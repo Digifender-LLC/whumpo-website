@@ -39,13 +39,13 @@ class HttpIdentityApiTest {
     @After fun stop() { server.stop(0) }
 
     @Test fun configurationRejectsStaleBuildAndChangedIdentityEndpoints() = runTest {
-        reply = { it.send(200, """{"version":1,"contract":1,"minimumBuild":3,"rpId":"whumpo.com","browserReturn":"https://whumpo.com/app/return"}""") }
+        reply = { it.send(200, """{"version":1,"contract":1,"minimumBuild":4,"rpId":"whumpo.com","browserReturn":"https://whumpo.com/app/return"}""") }
         api.checkConfiguration()
         assertEquals("/api/mobile/v1/config", seen.single().first)
         assertFalse(seen.single().second.containsKey("authorization"))
-        reply = { it.send(200, """{"version":1,"contract":1,"minimumBuild":4,"rpId":"whumpo.com","browserReturn":"https://whumpo.com/app/return"}""") }
+        reply = { it.send(200, """{"version":1,"contract":1,"minimumBuild":5,"rpId":"whumpo.com","browserReturn":"https://whumpo.com/app/return"}""") }
         assertEquals("client_update_required", failure { api.checkConfiguration() })
-        reply = { it.send(200, """{"version":1,"contract":1,"minimumBuild":3,"rpId":"evil.test","browserReturn":"https://whumpo.com/app/return"}""") }
+        reply = { it.send(200, """{"version":1,"contract":1,"minimumBuild":4,"rpId":"evil.test","browserReturn":"https://whumpo.com/app/return"}""") }
         assertEquals("invalid_response", failure { api.checkConfiguration() })
     }
 

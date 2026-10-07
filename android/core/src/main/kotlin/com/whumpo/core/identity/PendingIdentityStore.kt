@@ -63,8 +63,8 @@ class PendingIdentityStore(private val root: File, private val box: SecretBox) {
 
     @Synchronized
     fun clear() {
-        if (root.exists() && !root.deleteRecursively()) throw IOException("Could not erase browser return")
-        box.destroyKey()
+        try { if (root.exists() && !root.deleteRecursively()) throw IOException("Could not erase browser return") }
+        finally { box.destroyKey() }
     }
 }
 

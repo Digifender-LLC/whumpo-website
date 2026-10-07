@@ -13,6 +13,8 @@ import com.whumpo.android.R
 import com.whumpo.android.ui.common.ScreenTitle
 import com.whumpo.android.ui.common.ScrollingPage
 import com.whumpo.android.ui.common.UnavailableNotice
+import com.whumpo.android.workspace.NativeReviewPanel
+import com.whumpo.core.identity.NativeIdentityController
 import com.whumpo.android.workspace.WebsiteButton
 import com.whumpo.android.workspace.WorkspaceNotice
 import com.whumpo.core.data.UnavailableReason
@@ -21,7 +23,7 @@ import com.whumpo.core.workspace.NativeWorkspaceController
 import kotlinx.coroutines.launch
 
 @Composable
-fun ChatScreen(viewModel: ChatViewModel, controller: NativeWorkspaceController, origin: String) {
+fun ChatScreen(viewModel: ChatViewModel, controller: NativeWorkspaceController, identity: NativeIdentityController, origin: String) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val workspace by controller.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -44,18 +46,20 @@ fun ChatScreen(viewModel: ChatViewModel, controller: NativeWorkspaceController, 
                     Text(turn.userText)
                     Text("Whumpo · ${turn.status}", style = MaterialTheme.typography.labelLarge)
                     Text(turn.assistantText ?: if (turn.status == "pending") "Reply pending. Refresh to check." else "No reply text was saved.")
-                    if (turn.hasReview || turn.hasInteraction) {
-                        Text("This request includes a review or form. Complete it on the website; this app cannot approve or submit it.")
+                    if (turn.hasReview) Text("This reply includes a review. Refresh pending reviews below to read its current disclosure and any supported approval.")
+                    if (turn.hasInteraction) {
+                        Text("This request includes a form. Complete it on the website; native form submission is not available yet.")
                         WebsiteButton(origin)
                     }
                 }
+                NativeReviewPanel(controller, identity, origin)
                 workspace.pending?.let { pending ->
                     HorizontalDivider()
                     Text("Saved request", style = MaterialTheme.typography.titleMedium)
                     Text(pending.content)
                     Text(if (pending.delivery == ChatDelivery.ACCEPTED) "Saved by Whumpo · ${pending.status ?: "status unknown"}" else "Delivery needs confirmation. The original request is saved on this device.")
                     OutlinedButton(onClick = { scope.launch { controller.checkPending() } }, enabled = !workspace.busy, modifier = Modifier.testTag("chat-check-request")) { Text("Check saved request") }
-                    if (pending.delivery == ChatDelivery.NOT_FOUND) OutlinedButton(onClick = { scope.launch { controller.resendOriginal() } }, enabled = !workspace.busy,
+                    if (pending.delivery == ChatDelivery.NOT_FOUND) OutlinedButton(onClick = { scope.launch { controller.resendOriginal() } }, enabled = !workspace.busy && workspace.pendingApproval == null,
                         modifier = Modifier.testTag("chat-resend-original")) { Text("Resend exact original request") }
                     if (pending.delivery == ChatDelivery.NOT_FOUND && (workspace.revision ?: -1) > pending.expectedRevision) OutlinedButton(onClick = { scope.launch { controller.releaseStaleMissingRequest() } }, enabled = !workspace.busy) { Text("Release the missing request and review my draft") }
                     if (pending.delivery == ChatDelivery.ACCEPTED && pending.status == "uncertain") OutlinedButton(onClick = { scope.launch { controller.acknowledgeUncertain() } }, enabled = !workspace.busy) { Text("Keep uncertain result and compose a different request") }
@@ -70,7 +74,7 @@ fun ChatScreen(viewModel: ChatViewModel, controller: NativeWorkspaceController, 
                             label = { Text(stringResource(R.string.chat_composer_label)) }, maxLines = 5,
                             modifier = Modifier.weight(1f).testTag("chat-composer"))
                         Button(onClick = { scope.launch { controller.send(state.draft) } },
-                            enabled = workspace.owner == state.owner && workspace.loaded && !workspace.onboardingRequired && !workspace.busy && workspace.pending == null && NativeWorkspaceController.validContent(state.draft.trim()),
+                            enabled = workspace.owner == state.owner && workspace.loaded && !workspace.onboardingRequired && !workspace.busy && workspace.pending == null && workspace.pendingApproval == null && NativeWorkspaceController.validContent(state.draft.trim()),
                             modifier = Modifier.testTag("chat-send")) { Text(stringResource(R.string.chat_send)) }
                     }
                     Text("${state.draft.trim().length}/1000 · Send starts this request once. Reconnect never sends a saved request.", style = MaterialTheme.typography.bodySmall)

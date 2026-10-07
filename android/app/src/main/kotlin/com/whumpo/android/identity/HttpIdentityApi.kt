@@ -63,7 +63,20 @@ class HttpIdentityApi(private val environment: WhumpoEnvironment) : NativeIdenti
                     try {
                         val result = response.use {
                             if (it.code in 300..399) throw IdentityFailure("invalid_response")
-                            if (it.code == 401) throw IdentityFailure("proof_required")
+                            if (it.code == 401) {
+                                // Only a complete current fresh-proof refusal preserves the bearer. An unreadable
+                                // or ordinary 401 revokes local authority, regardless of its response format.
+                                val fresh = try {
+                                    val body = it.body ?: throw IllegalArgumentException()
+                                    if (body.contentType()?.toString()?.substringBefore(';') != "application/json" || body.contentLength() > 65_536) throw IllegalArgumentException()
+                                    val source = body.source(); source.request(65_537)
+                                    if (source.buffer.size > 65_536) throw IllegalArgumentException()
+                                    val value = JSONObject(source.readUtf8()); exact(value, "version", "error")
+                                    val error = value.getJSONObject("error"); exact(error, "code", "message", "proof"); text(error, "message")
+                                    value.opt("version") == 1 && error.opt("code") == "proof_required" && error.opt("proof") == "fresh_passkey"
+                                } catch (_: Exception) { false }
+                                throw IdentityFailure(if (fresh) "fresh_passkey_required" else "proof_required")
+                            }
                             if (it.code == 426) throw IdentityFailure("client_update_required")
                             val body = it.body ?: throw IdentityFailure("invalid_response")
                             if (body.contentType()?.let { type -> type.type == "application" && type.subtype == "json" } != true) throw IdentityFailure("invalid_response")
@@ -78,6 +91,10 @@ class HttpIdentityApi(private val environment: WhumpoEnvironment) : NativeIdenti
                                 val error = json.optJSONObject("error") ?: throw IdentityFailure("invalid_response")
                                 val code = error.optString("code")
                                 if (code !in ERRORS) throw IdentityFailure("invalid_response")
+                                if (code == "account_closing") {
+                                    exact(error, "code", "message", "next", "browserPath"); text(error, "message")
+                                    if (it.code != 409 || error.opt("next") != "browser" || error.opt("browserPath") != "/workspace/account") throw IdentityFailure("invalid_response")
+                                }
                                 throw IdentityFailure(code)
                             }
                             json
@@ -153,7 +170,7 @@ class HttpIdentityApi(private val environment: WhumpoEnvironment) : NativeIdenti
         return NativeSession(token, IdentityProtocol.time(text(value, "expiresAt")), IdentityProtocol.time(text(value, "freshUntil")))
     }
 
-    internal enum class WorkspaceOperation { BOOTSTRAP, CHAT, TURN, SEND, PROJECTS, ACTIVITY }
+    internal enum class WorkspaceOperation { BOOTSTRAP, CHAT, TURN, SEND, PROJECTS, ACTIVITY, REVIEWS, APPROVE }
     internal suspend fun workspace(operation: WorkspaceOperation, token: String, input: JSONObject? = null,
         id: String? = null, cursor: String? = null, query: String? = null): JSONObject {
         val route = when (operation) {
@@ -163,15 +180,18 @@ class HttpIdentityApi(private val environment: WhumpoEnvironment) : NativeIdenti
             WorkspaceOperation.SEND -> Route.SEND
             WorkspaceOperation.PROJECTS -> Route.PROJECTS
             WorkspaceOperation.ACTIVITY -> Route.ACTIVITY
+            WorkspaceOperation.REVIEWS -> Route.REVIEWS
+            WorkspaceOperation.APPROVE -> Route.APPROVE
         }
         if ((operation == WorkspaceOperation.TURN) != (id != null) || (id != null && !IdentityProtocol.uuid.matches(id))) throw IdentityFailure("invalid_request")
-        if ((operation == WorkspaceOperation.SEND) != (input != null)) throw IdentityFailure("invalid_request")
+        if ((operation in setOf(WorkspaceOperation.SEND, WorkspaceOperation.APPROVE)) != (input != null)) throw IdentityFailure("invalid_request")
         if (cursor != null && operation !in setOf(WorkspaceOperation.CHAT, WorkspaceOperation.PROJECTS, WorkspaceOperation.ACTIVITY)) throw IdentityFailure("invalid_request")
         if (query != null && operation != WorkspaceOperation.CHAT) throw IdentityFailure("invalid_request")
         return send(route, input, token, id.orEmpty(), cursor, query)
     }
     private enum class Route(val path: String, val authenticated: Boolean, val workspace: Boolean = false) {
         BOOTSTRAP("/bootstrap", true, true), CHAT("/chat", true, true), TURN("/chat/turns/", true, true),
+        REVIEWS("/reviews", true, true), APPROVE("/reviews/confirm", true, true),
         SEND("/chat/messages", true, true), PROJECTS("/projects", true, true), ACTIVITY("/activity", true, true),
         CONFIG("/config", false), LOGIN_OPTIONS("/session/login/options", false), LOGIN_VERIFY("/session/login/verify", false),
         REAUTH_OPTIONS("/session/reauth/options", true), REAUTH_VERIFY("/session/reauth/verify", true),
@@ -179,7 +199,7 @@ class HttpIdentityApi(private val environment: WhumpoEnvironment) : NativeIdenti
         START("/session/handoff/start", false), EXCHANGE("/session/handoff/exchange", false),
     }
     private companion object {
-        val ERRORS = setOf("invalid_cursor", "onboarding_required", "stale_revision", "chat_busy", "review_unavailable", "unsupported_control", "invalid_request", "unknown_field", "missing_field", "proof_required", "identity_incomplete", "not_found", "identity_changed", "request_conflict", "payload_too_large", "client_update_required", "rate_limited", "unavailable")
+        val ERRORS = setOf("account_closing", "invalid_cursor", "onboarding_required", "stale_revision", "chat_busy", "review_unavailable", "unsupported_control", "invalid_request", "unknown_field", "missing_field", "proof_required", "identity_incomplete", "not_found", "identity_changed", "request_conflict", "payload_too_large", "client_update_required", "rate_limited", "unavailable")
         fun oneShotBody(input: JSONObject): RequestBody {
             val bytes = input.toString().toByteArray(Charsets.UTF_8)
             return object : RequestBody() {

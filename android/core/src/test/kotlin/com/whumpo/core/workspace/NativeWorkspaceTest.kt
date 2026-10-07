@@ -25,6 +25,7 @@ class NativeWorkspaceTest {
     private val root get() = File(temp.root, "state")
     private val store by lazy { AccountStateStore(root, FakeSecretBox()) }
     private inner class Session : WorkspaceSession {
+        override fun hasFreshProof() = true
         override val activeAccount = MutableStateFlow<AccountScope?>(a)
         var epoch = 0
         init { store.activate(a) }
@@ -40,6 +41,8 @@ class NativeWorkspaceTest {
         }
     }
     private class Api : NativeWorkspaceApi {
+        override suspend fun reviews(token: String) = emptyList<NativeReview>()
+        override suspend fun approve(token: String, request: PendingApproval): ChatAcceptance = error("Unexpected approval")
         var revision = 0
         var welcome = true
         var outcome = "completed"

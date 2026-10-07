@@ -56,6 +56,8 @@ object Fixtures {
     }
 
     private class FixtureWorkspaceApi : NativeWorkspaceApi {
+        override suspend fun reviews(token: String) = emptyList<com.whumpo.core.workspace.NativeReview>()
+        override suspend fun approve(token: String, request: com.whumpo.core.workspace.PendingApproval): com.whumpo.core.workspace.ChatAcceptance = error("Unexpected approval")
         override suspend fun bootstrap(token: String) = WorkspaceBootstrap(true, 0, "guided", 0, 0)
         override suspend fun chat(token: String, cursor: String?, query: String) = NativeChatPage(0, "guided", emptyList(), null)
         override suspend fun turn(token: String, requestId: String): NativeTurn = error("Not used by shell fixtures")

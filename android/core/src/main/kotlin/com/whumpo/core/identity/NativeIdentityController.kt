@@ -28,6 +28,8 @@ data class IdentityState(
     val returnReady: Boolean = false,
     val savedSession: Boolean = false,
     val updateRequired: Boolean = false,
+    val accountClosing: Boolean = false,
+    val localCleanupFailed: Boolean = false,
 )
 
 /** One current flow, explicit network writes, durable encrypted PKCE and generation fences across every await. */
@@ -59,17 +61,21 @@ class NativeIdentityController(
             synchronized(lock) {
                 session = saved
                 if (saved == null && owner != null) store.signOut()
-                mutableState.value = IdentityState(savedSession = saved != null)
-                showPending()
+                val closing = saved != null && store.read(owner, CLOSING_SLOT) == "1"
+                mutableState.value = IdentityState(savedSession = saved != null, accountClosing = closing,
+                    message = if (closing) CLOSING_MESSAGE else "Sign in to connect this device.")
+                if (closing) {
+                    eraseForClosure(owner, saved)
+                } else showPending()
             }
         } catch (_: Exception) {
-            synchronized(lock) { mutableState.value = IdentityState(message = "Protected state could not be opened. Sign in again.") }
+            synchronized(lock) { if (!mutableState.value.accountClosing) mutableState.value = IdentityState(message = "Protected state could not be opened. Sign in again.") }
         } finally { ready.complete(Unit) }
-        if (synchronized(lock) { session != null && pendingStore.read(now()) == null }) checkSession()
+        if (synchronized(lock) { session != null && !mutableState.value.accountClosing && pendingStore.read(now()) == null }) checkSession()
     }
 
     private fun claim(): Long? = synchronized(lock) {
-        if (mutableState.value.busy) return@synchronized null
+        if (mutableState.value.busy || mutableState.value.accountClosing || mutableState.value.localCleanupFailed) return@synchronized null
         generation += 1
         mutableState.value = mutableState.value.copy(busy = true, message = "Working…", updateRequired = false)
         generation
@@ -94,15 +100,18 @@ class NativeIdentityController(
 
     private fun failed(ticket: Long, error: Exception) = settle(ticket) {
         val code = (error as? IdentityFailure)?.code
+        var cleanupFailed = false
         if (code in setOf("proof_required", "identity_changed", "identity_incomplete")) {
-            store.signOut(); session = null; active.value = null; pendingStore.clear()
+            session = null; active.value = null
+            try { store.signOut() } catch (_: Exception) { cleanupFailed = true }
+            try { pendingStore.clear() } catch (_: Exception) { cleanupFailed = true }
         }
         mutableState.value = mutableState.value.copy(
-            busy = false, signedIn = active.value != null,
+            busy = false, signedIn = active.value != null, localCleanupFailed = cleanupFailed,
             label = if (active.value != null) mutableState.value.label else null,
             savedSession = session != null && active.value == null,
             updateRequired = code == "client_update_required",
-            message = when (code) {
+            message = if (cleanupFailed) "This device is frozen. Local cleanup could not be confirmed; erase this app’s storage before signing in again." else when (code) {
                 "client_update_required" -> "Update Whumpo to sign in. Account recovery is available on the website."
                 "proof_required", "identity_changed" -> "Your session is no longer available. Sign in again."
                 "identity_incomplete" -> "Complete account setup or recovery on the website first."
@@ -220,6 +229,7 @@ class NativeIdentityController(
     suspend fun receiveReturn(uri: String) = withContext(io) {
         ready.await()
         synchronized(lock) {
+            if (mutableState.value.accountClosing || mutableState.value.localCleanupFailed) return@synchronized
             try {
                 val incoming = IdentityProtocol.parseReturn(uri)
                 val pending = pendingStore.read(now()) ?: throw IdentityFailure("invalid_return")
@@ -255,6 +265,7 @@ class NativeIdentityController(
     suspend fun cancel() = withContext(io) {
         ready.await()
         synchronized(lock) {
+            if (mutableState.value.accountClosing || mutableState.value.localCleanupFailed) return@synchronized
             generation += 1; pendingStore.clear()
             mutableState.value = IdentityState(signedIn = active.value != null, label = mutableState.value.label,
                 savedSession = session != null && active.value == null, message = "Sign-in cancelled.")
@@ -266,17 +277,44 @@ class NativeIdentityController(
         val (ticket, token) = synchronized(lock) {
             generation += 1
             val old = session?.token
-            session = null; active.value = null; pendingStore.clear(); store.signOut()
-            mutableState.value = IdentityState(message = "Signed out on this device.")
+            session = null; active.value = null
+            var clean = true
+            try { pendingStore.clear() } catch (_: Exception) { clean = false }
+            try { store.signOut() } catch (_: Exception) { clean = false }
+            mutableState.value = IdentityState(localCleanupFailed = !clean, message = if (clean) "Signed out on this device." else "This device is frozen. Local cleanup could not be confirmed; erase this app’s storage before signing in again.")
             generation to old
         }
         if (token != null) try { api.logout(token) } catch (error: Exception) {
             if ((error as? IdentityFailure)?.code != "proof_required") settle(ticket) {
-                mutableState.value = mutableState.value.copy(message = "Signed out on this device. Server sign-out was not confirmed; revoke this session on the website if needed.")
+                mutableState.value = mutableState.value.copy(message = if (mutableState.value.localCleanupFailed) "This device is frozen. Local cleanup and server sign-out could not be confirmed. Erase this app’s storage and revoke the session on the website." else "Signed out on this device. Server sign-out was not confirmed; revoke this session on the website if needed.")
             }
             if (error is CancellationException) throw error
         }
     }
+
+    private fun freezeForClosure(ticket: Long) = settle(ticket) {
+        val owner = store.activeAccount.value
+        val candidate = session
+        generation++
+        active.value = null
+        mutableState.value = IdentityState(savedSession = candidate != null, accountClosing = true, message = CLOSING_MESSAGE)
+        eraseForClosure(owner, candidate)
+    }
+
+    private fun eraseForClosure(owner: AccountScope?, candidate: NativeSession?) {
+        var failed = false
+        try { pendingStore.clear() } catch (_: Exception) { failed = true }
+        try {
+            if (owner != null && candidate != null) store.retainSessionOnly(owner, CLOSING_SLOT,
+                linkedMapOf(CLOSING_SLOT to "1", SESSION_SLOT to SessionEncoding.write(candidate)))
+            else store.signOut()
+        } catch (_: Exception) { failed = true }
+        if (failed) mutableState.value = mutableState.value.copy(message = "Account closure is in progress. This device is frozen, but local cleanup could not be fully confirmed. Sign out or erase this app’s storage, and check account status on the website.")
+    }
+
+    val accountStatusUrl: String get() = environment.origin + "/workspace/account"
+
+    override fun hasFreshProof(): Boolean = synchronized(lock) { active.value != null && session?.freshUntil?.isAfter(now()) == true && session?.expiresAt?.isAfter(now()) == true }
 
     override suspend fun <T> authorized(owner: AccountScope, action: suspend (String) -> T): T = withContext(io) {
         ready.await()
@@ -294,10 +332,15 @@ class NativeIdentityController(
             }
             result
         } catch (error: IdentityFailure) {
-            if (error.code in setOf("proof_required", "identity_changed", "identity_incomplete")) failed(ticket, error)
+            if (error.code == "account_closing") freezeForClosure(ticket)
+            else if (error.code in setOf("proof_required", "identity_changed", "identity_incomplete")) failed(ticket, error)
             throw error
         }
     }
 
-    companion object { val SESSION_SLOT = StateSlot(StateKind.SESSION, "native-v1") }
+    companion object {
+        val SESSION_SLOT = StateSlot(StateKind.SESSION, "native-v1")
+        val CLOSING_SLOT = StateSlot(StateKind.SESSION, "account-closing-v1")
+        private const val CLOSING_MESSAGE = "Account closure is in progress. Private work was erased from this device. Check account status on the website, or sign out."
+    }
 }

@@ -22,6 +22,7 @@ class AccountStateStore(
     private val box: SecretBox,
 ) {
     private val active = MutableStateFlow<AccountScope?>(null)
+    private var workspaceFrozen = false
 
     /** The account whose state is currently readable, or null when signed out. */
     val activeAccount: StateFlow<AccountScope?> = active.asStateFlow()
@@ -59,14 +60,16 @@ class AccountStateStore(
             box.seal(account.accountId.toByteArray(Charsets.UTF_8), MARKER_AAD),
         )
         active.value = account
+        workspaceFrozen = false
     }
 
     /** Erases every account's state and destroys the key. Safe to call when signed out. */
     @Synchronized
     fun signOut() {
-        eraseAll()
-        box.destroyKey()
+        workspaceFrozen = true
         active.value = null
+        try { eraseAll() } finally { box.destroyKey() }
+        workspaceFrozen = false
     }
 
     /**
@@ -76,7 +79,7 @@ class AccountStateStore(
      */
     @Synchronized
     fun write(owner: AccountScope, slot: StateSlot, value: String): Boolean {
-        if (active.value != owner) return false
+        if (active.value != owner || workspaceFrozen && slot.kind != StateKind.SESSION) return false
         val dir = File(root, owner.storageKey).apply { mkdirs() }
         writeAtomically(
             File(dir, slot.fileName),
@@ -88,7 +91,7 @@ class AccountStateStore(
     /** Returns [owner]'s value, or null if absent or [owner] is not active. Unreadable records are deleted. */
     @Synchronized
     fun read(owner: AccountScope, slot: StateSlot): String? {
-        if (active.value != owner) return null
+        if (active.value != owner || workspaceFrozen && slot.kind != StateKind.SESSION) return null
         val file = File(File(root, owner.storageKey), slot.fileName)
         if (!file.exists()) return null
         return try {
@@ -102,9 +105,25 @@ class AccountStateStore(
     /** Deletes [owner]'s record; returns false when [owner] is not active. */
     @Synchronized
     fun remove(owner: AccountScope, slot: StateSlot): Boolean {
-        if (active.value != owner) return false
+        if (active.value != owner || workspaceFrozen && slot.kind != StateKind.SESSION) return false
         File(File(root, owner.storageKey), slot.fileName).delete()
         return true
+    }
+
+    /** Closure freezes all private writes and rotates away their key while retaining only logout identity. */
+    @Synchronized
+    fun retainSessionOnly(owner: AccountScope, closingMarker: StateSlot, records: Map<StateSlot, String>) {
+        require(records.containsKey(closingMarker) && records.keys.all { it.kind == StateKind.SESSION })
+        if (active.value != owner) throw IOException("Account changed")
+        workspaceFrozen = true
+        active.value = null
+        try { eraseAll() } finally { box.destroyKey() }
+        root.mkdirs()
+        writeAtomically(File(root, ACTIVE_MARKER), box.seal(owner.accountId.toByteArray(Charsets.UTF_8), MARKER_AAD))
+        active.value = owner
+        // The durable freeze marker must precede every retained bearer, independent of map order.
+        check(write(owner, closingMarker, records.getValue(closingMarker)))
+        records.filterKeys { it != closingMarker }.forEach { (slot, value) -> check(write(owner, slot, value)) }
     }
 
     private fun eraseAll() {

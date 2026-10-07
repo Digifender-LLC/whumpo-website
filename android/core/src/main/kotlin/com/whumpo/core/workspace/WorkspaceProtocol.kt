@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.StateFlow
 /** A token is available only within one account-fenced operation, never in screen state. */
 interface WorkspaceSession {
     val activeAccount: StateFlow<AccountScope?>
+    fun hasFreshProof(): Boolean
     suspend fun <T> authorized(owner: AccountScope, action: suspend (String) -> T): T
 }
 
@@ -21,8 +22,10 @@ enum class ChatDelivery { UNCONFIRMED, NOT_FOUND, ACCEPTED }
 data class PendingChat(val requestId: String, val expectedRevision: Int, val content: String,
     val delivery: ChatDelivery = ChatDelivery.UNCONFIRMED, val status: String? = null)
 
-/** Supported browsing and plain Chat only. No review approvals or interaction mutations are callable here. */
+/** Closed workspace, plain Chat and the fully rendered application/restore review controls. Forms are separate. */
 interface NativeWorkspaceApi {
+    suspend fun reviews(token: String): List<NativeReview>
+    suspend fun approve(token: String, request: PendingApproval): ChatAcceptance
     suspend fun bootstrap(token: String): WorkspaceBootstrap
     suspend fun chat(token: String, cursor: String?, query: String): NativeChatPage
     suspend fun turn(token: String, requestId: String): NativeTurn

@@ -84,7 +84,7 @@ fun WhumpoApp(container: AppContainer) {
             modifier = Modifier.padding(padding).consumeWindowInsets(padding),
         ) {
             composable(TopDestination.CHAT.route) {
-                ChatScreen(viewModel(factory = ChatViewModel.factory(container)), container.workspace, container.environment.origin)
+                ChatScreen(viewModel(factory = ChatViewModel.factory(container)), container.workspace, container.identity, container.environment.origin)
             }
             composable(TopDestination.PROJECTS.route) {
                 ProjectsScreen(container.workspace, container.environment.origin)

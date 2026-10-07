@@ -56,13 +56,17 @@ fun IdentityPanel(controller: NativeIdentityController) {
         OutlinedButton(onClick = { run { open(controller.resumeBrowser()) } }, enabled = !state.busy,
             modifier = Modifier.testTag("identity-resume-browser")) { Text("Resume browser sign-in") }
     }
-    if (state.savedSession) {
+    if (state.accountClosing) {
+        OutlinedButton(onClick = { open(controller.accountStatusUrl) },
+            modifier = Modifier.testTag("identity-account-status")) { Text("Account closure status on the website") }
+    }
+    if (state.savedSession || state.localCleanupFailed) {
         OutlinedButton(onClick = { work?.cancel(); run { controller.signOut() } },
             modifier = Modifier.testTag("identity-forget-session")) { Text("Sign out on this device") }
-        OutlinedButton(onClick = { run { controller.checkSession() } }, enabled = !state.busy,
+        if (!state.accountClosing && !state.localCleanupFailed) OutlinedButton(onClick = { run { controller.checkSession() } }, enabled = !state.busy,
             modifier = Modifier.testTag("identity-check-session")) { Text("Check saved session") }
     }
-    if (!state.signedIn && !state.updateRequired) {
+    if (!state.signedIn && !state.updateRequired && !state.accountClosing && !state.localCleanupFailed) {
         Button(onClick = { activity?.let { run { controller.passkey(AndroidPasskeys(it)) } } },
             enabled = !state.busy && activity != null, modifier = Modifier.testTag("identity-passkey")) { Text("Sign in with a passkey") }
         OutlinedButton(onClick = { run { open(controller.beginBrowser(BrowserPurpose.SIGN_IN)) } },

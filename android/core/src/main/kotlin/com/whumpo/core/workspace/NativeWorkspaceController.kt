@@ -18,6 +18,7 @@ import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.util.Base64
 import java.util.UUID
+import java.time.Instant
 
 /** Screen state contains no bearer, browser secret or provider credential. */
 data class WorkspaceState(
@@ -26,6 +27,7 @@ data class WorkspaceState(
     val chat: List<NativeTurn> = emptyList(), val chatCursor: String? = null, val search: String = "",
     val projects: List<NativeProject> = emptyList(), val projectCursor: String? = null,
     val activity: List<NativeActivity> = emptyList(), val activityCursor: String? = null,
+    val reviews: List<NativeReview> = emptyList(), val pendingApproval: PendingApproval? = null,
     val pending: PendingChat? = null, val acceptedDraft: Pair<String, String>? = null,
     val notice: String = "Sign in from Settings to connect this device.",
 )
@@ -36,6 +38,7 @@ class NativeWorkspaceController(
     private val store: AccountStateStore,
     private val api: NativeWorkspaceApi,
     private val io: CoroutineDispatcher,
+    private val now: () -> Instant = { Instant.now() },
 ) {
     private val lock = Any()
     private var generation = 0L
@@ -47,9 +50,10 @@ class NativeWorkspaceController(
             synchronized(lock) {
                 generation++
                 val pending = owner?.let { readPending(it) }
-                mutable.value = WorkspaceState(owner = owner, pending = pending,
+                val approval = owner?.let { readApproval(it) }
+                mutable.value = WorkspaceState(owner = owner, pending = pending, pendingApproval = approval,
                     notice = if (owner == null) "Sign in from Settings to connect this device."
-                    else if (pending != null) "A saved request needs a status check. It will not be sent automatically."
+                    else if (pending != null || approval != null) "A saved request needs a status check. It will not be sent automatically."
                     else "Refresh to load your workspace.")
             }
             if (owner != null) refreshChat()
@@ -117,7 +121,7 @@ class NativeWorkspaceController(
     suspend fun send(content: String) = action { ticket, owner ->
         val snapshot = state.value
         val text = content.trim()
-        if (!snapshot.loaded || snapshot.onboardingRequired || snapshot.revision == null || snapshot.pending != null || !validContent(text)) throw IdentityFailure("invalid_request")
+        if (!snapshot.loaded || snapshot.onboardingRequired || snapshot.revision == null || snapshot.pending != null || snapshot.pendingApproval != null || !validContent(text)) throw IdentityFailure("invalid_request")
         val pending = PendingChat(UUID.randomUUID().toString(), snapshot.revision, text)
         dispatch(ticket, owner, pending)
     }
@@ -168,7 +172,7 @@ class NativeWorkspaceController(
     }
     suspend fun resendOriginal() = action { ticket, owner ->
         val pending = state.value.pending ?: return@action
-        if (pending.delivery != ChatDelivery.NOT_FOUND) throw IdentityFailure("invalid_request")
+        if (pending.delivery != ChatDelivery.NOT_FOUND || state.value.pendingApproval != null) throw IdentityFailure("invalid_request")
         dispatch(ticket, owner, pending)
     }
     /** A current missing receipt plus a newer monotonic revision proves this old payload cannot newly commit. */
@@ -192,11 +196,98 @@ class NativeWorkspaceController(
         store.remove(owner, PENDING_SLOT)
         change(ticket, owner) { it.copy(pending = null, notice = "The uncertain result remains in history. Review it before starting a different request.") }
     }
+    fun hasFreshProof(): Boolean = session.hasFreshProof()
+
+    suspend fun refreshReviews() = action { ticket, owner ->
+        if (!bootstrap(ticket, owner)) return@action
+        val reviews = session.authorized(owner) { api.reviews(it) }
+        reviews.forEach { it.validate() }
+        change(ticket, owner) { it.copy(reviews = reviews, notice = "Read every disclosure and the complete saved program before choosing an approval.") }
+    }
+    suspend fun approveReview(reviewId: String, fingerprint: String, acknowledged: Boolean, confirmation: String) = action { ticket, owner ->
+        val snapshot = state.value
+        if (!acknowledged || snapshot.pending != null || !snapshot.loaded || snapshot.onboardingRequired || snapshot.revision == null) throw IdentityFailure("invalid_request")
+        val currentReviews = session.authorized(owner) { api.reviews(it) }
+        currentReviews.forEach { it.validate() }
+        change(ticket, owner) { it.copy(reviews = currentReviews) }
+        val review = currentReviews.singleOrNull { it.id == reviewId } ?: throw IdentityFailure("review_unavailable")
+        review.validate()
+        if (!review.current(now()) || review.fingerprint() != fingerprint || review.control == null) throw IdentityFailure("review_unavailable")
+        if (review.kind == ReviewKind.RESTORE && confirmation != "RESTORE") throw IdentityFailure("invalid_request")
+        if (review.requiresFreshPasskey && !session.hasFreshProof()) throw IdentityFailure("fresh_passkey_required")
+        val prior = snapshot.pendingApproval
+        if (prior != null && (prior.delivery != ChatDelivery.NOT_FOUND || prior.fingerprint != fingerprint || prior.control != review.control)) throw IdentityFailure("review_unavailable")
+        val pending = prior?.copy(delivery = ChatDelivery.UNCONFIRMED, status = null)
+            ?: PendingApproval(UUID.randomUUID().toString(), snapshot.revision, review.control, fingerprint, review.expiresAt)
+        val result = session.authorized(owner) { token ->
+            if (!store.write(owner, APPROVAL_SLOT, ApprovalEncoding.write(pending))) throw IdentityFailure("identity_changed")
+            change(ticket, owner) { it.copy(pendingApproval = pending, notice = "Sending this exact approval once…") }
+            api.approve(token, pending)
+        }
+        if (result.requestId != pending.requestId || result.revision != pending.expectedRevision + 1) throw IdentityFailure("invalid_response")
+        val accepted = pending.copy(delivery = ChatDelivery.ACCEPTED, status = result.status)
+        if (!store.write(owner, APPROVAL_SLOT, ApprovalEncoding.write(accepted))) throw IdentityFailure("identity_changed")
+        change(ticket, owner) { it.copy(pendingApproval = accepted, revision = result.revision, notice = "The approval has a saved result. Checking it does not repeat the action.") }
+        readApprovalResult(ticket, owner, accepted)
+    }
+    suspend fun checkPendingApproval() = action { ticket, owner ->
+        val pending = state.value.pendingApproval ?: return@action
+        readApprovalResult(ticket, owner, pending)
+    }
+    private suspend fun readApprovalResult(ticket: Long, owner: AccountScope, pending: PendingApproval) {
+        // Receipt recovery never needs a still-open/unexpired review or a new passkey proof.
+        val turn = try { session.authorized(owner) { api.turn(it, pending.requestId) } }
+        catch (error: IdentityFailure) {
+            if (error.code == "not_found" && pending.delivery != ChatDelivery.ACCEPTED) {
+                val missing = pending.copy(delivery = ChatDelivery.NOT_FOUND)
+                if (!store.write(owner, APPROVAL_SLOT, ApprovalEncoding.write(missing))) throw IdentityFailure("identity_changed")
+                change(ticket, owner) { it.copy(pendingApproval = missing, notice = "No saved approval was found. Any retry requires reading the unchanged current review and explicitly approving its original request again.") }
+                return
+            }
+            throw error
+        }
+        if (turn.id != pending.requestId || turn.revision != pending.expectedRevision + 1 || turn.userText != pending.control.label) throw IdentityFailure("invalid_response")
+        val terminal = turn.status == "completed" || turn.status == "failed"
+        if (terminal) store.remove(owner, APPROVAL_SLOT)
+        else if (!store.write(owner, APPROVAL_SLOT, ApprovalEncoding.write(pending.copy(delivery = ChatDelivery.ACCEPTED, status = turn.status)))) throw IdentityFailure("identity_changed")
+        change(ticket, owner) { it.copy(pendingApproval = if (terminal) null else pending.copy(delivery = ChatDelivery.ACCEPTED, status = turn.status),
+            chat = (it.chat.filterNot { old -> old.id == turn.id } + turn).sortedBy(NativeTurn::revision), revision = maxOf(it.revision ?: 0, turn.revision),
+            reviews = it.reviews.filterNot { review -> terminal && review.id == pending.control.reviewId },
+            notice = when (turn.status) {
+                "completed" -> "The saved approval result is available. Read its exact outcome below."
+                "failed" -> "The saved approval failed. Read its result before starting another review."
+                "uncertain" -> "This approval has an uncertain saved result. Nothing will be repeated automatically."
+                else -> "The approval is still pending. Check its saved result again when ready."
+            }) }
+    }
+    suspend fun releaseStaleMissingApproval() = action { ticket, owner ->
+        val pending = state.value.pendingApproval ?: return@action
+        if (pending.delivery != ChatDelivery.NOT_FOUND || !bootstrap(ticket, owner) || (state.value.revision ?: -1) <= pending.expectedRevision) throw IdentityFailure("invalid_request")
+        try {
+            session.authorized(owner) { api.turn(it, pending.requestId) }
+            readApprovalResult(ticket, owner, pending); return@action
+        } catch (error: IdentityFailure) { if (error.code != "not_found") throw error }
+        store.remove(owner, APPROVAL_SLOT)
+        change(ticket, owner) { it.copy(pendingApproval = null, notice = "The missing approval used an older conversation revision and cannot start now. Read a current review before any new approval.") }
+    }
+    suspend fun acknowledgeUncertainApproval() = action { ticket, owner ->
+        val pending = state.value.pendingApproval ?: return@action
+        if (pending.delivery != ChatDelivery.ACCEPTED || pending.status != "uncertain") throw IdentityFailure("invalid_request")
+        store.remove(owner, APPROVAL_SLOT)
+        change(ticket, owner) { it.copy(pendingApproval = null, notice = "The uncertain approval result remains in history. Check the actual application before authorizing anything else.") }
+    }
+    private fun readApproval(owner: AccountScope): PendingApproval? {
+        val value = store.read(owner, APPROVAL_SLOT) ?: return null
+        return try { ApprovalEncoding.read(value) } catch (_: Exception) { store.remove(owner, APPROVAL_SLOT); null }
+    }
+
     private fun readPending(owner: AccountScope): PendingChat? {
         val raw = store.read(owner, PENDING_SLOT) ?: return null
         return try { PendingEncoding.read(raw) } catch (_: Exception) { store.remove(owner, PENDING_SLOT); null }
     }
     private fun message(error: Exception) = when ((error as? IdentityFailure)?.code) {
+        "fresh_passkey_required" -> "Verify with a passkey, then read and explicitly approve the current review. Your session remains signed in."
+        "review_unavailable" -> "This exact review changed, expired or is unavailable. Refresh and read the current review; no approval was repeated."
         "onboarding_required" -> "Finish welcome in your browser, then refresh here."
         "client_update_required" -> "Update Whumpo to use this workspace. Your saved request will not be repeated."
         "stale_revision" -> "The conversation changed. Check the saved request and refresh before starting another action."
@@ -209,6 +300,7 @@ class NativeWorkspaceController(
         else -> "The reply could not be confirmed. Refresh or check the saved request; nothing will be sent again automatically."
     }
     companion object {
+        val APPROVAL_SLOT = StateSlot(StateKind.PENDING_OPERATION, "native-approval-v1")
         val PENDING_SLOT = StateSlot(StateKind.PENDING_OPERATION, "native-chat-v1")
         fun validContent(value: String) = value.isNotBlank() && value.length <= 1000 && value.none { it.code in 0..8 || it.code in 11..12 || it.code in 14..31 || it.code == 127 }
     }

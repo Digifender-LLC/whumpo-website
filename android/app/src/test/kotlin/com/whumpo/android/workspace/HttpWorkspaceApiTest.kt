@@ -6,7 +6,10 @@ import com.whumpo.android.identity.HttpIdentityApi
 import com.whumpo.core.environment.WhumpoEnvironment
 import com.whumpo.core.identity.IdentityFailure
 import com.whumpo.core.identity.IdentityProtocol
-import com.whumpo.core.workspace.PendingChat
+import com.whumpo.core.workspace.*
+import java.time.Instant
+import java.security.MessageDigest
+import org.json.JSONArray
 import kotlinx.coroutines.test.runTest
 import org.json.JSONObject
 import org.junit.After
@@ -82,6 +85,68 @@ class HttpWorkspaceApiTest {
         assertEquals("invalid_response", failure { api.turn(token, id) })
         reply = { it.send(200, """{"version":1,"revision":0,"mode":"guided","items":[],"nextCursor":null,"commands":["approve"]}""") }
         assertEquals("invalid_response", failure { api.chat(token, null, "") })
+    }
+
+    @Test fun canonicalFreshProofAndClosureFixturesHaveDistinctCustodyAndFixedBrowserRoute() = runTest {
+        val cases = JSONObject(javaClass.classLoader!!.getResource("errors.json")!!.readText()).getJSONObject("cases")
+        for ((key, expected) in listOf("proof_required_fresh" to "fresh_passkey_required", "proof_required_signin" to "proof_required", "account_closing" to "account_closing")) {
+            val fixture = cases.getJSONObject(key)
+            reply = { it.send(fixture.getInt("status"), fixture.getJSONObject("body").toString()) }
+            assertEquals(expected, failure { api.bootstrap(token) })
+        }
+        val closure = cases.getJSONObject("account_closing").getJSONObject("body")
+        closure.getJSONObject("error").put("browserPath", "https://foreign.invalid/workspace/account")
+        reply = { it.send(409, closure.toString()) }
+        assertEquals("invalid_response", failure { api.bootstrap(token) })
+        closure.getJSONObject("error").put("browserPath", "/workspace/account").put("next", "approve")
+        assertEquals("invalid_response", failure { api.bootstrap(token) })
+        reply = { it.send(401, "not json") }
+        assertEquals("proof_required", failure { api.bootstrap(token) })
+    }
+
+    @Test fun fullSourceAndDigestAreReadExactlyAndUnsupportedOrExtraReviewControlsAreRefused() = runTest {
+        val source = "export default (document, input) => ({document, result: input});"
+        val review = review(source)
+        reply = { it.send(200, JSONObject().put("version", 1).put("items", JSONArray().put(review)).put("denied", 0).put("unavailable", 0).toString()) }
+        val value = api.reviews(token).single()
+        assertEquals(source, value.source); assertEquals(listOf("Read every effect.", "Publication stays separate."), value.lines)
+        assertEquals(ReviewKind.APPLICATION, value.control!!.kind)
+        review.getJSONObject("artifact").put("source", "different")
+        assertEquals("invalid_response", failure { api.reviews(token) })
+        review.getJSONObject("artifact").put("source", source)
+        review.getJSONObject("control").put("hiddenAuthority", "publish")
+        assertEquals("invalid_response", failure { api.reviews(token) })
+        review.getJSONObject("control").remove("hiddenAuthority")
+        review.put("kind", "site").put("artifact", JSONObject.NULL)
+        assertEquals("invalid_response", failure { api.reviews(token) })
+    }
+
+    @Test fun exactRestoreControlIsOneShotAndUsesOnlyItsSavedReviewAndProject() = runTest {
+        val pending = PendingApproval(id, 7, ReviewControl(ReviewKind.RESTORE, id, id), "b".repeat(64), Instant.parse(time))
+        reply = {
+            assertEquals("POST", it.requestMethod)
+            val body = JSONObject(it.requestBody.bufferedReader().readText())
+            assertEquals(setOf("version", "requestId", "expectedRevision", "control"), body.keys().asSequence().toSet())
+            assertEquals(id, body.getString("requestId")); assertEquals(7, body.getInt("expectedRevision"))
+            val control = body.getJSONObject("control")
+            assertEquals(setOf("type", "projectId", "reviewId", "confirmation"), control.keys().asSequence().toSet())
+            assertEquals("RESTORE", control.getString("confirmation")); assertEquals(id, control.getString("projectId"))
+            assertEquals("appRestore", control.getString("type")); assertEquals(id, control.getString("reviewId"))
+            it.responseHeaders.add("Retry-After", "0")
+            it.send(503, """{"version":1,"error":{"code":"unavailable"}}""")
+        }
+        assertEquals("unavailable", failure { api.approve(token, pending) })
+        assertEquals(listOf("/api/mobile/v1/reviews/confirm"), requests.toList())
+    }
+
+    private fun review(source: String): JSONObject {
+        val digest = MessageDigest.getInstance("SHA-256").digest(source.toByteArray()).joinToString("") { "%02x".format(it) }
+        return JSONObject().put("kind", "application").put("reviewId", id).put("project", JSONObject().put("id", id).put("name", "Project"))
+            .put("state", "pending").put("expiresAt", time).put("canApprove", true).put("requiresFreshPasskey", false)
+            .put("control", JSONObject().put("type", "confirm").put("kind", "application").put("reviewId", id))
+            .put("disclosure", JSONObject().put("title", "Authorize this exact program").put("lines", JSONArray().put("Read every effect.").put("Publication stays separate.")))
+            .put("preview", JSONObject.NULL).put("artifact", JSONObject().put("kind", "application-source").put("source", source).put("digest", digest))
+            .put("unavailableReason", JSONObject.NULL)
     }
 
     private fun turn(n: Int, assistant: String = "saved") = """{"id":"00000000-0000-4000-8000-${n.toString().padStart(12, '0')}","revision":$n,"status":"completed","mode":"guided","createdAt":"$time","userText":"message$n","assistantText":"$assistant","review":null,"interaction":null}"""

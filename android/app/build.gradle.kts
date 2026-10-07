@@ -13,8 +13,8 @@ android {
         applicationId = "com.whumpo.android"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 3
-        versionName = "0.3.0-workspace"
+        versionCode = 4
+        versionName = "0.4.0-reviews"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -48,6 +48,8 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    sourceSets.getByName("test").resources.directories.add(rootProject.file("../tests/fixtures/mobile-v1").path)
 
     buildFeatures {
         compose = true

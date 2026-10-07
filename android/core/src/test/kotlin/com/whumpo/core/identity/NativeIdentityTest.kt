@@ -5,6 +5,8 @@ import com.whumpo.core.account.AccountStateStore
 import com.whumpo.core.account.FakeSecretBox
 import com.whumpo.core.account.StateSlot
 import com.whumpo.core.environment.WhumpoEnvironment
+import com.whumpo.core.workspace.*
+import com.whumpo.core.account.SecretBox
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
@@ -206,6 +208,90 @@ class NativeIdentityTest {
         assertFalse(second.state.value.savedSession); assertNull(restartedStore.activeAccount.value)
         assertFalse(root.exists()); assertEquals(1, api.logoutCalls)
         assertTrue(second.state.value.message.contains("not confirmed"))
+    }
+
+    @Test fun freshPasskeyRefusalRetainsSessionButClosureErasesPrivateWorkAndSurvivesRestartFrozen() = runTest {
+        val io = StandardTestDispatcher(testScheduler); val api = Api(); val stateStore = store; val owner = AccountScope.of(a)
+        val first = NativeIdentityController(api, stateStore, pending, environment, io) { clock }
+        first.initialize(); first.passkey(PasskeyPrompt { "fixture-credential" })
+        val saved = stateStore.read(owner, NativeIdentityController.SESSION_SLOT)
+        try { first.authorized(owner) { throw IdentityFailure("fresh_passkey_required") } } catch (_: IdentityFailure) {}
+        assertTrue(first.state.value.signedIn); assertEquals(saved, stateStore.read(owner, NativeIdentityController.SESSION_SLOT))
+        stateStore.write(owner, StateSlot.CHAT_DRAFT, "draft")
+        val slots = listOf(com.whumpo.core.workspace.NativeWorkspaceController.PENDING_SLOT, com.whumpo.core.workspace.NativeWorkspaceController.APPROVAL_SLOT)
+        slots.forEach { stateStore.write(owner, it, "private pending") }
+        try { first.authorized(owner) { throw IdentityFailure("account_closing") } } catch (_: IdentityFailure) {}
+        assertNull(first.activeAccount.value); assertTrue(first.state.value.accountClosing); assertTrue(first.state.value.savedSession)
+        assertEquals(saved, stateStore.read(owner, NativeIdentityController.SESSION_SLOT))
+        assertNull(stateStore.read(owner, StateSlot.CHAT_DRAFT)); slots.forEach { assertNull(stateStore.read(owner, it)) }
+        assertFalse(stateStore.write(owner, StateSlot.CHAT_DRAFT, "late draft"))
+        first.cancel(); first.checkSession(); first.passkey(PasskeyPrompt { error("Closure must not prompt") }, true)
+        assertEquals(1, api.verifyCalls); assertNull(first.activeAccount.value)
+        val secondStore = store
+        val second = NativeIdentityController(api, secondStore, pending, environment, io) { clock }
+        second.initialize(); assertTrue(second.state.value.accountClosing); assertNull(second.activeAccount.value)
+        assertFalse(secondStore.write(owner, StateSlot.CHAT_DRAFT, "late restarted draft"))
+        assertNull(second.beginBrowser(BrowserPurpose.SIGN_IN)); assertEquals(0, api.starts)
+        second.signOut(); assertFalse(root.exists()); assertEquals(1, api.logoutCalls)
+    }
+
+    @Test fun closingDuringApprovalRecoveryClearsScreenAndPendingAndNeverReplays() = runTest {
+        val io = StandardTestDispatcher(testScheduler); val api = Api(); val stateStore = store
+        val identity = NativeIdentityController(api, stateStore, pending, environment, io) { clock }
+        identity.initialize(); identity.passkey(PasskeyPrompt { "fixture-credential" })
+        var writes = 0; var reads = 0
+        val review = NativeReview(ReviewKind.RESTORE, handoff, a, "Project", "pending", clock.plusSeconds(100), true,
+            ReviewControl(ReviewKind.RESTORE, handoff, a), true, "Replace saved documents", listOf("Later changes will be lost."), null, null, null, null)
+        val workspaceApi = object : NativeWorkspaceApi {
+            override suspend fun reviews(token: String) = listOf(review)
+            override suspend fun approve(token: String, request: PendingApproval): ChatAcceptance { writes++; throw IdentityFailure("network") }
+            override suspend fun bootstrap(token: String) = WorkspaceBootstrap(true, 0, "guided", 1, 1)
+            override suspend fun chat(token: String, cursor: String?, query: String) = NativeChatPage(0, "guided", emptyList(), null)
+            override suspend fun turn(token: String, requestId: String): NativeTurn { reads++; throw IdentityFailure("account_closing") }
+            override suspend fun send(token: String, request: PendingChat): ChatAcceptance = error("No Chat send allowed")
+            override suspend fun projects(token: String, cursor: String?) = NativePage<NativeProject>(emptyList(), null)
+            override suspend fun activity(token: String, cursor: String?) = NativePage<NativeActivity>(emptyList(), null)
+        }
+        val workspace = NativeWorkspaceController(identity, stateStore, workspaceApi, io) { clock }
+        backgroundScope.launch { workspace.observeAccounts() }; runCurrent()
+        workspace.approveReview(review.id, review.fingerprint(), true, "RESTORE")
+        assertNotNull(workspace.state.value.pendingApproval); assertEquals(1, writes)
+        workspace.checkPendingApproval(); runCurrent()
+        assertTrue(identity.state.value.accountClosing); assertNull(workspace.state.value.owner)
+        assertNull(workspace.state.value.pendingApproval); assertTrue(workspace.state.value.reviews.isEmpty())
+        workspace.checkPendingApproval(); workspace.approveReview(review.id, review.fingerprint(), true, "RESTORE")
+        assertEquals(1, writes); assertEquals(1, reads)
+    }
+
+    @Test fun cleanupFailureFreezesLocallyAndDoesNotClaimAnAccountClosureOrSuccessfulErasure() = runTest {
+        val io = StandardTestDispatcher(testScheduler); val api = Api()
+        val failing = object : SecretBox {
+            val delegate = FakeSecretBox()
+            override fun seal(plaintext: ByteArray, associatedData: ByteArray) = delegate.seal(plaintext, associatedData)
+            override fun open(ciphertext: ByteArray, associatedData: ByteArray) = delegate.open(ciphertext, associatedData)
+            override fun destroyKey() { delegate.destroyKey(); throw java.io.IOException("Synthetic key-service failure") }
+        }
+        val stateStore = AccountStateStore(root, failing)
+        val controller = NativeIdentityController(api, stateStore, pending, environment, io) { clock }
+        controller.initialize(); controller.passkey(PasskeyPrompt { "fixture-credential" })
+        api.offline = true; controller.signOut()
+        assertNull(controller.activeAccount.value); assertTrue(controller.state.value.localCleanupFailed)
+        assertFalse(controller.state.value.accountClosing); assertTrue(controller.state.value.message.contains("could not be confirmed"))
+        assertFalse(controller.state.value.message.startsWith("Signed out"))
+        controller.passkey(PasskeyPrompt { error("Frozen local storage must not prompt") }); assertEquals(1, api.verifyCalls)
+    }
+
+    @Test fun lateClosureFromThePreviousAccountCannotFreezeTheNewAccount() = runTest {
+        val io = StandardTestDispatcher(testScheduler); val api = Api(); val stateStore = store
+        val controller = NativeIdentityController(api, stateStore, pending, environment, io) { clock }
+        controller.initialize(); controller.passkey(PasskeyPrompt { "fixture-credential" })
+        val gate = CompletableDeferred<Unit>()
+        val job = launch { try { controller.authorized(AccountScope.of(a)) { gate.await(); throw IdentityFailure("account_closing") } } catch (_: IdentityFailure) {} }
+        runCurrent(); api.account = b; controller.passkey(PasskeyPrompt { "fixture-credential" })
+        stateStore.write(AccountScope.of(b), StateSlot.CHAT_DRAFT, "new owner draft")
+        gate.complete(Unit); job.join()
+        assertEquals(AccountScope.of(b), controller.activeAccount.value); assertFalse(controller.state.value.accountClosing)
+        assertEquals("new owner draft", stateStore.read(AccountScope.of(b), StateSlot.CHAT_DRAFT))
     }
 
     @Test fun tamperedExpiredOrForeignKeyPendingStateIsErased() {
