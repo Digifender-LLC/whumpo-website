@@ -1,7 +1,8 @@
 /** Navigation and maintained consent identity, never provider authority. */
-export type ConnectionProvider='github'|'cloudflare';
+import {isActiveConnectorProvider,type ActiveConnectorProvider} from './connector-catalog';
+export type ConnectionProvider=ActiveConnectorProvider;
 export type ConnectionHandoff={interactionId:string;definitionDigest:string};
-export const isConnectionProvider=(value:unknown):value is ConnectionProvider=>value==='github'||value==='cloudflare';
+export const isConnectionProvider=isActiveConnectorProvider;
 export function isConnectionHandoff(value:unknown):value is ConnectionHandoff{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const v=value as Record<string,unknown>;

@@ -1,7 +1,7 @@
+import {connectorVaultContext} from './connector-catalog';
 const encoder=new TextEncoder();
 export const CONNECTION_VAULT_FORMAT='wv2';
 const keyId=/^[a-z][a-z0-9-]{0,31}$/;
-const contextPattern=/^whumpo:(?:(?:github|cloudflare):(?:token|pkce)|github:refresh):[A-Za-z0-9_-]{1,128}:[A-Za-z0-9_-]{1,128}$/;
 const maxBytes=8192;
 type Keyring={version:2;active:string;keys:{id:string;secret:string}[]};
 export class ConnectionVaultError extends Error{
@@ -55,7 +55,7 @@ function envelope(value:unknown){
 /** Does not authenticate content or confer decryption/rotation authority. */
 export function connectionCiphertextKeyId(value:unknown){return envelope(value).id;}
 function additionalData(id:string,context:string){
- if(typeof context!=='string'||!contextPattern.test(context))throw new ConnectionVaultError('ciphertext');
+ if(!connectorVaultContext(context))throw new ConnectionVaultError('ciphertext');
  return encoder.encode(JSON.stringify(['whumpo-connection',CONNECTION_VAULT_FORMAT,id,context]));
 }
 async function key(secret:string){

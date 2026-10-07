@@ -2,6 +2,8 @@
 
 **WH-056 contract slice (WH-140), October 4, 2026 UTC; source baseline `d6d669a`.** This freezes one capability contract for the seven selected customer connections — GitHub, Cloudflare, Gmail, Google Calendar, Outlook email, Microsoft Calendar and HubSpot — maps the existing GitHub and Cloudflare machinery onto it with exact gaps, and splits the remaining [WH-056](roadmap/backlog.md#wh-056--standardize-bounded-external-lookups-and-reviewed-connector-actions) work into WH-141–146. It is a **planned contract**. It adds no table, route, OAuth client, scope request, provider adapter, binding or deployment. The [offline reference](../tools/prototypes/connectors.mjs) and [conformance harness](../tests/connectors-contract.mjs) exercise the frozen catalog and a synthetic in-memory runtime with fake providers. No Worker imports them.
 
+**WH-141 source implementation, October 7, 2026 UTC.** The [source catalog and request builder](../src/connector-catalog.ts) now match every frozen v1 declaration. GitHub and Cloudflare operation transports accept operation IDs, typed parameters and closed bodies only; methods, paths, query keys and GraphQL documents are server-owned. [Operation admission](../src/connector-admission.ts) derives dispatch eligibility from the operation and preserves exact receipt-bound recovery. Provider feature mapping and vault purposes derive from the catalog. Navigation/OAuth handoff identifiers derive only from implemented entries: the five planned declarations remain unavailable to handoffs, credential sealing and operation dispatch. WH-142–146 and real provider acceptance remain open. No schema or provider configuration changed.
+
 This contract uses these existing contracts and does not replace them: the [connection vault and key lifecycle](connection-key-lifecycle.md), [GitHub](integrations/github-connection.md) and [Cloudflare](integrations/cloudflare-connection.md) authorization, [Chat connection handoffs](chat-connection-handoffs.md), [WH-122 feature admission](feature-admission.md), the [WH-052 job envelope](job-envelope.md), [WH-116 data protection](data-protection.md) with the [lifecycle catalogue](data-lifecycle.json), the [inference privacy handoff](inference-privacy.md), the [bounded connection contracts](pricing-and-model-policy.md#bounded-connection-contracts) and the [current-version policy](current-version-policy.md). Its style and versioning follow the [shared module contract](shared-modules.md).
 
 ## Decision
@@ -16,7 +18,7 @@ The contract does not change GitHub/Cloudflare behaviour, enable any planned pro
 
 ## Catalog shape (contract version 1)
 
-The frozen catalog is `connectorCatalog` in the [reference](../tools/prototypes/connectors.mjs). `validateCatalog` rejects an unknown version, field, provider or authority class. It also rejects any widening shown in the table below.
+The frozen catalog is `connectorCatalog` in the [reference](../tools/prototypes/connectors.mjs), checked for exact equality with the [source declaration](../src/connector-catalog.ts). `validateCatalog` rejects an unknown version, field, provider or authority class. It also rejects any widening shown in the table below.
 
 | Element | Frozen v1 rule |
 | --- | --- |
@@ -125,7 +127,7 @@ A **minimized receipt** contains: receipt ID, owner, project (if any), provider,
 
 ## Existing GitHub and Cloudflare machinery
 
-The existing code already provides credential custody, account binding, feature admission, exact reviews, atomic dispatch claims and read-only recovery. What is missing is the common, declared form of these. The harness checks the pure parts against the catalog: the GitHub `BackupPaths` document, `backupRecoveryRead`, `dnsRecoveryRead` and vault context isolation.
+The existing code provides credential custody, account binding, feature admission, exact reviews, atomic dispatch claims and read-only recovery. The following table records the October 4 baseline gaps. WH-141 now closes G-GH-1, G-CF-1 and G-C1–C4 through the source catalog; G-C5–C7 remain WH-142 work. The harness checks the pure parts against the catalog: the GitHub `BackupPaths` document, `backupRecoveryRead`, `dnsRecoveryRead` and vault context isolation.
 
 | Contract element | GitHub ([connection](../src/github-connection.ts), [backups](../src/github-backups.ts)) | Cloudflare ([connection](../src/cloudflare-connection.ts), [DNS](../src/cloudflare-dns.ts)) |
 | --- | --- | --- |
@@ -184,3 +186,9 @@ WH-056 stays the parent with its acceptance unchanged. It closes only when every
 `node tests/connectors-contract.mjs` runs 71 offline checks. It validates the frozen catalog and rejects widened hosts, scopes and paths. It covers typed request construction and agreement with the existing pure GitHub/Cloudflare recovery, vault and catalogue functions. A reusable `runConformance` suite runs against the synthetic reference runtime with fake providers. It checks the host allowlist and redirect refusal, scope refusal, revoked, expired and provider-rejected credentials, single-flight refresh, in-flight disconnect, and lost-response reconciliation without a duplicate side effect (lost before or after acceptance, plus concurrent confirmation). It also checks consent binding, the training-route refusal, untrusted external data, owner-request-only operations refused from rule context and other principals, rule destination/limit/readiness gates, the four separate states and price binding.
 
 These checks prove the frozen contract and the reference only. They do not prove D1 atomicity, real provider behaviour, OAuth consent or acceptance. No database, network, model, credential, Cloudflare resource, CMS test or deployment is involved.
+
+### WH-141 source verification — October 7, 2026 UTC
+
+`pnpm --config.verify-deps-before-run=false check` passed in the isolated worktree (the flag prevents pnpm from trying to replace the shared dependency symlink). `node tests/connector-catalog.mjs` passed 57 additional checks against source: exact frozen catalog equality, all ten active operation requests, nested body refusal, path/query/host injection, immutable declarations, discovery/dispatch/recovery admission and refusal of all planned provider vault contexts. The original 71-check reference suite and 164-case vault suite still pass.
+
+The unchanged provider handler journeys passed on disposable local D1: GitHub connection, token lifecycle and backups; Cloudflare connection, TXT DNS and CNAME routing. The connection-handoff, task connection status, GitHub refresh-custody, keyring, rotation and rotation-custody checks also passed. Two tests that directly called the removed free-path transport now call declared operations; the in-flight disconnect case still proves result refusal and no automatic retry. OAuth/revocation endpoints remain separate fixed lifecycle operations, with no new endpoint or scope. Current AAD strings and key rotation behavior are unchanged. These are local synthetic results, not provider sandbox or customer acceptance.

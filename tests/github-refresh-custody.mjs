@@ -49,7 +49,7 @@ try{
  for(const context of [`whumpo:github:token:${a.account}:${saved.token_id}`,`whumpo:cloudflare:token:${a.account}:${saved.token_id}`,`whumpo:github:refresh:other:${saved.token_id}`,`whumpo:github:refresh:${a.account}:other`])await reject(()=>v.unseal(config.key,context,saved.ciphertext));
  await reject(()=>v.seal(config.key,`whumpo:cloudflare:refresh:${a.account}:${saved.token_id}`,refreshToken));
  const access=await g.githubAccess(await a.scope(),a.account,config,async(_url,init)=>{assert.equal(init.headers.authorization,'Bearer '+accessToken);return Response.json({ok:true});},{projectId:null,operation:'read'});
- await access.send('/user');
+ await access.send('installations.list');
  const status=await g.connectionStatus(await a.scope(),a.account,config);assert.ok(!JSON.stringify(status).includes(refreshToken));assert.ok(!JSON.stringify(status).includes('ciphertext'));
  const before=await restore();assert.equal(before.status,'verified',JSON.stringify(before));assert.equal(before.keys.credentials,2);assert.equal(before.tables,(await currentSchemaArtifact()).expected.tables);
  // Rotation uses the existing CAS journal and the distinct refresh purpose.

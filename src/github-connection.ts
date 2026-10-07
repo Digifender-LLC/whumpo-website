@@ -1,3 +1,5 @@
+import {connectorOperationUse} from './connector-admission';
+import {buildConnectorRequest,type ConnectorOperationId} from './connector-catalog';
 import {prepareConnectionHandoff} from './chat-interactions/connection-handoff';
 import type {ConnectionHandoff} from './connection-handoff-shape';
 import {sealConnectionWrite} from './connection-write-policy';
@@ -135,7 +137,7 @@ export async function disconnectGitHub(db:D1Database,userId:string,configuration
 
 export async function githubInstallations(db:D1Database,userId:string,configuration:GitHubConfig|undefined,transport:typeof fetch=fetch){
  const config=required(configuration),access=await githubAccess(db,userId,config,transport,{projectId:null,operation:'read'});
- const data=await readJSON(await access.send('/user/installations?per_page=100'));
+ const data=await readJSON(await access.send('installations.list'));
  // Recheck after the entire bounded body, not just after receiving headers.
  await access.assertCurrent();
  if(!Array.isArray(data.installations)||data.installations.length>100)throw new ConnectionError(503,'GitHub returned invalid installation data.');
@@ -166,14 +168,14 @@ export async function githubAccess(db:D1Database,userId:string,configuration:Git
  }
 
  await assertCurrent();
- return {tokenId:current.id,githubUserId:current.github_user_id,assertCurrent,async send(path:string,options:RequestInit={},operation:'read'|'prepare'|'confirm'|'dispatch'='recoveryId' in use?'read':use.operation){
-  if(!path.startsWith('/')||path.startsWith('//'))throw new ConnectionError(400,'Invalid GitHub API path.');
+ return {tokenId:current.id,githubUserId:current.github_user_id,assertCurrent,async send(id:ConnectorOperationId<'github'>,params:Record<string,unknown>={},body?:unknown){
+  const built=buildConnectorRequest('github',id,params,body),operation=connectorOperationUse('github',id,use);
   const row=await db.prepare("SELECT t.ciphertext FROM github_connections c JOIN github_token_vault t ON t.id=c.active_token_id AND t.user_id=c.user_id WHERE c.user_id=? AND t.id=? AND t.state='active' AND t.expires_at>?").bind(userId,current.id,new Date().toISOString()).first<{ciphertext:string}>();
   if(!row)throw new ConnectionError(401,'GitHub access changed. Reconnect and prepare a new review.');
   const token=await unseal(config.key,aad(userId,current.id,'token'),row.ciphertext);
   const recovery=await assertCurrent(operation);
-  if(recovery&&!backupRecoveryRead(recovery,path,options))throw new ConnectionError(403,'Backup reconciliation can only inspect its recorded destination.');
-  const response=await request(API+path,{...options,headers:{...apiHeaders,'content-type':'application/json',authorization:'Bearer '+token}},transport);
+  if(recovery&&!backupRecoveryRead(recovery,built.path,{method:built.method,body:built.body}))throw new ConnectionError(403,'Backup reconciliation can only inspect its recorded destination.');
+  const response=await request(built.url,{method:built.method,body:built.body,headers:{...apiHeaders,'content-type':'application/json',authorization:'Bearer '+token}},transport);
   try{await assertCurrent(operation);}catch(error){await response.body?.cancel().catch(()=>{});throw error;}
   return response;
  }};
