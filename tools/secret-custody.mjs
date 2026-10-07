@@ -16,7 +16,7 @@ export const secretCustody=Object.freeze([
  {name:'CMS_BRIDGE_MASTER_KEY',classes:['cms-resources'],readers:['src/cms-status.ts','tools/deploy-platform.mjs'],recovery:'retain-exact-key-versions',dependency:'Registered instance derivation digests and separately protected master material. CMS functional acceptance remains deferred.'},
 ].map(entry=>Object.freeze({...entry,backupResponsibility:'platform-operator',backupBoundary:'separately-protected-from-data-and-release-archives'})));
 
-export const publicVariableNames=Object.freeze(['ENVIRONMENT','TURNSTILE_SITE_KEY','AI_BASE_URL','AI_MODEL','AI_PROTOCOL','CLOUDFLARE_CLIENT_ID','DOMAIN_HOSTING_READY','GITHUB_CLIENT_ID','GITHUB_APP_ID','GITHUB_APP_SLUG','STRIPE_SANDBOX_CATALOG','SUPPORT_HOURS','SUPPORT_NOTIFICATION_PROVIDER','SUPPORT_NOTIFICATION_REVIEW','CONTACT_NOTIFICATION_PROVIDER','CONTACT_NOTIFICATION_REVIEW']);
+export const publicVariableNames=Object.freeze(['ENVIRONMENT','MOBILE_ANDROID_PACKAGE','MOBILE_ANDROID_CERT_SHA256','MOBILE_MINIMUM_BUILD','TURNSTILE_SITE_KEY','AI_BASE_URL','AI_MODEL','AI_PROTOCOL','CLOUDFLARE_CLIENT_ID','DOMAIN_HOSTING_READY','GITHUB_CLIENT_ID','GITHUB_APP_ID','GITHUB_APP_SLUG','STRIPE_SANDBOX_CATALOG','SUPPORT_HOURS','SUPPORT_NOTIFICATION_PROVIDER','SUPPORT_NOTIFICATION_REVIEW','CONTACT_NOTIFICATION_PROVIDER','CONTACT_NOTIFICATION_REVIEW']);
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const denied=()=>Error('Secret custody inventory does not match current source; review metadata locally.');
 

@@ -8,6 +8,11 @@ import {archivedConfig,prepareRelease} from '../tools/prepare-release.mjs';
 import {deployPlatform} from '../tools/deploy-platform.mjs';
 
 const report=await validateSecretCustody();assert.equal(report.secrets.length,9);assert.equal(report.backupCustodyVerified,false);assert.equal(report.retirementAllowed,false);
+// Package identity, public signing-certificate fingerprint and minimum client build are release metadata, never private signing keys.
+for(const name of ['MOBILE_ANDROID_PACKAGE','MOBILE_ANDROID_CERT_SHA256','MOBILE_MINIMUM_BUILD']){
+ assert.ok(publicVariableNames.includes(name));assert.ok(!secretCustody.some(secret=>secret.name===name));
+}
+assertArtifactConfiguration({vars:{MOBILE_ANDROID_PACKAGE:'com.example.synthetic',MOBILE_ANDROID_CERT_SHA256:Array(32).fill('AB').join(':'),MOBILE_MINIMUM_BUILD:'2'}});
 const canary='PRIVATE_CUSTODY_VALUE_CANARY';let refused=0;
 function reject(fn){assert.throws(fn,e=>!e.message.includes(canary));refused++;}
 for(const secret of secretCustody){
