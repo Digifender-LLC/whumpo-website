@@ -13,12 +13,14 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.whumpo.android.R
+import com.whumpo.android.identity.IdentityPanel
+import com.whumpo.core.identity.NativeIdentityController
 import com.whumpo.android.ui.common.ScreenTitle
 import com.whumpo.android.ui.common.ScrollingPage
 import com.whumpo.core.environment.EnvironmentKind
 
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel) {
+fun SettingsScreen(viewModel: SettingsViewModel, identity: NativeIdentityController) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     ScrollingPage {
         ScreenTitle(stringResource(R.string.nav_settings))
@@ -37,6 +39,8 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
         } else {
             Text(stringResource(R.string.settings_signed_out), style = MaterialTheme.typography.bodyLarge)
         }
+
+        IdentityPanel(identity)
 
         HorizontalDivider()
         SectionTitle(stringResource(R.string.settings_environment))

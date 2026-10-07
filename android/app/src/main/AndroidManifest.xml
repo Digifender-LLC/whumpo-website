@@ -6,8 +6,10 @@
       Backups are disabled and every domain is excluded for both cloud backup and
       device-to-device transfer: account-scoped state (drafts, sessions, pending
       operations) lives in no-backup storage and its Keystore key is not exportable.
-      No INTERNET permission yet: the WH-082 shell makes no network requests.
+      Identity requests use the current bounded native API; no browser cookie jar.
     -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:name=".WhumpoApplication"
         android:allowBackup="false"
@@ -24,10 +26,18 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Effective association still requires the owner-approved signing identity on the server. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="whumpo.com" android:path="/app/return" />
             </intent-filter>
         </activity>
     </application>

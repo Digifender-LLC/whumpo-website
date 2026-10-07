@@ -4,6 +4,7 @@ import android.app.Application
 import com.whumpo.android.security.KeystoreSecretBox
 import com.whumpo.core.account.AccountStateStore
 import com.whumpo.core.environment.WhumpoEnvironment
+import com.whumpo.core.identity.PendingIdentityStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -23,8 +24,9 @@ class WhumpoApplication : Application() {
             environment = WhumpoEnvironment.from(BuildConfig.WHUMPO_ENVIRONMENT, BuildConfig.WHUMPO_ORIGIN),
             accountState = store,
             io = Dispatchers.IO,
+            pendingIdentity = PendingIdentityStore(File(noBackupFilesDir, "native-pending"), KeystoreSecretBox("whumpo.native-pending.v1")),
         )
-        appScope.launch { store.restore() }
+        appScope.launch { container.identity.initialize() }
     }
 
     companion object {

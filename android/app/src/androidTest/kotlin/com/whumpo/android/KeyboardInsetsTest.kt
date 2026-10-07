@@ -24,7 +24,7 @@ class KeyboardInsetsTest {
     @Before
     fun setUp() {
         Fixtures.reset()
-        Fixtures.container.accountState.activate(Fixtures.ownerA)
+        Fixtures.signIn()
     }
 
     @After

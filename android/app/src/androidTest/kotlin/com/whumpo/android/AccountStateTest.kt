@@ -66,7 +66,7 @@ class AccountStateTest {
         val onDisk = stateDir.walkTopDown().filter { it.isFile }
             .joinToString("|") { it.name + String(it.readBytes(), Charsets.ISO_8859_1) }
         assertFalse(onDisk.contains("plaintext-marker-for-test"))
-        assertFalse(onDisk.contains("acct_fixture_instrumented_a"))
+        assertFalse(onDisk.contains("11111111-1111-4111-8111-111111111111"))
     }
 
     @Test
@@ -88,7 +88,7 @@ class AccountStateTest {
 
     @Test
     fun draftSurvivesActivityRecreationAndProcessRestart() {
-        store.activate(Fixtures.ownerA)
+        Fixtures.signIn()
         val scenario = ActivityScenario.launch(MainActivity::class.java)
         compose.onNodeWithTag("chat-composer").performTextInput("Add a booking page")
         // The ViewModel saves after a short debounce on the real clock.
@@ -111,7 +111,7 @@ class AccountStateTest {
 
     @Test
     fun signOutFromSettingsClearsDraftsAndReturnsToSignedOutChat() {
-        store.activate(Fixtures.ownerA)
+        Fixtures.signIn()
         store.write(Fixtures.ownerA, StateSlot.CHAT_DRAFT, "erase me")
         val scenario = ActivityScenario.launch(MainActivity::class.java)
 

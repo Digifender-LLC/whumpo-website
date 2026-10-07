@@ -13,8 +13,8 @@ android {
         applicationId = "com.whumpo.android"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "0.1.0-shell"
+        versionCode = 2
+        versionName = "0.2.0-identity"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -73,6 +73,10 @@ kotlin {
 
 dependencies {
     implementation(project(":core"))
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services)
+    implementation(libs.androidx.browser)
+    implementation(libs.okhttp)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
@@ -85,6 +89,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
 
     testImplementation(libs.junit4)
+    // Android supplies org.json; use its strict JVM counterpart for transport acceptance.
+    testImplementation(libs.json)
     testImplementation(libs.kotlinx.coroutines.test)
 
     androidTestImplementation(platform(libs.androidx.compose.bom))

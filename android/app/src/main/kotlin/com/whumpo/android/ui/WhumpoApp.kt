@@ -10,6 +10,8 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -48,6 +50,10 @@ enum class TopDestination(
 @Composable
 fun WhumpoApp(container: AppContainer) {
     val navController = rememberNavController()
+    val identity by container.identity.state.collectAsStateWithLifecycle()
+    LaunchedEffect(identity.returnReady) {
+        if (identity.returnReady) navController.navigate(TopDestination.SETTINGS.route) { launchSingleTop = true }
+    }
     val backStack by navController.currentBackStackEntryAsState()
     val current = backStack?.destination
 
@@ -89,7 +95,7 @@ fun WhumpoApp(container: AppContainer) {
                 ActivityScreen(viewModel(factory = ActivityViewModel.factory(container)))
             }
             composable(TopDestination.SETTINGS.route) {
-                SettingsScreen(viewModel(factory = SettingsViewModel.factory(container)))
+                SettingsScreen(viewModel(factory = SettingsViewModel.factory(container)), container.identity)
             }
         }
     }
