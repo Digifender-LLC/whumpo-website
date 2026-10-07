@@ -9,6 +9,7 @@ let checks=0;
 const check=(name,fn)=>{try{fn();checks++;}catch(cause){throw Error(name,{cause});}};
 const refuse=(fn,code)=>assert.throws(fn,e=>{assert.equal(e.code,code);return true;});
 check('source catalog exactly matches frozen declarations',()=>{assert.deepEqual(catalog,frozen);assert.equal(validateCatalog(catalog),true);});
+check('HubSpot local-only revocation never embeds a credential in its endpoint',()=>{assert.equal(catalog.providers.hubspot.authorization.revoke,null);assert.equal(catalog.providers.hubspot.authorization.revocation,'local-only-owner-removal');assert.equal(catalog.providers.hubspot.readiness,'planned');});
 check('catalog declarations and nested operation authority cannot mutate',()=>{assert.throws(()=>catalog.providers.github.operations['backup.commit'].authority.push('approved-rule'));assert.throws(()=>catalog.providers.github.origins.push('https://evil.test'));});
 const id='00000000-0000-4000-8000-000000000001',head='a'.repeat(40),path='whumpo/'+id+'/versions/'+id;
 const paths={query:m.graphqlDocuments.BackupPaths,variables:{owner:'owner',name:'website',p0:head+':whumpo',p1:head+':whumpo/'+id,p2:head+':whumpo/'+id+'/versions',p3:head+':'+path}};

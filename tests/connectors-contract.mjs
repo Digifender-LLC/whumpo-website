@@ -142,7 +142,7 @@ function fakeProvider(){
    if(s.token.invalid)return {status:400,json:{error:'invalid_grant'}};
    s.token.count=(s.token.count??0)+1;return {status:200,json:{access_token:'synthetic-access-'+s.token.count,token_type:'Bearer',expires_in:3600}};
   }
-  if(/revoke|refresh-tokens|applications/.test(u.pathname))return {status:s.revoke,json:null};
+  if(/revoke|applications/.test(u.pathname))return {status:s.revoke,json:null};
   if(s.mode.status)return {status:s.mode.status,json:{}};
   if(s.mode.redirect)return {status:302,json:null};
   if(req.method==='POST'&&s.mode.action!=='read'&&/send|events$|contacts$|dns_records$/.test(u.pathname)){
@@ -170,6 +170,11 @@ function referenceFactory(catalog=clone,routes=trainingRoute){
  return ()=>{const clock={t:clockBase},{s,transport}=fakeProvider();return {rt:createReferenceRuntime({catalog:catalog(),transport,now:()=>clock.t,routes}),s,clock};};
 }
 await runConformance('reference',referenceFactory(),test);
+await test('HubSpot local disconnect needs owner consent removal and never sends a token URL',async()=>{
+ const {rt,s}=referenceFactory()();const auth=connectorCatalog.providers.hubspot.authorization;assert.equal(auth.revoke,null);assert.equal(auth.revocation,'local-only-owner-removal');
+ rt.connect('owner-a','hubspot',token(undefined,{refresh_token:'synthetic-refresh',expires_in:1800}));assert.deepEqual(await rt.disconnect('owner-a','hubspot'),{state:'revocation-owner-action'});assert.deepEqual(s.calls,[]);
+});
+await test('token-in-URL revocation kind is no longer an admitted contract',()=>{const c=clone();Object.assign(c.providers.hubspot.authorization,{revoke:'https://api.hubapi.com/oauth/v1/refresh-tokens/{token}',revocation:'provider-refresh-delete'});throws(()=>validateCatalog(c),'INVALID_REVOCATION');});
 
 // Reference-only cases that need a live-accepted synthetic catalog or eligibility changes.
 await test('approved deterministic rule: exact destination, template and limit; requires an accepted adapter',async()=>{

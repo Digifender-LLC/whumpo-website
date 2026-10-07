@@ -158,7 +158,7 @@ The table below records the frozen operation **set** and authority for each new 
 | Google Calendar (WH-097) | `calendars.list` (`owner-control`), `events.range` (≤31 days) | `event.create` (client event ID) | RFC 7009 / single-flight | Granular calendar-list and owned-event scopes; update/delete are added by WH-097 with the same rules. |
 | Outlook email (WH-098) | `messages.search`, `message.get` | `message.send` (marker readback) | owner removal / single-flight | `sendMail` returns no message ID, so readback relies on a marker. Personal versus work/school accounts and tenant consent need checking. |
 | Microsoft Calendar (WH-099) | `events.range` (≤31 days) | `event.create` (transaction ID) | owner removal / single-flight | `Calendars.ReadWrite` is broader than selected calendars, so Whumpo enforces the selection. |
-| HubSpot (WH-100) | `contacts.search` | `contact.create` (**owner-request + approved-rule candidate**) | refresh-token delete / single-flight | The refresh-token delete API carries the token in the URL path. That conflicts with the "never in URLs" rule, and WH-100 must decide on it. Preserve unmapped fields. |
+| HubSpot (WH-100) | `contacts.search` | `contact.create` (**owner-request + approved-rule candidate**) | owner removal / single-flight | October 7 decision: local-only disconnection, followed by honest instructions to remove app consent at HubSpot. No credential-in-URL exception. Preserve unmapped fields; provider registration and scope verification remain pending. |
 
 ## Delivery slices
 
@@ -174,16 +174,17 @@ WH-056 stays the parent with its acceptance unchanged. It closes only when every
 | WH-145 | Approved deterministic-rule bridge from the WH-052 envelope to rule-eligible operations | WH-143, WH-052 |
 | WH-146 | Connected synthetic acceptance on local D1, plus privacy/deletion and rate-limit review | WH-142, WH-143, WH-144, WH-145 |
 
-## Open owner decisions
+## Recorded implementation decisions — October 7, 2026 UTC
 
-1. **Connector content retention** (before WH-143 admits `connector-content`). Options: never persist (show and discard; the receipt keeps digests only), keep for the Chat card's seven-day retention, or an owner-configurable bounded window.
-2. **Rule-eligible connector actions at launch.** This contract allows only HubSpot `contact.create` as a candidate. Confirm it, or confirm that no connector action is rule-eligible at first launch. Gmail/Outlook automated notifications would otherwise use the WH-036 platform sender.
-3. **HubSpot refresh-token revocation URL.** Accept HubSpot's documented path-token delete as a narrow exception, with the request excluded from all logging, or treat HubSpot as `local-only-owner-removal`.
-4. **Parent verification wording.** The WH-056 packet lists "Approved provider sandbox acceptance", but every provider packet depends on WH-056. This decomposition puts sandbox acceptance in WH-031/032/096–100. Confirm, or reorder so that WH-056 waits for them.
+The authorized implementation decisions are: (1) provider content remains transient, shown only in the explicitly selected owner panel and discarded; receipts/consent hold digests and identifiers only; (2) no rule-triggered connector action is enabled until separately accepted, while the offline HubSpot candidate remains a contract test; (3) HubSpot uses `local-only-owner-removal`, with no token-bearing revocation URL and no claim that local disconnect revoked the remote grant. Microsoft uses the same honest owner-action state. New-provider readiness remains planned/refused.
+
+The source and offline reference now share the amended HubSpot declaration. The reference reports `revocation-owner-action` without sending a revocation request; source transport/vault readiness still refuses HubSpot entirely. This policy amendment does not implement WH-144 refresh custody or register a provider client. Provider-specific instructions must link the documented consent-removal settings when the maintained adapter is implemented; those instructions cannot claim success at the provider.
+
+WH-056 parent acceptance is unchanged. Source tests and offline contract evidence do not substitute for the provider sandbox/customer acceptance required by the existing and new provider packets.
 
 ## Verification
 
-`node tests/connectors-contract.mjs` runs 71 offline checks. It validates the frozen catalog and rejects widened hosts, scopes and paths. It covers typed request construction and agreement with the existing pure GitHub/Cloudflare recovery, vault and catalogue functions. A reusable `runConformance` suite runs against the synthetic reference runtime with fake providers. It checks the host allowlist and redirect refusal, scope refusal, revoked, expired and provider-rejected credentials, single-flight refresh, in-flight disconnect, and lost-response reconciliation without a duplicate side effect (lost before or after acceptance, plus concurrent confirmation). It also checks consent binding, the training-route refusal, untrusted external data, owner-request-only operations refused from rule context and other principals, rule destination/limit/readiness gates, the four separate states and price binding.
+`node tests/connectors-contract.mjs` runs 73 offline checks. It validates the frozen catalog and rejects widened hosts, scopes and paths. It covers typed request construction and agreement with the existing pure GitHub/Cloudflare recovery, vault and catalogue functions. A reusable `runConformance` suite runs against the synthetic reference runtime with fake providers. It checks the host allowlist and redirect refusal, scope refusal, revoked, expired and provider-rejected credentials, single-flight refresh, in-flight disconnect, and lost-response reconciliation without a duplicate side effect (lost before or after acceptance, plus concurrent confirmation). It also checks consent binding, the training-route refusal, untrusted external data, owner-request-only operations refused from rule context and other principals, rule destination/limit/readiness gates, the four separate states and price binding.
 
 These checks prove the frozen contract and the reference only. They do not prove D1 atomicity, real provider behaviour, OAuth consent or acceptance. No database, network, model, credential, Cloudflare resource, CMS test or deployment is involved.
 
@@ -217,3 +218,8 @@ Parameters and provider results live only in request/component memory. The `conn
 **Local evidence:** type checking; eighteen actual-handler consent journeys on SQLite and local D1; the Chromium [shared-control/Worker journey](../tests/connector-lookup-browser.mjs) with synthetic provider reads; catalog 57, review 40 and reference 71 checks; lifecycle, release-manifest, preservation-inventory and isolated-restore checks. The browser journey covers exact visible review, query-edit invalidation, transient display/discard, lost response without retry, discarded late responses, workspace reset, reload without provider activity, no Chat/cache persistence, and authenticated same-origin admission.
 
 This delivers the request-bound consent runtime and connected owner-panel control. WH-143 remains open for the generic new-provider action receipt store and its action-specific Chat bindings; WH-142's current GitHub/Cloudflare receipts remain authoritative. WH-144 refresh custody, WH-145 deterministic-rule bridge, full WH-146 acceptance and real provider/customer acceptance are not claimed. New adapters must use this handler and register their actual current credential predicate and minimized reader before their catalog readiness can change. The new schema input requires an empty test-database cutover; this session ran no deployment or provider activation.
+
+
+### Approved HubSpot revocation amendment — October 7, 2026 UTC
+
+`node tests/connector-catalog.mjs` now passes 58 source checks and `node tests/connectors-contract.mjs` passes 73 offline checks. Added cases pin `revoke: null`, preserve planned readiness, reject the removed token-in-URL revocation kind, and prove the reference's local-only disconnect sends no provider request and reports owner action rather than remote revocation. The five planned-provider vault/transport refusals remain in the source suite.

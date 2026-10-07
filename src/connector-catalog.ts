@@ -74,7 +74,7 @@ export const connectorCatalog=deepFreeze({
     'event.create':action({origin:'https://graph.microsoft.com',path:'/v1.0/me/calendars/{calendar}/events',method:'POST',body:{kind:'json',fields:['subject','start','end','attendees','transactionId']},params:{calendar:'opaque'},scopes:['Calendars.ReadWrite'],dataClass:'connector-receipts',idempotency:'provider-idempotency-key',reconcile:['events.range'],bounds:{maxBytes:65536,maxItems:1}}),
    }},
   hubspot:{readiness:'planned',featureId:'connections.hubspot',
-   authorization:{kind:'oauth-code',authorize:'https://app.hubspot.com/oauth/authorize',token:'https://api.hubapi.com/oauth/v1/token',revoke:'https://api.hubapi.com/oauth/v1/refresh-tokens/{token}',revocation:'provider-refresh-delete',refresh:'single-flight',maxAccessSeconds:1800},
+   authorization:{kind:'oauth-code',authorize:'https://app.hubspot.com/oauth/authorize',token:'https://api.hubapi.com/oauth/v1/token',revoke:null,revocation:'local-only-owner-removal',refresh:'single-flight',maxAccessSeconds:1800},
    origins:['https://api.hubapi.com'],scopes:['oauth','crm.objects.contacts.read','crm.objects.contacts.write'],
    operations:{
     'contacts.search':read({origin:'https://api.hubapi.com',path:'/crm/v3/objects/contacts/search',method:'POST',body:{kind:'json',fields:['filterGroups','properties','limit']},params:{},scopes:['crm.objects.contacts.read'],consent:'request-bound',destinations:['owner-panel','model-context'],dataClass:'connector-content',bounds:{maxBytes:262144,maxItems:10}}),
