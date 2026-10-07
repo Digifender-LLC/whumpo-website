@@ -146,3 +146,8 @@ Closure confirmation now compares every reviewed inventory count and prerequisit
 An already admitted ordinary request rechecks current identity and the account freeze together in one read immediately before external transport, private object storage and service-binding calls, and after storage/service readback. A freeze denies those effects; an expired or revoked identity still denies them. The explicit account-lifecycle scope keeps status, export and the existing revocation continuation usable while closure waits. Database writes retain the atomic admission assertion. External dispatch itself cannot share a database transaction.
 
 Every composed collection-photo export now consumes the same per-account photo-read allowance as the owner library, before shared storage reservation or an object read. Exhaustion stops the stream without its completion manifest. Standalone module exports retain their existing shared storage allowance.
+
+
+### Contact notification effects — October 7, 2026 UTC
+
+The shared inventory includes `unresolvedContactNotifications` for contact outbox rows in `dispatching` or `uncertain`. Closure waits at the operations step while they remain; direct cascades also refuse to delete these receipts. The deterministic contact sender repeats the account freeze check inside enqueue and dispatch transitions, so work read before a closure cannot start a new send afterward. An already committed dispatch remains an unresolved external effect, even if a Worker stopped before reaching the provider. No automatic retry or unsupported provider reconciliation is introduced. The contact recovery fixture exercises actual closure review/confirmation and the read-to-dispatch race on the current schema.

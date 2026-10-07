@@ -45,7 +45,7 @@ const ownerActions={
 /** Retained records an operator must reconcile; closure may start, but the purge stops honestly at `blocked`. */
 const operatorRecords=['gatewaySpendBuckets','gatewaySpendAttempts','githubGrantReviews'] as const;
 /** Unresolved operations: never released or redispatched because closure was requested. */
-const unresolved=['unresolvedStandardAI','unresolvedChatInteractionContinuations','pendingScanTickets','githubGrantUncertain','unresolvedConnectionExchanges','connectionRotationGuards','uncertainGitHubBackups','unresolvedDomainRecords'] as const;
+const unresolved=['unresolvedContactNotifications','unresolvedStandardAI','unresolvedChatInteractionContinuations','pendingScanTickets','githubGrantUncertain','unresolvedConnectionExchanges','connectionRotationGuards','uncertainGitHubBackups','unresolvedDomainRecords'] as const;
 const credentials=['githubCredentials','cloudflareCredentials','githubRefreshCustody'] as const;
 /** Identity rows change with every reauthentication ceremony and funnel rows with hourly derivation; both are removed
  * by the purge and are excluded from the exact binding so a fresh-passkey retry does not invalidate the review.

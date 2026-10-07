@@ -26,7 +26,8 @@ export const backlogInventory={
  contact_submissions:queue('contact_submissions','expires_at<=?1 AND project_id NOT IN (SELECT project_id FROM safety_held_projects)','expires_at'),
  guest_previews:queue('guest_preview_links l',"coalesce(l.revoked_at,l.expires_at)+2592000<=unixepoch(?1) AND NOT EXISTS(SELECT 1 FROM guest_preview_feedback f WHERE f.link_id=l.id)","strftime('%Y-%m-%dT%H:%M:%fZ',coalesce(l.revoked_at,l.expires_at)+2592000,'unixepoch')"),
  contact_receipts:expiry('contact_receipts'),
- contact_notification_outbox:queue('contact_notification_outbox','expires_at<=?1 AND project_id NOT IN (SELECT project_id FROM safety_held_projects)','expires_at'),
+ contact_notification_outbox:queue('contact_notification_outbox',"state NOT IN ('dispatching','uncertain') AND expires_at<=?1 AND project_id NOT IN (SELECT project_id FROM safety_held_projects)",'expires_at'),
+ contact_notification_unknown:queue('contact_notification_outbox',"state IN ('dispatching','uncertain')",'dispatched_at',1800000),
  contact_notification_queue:queue('contact_notification_outbox',"state='queued'",'next_attempt_at',3600000),
  github_oauth:expiry('github_oauth_states'),
  github_staged:expiry('github_token_staging'),
@@ -55,6 +56,7 @@ export const backlogInventory={
  account_closures:queue('account_closures c',"c.state<>'complete' AND NOT EXISTS(SELECT 1 FROM safety_preservation_holds h WHERE h.released_at IS NULL AND (h.subject_user_id=c.account_id OR (h.scope IN ('project','object') AND h.project_id IN (SELECT id FROM projects WHERE owner_user_id=c.account_id))))","strftime('%Y-%m-%dT%H:%M:%fZ',c.updated_at,'unixepoch')"),
 };
 export const operationInventory={
+ contact_notifications:{table:'contact_notification_outbox',state:'state',states:['dispatching','uncertain'],time:'dispatched_at',guide:'docs/contact-forms.md'},
  standard_ai:{table:'standard_ai_requests',state:'state',states:['reserved','dispatched','uncertain'],time:'updated_at',guide:'docs/standard-ai-accounting.md'},
  hosting:{table:'domain_connections',state:'state',states:['creating','uncertain','disconnecting','provisioning'],time:'created_at',guide:'docs/integrations/domain-hosting.md'},
  backups:{table:'github_backups',state:'state',states:['dispatching','uncertain'],time:'dispatched_at',guide:'docs/integrations/github-backups.md'},

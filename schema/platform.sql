@@ -1382,7 +1382,7 @@ CREATE TABLE support_deliveries (
 
 -- WH-036: provider-neutral contact notification outbox. The inbox (contact_submissions) stays the source of truth;
 -- nothing here carries a visitor name, email or message. Rows are created only when a selected, implemented and
--- reviewed provider is configured (src/contact-notifications.ts); no provider is implemented or enabled.
+-- reviewed provider is configured (src/contact-notifications.ts); source implementation does not imply live acceptance.
 CREATE TABLE contact_notification_destinations (
  id TEXT PRIMARY KEY,
  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1419,14 +1419,20 @@ CREATE TABLE contact_notification_outbox (
  idempotency_key TEXT NOT NULL UNIQUE CHECK(length(idempotency_key) BETWEEN 10 AND 120),
  provider TEXT NOT NULL CHECK(length(provider) BETWEEN 1 AND 60),
  review TEXT NOT NULL CHECK(length(review) BETWEEN 1 AND 200),
- state TEXT NOT NULL DEFAULT 'queued' CHECK(state IN ('queued','accepted','failed','cancelled','bounced','complained')),
+ state TEXT NOT NULL DEFAULT 'queued' CHECK(state IN ('queued','dispatching','uncertain','accepted','failed','cancelled','bounced','complained')),
  attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts BETWEEN 0 AND 10),
+ dispatch_id TEXT CHECK(dispatch_id IS NULL OR length(dispatch_id)=36),
+ dispatched_at TEXT,
  created_at TEXT NOT NULL,
  next_attempt_at TEXT NOT NULL,
  expires_at TEXT NOT NULL,
  accepted_at TEXT,
  provider_ref TEXT CHECK(provider_ref IS NULL OR length(provider_ref) BETWEEN 1 AND 100),
  last_error TEXT CHECK(last_error IS NULL OR last_error IN ('rejected','unavailable','exhausted','suppressed','expired','contained','uncertain','ceiling')),
+ CHECK((dispatch_id IS NULL)=(dispatched_at IS NULL)),
+ CHECK((attempts=0)=(dispatch_id IS NULL)),
+ CHECK(state NOT IN ('dispatching','uncertain') OR dispatch_id IS NOT NULL),
+ CHECK(state!='uncertain' OR last_error IS 'uncertain'),
  CHECK((kind='new_message')=(submission_id IS NOT NULL)),
  CHECK((state IN ('accepted','bounced','complained'))=(accepted_at IS NOT NULL))
 );
@@ -3766,7 +3772,8 @@ CREATE TRIGGER contact_suppression_apply AFTER INSERT ON contact_notification_su
 END;
 
 CREATE TRIGGER contact_outbox_insert BEFORE INSERT ON contact_notification_outbox BEGIN
- SELECT RAISE(ABORT,'contact_outbox_initial') WHERE NEW.state!='queued' OR NEW.attempts!=0 OR NEW.accepted_at IS NOT NULL OR NEW.provider_ref IS NOT NULL OR NEW.last_error IS NOT NULL;
+ SELECT RAISE(ABORT,'contact_delivery_closed') WHERE EXISTS(SELECT 1 FROM account_closures WHERE account_id=NEW.user_id);
+ SELECT RAISE(ABORT,'contact_outbox_initial') WHERE NEW.state!='queued' OR NEW.attempts!=0 OR NEW.dispatch_id IS NOT NULL OR NEW.dispatched_at IS NOT NULL OR NEW.accepted_at IS NOT NULL OR NEW.provider_ref IS NOT NULL OR NEW.last_error IS NOT NULL;
  SELECT RAISE(ABORT,'contact_outbox_destination') WHERE NOT EXISTS(SELECT 1 FROM contact_notification_destinations d WHERE d.id=NEW.destination_id AND d.user_id=NEW.user_id AND d.project_id=NEW.project_id AND d.state=CASE NEW.kind WHEN 'verification' THEN 'unverified' ELSE 'verified' END);
  SELECT RAISE(ABORT,'contact_outbox_submission') WHERE NEW.kind='new_message' AND NOT EXISTS(SELECT 1 FROM contact_submissions WHERE id=NEW.submission_id AND project_id=NEW.project_id);
  SELECT RAISE(ABORT,'contact_outbox_rate') WHERE NEW.kind='verification' AND ((SELECT count(*) FROM contact_notification_outbox WHERE destination_id=NEW.destination_id AND kind='verification' AND created_at>strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at,'-1 day'))>=3
@@ -3775,12 +3782,31 @@ CREATE TRIGGER contact_outbox_insert BEFORE INSERT ON contact_notification_outbo
   OR (SELECT count(*) FROM contact_notification_outbox WHERE destination_id=NEW.destination_id AND kind='new_message' AND created_at>strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at,'-1 day'))>=50);
 END;
 
--- Terminal states (failed, cancelled, bounced, complained) are final. Provider acceptance can only later become a bounce or complaint.
+-- Dispatch intent is durable before the provider call. Unknown results cannot become a fresh send.
+CREATE INDEX contact_outbox_dispatch ON contact_notification_outbox(state,dispatched_at);
+CREATE TRIGGER contact_outbox_unknown_retained BEFORE DELETE ON contact_notification_outbox
+WHEN OLD.state IN ('dispatching','uncertain')
+BEGIN SELECT RAISE(ABORT,'contact_delivery_unresolved'); END;
+-- Terminal states are final. Provider acceptance can only later become a bounce or complaint.
 CREATE TRIGGER contact_outbox_update BEFORE UPDATE ON contact_notification_outbox BEGIN
- SELECT RAISE(ABORT,'contact_outbox_final') WHERE OLD.state IN ('failed','cancelled','bounced','complained') OR (OLD.state='accepted' AND NEW.state NOT IN ('accepted','bounced','complained'))
+ SELECT RAISE(ABORT,'contact_outbox_final') WHERE OLD.state IN ('uncertain','failed','cancelled','bounced','complained') OR (OLD.state='accepted' AND NEW.state NOT IN ('accepted','bounced','complained'))
   OR NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.project_id IS NOT OLD.project_id OR NEW.destination_id IS NOT OLD.destination_id OR NEW.kind IS NOT OLD.kind OR NEW.submission_id IS NOT OLD.submission_id
   OR NEW.idempotency_key IS NOT OLD.idempotency_key OR NEW.provider IS NOT OLD.provider OR NEW.review IS NOT OLD.review OR NEW.created_at IS NOT OLD.created_at OR NEW.expires_at IS NOT OLD.expires_at
   OR NEW.attempts<OLD.attempts OR (OLD.accepted_at IS NOT NULL AND (NEW.accepted_at IS NOT OLD.accepted_at OR NEW.attempts IS NOT OLD.attempts OR NEW.provider_ref IS NOT OLD.provider_ref));
+ SELECT RAISE(ABORT,'contact_outbox_dispatch') WHERE
+  (OLD.state='queued' AND NEW.state NOT IN ('queued','dispatching','cancelled'))
+  OR (OLD.state='dispatching' AND NEW.state NOT IN ('queued','uncertain','accepted','failed'))
+  OR (OLD.state='dispatching' AND NEW.state='queued' AND NEW.last_error IS NOT 'unavailable')
+  OR (NEW.state='dispatching' AND (OLD.state!='queued' OR NEW.attempts!=OLD.attempts+1 OR NEW.dispatch_id IS OLD.dispatch_id OR NEW.dispatched_at IS NULL OR NEW.last_error IS NOT NULL))
+  OR (NEW.state!='dispatching' AND (NEW.attempts!=OLD.attempts OR NEW.dispatch_id IS NOT OLD.dispatch_id OR NEW.dispatched_at IS NOT OLD.dispatched_at));
+ SELECT RAISE(ABORT,'contact_outbox_dispatch') WHERE NEW.state='dispatching' AND (
+  NEW.expires_at<=NEW.dispatched_at OR OLD.next_attempt_at>NEW.dispatched_at
+  OR EXISTS(SELECT 1 FROM account_closures WHERE account_id=NEW.user_id)
+  OR EXISTS(SELECT 1 FROM operator_contained_projects WHERE project_id=NEW.project_id AND scope='contact')
+  OR NOT EXISTS(SELECT 1 FROM contact_notification_destinations d WHERE d.id=NEW.destination_id AND d.user_id=NEW.user_id AND d.project_id=NEW.project_id
+   AND ((NEW.kind='new_message' AND d.state='verified' AND EXISTS(SELECT 1 FROM contact_submissions s WHERE s.id=NEW.submission_id AND s.project_id=NEW.project_id AND s.expires_at>NEW.dispatched_at))
+    OR (NEW.kind='verification' AND d.state='unverified' AND d.verification_code IS NOT NULL AND d.verification_expires_at>NEW.dispatched_at AND NEW.idempotency_key='verify:'||d.id||':'||d.verification_code)))
+ );
 END;
 
 CREATE TRIGGER backend_import_owner BEFORE INSERT ON backend_imports WHEN NOT EXISTS(

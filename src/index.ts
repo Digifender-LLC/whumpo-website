@@ -83,7 +83,7 @@ import {abuseReportPage,abuseReportPath} from './abuse-report-page';
 import {cleanupAbuseReports} from './abuse-reports';
 import {policyConsentPath,policyConsentRoute} from './policy-consent';
 import {ContactError,contactInbox,deleteContact,cleanupContacts} from './contacts';
-import {contactNotificationStatus,proposeContactDestination,removeContactDestination,requestContactVerification,confirmContactDestination,runContactDelivery} from './contact-notifications';
+import {contactNotificationStatus,proposeContactDestination,removeContactDestination,requestContactVerification,confirmContactDestination,runContactDelivery,reconcileContactDelivery} from './contact-notifications';
 import {contactDelivery} from './contact-email';
 import {handleModuleRequest,cleanupModuleRequestReceipts} from './shared-modules/api';
 import {ModuleError} from './shared-modules/policy';
@@ -661,9 +661,9 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
 
 export default {
   async scheduled(_event: ScheduledController, env: Env) {
-    // WH-036 every-minute contact notice drain. No cron trigger for it is configured; the owner adds "* * * * *" only when
-    // activating (docs/contact-forms.md), and even then nothing runs unless contactDelivery(env) finds the reviewed provider and binding.
-    if(_event.cron==='* * * * *'){const delivery=contactDelivery(env);if(delivery)await runContactDelivery(env.DB,delivery.settings,delivery.sender);return;}
+    // WH-036 sends only through the reviewed provider and binding. Without a sender, the existing minute wake-up
+    // records old dispatch uncertainty only; it cannot queue, resend or erase a notice.
+    if(_event.cron==='* * * * *'){const delivery=contactDelivery(env);if(delivery)await runContactDelivery(env.DB,delivery.settings,delivery.sender);else await reconcileContactDelivery(env.DB);return;}
     const imports={name:'imports' as const,run:()=>scanBackendImports(env.DB)};
     // WH-018 bounded continuation of confirmed account closures through the same journaled steps as closure/resume.
     const closures={name:'account_closures' as const,run:()=>continueAccountClosures(env)};

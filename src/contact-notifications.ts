@@ -36,6 +36,7 @@ export type ContactProviderOutcome={accepted:true;providerRef?:string}|{accepted
 export type ContactSender=(notice:ContactNotice,settings:ContactNotificationSettings)=>Promise<ContactProviderOutcome>;
 export const maxContactDeliveryAttempts=6;
 export const contactSendTimeoutMs=10000;
+export const contactDispatchUncertainMs=60000;
 export const verificationValidityMs=3600000;
 const cleaned=(value:unknown,max:number)=>typeof value==='string'&&value.trim()&&value.trim().length<=max&&!/[\u0000-\u001f\u007f]/.test(value)?value.trim():null;
 export function contactNotificationConfig(env:ContactNotificationEnv,implemented:Readonly<Record<string,{sendCeiling:number}>>=implementedContactNotificationProviders){
@@ -67,7 +68,8 @@ export async function contactNotificationStatus(db:Pick<D1Database,'prepare'>,us
  await owned(db,userId,projectId);
  const destination=await readDestination(db,projectId);
  const counts=destination?(await db.prepare("SELECT state,count(*) n FROM contact_notification_outbox WHERE destination_id=? AND kind='new_message' GROUP BY state").bind(destination.id).all<{state:string;n:number}>()).results:[];
- return {destination:view(destination),notices:Object.fromEntries(counts.map(c=>[c.state,c.n]))};
+ const unconfirmed=destination?(await db.prepare("SELECT count(*) n FROM contact_notification_outbox WHERE destination_id=? AND state IN ('dispatching','uncertain')").bind(destination.id).first<{n:number}>())?.n??0:0;
+ return {destination:view(destination),notices:Object.fromEntries(counts.map(c=>[c.state,c.n])),unconfirmed};
 }
 /**
  * The owner names the address that may receive notices. It starts unverified and stays unverified until a code delivered through
@@ -83,9 +85,9 @@ export async function proposeContactDestination(db:Pick<D1Database,'prepare'>,us
  catch(cause){if(String(cause).includes('contact_destination_suppressed'))throw new ContactError(409,'That address cannot receive notices from Whumpo.');throw cause;}
  return view(await readDestination(db,projectId));
 }
-/** A safety preservation hold refuses replacing or removing the address (owner question on removal during a hold remains open). */
-async function held<T>(work:Promise<T>){try{return await work;}catch(cause){if(String(cause).includes('safety_preservation_hold'))throw new ContactError(423,'This notification address cannot be changed or removed right now. Contact Whumpo support if you need help.');throw cause;}}
-/** Removing a destination cancels nothing already accepted by a provider; queued notices are removed with it. Refused inside a safety preservation hold. */
+/** Holds and unresolved sends preserve destination authority; replacing/removing it cannot cascade those receipts. */
+async function held<T>(work:Promise<T>){try{return await work;}catch(cause){if(String(cause).includes('contact_delivery_unresolved'))throw new ContactError(409,'This address has an unconfirmed notification send. Contact Whumpo support before replacing or removing it.');if(String(cause).includes('safety_preservation_hold'))throw new ContactError(423,'This notification address cannot be changed or removed right now. Contact Whumpo support if you need help.');throw cause;}}
+/** Removing an eligible destination cannot recall a provider effect. Holds and unresolved sends refuse the cascade. */
 export async function removeContactDestination(db:Pick<D1Database,'prepare'>,userId:string,projectId:string){
  await owned(db,userId,projectId);
  await held(db.prepare('DELETE FROM contact_notification_destinations WHERE project_id=? AND user_id=?').bind(projectId,userId).run());
@@ -129,12 +131,17 @@ export async function applyContactDeliveryEvent(db:Pick<D1Database,'prepare'>,ev
  const row=await db.prepare('SELECT o.id,o.user_id,d.address FROM contact_notification_outbox o JOIN contact_notification_destinations d ON d.id=o.destination_id WHERE o.id=?').bind(event.outboxId).first<{id:string;user_id:string;address:string}>();
  if(!row)return {applied:false};
  const iso=now.toISOString(),terminal=event.type==='bounce'?'bounced':event.type==='complaint'?'complained':null;
- if(terminal)await db.prepare("UPDATE contact_notification_outbox SET state=?,accepted_at=coalesce(accepted_at,?) WHERE id=? AND state IN ('queued','accepted')").bind(terminal,iso,row.id).run();
+ if(terminal)await db.prepare("UPDATE contact_notification_outbox SET state=?,accepted_at=coalesce(accepted_at,?) WHERE id=? AND state='accepted'").bind(terminal,iso,row.id).run();
  await db.prepare('INSERT OR IGNORE INTO contact_notification_suppressions(user_id,address,reason,created_at) VALUES(?,?,?,?)').bind(row.user_id,row.address,event.type,iso).run();
  return {applied:true};
 }
 const withTimeout=<T>(promise:Promise<T>,ms:number)=>new Promise<T>((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('timeout')),ms);promise.then(v=>{clearTimeout(timer);resolve(v);},e=>{clearTimeout(timer);reject(e);});});
-type Due={id:string;user_id:string;project_id:string;kind:'verification'|'new_message';submission_id:string|null;idempotency_key:string;attempts:number;expires_at:string;dstate:string;address:string;code:string|null;code_expires_at:string|null;submission_exists:number|null;contained:number};
+type Due={id:string;user_id:string;project_id:string;provider:string;review:string;kind:'verification'|'new_message';submission_id:string|null;idempotency_key:string;attempts:number;expires_at:string;dstate:string;address:string;code:string|null;code_expires_at:string|null;submission_exists:number|null;contained:number;closing:number};
+/** A crashed sender cannot be reclaimed. This records uncertainty only; it never resends or infers provider failure. */
+export async function reconcileContactDelivery(db:Pick<D1Database,'prepare'>,now=new Date()){
+ const before=new Date(now.getTime()-contactDispatchUncertainMs).toISOString();
+ return (await db.prepare("UPDATE contact_notification_outbox SET state='uncertain',last_error='uncertain' WHERE id IN (SELECT id FROM contact_notification_outbox WHERE state='dispatching' AND dispatched_at<=? ORDER BY dispatched_at,id LIMIT 25) AND state='dispatching'").bind(before).run()).meta.changes;
+}
 /** Provider calls recorded in the 32 UTC days ending `now` (the spending-ceiling window). */
 export async function contactSendsInWindow(db:Pick<D1Database,'prepare'>,now=new Date()){
  const day=now.toISOString().slice(0,10);
@@ -149,57 +156,60 @@ export async function contactSendsInWindow(db:Pick<D1Database,'prepare'>,now=new
  * notices are cancelled (`ceiling`). Invoked by the every-minute scheduled handler only after owner activation (docs/contact-forms.md).
  */
 export async function runContactDelivery(db:Pick<D1Database,'prepare'|'batch'>,settings:ContactNotificationSettings|null,sender:ContactSender,options:{now?:Date;limit?:number;timeoutMs?:number}={}){
- const result={enabled:false,queued:0,accepted:0,retried:0,failed:0,cancelled:0,refused:0};
+ const clockStart=Date.now(),now=options.now??new Date(),currentInstant=()=>new Date(+now+Date.now()-clockStart),result={enabled:false,queued:0,accepted:0,retried:0,failed:0,uncertain:await reconcileContactDelivery(db,now),cancelled:0,refused:0};
  if(!settings)return result;
  result.enabled=true;
- const now=options.now??new Date(),iso=now.toISOString(),day=iso.slice(0,10),limit=Math.min(options.limit??10,25),timeout=options.timeoutMs??contactSendTimeoutMs;
+ const iso=now.toISOString(),limit=Math.max(0,Math.min(options.limit??10,25)),timeout=Math.max(1,Math.min(options.timeoutMs??contactSendTimeoutMs,contactSendTimeoutMs));
  const ceiling=Math.max(0,Math.min(100000,Math.floor(settings.sendCeiling)));
  const hour=new Date(now.getTime()-3600000).toISOString(),dayAgo=new Date(now.getTime()-86400000).toISOString(),expires=new Date(now.getTime()+30*86400000).toISOString();
  let overCeiling=await contactSendsInWindow(db,now)>=ceiling;
- const candidates=overCeiling?[]:(await db.prepare("SELECT s.id AS submission_id,d.id AS destination_id,d.user_id,d.project_id FROM contact_submissions s JOIN contact_notification_destinations d ON d.project_id=s.project_id WHERE d.state='verified' AND s.created_at>=d.verified_at AND s.created_at>? AND s.expires_at>? AND NOT EXISTS(SELECT 1 FROM contact_notification_outbox o WHERE o.idempotency_key='message:'||s.id||':'||d.id) AND NOT EXISTS(SELECT 1 FROM operator_contained_projects c WHERE c.project_id=s.project_id AND c.scope='contact') ORDER BY s.created_at,s.id LIMIT ?").bind(dayAgo,iso,limit).all<{submission_id:string;destination_id:string;user_id:string;project_id:string}>()).results;
+ const candidates=overCeiling?[]:(await db.prepare("SELECT s.id AS submission_id,d.id AS destination_id,d.user_id,d.project_id FROM contact_submissions s JOIN contact_notification_destinations d ON d.project_id=s.project_id WHERE d.state='verified' AND NOT EXISTS(SELECT 1 FROM account_closures WHERE account_id=d.user_id) AND s.created_at>=d.verified_at AND s.created_at>? AND s.expires_at>? AND NOT EXISTS(SELECT 1 FROM contact_notification_outbox o WHERE o.idempotency_key='message:'||s.id||':'||d.id) AND NOT EXISTS(SELECT 1 FROM operator_contained_projects c WHERE c.project_id=s.project_id AND c.scope='contact') ORDER BY s.created_at,s.id LIMIT ?").bind(dayAgo,iso,limit).all<{submission_id:string;destination_id:string;user_id:string;project_id:string}>()).results;
  for(const c of candidates){
   // One statement per row so the caps see rows queued earlier in this run; the trigger is the backstop.
-  const insert=await db.prepare("INSERT INTO contact_notification_outbox(id,user_id,project_id,destination_id,kind,submission_id,idempotency_key,provider,review,created_at,next_attempt_at,expires_at) SELECT ?,?,?,?,'new_message',?,?,?,?,?,?,? WHERE (SELECT count(*) FROM contact_notification_outbox WHERE destination_id=? AND kind='new_message' AND created_at>?)<10 AND (SELECT count(*) FROM contact_notification_outbox WHERE destination_id=? AND kind='new_message' AND created_at>?)<50 ON CONFLICT(idempotency_key) DO NOTHING").bind(crypto.randomUUID(),c.user_id,c.project_id,c.destination_id,c.submission_id,'message:'+c.submission_id+':'+c.destination_id,settings.provider,settings.review,iso,iso,expires,c.destination_id,hour,c.destination_id,dayAgo).run();
+  let insert:D1Result;try{insert=await db.prepare("INSERT INTO contact_notification_outbox(id,user_id,project_id,destination_id,kind,submission_id,idempotency_key,provider,review,created_at,next_attempt_at,expires_at) SELECT ?,?,?,?,'new_message',?,?,?,?,?,?,? WHERE (SELECT count(*) FROM contact_notification_outbox WHERE destination_id=? AND kind='new_message' AND created_at>?)<10 AND (SELECT count(*) FROM contact_notification_outbox WHERE destination_id=? AND kind='new_message' AND created_at>?)<50 ON CONFLICT(idempotency_key) DO NOTHING").bind(crypto.randomUUID(),c.user_id,c.project_id,c.destination_id,c.submission_id,'message:'+c.submission_id+':'+c.destination_id,settings.provider,settings.review,iso,iso,expires,c.destination_id,hour,c.destination_id,dayAgo).run();}catch(error){if(String(error).includes('contact_delivery_closed'))continue;throw error;}
   result.queued+=insert.meta.changes;
  }
- const due=(await db.prepare("SELECT o.id,o.user_id,o.project_id,o.kind,o.submission_id,o.idempotency_key,o.attempts,o.expires_at,d.state AS dstate,d.address,d.verification_code AS code,d.verification_expires_at AS code_expires_at,(SELECT 1 FROM contact_submissions s WHERE s.id=o.submission_id) AS submission_exists,EXISTS(SELECT 1 FROM operator_contained_projects c WHERE c.project_id=o.project_id AND c.scope='contact') AS contained FROM contact_notification_outbox o JOIN contact_notification_destinations d ON d.id=o.destination_id WHERE o.state='queued' AND o.next_attempt_at<=? ORDER BY o.next_attempt_at,o.id LIMIT ?").bind(iso,limit).all<Due>()).results;
+ const due=(await db.prepare("SELECT o.id,o.user_id,o.project_id,o.provider,o.review,o.kind,o.submission_id,o.idempotency_key,o.attempts,o.expires_at,d.state AS dstate,d.address,d.verification_code AS code,d.verification_expires_at AS code_expires_at,(SELECT 1 FROM contact_submissions s WHERE s.id=o.submission_id AND s.expires_at>?) AS submission_exists,EXISTS(SELECT 1 FROM account_closures WHERE account_id=o.user_id) AS closing,EXISTS(SELECT 1 FROM operator_contained_projects c WHERE c.project_id=o.project_id AND c.scope='contact') AS contained FROM contact_notification_outbox o JOIN contact_notification_destinations d ON d.id=o.destination_id WHERE o.state='queued' AND o.next_attempt_at<=? ORDER BY o.next_attempt_at,o.id LIMIT ?").bind(iso,iso,limit).all<Due>()).results;
  const cancel=async(row:Due,error:string|null)=>{if((await db.prepare("UPDATE contact_notification_outbox SET state='cancelled',last_error=? WHERE id=? AND state='queued'").bind(error,row.id).run()).meta.changes){if(error==='ceiling')result.refused++;else result.cancelled++;}};
- const fail=async(row:Due,error:'rejected'|'exhausted'|'uncertain')=>{const changed=(await db.prepare("UPDATE contact_notification_outbox SET state='failed',last_error=? WHERE id=? AND state='queued'").bind(error,row.id).run()).meta.changes;if(changed)result.failed++;return changed>0;};
+ const fail=async(row:Due,dispatch:string,error:'rejected'|'exhausted'|'uncertain')=>{const changed=(await db.prepare("UPDATE contact_notification_outbox SET state=?,last_error=? WHERE id=? AND state='dispatching' AND dispatch_id=?").bind(error==='uncertain'?'uncertain':'failed',error,row.id,dispatch).run()).meta.changes;if(changed){if(error==='uncertain')result.uncertain++;else result.failed++;}return changed>0;};
  for(const row of due){
+  const instant=currentInstant(),at=instant.toISOString(),day=at.slice(0,10);
+  if(row.closing||row.provider!==settings.provider||row.review!==settings.review){await cancel(row,null);continue;}
   if(row.dstate==='suppressed'){await cancel(row,'suppressed');continue;}
-  if(row.expires_at<=iso){await cancel(row,'expired');continue;}
+  if(row.expires_at<=at){await cancel(row,'expired');continue;}
   if(row.contained){await cancel(row,'contained');continue;}
   if(row.kind==='new_message'&&(row.dstate!=='verified'||!row.submission_exists)){await cancel(row,null);continue;}
-  if(row.kind==='verification'&&(row.dstate!=='unverified'||!row.code||!row.code_expires_at||row.code_expires_at<=iso||!row.idempotency_key.endsWith(':'+row.code))){await cancel(row,'expired');continue;}
+  if(row.kind==='verification'&&(row.dstate!=='unverified'||!row.code||!row.code_expires_at||row.code_expires_at<=at||!row.idempotency_key.endsWith(':'+row.code))){await cancel(row,'expired');continue;}
   if(overCeiling){await cancel(row,'ceiling');continue;}
-  const attempts=row.attempts+1,next=new Date(now.getTime()+backoffMinutes(attempts)*60000).toISOString();
-  // Claim the attempt (and push the retry time) and count it against the ceiling in one transaction before sending, so a crash
-  // cannot hot-loop, double-count or send past the ceiling. The ledger trigger refuses the whole claim past the ceiling.
+  const attempts=row.attempts+1,dispatch=crypto.randomUUID(),next=new Date(instant.getTime()+backoffMinutes(attempts)*60000).toISOString();
+  // Persist the exact send intent and its spending reservation atomically before dispatch. A lost acknowledgement
+  // leaves unresolved authority, even if no provider call occurred. Only a proved refusal permits the next retry time.
   let claimed=0;
   try{
    const [,claim]=await db.batch([
     // The day's row keeps the lowest ceiling any run applied, so lowering the ceiling takes effect immediately.
     db.prepare('INSERT INTO contact_notification_send_ledger(day,sends,ceiling) VALUES(?,0,?) ON CONFLICT(day) DO UPDATE SET ceiling=min(ceiling,excluded.ceiling)').bind(day,ceiling),
-    db.prepare("UPDATE contact_notification_outbox SET attempts=?,next_attempt_at=? WHERE id=? AND state='queued' AND attempts=?").bind(attempts,next,row.id,row.attempts),
-    db.prepare("UPDATE contact_notification_send_ledger SET sends=sends+1 WHERE day=? AND EXISTS(SELECT 1 FROM contact_notification_outbox WHERE id=? AND state='queued' AND attempts=? AND next_attempt_at=?)").bind(day,row.id,attempts,next)
+    db.prepare("UPDATE contact_notification_outbox SET state='dispatching',dispatch_id=?,dispatched_at=?,attempts=?,next_attempt_at=?,last_error=NULL WHERE id=? AND state='queued' AND attempts=? AND provider=? AND review=?").bind(dispatch,at,attempts,next,row.id,row.attempts,settings.provider,settings.review),
+    // The unique attempt identity means a losing overlapping claim cannot count the winning sender twice.
+    db.prepare("UPDATE contact_notification_send_ledger SET sends=sends+1 WHERE day=? AND EXISTS(SELECT 1 FROM contact_notification_outbox WHERE id=? AND state='dispatching' AND dispatch_id=?)").bind(day,row.id,dispatch)
    ]);
    claimed=claim.meta.changes;
-  }catch(cause){if(String(cause).includes('contact_send_ceiling')){overCeiling=true;await cancel(row,'ceiling');continue;}throw cause;}
+  }catch(cause){if(String(cause).includes('contact_send_ceiling')){overCeiling=true;await cancel(row,'ceiling');continue;}if(String(cause).includes('contact_outbox_dispatch')){await cancel(row,null);continue;}throw cause;}
   if(!claimed)continue;
   let outcome:ContactProviderOutcome;
   try{outcome=await withTimeout(sender({outboxId:row.id,idempotencyKey:row.idempotency_key,kind:row.kind,projectId:row.project_id,recipient:row.address,...(row.kind==='verification'?{verificationCode:row.code!}:{})},settings),timeout);}catch{outcome={accepted:false,retryable:false,uncertain:true};}
   if(outcome.accepted){
    const ref=typeof outcome.providerRef==='string'&&outcome.providerRef.length>=1&&outcome.providerRef.length<=100?outcome.providerRef:null;
-   await db.prepare("UPDATE contact_notification_outbox SET state='accepted',accepted_at=?,provider_ref=? WHERE id=? AND state='queued'").bind(iso,ref,row.id).run();result.accepted++;
+   if((await db.prepare("UPDATE contact_notification_outbox SET state='accepted',accepted_at=?,provider_ref=? WHERE id=? AND state='dispatching' AND dispatch_id=?").bind(currentInstant().toISOString(),ref,row.id,dispatch).run()).meta.changes)result.accepted++;
   }
-  else if(outcome.uncertain)await fail(row,'uncertain');
+  else if(outcome.uncertain)await fail(row,dispatch,'uncertain');
   else if(outcome.suppressed){
-   // Provider-side suppression becomes permanent Whumpo suppression; the trigger cancels this and every unsent notice.
+   // Provider-side refusal becomes permanent suppression; queued notices are cancelled, this attempted send is rejected.
    await db.prepare("INSERT OR IGNORE INTO contact_notification_suppressions(user_id,address,reason,created_at) VALUES(?,?,'provider',?)").bind(row.user_id,row.address,iso).run();
-   if(!await fail(row,'rejected'))result.cancelled++;
+   if(!await fail(row,dispatch,'rejected'))result.cancelled++;
   }
-  else if(!outcome.retryable||attempts>=maxContactDeliveryAttempts)await fail(row,outcome.retryable?'exhausted':'rejected');
-  else{await db.prepare("UPDATE contact_notification_outbox SET last_error='unavailable' WHERE id=? AND state='queued'").bind(row.id).run();result.retried++;}
+  else if(!outcome.retryable||attempts>=maxContactDeliveryAttempts)await fail(row,dispatch,outcome.retryable?'exhausted':'rejected');
+  else{if((await db.prepare("UPDATE contact_notification_outbox SET state='queued',last_error='unavailable' WHERE id=? AND state='dispatching' AND dispatch_id=?").bind(row.id,dispatch).run()).meta.changes)result.retried++;}
  }
  return result;
 }

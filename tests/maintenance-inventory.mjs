@@ -58,14 +58,14 @@ try{
  sql.prepare("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES('hold-inv','case-inv',?,'account',NULL,'basis-1','human:approver',unixepoch(),unixepoch()+86400)").run(held);
  sql.exec('PRAGMA query_only=ON');
  report=await maintenanceReport(db,Date.now());
- assert.equal(report.backlogs.length,42);
+ assert.equal(report.backlogs.length,43);
  {const closures=report.backlogs.find(q=>q.queue==='account_closures');assert.equal(closures.count,1);assert.equal(closures.state,'attention');assert.ok(closures.oldestAgeMs>=2*day-1000);}assert.ok(report.backlogs.every(q=>q.state!=='unavailable'),JSON.stringify(report.backlogs));
  for(const queue of ['contact_receipts','contact_notification_outbox','contact_notification_queue','traffic','fair_use','health_budget','github_staged','connection_exchanges']){const backlog=report.backlogs.find(q=>q.queue===queue);assert.equal(backlog.state,'attention',queue);assert.equal(backlog.count,1,queue);}
  assert.equal(report.backlogs.find(q=>q.queue==='contact_receipts').oldestAgeMs>=2*day,true);
  for(const queue of ['github','cloudflare']){const backlog=report.backlogs.find(q=>q.queue===queue);assert.equal(backlog.state,'pending');assert.equal(backlog.unknownAgeCount,0);assert.ok(backlog.oldestAgeMs<60000);}
  assert.equal(report.backlogs.find(q=>q.queue==='github_refresh_grants').count,1);
  assert.equal(report.backlogs.find(q=>q.queue==='github_refresh_grants').unknownAgeCount,0);
- assert.equal(report.operations.length,4);assert.ok(report.operations.every(o=>o.state==='available'));
+ assert.equal(report.operations.length,5);assert.ok(report.operations.every(o=>o.state==='available'));
  // WH-050 F8: every shared counter's ceiling matches the trigger/table that enforces it; 50%/80% flags; read-only.
  for(const [name,{enforcedBy,evidence}] of Object.entries(platformCounterInventory)){const source=sql.prepare('SELECT sql FROM sqlite_master WHERE name=?').get(enforcedBy)?.sql??'';assert.ok(source.replace(/\s+/g,' ').includes(evidence),name);}
  assert.equal(report.counters.length,13);assert.ok(report.counters.every(c=>c.state!=='unavailable'),JSON.stringify(report.counters));
@@ -83,5 +83,5 @@ try{
  const broken=await counterReport({prepare:()=>{throw Error('PRIVATE_SECRET_CANARY');}},now);assert.ok(broken.counters.every(c=>c.state==='unavailable'));assert.equal(broken.attention,true);assert.ok(!JSON.stringify(broken).includes('PRIVATE_'));
  assert.ok(!JSON.stringify(counters).includes(project)&&!JSON.stringify(counters).includes(owner));
  const encoded=JSON.stringify(report);for(const marker of ['PRIVATE_',owner,held,newGH,newCF,project])assert.ok(!encoded.includes(marker),marker);
- console.log('Maintenance inventory passed: complete current schema, missing telemetry attention, precise new revocation clocks, retry stability/cascade, 42 read-only queues (including unfinished account closures outside holds), four receipt families, 13 shared platform counters checked against their schema ceilings with 50%/80% flags, retention eligibility and private data exclusion.');
+ console.log('Maintenance inventory passed: complete current schema, missing telemetry attention, precise new revocation clocks, retry stability/cascade, 43 read-only queues (including unresolved contact sends and unfinished account closures outside holds), five receipt families, 13 shared platform counters checked against their schema ceilings with 50%/80% flags, retention eligibility and private data exclusion.');
 }finally{sql.close();}

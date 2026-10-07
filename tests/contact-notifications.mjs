@@ -47,7 +47,7 @@ try{
   const a=await account(),fake=provider(),revision=await enable(a);await saveContact(db,a.project,revision,msg());
   const destination=await N.proposeContactDestination(db,a.id,a.project,'  Owner@Example.COM ');assert.deepEqual({address:destination.address,state:destination.state},{address:'owner@example.com',state:'unverified'});
   assert.deepEqual(await N.requestContactVerification(db,null,a.id,a.project),{status:'provider_not_configured'});
-  assert.deepEqual(await N.runContactDelivery(db,null,fake.send),{enabled:false,queued:0,accepted:0,retried:0,failed:0,cancelled:0,refused:0});
+  assert.deepEqual(await N.runContactDelivery(db,null,fake.send),{enabled:false,queued:0,accepted:0,retried:0,failed:0,uncertain:0,cancelled:0,refused:0});
   assert.equal((await N.runContactDelivery(db,null,fake.send)).enabled,false);assert.equal(fake.calls.length,0);assert.equal((await row('SELECT count(*) n FROM contact_notification_outbox')).n,0);
   await assert.rejects(N.confirmContactDestination(db,a.id,a.project,'ABCDEFGH'),e=>e.status===400);
   assert.equal((await N.contactNotificationStatus(db,a.id,a.project)).destination.state,'unverified','Without a provider the destination stays unverified');
@@ -83,8 +83,8 @@ try{
   const a=await account(),fake=provider(),{revision}=await verified(a,'owner-b@example.com',fake);fake.calls.length=0;const base=fake.sent.size;
   const first=msg();await Promise.all([saveContact(db,a.project,revision,first),saveContact(db,a.project,revision,first)]);
   const t=Date.now();fake.hang=true;
-  let r=await N.runContactDelivery(db,settings,fake.send,{now:new Date(t),timeoutMs:25});assert.equal(r.queued,1);assert.equal(r.failed,1,'A timeout is uncertain and final');assert.equal(fake.sent.size,base+1,'The provider did take the first attempt');
-  let out=await row("SELECT state,attempts,last_error,idempotency_key FROM contact_notification_outbox WHERE kind='new_message'");assert.deepEqual({state:out.state,attempts:out.attempts,last_error:out.last_error},{state:'failed',attempts:1,last_error:'uncertain'});
+  let r=await N.runContactDelivery(db,settings,fake.send,{now:new Date(t),timeoutMs:25});assert.equal(r.queued,1);assert.equal(r.uncertain,1,'A timeout remains unresolved and is never retried');assert.equal(fake.sent.size,base+1,'The provider did take the first attempt');
+  let out=await row("SELECT state,attempts,last_error,idempotency_key FROM contact_notification_outbox WHERE kind='new_message'");assert.deepEqual({state:out.state,attempts:out.attempts,last_error:out.last_error},{state:'uncertain',attempts:1,last_error:'uncertain'});
   for(const later of [6*60000,3600000,86400000])await N.runContactDelivery(db,settings,fake.send,{now:new Date(t+later)});assert.equal(fake.calls.length,1,'The provider has no idempotency key, so an uncertain call is never resent');assert.equal(fake.sent.size,base+1);
   // Replays: the same drain, the same message and another process cannot create or send a second notice.
   await saveContact(db,a.project,revision,first);r=await N.runContactDelivery(db,settings,fake.send,{now:new Date(t+3600000)});assert.equal(r.queued+r.accepted+r.retried,0);assert.equal((await row("SELECT count(*) n FROM contact_notification_outbox WHERE kind='new_message'")).n,1);
@@ -103,7 +103,7 @@ try{
   await assert.rejects(()=>run("UPDATE contact_notification_outbox SET state='queued' WHERE id=?",rejected.id),/final/);await assert.rejects(()=>run("UPDATE contact_notification_outbox SET state='accepted',accepted_at=? WHERE id=?",now(),rejected.id),/final/);
   const calls=fake.calls.length;r=await N.runContactDelivery(db,settings,fake.send,{now:new Date(t0+86400000)});assert.equal(fake.calls.length,calls,'A failed notice is never sent again');
   // A thrown provider call is uncertain and final after one call.
-  await saveContact(db,a.project,revision,msg());fake.mode='throw';const before=fake.calls.length;r=await N.runContactDelivery(db,settings,fake.send,{now:new Date(t0+3600000)});assert.equal(r.failed,1);assert.equal(fake.calls.length,before+1);
+  await saveContact(db,a.project,revision,msg());fake.mode='throw';const before=fake.calls.length;r=await N.runContactDelivery(db,settings,fake.send,{now:new Date(t0+3600000)});assert.equal(r.uncertain,1);assert.equal(fake.calls.length,before+1);
   await N.runContactDelivery(db,settings,fake.send,{now:new Date(t0+2*86400000)});assert.equal(fake.calls.length,before+1,'Never resent');assert.ok(!JSON.stringify(await rows('SELECT * FROM contact_notification_outbox')).includes('PRIVATE-PROVIDER-ERROR'));
   await saveContact(db,a.project,revision,msg());fake.mode='down';let at=t0+3*3600000,failed=0,sends=0;
   for(let i=0;i<8&&!failed;i++){const before=fake.calls.length;failed+=(await N.runContactDelivery(db,settings,fake.send,{now:new Date(at)})).failed;sends+=fake.calls.length-before;at+=7*3600000;}
@@ -191,7 +191,7 @@ try{
   assert.match((await row("SELECT provider_ref FROM contact_notification_outbox WHERE project_id=? AND kind='new_message'",a.project)).provider_ref,/^cf-\d+$/);
   failWith=coded('E_RECIPIENT_SUPPRESSED');await saveContact(db,a.project,revision,msg());await m.worker.scheduled({cron:'* * * * *'},env);failWith=null;
   assert.equal((await row('SELECT reason FROM contact_notification_suppressions WHERE user_id=? AND address=?',a.id,'cf-owner@example.com')).reason,'provider');assert.equal((await row('SELECT state FROM contact_notification_destinations WHERE project_id=?',a.project)).state,'suppressed');
-  assert.equal((await row("SELECT count(*) n FROM contact_notification_outbox WHERE project_id=? AND state='cancelled' AND last_error='suppressed'",a.project)).n,1);
+  assert.equal((await row("SELECT count(*) n FROM contact_notification_outbox WHERE project_id=? AND state='failed' AND last_error='rejected'",a.project)).n,1);
   await saveContact(db,a.project,revision,msg());await m.worker.scheduled({cron:'* * * * *'},env);assert.equal(mine().length,2,'Nothing more after provider suppression');
  });
  await test('exact Chat review sets the address; cross-owner, replay, expiry, suppression and holds are refused',async()=>{

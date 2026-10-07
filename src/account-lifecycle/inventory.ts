@@ -65,6 +65,7 @@ export const closureMetrics:Record<string,readonly [string,string,string?]>={
  activePreservationHolds:['safety_preservation_holds','subject_user_id','released_at IS NULL'],
  scanTickets:['photo_scan_tickets','user_id'],
  pendingScanTickets:['photo_scan_tickets','user_id',"state='reserved'"],
+ unresolvedContactNotifications:['contact_notification_outbox','user_id',"state IN ('dispatching','uncertain')"],
  unresolvedStandardAI:['standard_ai_requests','user_id',"state IN ('reserved','dispatched','uncertain')"],
  usedInvitations:['invitations','used_by'],
  funnelEvents:['funnel_events','user_id'],
