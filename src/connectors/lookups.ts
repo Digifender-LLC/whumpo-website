@@ -8,7 +8,7 @@ import {githubInstallations,type GitHubConfig} from '../github-connection';
 import {githubRepositories} from '../github-backups';
 import {cloudflareZones,type CloudflareConfig} from '../cloudflare-connection';
 import {connectorCredentialId,connectorCredentialPredicate} from './admission';
-export class ConnectorLookupError extends Error{constructor(readonly status:number,readonly code:string){super(code==='content_route_unavailable'?'Connected content has no approved model route. Choose the owner panel.':code==='lookup_used'?'This lookup permission was already used. Prepare a new lookup.':'This lookup permission is unavailable or changed. Prepare a fresh lookup.');}}
+export class ConnectorLookupError extends Error{constructor(readonly status:number,readonly code:string){super(code==='content_route_unavailable'?'Connected content has no approved model route. Choose the owner panel.':code==='lookup_used'?'This lookup permission was already used. Prepare a new lookup.':code==='lookup_capacity'?'Too many recent lookups. Wait for an earlier permission to expire.':'This lookup permission is unavailable or changed. Prepare a fresh lookup.');}}
 const fail=(code:string,status=409):never=>{throw new ConnectorLookupError(status,code);};
 const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(v);
 export type {ConnectorLookupInput} from '../connector-lookup-shape';
@@ -50,7 +50,9 @@ export async function prepareConnectorLookup(db:D1Database,user:string,value:unk
  const credentialId=await connectorCredentialId(db,user,v.provider),operationDigest=await connectorDigest(connectorOperation(v.provider,v.operationId)),paramsDigest=await connectorDigest(v.params);
  const count=await db.prepare('SELECT count(*) n FROM connector_lookup_consents WHERE user_id=?').bind(user).first<{n:number}>();if(count&&count.n>=100)fail('lookup_capacity',429);
  const gate=guard(db,user,{provider:v.provider,credential_id:credentialId});
- const inserted=await db.prepare(`INSERT INTO connector_lookup_consents(id,user_id,provider,operation_id,credential_id,operation_digest,params_digest,destination,expires_at) SELECT ?,?,?,?,?,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now','+15 minutes') WHERE ${gate.sql}`).bind(v.id,user,v.provider,v.operationId,credentialId,operationDigest,paramsDigest,v.destination,...gate.params).run();
+ let inserted:D1Result<unknown>;
+ try{inserted=await db.prepare(`INSERT INTO connector_lookup_consents(id,user_id,provider,operation_id,credential_id,operation_digest,params_digest,destination,expires_at) SELECT ?,?,?,?,?,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now','+15 minutes') WHERE ${gate.sql}`).bind(v.id,user,v.provider,v.operationId,credentialId,operationDigest,paramsDigest,v.destination,...gate.params).run();}
+ catch(error){if(error instanceof Error&&/^(?:D1_ERROR: )?connector_lookup_capacity(?:: SQLITE_CONSTRAINT(?: \(extended: SQLITE_CONSTRAINT_TRIGGER\))?)?$/.test(error.message))fail('lookup_capacity',429);throw error;}
  if(inserted.meta.changes!==1)fail('lookup_changed');return {...publicConsent(await owned(db,user,v.id)),params:v.params};
 }
 /** Only an admitted current owner can approve the exact query and destination. No result is an approval. */
