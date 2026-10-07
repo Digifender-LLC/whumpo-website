@@ -51,6 +51,10 @@ try{
  const access=await g.githubAccess(await a.scope(),a.account,config,async(_url,init)=>{assert.equal(init.headers.authorization,'Bearer '+accessToken);return Response.json({ok:true});},{projectId:null,operation:'read'});
  await access.send('installations.list');
  const status=await g.connectionStatus(await a.scope(),a.account,config);assert.ok(!JSON.stringify(status).includes(refreshToken));assert.ok(!JSON.stringify(status).includes('ciphertext'));
+ const activeBudget=await restore();assert.deepEqual(activeBudget.holds,['connector-budget-window']);
+ // This fixture's independent restore journey starts after its content-free read window expires.
+ // Replace only this counter with an expired window; credential and uncertain-effect rows stay intact.
+ await db.batch([db.prepare("DELETE FROM connector_request_budgets WHERE user_id=? AND provider='github' AND kind='read'").bind(a.account),db.prepare("INSERT INTO connector_request_budgets(user_id,provider,kind,window_start,used) VALUES(?,'github','read',0,1)").bind(a.account)]);
  const before=await restore();assert.equal(before.status,'verified',JSON.stringify(before));assert.equal(before.keys.credentials,2);assert.equal(before.tables,(await currentSchemaArtifact()).expected.tables);
  // Rotation uses the existing CAS journal and the distinct refresh purpose.
  const next=fixtureKeyring('cd'.repeat(32),'refresh-next',JSON.parse(config.key).keys);
