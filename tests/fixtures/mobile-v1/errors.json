@@ -190,6 +190,18 @@
      "message": "Whumpo is temporarily unavailable."
     }
    }
+  },
+  "account_closing": {
+   "status": 409,
+   "body": {
+    "version": 1,
+    "error": {
+     "code": "account_closing",
+     "message": "This account is closing. Open account status in the browser.",
+     "next": "browser",
+     "browserPath": "/workspace/account"
+    }
+   }
   }
  }
 }

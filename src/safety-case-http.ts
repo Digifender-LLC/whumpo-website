@@ -26,6 +26,14 @@ async function body(request:Request){
 type Handler=(env:Environment,principal:unknown,data:Record<string,unknown>)=>Promise<unknown>;
 const s=(v:unknown)=>v as string;
 const retention=(d:Record<string,unknown>)=>({caseId:s(d.caseId),decision:d.decision as 'extend'|'release',decisionRef:s(d.decisionRef),...(d.extendDays===undefined?{}:{extendDays:d.extendDays as number})});
+/** The audited action each route performs, for the denied-attempt log of transport-level refusals. */
+const audited:Record<string,cases.SafetyCaseAction>={'roles/grant':'grant_role','roles/revoke':'revoke_role','cases/open':'open_case','cases/link-evidence':'link_evidence',
+ 'cases/record-finding':'record_finding','cases/close':'close_case','cases/read':'read_case','cases/audit':'read_audit','holds/place':'place_hold','holds/release':'release_hold',
+ 'notice-delays/place':'place_notice_delay','notice-delays/lift':'lift_notice_delay','holds/list':'list_holds','evidence/capture':'capture_evidence','evidence/dispose':'dispose_evidence',
+ 'disclosures/request':'request_disclosure','disclosures/approve':'approve_disclosure','disclosures/record':'record_disclosure','disclosures/cancel':'cancel_disclosure',
+ 'retention/list':'list_retention','retention/preview':'preview_retention','retention/apply':'decide_retention','reports/list':'list_reports','reports/read':'read_report',
+ 'appeals/list':'list_appeals','appeals/read':'read_appeal','appeals/decide':'decide_appeal','reports/erase-contact':'erase_report_contact','reports/triage':'triage_report',
+ 'disclosures/read':'read_disclosure'};
 const actions:Record<string,{keys:readonly string[];optional?:readonly string[];run:Handler}>={
  'roles/grant':{keys:['grantId','operatorAccountId','role'],run:(e,p,d)=>cases.grantSafetyCaseRole(e.DB,p,{grantId:s(d.grantId),operatorAccountId:s(d.operatorAccountId),role:d.role as cases.SafetyCaseRole})},
  'roles/revoke':{keys:['grantId','revokeRef'],run:(e,p,d)=>cases.revokeSafetyCaseRole(e.DB,p,{grantId:s(d.grantId),revokeRef:s(d.revokeRef)})},
@@ -39,6 +47,8 @@ const actions:Record<string,{keys:readonly string[];optional?:readonly string[];
   run:(e,p,d)=>cases.placePreservationHold(e.DB,p,{holdId:s(d.holdId),caseId:s(d.caseId),legalBasisRef:s(d.legalBasisRef),reviewDays:d.reviewDays as number,scope:d.scope as cases.SafetyHoldScope,
    ...(d.projectId===undefined?{}:{projectId:s(d.projectId)}),...(d.fileId===undefined?{}:{fileId:s(d.fileId)})})},
  'holds/release':{keys:['holdId','caseId','releaseRef'],run:(e,p,d)=>cases.releasePreservationHold(e.DB,p,{holdId:s(d.holdId),caseId:s(d.caseId),releaseRef:s(d.releaseRef)})},
+ 'notice-delays/place':{keys:['delayId','caseId','reason'],run:(e,p,d)=>cases.placeSafetyNoticeDelay(e.DB,p,{delayId:s(d.delayId),caseId:s(d.caseId),reason:s(d.reason)})},
+ 'notice-delays/lift':{keys:['delayId','caseId','liftRef'],run:(e,p,d)=>cases.liftSafetyNoticeDelay(e.DB,p,{delayId:s(d.delayId),caseId:s(d.caseId),liftRef:s(d.liftRef)})},
  'holds/list':{keys:[],run:(e,p)=>cases.listActivePreservationHolds(e.DB,p)},
  'evidence/capture':{keys:['objectId','caseId','holdId','source','sourceRef'],run:(e,p,d)=>cases.captureSafetyEvidence(e,p,{objectId:s(d.objectId),caseId:s(d.caseId),holdId:s(d.holdId),source:d.source as cases.SafetyEvidenceSource,sourceRef:s(d.sourceRef)})},
  'evidence/dispose':{keys:['objectId','caseId','disposeRef'],run:(e,p,d)=>cases.disposeSafetyEvidence(e,p,{objectId:s(d.objectId),caseId:s(d.caseId),disposeRef:s(d.disposeRef)})},
@@ -49,9 +59,17 @@ const actions:Record<string,{keys:readonly string[];optional?:readonly string[];
  'retention/list':{keys:[],run:(e,p)=>cases.listSafetyRetentionReviews(e.DB,p)},
  'retention/preview':{keys:['caseId','decision','decisionRef'],optional:['extendDays'],run:(e,p,d)=>cases.previewSafetyRetentionDecision(e.DB,p,retention(d))},
  'retention/apply':{keys:['caseId','decision','decisionRef','reviewSha256'],optional:['extendDays'],run:(e,p,d)=>cases.applySafetyRetentionDecision(e.DB,p,{...retention(d),reviewSha256:s(d.reviewSha256)})},
+ 'reports/list':{keys:[],run:(e,p)=>cases.listAbuseReports(e.DB,p)},
+ 'reports/read':{keys:['reportId'],run:(e,p,d)=>cases.readAbuseReport(e.DB,p,{reportId:s(d.reportId)})},
+ 'appeals/list':{keys:[],run:(e,p)=>cases.listSafetyAppeals(e.DB,p)},
+ 'appeals/read':{keys:['appealId'],run:(e,p,d)=>cases.readSafetyAppeal(e.DB,p,{appealId:s(d.appealId)})},
+ 'appeals/decide':{keys:['appealId','decision','decisionRef'],run:(e,p,d)=>cases.decideSafetyAppeal(e.DB,p,{appealId:s(d.appealId),decision:d.decision as cases.SafetyAppealDecision,decisionRef:s(d.decisionRef)})},
+ 'reports/erase-contact':{keys:['reportId'],run:(e,p,d)=>cases.eraseAbuseReportContact(e.DB,p,{reportId:s(d.reportId)})},
+ 'reports/triage':{keys:['reportId','decision','decisionRef'],optional:['caseId'],run:(e,p,d)=>cases.triageAbuseReport(e.DB,p,{reportId:s(d.reportId),decision:d.decision as cases.AbuseReportDecision,decisionRef:s(d.decisionRef),...(d.caseId===undefined?{}:{caseId:s(d.caseId)})})},
  'disclosures/read':{keys:['disclosureId','caseId'],run:(e,p,d)=>cases.readSafetyDisclosure(e.DB,p,{disclosureId:s(d.disclosureId),caseId:s(d.caseId)})},
 };
 export const safetyCaseActions=Object.freeze(Object.keys(actions));
+if(safetyCaseActions.some(name=>!Object.hasOwn(audited,name))||Object.keys(audited).length!==safetyCaseActions.length)throw Error('Every safety case route needs its audited action');
 /** Returns null for every other path. Identity failures carry the existing identity codes, so the browser can run the
  * ordinary passkey reauthentication ceremony and retry the same request. */
 export async function handleSafetyCaseRequest(request:Request,env:Environment):Promise<Response|null>{
@@ -59,10 +77,16 @@ export async function handleSafetyCaseRequest(request:Request,env:Environment):P
  const headers=new Headers({'content-type':'application/json; charset=utf-8','cache-control':'no-store','pragma':'no-cache','x-content-type-options':'nosniff','referrer-policy':'no-referrer'});
  const respond=(value:unknown,code=200)=>new Response(JSON.stringify(value),{status:code,headers});
  try{
-  const action=actions[url.pathname.slice(safetyCasePrefix.length)];
+  const name=url.pathname.slice(safetyCasePrefix.length),action=Object.hasOwn(actions,name)?actions[name]:undefined;
   if(!action||request.method!=='POST'||url.search)return respond({error:'Not found',code:'not_found'},404);
-  const principal=await workspaceIdentity(request,env);
-  const data=record(await body(request),action.keys,action.optional);
+  // Transport-level identity and body refusals go only to the bounded denied-attempt log (never the privileged audit).
+  let principal:Awaited<ReturnType<typeof workspaceIdentity>>;
+  try{principal=await workspaceIdentity(request,env);}
+  catch(error){if(error instanceof IdentityError)await cases.recordDeniedSafetyCaseAttempt(env.DB,null,audited[name],'unauthenticated');throw error;}
+  let data:Record<string,unknown>;
+  try{data=record(await body(request),action.keys,action.optional);}
+  catch(error){const account=(principal as {accountId?:unknown}).accountId;
+   await cases.recordDeniedSafetyCaseAttempt(env.DB,typeof account==='string'?'human:'+account:null,audited[name],'invalid_input');throw error;}
   return respond({version:1,result:await action.run(env,principal,data)});
  }catch(error){
   if(error instanceof IdentityError)return respond({error:error.message,code:error.code},error.status);

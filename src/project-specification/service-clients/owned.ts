@@ -1,3 +1,4 @@
+import {requireArtifactsAvailable} from '../../artifact-admission';
 import {BackendError} from '../../backend-error';
 import {requireSpecificationAvailable} from '../../specification-safety';
 import {jsonDigest,sha256,SpecificationError} from '../v2/json';
@@ -28,7 +29,7 @@ async function ownedSnapshot(db:D1Database,user:string,project:string,version:st
  await requireSpecificationAvailable(db,version);
  if(await sha256(row.html)!==row.digest)throw unavailable();
  if(row.backend_source!==null&&await sha256(row.backend_source)!==row.backend_digest)throw unavailable();
- if(await db.prepare("SELECT 1 FROM content_screening_decisions WHERE user_id=? AND kind='generated_artifact' AND required=1 AND digest IN (?,?) LIMIT 1").bind(user,row.digest,row.backend_digest).first())throw new BackendError(423,'This website or service is held for safety review.');
+ await requireArtifactsAvailable(db,user,[row.digest,row.backend_digest],'This website or service is held for safety review.');
  const target=validateServiceClientTarget({projectId:row.project_id,website:{versionId:row.version_id,digest:row.digest},publication:{revision:row.site_revision,versionId:row.live_version_id},
  contact:{revision:row.contact_revision,active:row.contact_active===1},form:{revision:row.form_revision,reviewId:row.form_review_id,active:row.form_active===1},
  backend:row.backend_review_id&&row.backend_version_id&&row.backend_digest?{revision:row.backend_revision,reviewId:row.backend_review_id,versionId:row.backend_version_id,digest:row.backend_digest}:null});

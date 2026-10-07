@@ -11,7 +11,7 @@ const fixture=await databaseFixture(),db=fixture.db,id=()=>crypto.randomUUID(),n
 const run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
 const networkCalls=[],previousFetch=globalThis.fetch;globalThis.fetch=async(input,init)=>{const u=new URL(typeof input==='string'?input:input.url??input);if(/^https:\/\/[0-9a-f-]{36}\.whumpo\.site$/.test(u.origin)){healthReads++;return siteHost.default.fetch(new Request(input,init),{DB:db});}network++;networkCalls.push(u.origin+u.pathname);throw Error('Unexpected provider or inference request');};
 const env={DB:db,ENVIRONMENT:'test',MOBILE_ANDROID_PACKAGE:'com.whumpo.fixture',MOBILE_ANDROID_CERT_SHA256:Array(32).fill('B1').join(':'),API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})}};
-const client={contract:1,build:3,platform:'android',controls:[...controlCapabilities],interaction:{versions:[1],fieldTypes:[...fieldTypes],bindings:[...interactionBindings]}};
+const client={contract:1,build:4,platform:'android',controls:[...controlCapabilities],interaction:{versions:[1],fieldTypes:[...fieldTypes],bindings:[...interactionBindings]}};
 const background=[],ctx={waitUntil(promise){background.push(promise);}};
 async function native(o,offset=-5){const token=m.newSessionToken(),authority=id();await run("INSERT INTO identity_sessions VALUES(?,?,?,?,?,'android',?,'passkey',unixepoch()+?,unixepoch(),unixepoch()+3600)",authority,await m.hashToken(token),o.user,1,1,o.authority.credential,offset);return {token,nativeAuthority:authority};}
 async function owner(withProject=true){
@@ -48,6 +48,18 @@ try{
   for(const headers of [{origin:'https://whumpo.com'},{cookie:'any=1'}])await no(a,'/projects',undefined,400,'invalid_request',{headers});
   await no(b,'/projects/'+a.project,undefined,404,'not_found');await no(b,'/projects/'+a.project+'/versions',undefined,404,'not_found');
   await no(a,'/chat/export',undefined,404,'not_found');await no(a,'/interactions/card',{version:1},404,'not_found');
+ });
+ await test('closing accounts refuse native workspace with a fixed browser destination while identity read, reauth and logout remain available',async()=>{
+  const o=await owner(),requestId=id();
+  await run("INSERT INTO account_closures(id,account_id,policy_version,review_digest,obligations_json,state,revision,created_at,updated_at) VALUES(?,?,1,?,'{}','waiting',1,unixepoch(),unixepoch())",id(),o.user,'a'.repeat(64));
+  for(const path of ['/bootstrap','/projects','/chat','/activity','/reviews']){
+   const result=await no(o,path,undefined,409,'account_closing');assert.equal(result.error.browserPath,'/workspace/account');assert.equal(result.error.next,'browser');
+  }
+  await no(o,'/chat/messages',{version:1,requestId,expectedRevision:1,content:'Hello'},409,'account_closing');
+  assert.equal(await row('SELECT id FROM chat_turns WHERE id=?',requestId),null);
+  assert.equal((await call(o,'/session')).account.id,o.user);
+  assert.ok((await call(o,'/session/reauth/options',{version:1})).challengeId);
+  assert.equal((await call(o,'/session/logout',{version:1})).signedOut,true);await no(o,'/session',undefined,401,'proof_required');
  });
  await test('project/activity pages use exact owner and route-bound stable cursors, including equal timestamps',async()=>{
   await project(a,'Second');await project(a,'Third');const stamp=now();await run('UPDATE projects SET updated_at=? WHERE owner_user_id=?',stamp,a.user);

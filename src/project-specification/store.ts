@@ -1,3 +1,4 @@
+import {requireArtifactsAvailable} from '../artifact-admission';
 import {BackendError} from '../backend-error';
 import {previewHeaders,type SiteConfig,type PhotoConfig} from '../components';
 import {contentPolicyVersion} from '../content-policy';
@@ -46,7 +47,7 @@ export async function readSpecification(db:D1Database,user:string,project:string
  return {projectId:project,revision:current.revision,versionId:current.version_id,otherDraftChanges:current.head_draft_revision!==null&&current.head_draft_revision!==current.draft_revision,specification:current.spec_json?JSON.parse(current.spec_json):null,versions:versions.results};
 }
 async function held(db:D1Database,user:string,hashes:string[]){
- if(await db.prepare("SELECT 1 FROM content_screening_decisions WHERE user_id=? AND kind='generated_artifact' AND required=1 AND digest IN(?,?,?) LIMIT 1").bind(user,...hashes).first())throw new BackendError(423,'This website content is held for safety review.');
+ await requireArtifactsAvailable(db,user,hashes,'This website content is held for safety review.');
 }
 function home(compiled:Awaited<ReturnType<typeof compileProjectSpecification>>){
  if(compiled.artifacts.length!==1||compiled.artifacts[0].path!=='/')throw new BackendError(422,'This saved-version adapter supports one website homepage. Additional routes need their own delivery adapter.');

@@ -40,7 +40,7 @@ function decode(value:unknown):Cursor|null{
  * withdrawn or restaged; the registered descriptor must name this hook and the caller's configRevision must be current.
  * `files` is the receiving Worker's private R2 binding; a stored object that no longer matches its approved digest fails
  * the export (`unavailable`) instead of being skipped or served. */
-export async function exportFiles(db:D1Database,files:R2Bucket,user:string,project:string,resourceId:string,configRevision:number,options:FilesExportOptions){
+export async function exportFiles(db:D1Database,files:R2Bucket,user:string,project:string,resourceId:string,configRevision:number,options:FilesExportOptions,beforeRead?:()=>Promise<void>){
  await assertWorkspace(db,user);
  const subject=options.visitorId??null;
  if(!uuid.test(project)||!uuid.test(resourceId))throw new ModuleError('not_found');
@@ -63,7 +63,8 @@ export async function exportFiles(db:D1Database,files:R2Bucket,user:string,proje
  const out:ExportFile[]=[];
  for(const r of results.slice(0,pageSize)){
   if(r.size>maxPhotoBytes)throw new ModuleError('unavailable','A file could not be verified.');
-  try{await reserveStorage(db,'read');}catch(error){if(error instanceof StorageLimitError)throw new ModuleError('limited');throw error;}
+  // A composed account export adds its account allowance before this unavoidable shared storage reservation.
+  try{await beforeRead?.();await reserveStorage(db,'read');}catch(error){if(error instanceof StorageLimitError)throw new ModuleError('limited');throw error;}
   const object=await files.get(r.object_key);
   if(!object)throw new ModuleError('unavailable','A file could not be verified.');
   if(object.size!==r.size){await object.body.cancel();throw new ModuleError('unavailable','A file could not be verified.');}

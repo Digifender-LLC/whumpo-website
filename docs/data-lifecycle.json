@@ -91,6 +91,88 @@
       }
     },
     {
+      "id": "policy-adoptions",
+      "tables": [
+        "policy_adoptions"
+      ],
+      "scope": "platform",
+      "purpose": "Versioned adoption of the Terms of Service, Acceptable Use Policy and Privacy Policy as one version identified by the SHA-256 of the exact adopted documents (WH-016). The latest adoption is current; none is seeded until owner/counsel adoption.",
+      "currentRetention": "Append-only with no update or delete path; adoption times strictly increase.",
+      "proposedRetention": "Keep for the life of the service as the record of which documents applied when.",
+      "deletionAuthority": "None; a new version is a new adoption.",
+      "exportPolicy": "Public document metadata; the owner's policies route returns the current version and digest.",
+      "references": [
+        "src/policy-consent.ts",
+        "schema/platform.sql",
+        "docs/content-safety.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Owner policy consent route and publication/activation gates (current version only)"
+        ],
+        "processors": [
+          "Schema gates on site/backend publication, application activation and CMS approval/publication"
+        ],
+        "remainingExposure": [
+          "None beyond public document identity."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
+      "id": "policy-consent",
+      "tables": [
+        "policy_consents"
+      ],
+      "scope": "owner",
+      "purpose": "Each owner's acceptance of an exact adopted policy version and documents digest at server time, separate from the signup US-customer declaration. Gates publication and activation once a version is adopted (WH-016).",
+      "currentRetention": "Immutable; cascades with the account. A newer adoption makes earlier consents insufficient without deleting them.",
+      "proposedRetention": "Keep adoptions for the life of the service. Consent retention after account closure (for example a minimal restricted receipt) requires an owner/counsel decision.",
+      "deletionAuthority": "No ordinary deletion of adoptions or consents while the account exists; account closure cascades consents.",
+      "exportPolicy": "Not yet included in the customer account export (pending the WH-018 export allowlist update). Never in model context or ordinary logs.",
+      "references": [
+        "src/policy-consent.ts",
+        "schema/platform.sql",
+        "docs/content-safety.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "The owner's own policy consent route and the publication/activation gates; no customer or model reader of other accounts' consents"
+        ],
+        "processors": [
+          "Schema gates on site/backend publication, application activation and CMS approval/publication"
+        ],
+        "remainingExposure": [
+          "Consent timestamps are readable account metadata; operator access must be restricted."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
       "id": "owner-identity-progress",
       "tables": [
         "identity_accounts",
@@ -359,7 +441,7 @@
         "identity_admission_checks"
       ],
       "scope": "platform",
-      "purpose": "Always-empty SQL assertion table used to atomically reject workspace batches after identity revocation.",
+      "purpose": "Always-empty SQL assertion table used to atomically reject workspace batches after identity revocation and, for WH-018, while the account is closing.",
       "currentRetention": "No records: a successful assertion inserts zero rows; any attempted row insertion aborts its entire transaction.",
       "proposedRetention": "Remain empty in every deployment and restore.",
       "deletionAuthority": "Database trigger; never application CRUD or an operator grant.",
@@ -368,7 +450,8 @@
         "src/workspace-identity/schema.sql",
         "src/workspace-identity/ceremonies.ts",
         "docs/identity-web.md",
-        "docs/data-protection.md"
+        "docs/data-protection.md",
+        "src/account-lifecycle/schema.sql"
       ],
       "storageStatus": "current",
       "protection": {
@@ -867,10 +950,13 @@
         "safety_evidence_objects",
         "safety_disclosures",
         "safety_disclosure_items",
-        "safety_retention_decisions"
+        "safety_retention_decisions",
+        "safety_action_notices",
+        "safety_appeal_decisions",
+        "safety_notice_delays"
       ],
       "scope": "mixed",
-      "purpose": "Restricted case references, append-only uncertain/confirmed/corrected findings, links to reviewed risk evidence, account/project/object preservation holds, trigger-preserved small payloads (replaced profile photos, discarded or expired Chat drafts, overwritten app visitor documents and cleared app recovery-point copies) under an active hold, restricted evidence-object copies and two-person lawful-disclosure manifests. Opaque identifiers and digests only in case rows; preserved payloads and evidence bytes are restricted content.",
+      "purpose": "Restricted case references, append-only uncertain/confirmed/corrected findings, links to reviewed risk evidence, account/project/object preservation holds, trigger-preserved small payloads (replaced profile photos, discarded or expired Chat drafts, overwritten app visitor documents and cleared app recovery-point copies) under an active hold, restricted evidence-object copies, two-person lawful-disclosure manifests, WH-016 owner-notice generation records (one per confirmed finding, naming the acting reviewer) and independent appeal decisions (the deciding reviewer, upheld/reversed and an opaque reference). Opaque identifiers and digests only in case rows; preserved payloads and evidence bytes are restricted content.",
       "currentRetention": "Independent of the customer account lifecycle: no foreign key to users and no ordinary delete path. An unreleased hold blocks account/project deletion and owner change, photo/version removal, visitor deletion/erasure, guest-feedback and contact deletion, contact/traffic expiry and R2 cleanup of queued objects in its scope; profile-photo replacement, Chat draft clearing, app visitor document overwrites and cleared app recovery-point copies are preserved in place (at most 50,000 preserved records; beyond that the preserving write fails closed). Preserved payloads are removed when the last covering hold is released. Cases and evidence objects carry a default one-year retention term (owner decision 2026-10-04, pending counsel); at expiry the case is listed for operator review (retention_review_due) and a preservation approver extends or releases it through an exact preview digest. Evidence objects remain until an audited disposal after case closure and a retention release, never while a hold on the case or subject is active. No automatic case age purge.",
       "proposedRetention": "Case-specific basis, scope, review deadline and audited release decided by named humans with qualified counsel; routine closed-case metadata retention still requires an owner/counsel schedule. No blanket permanent retention.",
       "deletionAuthority": "No ordinary deletion. Preserved payloads follow hold release; evidence objects need an authenticated preservation approver's audited disposal after case closure and an operator retention release (WH-132). A future reviewed case-retention procedure may purge closed cases; owner, customer, model and agents cannot remove or release held evidence.",
@@ -908,14 +994,57 @@
       }
     },
     {
+      "id": "abuse-reports",
+      "tables": [
+        "abuse_reports"
+      ],
+      "scope": "platform",
+      "purpose": "Public abuse reports about published Whumpo sites and applications (WH-016): the server-resolved project, its owner at intake, surface, host kind, reported path (no query), category, an optional reporter description of at most 1,000 characters, an optional reporter email for follow-up (owner decision October 4, 2026; readable only through the case-reviewer report read, never emailed by Whumpo), request digest and the single audited triage decision (case opened, case linked or not actionable). No reporter IP or upload is stored.",
+      "currentRetention": "Independent of the customer account lifecycle: no foreign key to users or projects. Owner decision October 4, 2026 (issue #172), implemented in source: untriaged reports are kept until triaged; reports not linked to a case are deleted 365 days after triage; reports linked to a case are deleted once an operator has released that case's retention (WH-132 reviewed release, at least one year after opening) and at least 365 days after triage; nothing is deleted while any hold covers the linked case or the subject. The daily contacts maintenance job deletes exactly these; the abuse_reports_retained trigger refuses any other delete, and each deletion is recorded in the WH-019 restore suppression ledger. Bounded at 10,000 retained reports, 1,000 awaiting triage and 50 awaiting triage per project; intake fails closed beyond those caps.",
+      "proposedRetention": "Keep as current (owner decision October 4, 2026); counsel review of the one-year term remains open.",
+      "deletionAuthority": "Only the scheduled retention cleanup (and the WH-019 operator replay of a recorded deletion) deletes reports, never inside a hold; a case reviewer may erase the optional reporter email. Owner, customer, model and agents cannot read, change or remove reports; triage is one authenticated case-reviewer decision.",
+      "exportPolicy": "Excluded from the customer account export (including the reported owner's), ordinary logs, GitHub and model context. Reports are read only through the authenticated restricted operator surface; the reporter receives a receipt identifier only.",
+      "references": [
+        "src/abuse-reports.ts",
+        "src/abuse-report-page.ts",
+        "src/safety-cases.ts",
+        "docs/content-safety.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Authenticated restricted operator surface (fresh passkey session plus case_reviewer for full reads, case_reviewer/case_auditor for the metadata queue); reports about the operator's own account are hidden; every attempt audited"
+        ],
+        "processors": [
+          "Public intake handler (Origin, bounded body, rate limiter, per-connection allowance, Turnstile) writes once; schema triggers enforce target, caps and the single triage transition"
+        ],
+        "remainingExposure": [
+          "Reporter descriptions are untrusted free text that may name people or describe sensitive material, and the optional reporter email is personal data; both are readable by Cloudflare-managed storage and Worker code. An audited case-reviewer erasure clears the email (refused while a hold covers the case or subject) and records a report_contact restore suppression; no follow-up sending channel exists."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
       "id": "safety-case-access",
       "tables": [
         "safety_case_roles",
-        "safety_case_audit"
+        "safety_case_audit",
+        "safety_case_denied_attempts"
       ],
       "scope": "platform",
-      "purpose": "Authenticated named human operator role grants/revocations (including role administration bootstrapped once by operator tooling) and the append-only audit of every case access attempt and decision.",
-      "currentRetention": "Append-only; no delete path. Bounded at 1,000 role rows and 100,000 audit rows, after which operations fail closed.",
+      "purpose": "Authenticated named human operator role grants/revocations (including role administration bootstrapped once by operator tooling), the append-only audit of every role-verified case access attempt and decision, and a separate bounded, content-free log of identity, input and role failures.",
+      "currentRetention": "Roles and audit are append-only with no delete path, bounded at 1,000 role rows and 100,000 audit rows (the last 10,000 reserved for placing holds and capturing evidence; other actions at most 2,000 rows per operator per day), after which operations fail closed. Denied attempts self-prune to the newest 10,000 rows within 30 days, at most 60 rows per principal per hour.",
       "proposedRetention": "Retain at least as long as the related cases; schedule requires owner/counsel review.",
       "deletionAuthority": "No ordinary deletion; revocation is one-way and audited.",
       "exportPolicy": "Operator audit only; never in customer exports, ordinary logs or model context.",
@@ -2081,6 +2210,55 @@
       }
     },
     {
+      "id": "account-lifecycle",
+      "tables": [
+        "account_lifecycle_reviews",
+        "account_export_usage",
+        "account_closures",
+        "account_closure_steps",
+        "restore_suppressions"
+      ],
+      "scope": "mixed",
+      "purpose": "WH-018 exact owner reviews for the platform account export and account closure (content-free binding of counts, project/module revisions and requested scope) and the resumable closure journal: one closure row per account id and six ordered, idempotent step rows with content-free counts. The closure row and journal are the final deletion receipt. WH-019 adds the restore suppression ledger: one content-free row (opaque identifier, effect, staff revision) per erased account, project, visitor, record, file or revoked/deleted visitor, staff grant and provider token, written by database triggers inside the erasure/revocation commit and consulted by guard triggers and the operator restore replay.",
+      "currentRetention": "Reviews expire after ten minutes; the owner's expired reviews are removed when the next review is prepared, an export review is consumed by its download, and every review cascades with the account. Monthly export allowance counters (downloads and photo reads per account and month) cascade with the account; no other expiry is implemented. Closure rows and steps have no foreign key to users, survive the account cascade and cannot be updated after completion or deleted (database triggers). Restore suppression rows have no foreign key, survive every cascade and cannot be deleted; only a staff revision may increase. No expiry is implemented.",
+      "proposedRetention": "Keep the closure receipt while it is needed to prove deletion and reconcile restores (LC-08), then expire it under an approved schedule; no expiry is implemented yet. Keep restore suppression rows at least as long as any restorable copy (platform backups, recovery points, saved versions) can contain the subject; an approved compaction schedule is still open (LC-08).",
+      "deletionAuthority": "Reviews: account cascade or opportunistic expiry. Closure receipt: none in this release; a future approved retention job only. Restore suppression ledger: none (append-only).",
+      "exportPolicy": "Reviews and the closure journal are not exported; the owner sees the closure status and receipt in the closure response. Never export review bindings of another account. The restore suppression ledger is never exported; the operator replay captures it for an isolated candidate only.",
+      "references": [
+        "src/account-lifecycle/schema.sql",
+        "src/account-lifecycle/closure.ts",
+        "src/account-lifecycle/export.ts",
+        "docs/account-closure.md",
+        "docs/data-protection.md",
+        "src/restore-suppression.ts"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "The owner through the authenticated account lifecycle routes while the account exists; restricted operators for the surviving closure receipt; no model, Chat or view reader; restore suppression rows are read only by guard triggers and the operator restore replay"
+        ],
+        "processors": [
+          "Deterministic review binding, step runner and purge batch; no model, provider or network call except the existing provider revocation path"
+        ],
+        "remainingExposure": [
+          "The surviving closure receipt keeps the deleted account id with timestamps and counts; it must stay operator-restricted and minimal.",
+          "Restore suppression rows keep opaque identifiers of erased subjects indefinitely in this release; they hold no names, values or credentials."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
       "id": "platform-operations",
       "tables": [
         "plan_catalog",
@@ -2321,7 +2499,7 @@
         "workspace_layout_checks"
       ],
       "scope": "platform",
-      "purpose": "Always-empty SQL assertion tables used to atomically reject stale Chat interaction or workspace layout state, feature inclusion, project ownership and revision checks.",
+      "purpose": "Always-empty SQL assertion table used to atomically reject stale Chat interaction or workspace layout state, feature inclusion, project ownership and revision checks.",
       "currentRetention": "No records: a successful assertion inserts zero rows; any attempted row insertion aborts its entire transaction.",
       "proposedRetention": "Remain empty in every deployment and restore.",
       "deletionAuthority": "Database trigger; never application CRUD or an operator grant.",

@@ -1,5 +1,7 @@
 import {projectRuntime} from './runtime-lane';
-import {BackendError,listBackends,testBackend} from './backend-versions';
+import {requireArtifactsAvailable,heldRefusal,artifactHeldMessage} from './artifact-admission';
+import {BackendError,listBackends} from './backend-versions';
+import {testAdmittedBackend} from './artifact-admission';
 import {prepareApplication,readApplicationReview,describeApplicationReview} from './app-activation';
 import {hashToken} from './security';
 import {readBackendComponent} from './backend-library';
@@ -43,6 +45,8 @@ export async function buildApplication(db:D1Database,user:string,id:string,actio
  const prior=await read();
  if(prior){match(prior);return readApplicationBuild(db,user,id);}
  if(component&&component.state!=='available')throw new BackendError(409,'This component was withdrawn. Choose an available version.');
+ // WH-014: the same exact-digest gate as every other version writer; checked again by the insert trigger.
+ await requireArtifactsAvailable(db,user,[digest]);
  const provenance=component?db.prepare('INSERT INTO backend_component_instances(version_id,component_id,component_version,artifact_digest,provenance,license) VALUES(?,?,?,?,?,?)').bind(id,component.id,component.version,component.digest,component.provenance,component.license):(await requireExtensionPlan(db,user,action.projectId,action.planId,'visitor-transition'))(id);
  // The intent and version commit together. If acknowledgment is lost, never
  // continue into execution: report the saved private artifact for recovery.
@@ -61,6 +65,7 @@ export async function buildApplication(db:D1Database,user:string,id:string,actio
  ]);}catch(error){
   const saved=await read();if(saved){match(saved);return readApplicationBuild(db,user,id);}
   if(String(error).includes('welcome_first_draft_changed'))throw error;
+  if(heldRefusal(error))throw new BackendError(423,artifactHeldMessage);
   if(String(error).includes('build_job_capacity'))throw new BackendError(429,'Shared build capacity for this project or account is not available right now. Nothing was saved; try again later.');
   throw new BackendError(409,'Application draft was not saved. Check project ownership, the draft allowance and whether existing visitors require a data migration.');
  }
@@ -72,7 +77,7 @@ export async function buildApplication(db:D1Database,user:string,id:string,actio
  if(!await dispatchBuildJob(db,job.lease)){await reconcileBuildJobs(db);return readApplicationBuild(db,user,id);}
  let returned=false;
  try{
-  const run=await testBackend(db,await projectRuntime(service,action.projectId),user,action.projectId,id,id,action.input,{expected:action.expected});
+  const run=await testAdmittedBackend(db,await projectRuntime(service,action.projectId),user,action.projectId,id,id,action.input,{expected:action.expected});
   const result='result' in run?run.result as {ok?:boolean;error?:string;check?:{status?:string}}|undefined:undefined;
   const passed=run.state==='complete'&&result?.ok===true&&result?.check?.status==='passed';
   returned=run.state==='complete'&&result?.error!=='unavailable';

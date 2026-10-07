@@ -158,6 +158,7 @@ try{
   const old='2000-01-01T00:00:00.000Z';
   for(const [x,d,k] of [[a,destA,'expired-a'],[b,destB,'expired-b']])await run("INSERT INTO contact_notification_outbox(id,user_id,project_id,destination_id,kind,idempotency_key,provider,review,created_at,next_attempt_at,expires_at) VALUES(?,?,?,?,'verification',?,'p','r',?,?,?)",crypto.randomUUID(),x.id,x.project,d.id,'verify:'+k+d.id,old,old,old);
   await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES('case-wh036',?,'intake-1','human:reviewer',unixepoch(),unixepoch()+31536000)",a.id);
+  await run("INSERT OR IGNORE INTO safety_case_roles(id,operator_ref,role,granted_by,granted_at) VALUES('grant-test-approver','human:approver','preservation_approver','human:test-administrator',unixepoch())"); // holds need a current preservation approver
   await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES('hold-wh036','case-wh036',?,'project',?,'basis-1','human:approver',unixepoch(),unixepoch()+86400)",a.id,a.project);
   await cleanupContacts(db);assert.equal((await row("SELECT count(*) n FROM contact_notification_outbox WHERE idempotency_key LIKE 'verify:expired-%'")).n,1,'Only the unheld project expires');assert.equal((await row("SELECT project_id FROM contact_notification_outbox WHERE idempotency_key LIKE 'verify:expired-%'")).project_id,a.project);
   await assert.rejects(N.removeContactDestination(db,a.id,a.project),e=>e.status===423&&!/safety_preservation_hold/.test(e.message));await assert.rejects(()=>run("DELETE FROM contact_notification_outbox WHERE project_id=?",a.project),/safety_preservation_hold/);
@@ -219,6 +220,7 @@ try{
   // Inside a safety preservation hold, replacing the address is refused as a whole.
   const held=await chat(a,'/contact-notify '+a.project+' third@example.com');
   await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES('case-wh036-review',?,'intake-2','human:reviewer',unixepoch(),unixepoch()+31536000)",a.id);
+  await run("INSERT OR IGNORE INTO safety_case_roles(id,operator_ref,role,granted_by,granted_at) VALUES('grant-test-approver','human:approver','preservation_approver','human:test-administrator',unixepoch())"); // holds need a current preservation approver
   await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES('hold-wh036-review','case-wh036-review',?,'project',?,'basis-2','human:approver',unixepoch(),unixepoch()+86400)",a.id,a.project);
   assert.equal((await chat(a,'/confirm-contact-notify '+held.id)).result.status,423);assert.equal((await N.contactNotificationStatus(db,a.id,a.project)).destination.address,'second@example.com');
   await assert.rejects(N.proposeContactDestination(db,a.id,a.project,'fourth@example.com'),e=>e.status===423,'The Dashboard control is refused the same way');
@@ -246,6 +248,7 @@ try{
   const h=await account(),fh=provider();await verified(h,'held-reset@example.com',fh);const hs=await row("SELECT id FROM contact_notification_outbox WHERE project_id=? AND kind='verification'",h.project);await N.applyContactDeliveryEvent(db,{outboxId:hs.id,type:'bounce'});
   await assert.rejects(()=>run('DELETE FROM contact_notification_suppressions WHERE user_id=?',h.id),/suppression_final/);
   await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES('case-wh036-reset',?,'intake-3','human:reviewer',unixepoch(),unixepoch()+31536000)",h.id);
+  await run("INSERT OR IGNORE INTO safety_case_roles(id,operator_ref,role,granted_by,granted_at) VALUES('grant-test-approver','human:approver','preservation_approver','human:test-administrator',unixepoch())"); // holds need a current preservation approver
   await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES('hold-wh036-reset','case-wh036-reset',?,'project',?,'basis-3','human:approver',unixepoch(),unixepoch()+86400)",h.id,h.project);
   const hstatus=await runSuppressionReset(db,{action:'status',account:h.id,address:'held-reset@example.com'});assert.equal(hstatus.destinations[0].held,true);
   await assert.rejects(runSuppressionReset(db,{...request,id:crypto.randomUUID(),account:h.id,address:'held-reset@example.com',suppressedAt:hstatus.suppression.suppressedAt}),/safety preservation hold/);

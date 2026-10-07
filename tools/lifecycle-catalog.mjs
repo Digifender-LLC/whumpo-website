@@ -49,7 +49,13 @@ const unlinkedOwnership={
  safety_disclosures:'Two-person lawful-disclosure manifest owned through safety_cases, deliberately outside the account cascade (WH-132).',
  safety_disclosure_items:'Manifest items owned through safety_disclosures and safety_evidence_objects, deliberately outside the account cascade (WH-132).',
  safety_retention_decisions:'Append-only operator retention decisions (extend or release at the one-year review) owned through safety_cases, deliberately outside the account cascade (WH-132).',
+ safety_appeal_decisions:'WH-016 independent appeal decision (deciding reviewer, upheld/reversed, opaque reference) owned through safety_cases and its notice, deliberately outside the account cascade.',
+ safety_notice_delays:'WH-016 restricted legal-process notice-delay mark (case, bounded reason, placing and lifting preservation approver, opaque lift reference) owned through safety_cases, deliberately outside the account cascade; the reason is never shown to the owner, a support row, the audit or a model.',
+ safety_action_notices:'WH-016 owner-notice generation record (one per confirmed finding, naming the acting reviewer) owned through safety_cases, deliberately outside the account cascade so notice generation and appeal independence stay provable after account deletion; the in-app copy is a support row that cascades with the account.',
  operator_containments:'Operator containment audit keyed by subject account or project id without a foreign key, so closure is neither blocked nor erases the record; expires within 30 days and is never deleted (WH-050 F7).',
+ account_closures:'WH-018 final closure receipt keyed by the closed account id without a foreign key, so it survives the account cascade it records; never deletable and immutable once complete.',
+ account_closure_steps:'WH-018 closure step journal owned through account_closures, deliberately outside the account cascade; content-free counts only.',
+ restore_suppressions:'WH-019 append-only restore suppression ledger keyed by opaque erased/revoked subject ids without foreign keys, so it survives the cascades it records and is consulted by guard triggers and the operator restore replay; no content.',
  file_cleanup:'Physical object deletion queue keyed by object_key, with project/owner identifiers copied without foreign keys so preservation holds can retain queued objects. Never expose keys in customer reports.'
 };
 export async function currentLifecycleSchema(directory=root){

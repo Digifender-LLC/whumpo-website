@@ -5,7 +5,7 @@ import {deliveryLabel,readSupportRequestsCard,type SupportRequest} from '../../s
 import {APIError,api,message,send} from './lib/api';
 import {identityGeneration} from './lib/identity-invalidation';
 import {Button} from './components/ui/button';
-import {kindLabel,readLabel,responseLabel,when} from './support';
+import {SupportRequestBody,kindLabel,readLabel,responseLabel,when} from './support';
 
 /** WH-035 Chat support view. Reads the owner's own requests through the issued card; opening a saved
  * response records the customer read with the existing Support read receipt. Never submits or answers. */
@@ -31,8 +31,8 @@ export function ChatSupportRequests({owner,interactionId,digest}:{owner:string;i
   {!!requests.length&&<ul className="grid gap-3">{requests.map((r:SupportRequest)=><li key={r.id}><article aria-label={kindLabel(r.kind)+' '+when(r.createdAt)} className="rounded-md border p-3 space-y-2 text-sm">
    <h4 className="font-semibold">{kindLabel(r.kind)} · {when(r.createdAt)}</h4>
    <dl className="grid gap-1"><div><dt className="inline font-medium">Response: </dt><dd className="inline">{responseLabel(r)}</dd></div><div><dt className="inline font-medium">Notification: </dt><dd className="inline">{r.response.saved?deliveryLabel(r.delivery.state):'None yet'}</dd></div><div><dt className="inline font-medium">Read: </dt><dd className="inline">{readLabel(r)}</dd></div></dl>
-   <Button type="button" variant="secondary" className="min-h-11" aria-expanded={openId===r.id} onClick={()=>setOpenId(openId===r.id?null:r.id)}>{openId===r.id?'Hide details':r.response.saved?'Open response':'Open request'}</Button>
-   {openId===r.id&&<div className="space-y-2 border-t pt-2"><p className="font-medium">Your request:</p><p className="whitespace-pre-wrap break-words">{r.statement}</p>{r.publicResponse&&<><p className="font-medium">Response{r.answeredAt?' · '+when(r.answeredAt):''}:</p><p className="whitespace-pre-wrap break-words" data-support-response>{r.publicResponse}</p></>}</div>}
+   <Button type="button" variant="secondary" className="min-h-11" aria-expanded={openId===r.id} onClick={()=>setOpenId(openId===r.id?null:r.id)}>{openId===r.id?'Hide details':r.kind==='safety_notice'?'Open notice':r.response.saved?'Open response':'Open request'}</Button>
+   {openId===r.id&&<div className="space-y-2 border-t pt-2"><SupportRequestBody r={r} label="Your request:"/>{r.kind==='safety_notice'&&<p>{r.appealWindow.state==='closed'?'The 30-day appeal window for this notice has closed.':'To appeal within 30 days of the notice, open Support and choose Appeal this decision on this notice.'}</p>}</div>}
   </article></li>)}</ul>}
   <div className="flex flex-wrap items-center gap-2"><Button type="button" variant="secondary" className="min-h-11" disabled={query.isFetching} onClick={()=>void query.refetch()}>Refresh</Button><Button asChild variant="link" className="min-h-11 px-0 h-auto whitespace-normal"><Link to="/workspace/$view" params={{view:'support'}} search={{}}>Open Support</Link></Button></div>
  </div>;

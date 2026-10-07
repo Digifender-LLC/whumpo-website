@@ -50,6 +50,9 @@ export const backlogInventory={
  // WH-074: unfinished build jobs past their deadline, and finished jobs whose capacity cleanup is not yet released.
  build_jobs_expired:queue('build_jobs',"state='running' AND expires_at<=?1",'expires_at',600000),
  build_cleanup:queue('build_jobs',"state<>'running' AND cleanup<>'released'",'finished_at',600000),
+ // WH-018: unfinished confirmed closures, aged from their last journal write. A closure paused by an active preservation
+ // hold is intentionally retained, not backlog; waiting provider/operation and retained-record blocks are attention.
+ account_closures:queue('account_closures c',"c.state<>'complete' AND NOT EXISTS(SELECT 1 FROM safety_preservation_holds h WHERE h.released_at IS NULL AND (h.subject_user_id=c.account_id OR (h.scope IN ('project','object') AND h.project_id IN (SELECT id FROM projects WHERE owner_user_id=c.account_id))))","strftime('%Y-%m-%dT%H:%M:%fZ',c.updated_at,'unixepoch')"),
 };
 export const operationInventory={
  standard_ai:{table:'standard_ai_requests',state:'state',states:['reserved','dispatched','uncertain'],time:'updated_at',guide:'docs/standard-ai-accounting.md'},

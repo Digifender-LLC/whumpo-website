@@ -256,7 +256,10 @@ CREATE TRIGGER module_request_admit BEFORE INSERT ON module_request_receipts BEG
  -- operations (reads, export, removal, revocation) stay available in every activation state.
  SELECT RAISE(ABORT,'module_request_unavailable') WHERE NEW.principal_kind!='owner' AND (NOT EXISTS(SELECT 1 FROM module_activations WHERE instance_id=NEW.instance_id AND state='active')
   OR EXISTS(SELECT 1 FROM module_instances i, json_each(i.dependencies_json) d WHERE i.id=NEW.instance_id AND NOT EXISTS(SELECT 1 FROM module_instances x JOIN module_activations a ON a.instance_id=x.id
-   WHERE x.id=d.value AND x.project_id=i.project_id AND a.state='active')));
+   WHERE x.id=d.value AND x.project_id=i.project_id AND a.state='active'))
+  -- WH-014: a held website configuration (the instance's or a dependency's activation source) stops non-owner serving.
+  OR EXISTS(SELECT 1 FROM module_instances i JOIN project_spec_held h ON h.version_id=i.source_version_id WHERE i.id=NEW.instance_id
+   OR i.id IN (SELECT d.value FROM module_instances o, json_each(o.dependencies_json) d WHERE o.id=NEW.instance_id)));
  SELECT RAISE(ABORT,'module_request_stale') WHERE NOT EXISTS(SELECT 1 FROM module_instances i JOIN module_activations a ON a.instance_id=i.id
   WHERE i.id=NEW.instance_id AND i.config_revision=NEW.config_revision AND a.revision=NEW.activation_revision);
  SELECT RAISE(ABORT,'module_request_limited') WHERE abs(NEW.created_at-unixepoch())>60;

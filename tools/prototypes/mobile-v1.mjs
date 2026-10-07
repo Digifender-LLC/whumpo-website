@@ -12,7 +12,7 @@ const check=(ok,code,path)=>{if(!ok)fail(code,path);};
 const plain=v=>v!==null&&typeof v==='object'&&!Array.isArray(v)&&[Object.prototype,null].includes(Object.getPrototypeOf(v));
 
 export const contractVersion=1;
-export const currentMobileBuild=3;
+export const currentMobileBuild=4;
 export const prefix='/api/mobile/v1';
 export const uuidPattern=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 
@@ -46,11 +46,16 @@ const v1=lit(1);
 export const errors=Object.freeze({
  invalid_request:400,invalid_cursor:400,unsupported_control:400,unknown_field:400,missing_field:400,
  proof_required:401,identity_incomplete:403,not_found:404,
- onboarding_required:409,identity_changed:409,request_conflict:409,stale_revision:409,chat_busy:409,review_unavailable:409,
+ onboarding_required:409,identity_changed:409,account_closing:409,request_conflict:409,stale_revision:409,chat_busy:409,review_unavailable:409,
  payload_too_large:413,unsupported_media_type:415,client_update_required:426,rate_limited:429,unavailable:503,
 });
-export const errorBody=obj({version:v1,error:obj({code:en(...Object.keys(errors)),message:str(300,null,1)},{
- minimumBuild:int(1,1e9),contract:int(1,1e6),proof:en('signin','fresh_passkey'),retryAfterSeconds:int(1,3600),currentRevision:int(0,1e9),next:en('browser','update_app')})});
+const errorShape=obj({version:v1,error:obj({code:en(...Object.keys(errors)),message:str(300,null,1)},{
+ minimumBuild:int(1,1e9),contract:int(1,1e6),proof:en('signin','fresh_passkey'),retryAfterSeconds:int(1,3600),currentRevision:int(0,1e9),next:en('browser','update_app'),browserPath:lit('/workspace/account')})});
+export function errorBody(value,path){
+ errorShape(value,path);
+ if(value.error.code==='account_closing')check(value.error.browserPath==='/workspace/account'&&value.error.next==='browser','invalid_request',path+'.error');
+ else check(!Object.hasOwn(value.error,'browserPath'),'unknown_field',path+'.error.browserPath');
+}
 
 // ---- Client admission. The header selects a contract and capability list; it never grants authority. ---------------
 // Capability strings are exact. A client lacking a control capability is never offered that control.
@@ -282,6 +287,7 @@ export function authorize({session,account,opId,control=null,now}){
  // Revoking sessions deletes them and every epoch bump invalidates the rest: a stale session is simply unknown.
  check(session.epoch===account.authEpoch,'proof_required','revoked');
  check(account.stage==='ready','identity_incomplete','stage');
+ if(!opId.startsWith('session.'))check(!account.closing,'account_closing','account');
  if(!ungated.has(opId))check(account.onboardingComplete,'onboarding_required','onboarding');
  const fresh=session.proofMethod==='passkey'&&now-session.proofAt<sessionPolicy.freshSeconds;
  if(control&&reviewKindFor(control).freshPasskey)check(fresh,'proof_required','fresh_passkey');

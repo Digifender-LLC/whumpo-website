@@ -1,4 +1,5 @@
 import {projectRuntime} from './runtime-lane';
+import {requireBackendVersionAvailable,heldRefusal} from './artifact-admission';
 import {hashToken,newSessionToken} from './security';
 import {BackendError,callBackend} from './backend-versions';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -55,8 +56,10 @@ export async function transitionAppData(db:D1Database,service:Fetcher,token:stri
  const payload={state:JSON.parse(doc.state_json),input:JSON.parse(encoded)};if(bytes(JSON.stringify(payload))>8192)throw new BackendError(400,'Combined application state and input exceed 8192 bytes');
  const code=await db.prepare('SELECT source,digest FROM backend_versions WHERE id=? AND project_id=?').bind(actor.version_id,project).first<{source:string;digest:string}>();
  if(!code||await hashToken(code.source)!==code.digest)throw new BackendError(503,'Application program unavailable');
- try{await db.prepare('INSERT INTO app_runs(id,visitor_id,project_id,version_id,session_hash,request_hash,base_revision,program_revision,page_review_id) SELECT ?,?,?,?,?,?,?,?,(SELECT id FROM app_live_pages WHERE project_id=?)').bind(id,actor.visitor_id,project,actor.version_id,actor.token_hash,fingerprint,revision,actor.program_revision,project).run();}catch{
-  const found=await read();if(found)return receipt(found);throw new BackendError(409,'Application changed or execution allowance reached');
+ // WH-014: a held program is unavailable to visitors; the app_runs trigger repeats this at reservation.
+ await requireBackendVersionAvailable(db,actor.version_id).catch(()=>{throw new BackendError(503,'Application program unavailable');});
+ try{await db.prepare('INSERT INTO app_runs(id,visitor_id,project_id,version_id,session_hash,request_hash,base_revision,program_revision,page_review_id) SELECT ?,?,?,?,?,?,?,?,(SELECT id FROM app_live_pages WHERE project_id=?)').bind(id,actor.visitor_id,project,actor.version_id,actor.token_hash,fingerprint,revision,actor.program_revision,project).run();}catch(error){
+  const found=await read();if(found)return receipt(found);if(heldRefusal(error))throw new BackendError(503,'Application program unavailable');throw new BackendError(409,'Application changed or execution allowance reached');
  }
  const outcome=await callBackend(await projectRuntime(service,project),code.source,payload),value=outcome.ok?outcome.value:null;
  const valid=value!==null&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===2&&'state'in value&&'result'in value&&bytes(JSON.stringify((value as {state:unknown}).state))<=4096&&bytes(JSON.stringify((value as {result:unknown}).result))<=4096;

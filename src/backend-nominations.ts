@@ -1,5 +1,6 @@
 import {BackendError} from './backend-versions';
 import {hashToken} from './security';
+import {requireBackendVersionAvailable,heldRefusal,artifactHeldMessage} from './artifact-admission';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 type Nomination={id:string;version_id:string;digest:string;state:'review'|'nominated'|'withdrawn';expires_at:string;consent_at:string|null;withdrawn_at:string|null};
 export async function readNomination(db:D1Database,user:string,id:string){
@@ -10,7 +11,10 @@ export async function prepareNomination(db:D1Database,user:string,id:string,vers
  if(!uuid.test(id)||!uuid.test(version))throw new BackendError(400,'Choose a saved backend version');
  const prior=await db.prepare('SELECT user_id,version_id FROM backend_nominations WHERE id=?').bind(id).first<{user_id:string;version_id:string}>();if(prior){if(prior.user_id!==user||prior.version_id!==version)throw new BackendError(409,'Nomination ID already used');return readNomination(db,user,id);}
  const source=await db.prepare('SELECT v.source,v.digest FROM backend_versions v JOIN projects p ON p.id=v.project_id WHERE v.id=? AND p.owner_user_id=?').bind(version,user).first<{source:string;digest:string}>();if(!source)throw new BackendError(404,'Backend version not found');if(await hashToken(source.source)!==source.digest)throw new BackendError(409,'Saved source integrity check failed');
- const now=new Date();try{await db.prepare('INSERT INTO backend_nominations(id,user_id,version_id,digest,created_at,expires_at) VALUES(?,?,?,?,?,?)').bind(id,user,version,source.digest,now.toISOString(),new Date(now.getTime()+600000).toISOString()).run();}catch{
+ // WH-014: held code cannot be offered for reuse; the insert and consent triggers repeat this at commit.
+ await requireBackendVersionAvailable(db,version);
+ const now=new Date();try{await db.prepare('INSERT INTO backend_nominations(id,user_id,version_id,digest,created_at,expires_at) VALUES(?,?,?,?,?,?)').bind(id,user,version,source.digest,now.toISOString(),new Date(now.getTime()+600000).toISOString()).run();}catch(error){
+  if(heldRefusal(error))throw new BackendError(423,artifactHeldMessage);
   const saved=await db.prepare('SELECT user_id,version_id FROM backend_nominations WHERE id=?').bind(id).first<{user_id:string;version_id:string}>();if(saved?.user_id!==user||saved.version_id!==version)throw new BackendError(409,"An open nomination already exists or the nomination allowance is full. Ask an operator to inspect your saved nomination records.");
  }
  return readNomination(db,user,id);
@@ -18,7 +22,8 @@ export async function prepareNomination(db:D1Database,user:string,id:string,vers
 export async function consentNomination(db:D1Database,user:string,id:string,confirmation:string){
  if(confirmation!=='NOMINATE')throw new BackendError(400,'Read the nomination review, then type NOMINATE exactly');
  const row=await readNomination(db,user,id);if(row.state==='nominated')return row;if(row.state!=='review'||row.expires_at<=new Date().toISOString())throw new BackendError(409,'This nomination review is no longer available');
- try{await db.prepare("UPDATE backend_nominations SET state='nominated',consent_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND user_id=? AND state='review' AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')").bind(id,user).run();}catch{const saved=await readNomination(db,user,id);if(saved.state==='nominated')return saved;throw new BackendError(409,'Nomination changed; inspect it before continuing');}
+ await requireBackendVersionAvailable(db,row.version_id);
+ try{await db.prepare("UPDATE backend_nominations SET state='nominated',consent_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND user_id=? AND state='review' AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')").bind(id,user).run();}catch(error){const saved=await readNomination(db,user,id);if(saved.state==='nominated')return saved;if(heldRefusal(error))throw new BackendError(423,artifactHeldMessage);throw new BackendError(409,'Nomination changed; inspect it before continuing');}
  const saved=await readNomination(db,user,id);if(saved.state!=='nominated')throw new BackendError(409,'Nomination changed; inspect it before continuing');return saved;
 }
 export async function withdrawNomination(db:D1Database,user:string,id:string){

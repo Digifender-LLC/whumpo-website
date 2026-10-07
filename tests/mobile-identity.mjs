@@ -15,7 +15,7 @@ crypto.subtle.timingSafeEqual=(a,b)=>timingSafeEqual(Buffer.from(a),Buffer.from(
 let limited=false;
 const env={DB:db,ENVIRONMENT:'test',TURNSTILE_SECRET:'synthetic-only',TURNSTILE_SITE_KEY:'synthetic-public',MOBILE_ANDROID_PACKAGE:'com.whumpo.fixture',MOBILE_ANDROID_CERT_SHA256:Array(32).fill('A1').join(':'),MOBILE_MINIMUM_BUILD:'2',API_LIMITER:{limit:async()=>({success:!limited})},AUTH_LIMITER:{limit:async()=>({success:!limited})}};
 const signingOrigin='android:apk-key-hash:'+Buffer.alloc(32,0xa1).toString('base64url');
-const client={contract:1,build:3,platform:'android',controls:[],interaction:{versions:[1],fieldTypes:[],bindings:[]}};
+const client={contract:1,build:4,platform:'android',controls:[],interaction:{versions:[1],fieldTypes:[],bindings:[]}};
 const request=()=>new Request('https://whumpo.com/api/auth/identity/v1/test',{method:'POST',headers:{origin:'https://whumpo.com'}});
 const counters=new Map();
 const assertion=(key,options,overrides={})=>{const count=(counters.get(key.id)??0)+1;counters.set(key.id,count);return key.assertion(options,count,overrides);};
@@ -61,11 +61,11 @@ async function handoff(f,{complete=true}={}){
 }
 async function replaceImmutable(table,key,value,changes){const saved=await row(`DELETE FROM ${table} WHERE ${key}=? RETURNING *`,value);assert(saved);const next={...saved,...changes};await run(`INSERT INTO ${table}(${Object.keys(next).join(',')}) VALUES(${Object.keys(next).map(()=>'?').join(',')})`,...Object.values(next));}
 try{
- admitClient(client,{minimumBuild:3});
- assert.equal((await ok('/config')).minimumBuild,3); // Even a stale MOBILE_MINIMUM_BUILD=2 cannot re-enable retired build2.
- assert.equal((await ok('/config',undefined,undefined,{}, {...env,MOBILE_MINIMUM_BUILD:undefined})).minimumBuild,3);
- assert.equal((await ok('/config',undefined,undefined,{}, {...env,MOBILE_MINIMUM_BUILD:'4'})).minimumBuild,4);
- await no('/session/login/options',{version:1},426,'client_update_required',undefined,{headers:{'whumpo-client':JSON.stringify({...client,build:2})}});
+ admitClient(client,{minimumBuild:4});
+ assert.equal((await ok('/config')).minimumBuild,4); // Even a stale MOBILE_MINIMUM_BUILD=2 cannot re-enable retired builds.
+ assert.equal((await ok('/config',undefined,undefined,{}, {...env,MOBILE_MINIMUM_BUILD:undefined})).minimumBuild,4);
+ assert.equal((await ok('/config',undefined,undefined,{}, {...env,MOBILE_MINIMUM_BUILD:'5'})).minimumBuild,5);
+ await no('/session/login/options',{version:1},426,'client_update_required',undefined,{headers:{'whumpo-client':JSON.stringify({...client,build:3})}});
  await ok('/config',undefined,undefined,{headers:{'whumpo-client':JSON.stringify({...client,build:1})}});
  await no('/session/login/options',{version:1},426,'client_update_required',undefined,{headers:{'whumpo-client':JSON.stringify({...client,build:1})}});
  for(const header of [{...client,contract:0},{...client,platform:'ios'},{...client,controls:['unknown']},{...client,interaction:{...client.interaction,versions:[2]}}])await no('/config',undefined,426,'client_update_required',undefined,{headers:{'whumpo-client':JSON.stringify(header)}});

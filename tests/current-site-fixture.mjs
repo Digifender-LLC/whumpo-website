@@ -10,7 +10,7 @@ export async function currentSiteFixtureHandlers(){
   export {default as worker} from './src/index';
   export {comparisonErrorResponse} from './src/comparison-page';
   export {hashToken,newSessionToken} from './src/security';
-  export {admitWorkspace} from './src/workspace-identity/admission';
+  export {admitWorkspace,assertWorkspace,requireFreshWorkspace,workspaceTransport,workspaceBindings} from './src/workspace-identity/admission';
   export {resolveIdentity} from './src/workspace-identity/authority';
   export {createWebsite,prepareSpecification,readSpecificationProposal,readSpecification,specificationPreview,applySpecificationCommand} from './src/project-specification/store';
   export {readChat,sendChat,sendChatControl,sendConversation,chatState} from './src/chat';
@@ -32,6 +32,7 @@ export async function currentSiteFixtureHandlers(){
   export * as moduleFilesExport from './src/shared-modules/files-export';
   export * as accessSetup from './src/shared-modules/access-setup';
   export {readAppAccess} from './src/app-access';
+  export {continueAccountClosures,closureContinuation} from './src/account-lifecycle/closure';
   export * as appResource from './src/app-resource';
   export * as sharedModuleRecords from './src/shared-modules/records';
   export * as sharedModuleFiles from './src/shared-modules/files';

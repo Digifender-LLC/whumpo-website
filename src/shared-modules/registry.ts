@@ -69,8 +69,11 @@ export async function instanceOf(row:RegistryRow):Promise<ModuleInstance>{
 export async function registeredInstances(db:D1Database,project:string){
  return (await db.prepare(`SELECT ${columns} FROM module_instances i LEFT JOIN module_activations a ON a.instance_id=i.id WHERE i.project_id=? ORDER BY i.local_id LIMIT 64`).bind(project).all<RegistryRow>()).results;
 }
+/** Active dependencies, and (WH-014) no safety hold on the website configuration this instance or a dependency was
+ * activated from: a later hold stops visitor, staff and public serving; owner reads, export and disable stay open. */
 async function dependenciesActive(db:D1Database,row:RegistryRow){
- return !!await db.prepare(`SELECT 1 WHERE NOT EXISTS(SELECT 1 FROM json_each(?) d WHERE NOT EXISTS(SELECT 1 FROM module_instances x JOIN module_activations a ON a.instance_id=x.id WHERE x.id=d.value AND x.project_id=? AND a.state='active'))`).bind(row.dependencies_json,row.project_id).first();
+ return !!await db.prepare(`SELECT 1 WHERE NOT EXISTS(SELECT 1 FROM json_each(?) d WHERE NOT EXISTS(SELECT 1 FROM module_instances x JOIN module_activations a ON a.instance_id=x.id WHERE x.id=d.value AND x.project_id=? AND a.state='active' AND NOT EXISTS(SELECT 1 FROM project_spec_held h WHERE h.version_id=x.source_version_id)))
+  AND NOT EXISTS(SELECT 1 FROM project_spec_held WHERE version_id=?)`).bind(row.dependencies_json,row.project_id,row.source_version_id).first();
 }
 
 export type ResolvedResource={resourceId:string;projectId:string;localId:string;kind:ModuleKind;instance:ModuleInstance;configRevision:number;activationRevision:number;state:string;moduleDigest:string;schemaDigest:string};

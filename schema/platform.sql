@@ -666,7 +666,7 @@ CREATE TABLE backend_public_usage (
 -- Per-client attempt sub-limits inside each project's public allowance (WH-075, src/public-admission.ts).
 -- client_key is a scope/project/UTC-day SHA-256 of the connecting address (IPv6 /64), never the address.
 CREATE TABLE public_client_usage (
- scope TEXT NOT NULL CHECK(scope IN ('backend','contact','photo')),
+ scope TEXT NOT NULL CHECK(scope IN ('backend','contact','photo','abuse')),
  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
  client_key TEXT NOT NULL CHECK(length(client_key)=64),
  day TEXT NOT NULL,
@@ -1345,8 +1345,10 @@ CREATE TABLE standard_ai_requests (
 CREATE TABLE usage_review_requests (
  id TEXT PRIMARY KEY,
  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
- kind TEXT NOT NULL DEFAULT 'usage_review' CHECK(kind IN ('usage_review','help')),
- source TEXT NOT NULL DEFAULT 'chat' CHECK(source IN ('chat','support','chat_form')),
+ -- WH-016: 'safety_notice' is the in-app owner notice of a recorded safety action (source 'safety', created answered by
+ -- trigger from safety_action_notices); 'safety_appeal' is the owner's appeal of one notice (source 'support').
+ kind TEXT NOT NULL DEFAULT 'usage_review' CHECK(kind IN ('usage_review','help','safety_notice','safety_appeal')),
+ source TEXT NOT NULL DEFAULT 'chat' CHECK(source IN ('chat','support','chat_form','safety')),
  reference TEXT CHECK(reference IS NULL OR length(reference) BETWEEN 1 AND 200),
  statement TEXT NOT NULL CHECK(length(statement) BETWEEN 1 AND 950),
  created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),
@@ -1357,7 +1359,9 @@ CREATE TABLE usage_review_requests (
  customer_read_at TEXT,
  CHECK((state='open' AND public_response IS NULL AND answered_by IS NULL AND answered_at IS NULL AND customer_read_at IS NULL) OR
        (state='answered' AND public_response IS NOT NULL AND answered_by IS NOT NULL AND answered_at IS NOT NULL)),
- CHECK(source='support' OR (source='chat' AND kind='usage_review' AND reference IS NULL) OR (source='chat_form' AND kind='help' AND reference IS NULL))
+ CHECK((source='support' AND kind IN ('usage_review','help','safety_appeal')) OR (source='chat' AND kind='usage_review' AND reference IS NULL) OR (source='chat_form' AND kind='help' AND reference IS NULL)
+  OR (source='safety' AND kind='safety_notice' AND reference IS NULL)),
+ CHECK((kind='safety_appeal')=(coalesce(reference,'') GLOB 'safety_notice:*'))
 );
 
 -- External notification of a saved response. A row exists only when an owner-selected,
@@ -1581,7 +1585,7 @@ CREATE TABLE content_risk_reversals (
 );
 
 CREATE TABLE maintenance_health (
- job TEXT PRIMARY KEY CHECK(job IN ('identity','chat_drafts','imports','hosting','health','fair_use','traffic','funnel','guest_previews','applications','contacts','photos','github','cloudflare')),
+ job TEXT PRIMARY KEY CHECK(job IN ('identity','chat_drafts','imports','hosting','health','fair_use','traffic','funnel','guest_previews','applications','contacts','photos','github','cloudflare','account_closures')),
  run_id TEXT NOT NULL,
  started_at INTEGER NOT NULL CHECK(started_at>=0),
  finished_at INTEGER,
@@ -1989,6 +1993,8 @@ CREATE INDEX backend_nominations_owner ON backend_nominations(user_id,created_at
 CREATE INDEX standard_ai_owner_time ON standard_ai_requests(user_id,created_at,id);
 
 CREATE UNIQUE INDEX usage_review_one_open ON usage_review_requests(user_id,kind) WHERE state='open';
+-- WH-016: one appeal per safety notice.
+CREATE UNIQUE INDEX usage_review_one_appeal ON usage_review_requests(reference) WHERE kind='safety_appeal';
 
 CREATE INDEX usage_review_queue ON usage_review_requests(state,created_at,id);
 
@@ -2005,6 +2011,8 @@ CREATE INDEX usage_review_owner_time ON usage_review_requests(user_id,created_at
 CREATE INDEX backend_imports_pending ON backend_imports(state,created_at,id);
 
 CREATE INDEX backend_imports_owner ON backend_imports(user_id,project_id,created_at);
+
+CREATE INDEX backend_imports_digest ON backend_imports(user_id,digest);
 
 CREATE UNIQUE INDEX photo_scan_one_reserved ON photo_scan_tickets(kind,subject_id,digest,policy_version) WHERE state='reserved';
 
@@ -2042,7 +2050,8 @@ CREATE VIEW cms_live_articles AS
  SELECT r.id AS publication_id,r.project_id,r.user_id,r.collection,r.item_id,r.public_html,r.digest,json_extract(r.snapshot,'$.item.data.title') AS title,r.created_at
  FROM cms_publication_reviews r JOIN projects p ON p.id=r.project_id JOIN cms_instances c ON c.project_id=r.project_id
  WHERE r.status='published' AND r.withdrawn=0 AND p.owner_user_id=r.user_id AND c.state='ready'
- AND NOT EXISTS(SELECT 1 FROM blocked_cms_publications b WHERE b.review_id=r.id);
+ AND NOT EXISTS(SELECT 1 FROM blocked_cms_publications b WHERE b.review_id=r.id)
+ AND NOT EXISTS(SELECT 1 FROM cms_held_publications h WHERE h.id=r.id);
 
 CREATE VIEW project_service_status AS
  SELECT service.*,CASE WHEN site_live=1 OR cms_articles>0 OR backend_live=1 THEN 'live' WHEN status='live' THEN 'draft' ELSE status END AS service_status
@@ -2055,7 +2064,8 @@ CREATE VIEW project_service_status AS
 CREATE VIEW app_live_pages AS
  SELECT r.id,r.project_id,r.config_json,r.program_revision,s.revision
  FROM app_page_settings s JOIN app_page_reviews r ON r.id=s.review_id JOIN app_spaces a ON a.project_id=s.project_id JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id
- WHERE r.status='applied' AND r.config_json IS NOT NULL AND a.enabled=1 AND a.owner_user_id=r.user_id AND a.revision=r.program_revision;
+ WHERE r.status='applied' AND r.config_json IS NOT NULL AND a.enabled=1 AND a.owner_user_id=r.user_id AND a.revision=r.program_revision
+ AND NOT EXISTS(SELECT 1 FROM held_backend_versions h WHERE h.id=a.version_id);
 
 CREATE VIEW app_recovery_rosters AS SELECT a.project_id,coalesce((SELECT json_group_array(json(row_json)) FROM (SELECT json_object('visitor',v.id,'revision',d.revision) row_json FROM app_visitors v JOIN app_documents d ON d.visitor_id=v.id WHERE v.project_id=a.project_id AND v.revoked=0 ORDER BY v.id)),'[]') roster_json FROM app_spaces a;
 
@@ -2084,13 +2094,33 @@ CREATE VIEW approved_cms_media AS
  AND julianday(s.expires_at)>julianday('now')
  AND NOT EXISTS(SELECT 1 FROM cms_media_uploads o WHERE o.project_id=u.project_id AND o.id<>u.id AND json_extract(o.result,'$.mediaId')=json_extract(u.result,'$.mediaId'));
 
+-- WH-014: the one fail-closed artifact gate (src/artifact-admission.ts). A required screening decision for generated or
+-- imported work under ANY policy version, or the same exact bytes waiting in backend import quarantine (imports have no
+-- approval state), holds that owner+digest. There is no completion receipt yet, so a required row is a terminal hold.
+-- Neither a row nor the absence of one is an approval; mandatory imported formats are denied separately.
+CREATE VIEW artifact_screening_holds AS
+ SELECT user_id,digest FROM content_screening_decisions WHERE required=1 AND kind IN ('generated_artifact','imported_code')
+ UNION ALL SELECT user_id,digest FROM backend_imports;
+
+CREATE VIEW held_backend_versions AS SELECT v.id FROM backend_versions v JOIN projects p ON p.id=v.project_id
+ WHERE EXISTS(SELECT 1 FROM artifact_screening_holds h WHERE h.user_id=p.owner_user_id AND h.digest=v.digest);
+
+-- Imported CMS articles (their draft request is a WordPress import review) need mandatory import checks that do not
+-- exist yet, so they stay private. Generated or owner articles are held by an exact rendered-article digest hold.
+CREATE VIEW cms_held_publications AS SELECT r.id FROM cms_publication_reviews r
+ WHERE EXISTS(SELECT 1 FROM cms_import_reviews i WHERE i.id=r.draft_request_id)
+ OR EXISTS(SELECT 1 FROM artifact_screening_holds h WHERE h.user_id=r.user_id AND h.digest=r.digest);
+
 -- A blocked receipt revokes every publication that froze the same native media ID.
 CREATE VIEW blocked_cms_publications AS
  SELECT DISTINCT m.review_id FROM cms_publication_media m JOIN cms_media_uploads u ON u.project_id=m.project_id AND json_extract(u.result,'$.mediaId')=m.media_id
  JOIN cms_media_safety s ON s.upload_id=u.id WHERE s.state='blocked';
 
-CREATE VIEW project_spec_held AS SELECT v.version_id FROM project_spec_versions v JOIN projects p ON p.id=v.project_id JOIN site_versions s ON s.id=v.version_id
- WHERE EXISTS(SELECT 1 FROM content_screening_decisions d WHERE d.user_id=p.owner_user_id AND d.kind='generated_artifact' AND d.required=1 AND d.digest IN(v.spec_digest,v.manifest_digest,s.digest));
+-- Every saved website version (generated, restored or any future writer) is held by its exact rendered HTML digest, and a
+-- specification version also by its specification and manifest digests. Preview, export, diff, publication, serving,
+-- guest previews and module activation all consume this one view through requireSpecificationAvailable or triggers.
+CREATE VIEW project_spec_held AS SELECT s.id version_id FROM site_versions s JOIN projects p ON p.id=s.project_id LEFT JOIN project_spec_versions v ON v.version_id=s.id AND v.project_id=s.project_id
+ WHERE EXISTS(SELECT 1 FROM artifact_screening_holds d WHERE d.user_id=p.owner_user_id AND d.digest IN(v.spec_digest,v.manifest_digest,s.digest));
 
 CREATE VIEW service_client_current AS SELECT p.id project_id,p.owner_user_id,
  coalesce(s.revision,0) site_revision,s.version_id live_version_id,
@@ -2105,7 +2135,7 @@ CREATE VIEW service_client_current AS SELECT p.id project_id,p.owner_user_id,
 
 CREATE VIEW service_client_held AS SELECT v.id FROM service_client_versions v JOIN projects p ON p.id=v.project_id
  WHERE EXISTS(SELECT 1 FROM project_spec_held WHERE version_id=v.website_version_id)
- OR EXISTS(SELECT 1 FROM content_screening_decisions d WHERE d.user_id=p.owner_user_id AND d.kind='generated_artifact' AND d.required=1
+ OR EXISTS(SELECT 1 FROM artifact_screening_holds d WHERE d.user_id=p.owner_user_id
  AND d.digest IN(v.spec_digest,v.manifest_digest,v.preview_digest,v.candidate_digest,json_extract(v.target_json,'$.website.digest'),json_extract(v.target_json,'$.backend.digest')));
 
 CREATE VIEW service_client_valid_proposals AS SELECT q.id FROM service_client_proposals q
@@ -2123,7 +2153,7 @@ CREATE VIEW service_client_valid_proposals AS SELECT q.id FROM service_client_pr
  AND (q.operation='prepare' AND q.restore_version_id IS NULL OR q.operation='restore' AND EXISTS(SELECT 1 FROM service_client_versions r WHERE r.id=q.restore_version_id AND r.project_id=q.project_id AND r.website_version_id=q.website_version_id AND r.spec_json=q.spec_json AND r.lock_json=q.lock_json AND (json_type(q.spec_json,'$.statelessForm')='null' OR json_extract(r.target_json,'$.backend.versionId') IS json_extract(q.target_json,'$.backend.versionId') AND json_extract(r.target_json,'$.backend.digest') IS json_extract(q.target_json,'$.backend.digest'))))
  AND NOT EXISTS(SELECT 1 FROM project_spec_held WHERE version_id=q.website_version_id)
  AND NOT EXISTS(SELECT 1 FROM service_client_held WHERE id IN(q.base_version_id,q.restore_version_id))
- AND NOT EXISTS(SELECT 1 FROM content_screening_decisions d WHERE d.user_id=q.user_id AND d.kind='generated_artifact' AND d.required=1 AND d.digest IN(q.spec_digest,q.manifest_digest,q.preview_digest,q.candidate_digest,json_extract(q.target_json,'$.website.digest'),json_extract(q.target_json,'$.backend.digest')));
+ AND NOT EXISTS(SELECT 1 FROM artifact_screening_holds d WHERE d.user_id=q.user_id AND d.digest IN(q.spec_digest,q.manifest_digest,q.preview_digest,q.candidate_digest,json_extract(q.target_json,'$.website.digest'),json_extract(q.target_json,'$.backend.digest')));
 
 CREATE VIEW service_client_activation_state AS
  SELECT a.id,r.status FROM service_client_activation_reviews a JOIN contact_reviews r ON a.service='contact' AND r.id=a.id AND r.user_id=a.user_id AND r.project_id=a.project_id
@@ -2144,7 +2174,7 @@ CREATE VIEW service_client_activation_valid AS SELECT a.id FROM service_client_a
  AND json_extract(a.target_json,'$.backend.versionId') IS c.backend_version_id AND json_extract(a.target_json,'$.backend.digest') IS c.backend_digest
  AND (json_type(v.spec_json,'$.statelessForm')='null' OR (json_extract(v.target_json,'$.backend.versionId')=c.backend_version_id AND json_extract(v.target_json,'$.backend.digest')=c.backend_digest))
  AND NOT EXISTS(SELECT 1 FROM service_client_held WHERE id=v.id)
- AND NOT EXISTS(SELECT 1 FROM content_screening_decisions d WHERE d.user_id=a.user_id AND d.kind='generated_artifact' AND d.required=1 AND d.digest IN(a.spec_digest,a.manifest_digest,a.preview_digest,a.candidate_digest,json_extract(a.target_json,'$.website.digest'),json_extract(a.target_json,'$.backend.digest')))
+ AND NOT EXISTS(SELECT 1 FROM artifact_screening_holds d WHERE d.user_id=a.user_id AND d.digest IN(a.spec_digest,a.manifest_digest,a.preview_digest,a.candidate_digest,json_extract(a.target_json,'$.website.digest'),json_extract(a.target_json,'$.backend.digest')))
  AND (
   a.service='contact' AND a.enabled=(json_type(v.spec_json,'$.contact')<>'null') AND EXISTS(SELECT 1 FROM contact_reviews r WHERE r.id=a.id AND r.user_id=a.user_id AND r.project_id=a.project_id AND r.status='pending' AND r.enabled=a.enabled AND r.expected_revision=c.contact_revision AND r.publication_revision=CASE WHEN c.live_version_id IS NULL THEN -1 ELSE c.site_revision END AND r.expires_at=a.expires_at)
   OR a.service='statelessForm' AND a.enabled=(json_type(v.spec_json,'$.statelessForm')<>'null') AND EXISTS(SELECT 1 FROM backend_form_reviews r WHERE r.id=a.id AND r.user_id=a.user_id AND r.project_id=a.project_id AND r.status='pending' AND r.enabled=a.enabled AND r.base_revision=c.form_revision AND r.expires_at=a.expires_at AND (a.enabled=0 AND r.config_json IS NULL AND r.site_revision=-1 AND r.backend_publication_id IS NULL OR a.enabled=1 AND r.config_json=json_extract(v.spec_json,'$.statelessForm.config') AND r.site_revision=c.site_revision AND r.backend_publication_id=c.backend_review_id))
@@ -2153,7 +2183,7 @@ CREATE VIEW service_client_activation_valid AS SELECT a.id FROM service_client_a
 CREATE VIEW service_client_activation_held AS SELECT a.id FROM service_client_activation_reviews a
  WHERE NOT EXISTS(SELECT 1 FROM service_client_versions WHERE id=a.version_id AND project_id=a.project_id)
  OR EXISTS(SELECT 1 FROM service_client_held WHERE id=a.version_id)
- OR EXISTS(SELECT 1 FROM content_screening_decisions d WHERE d.user_id=a.user_id AND d.kind='generated_artifact' AND d.required=1 AND d.digest IN(a.spec_digest,a.manifest_digest,a.preview_digest,a.candidate_digest,json_extract(a.target_json,'$.website.digest'),json_extract(a.target_json,'$.backend.digest')));
+ OR EXISTS(SELECT 1 FROM artifact_screening_holds d WHERE d.user_id=a.user_id AND d.digest IN(a.spec_digest,a.manifest_digest,a.preview_digest,a.candidate_digest,json_extract(a.target_json,'$.website.digest'),json_extract(a.target_json,'$.backend.digest')));
 
 CREATE VIEW service_client_blocked_contacts AS SELECT c.project_id FROM contact_settings c
  JOIN contact_reviews r ON r.project_id=c.project_id AND r.expected_revision+1=c.revision AND r.status='applied' AND r.enabled=1 AND r.publication_revision=c.publication_revision
@@ -2163,7 +2193,8 @@ CREATE VIEW backend_live_forms AS
  SELECT r.id,r.project_id,r.config_json,r.backend_publication_id,r.site_revision
  FROM backend_form_settings f JOIN backend_form_reviews r ON r.id=f.review_id JOIN projects p ON p.id=f.project_id AND p.owner_user_id=r.user_id JOIN publications s ON s.project_id=f.project_id JOIN backend_publications b ON b.project_id=f.project_id
  WHERE r.status='applied' AND r.enabled=1 AND s.version_id IS NOT NULL AND s.revision=r.site_revision AND b.review_id=r.backend_publication_id AND b.version_id IS NOT NULL
- AND NOT EXISTS(SELECT 1 FROM service_client_activation_held WHERE id=r.id);
+ AND NOT EXISTS(SELECT 1 FROM service_client_activation_held WHERE id=r.id)
+ AND NOT EXISTS(SELECT 1 FROM held_backend_versions h WHERE h.id=b.version_id);
 
 -- Active operator containment per project and public scope (account subjects cover every project they own).
 CREATE VIEW operator_contained_projects AS
@@ -2740,7 +2771,7 @@ END;
 
 CREATE TRIGGER public_client_usage_insert BEFORE INSERT ON public_client_usage BEGIN
  SELECT RAISE(ABORT,'public_client_counter') WHERE NEW.day<>strftime('%Y-%m-%d','now') OR NEW.uses<>1;
- SELECT RAISE(ABORT,'public_client_quota') WHERE coalesce((SELECT uses FROM public_client_usage WHERE scope=NEW.scope AND project_id=NEW.project_id AND client_key=NEW.client_key AND day=NEW.day),0)>=CASE NEW.scope WHEN 'backend' THEN 20 WHEN 'contact' THEN 10 ELSE 400 END;
+ SELECT RAISE(ABORT,'public_client_quota') WHERE coalesce((SELECT uses FROM public_client_usage WHERE scope=NEW.scope AND project_id=NEW.project_id AND client_key=NEW.client_key AND day=NEW.day),0)>=CASE NEW.scope WHEN 'backend' THEN 20 WHEN 'contact' THEN 10 WHEN 'abuse' THEN 3 ELSE 400 END;
 END;
 
 CREATE TRIGGER public_client_usage_update BEFORE UPDATE ON public_client_usage BEGIN
@@ -3636,9 +3667,19 @@ WHEN OLD.ai_context_allowed=0 AND NEW.ai_context_allowed!=0
 BEGIN SELECT RAISE(ABORT,'private_chat_context'); END;
 
 CREATE TRIGGER usage_review_insert BEFORE INSERT ON usage_review_requests BEGIN
- SELECT RAISE(ABORT,'usage_review_initial') WHERE NEW.state!='open' OR NEW.customer_read_at IS NOT NULL OR NOT (
-  (NEW.source='chat' AND EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id AND t.user_id=NEW.user_id AND t.mode='guided' AND t.status='completed' AND t.ai_context_allowed=0))
-  OR (NEW.source='support' AND NOT EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id) AND NOT EXISTS(SELECT 1 FROM chat_interaction_submissions s WHERE s.id=NEW.id))
+ -- WH-016 appeal deadline (owner decision October 5, 2026): an owner may appeal within 30 days of the notice's delivery
+ -- (its answered_at); later the trigger refuses. One appeal per notice stays (usage_review_one_appeal).
+ SELECT RAISE(ABORT,'safety_appeal_window') WHERE NEW.kind='safety_appeal' AND EXISTS(SELECT 1 FROM usage_review_requests n WHERE n.id=substr(NEW.reference,15) AND n.user_id=NEW.user_id AND n.kind='safety_notice'
+  AND strftime('%Y-%m-%dT%H:%M:%fZ','now')>strftime('%Y-%m-%dT%H:%M:%fZ',n.answered_at,'+30 days'));
+ SELECT RAISE(ABORT,'usage_review_initial') WHERE NEW.customer_read_at IS NOT NULL OR (NEW.state!='open')<>(NEW.source='safety') OR NOT (
+  -- WH-016 owner notice: only the trigger copy of a restricted safety_action_notices row, to that row's subject.
+  (NEW.source='safety' AND NEW.state='answered' AND NEW.answered_by='safety_review' AND EXISTS(SELECT 1 FROM safety_action_notices n WHERE n.id=NEW.id AND n.subject_user_id=NEW.user_id
+    AND NOT EXISTS(SELECT 1 FROM safety_notice_delays d WHERE d.case_id=n.case_id AND d.lifted_at IS NULL)))
+  -- WH-016 appeal: the owner's own appeal of one of their own notices.
+  OR (NEW.source='support' AND NEW.kind='safety_appeal' AND EXISTS(SELECT 1 FROM usage_review_requests n WHERE n.id=substr(NEW.reference,15) AND n.user_id=NEW.user_id AND n.kind='safety_notice')
+   AND NOT EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id) AND NOT EXISTS(SELECT 1 FROM chat_interaction_submissions s WHERE s.id=NEW.id))
+  OR (NEW.source='chat' AND EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id AND t.user_id=NEW.user_id AND t.mode='guided' AND t.status='completed' AND t.ai_context_allowed=0))
+  OR (NEW.source='support' AND NEW.kind IN ('usage_review','help') AND NOT EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id) AND NOT EXISTS(SELECT 1 FROM chat_interaction_submissions s WHERE s.id=NEW.id))
   -- WH-035 Chat help intake: only the owner's own explicit submission of the maintained support form, with its exact statement.
   OR (NEW.source='chat_form' AND EXISTS(SELECT 1 FROM chat_interaction_submissions s JOIN chat_interactions i ON i.id=s.interaction_id AND i.user_id=s.user_id
    WHERE s.id=NEW.id AND s.user_id=NEW.user_id AND i.project_id IS NULL AND i.state='submitted'
@@ -3649,6 +3690,10 @@ CREATE TRIGGER usage_review_update BEFORE UPDATE ON usage_review_requests BEGIN
  SELECT RAISE(ABORT,'usage_review_immutable') WHERE NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.kind IS NOT OLD.kind OR NEW.source IS NOT OLD.source OR NEW.reference IS NOT OLD.reference OR NEW.statement IS NOT OLD.statement OR NEW.created_at IS NOT OLD.created_at OR NOT (
   (OLD.state='open' AND NEW.state='answered' AND NEW.customer_read_at IS NULL)
   OR (OLD.state='answered' AND NEW.state='answered' AND OLD.customer_read_at IS NULL AND NEW.customer_read_at IS NOT NULL AND NEW.public_response IS OLD.public_response AND NEW.answered_by IS OLD.answered_by AND NEW.answered_at IS OLD.answered_at));
+ -- WH-016: an appeal is answered only with its recorded independent decision (src/safety-cases.ts), and only appeals use
+ -- the generic 'safety_review' responder (the reviewer's identity stays in the restricted decision row).
+ SELECT RAISE(ABORT,'usage_review_immutable') WHERE OLD.state='open' AND NEW.state='answered'
+  AND ((OLD.kind='safety_appeal')<>(NEW.answered_by='safety_review') OR (OLD.kind='safety_appeal' AND NOT EXISTS(SELECT 1 FROM safety_appeal_decisions WHERE appeal_id=NEW.id)));
 END;
 
 CREATE TRIGGER usage_review_delete BEFORE DELETE ON usage_review_requests
@@ -3945,7 +3990,7 @@ CREATE TRIGGER project_spec_proposal_admit BEFORE INSERT ON project_spec_proposa
  );
  SELECT RAISE(ABORT,'specification_changed') WHERE NEW.target_version_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM site_versions WHERE id=NEW.target_version_id AND project_id=NEW.project_id);
  SELECT RAISE(ABORT,'specification_expired') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now');
- SELECT RAISE(ABORT,'specification_held') WHERE EXISTS(SELECT 1 FROM content_screening_decisions WHERE user_id=NEW.user_id AND kind='generated_artifact' AND required=1 AND digest IN (NEW.spec_digest,NEW.manifest_digest,NEW.html_digest));
+ SELECT RAISE(ABORT,'specification_held') WHERE EXISTS(SELECT 1 FROM artifact_screening_holds WHERE user_id=NEW.user_id AND digest IN (NEW.spec_digest,NEW.manifest_digest,NEW.html_digest));
  SELECT RAISE(ABORT,'specification_held') WHERE EXISTS(SELECT 1 FROM project_spec_held WHERE version_id IN(NEW.base_version_id,NEW.target_version_id));
  SELECT RAISE(ABORT,'specification_quota') WHERE (SELECT count(*) FROM project_spec_proposals WHERE project_id=NEW.project_id)>=50 OR (SELECT count(*) FROM project_spec_proposals)>=4000;
 END;
@@ -4216,7 +4261,7 @@ CREATE TRIGGER project_spec_apply_admit BEFORE INSERT ON project_spec_applies BE
   AND (q.target_version_id IS NULL OR EXISTS(SELECT 1 FROM site_versions WHERE id=q.target_version_id AND project_id=q.project_id))
  );
  SELECT RAISE(ABORT,'specification_expired') WHERE (SELECT expires_at FROM project_spec_proposals WHERE id=NEW.proposal_id)<=strftime('%Y-%m-%dT%H:%M:%fZ','now');
- SELECT RAISE(ABORT,'specification_held') WHERE EXISTS(SELECT 1 FROM content_screening_decisions s JOIN project_spec_proposals q ON q.id=NEW.proposal_id AND s.user_id=q.user_id AND s.kind='generated_artifact' AND s.required=1 AND s.digest IN(q.spec_digest,q.manifest_digest,q.html_digest));
+ SELECT RAISE(ABORT,'specification_held') WHERE EXISTS(SELECT 1 FROM artifact_screening_holds s JOIN project_spec_proposals q ON q.id=NEW.proposal_id AND s.user_id=q.user_id AND s.digest IN(q.spec_digest,q.manifest_digest,q.html_digest));
  SELECT RAISE(ABORT,'specification_held') WHERE EXISTS(SELECT 1 FROM project_spec_held h JOIN project_spec_proposals q ON q.id=NEW.proposal_id AND h.version_id IN(q.base_version_id,q.target_version_id));
  SELECT RAISE(ABORT,'specification_quota') WHERE (SELECT count(*) FROM project_spec_applies WHERE project_id=NEW.project_id)>=500 OR (SELECT count(*) FROM project_spec_applies)>=20000;
 END;
@@ -4865,19 +4910,41 @@ CREATE TABLE safety_preservation_holds (
 CREATE INDEX safety_preservation_holds_active ON safety_preservation_holds(subject_user_id) WHERE released_at IS NULL;
 CREATE INDEX safety_preservation_holds_project ON safety_preservation_holds(project_id) WHERE released_at IS NULL AND project_id IS NOT NULL;
 
--- Every case access attempt and decision, allowed or not. No inputs beyond validated opaque identifiers.
+-- Every role-verified case access attempt and decision (allowed, conflict of interest or rejected), written in the same
+-- transaction as its effect. No inputs beyond validated opaque identifiers. Identity, input and role failures go to the
+-- separate bounded safety_case_denied_attempts log below, so they can never consume this immutable table's capacity.
 CREATE TABLE safety_case_audit (
  seq INTEGER PRIMARY KEY AUTOINCREMENT,
  at INTEGER NOT NULL CHECK(at>=0),
  actor_ref TEXT CHECK(actor_ref IS NULL OR (actor_ref GLOB 'human:?*' AND length(actor_ref)<=128 AND actor_ref NOT GLOB '*[^A-Za-z0-9_.:-]*')),
  action TEXT NOT NULL CHECK(action IN ('bootstrap_administrator','grant_role','revoke_role','open_case','link_evidence','record_finding','place_hold','release_hold','close_case','read_case','read_audit','list_holds',
   'capture_evidence','dispose_evidence','request_disclosure','approve_disclosure','record_disclosure','cancel_disclosure','read_disclosure',
-  'list_retention','preview_retention','decide_retention')),
+  'list_retention','preview_retention','decide_retention','list_reports','read_report','triage_report','erase_report_contact','list_appeals','read_appeal','decide_appeal','place_notice_delay','lift_notice_delay')),
  case_id TEXT CHECK(case_id IS NULL OR (length(case_id) BETWEEN 1 AND 128 AND case_id NOT GLOB '*[^A-Za-z0-9_.:-]*')),
  target_ref TEXT CHECK(target_ref IS NULL OR (length(target_ref) BETWEEN 1 AND 128 AND target_ref NOT GLOB '*[^A-Za-z0-9_.:-]*')),
  outcome TEXT NOT NULL CHECK(outcome IN ('allowed','denied','rejected')),
  reason TEXT NOT NULL CHECK(reason IN ('ok','unauthenticated','missing_role','conflict_of_interest','invalid_input','conflict','not_found','active_hold','case_closed','capacity','unavailable'))
 );
+
+CREATE INDEX safety_case_audit_actor ON safety_case_audit(actor_ref,at);
+
+-- WH-132 audit-exhaustion fix (owner decision October 6, 2026, "separate ring + per-principal budget"): attempts that fail
+-- identity, input validation or role. Content-free (principal, action, outcome, time), bounded to the newest 10,000 rows and
+-- 30 days, self-pruning, and never read or required by a privileged action. Each principal (or the shared anonymous bucket,
+-- principal_ref NULL) records at most 60 rows per rolling hour; further attempts are refused without a row.
+CREATE TABLE safety_case_denied_attempts (
+ seq INTEGER PRIMARY KEY AUTOINCREMENT,
+ at INTEGER NOT NULL CHECK(at>=0),
+ principal_ref TEXT CHECK(principal_ref IS NULL OR (principal_ref GLOB 'human:?*' AND length(principal_ref)<=128 AND principal_ref NOT GLOB '*[^A-Za-z0-9_.:-]*')),
+ action TEXT NOT NULL CHECK(action IN ('bootstrap_administrator','grant_role','revoke_role','open_case','link_evidence','record_finding','place_hold','release_hold','close_case','read_case','read_audit','list_holds',
+  'capture_evidence','dispose_evidence','request_disclosure','approve_disclosure','record_disclosure','cancel_disclosure','read_disclosure',
+  'list_retention','preview_retention','decide_retention','list_reports','read_report','triage_report','erase_report_contact','list_appeals','read_appeal','decide_appeal','place_notice_delay','lift_notice_delay')),
+ outcome TEXT NOT NULL CHECK(outcome IN ('denied','rejected')),
+ reason TEXT NOT NULL CHECK(reason IN ('unauthenticated','missing_role','invalid_input')),
+ CHECK((outcome='rejected')=(reason='invalid_input'))
+);
+CREATE INDEX safety_case_denied_attempts_principal ON safety_case_denied_attempts(principal_ref,at);
+CREATE INDEX safety_case_denied_attempts_at ON safety_case_denied_attempts(at);
 
 -- Projects and project photos currently inside an unreleased hold's scope.
 CREATE VIEW safety_held_projects AS
@@ -5013,7 +5080,9 @@ BEGIN SELECT RAISE(ABORT,'safety_hold_active'); END;
 CREATE TRIGGER safety_cases_retained BEFORE DELETE ON safety_cases BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
 
 CREATE TRIGGER safety_case_findings_admit BEFORE INSERT ON safety_case_findings BEGIN
- SELECT RAISE(ABORT,'safety_case_closed') WHERE EXISTS(SELECT 1 FROM safety_cases WHERE id=NEW.case_id AND closed_at IS NOT NULL);
+ -- A closed case takes one kind of finding: the not_confirmed correction of an appeal an independent reviewer reversed.
+ SELECT RAISE(ABORT,'safety_case_closed') WHERE EXISTS(SELECT 1 FROM safety_cases WHERE id=NEW.case_id AND closed_at IS NOT NULL)
+  AND NOT (NEW.finding='not_confirmed' AND EXISTS(SELECT 1 FROM safety_appeal_decisions d WHERE d.case_id=NEW.case_id AND d.decision='reversed' AND d.decision_ref=NEW.decision_ref AND d.decided_by=NEW.reviewer_ref));
  SELECT RAISE(ABORT,'safety_case_finding_order') WHERE NEW.seq<>COALESCE((SELECT max(seq) FROM safety_case_findings WHERE case_id=NEW.case_id),0)+1
   OR (NEW.seq=1 AND NEW.finding<>'uncertain_flag')
   OR (NEW.seq>1 AND NEW.finding=(SELECT finding FROM safety_case_findings WHERE case_id=NEW.case_id AND seq=NEW.seq-1));
@@ -5036,6 +5105,16 @@ CREATE TRIGGER safety_preservation_holds_admit BEFORE INSERT ON safety_preservat
   OR (NEW.scope IN ('project','object') AND NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id AND owner_user_id=NEW.subject_user_id))
   OR (NEW.scope='object' AND NOT EXISTS(SELECT 1 FROM project_files WHERE id=NEW.file_id AND project_id=NEW.project_id));
  SELECT RAISE(ABORT,'safety_case_capacity') WHERE (SELECT count(*) FROM safety_preservation_holds)>=10000;
+ -- The approver must currently hold preservation_approver and is never the case subject (as for notice delays).
+ SELECT RAISE(ABORT,'safety_hold_approver') WHERE NOT EXISTS(SELECT 1 FROM safety_case_roles WHERE operator_ref=NEW.approved_by AND role='preservation_approver' AND revoked_at IS NULL)
+  OR NEW.approved_by='human:'||NEW.subject_user_id;
+END;
+-- Release is single-approver for now (owner decision October 6, 2026; the owner is the only administrator): the releasing
+-- operator must currently hold preservation_approver and is never the subject. Two-person release is planned, not implemented.
+CREATE TRIGGER safety_preservation_holds_release_approver BEFORE UPDATE OF released_at,released_by ON safety_preservation_holds
+WHEN OLD.released_at IS NULL AND NEW.released_at IS NOT NULL BEGIN
+ SELECT RAISE(ABORT,'safety_hold_approver') WHERE NOT EXISTS(SELECT 1 FROM safety_case_roles WHERE operator_ref=NEW.released_by AND role='preservation_approver' AND revoked_at IS NULL)
+  OR NEW.released_by='human:'||NEW.subject_user_id;
 END;
 CREATE TRIGGER safety_preservation_holds_update BEFORE UPDATE ON safety_preservation_holds
 WHEN OLD.released_at IS NOT NULL OR NEW.released_at IS NULL OR NEW.id IS NOT OLD.id OR NEW.case_id IS NOT OLD.case_id
@@ -5054,10 +5133,194 @@ WHEN OLD.released_at IS NULL AND NEW.released_at IS NOT NULL BEGIN
  DELETE FROM safety_preserved_records WHERE hold_id=NEW.id;
 END;
 
-CREATE TRIGGER safety_case_audit_capacity BEFORE INSERT ON safety_case_audit WHEN (SELECT count(*) FROM safety_case_audit)>=100000
-BEGIN SELECT RAISE(ABORT,'safety_case_capacity'); END;
+-- 100,000 rows in all. The last 10,000 are reserved for the protective actions (placing a hold, capturing evidence), and
+-- each operator's other actions are bounded at 2,000 rows per rolling day, so routine reads cannot crowd out a hold.
+CREATE TRIGGER safety_case_audit_capacity BEFORE INSERT ON safety_case_audit BEGIN
+ SELECT RAISE(ABORT,'safety_case_capacity') WHERE (SELECT count(*) FROM safety_case_audit)>=100000
+  OR (NEW.action NOT IN ('place_hold','capture_evidence') AND ((SELECT count(*) FROM safety_case_audit)>=90000
+   OR (NEW.actor_ref IS NOT NULL AND (SELECT count(*) FROM safety_case_audit WHERE actor_ref=NEW.actor_ref AND at>NEW.at-86400)>=2000)));
+END;
 CREATE TRIGGER safety_case_audit_immutable BEFORE UPDATE ON safety_case_audit BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
 CREATE TRIGGER safety_case_audit_retained BEFORE DELETE ON safety_case_audit BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+CREATE TRIGGER safety_case_denied_attempts_budget BEFORE INSERT ON safety_case_denied_attempts
+WHEN (SELECT count(*) FROM safety_case_denied_attempts WHERE principal_ref IS NEW.principal_ref AND at>NEW.at-3600)>=60
+BEGIN SELECT RAISE(IGNORE); END;
+CREATE TRIGGER safety_case_denied_attempts_prune AFTER INSERT ON safety_case_denied_attempts BEGIN
+ DELETE FROM safety_case_denied_attempts WHERE seq<=NEW.seq-10000 OR at<NEW.at-2592000;
+END;
+CREATE TRIGGER safety_case_denied_attempts_update BEFORE UPDATE ON safety_case_denied_attempts BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+
+-- WH-016 public abuse reports about published Whumpo sites and applications (src/abuse-reports.ts). Unauthenticated
+-- intake behind origin, bounded body, Turnstile, a per-connection daily allowance (public_client_usage scope 'abuse')
+-- and the platform/project caps below, into the restricted WH-132 operator queue. No foreign key to users or projects:
+-- a report survives the subject's account or project deletion. Owner, Chat, agent, model and customer paths never read
+-- this table; only the authenticated case-role surface lists, reads and triages it. No reporter IP or uploaded material
+-- is stored. The reporter may OPTIONALLY give an email address for follow-up (owner decision October 4, 2026): it is
+-- readable only through the case-reviewer report read, never by the owner, Chat, agents, models or logs; nothing emails
+-- it. An audited operator erasure clears it (refused while a hold covers the report's case or subject), the clearing is
+-- recorded in the WH-019 restore suppression ledger, and it is deleted with the report. Triage is one audited human
+-- decision: open a new uncertain_flag case, link an existing open case of the same subject, or record the report as not
+-- actionable. A report is never a finding. Retention (owner decision October 4, 2026) is abuse_reports_retained below.
+CREATE TABLE abuse_reports (
+ id TEXT PRIMARY KEY CHECK(length(id)=36 AND id NOT GLOB '*[^0-9a-f-]*'),
+ project_id TEXT NOT NULL CHECK(length(project_id)=36 AND project_id NOT GLOB '*[^0-9a-f-]*'),
+ subject_user_id TEXT NOT NULL CHECK(length(subject_user_id) BETWEEN 1 AND 122 AND subject_user_id NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ surface TEXT NOT NULL CHECK(surface IN ('site','app')),
+ host_kind TEXT NOT NULL CHECK(host_kind IN ('platform','custom')),
+ path TEXT NOT NULL CHECK(length(path) BETWEEN 1 AND 512 AND substr(path,1,1)='/'),
+ category TEXT NOT NULL CHECK(category IN ('child_safety','sexual_content','copyright','fraud_phishing','hate_harassment','gambling','malware_security','spam_abuse','other')),
+ details TEXT CHECK(details IS NULL OR length(details) BETWEEN 1 AND 1000),
+ reporter_email TEXT CHECK(reporter_email IS NULL OR (length(reporter_email) BETWEEN 6 AND 254 AND reporter_email GLOB '?*@?*.?*'
+  AND reporter_email NOT GLOB '*@*@*' AND reporter_email NOT GLOB '*[^A-Za-z0-9.!#$%&''*+/=?^_`{|}~@-]*')),
+ request_hash TEXT NOT NULL CHECK(length(request_hash)=64 AND request_hash NOT GLOB '*[^0-9a-f]*'),
+ received_at INTEGER NOT NULL CHECK(received_at>=0),
+ triage TEXT NOT NULL DEFAULT 'received' CHECK(triage IN ('received','case_opened','case_linked','not_actionable')),
+ case_id TEXT REFERENCES safety_cases(id),
+ triaged_by TEXT CHECK(triaged_by IS NULL OR (triaged_by GLOB 'human:?*' AND length(triaged_by)<=128 AND triaged_by NOT GLOB '*[^A-Za-z0-9_.:-]*')),
+ triaged_at INTEGER CHECK(triaged_at IS NULL OR triaged_at>=received_at),
+ triage_ref TEXT CHECK(triage_ref IS NULL OR (length(triage_ref) BETWEEN 1 AND 128 AND triage_ref NOT GLOB '*[^A-Za-z0-9_.:-]*')),
+ CHECK((triage='received')=(triaged_by IS NULL) AND (triaged_by IS NULL)=(triaged_at IS NULL) AND (triaged_at IS NULL)=(triage_ref IS NULL)),
+ CHECK((triage IN ('case_opened','case_linked'))=(case_id IS NOT NULL)),
+ CHECK(triaged_by IS NULL OR triaged_by<>'human:'||subject_user_id)
+);
+CREATE INDEX abuse_reports_queue ON abuse_reports(triage,received_at);
+CREATE INDEX abuse_reports_project ON abuse_reports(project_id,received_at);
+CREATE INDEX abuse_reports_received ON abuse_reports(received_at);
+-- The target must be a currently published site (or an enabled application) of its recorded owner at intake.
+-- Caps (owner decision pending; conservative test defaults): 10,000 retained, 1,000 awaiting triage platform-wide and
+-- 50 per project; 100 an hour platform-wide and 10 an hour per project. Concurrent intake cannot pass them.
+CREATE TRIGGER abuse_reports_admit BEFORE INSERT ON abuse_reports BEGIN
+ SELECT RAISE(ABORT,'abuse_report_immutable') WHERE NEW.triage<>'received' OR NEW.case_id IS NOT NULL OR NEW.received_at<>unixepoch();
+ SELECT RAISE(ABORT,'abuse_report_target') WHERE NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id AND owner_user_id=NEW.subject_user_id)
+  OR (NEW.surface='site' AND NOT EXISTS(SELECT 1 FROM publications WHERE project_id=NEW.project_id AND version_id IS NOT NULL))
+  OR (NEW.surface='app' AND NOT EXISTS(SELECT 1 FROM app_spaces WHERE project_id=NEW.project_id AND enabled=1));
+ SELECT RAISE(ABORT,'abuse_report_capacity') WHERE (SELECT count(*) FROM abuse_reports)>=10000
+  OR (SELECT count(*) FROM abuse_reports WHERE triage='received')>=1000
+  OR (SELECT count(*) FROM abuse_reports WHERE triage='received' AND project_id=NEW.project_id)>=50;
+ SELECT RAISE(ABORT,'abuse_report_rate') WHERE (SELECT count(*) FROM abuse_reports WHERE received_at>unixepoch()-3600)>=100
+  OR (SELECT count(*) FROM abuse_reports WHERE project_id=NEW.project_id AND received_at>unixepoch()-3600)>=10;
+END;
+-- Only two transitions are allowed: the single triage decision (a linked or opened case must be an open case about the
+-- same subject), and erasing the optional reporter email, which is refused while any hold covers the case or subject.
+CREATE TRIGGER abuse_reports_update BEFORE UPDATE ON abuse_reports BEGIN
+ SELECT RAISE(ABORT,'abuse_report_immutable') WHERE NEW.id IS NOT OLD.id OR NEW.project_id IS NOT OLD.project_id OR NEW.subject_user_id IS NOT OLD.subject_user_id
+  OR NEW.surface IS NOT OLD.surface OR NEW.host_kind IS NOT OLD.host_kind OR NEW.path IS NOT OLD.path OR NEW.category IS NOT OLD.category
+  OR NEW.details IS NOT OLD.details OR NEW.request_hash IS NOT OLD.request_hash OR NEW.received_at IS NOT OLD.received_at
+  OR NOT ((OLD.triage='received' AND NEW.triage<>'received' AND NEW.reporter_email IS OLD.reporter_email
+    AND (NEW.case_id IS NULL OR EXISTS(SELECT 1 FROM safety_cases WHERE id=NEW.case_id AND subject_user_id=OLD.subject_user_id AND closed_at IS NULL)))
+   OR (OLD.reporter_email IS NOT NULL AND NEW.reporter_email IS NULL AND NEW.triage IS OLD.triage AND NEW.case_id IS OLD.case_id
+    AND NEW.triaged_by IS OLD.triaged_by AND NEW.triaged_at IS OLD.triaged_at AND NEW.triage_ref IS OLD.triage_ref));
+ SELECT RAISE(ABORT,'safety_preservation_hold') WHERE OLD.reporter_email IS NOT NULL AND NEW.reporter_email IS NULL
+  AND EXISTS(SELECT 1 FROM safety_preservation_holds WHERE released_at IS NULL AND (case_id=OLD.case_id OR subject_user_id=OLD.subject_user_id));
+END;
+-- Retention (owner decision October 4, 2026, issue #172; the daily maintenance cleanup in src/abuse-reports.ts deletes
+-- exactly these). A report awaiting triage is kept until triaged. A report not linked to a case (not_actionable) may be
+-- deleted 365 days after triage. A report linked to a case follows that case: it may be deleted only once an operator has
+-- released the case's retention (WH-132 reviewed release, itself at least one year after opening) AND at least 365 days
+-- after triage. Nothing is deleted while any hold covers the report's case or its subject. The one other delete is the
+-- WH-019 operator replay of a deletion already recorded in the restore suppression ledger (an isolated restore candidate),
+-- which still honours holds. Deleting a report also deletes its optional reporter email.
+CREATE TRIGGER abuse_reports_retained BEFORE DELETE ON abuse_reports BEGIN
+ SELECT RAISE(ABORT,'safety_preservation_hold') WHERE EXISTS(SELECT 1 FROM safety_preservation_holds WHERE released_at IS NULL AND (case_id=OLD.case_id OR subject_user_id=OLD.subject_user_id));
+ SELECT RAISE(ABORT,'abuse_report_immutable') WHERE NOT EXISTS(SELECT 1 FROM restore_suppressions WHERE kind='abuse_report' AND subject_id=OLD.id) AND NOT (
+  OLD.triaged_at IS NOT NULL AND OLD.triaged_at<=unixepoch()-31536000 AND (OLD.triage='not_actionable'
+   OR (OLD.triage IN ('case_opened','case_linked') AND EXISTS(SELECT 1 FROM safety_case_retention WHERE case_id=OLD.case_id AND released=1))));
+END;
+
+-- WH-016 owner notice and independent appeal (owner decision October 4, 2026, issue #172).
+-- "Action taken against the owner's content" means a recorded confirmed_policy_finding: the only case decision that
+-- determines the subject's content breaks the policy. Opening a case, an uncertain flag, linking evidence or reports,
+-- a preservation hold (which may be confidential legal process), evidence capture, disclosure and retention decisions are
+-- not actions against content and never produce a notice. Each confirmed finding generates exactly one restricted notice
+-- row here (generation), by trigger, naming the reviewer who acted; a second trigger copies a fixed, content-free notice
+-- into the subject's support channel (usage_review_requests kind 'safety_notice') while the account exists (in-app
+-- delivery; the owner's read receipt is the customer read). The notice carries no reporter identity, report text, case
+-- identifier or reviewer identity. Restricted rows have no foreign key to users, so they outlive the account.
+CREATE TABLE safety_action_notices (
+ id TEXT PRIMARY KEY CHECK(length(id)=36 AND id NOT GLOB '*[^0-9a-f-]*'),
+ case_id TEXT NOT NULL REFERENCES safety_cases(id),
+ finding_seq INTEGER NOT NULL,
+ subject_user_id TEXT NOT NULL CHECK(length(subject_user_id) BETWEEN 1 AND 122 AND subject_user_id NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ acted_by TEXT NOT NULL CHECK(acted_by GLOB 'human:?*' AND length(acted_by)<=128 AND acted_by NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ issued_at INTEGER NOT NULL CHECK(issued_at>=0),
+ UNIQUE(case_id,finding_seq),
+ FOREIGN KEY(case_id,finding_seq) REFERENCES safety_case_findings(case_id,seq)
+);
+CREATE INDEX safety_action_notices_subject ON safety_action_notices(subject_user_id,issued_at);
+CREATE TRIGGER safety_action_notices_admit BEFORE INSERT ON safety_action_notices BEGIN
+ SELECT RAISE(ABORT,'safety_case_immutable') WHERE NEW.issued_at<>unixepoch() OR NOT EXISTS(SELECT 1 FROM safety_case_findings f JOIN safety_cases c ON c.id=f.case_id
+  WHERE f.case_id=NEW.case_id AND f.seq=NEW.finding_seq AND f.finding='confirmed_policy_finding' AND f.reviewer_ref=NEW.acted_by AND c.subject_user_id=NEW.subject_user_id);
+END;
+CREATE TRIGGER safety_action_notices_immutable BEFORE UPDATE ON safety_action_notices BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+CREATE TRIGGER safety_action_notices_retained BEFORE DELETE ON safety_action_notices BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+CREATE TRIGGER safety_case_findings_notice AFTER INSERT ON safety_case_findings WHEN NEW.finding='confirmed_policy_finding' BEGIN
+ INSERT INTO safety_action_notices(id,case_id,finding_seq,subject_user_id,acted_by,issued_at)
+  SELECT lower(hex(randomblob(4)))||'-'||lower(hex(randomblob(2)))||'-4'||substr(lower(hex(randomblob(2))),2)||'-'||substr('89ab',1+abs(random()%4),1)||substr(lower(hex(randomblob(2))),2)||'-'||lower(hex(randomblob(6))),NEW.case_id,NEW.seq,c.subject_user_id,NEW.reviewer_ref,unixepoch() FROM safety_cases c WHERE c.id=NEW.case_id;
+END;
+CREATE TRIGGER safety_action_notices_deliver AFTER INSERT ON safety_action_notices BEGIN
+ INSERT INTO usage_review_requests(id,user_id,statement,kind,source,state,public_response,answered_by,answered_at)
+  SELECT NEW.id,NEW.subject_user_id,'Safety review notice','safety_notice','safety','answered','Whumpo''s safety reviewers confirmed that content in your Whumpo account breaks the Acceptable Use Policy (https://digifender.com/legal/whumpo). This notice is sent only because a decision was recorded against your content. It does not say who reported anything or what they wrote. If you think the decision is wrong, you can appeal: open Support (/workspace/support), open this notice, choose Appeal this decision and explain why. A safety reviewer who did not make this decision will review your appeal, and the answer will appear here.','safety_review',strftime('%Y-%m-%dT%H:%M:%fZ','now')
+  WHERE EXISTS(SELECT 1 FROM users WHERE id=NEW.subject_user_id)
+   AND NOT EXISTS(SELECT 1 FROM safety_notice_delays d WHERE d.case_id=NEW.case_id AND d.lifted_at IS NULL);
+END;
+-- One independent decision per appeal. The deciding case reviewer must differ from the reviewer who acted (the notice's
+-- acted_by) and from the subject; the appeal must be the subject's open appeal of exactly this notice.
+CREATE TABLE safety_appeal_decisions (
+ appeal_id TEXT PRIMARY KEY CHECK(length(appeal_id)=36 AND appeal_id NOT GLOB '*[^0-9a-f-]*'),
+ notice_id TEXT NOT NULL UNIQUE REFERENCES safety_action_notices(id),
+ case_id TEXT NOT NULL REFERENCES safety_cases(id),
+ decision TEXT NOT NULL CHECK(decision IN ('upheld','reversed')),
+ decision_ref TEXT NOT NULL CHECK(length(decision_ref) BETWEEN 1 AND 128 AND decision_ref NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ decided_by TEXT NOT NULL CHECK(decided_by GLOB 'human:?*' AND length(decided_by)<=128 AND decided_by NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ decided_at INTEGER NOT NULL CHECK(decided_at>=0)
+);
+CREATE TRIGGER safety_appeal_decisions_admit BEFORE INSERT ON safety_appeal_decisions BEGIN
+ SELECT RAISE(ABORT,'safety_appeal_independence') WHERE EXISTS(SELECT 1 FROM safety_action_notices n WHERE n.id=NEW.notice_id AND (n.acted_by=NEW.decided_by OR 'human:'||n.subject_user_id=NEW.decided_by))
+  OR NOT EXISTS(SELECT 1 FROM safety_case_roles WHERE operator_ref=NEW.decided_by AND role='case_reviewer' AND revoked_at IS NULL);
+ SELECT RAISE(ABORT,'safety_appeal_state') WHERE NEW.decided_at<>unixepoch() OR NOT EXISTS(SELECT 1 FROM safety_action_notices n JOIN usage_review_requests a ON a.reference='safety_notice:'||n.id
+  WHERE n.id=NEW.notice_id AND n.case_id=NEW.case_id AND a.id=NEW.appeal_id AND a.kind='safety_appeal' AND a.state='open' AND a.user_id=n.subject_user_id);
+END;
+CREATE TRIGGER safety_appeal_decisions_immutable BEFORE UPDATE ON safety_appeal_decisions BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+CREATE TRIGGER safety_appeal_decisions_retained BEFORE DELETE ON safety_appeal_decisions BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+
+-- WH-016 notice delay under legal process (owner decision October 5, 2026, issue #172). A preservation approver (not the
+-- case subject, fresh passkey) marks a case "legal hold - delay notice" with a restricted, bounded reason. While the mark is
+-- active, a confirmed finding still records its restricted notice row (generation) but no in-app notice is delivered, enforced
+-- by safety_action_notices_deliver and the usage_review_insert gate. Lifting is a separate audited action: the lift trigger
+-- delivers the same fixed notice then (never for a withdrawn finding or a deleted account). The reason is read only through
+-- the restricted case view; it never reaches an owner, a support row, the audit or a model. The appeal window starts at delivery.
+CREATE TABLE safety_notice_delays (
+ id TEXT PRIMARY KEY CHECK(length(id) BETWEEN 1 AND 128 AND id NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ case_id TEXT NOT NULL REFERENCES safety_cases(id),
+ reason TEXT NOT NULL CHECK(length(reason) BETWEEN 1 AND 500),
+ placed_by TEXT NOT NULL CHECK(placed_by GLOB 'human:?*' AND length(placed_by)<=128 AND placed_by NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ placed_at INTEGER NOT NULL CHECK(placed_at>=0),
+ lifted_by TEXT CHECK(lifted_by IS NULL OR (lifted_by GLOB 'human:?*' AND length(lifted_by)<=128 AND lifted_by NOT GLOB '*[^A-Za-z0-9_.:-]*')),
+ lifted_at INTEGER CHECK(lifted_at IS NULL OR lifted_at>=placed_at),
+ lift_ref TEXT CHECK(lift_ref IS NULL OR (length(lift_ref) BETWEEN 1 AND 128 AND lift_ref NOT GLOB '*[^A-Za-z0-9_.:-]*')),
+ CHECK((lifted_by IS NULL)=(lifted_at IS NULL) AND (lifted_at IS NULL)=(lift_ref IS NULL))
+);
+CREATE UNIQUE INDEX safety_notice_delays_active ON safety_notice_delays(case_id) WHERE lifted_at IS NULL;
+CREATE TRIGGER safety_notice_delays_admit BEFORE INSERT ON safety_notice_delays BEGIN
+ SELECT RAISE(ABORT,'safety_notice_delay') WHERE NEW.placed_at<>unixepoch() OR NEW.lifted_at IS NOT NULL
+  OR NOT EXISTS(SELECT 1 FROM safety_case_roles WHERE operator_ref=NEW.placed_by AND role='preservation_approver' AND revoked_at IS NULL)
+  OR EXISTS(SELECT 1 FROM safety_cases WHERE id=NEW.case_id AND 'human:'||subject_user_id=NEW.placed_by);
+END;
+CREATE TRIGGER safety_notice_delays_update BEFORE UPDATE ON safety_notice_delays BEGIN
+ SELECT RAISE(ABORT,'safety_case_immutable') WHERE NEW.id IS NOT OLD.id OR NEW.case_id IS NOT OLD.case_id OR NEW.reason IS NOT OLD.reason OR NEW.placed_by IS NOT OLD.placed_by
+  OR NEW.placed_at IS NOT OLD.placed_at OR OLD.lifted_at IS NOT NULL OR NEW.lifted_at IS NULL;
+ SELECT RAISE(ABORT,'safety_notice_delay') WHERE NEW.lifted_at<>unixepoch()
+  OR NOT EXISTS(SELECT 1 FROM safety_case_roles WHERE operator_ref=NEW.lifted_by AND role='preservation_approver' AND revoked_at IS NULL)
+  OR EXISTS(SELECT 1 FROM safety_cases WHERE id=NEW.case_id AND 'human:'||subject_user_id=NEW.lifted_by);
+END;
+CREATE TRIGGER safety_notice_delays_retained BEFORE DELETE ON safety_notice_delays BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+CREATE TRIGGER safety_notice_delays_lift AFTER UPDATE ON safety_notice_delays BEGIN
+ INSERT INTO usage_review_requests(id,user_id,statement,kind,source,state,public_response,answered_by,answered_at)
+  SELECT n.id,n.subject_user_id,'Safety review notice','safety_notice','safety','answered','Whumpo''s safety reviewers confirmed that content in your Whumpo account breaks the Acceptable Use Policy (https://digifender.com/legal/whumpo). This notice is sent only because a decision was recorded against your content. It does not say who reported anything or what they wrote. If you think the decision is wrong, you can appeal: open Support (/workspace/support), open this notice, choose Appeal this decision and explain why. A safety reviewer who did not make this decision will review your appeal, and the answer will appear here.','safety_review',strftime('%Y-%m-%dT%H:%M:%fZ','now')
+  FROM safety_action_notices n WHERE n.case_id=NEW.case_id AND EXISTS(SELECT 1 FROM users WHERE id=n.subject_user_id)
+   AND NOT EXISTS(SELECT 1 FROM usage_review_requests r WHERE r.id=n.id)
+   AND NOT EXISTS(SELECT 1 FROM safety_case_findings f WHERE f.case_id=n.case_id AND f.seq>n.finding_seq AND f.finding='not_confirmed');
+END;
 
 CREATE TRIGGER safety_preserved_records_admit BEFORE INSERT ON safety_preserved_records BEGIN
  SELECT RAISE(ABORT,'safety_hold_subject') WHERE NOT EXISTS(SELECT 1 FROM safety_preservation_holds WHERE id=NEW.hold_id AND released_at IS NULL);
@@ -5246,3 +5509,113 @@ BEGIN SELECT RAISE(ABORT,'directory_review_retained'); END;
 CREATE TRIGGER safety_hold_directory_review_retained BEFORE DELETE ON directory_reviews
 WHEN EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
 BEGIN SELECT RAISE(ABORT,'safety_preservation_hold'); END;
+
+-- WH-014 final-use rechecks. Every writer that saves, tests, publishes, activates, migrates or executes generated or
+-- imported backend source repeats the artifact gate inside its own statement, so a hold recorded concurrently (risk
+-- escalation, policy change, import of the same bytes) wins at commit. Withdrawal, disable and unpublish stay open.
+CREATE TRIGGER artifact_backend_version_held BEFORE INSERT ON backend_versions
+WHEN EXISTS(SELECT 1 FROM projects p JOIN artifact_screening_holds h ON h.user_id=p.owner_user_id AND h.digest=NEW.digest WHERE p.id=NEW.project_id)
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+CREATE TRIGGER artifact_backend_run_held BEFORE INSERT ON backend_runs
+WHEN EXISTS(SELECT 1 FROM held_backend_versions WHERE id=NEW.version_id)
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+CREATE TRIGGER artifact_app_run_held BEFORE INSERT ON app_runs
+WHEN EXISTS(SELECT 1 FROM held_backend_versions WHERE id=NEW.version_id)
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+CREATE TRIGGER artifact_backend_review_held BEFORE INSERT ON backend_publication_reviews
+WHEN NEW.operation='publish' AND EXISTS(SELECT 1 FROM held_backend_versions WHERE id=NEW.version_id)
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+CREATE TRIGGER artifact_backend_review_apply_held BEFORE UPDATE OF status ON backend_publication_reviews
+WHEN NEW.status='applied' AND OLD.status<>'applied' AND NEW.operation='publish' AND EXISTS(SELECT 1 FROM held_backend_versions WHERE id=NEW.version_id)
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+CREATE TRIGGER artifact_backend_publication_held BEFORE UPDATE OF version_id ON backend_publications
+WHEN NEW.version_id IS NOT NULL AND EXISTS(SELECT 1 FROM held_backend_versions WHERE id=NEW.version_id)
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+CREATE TRIGGER artifact_app_review_held BEFORE INSERT ON app_activation_reviews
+WHEN NEW.enabled=1 AND EXISTS(SELECT 1 FROM held_backend_versions WHERE id=NEW.version_id)
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+CREATE TRIGGER artifact_app_review_apply_held BEFORE UPDATE OF status ON app_activation_reviews
+WHEN NEW.status='applied' AND OLD.status<>'applied' AND NEW.enabled=1 AND EXISTS(SELECT 1 FROM held_backend_versions WHERE id=NEW.version_id)
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+CREATE TRIGGER artifact_app_space_held BEFORE UPDATE ON app_spaces
+WHEN NEW.enabled=1 AND (NEW.version_id IS NOT OLD.version_id OR OLD.enabled=0) AND EXISTS(SELECT 1 FROM held_backend_versions WHERE id=NEW.version_id)
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+CREATE TRIGGER artifact_app_space_insert_held BEFORE INSERT ON app_spaces
+WHEN EXISTS(SELECT 1 FROM held_backend_versions WHERE id=NEW.version_id)
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+CREATE TRIGGER artifact_migration_check_held BEFORE INSERT ON app_migration_checks
+WHEN EXISTS(SELECT 1 FROM held_backend_versions WHERE id IN (NEW.to_version,NEW.transform_version))
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+CREATE TRIGGER artifact_migration_claim_held BEFORE UPDATE OF state ON app_migration_documents
+WHEN NEW.state='running' AND EXISTS(SELECT 1 FROM app_migration_checks m JOIN held_backend_versions h ON h.id IN (m.to_version,m.transform_version) WHERE m.id=NEW.migration_id)
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+CREATE TRIGGER artifact_nomination_held BEFORE INSERT ON backend_nominations
+WHEN EXISTS(SELECT 1 FROM held_backend_versions WHERE id=NEW.version_id)
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+CREATE TRIGGER artifact_nomination_consent_held BEFORE UPDATE OF state ON backend_nominations
+WHEN NEW.state='nominated' AND OLD.state<>'nominated' AND EXISTS(SELECT 1 FROM held_backend_versions WHERE id=NEW.version_id)
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+-- CMS: imported articles never leave private drafts; held rendered articles cannot be reviewed, approved or published.
+CREATE TRIGGER artifact_cms_publication_held BEFORE INSERT ON cms_publication_reviews BEGIN
+ SELECT RAISE(ABORT,'imported_content_held') WHERE EXISTS(SELECT 1 FROM cms_import_reviews WHERE id=NEW.draft_request_id);
+ SELECT RAISE(ABORT,'artifact_held') WHERE EXISTS(SELECT 1 FROM artifact_screening_holds WHERE user_id=NEW.user_id AND digest=NEW.digest);
+END;
+CREATE TRIGGER artifact_cms_publication_apply_held BEFORE UPDATE OF status ON cms_publication_reviews
+WHEN NEW.status IN ('approved','published') AND NEW.status<>OLD.status AND EXISTS(SELECT 1 FROM cms_held_publications WHERE id=NEW.id)
+BEGIN SELECT RAISE(ABORT,'artifact_held'); END;
+
+-- WH-016 versioned policy adoption and owner consent (src/policy-consent.ts). The Terms of Service, Acceptable Use Policy
+-- and Privacy Policy are adopted together as one version, identified by the SHA-256 of the exact adopted documents.
+-- Adoption is an owner/counsel decision: this schema seeds no adopted version, so until one is adopted no consent can be
+-- recorded and the gates below are inert. Once a version is adopted, the latest adoption is current; consent to an
+-- earlier version does not satisfy it (re-consent on every version change, no grandfathering). Consent is separate from
+-- the signup US-customer declaration (customer_eligibility).
+CREATE TABLE policy_adoptions (
+ version TEXT PRIMARY KEY CHECK(length(version) BETWEEN 1 AND 64 AND version NOT GLOB '*[^a-z0-9.-]*'),
+ documents_sha256 TEXT NOT NULL UNIQUE CHECK(length(documents_sha256)=64 AND documents_sha256 NOT GLOB '*[^0-9a-f]*'),
+ adopted_at INTEGER NOT NULL UNIQUE CHECK(adopted_at>=0),
+ adoption_ref TEXT NOT NULL CHECK(length(adoption_ref) BETWEEN 1 AND 128 AND adoption_ref NOT GLOB '*[^A-Za-z0-9_.:-]*')
+);
+CREATE TRIGGER policy_adoptions_admit BEFORE INSERT ON policy_adoptions
+WHEN NEW.adopted_at<=COALESCE((SELECT max(adopted_at) FROM policy_adoptions),-1) OR NEW.adopted_at>unixepoch()
+BEGIN SELECT RAISE(ABORT,'policy_adoption_order'); END;
+CREATE TRIGGER policy_adoptions_immutable BEFORE UPDATE ON policy_adoptions BEGIN SELECT RAISE(ABORT,'policy_adoption_immutable'); END;
+CREATE TRIGGER policy_adoptions_retained BEFORE DELETE ON policy_adoptions BEGIN SELECT RAISE(ABORT,'policy_adoption_immutable'); END;
+CREATE VIEW policy_current AS SELECT version,documents_sha256,adopted_at FROM policy_adoptions ORDER BY adopted_at DESC LIMIT 1;
+
+CREATE TABLE policy_consents (
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ policy_version TEXT NOT NULL REFERENCES policy_adoptions(version),
+ documents_sha256 TEXT NOT NULL CHECK(length(documents_sha256)=64 AND documents_sha256 NOT GLOB '*[^0-9a-f]*'),
+ accepted_at INTEGER NOT NULL CHECK(accepted_at>=0),
+ PRIMARY KEY(user_id,policy_version)
+);
+-- Only the current version, its exact documents digest and server time can be accepted.
+CREATE TRIGGER policy_consents_admit BEFORE INSERT ON policy_consents
+WHEN NOT EXISTS(SELECT 1 FROM policy_current WHERE version=NEW.policy_version AND documents_sha256=NEW.documents_sha256) OR NEW.accepted_at<>unixepoch()
+BEGIN SELECT RAISE(ABORT,'policy_version_stale'); END;
+CREATE TRIGGER policy_consents_immutable BEFORE UPDATE ON policy_consents BEGIN SELECT RAISE(ABORT,'policy_consent_immutable'); END;
+-- Accounts that have not accepted the current adopted version (empty while no version is adopted).
+CREATE VIEW policy_consent_missing AS
+ SELECT u.id AS user_id FROM users u JOIN policy_current c
+ WHERE NOT EXISTS(SELECT 1 FROM policy_consents k WHERE k.user_id=u.id AND k.policy_version=c.version);
+
+-- Publication and activation gates at each final write. Withdrawal (unpublish, disable) always stays available.
+CREATE TRIGGER policy_site_publication_insert BEFORE INSERT ON publications
+WHEN NEW.version_id IS NOT NULL AND EXISTS(SELECT 1 FROM projects p JOIN policy_consent_missing m ON m.user_id=p.owner_user_id WHERE p.id=NEW.project_id)
+BEGIN SELECT RAISE(ABORT,'policy_consent_required'); END;
+CREATE TRIGGER policy_site_publication_update BEFORE UPDATE OF version_id ON publications
+WHEN NEW.version_id IS NOT NULL AND EXISTS(SELECT 1 FROM projects p JOIN policy_consent_missing m ON m.user_id=p.owner_user_id WHERE p.id=NEW.project_id)
+BEGIN SELECT RAISE(ABORT,'policy_consent_required'); END;
+CREATE TRIGGER policy_backend_publication BEFORE UPDATE OF version_id ON backend_publications
+WHEN NEW.version_id IS NOT NULL AND EXISTS(SELECT 1 FROM projects p JOIN policy_consent_missing m ON m.user_id=p.owner_user_id WHERE p.id=NEW.project_id)
+BEGIN SELECT RAISE(ABORT,'policy_consent_required'); END;
+CREATE TRIGGER policy_backend_publication_insert BEFORE INSERT ON backend_publications
+WHEN NEW.version_id IS NOT NULL AND EXISTS(SELECT 1 FROM projects p JOIN policy_consent_missing m ON m.user_id=p.owner_user_id WHERE p.id=NEW.project_id)
+BEGIN SELECT RAISE(ABORT,'policy_consent_required'); END;
+CREATE TRIGGER policy_app_activation BEFORE UPDATE ON app_spaces
+WHEN NEW.enabled=1 AND (NEW.version_id IS NOT OLD.version_id OR OLD.enabled=0) AND EXISTS(SELECT 1 FROM policy_consent_missing WHERE user_id=NEW.owner_user_id)
+BEGIN SELECT RAISE(ABORT,'policy_consent_required'); END;
+CREATE TRIGGER policy_cms_publication BEFORE UPDATE OF status ON cms_publication_reviews
+WHEN NEW.status IN ('approved','published') AND NEW.status<>OLD.status AND EXISTS(SELECT 1 FROM policy_consent_missing WHERE user_id=NEW.user_id)
+BEGIN SELECT RAISE(ABORT,'policy_consent_required'); END;

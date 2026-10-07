@@ -51,6 +51,7 @@ import {BackendError} from './backend-error';
 import {prepareModuleActivationCommand,applyModuleActivationCommand,moduleActivationChatLinks,moduleActivationFailure} from './shared-modules/activation';
 import {prepareAccessRoleCommand,applyAccessRoleCommand,accessRoleChatLinks,accessRoleFailure} from './shared-modules/access-roles';
 import {ModuleError} from './shared-modules/policy';
+import {policyConsentRefusal,policyConsentMessage} from './policy-consent';
 import {applySpecificationCommand,specificationChatLinks} from './project-specification/store';
 import {inspectWorkspace} from './workspace-read';
 import {domainCommand} from './domains';
@@ -360,6 +361,8 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
       if(matches(recovered))return {status:200};
       return {status:409,error:String(cause).includes('quota')?'Service configuration history has reached its test capacity.':String(cause).includes('version_removal_service_client')?'This website version is retained by saved service settings or a pending review.':'The service settings, references or review changed, expired or are held. Ask for a fresh review.'};
     }
+    // WH-016: a policy version adopted between review and confirmation refuses the final publication write.
+    if(policyConsentRefusal(cause))return {status:403,error:policyConsentMessage};
     if(/specification_(changed|expired|quota|held)|version_removal_specification/.test(String(cause))){
       const recovered=await db.prepare('SELECT user_text,action_json,revision FROM chat_turns WHERE id=? AND user_id=?').bind(input.id,userId).first<{user_text:string;action_json:string|null;revision:number}>();
       if(matches(recovered))return {status:200};

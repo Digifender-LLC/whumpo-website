@@ -15,6 +15,9 @@ const proposals='Unapplied, short-lived proposal/review state; saved versions an
 const blocked=(trigger,note)=>({decision:'blocked',mechanism:trigger,note});
 const excluded=rationale=>({decision:'excluded',rationale});
 export const deletionSites={
+ 'src/mobile/handoff.ts::mobile_identity_handoffs':excluded(credential),
+ 'src/mobile/http.ts::identity_challenges':excluded(credential),
+ 'src/mobile/http.ts::identity_sessions':excluded(credential),
  'src/connectors/lookups.ts::connector_lookup_consents':excluded('Temporary one-use read authority containing digests and identifiers only. Query/result content is transient and never stored; expiry must not preserve executable consent.'),
  'src/mobile/http.ts::identity_challenges':excluded(credential),
  'src/mobile/http.ts::identity_sessions':excluded(credential),
@@ -42,6 +45,7 @@ export const deletionSites={
  'schema/platform.sql::profile_photo_safety':{decision:'preserved',mechanism:'safety_hold_profile_photo',note:'The replaced photo and its safety receipt are copied into safety_preserved_records before profile_photo_safety_invalidate removes the receipt.'},
  'schema/platform.sql::project_spec_proposals':excluded(proposals),
  'schema/platform.sql::service_client_proposals':excluded(proposals),
+ 'schema/platform.sql::safety_case_denied_attempts':excluded('WH-132 content-free, self-pruning log of operator-surface identity, input and role failures (principal reference, action, outcome, time); no customer content and never evidence. Privileged attempts stay in the immutable safety_case_audit.'),
  'schema/platform.sql::safety_preserved_records':{decision:'hold-mechanism',mechanism:'safety_preservation_holds_release',note:'Preserved payloads are removed only when the last covering hold is released; a direct delete under an active hold is refused.'},
  'src/workspace-identity/kits.ts::users':blocked('safety_hold_account_retained','Pending-enrollment cancellation (account deletion) of a held account fails with its existing generic error.'),
  'src/contacts.ts::contact_submissions':{decision:'blocked',mechanism:'safety_hold_contact_retained + cleanupContacts excludes safety_held_projects',note:'Owner deletion is refused; expiry skips held projects. The inbox already hides expired messages.'},
@@ -59,6 +63,8 @@ export const deletionSites={
  'src/files.ts::file_cleanup':{decision:'skips-held',mechanism:'cleanupPhotos excludes held queue rows + safety_hold_file_cleanup_retained',note:'Queue rows carry project/owner ids, so objects removed shortly before an account or project hold stay queued and stored until release. An object hold needs a still-referenced file, which cannot be queued while held.'},
  'src/files.ts::R2':{decision:'skips-held',mechanism:'queue row deleted first (refused when held); orphan sweep lists only photos/ and retains every queued key',note:'Restricted evidence under restricted/safety-evidence/ is never listed or deleted by ordinary cleanup.'},
  'src/safety-cases.ts::R2':{decision:'hold-mechanism',mechanism:'disposeSafetyEvidence',note:'Audited restricted-evidence disposal by an authenticated preservation approver, only after case closure with no open disclosure.'},
+ // WH-016 abuse-report retention (owner decision October 4, 2026, issue #172), daily in the contacts maintenance job.
+ 'src/abuse-reports.ts::abuse_reports':{decision:'skips-held',mechanism:'cleanupAbuseReports excludes reports whose case or subject has an active hold + abuse_reports_retained (safety_preservation_hold)',note:'Deletes only reports triaged at least 365 days ago that are not linked to a case, or are linked to a case whose retention an operator released; untriaged reports are kept. Reports are restricted operator records about a subject (and may carry an optional reporter email), so any hold on the linked case or on the reported subject keeps them; the trigger refuses a direct delete inside that scope.'},
  'src/site-traffic.ts::site_traffic_daily':{decision:'skips-held',mechanism:'cleanupTraffic excludes safety_held_projects',note:'Readers only show the 30-day window, so retained rows are not visible.'},
  'src/site-traffic.ts::site_traffic_quality':{decision:'skips-held',mechanism:'cleanupTraffic excludes safety_held_projects',note:'Content-free daily counters of excluded automated requests and missed measurements; readers only show the 30-day window.'},
  'src/app-lifecycle.ts::app_visitors':blocked('safety_hold_visitor_retained','Visitor self-deletion inside a held project returns the existing "could not be confirmed" error. Visitor deletion rights during a hold need counsel review (owner question).'),
@@ -114,6 +120,22 @@ export const deletionSites={
  'src/shared-modules/access-roles.ts::module_access_role_reviews':{decision:'blocked',mechanism:'safety_hold_module_access_review_retained + expiry queries exclude safety_held_projects',note:'Expired unapplied reviews and superseded 90-day terminal receipts are pruned only outside holds; the current grant/revoke provenance remains with its role row.'},
  'src/shared-modules/records.ts::module_records':{decision:'blocked',mechanism:'safety_hold_module_record_retained + cleanupModuleRecords excludes safety_held_projects',note:'WH-127 owner record removal (records.remove) is refused as unavailable inside a held project; retention expiry skips held projects and the delete trigger backs both. Visitor erasure cascades only through app_visitors, which the visitor hold refuses.'},
  'src/project-specification/service-clients/store.ts::service_client_proposals':excluded(proposals),
+ // WH-018 account closure: the purge refuses inside an account hold (trigger) and the closure holds step first refuses any
+ // account/project/object hold, journaling a generic pending state; the closure receipt itself is never deletable.
+ 'src/account-lifecycle/closure.ts::users':blocked('safety_hold_account_retained + safety_hold_project_retained + closure holds step','Reviewed account closure purge. The holds step stops at a generic retention pause for any active account, project or object hold on the account; the cascade itself is refused by the account/project/file hold triggers, and the batch (including the completed journal) rolls back.'),
+ 'src/account-lifecycle/closure.ts::identity_challenges':excluded(credential),
+ 'src/restore-suppression.ts::users':blocked('safety_hold_account_retained','WH-019 operator restore replay on an isolated whole-database candidate, never a live Worker path. It removes only subjects already erased in the current source; a candidate holding an active hold refuses the batch and stays held (restore admission also refuses any candidate with an active hold).'),
+ 'src/restore-suppression.ts::projects':blocked('safety_hold_project_retained','WH-019 operator restore replay on an isolated whole-database candidate, never a live Worker path. It removes only subjects already erased in the current source; the project hold trigger refuses inside held scope and the whole replay rolls back.'),
+ 'src/restore-suppression.ts::project_files':blocked('safety_hold_file_retained','WH-019 operator restore replay on an isolated whole-database candidate, never a live Worker path. It removes only subjects already erased in the current source; the file hold trigger refuses inside held scope and the whole replay rolls back.'),
+ 'src/restore-suppression.ts::app_visitors':blocked('safety_hold_visitor_retained','WH-019 operator restore replay on an isolated whole-database candidate, never a live Worker path. It removes only subjects already erased in the current source; the visitor hold trigger refuses inside held scope and the whole replay rolls back.'),
+ 'src/restore-suppression.ts::module_records':blocked('safety_hold_module_record_retained','WH-019 operator restore replay on an isolated whole-database candidate, never a live Worker path. It removes only subjects already erased in the current source; the record hold trigger refuses inside held scope and the whole replay rolls back.'),
+ 'src/restore-suppression.ts::abuse_reports':blocked('abuse_reports_retained','WH-019 operator restore replay on an isolated whole-database candidate, never a live Worker path. It removes only WH-016 abuse reports already deleted by retention in the current source (ledger kind abuse_report); a hold on the report\'s case or subject refuses the delete and the whole replay rolls back.'),
+ 'src/restore-suppression.ts::identity_challenges':excluded(credential),
+ 'src/restore-suppression.ts::github_token_vault':excluded(credential),
+ 'src/restore-suppression.ts::github_refresh_custody':excluded(credential),
+ 'src/restore-suppression.ts::cloudflare_token_vault':excluded(credential),
+ 'src/account-lifecycle/closure.ts::account_lifecycle_reviews':excluded(proposals),
+ 'src/account-lifecycle/export.ts::account_lifecycle_reviews':excluded('A download consumes its own ten-minute export review (single use); the review holds a content-free binding, never customer content.'),
  'src/site-health.ts::site_health_budget':excluded('Platform monitoring budget; no customer content.'),
  'src/site-health.ts::site_health_checks':excluded('Platform availability checks of public pages; no customer content beyond the public URL status.'),
 };
@@ -126,6 +148,7 @@ export const otherPaths={
  'restore of a D1 archive (backup/restore)':{decision:'blocked',mechanism:'restore admission and inventory evidence refuse while a hold, open disclosure or unfinished capture exists (preservation-hold); stored evidence objects must be present with exact digests'},
  'visitor document overwrite by app runs, app recovery restore or migration apply':{decision:'preserved',mechanism:'safety_hold_app_document (previous revision copied to safety_preserved_records while an account/project hold is active; the write still succeeds, and past preserved-record capacity it fails closed)'},
  'website unpublish / publication withdrawal':{decision:'excluded',rationale:'No data is deleted; saved versions stay and are covered by the version hold.'},
+ 'WH-018 closure withdrawal (publications cleared, guest links revoked, active module instances suspended)':{decision:'excluded',rationale:'Stops serving only; no content row is deleted, and the later purge stays behind the closure holds step and hold triggers.'},
  'Cloudflare D1 Time Travel / provider-managed backups ageing':{decision:'excluded',rationale:'Provider-managed point-in-time history, not an ordinary Whumpo deletion path; held current data is retained in place. Handled by the written outside-hold-control procedure (docs/content-safety.md), required before case operations are activated.'},
  'native CMS resources and GitHub backups in customer-owned Cloudflare/GitHub accounts':{decision:'excluded',rationale:'External customer-owned resources Whumpo cannot preserve; CMS testing is owner-deferred. Withdrawal/deletion of these is not a Whumpo cleanup path. Handled by the written outside-hold-control procedure (docs/content-safety.md), required before case operations are activated.'},
  'Workers logs, local operator files and browser-local drafts':{decision:'excluded',rationale:'No case or evidence content is logged or written to operator files by the case surface; browser drafts are on the customer device.'},

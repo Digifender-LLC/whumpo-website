@@ -99,6 +99,15 @@ try{
  r=await call('cases/open',{caseId:'case-1',subjectUserId:subject,intakeRef:'intake-1'},{token:reviewer.fixture.token});
  assert.equal(r.status,200,JSON.stringify(r.body));checks++;
  assert.equal((await row("SELECT opened_by FROM safety_cases WHERE id='case-1'")).opened_by,reviewer.ref);checks++;
+ // Transport refusals (no session, malformed body, declared actor), stale proofs and role failures are recorded only in the
+ // bounded, content-free denied-attempt log; none of them wrote to the immutable privileged audit.
+ const deniedRows=(await all('SELECT principal_ref AS p,action,outcome,reason FROM safety_case_denied_attempts ORDER BY seq')).map(x=>[x.p,x.action,x.outcome,x.reason].join(':'));
+ assert.deepEqual(deniedRows,[':open_case:denied:unauthenticated',reviewer.ref+':open_case:rejected:invalid_input',reviewer.ref+':open_case:denied:unauthenticated',
+  'human:'+customer.account+':open_case:denied:missing_role',reviewer.ref+':open_case:rejected:invalid_input']);checks++;
+ assert.equal((await row("SELECT count(*) AS n FROM safety_case_audit WHERE reason IN ('unauthenticated','missing_role','invalid_input')")).n,0);checks++;
+ for(let i=0;i<70;i++)assert.equal((await call('holds/place',{holdId:'h-x',caseId:'case-1',legalBasisRef:'b',reviewDays:30,scope:'account'})).status,401);
+ assert.equal((await row('SELECT count(*) AS n FROM safety_case_denied_attempts WHERE principal_ref IS NULL')).n,60,'Anonymous budget');checks++;
+ assert.equal((await row("SELECT count(*) AS n FROM safety_case_audit WHERE action='place_hold'")).n,0);checks++;
  // The surface is mounted in the platform Worker behind its origin check.
  const workerEnv={...env,API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})},ASSETS:{fetch:async()=>new Response('asset')}};
  let response=await m.worker.fetch(post('cases/read',{caseId:'case-1'},{token:reviewer.fixture.token}),workerEnv,{waitUntil:()=>{}});
@@ -334,13 +343,19 @@ try{
  await age('case-op');
  assert.ok((await queue(approver)).some(i=>i.caseId==='case-op'));assert.ok(!(await queue(auditor)).some(i=>i.caseId==='case-op'));checks++;
 
- // ---- Audit: every attempt is recorded with identifiers only; no raw material in case storage or responses.
+ // ---- Audit: every role-verified attempt is in the privileged audit; identity, input and role failures are only in the
+ // bounded denied-attempt log. Identifiers only; no raw material in case storage or responses.
  const audit=await c.readSafetyCaseAudit(db,auditor.p,{caseId:'case-1'}),seen=new Set(audit.map(e=>e.action+':'+e.outcome+':'+e.reason));
- for(const expected of ['open_case:denied:unauthenticated','open_case:denied:missing_role','open_case:allowed:ok','place_hold:rejected:invalid_input','place_hold:rejected:not_found','capture_evidence:denied:missing_role',
-  'capture_evidence:allowed:ok','capture_evidence:rejected:conflict','request_disclosure:rejected:invalid_input','approve_disclosure:rejected:conflict','approve_disclosure:allowed:ok','record_disclosure:allowed:ok',
-  'cancel_disclosure:allowed:ok','read_disclosure:allowed:ok','dispose_evidence:rejected:conflict','dispose_evidence:allowed:ok','preview_retention:rejected:conflict','preview_retention:denied:missing_role','preview_retention:allowed:ok','decide_retention:rejected:conflict','decide_retention:denied:missing_role','decide_retention:allowed:ok','close_case:rejected:active_hold','close_case:allowed:ok','read_case:denied:unauthenticated'])
+ for(const expected of ['open_case:allowed:ok','place_hold:rejected:not_found',
+  'capture_evidence:allowed:ok','capture_evidence:rejected:conflict','approve_disclosure:rejected:conflict','approve_disclosure:allowed:ok','record_disclosure:allowed:ok',
+  'cancel_disclosure:allowed:ok','read_disclosure:allowed:ok','dispose_evidence:rejected:conflict','dispose_evidence:allowed:ok','preview_retention:rejected:conflict','preview_retention:allowed:ok','decide_retention:rejected:conflict','decide_retention:allowed:ok','close_case:rejected:active_hold','close_case:allowed:ok'])
   {assert.ok(seen.has(expected),expected);checks++;}
- const everything=JSON.stringify([await all('SELECT * FROM safety_case_audit'),await all('SELECT * FROM safety_cases'),await all('SELECT * FROM safety_preservation_holds'),await all('SELECT * FROM safety_evidence_objects'),await all('SELECT * FROM safety_disclosures'),audit,manifest]);
+ assert.ok(audit.every(e=>!['unauthenticated','missing_role','invalid_input'].includes(e.reason)));checks++;
+ const deniedSeen=new Set((await all('SELECT action,outcome,reason FROM safety_case_denied_attempts')).map(e=>e.action+':'+e.outcome+':'+e.reason));
+ for(const expected of ['open_case:denied:unauthenticated','open_case:denied:missing_role','place_hold:rejected:invalid_input','capture_evidence:denied:missing_role','request_disclosure:rejected:invalid_input',
+  'preview_retention:denied:missing_role','decide_retention:denied:missing_role','read_case:denied:unauthenticated'])
+  {assert.ok(deniedSeen.has(expected),expected);checks++;}
+ const everything=JSON.stringify([await all('SELECT * FROM safety_case_audit'),await all('SELECT * FROM safety_case_denied_attempts'),await all('SELECT * FROM safety_cases'),await all('SELECT * FROM safety_preservation_holds'),await all('SELECT * FROM safety_evidence_objects'),await all('SELECT * FROM safety_disclosures'),audit,manifest]);
  assert.doesNotMatch(everything,new RegExp(MARK+'|example\\.invalid|raw'));checks++;
  assert.equal(network,0);
  console.log(`Safety case operations passed (${d1?'local D1 + local R2':'SQLite + in-memory R2'}): ${checks} checks. One-year retention review (not due, due queue without self-cases, exact preview digest -> apply, release or 1-366 day extension, final release, holds on the subject and open cases blocking release, disposal only after release), Authenticated fresh-passkey HTTP surface (declared/stale/revoked/foreign-origin refused), project/object/account holds over photo, version, visitor, project, owner, account, contact, traffic and R2 cleanup paths, invisible preservation of profile photos, app document overwrites and cleared recovery-point copies, 50,000 preserved-record capacity failing closed, restricted evidence capture/resume/disposal, two-person manifest-only disclosure, restore suppression, conflict-of-interest non-disclosure, release and the ${inventory.sites}-site deletion inventory. Synthetic placeholders only; nothing transmitted.`);

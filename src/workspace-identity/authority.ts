@@ -19,7 +19,7 @@ type Row={authority_id:string;kind:AuthorityKind;token_hash:string;account_id:st
 // Serializing, cloning or constructing the public shape cannot preserve that capability.
 const resolved=new WeakMap<IdentityPrincipal,{db:Database;tokenHash:string}>();
 export class IdentityError extends Error {
- constructor(readonly status:400|401|403|409|503,readonly code:'invalid_identity_request'|'proof_required'|'identity_incomplete'|'identity_changed'|'client_upgrade_required'|'identity_unavailable'|'request_conflict',message:string){super(message);this.name='IdentityError';}
+ constructor(readonly status:400|401|403|409|503,readonly code:'invalid_identity_request'|'proof_required'|'identity_incomplete'|'identity_changed'|'client_upgrade_required'|'identity_unavailable'|'request_conflict'|'account_closing',message:string){super(message);this.name='IdentityError';}
 }
 const proofRequired=()=>new IdentityError(401,'proof_required','Verify your current passkey or recovery proof to continue.');
 const changed=()=>new IdentityError(409,'identity_changed','Your account access changed. Verify your current access and review this action again.');

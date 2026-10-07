@@ -2,9 +2,12 @@
 -- Admit into the platform schema only with the coordinated current-policy cutover.
 -- Atomic admission assertion. Successful checks insert nothing; denial aborts the
 -- entire D1 batch before any workspace effect. This table must always be empty.
-CREATE TABLE identity_admission_checks (denied INTEGER NOT NULL CHECK(denied=1)) STRICT;
-CREATE TRIGGER identity_admission_denied BEFORE INSERT ON identity_admission_checks
+-- denied=1: identity changed; denied=2: the account is closing (WH-018). One statement, so read-only batches stay write-free.
+CREATE TABLE identity_admission_checks (denied INTEGER NOT NULL CHECK(denied IN (1,2))) STRICT;
+CREATE TRIGGER identity_admission_denied BEFORE INSERT ON identity_admission_checks WHEN NEW.denied=1
 BEGIN SELECT RAISE(ABORT,'identity_admission_denied'); END;
+CREATE TRIGGER identity_admission_account_closing BEFORE INSERT ON identity_admission_checks WHEN NEW.denied=2
+BEGIN SELECT RAISE(ABORT,'account_closing'); END;
 
 CREATE TABLE identity_accounts (
  account_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,

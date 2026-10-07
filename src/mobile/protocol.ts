@@ -1,20 +1,21 @@
 import {IdentityError,type IdentityPrincipal} from '../workspace-identity/authority';
 import type {IdentityCeremonyContext} from '../workspace-identity/protocol';
 
-export const currentMobileBuild=3;
+export const currentMobileBuild=4;
 export const mobilePrefix='/api/mobile/v1';
 export const browserReturn='https://whumpo.com/app/return';
 export type MobileEnvironment=Pick<Env,'DB'|'ENVIRONMENT'|'TURNSTILE_SECRET'|'API_LIMITER'|'AUTH_LIMITER'|'MOBILE_ANDROID_PACKAGE'|'MOBILE_ANDROID_CERT_SHA256'|'MOBILE_MINIMUM_BUILD'>;
 export type MobileClient=Readonly<{contract:1;build:number;platform:'android';controls:string[];interaction:{versions:number[];fieldTypes:string[];bindings:string[]}}>;
-const codes={invalid_request:400,invalid_cursor:400,unsupported_control:400,unknown_field:400,missing_field:400,proof_required:401,identity_incomplete:403,not_found:404,onboarding_required:409,identity_changed:409,request_conflict:409,stale_revision:409,chat_busy:409,review_unavailable:409,payload_too_large:413,client_update_required:426,rate_limited:429,unavailable:503} as const;
+const codes={invalid_request:400,invalid_cursor:400,unsupported_control:400,unknown_field:400,missing_field:400,proof_required:401,identity_incomplete:403,not_found:404,onboarding_required:409,identity_changed:409,account_closing:409,request_conflict:409,stale_revision:409,chat_busy:409,review_unavailable:409,payload_too_large:413,client_update_required:426,rate_limited:429,unavailable:503} as const;
 export class MobileError extends Error {
- constructor(readonly code:keyof typeof codes,readonly details:Record<string,unknown>={}){super(({proof_required:'Sign in again to continue.',identity_incomplete:'Complete account setup or recovery in the browser.',identity_changed:'Your account access changed. Sign in and review again.',client_update_required:'Update Whumpo to continue.',unavailable:'Native access is temporarily unavailable.',rate_limited:'Too many requests. Try again in a minute.',not_found:'This resource is unavailable.'} as Partial<Record<keyof typeof codes,string>>)[code]??'This request could not be accepted.');}
+ constructor(readonly code:keyof typeof codes,readonly details:Record<string,unknown>={}){super(({proof_required:'Sign in again to continue.',identity_incomplete:'Complete account setup or recovery in the browser.',identity_changed:'Your account access changed. Sign in and review again.',account_closing:'This account is closing. Open account status in the browser.',client_update_required:'Update Whumpo to continue.',unavailable:'Native access is temporarily unavailable.',rate_limited:'Too many requests. Try again in a minute.',not_found:'This resource is unavailable.'} as Partial<Record<keyof typeof codes,string>>)[code]??'This request could not be accepted.');}
  get status(){return codes[this.code];}
 }
 export function mobileFailure(error:unknown,env:MobileEnvironment){
  if(error instanceof MobileError)return error;
  if(error instanceof IdentityError){
   if(error.code==='proof_required')return new MobileError('proof_required',{proof:'signin'});
+  if(error.code==='account_closing')return new MobileError('account_closing',{next:'browser',browserPath:'/workspace/account'});
   if(error.code==='identity_incomplete')return new MobileError('identity_incomplete',{next:'browser'});
   if(error.code==='client_upgrade_required')return updateRequired(env);
   if(error.code==='identity_changed'||error.code==='request_conflict')return new MobileError(error.code);

@@ -48,9 +48,18 @@ try{
  const stage=id();ciphers.set(stage,await fixtureCiphertext(fixtureKeyring(),`whumpo:github:token:${owner}:${stage}`,'PRIVATE_CREDENTIAL_CANARY'));github(stage,'active');sql.prepare('INSERT INTO github_token_staging VALUES(?,?,?)').run(stage,'PRIVATE_STATE_CANARY',at(-2*day));
  sql.prepare("INSERT INTO connection_oauth_exchanges(token_id,user_id,provider,client_id,state_hash,key_id,revision,state,created_at) VALUES(?,?,'github','fixture','PRIVATE_STATE','fixture-current',1,'dispatched',?)").run(newGH,owner,at(-2*day));
  sql.prepare('INSERT INTO github_refresh_custody(token_id,user_id,client_id,ciphertext,expires_at) VALUES(?,?,?,?,?)').run(newGH,owner,'fixture',await fixtureCiphertext(fixtureKeyring(),`whumpo:github:refresh:${owner}:${newGH}`,'PRIVATE_REFRESH_CANARY'),at(180*day));
+ // WH-018: an unfinished closure last journaled two days ago is attention; a held account's closure is not backlog.
+ const closureAt=Math.floor((now-2*day)/1000),held=id();
+ sql.prepare("INSERT INTO account_closures(id,account_id,policy_version,review_digest,obligations_json,state,revision,created_at,updated_at) VALUES(?,?,1,?,'{}','waiting',1,?,?)").run(id(),owner,'e'.repeat(64),closureAt,closureAt);
+ sql.prepare("INSERT INTO users VALUES(?,?,?)").run(held,'PRIVATE_HELD_CANARY@example.invalid',at(0));
+ sql.prepare("INSERT INTO account_closures(id,account_id,policy_version,review_digest,obligations_json,state,revision,created_at,updated_at) VALUES(?,?,1,?,'{}','blocked',1,?,?)").run(id(),held,'f'.repeat(64),closureAt,closureAt);
+ sql.prepare("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES('case-inv',?,'intake-1','human:reviewer',unixepoch(),unixepoch()+86400)").run(held);
+ sql.prepare("INSERT OR IGNORE INTO safety_case_roles(id,operator_ref,role,granted_by,granted_at) VALUES('grant-test-approver','human:approver','preservation_approver','human:test-administrator',unixepoch())").run(); // holds need a current preservation approver
+ sql.prepare("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES('hold-inv','case-inv',?,'account',NULL,'basis-1','human:approver',unixepoch(),unixepoch()+86400)").run(held);
  sql.exec('PRAGMA query_only=ON');
  report=await maintenanceReport(db,Date.now());
- assert.equal(report.backlogs.length,41);assert.ok(report.backlogs.every(q=>q.state!=='unavailable'),JSON.stringify(report.backlogs));
+ assert.equal(report.backlogs.length,42);
+ {const closures=report.backlogs.find(q=>q.queue==='account_closures');assert.equal(closures.count,1);assert.equal(closures.state,'attention');assert.ok(closures.oldestAgeMs>=2*day-1000);}assert.ok(report.backlogs.every(q=>q.state!=='unavailable'),JSON.stringify(report.backlogs));
  for(const queue of ['contact_receipts','contact_notification_outbox','contact_notification_queue','traffic','fair_use','health_budget','github_staged','connection_exchanges']){const backlog=report.backlogs.find(q=>q.queue===queue);assert.equal(backlog.state,'attention',queue);assert.equal(backlog.count,1,queue);}
  assert.equal(report.backlogs.find(q=>q.queue==='contact_receipts').oldestAgeMs>=2*day,true);
  for(const queue of ['github','cloudflare']){const backlog=report.backlogs.find(q=>q.queue===queue);assert.equal(backlog.state,'pending');assert.equal(backlog.unknownAgeCount,0);assert.ok(backlog.oldestAgeMs<60000);}
@@ -73,6 +82,6 @@ try{
  assert.equal((await maintenanceReport(db,now)).attention,true,'Counters at the act threshold surface in the maintenance report');
  const broken=await counterReport({prepare:()=>{throw Error('PRIVATE_SECRET_CANARY');}},now);assert.ok(broken.counters.every(c=>c.state==='unavailable'));assert.equal(broken.attention,true);assert.ok(!JSON.stringify(broken).includes('PRIVATE_'));
  assert.ok(!JSON.stringify(counters).includes(project)&&!JSON.stringify(counters).includes(owner));
- const encoded=JSON.stringify(report);for(const marker of ['PRIVATE_',owner,newGH,newCF,project])assert.ok(!encoded.includes(marker),marker);
- console.log('Maintenance inventory passed: complete current schema, missing telemetry attention, precise new revocation clocks, retry stability/cascade, 41 read-only queues, four receipt families, 13 shared platform counters checked against their schema ceilings with 50%/80% flags, retention eligibility and private data exclusion.');
+ const encoded=JSON.stringify(report);for(const marker of ['PRIVATE_',owner,held,newGH,newCF,project])assert.ok(!encoded.includes(marker),marker);
+ console.log('Maintenance inventory passed: complete current schema, missing telemetry attention, precise new revocation clocks, retry stability/cascade, 42 read-only queues (including unfinished account closures outside holds), four receipt families, 13 shared platform counters checked against their schema ceilings with 50%/80% flags, retention eligibility and private data exclusion.');
 }finally{sql.close();}

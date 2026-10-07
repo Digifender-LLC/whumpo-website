@@ -189,6 +189,19 @@ try{
   await fails(m.sharedModules.handleModuleRequest(db,{kind:'visitor',projectId:a.project,visitorId:id(),sessionHash:'0'.repeat(64),accessInstanceId:access.id,roles:[],accessRevision:1},submission(records),handlers),'forbidden');
  });
 
+ await check('WH-014: a safety hold on the activation source configuration stops non-owner serving; owner reads remain',async()=>{
+  const source=await row('SELECT s.digest FROM module_instances i JOIN site_versions s ON s.id=i.source_version_id WHERE i.id=?',records.id);
+  await run("INSERT INTO content_screening_decisions(user_id,kind,digest,policy_version,first_required,required,first_reason,first_percent,first_risk_score) VALUES(?,'generated_artifact',?,'synthetic-retired-policy',1,1,'risk_or_missing_history',100,60)",a.user,source.digest);
+  await fails(publicCall(a,submission(records)),'unavailable');
+  assert.deepEqual((await ownerCall(a,envelope(records,'records.get',{target:{recordId:'request'}}))).result,{fields:['name','note'],scope:'all'});
+  // A hold that lands while a request is in flight wins at the receipt trigger.
+  await run('DELETE FROM content_screening_decisions WHERE user_id=? AND digest=?',a.user,source.digest);
+  await fails(publicCall(a,submission(records),{'forms.submit':async(d,c)=>{await run("INSERT INTO content_screening_decisions(user_id,kind,digest,policy_version,first_required,required,first_reason,first_percent,first_risk_score) VALUES(?,'generated_artifact',?,'synthetic-retired-policy',1,1,'risk_or_missing_history',100,60)",a.user,source.digest);return submitHandler(d,c);}}),'unavailable');
+  // Test-fixture cleanup only: no product path deletes or lowers a recorded decision.
+  await run('DELETE FROM content_screening_decisions WHERE user_id=? AND digest=?',a.user,source.digest);
+  assert.equal((await publicCall(a,submission(records))).receipt.replayed,false);
+ });
+
  await check('withdrawn and stale pins fail closed while owner disable and reads remain',async()=>{
   const ws=await workspaceSession(db,withdrawn,{account:a.user,credential:a.credential}),wScope=await ws.scope();
   await fails(publicCall(a,submission(records),handlers,withdrawn),'unavailable');

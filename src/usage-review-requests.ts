@@ -1,7 +1,7 @@
 import {BillingError} from './billing';
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 const fields='id,kind,reference,statement,created_at,state,public_response,answered_at,customer_read_at';
-export type UsageReviewRequest={id:string;kind:'usage_review'|'help';reference:string|null;statement:string;created_at:string;state:'open'|'answered';public_response:string|null;answered_at:string|null;customer_read_at:string|null};
+export type UsageReviewRequest={id:string;kind:'usage_review'|'help'|'safety_notice'|'safety_appeal';reference:string|null;statement:string;created_at:string;state:'open'|'answered';public_response:string|null;answered_at:string|null;customer_read_at:string|null};
 export type OperatorQueueRow=UsageReviewRequest&{user_id:string;source:'chat'|'support'|'chat_form';delivery_state:'queued'|'delivered'|'failed'|'cancelled'|null};
 function text(value:string,max:number){if(typeof value!=='string'||!value.trim()||value.trim().length>max||/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(value))throw new BillingError(400,'Invalid usage-review text.');return value.trim();}
 export function usageReviewCommand(content:string){return /^(?:\/usage-reviews?(?:\s|$)|request a usage review(?:\s*:|$)|show my usage reviews?(?: [0-9a-f-]{36})?$)/i.test(content);}
@@ -12,10 +12,11 @@ export async function readUsageReviewRequest(db:Pick<D1Database,'prepare'>,user:
 export async function listUsageReviewRequests(db:Pick<D1Database,'prepare'>,user:string,kind?:'usage_review'|'help'){
  return (await db.prepare(`SELECT ${fields} FROM usage_review_requests WHERE user_id=?${kind?' AND kind=?':''} ORDER BY created_at DESC,id DESC LIMIT 25`).bind(user,...(kind?[kind]:[])).all<UsageReviewRequest>()).results;
 }
-/** Operator-only cross-account queue (private: statements and account IDs). Oldest first; no response is implied. */
+/** Operator-only cross-account queue (private: statements and account IDs). Oldest first; no response is implied.
+ * WH-016 safety notices and appeals are not in this queue: appeals are decided only through the restricted safety surface. */
 export async function listSupportQueue(db:Pick<D1Database,'prepare'>,state:'open'|'answered'='open',limit=50){
  if(!['open','answered'].includes(state)||!Number.isInteger(limit)||limit<1||limit>100)throw new BillingError(400,'Invalid queue request.');
- return (await db.prepare(`SELECT r.user_id,r.source,r.id,r.kind,r.reference,r.statement,r.created_at,r.state,r.public_response,r.answered_at,r.customer_read_at,d.state AS delivery_state FROM usage_review_requests r LEFT JOIN support_deliveries d ON d.request_id=r.id WHERE r.state=? ORDER BY r.created_at,r.id LIMIT ?`).bind(state,limit).all<OperatorQueueRow>()).results;
+ return (await db.prepare(`SELECT r.user_id,r.source,r.id,r.kind,r.reference,r.statement,r.created_at,r.state,r.public_response,r.answered_at,r.customer_read_at,d.state AS delivery_state FROM usage_review_requests r LEFT JOIN support_deliveries d ON d.request_id=r.id WHERE r.state=? AND r.kind IN ('usage_review','help') ORDER BY r.created_at,r.id LIMIT ?`).bind(state,limit).all<OperatorQueueRow>()).results;
 }
 export function markReadStatement(db:Pick<D1Database,'prepare'>,user:string,id:string){return db.prepare("UPDATE usage_review_requests SET customer_read_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND user_id=? AND state='answered' AND customer_read_at IS NULL").bind(id,user);}
 function describe(row:UsageReviewRequest){return `Usage review ${row.id}\n${row.state==='open'?'Waiting for operator review':'Response saved'} · ${row.created_at}\nYour statement: ${row.statement}${row.public_response?'\n\nResponse: '+row.public_response:''}`;}
@@ -38,8 +39,9 @@ export async function prepareUsageReviewChat(db:D1Database,user:string,turn:stri
 export async function answerUsageReview(db:Pick<D1Database,'prepare'>,user:string,id:string,response:string,operator:string){
  if(!uuid.test(user)||!uuid.test(id))throw new BillingError(400,'Invalid review identity.');
  const reply=text(response,2000),who=text(operator,100);
- const existing=await db.prepare('SELECT state,public_response,answered_by FROM usage_review_requests WHERE id=? AND user_id=?').bind(id,user).first<{state:string;public_response:string|null;answered_by:string|null}>();
+ const existing=await db.prepare('SELECT kind,state,public_response,answered_by FROM usage_review_requests WHERE id=? AND user_id=?').bind(id,user).first<{kind:string;state:string;public_response:string|null;answered_by:string|null}>();
  if(!existing)throw new BillingError(404,'Usage review not found.');
+ if(existing.kind!=='usage_review'&&existing.kind!=='help')throw new BillingError(409,'Safety notices and appeals are answered only through the restricted safety review surface.');
  if(existing.state==='answered'){
   if(existing.public_response!==reply||existing.answered_by!==who)throw new BillingError(409,'This review already has a different response.');
   return {review:await readUsageReviewRequest(db,user,id),replayed:true,enforcementEnabled:false};

@@ -19,12 +19,14 @@ import {handleInteractionRequest} from './chat-interactions/http';
 import {cleanIdentityCeremonies} from './workspace-identity/ceremonies';
 import {handleIdentityRequest,workspaceIdentity} from './workspace-identity/http';
 import {handleSafetyCaseRequest} from './safety-case-http';
+import {handleAccountLifecycleRequest} from './account-lifecycle/http';
 import {IdentityError} from './workspace-identity/authority';
 import {admitWorkspace,workspaceBindings,assertWorkspace,requireFreshWorkspace,workspaceTransport} from './workspace-identity/admission';
 import {FeatureInclusionError} from './feature-inclusion';
 import {stripeBillingWebhook,subscriptionsEnabled,subscriptionStatus,refreshSubscriptions,startSubscription,billingPortal} from './stripe-billing';
 import {serviceClientActivationPreview} from './project-specification/service-clients/activation';
 import {runMaintenance} from './maintenance';
+import {continueAccountClosures} from './account-lifecycle/closure';
 import {cleanupInteractionDrafts} from './chat-interactions/retention';
 import {exportChatTranscript} from './chat-transcript';
 import {quarantineBackendImport,listBackendImports,scanBackendImports} from './backend-imports';
@@ -68,11 +70,15 @@ import {listCMSPublications} from './cms-publication';
 import {readCMSCapabilities,readCMSStatus} from './cms-status';
 import {listCMS,readCMSReview,prepareCMS,confirmCMS,CMSProjectError} from './cms-projects';
 import {readBackendState,readBackendReview,prepareBackendState,confirmBackendState,backendStateHistory,exportBackendState,restoreBackendState} from './backend-state';
-import {BackendError,listBackends,testBackend} from './backend-versions';
+import {BackendError,listBackends} from './backend-versions';
+import {testAdmittedBackend} from './artifact-admission';
 import {readDirectory,directoryHistory,exportDirectory,DirectoryError,cleanupDirectoryReviews} from './directory';
 import {HealthError,listHealth,checkHealth,maintainHealth} from './site-health';
 import {DiffError,compareVersions,compareReview,diffPage,comparisonErrorResponse} from './version-diff';
 import {contactPage} from './contact-page';
+import {abuseReportPage,abuseReportPath} from './abuse-report-page';
+import {cleanupAbuseReports} from './abuse-reports';
+import {policyConsentPath,policyConsentRoute} from './policy-consent';
 import {ContactError,contactInbox,deleteContact,cleanupContacts} from './contacts';
 import {contactNotificationStatus,proposeContactDestination,removeContactDestination,requestContactVerification,confirmContactDestination,runContactDelivery} from './contact-notifications';
 import {contactDelivery} from './contact-email';
@@ -159,6 +165,8 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   if(pathname.startsWith('/api/auth/'))return error(404,'Not found');
   // WH-132 restricted operator case surface: own authentication/role gates, never the workspace router.
   const operator=await handleSafetyCaseRequest(request,env);if(operator)return operator;
+  // WH-018 account export and closure: own closure-permitting admission; every other route refuses a closing account.
+  const lifecycle=await handleAccountLifecycleRequest(request,env);if(lifecycle)return lifecycle;
   const principal=await workspaceIdentity(request,env);
   const scoped=workspaceBindings(env,admitWorkspace(env.DB,principal),principal.accountId);
   const user=await scoped.DB.prepare('SELECT id,email FROM users WHERE id=?').bind(principal.accountId).first<User>();
@@ -176,6 +184,8 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
     const data=method==='POST'?await body(request):undefined;
     return json(await supportRoute(env.DB,user.id,method,pathname,new URL(request.url).search,data,supportConfig(env)));
   }
+  // WH-016 current policy consent: identity-only, like support (no Chat, AI or onboarding dependency).
+  if(pathname===policyConsentPath)return policyConsentRoute(env.DB,user.id,method,method==='POST'?await body(request):undefined);
   if((pathname==='/api/chat'||pathname.startsWith('/api/chat/')||pathname.startsWith('/api/workspace/'))&&!await onboardingComplete(env.DB,user.id))return json({error:'Start your first project in welcome before opening your workspace.',code:'onboarding_required',support:supportLink('onboarding_required')},409);
   if(pathname==='/api/onboarding'){
     if(method==='GET')return json(await readOnboarding(env.DB,user.id));
@@ -392,7 +402,7 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
     if(method==='GET'&&!backendRoute[2])return json({versions:await listBackends(env.DB,user.id,backendRoute[1]),imports:await listBackendImports(env.DB,user.id,backendRoute[1])});
     if(method==='POST'){
       const data=await body(request);if(!data)return error(400,'A bounded JSON request is required');
-      return backendRoute[2]?json(await testBackend(env.DB,await projectRuntime(env.BACKEND_RUNTIME,backendRoute[1]),user.id,backendRoute[1],backendRoute[2],data.id,data.input,Object.hasOwn(data,'expected')?{expected:data.expected}:undefined)):json(await quarantineBackendImport(env.DB,user.id,backendRoute[1],data.id,data.source),202);
+      return backendRoute[2]?json(await testAdmittedBackend(env.DB,await projectRuntime(env.BACKEND_RUNTIME,backendRoute[1]),user.id,backendRoute[1],backendRoute[2],data.id,data.input,Object.hasOwn(data,'expected')?{expected:data.expected}:undefined)):json(await quarantineBackendImport(env.DB,user.id,backendRoute[1],data.id,data.source),202);
     }
   }
   // Shared module owner operations (whumpo-modules v1) on the workspace origin: the owner principal is the admitted
@@ -648,9 +658,11 @@ export default {
     // activating (docs/contact-forms.md), and even then nothing runs unless contactDelivery(env) finds the reviewed provider and binding.
     if(_event.cron==='* * * * *'){const delivery=contactDelivery(env);if(delivery)await runContactDelivery(env.DB,delivery.settings,delivery.sender);return;}
     const imports={name:'imports' as const,run:()=>scanBackendImports(env.DB)};
+    // WH-018 bounded continuation of confirmed account closures through the same journaled steps as closure/resume.
+    const closures={name:'account_closures' as const,run:()=>continueAccountClosures(env)};
     if(_event.cron==='47 * * * *'){
       await runMaintenance(env.DB,[imports,{name:'chat_drafts',run:async()=>{await cleanupInteractionDrafts(env.DB);await cleanupConnectorLookups(env.DB);}},
-      {name:'identity',run:async()=>{await cleanIdentityCeremonies(env.DB);await cleanMobileHandoffs(env.DB);}},{name:'hosting',enabled:!!hostingConfig(env),run:()=>maintainHosting(env.DB,hostingConfig(env))},{name:'health',run:()=>maintainHealth(env.DB)},{name:'funnel',run:()=>maintainFunnelEvents(env.DB)}]);return;
+      {name:'identity',run:async()=>{await cleanIdentityCeremonies(env.DB);await cleanMobileHandoffs(env.DB);}},{name:'hosting',enabled:!!hostingConfig(env),run:()=>maintainHosting(env.DB,hostingConfig(env))},{name:'health',run:()=>maintainHealth(env.DB)},{name:'funnel',run:()=>maintainFunnelEvents(env.DB)},closures]);return;
     }
     await runMaintenance(env.DB,[imports,{name:'chat_drafts',run:async()=>{await cleanupInteractionDrafts(env.DB);await cleanupConnectorLookups(env.DB);}},
       {name:'identity',run:async()=>{await cleanIdentityCeremonies(env.DB);await cleanMobileHandoffs(env.DB);}},
@@ -659,12 +671,13 @@ export default {
       {name:'funnel',run:()=>maintainFunnelEvents(env.DB)},
       {name:'applications',run:async()=>{await cleanupAppLifecycle(env.DB);await reconcileBuildJobs(env.DB);}},
       // Form-submission expiry: the contact inbox and WH-127 module records (both skip safety-held projects), then content-free
-      // module request receipts past their 30-day replay window and eligible terminal directory reviews.
-      {name:'contacts',run:async()=>{await cleanupContacts(env.DB);await cleanupModuleRecords(env.DB);await cleanupModuleRequestReceipts(env.DB);await cleanupDirectoryReviews(env.DB);}},
+      // module request receipts past their 30-day replay window, eligible terminal directory reviews and abuse reports past retention.
+      {name:'contacts',run:async()=>{await cleanupContacts(env.DB);await cleanupModuleRecords(env.DB);await cleanupModuleRequestReceipts(env.DB);await cleanupDirectoryReviews(env.DB);await cleanupAbuseReports(env.DB);}},
       {name:'guest_previews',run:()=>cleanupGuestPreviews(env.DB)},
       {name:'photos',run:()=>cleanupPhotos(env)},
       {name:'github',enabled:!!githubConfig(env),run:()=>cleanupGitHub(env.DB,githubConfig(env))},
       {name:'cloudflare',enabled:!!cloudflareConfig(env),run:()=>cleanupCloudflare(env.DB,cloudflareConfig(env))},
+      closures,
     ]);
   },
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -675,6 +688,8 @@ export default {
       if(request.headers.has('authorization')&&nativePath!=='/api/mobile'&&!nativePath.startsWith('/api/mobile/'))return error(400,'Bearer access is limited to native routes.');
       const contactMatch=new URL(request.url).pathname.match(/^\/contact\/([0-9a-f-]{36})$/);
       if(contactMatch)return contactPage(request,env,contactMatch[1]);
+      // WH-016 public abuse reports: no session, Chat or AI; reports reach only the restricted operator queue.
+      if(new URL(request.url).pathname===abuseReportPath)return abuseReportPage(request,env);
       if (new URL(request.url).pathname.startsWith("/api/")) return comparisonErrorResponse(request,await handle(request, env, ctx));
       if(new URL(request.url).pathname==='/.well-known/assetlinks.json')return request.method==='GET'?mobileAssetLinks(env):error(404,'Not found');
       const handoffPage=mobileHandoffPage(request);if(handoffPage)return handoffPage;

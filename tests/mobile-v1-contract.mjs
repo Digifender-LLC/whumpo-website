@@ -158,6 +158,14 @@ test('every wire error code has a fixture with its fixed HTTP status',()=>{
  assert.equal(errors.client_update_required,426);
  assert.equal(fx.errors.cases.client_update_required.body.error.next,'update_app');
 });
+test('account closure error has only its fixed browser recovery destination',()=>{
+ const body=fx.errors.cases.account_closing.body;validateError(body);
+ for(const browserPath of [undefined,'https://provider.invalid/','/workspace/','/workspace/account?token=synthetic']){
+  const changed=structuredClone(body);if(browserPath===undefined)delete changed.error.browserPath;else changed.error.browserPath=browserPath;
+  rejects(()=>validateError(changed),'invalid_request');
+ }
+ const other=structuredClone(fx.errors.cases.proof_required_signin.body);other.error.browserPath='/workspace/account';rejects(()=>validateError(other),'unknown_field');
+});
 test('error bodies carry no stack, SQL, provider text or identifiers',()=>{
  for(const c of Object.values(fx.errors.cases))assert.doesNotMatch(JSON.stringify(c),/stack|SELECT|INSERT|at .*\(|provider|requestId/i);
 });
@@ -183,6 +191,13 @@ test('ordinary current session passes; expiry, epoch bump and web-client tokens 
  rejects(()=>authorize({session:session({epoch:6}),account:ready,opId:'chat.read',now}),'proof_required');
  rejects(()=>authorize({session:session({client:'web'}),account:ready,opId:'chat.read',now}),'proof_required');
  rejects(()=>authorize({session:null,account:ready,opId:'chat.read',now}),'proof_required');
+});
+test('closing account stops every workspace surface while current identity-only operations remain available',()=>{
+ const account={...ready,closing:true};
+ for(const op of operations.filter(op=>op.auth!=='none')){
+  if(op.id.startsWith('session.'))assert.doesNotThrow(()=>authorize({session:session(),account,opId:op.id,now}));
+  else rejects(()=>authorize({session:session(),account,opId:op.id,now}),'account_closing');
+ }
 });
 test('incomplete identity and welcome gates fail closed; bootstrap and sign-out stay reachable',()=>{
  for(const stage of ['enrolling','recovering'])rejects(()=>authorize({session:session(),account:{...ready,stage},opId:'chat.read',now}),'identity_incomplete');

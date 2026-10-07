@@ -1,4 +1,5 @@
 import {taskListSource} from './backend-task-list';
+import {requireArtifactsAvailable} from './artifact-admission';
 import {BackendError,listBackends} from './backend-versions';
 import {hashToken} from './security';
 /** Platform-authored source only. Never populate this catalog from tenant artifacts. */
@@ -43,6 +44,7 @@ export async function installBackendComponent(db:D1Database,user:string,project:
  if(previous){if(previous.project_id!==project||previous.digest!==entry.digest||previous.component_id!==entry.id||previous.component_version!==entry.version)throw new BackendError(409,'This request belongs to another backend version');}
  else{
   if(entry.state!=='available')throw new BackendError(409,'This component was withdrawn. Choose another available version.');
+  await requireArtifactsAvailable(db,user,[entry.digest]);
   try{await db.batch([
    db.prepare('INSERT INTO backend_versions(id,project_id,source,digest,created_at) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM projects WHERE id=? AND owner_user_id=?)').bind(id,project,entry.source,entry.digest,new Date().toISOString(),project,user),
    db.prepare('INSERT INTO backend_component_instances(version_id,component_id,component_version,artifact_digest,provenance,license) VALUES(?,?,?,?,?,?)').bind(id,entry.id,entry.version,entry.digest,entry.provenance,entry.license)

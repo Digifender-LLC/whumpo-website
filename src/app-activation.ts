@@ -1,4 +1,6 @@
 import {liveAppPage,applicationURL} from './app-pages';
+import {requireBackendVersionAvailable,heldRefusal,artifactHeldMessage} from './artifact-admission';
+import {requirePolicyConsent,policyConsentRefusal,policyConsentMessage} from './policy-consent';
 import {BackendError,listBackends} from './backend-versions';
 import {hashToken} from './security';
 import {readVisitorApplicationResource} from './app-resource';
@@ -22,6 +24,8 @@ export async function prepareApplication(db:D1Database,user:string,project:strin
  const previous=await db.prepare('SELECT id FROM app_activation_reviews WHERE id=?').bind(id).first();
  if(!previous){
   if(operation==='enable'){
+   await requireBackendVersionAvailable(db,version!);
+   await requirePolicyConsent(db,user,(s,m)=>new BackendError(s,m));
    // WH-126: the application consumes the project's access module instance (its visitor identities); it never owns them.
    if(!await db.prepare("SELECT 1 FROM module_instances WHERE project_id=? AND kind='access'").bind(project).first())throw new BackendError(409,'Activate this project’s visitor access module before authorizing an application');
    try{await db.prepare("INSERT OR IGNORE INTO app_spaces(project_id,owner_user_id,version_id,access_id,resource_id) SELECT ?,?,?,i.id,? FROM module_instances i WHERE i.project_id=? AND i.kind='access'").bind(project,user,version,crypto.randomUUID(),project).run();}catch{throw new BackendError(409,'Choose an owned backend version');}
@@ -35,7 +39,8 @@ export async function prepareApplication(db:D1Database,user:string,project:strin
 }
 export async function confirmApplication(db:D1Database,user:string,id:string){
  const row=await readApplicationReview(db,user,id);if(row.status==='applied')return row;
- try{await db.prepare("UPDATE app_activation_reviews SET status='applied' WHERE id=? AND user_id=? AND status='pending'").bind(id,user).run();}catch{const saved=await readApplicationReview(db,user,id);if(saved.status==='applied')return saved;throw new BackendError(409,'Review expired, configuration changed, or a program replacement needs a visitor-data migration');}
+ if(row.enabled){await requireBackendVersionAvailable(db,row.version_id);await requirePolicyConsent(db,user,(s,m)=>new BackendError(s,m));}
+ try{await db.prepare("UPDATE app_activation_reviews SET status='applied' WHERE id=? AND user_id=? AND status='pending'").bind(id,user).run();}catch(error){const saved=await readApplicationReview(db,user,id);if(saved.status==='applied')return saved;if(heldRefusal(error))throw new BackendError(423,artifactHeldMessage);if(policyConsentRefusal(error))throw new BackendError(403,policyConsentMessage);throw new BackendError(409,'Review expired, configuration changed, or a program replacement needs a visitor-data migration');}
  return readApplicationReview(db,user,id);
 }
 export function describeApplicationReview(row:Review){return `Application review ${row.id}\nStatus: ${row.status}\nProject: ${row.project_id}\nProgram: ${row.version_id}\nSHA-256: ${row.digest}\nBase revision: ${row.base_revision}\nTest: ${row.run_id??'not applicable'}\n${row.enabled?'Authorize this program to receive an authenticated visitor’s private document and input and return its replacement document and result. Each visitor has a separate document, limited to 4 KiB. No other visitor data, owner workspace data, credentials or network are supplied. State/results remain in private storage and operation history; visitors can export and delete their own account, while automatic retention and whole-app recovery remain unfinished. Limits: 100 visitors/project, 20 attempts/visitor/day and 100/project/day. Visitors are the project’s visitor access module identities; the module must stay active for them to sign in. Changing code after visitors exist requires a separate migration workflow, which is not available yet. A passing example does not prove compatibility for all inputs.':'Disable this application. Visitors keep their project visitor sign-in, which belongs to the visitor access module, but cannot use this application. Existing documents and operation history remain stored. Already committed operations remain committed; in-flight state changes will be rejected. Stateless backend endpoints are separate and are not changed.'}\nThis authorizes the program only. A separate application-page review is required to publish a visitor page. Reauthorizing this program hides any existing visitor page until reviewed again.\nSource (untrusted code):\n${row.source}\nExpires: ${row.expires_at}\n${row.status==='pending'?"Only you can apply this exact review using its confirmation button. Review: "+row.id:"This review was applied. Ask for the current status of project "+row.project_id+'.'}`;}

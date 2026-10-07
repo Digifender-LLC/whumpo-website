@@ -172,5 +172,20 @@ try{
   const text=JSON.stringify(await readCMSUploads(scope(user),user,project,env))+JSON.stringify(await listCMSMedia(scope(user),user,project,1,env));
   for(const secret of ['synthetic-csam','synthetic-sexual','synthetic-short','cms-publications/',(await safetyOf(uploadA)).digest])assert.ok(!text.includes(secret));
  });
- console.log(`CMS media safety passed (${checks} checks): pending, missing, stale, incomplete, ambiguous and blocked coverage hold owner preview, draft preview, WordPress comparison, publication review/freeze/inline and GET/HEAD public CMS media; blocked media withdraw referencing articles; custom hosts never route CMS media; clearance grants no publication. Synthetic local D1/R2 only.`);
+ // WH-014: the artifact gate on CMS publication (no scanner; recorded holds and imported provenance only).
+ await check('WH-014: WordPress-imported drafts stay private; a held rendered article cannot be reviewed, previewed or served',async()=>{
+  // Approving the exact import review creates its private draft request (the import trigger), as confirmation does.
+  await db.prepare("UPDATE cms_import_reviews SET status='approved' WHERE id=? AND status='pending'").bind(importReview.id).run();
+  assert.ok(await db.prepare('SELECT 1 FROM cms_draft_requests WHERE id=?').bind(importReview.id).first());
+  await assert.rejects(prepareCMSPublication(scope(user),user,project,importReview.id,id(),env),e=>e.status===423&&/Imported content stays private/.test(e.message));
+  await assert.rejects(db.prepare("INSERT INTO cms_publication_reviews(id,draft_request_id,user_id,project_id,collection,item_id,revision,snapshot,preview_html,public_html,digest,media_manifest) VALUES(?,?,?,?,'posts','01ARZ3NDEKTSV4RRFFQ69G5FB9','r','{}','p','p',?,'[]')").bind(id(),importReview.id,user,project,'d'.repeat(64)).run(),/imported_content_held/);
+  const live=await db.prepare('SELECT digest FROM cms_publication_reviews WHERE id=?').bind(reviewB).first();
+  assert.equal((await host('/cms/posts/01ARZ3NDEKTSV4RRFFQ69G5FB2')).status,200);
+  await db.prepare("INSERT INTO content_screening_decisions(user_id,kind,digest,policy_version,first_required,required,first_reason,first_percent,first_risk_score) VALUES(?,'generated_artifact',?,'synthetic-retired-policy',1,1,'risk_or_missing_history',100,60)").bind(user,live.digest).run();
+  for(const method of ['GET','HEAD'])assert.equal((await host('/cms/posts/01ARZ3NDEKTSV4RRFFQ69G5FB2',method)).status,404);
+  assert.ok(!((await (await host('/cms')).text()).includes('01ARZ3NDEKTSV4RRFFQ69G5FB2')));
+  await assert.rejects(cmsPublicationPage(scope(user),user,reviewB,files),e=>e.status===423&&/held for safety review/.test(e.message));
+  await assert.rejects(db.prepare("INSERT INTO cms_publication_reviews(id,draft_request_id,user_id,project_id,collection,item_id,revision,snapshot,preview_html,public_html,digest,media_manifest) VALUES(?,?,?,?,'posts','01ARZ3NDEKTSV4RRFFQ69G5FB2','r2','{}','p','p',?,'[]')").bind(id(),draftB,user,project,live.digest).run(),/artifact_held/);
+ });
+ console.log(`CMS media safety passed (${checks} checks): pending, missing, stale, incomplete, ambiguous and blocked coverage hold owner preview, draft preview, WordPress comparison, publication review/freeze/inline and GET/HEAD public CMS media; blocked media withdraw referencing articles; custom hosts never route CMS media; clearance grants no publication; WH-014 keeps WordPress-imported drafts private and withdraws digest-held articles from every alias. Synthetic local D1/R2 only.`);
 }finally{await store.close();await rm(dir,{recursive:true,force:true});}

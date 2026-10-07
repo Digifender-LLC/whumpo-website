@@ -232,6 +232,7 @@ try{
   const b=await owner(),kept=await issue(b,b.project,b.version),empty=await issue(b,b.project,b.version,{feedback:false});
   const c=await ok(await comment(kept.token));
   await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES('case-guest',?,'intake-1','human:reviewer',unixepoch(),unixepoch()+31536000)",b.user);
+  await run("INSERT OR IGNORE INTO safety_case_roles(id,operator_ref,role,granted_by,granted_at) VALUES('grant-test-approver','human:approver','preservation_approver','human:test-administrator',unixepoch())"); // holds need a current preservation approver
   await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES('hold-guest','case-guest',?,'account','basis-1','human:approver',unixepoch(),unixepoch()+86400)",b.user);
   assert.equal((await api(b,`/guest-previews/${kept.link.id}/feedback/${c.id}`,'DELETE')).status,409);
   assert.equal((await api(b,`/guest-previews/${kept.link.id}`,'DELETE')).status,409);

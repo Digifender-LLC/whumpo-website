@@ -1,4 +1,6 @@
 import {projectRuntime} from './runtime-lane';
+import {requireBackendVersionAvailable,heldRefusal,artifactHeldMessage} from './artifact-admission';
+import {requirePolicyConsent,policyConsentRefusal,policyConsentMessage} from './policy-consent';
 import {publicClientKey,reservePublicClient,PublicClientLimitError} from './public-admission';
 import {BackendError,listBackends,callBackend} from './backend-versions';
 import {hashToken} from './security';
@@ -23,6 +25,8 @@ export async function prepareBackendPublication(db:D1Database,user:string,projec
  await listBackends(db,user,project);
  const previous=await db.prepare('SELECT id FROM backend_publication_reviews WHERE id=?').bind(id).first();
  if(!previous){
+  // WH-014: unpublish stays available; publishing held code is refused here and by the review insert trigger.
+  if(operation==='publish'){await requireBackendVersionAvailable(db,version);await requirePolicyConsent(db,user,(s,m)=>new BackendError(s,m));}
   await db.prepare('INSERT OR IGNORE INTO backend_publications(project_id) VALUES(?)').bind(project).run();
   const current=await readBackendPublication(db,user,project);
   try{await db.prepare('INSERT INTO backend_publication_reviews(id,user_id,project_id,operation,version_id,run_id,base_revision) VALUES(?,?,?,?,?,?,?)').bind(id,user,project,operation,version,run,expectedRevision??current.revision).run();}catch{/* Read an exact committed review after an uncertain acknowledgment. */}
@@ -34,8 +38,11 @@ export async function prepareBackendPublication(db:D1Database,user:string,projec
 // Only the authenticated human confirmation route/command may call this.
 export async function confirmBackendPublication(db:D1Database,user:string,id:string){
  const row=await readBackendPublicationReview(db,user,id);if(row.status==='applied')return row;
- try{await db.prepare("UPDATE backend_publication_reviews SET status='applied' WHERE id=? AND user_id=? AND status='pending'").bind(id,user).run();}catch{
+ if(row.operation==='publish'){await requireBackendVersionAvailable(db,row.version_id);await requirePolicyConsent(db,user,(s,m)=>new BackendError(s,m));}
+ try{await db.prepare("UPDATE backend_publication_reviews SET status='applied' WHERE id=? AND user_id=? AND status='pending'").bind(id,user).run();}catch(error){
   const saved=await readBackendPublicationReview(db,user,id);if(saved.status==='applied')return saved;
+  if(heldRefusal(error))throw new BackendError(423,artifactHeldMessage);
+  if(policyConsentRefusal(error))throw new BackendError(403,policyConsentMessage);
   throw new BackendError(409,'Publication review expired or the endpoint changed; prepare a new review');
  }
  return readBackendPublicationReview(db,user,id);
@@ -59,7 +66,7 @@ export async function publicBackend(request:Request,db:D1Database,service:Fetche
   const bytes=new Uint8Array(length);let offset=0;for(const p of parts){bytes.set(p,offset);offset+=p.length;}input=JSON.parse(new TextDecoder('utf-8',{fatal:true,ignoreBOM:false}).decode(bytes));
  }catch{return reply({ok:false,error:'invalid_input'},400);}
  try{
-  const row=await db.prepare('SELECT b.review_id,v.source,v.digest FROM backend_publications b JOIN backend_versions v ON v.id=b.version_id AND v.project_id=b.project_id JOIN backend_publication_reviews r ON r.id=b.review_id AND r.status=\'applied\' JOIN projects p ON p.id=b.project_id AND p.owner_user_id=r.user_id WHERE b.project_id=?').bind(project).first<{review_id:string;source:string;digest:string}>();
+  const row=await db.prepare('SELECT b.review_id,v.source,v.digest FROM backend_publications b JOIN backend_versions v ON v.id=b.version_id AND v.project_id=b.project_id JOIN backend_publication_reviews r ON r.id=b.review_id AND r.status=\'applied\' JOIN projects p ON p.id=b.project_id AND p.owner_user_id=r.user_id WHERE b.project_id=? AND NOT EXISTS(SELECT 1 FROM held_backend_versions h WHERE h.id=b.version_id)').bind(project).first<{review_id:string;source:string;digest:string}>();
   if(!row||publication&&row.review_id!==publication)return reply({ok:false,error:'not_found'},404);
   if(!service||await hashToken(row.source)!==row.digest)return reply({ok:false,error:'unavailable'},503);
   // One anonymous source may spend at most a bounded share of the project allowance (attempts, never refunded).
