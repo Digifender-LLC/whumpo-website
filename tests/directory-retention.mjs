@@ -31,10 +31,14 @@ try{
  assert.ok(await row('SELECT id FROM prunable_directory_reviews WHERE id=?',expired));assert.equal(await row('SELECT id FROM prunable_directory_reviews WHERE id=?',unknown),null);
  for(const protectedId of [first.id,exported.id,live.id,restored.id,unknown,fresh])await assert.rejects(run('DELETE FROM directory_reviews WHERE id=?',protectedId),/directory_review_retained/);
  phase='safety hold and bounded cleanup';const caseId=id(),holdId=id();
- await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES(?,?,'synthetic-directory-retention','human:reviewer',unixepoch(),unixepoch()+31536000)",caseId,user);
- await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES(?,?,?,'project',?,'synthetic-basis','human:approver',unixepoch(),unixepoch()+86400)",holdId,caseId,user,project);
+ // Synthetic ready operators and the current role row are fixture setup; role administration is covered by
+ // safety-cases.mjs. Retention exercises real hold admission/release with current role-backed identities.
+ const reviewer=await workspaceFixture(db,m),approver=await workspaceFixture(db,m),reviewerRef='human:'+reviewer.account,approverRef='human:'+approver.account;
+ await run("INSERT INTO safety_case_roles(id,operator_ref,role,granted_by,granted_at) VALUES(?,?,'preservation_approver',?,unixepoch())",id(),approverRef,reviewerRef);
+ await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES(?,?,'synthetic-directory-retention',?,unixepoch(),unixepoch()+31536000)",caseId,user,reviewerRef);
+ await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES(?,?,?,'project',?,'synthetic-basis',?,unixepoch(),unixepoch()+86400)",holdId,caseId,user,project,approverRef);
  const held=await history();await m.directory.cleanupDirectoryReviews(db);assert.deepEqual(await history(),held);await assert.rejects(run('DELETE FROM directory_reviews WHERE id=?',obsolete1.id),/safety_preservation_hold/);
- await run("UPDATE safety_preservation_holds SET released_at=unixepoch(),released_by='human:approver',release_ref='synthetic-release' WHERE id=?",holdId);
+ await run("UPDATE safety_preservation_holds SET released_at=unixepoch(),released_by=?,release_ref='synthetic-release' WHERE id=?",approverRef,holdId);
  await m.directory.cleanupDirectoryReviews(db);
  for(const deleted of [expired,obsolete1.id,obsolete2.id])assert.equal(await row('SELECT id FROM directory_reviews WHERE id=?',deleted),null);
  for(const kept of [first.id,exported.id,live.id,restored.id,unknown,fresh])assert.ok(await row('SELECT id FROM directory_reviews WHERE id=?',kept));
