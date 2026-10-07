@@ -165,6 +165,20 @@ class NativeIdentityTest {
         assertNull(controller.activeAccount.value); assertNull(stateStore.activeAccount.value); assertFalse(root.exists())
     }
 
+    @Test fun workspaceAuthorizationDropsLatePrivateResultsAndPurgesOnRevocation() = runTest {
+        val io = StandardTestDispatcher(testScheduler); val api = Api(); val stateStore = store
+        val controller = NativeIdentityController(api, stateStore, pending, environment, io) { clock }
+        controller.initialize(); controller.passkey(PasskeyPrompt { "fixture-credential" })
+        val gate = CompletableDeferred<Unit>(); var delivered = false
+        val request = launch { controller.authorized(AccountScope.of(a)) { gate.await(); "private reply" }; delivered = true }
+        runCurrent(); controller.signOut(); gate.complete(Unit); request.join()
+        assertFalse(delivered)
+        controller.passkey(PasskeyPrompt { "fixture-credential" })
+        try { controller.authorized(AccountScope.of(a)) { throw IdentityFailure("proof_required") } }
+        catch (_: IdentityFailure) { /* Expected current-session revocation. */ }
+        assertNull(controller.activeAccount.value); assertNull(stateStore.activeAccount.value); assertFalse(root.exists())
+    }
+
     @Test fun staleBuildRefusesCeremoniesAndRetainsActionableUpdateGuidance() = runTest {
         val io = StandardTestDispatcher(testScheduler); val api = Api()
         val controller = NativeIdentityController(api, store, pending, environment, io) { clock }

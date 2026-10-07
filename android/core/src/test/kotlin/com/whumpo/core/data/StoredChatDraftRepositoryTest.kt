@@ -4,7 +4,6 @@ import com.whumpo.core.account.AccountScope
 import com.whumpo.core.account.AccountStateStore
 import com.whumpo.core.account.FakeSecretBox
 import com.whumpo.core.account.StateSlot
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -16,7 +15,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 
-class ShellRepositoriesTest {
+class StoredChatDraftRepositoryTest {
     @get:Rule
     val temp = TemporaryFolder()
 
@@ -24,21 +23,6 @@ class ShellRepositoriesTest {
     private val ownerB = AccountScope.of("acct_fixture_b")
 
     private fun store() = AccountStateStore(File(temp.root, "state"), FakeSecretBox())
-
-    @Test
-    fun remoteDataExplainsWhyItIsUnavailable() = runTest {
-        val store = store()
-        val projects = ShellProjectsRepository(store)
-        val activity = ShellActivityRepository(store)
-        val signedOut = Availability.Unavailable(UnavailableReason.SIGN_IN_REQUIRED)
-        assertEquals(signedOut, projects.projects().first())
-        assertEquals(signedOut, activity.activity().first())
-
-        store.activate(ownerA)
-        val notConnected = Availability.Unavailable(UnavailableReason.SERVICE_NOT_CONNECTED)
-        assertEquals(notConnected, projects.projects().first())
-        assertEquals(notConnected, activity.activity().first())
-    }
 
     @Test
     fun draftsRequireTheirAccountAndAreBounded() = runTest {
@@ -58,18 +42,4 @@ class ShellRepositoriesTest {
         assertNull(store.read(ownerA, StateSlot.CHAT_DRAFT))
     }
 
-    @Test
-    fun signOutThroughTheAccountRepositoryClearsDrafts() = runTest {
-        val store = store()
-        val io = StandardTestDispatcher(testScheduler)
-        val drafts = StoredChatDraftRepository(store, io)
-        val account = StoreAccountRepository(store, io)
-        store.activate(ownerA)
-        drafts.saveDraft(ownerA, "pending thought")
-        assertEquals(ownerA, account.activeAccount.first())
-
-        account.signOut()
-        assertNull(account.activeAccount.first())
-        assertNull(drafts.loadDraft(ownerA))
-    }
 }

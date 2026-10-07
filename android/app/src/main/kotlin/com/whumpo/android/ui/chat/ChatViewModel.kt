@@ -21,7 +21,7 @@ import kotlinx.coroutines.launch
 /**
  * Chat composer state. The draft belongs to the signed-in account: it is loaded from and
  * saved to encrypted account-scoped storage, and it disappears from the screen as soon
- * as the account signs out or changes. Sending arrives with WH-084.
+ * as the account signs out or changes. Sending uses the separate durable workspace controller.
  */
 class ChatViewModel(
     private val drafts: ChatDraftRepository,
@@ -70,6 +70,15 @@ class ChatViewModel(
             delay(SAVE_DEBOUNCE_MS)
             drafts.saveDraft(owner, bounded)
         }
+    }
+
+    /** A known server acceptance clears only the exact submitted draft of this account. */
+    fun accepted(owner: AccountScope?, content: String) {
+        val current = mutableState.value
+        if (owner == null || current.owner != owner || current.draft.trim() != content) return
+        saveJob?.cancel()
+        mutableState.value = current.copy(draft = "")
+        saveJob = viewModelScope.launch { drafts.saveDraft(owner, "") }
     }
 
     companion object {

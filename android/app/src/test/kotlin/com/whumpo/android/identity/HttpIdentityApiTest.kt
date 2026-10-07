@@ -2,6 +2,7 @@ package com.whumpo.android.identity
 
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
+import com.whumpo.android.BuildConfig
 import com.whumpo.core.environment.WhumpoEnvironment
 import com.whumpo.core.identity.BrowserPurpose
 import com.whumpo.core.identity.IdentityFailure
@@ -38,17 +39,18 @@ class HttpIdentityApiTest {
     @After fun stop() { server.stop(0) }
 
     @Test fun configurationRejectsStaleBuildAndChangedIdentityEndpoints() = runTest {
-        reply = { it.send(200, """{"version":1,"contract":1,"minimumBuild":2,"rpId":"whumpo.com","browserReturn":"https://whumpo.com/app/return"}""") }
+        reply = { it.send(200, """{"version":1,"contract":1,"minimumBuild":3,"rpId":"whumpo.com","browserReturn":"https://whumpo.com/app/return"}""") }
         api.checkConfiguration()
         assertEquals("/api/mobile/v1/config", seen.single().first)
         assertFalse(seen.single().second.containsKey("authorization"))
-        reply = { it.send(200, """{"version":1,"contract":1,"minimumBuild":3,"rpId":"whumpo.com","browserReturn":"https://whumpo.com/app/return"}""") }
+        reply = { it.send(200, """{"version":1,"contract":1,"minimumBuild":4,"rpId":"whumpo.com","browserReturn":"https://whumpo.com/app/return"}""") }
         assertEquals("client_update_required", failure { api.checkConfiguration() })
-        reply = { it.send(200, """{"version":1,"contract":1,"minimumBuild":2,"rpId":"evil.test","browserReturn":"https://whumpo.com/app/return"}""") }
+        reply = { it.send(200, """{"version":1,"contract":1,"minimumBuild":3,"rpId":"evil.test","browserReturn":"https://whumpo.com/app/return"}""") }
         assertEquals("invalid_response", failure { api.checkConfiguration() })
     }
 
     @Test fun sessionUsesOnlyFixedRouteBearerAndCurrentEmptyCapabilities() = runTest {
+        assertEquals(BuildConfig.VERSION_CODE, JSONObject(IdentityProtocol.CLIENT).getInt("build"))
         reply = { it.send(200, """{"version":1,"account":{"id":"$account","label":"a***@example.test"},"session":{"expiresAt":"$expiry","freshUntil":"$fresh"}}""") }
         assertEquals(account, api.session(token).id)
         assertEquals("/api/mobile/v1/session", seen.single().first)

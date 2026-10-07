@@ -8,9 +8,9 @@ import java.util.Base64
 
 /** Closed identity-only client; unimplemented Chat/review capabilities are never advertised. */
 object IdentityProtocol {
-    const val BUILD = 2
+    const val BUILD = 3
     const val RETURN_URI = "https://whumpo.com/app/return"
-    const val CLIENT = "{\"contract\":1,\"build\":2,\"platform\":\"android\",\"controls\":[],\"interaction\":{\"versions\":[1],\"fieldTypes\":[],\"bindings\":[]}}"
+    const val CLIENT = "{\"contract\":1,\"build\":3,\"platform\":\"android\",\"controls\":[],\"interaction\":{\"versions\":[1],\"fieldTypes\":[],\"bindings\":[]}}"
     val uuid = Regex("[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
     val token = Regex("[0-9a-f]{64}")
     val opaque = Regex("[A-Za-z0-9_-]{43}")

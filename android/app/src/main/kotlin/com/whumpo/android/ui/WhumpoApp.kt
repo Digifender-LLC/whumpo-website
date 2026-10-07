@@ -27,11 +27,9 @@ import androidx.navigation.compose.rememberNavController
 import com.whumpo.android.AppContainer
 import com.whumpo.android.R
 import com.whumpo.android.ui.activity.ActivityScreen
-import com.whumpo.android.ui.activity.ActivityViewModel
 import com.whumpo.android.ui.chat.ChatScreen
 import com.whumpo.android.ui.chat.ChatViewModel
 import com.whumpo.android.ui.projects.ProjectsScreen
-import com.whumpo.android.ui.projects.ProjectsViewModel
 import com.whumpo.android.ui.settings.SettingsScreen
 import com.whumpo.android.ui.settings.SettingsViewModel
 
@@ -86,13 +84,13 @@ fun WhumpoApp(container: AppContainer) {
             modifier = Modifier.padding(padding).consumeWindowInsets(padding),
         ) {
             composable(TopDestination.CHAT.route) {
-                ChatScreen(viewModel(factory = ChatViewModel.factory(container)))
+                ChatScreen(viewModel(factory = ChatViewModel.factory(container)), container.workspace, container.environment.origin)
             }
             composable(TopDestination.PROJECTS.route) {
-                ProjectsScreen(viewModel(factory = ProjectsViewModel.factory(container)))
+                ProjectsScreen(container.workspace, container.environment.origin)
             }
             composable(TopDestination.ACTIVITY.route) {
-                ActivityScreen(viewModel(factory = ActivityViewModel.factory(container)))
+                ActivityScreen(container.workspace, container.environment.origin)
             }
             composable(TopDestination.SETTINGS.route) {
                 SettingsScreen(viewModel(factory = SettingsViewModel.factory(container)), container.identity)

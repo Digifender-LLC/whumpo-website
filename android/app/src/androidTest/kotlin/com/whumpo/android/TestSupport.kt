@@ -12,6 +12,11 @@ import com.whumpo.core.identity.PasskeyPrompt
 import com.whumpo.core.identity.PendingIdentityStore
 import com.whumpo.core.identity.StartedHandoff
 import com.whumpo.core.identity.VerifiedAccount
+import com.whumpo.core.workspace.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import java.io.File
@@ -26,24 +31,37 @@ object Fixtures {
     val app: WhumpoApplication get() = ApplicationProvider.getApplicationContext()
     val container: AppContainer get() = app.container
     private var api = FixtureIdentityApi()
+    private var workspaceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /** Leaves the device signed out with no account state, pending browser flow or key. */
     fun reset() = runBlocking {
+        workspaceScope.cancel()
         container.identity.signOut()
         api = FixtureIdentityApi()
         val replacement = AppContainer(container.environment,
             AccountStateStore(WhumpoApplication.accountStateDirectory(app), KeystoreSecretBox(WhumpoApplication.ACCOUNT_STATE_KEY_ALIAS)),
             Dispatchers.IO,
-            PendingIdentityStore(File(app.noBackupFilesDir, "native-pending"), KeystoreSecretBox("whumpo.native-pending.v1")), api)
+            PendingIdentityStore(File(app.noBackupFilesDir, "native-pending"), KeystoreSecretBox("whumpo.native-pending.v1")), api, FixtureWorkspaceApi())
         replacement.identity.initialize()
         // Application replacement is confined to instrumentation; production has no bypass or fixture flag.
         WhumpoApplication::class.java.getDeclaredField("container").apply { isAccessible = true }.set(app, replacement)
+        workspaceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        workspaceScope.launch { replacement.workspace.observeAccounts() }
     }
 
     fun signIn(owner: AccountScope = ownerA) = runBlocking {
         api.owner = when (owner) { ownerA -> OWNER_A; ownerB -> OWNER_B; else -> error("Unknown fixture") }
         container.identity.passkey(PasskeyPrompt { "{}" })
         check(container.identity.activeAccount.value == owner)
+    }
+
+    private class FixtureWorkspaceApi : NativeWorkspaceApi {
+        override suspend fun bootstrap(token: String) = WorkspaceBootstrap(true, 0, "guided", 0, 0)
+        override suspend fun chat(token: String, cursor: String?, query: String) = NativeChatPage(0, "guided", emptyList(), null)
+        override suspend fun turn(token: String, requestId: String): NativeTurn = error("Not used by shell fixtures")
+        override suspend fun send(token: String, request: PendingChat): ChatAcceptance = error("Not used by shell fixtures")
+        override suspend fun projects(token: String, cursor: String?) = NativePage<NativeProject>(emptyList(), null)
+        override suspend fun activity(token: String, cursor: String?) = NativePage<NativeActivity>(emptyList(), null)
     }
 
     private class FixtureIdentityApi : NativeIdentityApi {

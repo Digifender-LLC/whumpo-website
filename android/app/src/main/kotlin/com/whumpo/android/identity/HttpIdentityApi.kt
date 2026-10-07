@@ -16,6 +16,7 @@ import okhttp3.CookieJar
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.RequestBody
 import okio.BufferedSink
 import okhttp3.Response
@@ -32,10 +33,21 @@ class HttpIdentityApi(private val environment: WhumpoEnvironment) : NativeIdenti
         .retryOnConnectionFailure(false).connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS).callTimeout(30, TimeUnit.SECONDS).build()
 
-    private suspend fun send(route: Route, input: JSONObject? = null, token: String? = null): JSONObject {
+    private suspend fun send(route: Route, input: JSONObject? = null, token: String? = null, suffix: String = "", cursor: String? = null, query: String? = null): JSONObject {
         if (route.authenticated != (token != null) || (token != null && !IdentityProtocol.token.matches(token))) throw IdentityFailure("invalid_request")
         if (input != null && input.toString().toByteArray(Charsets.UTF_8).size > 16_384) throw IdentityFailure("invalid_request")
-        val request = Request.Builder().url(environment.mobileApiBase + route.path)
+        val url = (environment.mobileApiBase + route.path + suffix).toHttpUrl().newBuilder()
+        if (route in setOf(Route.CHAT, Route.PROJECTS, Route.ACTIVITY)) url.addQueryParameter("limit", "10")
+        if (cursor != null) {
+            if (!Regex("[A-Za-z0-9_-]{1,256}").matches(cursor)) throw IdentityFailure("invalid_request")
+            url.addQueryParameter("cursor", cursor)
+        }
+        if (query != null) {
+            if (query.length > 100 || query.any(Char::isISOControl)) throw IdentityFailure("invalid_request")
+            url.addQueryParameter("q", query)
+        }
+        val responseLimit = if (route.workspace) 1_048_576L else 65_536L
+        val request = Request.Builder().url(url.build())
             .header("Whumpo-Client", IdentityProtocol.CLIENT).header("Accept", "application/json")
             .apply { if (token != null) header("Authorization", "Bearer $token") }
             .apply { if (input != null) post(oneShotBody(input)) else get() }
@@ -55,10 +67,10 @@ class HttpIdentityApi(private val environment: WhumpoEnvironment) : NativeIdenti
                             if (it.code == 426) throw IdentityFailure("client_update_required")
                             val body = it.body ?: throw IdentityFailure("invalid_response")
                             if (body.contentType()?.let { type -> type.type == "application" && type.subtype == "json" } != true) throw IdentityFailure("invalid_response")
-                            if (body.contentLength() > 65_536) throw IdentityFailure("invalid_response")
+                            if (body.contentLength() > responseLimit) throw IdentityFailure("invalid_response")
                             val source = body.source()
-                            source.request(65_537)
-                            if (source.buffer.size > 65_536) throw IdentityFailure("invalid_response")
+                            source.request(responseLimit + 1)
+                            if (source.buffer.size > responseLimit) throw IdentityFailure("invalid_response")
                             val json = try { JSONObject(source.readUtf8()) } catch (_: Exception) { throw IdentityFailure("invalid_response") }
                             if (json.opt("version") != 1) throw IdentityFailure("client_update_required")
                             if (!it.isSuccessful) {
@@ -141,14 +153,33 @@ class HttpIdentityApi(private val environment: WhumpoEnvironment) : NativeIdenti
         return NativeSession(token, IdentityProtocol.time(text(value, "expiresAt")), IdentityProtocol.time(text(value, "freshUntil")))
     }
 
-    private enum class Route(val path: String, val authenticated: Boolean) {
+    internal enum class WorkspaceOperation { BOOTSTRAP, CHAT, TURN, SEND, PROJECTS, ACTIVITY }
+    internal suspend fun workspace(operation: WorkspaceOperation, token: String, input: JSONObject? = null,
+        id: String? = null, cursor: String? = null, query: String? = null): JSONObject {
+        val route = when (operation) {
+            WorkspaceOperation.BOOTSTRAP -> Route.BOOTSTRAP
+            WorkspaceOperation.CHAT -> Route.CHAT
+            WorkspaceOperation.TURN -> Route.TURN
+            WorkspaceOperation.SEND -> Route.SEND
+            WorkspaceOperation.PROJECTS -> Route.PROJECTS
+            WorkspaceOperation.ACTIVITY -> Route.ACTIVITY
+        }
+        if ((operation == WorkspaceOperation.TURN) != (id != null) || (id != null && !IdentityProtocol.uuid.matches(id))) throw IdentityFailure("invalid_request")
+        if ((operation == WorkspaceOperation.SEND) != (input != null)) throw IdentityFailure("invalid_request")
+        if (cursor != null && operation !in setOf(WorkspaceOperation.CHAT, WorkspaceOperation.PROJECTS, WorkspaceOperation.ACTIVITY)) throw IdentityFailure("invalid_request")
+        if (query != null && operation != WorkspaceOperation.CHAT) throw IdentityFailure("invalid_request")
+        return send(route, input, token, id.orEmpty(), cursor, query)
+    }
+    private enum class Route(val path: String, val authenticated: Boolean, val workspace: Boolean = false) {
+        BOOTSTRAP("/bootstrap", true, true), CHAT("/chat", true, true), TURN("/chat/turns/", true, true),
+        SEND("/chat/messages", true, true), PROJECTS("/projects", true, true), ACTIVITY("/activity", true, true),
         CONFIG("/config", false), LOGIN_OPTIONS("/session/login/options", false), LOGIN_VERIFY("/session/login/verify", false),
         REAUTH_OPTIONS("/session/reauth/options", true), REAUTH_VERIFY("/session/reauth/verify", true),
         SESSION("/session", true), LOGOUT("/session/logout", true),
         START("/session/handoff/start", false), EXCHANGE("/session/handoff/exchange", false),
     }
     private companion object {
-        val ERRORS = setOf("invalid_request", "unknown_field", "missing_field", "proof_required", "identity_incomplete", "not_found", "identity_changed", "request_conflict", "payload_too_large", "client_update_required", "rate_limited", "unavailable")
+        val ERRORS = setOf("invalid_cursor", "onboarding_required", "stale_revision", "chat_busy", "review_unavailable", "unsupported_control", "invalid_request", "unknown_field", "missing_field", "proof_required", "identity_incomplete", "not_found", "identity_changed", "request_conflict", "payload_too_large", "client_update_required", "rate_limited", "unavailable")
         fun oneShotBody(input: JSONObject): RequestBody {
             val bytes = input.toString().toByteArray(Charsets.UTF_8)
             return object : RequestBody() {

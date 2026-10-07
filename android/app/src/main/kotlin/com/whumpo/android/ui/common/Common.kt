@@ -20,7 +20,6 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.whumpo.android.R
-import com.whumpo.core.data.Availability
 import com.whumpo.core.data.UnavailableReason
 
 /** Screen title exposed to TalkBack as a heading. */
@@ -52,7 +51,6 @@ fun ScrollingPage(modifier: Modifier = Modifier, content: @Composable ColumnScop
 fun UnavailableNotice(reason: UnavailableReason, modifier: Modifier = Modifier) {
     val message = when (reason) {
         UnavailableReason.SIGN_IN_REQUIRED -> stringResource(R.string.unavailable_sign_in)
-        UnavailableReason.SERVICE_NOT_CONNECTED -> stringResource(R.string.unavailable_not_connected)
     }
     Card(
         modifier = modifier.fillMaxWidth().testTag("unavailable-${reason.name.lowercase()}"),
@@ -64,19 +62,5 @@ fun UnavailableNotice(reason: UnavailableReason, modifier: Modifier = Modifier) 
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(16.dp),
         )
-    }
-}
-
-/** Renders loading, unavailable or ready content for a remote-backed value. */
-@Composable
-fun <T> AvailabilityContent(state: Availability<T>?, ready: @Composable (T) -> Unit) {
-    when (state) {
-        null -> Text(
-            text = stringResource(R.string.loading),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        is Availability.Unavailable -> UnavailableNotice(state.reason)
-        is Availability.Ready -> ready(state.value)
     }
 }

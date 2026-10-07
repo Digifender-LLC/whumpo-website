@@ -13,8 +13,8 @@ android {
         applicationId = "com.whumpo.android"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 2
-        versionName = "0.2.0-identity"
+        versionCode = 3
+        versionName = "0.3.0-workspace"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

@@ -67,6 +67,22 @@ class ChatViewModelTest {
     }
 
     @Test
+    fun acceptanceClearsOnlyTheExactDraftAndNeverAnEditOrAnotherAccount() = runTest(main) {
+        val account = FakeAccountRepository(ownerA)
+        val drafts = FakeChatDraftRepository(account)
+        val vm = ChatViewModel(drafts, account)
+        advanceUntilIdle()
+        vm.onDraftChanged("new edit")
+        vm.accepted(ownerA, "old submitted text")
+        vm.accepted(ownerB, "new edit")
+        assertEquals("new edit", vm.state.value.draft)
+        vm.accepted(ownerA, "new edit")
+        advanceUntilIdle()
+        assertEquals("", vm.state.value.draft)
+        assertEquals("", drafts.stored[ownerA])
+    }
+
+    @Test
     fun signOutClearsTheVisibleDraftAndDropsPendingSaves() = runTest(main) {
         val account = FakeAccountRepository(ownerA)
         val drafts = FakeChatDraftRepository(account)

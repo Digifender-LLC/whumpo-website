@@ -27,6 +27,7 @@ class WhumpoApplication : Application() {
             pendingIdentity = PendingIdentityStore(File(noBackupFilesDir, "native-pending"), KeystoreSecretBox("whumpo.native-pending.v1")),
         )
         appScope.launch { container.identity.initialize() }
+        appScope.launch { container.workspace.observeAccounts() }
     }
 
     companion object {

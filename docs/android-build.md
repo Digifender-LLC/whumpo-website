@@ -1,6 +1,6 @@
 # Android build and checks (WH-082)
 
-**Source and local-build status, October 7, 2026:** the native shell and identity client are implemented in `android/`. Both flavors, both instrumentation APKs, lint and all 52 JVM tests passed against identity commit `4468991`. Credential Manager, bounded native HTTP, protected session/PKCE custody, explicit browser return and sign-out are implemented. Instrumentation APK compilation does not mean device tests ran. No approved release signing, provider activation, domain association, emulator/device execution or physical-device acceptance is claimed. WH-084 workspace client work is tracked separately in [android-workspace](android-workspace.md).
+**Source and local-build status, October 7, 2026:** the shell, identity and bounded build-3 workspace/Chat client are implemented in `android/`. Both flavors, both instrumentation APKs, lint and all 69 JVM tests passed on the current workspace client. Credential Manager, protected session/PKCE custody, explicit browser return, owned workspace reads and durable plain-Chat recovery are implemented. Instrumentation APK compilation does not mean device tests ran. No approved release signing, provider activation, domain association, emulator/device execution or physical-device acceptance is claimed. Native review/form rendering and other WH-084 gaps remain explicit in [android-workspace](android-workspace.md).
 
 ## Toolchain (pinned)
 
@@ -78,4 +78,16 @@ At `4468991`, this command completed successfully in 3 minutes 35 seconds with t
 ./gradlew --no-daemon --max-workers=2 :core:test testLocalDebugUnitTest testDeployedDebugUnitTest assembleLocalDebug assembleDeployedDebug lintLocalDebug lintDeployedDebug assembleLocalDebugAndroidTest assembleDeployedDebugAndroidTest
 ```
 
-Results: 28 core tests and 12 app tests per flavor (52 total), zero lint issues in each flavor, both debug application APKs and both instrumentation APKs assembled. A separate checkout independently ran 15 identity-focused JVM tests. Evidence logs for this session are `/tmp/whumpo-native-client-full.log` and `/tmp/whumpo-verification/android-identity-independent.log`. These are local build and JVM results; no connected instrumentation, emulator, TalkBack, physical passkey, verified App Link, signed upgrade or release installation was run.
+Results: 28 core tests and 12 app tests per flavor (52 total), zero lint issues in each flavor, both debug application APKs and both instrumentation APKs assembled. An independent reviewer ran 15 identity-focused JVM tests directly against the compiled client classes. Evidence logs for this session are `/tmp/whumpo-native-client-full.log` and `/tmp/whumpo-verification/android-identity-independent.log`. These are local build and JVM results; no connected instrumentation, emulator, TalkBack, physical passkey, verified App Link, signed upgrade or release installation was run.
+
+## Workspace client verification (October 7, 2026)
+
+The current build-3 workspace slice passed the following command, from `android/`, in 1 minute 49 seconds using the same isolated JDK 21/API 36 SDK and two workers:
+
+```sh
+./gradlew --no-daemon --max-workers=2 :core:test :app:assembleLocalDebug :app:assembleDeployedDebug :app:lintLocalDebug :app:lintDeployedDebug :app:testLocalDebugUnitTest :app:testDeployedDebugUnitTest :app:assembleLocalDebugAndroidTest :app:assembleDeployedDebugAndroidTest
+```
+
+Results: **35 core + 17 app tests per flavor = 69 JVM tests**, zero failures/errors/skips, zero lint issues in each flavor, both debug APKs and both instrumentation APKs assembled. The session log is `/tmp/whumpo-native-workspace-full.log`. New checks cover actual HTTP workspace DTOs/large replies/query paging/one-shot mutation behavior, durable original request recovery, duplicate taps, mismatching readback, stale revision safety, onboarding, account/identity response fences and preservation of a draft edited after submission. Instrumentation fixtures use synthetic identity and workspace adapters through the actual production controllers; the production app contains no fixture bypass.
+
+The initial shell's placeholder repository tests were replaced by connected-workspace regressions; the identity commit's historical 52-test result remains above. This current build still advertises no review controls or form bindings. No connected instrumentation, emulator, TalkBack, physical passkey, verified App Link, signed upgrade or release installation was run.

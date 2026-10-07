@@ -6,6 +6,7 @@ import com.whumpo.core.account.StateKind
 import com.whumpo.core.account.StateSlot
 import com.whumpo.core.data.AccountRepository
 import com.whumpo.core.environment.WhumpoEnvironment
+import com.whumpo.core.workspace.WorkspaceSession
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
@@ -37,7 +38,7 @@ class NativeIdentityController(
     private val environment: WhumpoEnvironment,
     private val io: CoroutineDispatcher,
     private val now: () -> Instant = { Instant.now() },
-) : AccountRepository {
+) : AccountRepository, WorkspaceSession {
     private val lock = Any()
     private var generation = 0L
     private var session: NativeSession? = null
@@ -274,6 +275,27 @@ class NativeIdentityController(
                 mutableState.value = mutableState.value.copy(message = "Signed out on this device. Server sign-out was not confirmed; revoke this session on the website if needed.")
             }
             if (error is CancellationException) throw error
+        }
+    }
+
+    override suspend fun <T> authorized(owner: AccountScope, action: suspend (String) -> T): T = withContext(io) {
+        ready.await()
+        val (ticket, candidate) = synchronized(lock) {
+            if (active.value != owner || session == null) throw IdentityFailure("proof_required")
+            generation to session!!
+        }
+        try {
+            if (!candidate.expiresAt.isAfter(now())) throw IdentityFailure("proof_required")
+            val result = action(candidate.token)
+            synchronized(lock) {
+                if (generation != ticket || active.value != owner || session?.token != candidate.token) {
+                    throw CancellationException("Account changed")
+                }
+            }
+            result
+        } catch (error: IdentityFailure) {
+            if (error.code in setOf("proof_required", "identity_changed", "identity_incomplete")) failed(ticket, error)
+            throw error
         }
     }
 
