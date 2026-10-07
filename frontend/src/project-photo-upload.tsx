@@ -17,7 +17,7 @@ export function ProjectPhotoUpload({owner,project,disabled=false,onSaved,handoff
  const [pending,setPending]=useState<PhotoRecovery|null>(null),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[error,setError]=useState(''),[checked,setChecked]=useState(false),[savedPhoto,setSavedPhoto]=useState(false),[choice,setChoice]=useState('');
  const collections=useQuery({queryKey:['photo-collections',owner,project],queryFn:()=>api<OwnerFileCollections>(ownerCollectionsPath(project)),gcTime:0}),options=fileableCollections(collections.data);
  function load(){const saved=readPhotoRecovery(sessionStorage,owner,project);setPending(saved);if(prepared.current?.id!==saved?.id)prepared.current=null;return saved;}
- async function check(upload:PhotoRecovery,finish=false){
+ async function check(upload:PhotoRecovery,finish=false,keepPhoto=false){
   const data=readPhotoUploadStatus(await api(`/projects/${project}/files/${upload.id}`,{headers:{'x-whumpo-photo-handoff':JSON.stringify(upload.handoff)}}));if(!active.current)return;
   if(!data)throw Error('The upload status needs the current Whumpo response.');
   if(data.photo&&!samePhotoUpload(upload,data.photo))throw Error('This upload ID refers to different photo details. Keep the original request for review.');
@@ -27,6 +27,10 @@ export function ProjectPhotoUpload({owner,project,disabled=false,onSaved,handoff
    setNotice('The earlier uploader closed before this upload was reserved. Its request cannot start now. You can choose a photo in this uploader.');
   }else if(data.photo?.status==='ready'){
    setSavedPhoto(true);setChecked(true);prepared.current=null;
+   if(keepPhoto&&upload.collection){
+    resolvePhotoRecovery(sessionStorage,owner,upload);setPending(null);setChecked(false);setSavedPhoto(false);form.current?.reset();window.dispatchEvent(new Event(changed));
+    setNotice('Photo saved privately. This tab will not retry its collection request. A request already sent may still finish; Project photos shows current membership.');onSaved?.();return;
+   }
    const filed=await photoCollectionStatus(api,upload);if(!active.current)return;
    if(filed==='different')throw Error('This photo is in a different collection. Open Project photos to review it; the original collection request is kept.');
    if(filed==='pending'){
@@ -79,6 +83,7 @@ export function ProjectPhotoUpload({owner,project,disabled=false,onSaved,handoff
   {notice&&<p role="status" className="text-sm break-words">{notice}</p>}
   {error&&<p role="alert" className="text-sm break-words">{error}</p>}
   {pending&&<div className="rounded-md border bg-secondary/40 p-3 space-y-3"><p className="text-sm break-words">{savedPhoto?pending.collection?'Saved photo; collection not confirmed':'Saved photo; recovery needs confirmation':'Unconfirmed upload'}: <strong>{pending.name}</strong>{pending.collection?` · ${pending.collection.collectionId}`:''}. Closing this card keeps its recovery details in this browser tab.</p><Button type="button" variant="secondary" className="min-h-11" disabled={busy||disabled} onClick={()=>void run(async()=>{setChecked(false);setNotice('');await check(pending);})}>Check upload status</Button></div>}
+  {pending?.collection&&savedPhoto&&<div className="space-y-2"><Button type="button" variant="quiet" className="min-h-11" disabled={busy||disabled} onClick={()=>void run(()=>check(pending,false,true))}>Keep photo and stop collection retries</Button><p className="text-xs text-muted-foreground">The photo stays saved privately. A collection request already sent may still finish; stopping retries does not cancel it.</p></div>}
   <form ref={form} className="space-y-4" onSubmit={e=>{e.preventDefault();const element=e.currentTarget;void run(()=>save(element));}}>
    {!pending&&<div className="space-y-2"><label htmlFor={label+'-name'} className="text-sm font-medium">Photo name</label><Input id={label+'-name'} name="name" maxLength={100} required disabled={busy||disabled} className="min-h-11"/></div>}
    {!pending&&(options.length>0||!!choice)&&<div className="space-y-2"><label htmlFor={label+'-collection'} className="text-sm font-medium">Save in</label><select id={label+'-collection'} value={choice} onChange={e=>setChoice(e.target.value)} disabled={busy||disabled} className="h-11 w-full px-3 border rounded-md bg-card"><option value="">Project photos only</option>{choice&&!options.some(c=>collectionKey(c)===choice)&&<option value={choice} disabled>Selected collection unavailable</option>}{options.map(c=><option key={collectionKey(c)} value={collectionKey(c)}>{collectionLabel(c)}</option>)}</select><p className="text-xs text-muted-foreground">A collection keeps this photo private. It still needs safety checks and a separate website review.</p></div>}
