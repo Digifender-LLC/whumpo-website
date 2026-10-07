@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {readFileSync,readdirSync} from 'node:fs';
 import {admitClient,authorize,control,controlCapabilities,controlCapability,errors,excluded,exchangeHandoff,fieldTypes,interactionBindings,operationById,operations,pathParams,
  pkceChallengeFor,presentReview,prefix,pushMessage,replay,reviewKinds,sessionPolicy,validateError,validateRequest,validateResponse,verifyExchange} from '../tools/prototypes/mobile-v1.mjs';
@@ -48,9 +49,10 @@ test('admitted controls match src/chat-controls.ts exactly',()=>{
  for(const needle of ["a.type==='specificationApply'","exact(a,['type','reviewId','proposalDigest','expectedRevision'])","a.type==='confirm'&&exact(a,['type','kind','reviewId'])","site:{verb:'confirm'","application:{verb:'confirm-application'",
   "a.type==='appRestore'&&exact(a,['type','projectId','reviewId','confirmation'])","a.confirmation==='RESTORE'"])assert.ok(src.includes(needle),needle);
  assert.deepEqual(Object.keys(reviewKinds).map(k=>reviewKinds[k].capability).sort(),[...controlCapabilities].sort());
- // Fresh passkey requirement mirrors recentAuth in chatControl: specificationApply true; confirm/appRestore false.
+ // Fresh passkey requirement mirrors recentAuth in chatControl: specificationApply/appRestore true; confirm false.
  assert.match(src,/specificationApply[\s\S]{0,400}recentAuth:true/);
- assert.match(src,/command:`\/confirm-app-restore|\/confirm-app-restore|appRestore/);
+ assert.match(src,/appRestore[\s\S]*label:'Restore the exact reviewed application data.',recentAuth:true/);
+ assert.equal(reviewKinds['app-restore'].freshPasskey,true);
 });
 test('admitted interaction field types and bindings exist in the WH-105 registry; photo bindings wait for WH-085',()=>{
  const proto=text('src/chat-interactions/protocol.ts');
@@ -87,6 +89,17 @@ test('every operation has exactly one valid success pair with a matching path',(
   else validateResponse(c.operation,c.response.body);
   assert.equal(c.response.status,200);
  }
+});
+test('application reviews require the complete exact source artifact and matching digest',()=>{
+ const base=structuredClone(fx.reviews.cases[0].review),source='export default ({state})=>({state,result:null})',digest=createHash('sha256').update(source).digest('hex');
+ const r={...base,kind:'application',control:{type:'confirm',kind:'application',reviewId:base.reviewId},requiresFreshPasskey:false,preview:null,artifact:{kind:'application-source',source,digest}};
+ validateResponse('review.list',{version:1,items:[r],denied:0,unavailable:0});
+ for(const artifact of [null,{...r.artifact,source:source.slice(0,-1)},{...r.artifact,digest:'f'.repeat(64)},{...r.artifact,source:'a'.repeat(8193)}])rejects(()=>validateResponse('review.list',{version:1,items:[{...r,artifact}],denied:0,unavailable:0}),'invalid_request');
+});
+test('activity preserves bounded prefixed current receipt IDs',()=>{
+ const body=structuredClone(fx.operations.cases.find(c=>c.operation==='activity.list').response.body);
+ body.items[0].id='application-build:11111111-1111-4111-8111-111111111111';validateResponse('activity.list',body);
+ for(const invalid of ['x'.repeat(81),'foreign/path','newline\nkey']){body.items[0].id=invalid;rejects(()=>validateResponse('activity.list',body),'invalid_request');}
 });
 test('current-client header is admitted; version and capability drift are refused',()=>{
  const h=admitClient(JSON.stringify(fx.client.current),{minimumBuild});assert.equal(h.build,42);
@@ -172,7 +185,8 @@ test('specification apply needs a fresh passkey proof; site confirmation does no
  rejects(()=>authorize({session:stale,account:ready,opId:'review.confirm',control:spec,now}),'proof_required');
  rejects(()=>authorize({session:viaHandoff,account:ready,opId:'review.confirm',control:spec,now}),'proof_required');
  assert.doesNotThrow(()=>authorize({session:stale,account:ready,opId:'review.confirm',control:site,now}));
- assert.doesNotThrow(()=>authorize({session:session({proofAt:now-600}),account:ready,opId:'review.confirm',control:spec,now}));
+ rejects(()=>authorize({session:session({proofAt:now-600}),account:ready,opId:'review.confirm',control:spec,now}),'proof_required');
+ assert.doesNotThrow(()=>authorize({session:session({proofAt:now-599}),account:ready,opId:'review.confirm',control:spec,now}));
 });
 const start=fx.operations.cases.find(c=>c.operation==='session.handoffStart').request.body;
 const exchange=fx.operations.cases.find(c=>c.operation==='session.handoffExchange').request.body;

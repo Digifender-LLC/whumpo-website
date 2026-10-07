@@ -1,11 +1,12 @@
 import {IdentityError,type IdentityPrincipal} from '../workspace-identity/authority';
 import type {IdentityCeremonyContext} from '../workspace-identity/protocol';
 
+export const currentMobileBuild=3;
 export const mobilePrefix='/api/mobile/v1';
 export const browserReturn='https://whumpo.com/app/return';
 export type MobileEnvironment=Pick<Env,'DB'|'ENVIRONMENT'|'TURNSTILE_SECRET'|'API_LIMITER'|'AUTH_LIMITER'|'MOBILE_ANDROID_PACKAGE'|'MOBILE_ANDROID_CERT_SHA256'|'MOBILE_MINIMUM_BUILD'>;
 export type MobileClient=Readonly<{contract:1;build:number;platform:'android';controls:string[];interaction:{versions:number[];fieldTypes:string[];bindings:string[]}}>;
-const codes={invalid_request:400,unknown_field:400,missing_field:400,proof_required:401,identity_incomplete:403,not_found:404,identity_changed:409,request_conflict:409,payload_too_large:413,client_update_required:426,rate_limited:429,unavailable:503} as const;
+const codes={invalid_request:400,invalid_cursor:400,unsupported_control:400,unknown_field:400,missing_field:400,proof_required:401,identity_incomplete:403,not_found:404,onboarding_required:409,identity_changed:409,request_conflict:409,stale_revision:409,chat_busy:409,review_unavailable:409,payload_too_large:413,client_update_required:426,rate_limited:429,unavailable:503} as const;
 export class MobileError extends Error {
  constructor(readonly code:keyof typeof codes,readonly details:Record<string,unknown>={}){super(({proof_required:'Sign in again to continue.',identity_incomplete:'Complete account setup or recovery in the browser.',identity_changed:'Your account access changed. Sign in and review again.',client_update_required:'Update Whumpo to continue.',unavailable:'Native access is temporarily unavailable.',rate_limited:'Too many requests. Try again in a minute.',not_found:'This resource is unavailable.'} as Partial<Record<keyof typeof codes,string>>)[code]??'This request could not be accepted.');}
  get status(){return codes[this.code];}
@@ -24,7 +25,7 @@ export function mobileFailure(error:unknown,env:MobileEnvironment){
 export const mobileHeaders={'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer'};
 export const mobileResponse=(body:Record<string,unknown>,status=200)=>new Response(JSON.stringify({version:1,...body}),{status,headers:mobileHeaders});
 export function mobileErrorResponse(error:unknown,env:MobileEnvironment){const failure=mobileFailure(error,env);return mobileResponse({error:{code:failure.code,message:failure.message,...failure.details}},failure.status);}
-export function minimumBuild(env:MobileEnvironment){const value=env.MOBILE_MINIMUM_BUILD??'2';if(!/^[1-9][0-9]{0,8}$/.test(value))throw new MobileError('unavailable');return Number(value);}
+export function minimumBuild(env:MobileEnvironment){const value=env.MOBILE_MINIMUM_BUILD??String(currentMobileBuild);if(!/^[1-9][0-9]{0,8}$/.test(value))throw new MobileError('unavailable');return Math.max(currentMobileBuild,Number(value));}
 const updateRequired=(env:MobileEnvironment)=>new MobileError('client_update_required',{minimumBuild:minimumBuild(env),contract:1,next:'update_app'});
 export function exact(value:unknown,keys:readonly string[]):Record<string,unknown>{
  if(!value||typeof value!=='object'||Array.isArray(value)||Object.getPrototypeOf(value)!==Object.prototype)throw new MobileError('invalid_request');
@@ -64,12 +65,12 @@ export function mobileRequestContext(request:Request,env:MobileEnvironment):Iden
  if(!(local?['http://localhost:8787','http://127.0.0.1:8787'].includes(url.origin):String(env.ENVIRONMENT)==='test'&&url.origin==='https://whumpo.com'))throw new MobileError('invalid_request');
  return {origin:nativeIdentityConfiguration(env).origin,rpID:'whumpo.com',client:'android'};
 }
-export async function mobileInput(request:Request){
+export async function mobileInput(request:Request,maxBytes=16384){
  if(!/^application\/json(?:\s*;|$)/i.test(request.headers.get('content-type')??''))throw new MobileError('invalid_request');
- const length=request.headers.get('content-length');if(length!==null&&(!/^\d+$/.test(length)||Number(length)>16384))throw new MobileError('payload_too_large');
+ const length=request.headers.get('content-length');if(length!==null&&(!/^\d+$/.test(length)||Number(length)>maxBytes))throw new MobileError('payload_too_large');
  const reader=request.body?.getReader();if(!reader)throw new MobileError('invalid_request');
  const chunks:Uint8Array[]=[];let size=0;
- try{while(true){const next=await reader.read();if(next.done)break;size+=next.value.length;if(size>16384)throw new MobileError('payload_too_large');chunks.push(next.value);}}
+ try{while(true){const next=await reader.read();if(next.done)break;size+=next.value.length;if(size>maxBytes)throw new MobileError('payload_too_large');chunks.push(next.value);}}
  finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
  const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
  try{return JSON.parse(new TextDecoder('utf-8',{fatal:true,ignoreBOM:false}).decode(bytes)) as unknown;}catch{throw new MobileError('invalid_request');}

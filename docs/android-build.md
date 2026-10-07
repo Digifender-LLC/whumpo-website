@@ -1,6 +1,6 @@
 # Android build and checks (WH-082)
 
-**Status, October 4, 2026: the native shell is implemented in source (`android/`). Only the pure-Kotlin `:core` module has been built and tested locally. The Android app module, lint and instrumentation tests are verified only in CI (`.github/workflows/android.yml`), and CI has not run yet.** This is a navigable shell with no network calls. It is **not** acceptance of native identity, providers, mobile API routes, signed releases or physical devices. Those belong to WH-083–087 ([Android contract](android-app.md), [v1 contract](mobile-api-v1.md)).
+**Source and local-build status, October 7, 2026:** the native shell and identity client are implemented in `android/`. Both flavors, both instrumentation APKs, lint and all 52 JVM tests passed against identity commit `4468991`. Credential Manager, bounded native HTTP, protected session/PKCE custody, explicit browser return and sign-out are implemented. Instrumentation APK compilation does not mean device tests ran. No approved release signing, provider activation, domain association, emulator/device execution or physical-device acceptance is claimed. WH-084 workspace client work is tracked separately in [android-workspace](android-workspace.md).
 
 ## Toolchain (pinned)
 
@@ -37,7 +37,7 @@ Debug APKs are written to `android/app/build/outputs/apk/{local,deployed}/debug/
 
 - **`local` flavor** (`com.whumpo.android.local`) targets `http://127.0.0.1:8787`, which is the default `pnpm dev` (`wrangler dev`) port. Run `adb reverse tcp:8787 tcp:8787` so the device's loopback reaches your machine. Do not bind the dev server to `0.0.0.0`, a LAN address or a tunnel. The local [network security config](https://developer.android.com/privacy-and-security/security-config) allows cleartext only to `127.0.0.1`/`localhost`. `WhumpoEnvironment` rejects any non-loopback local origin at startup.
 - **`deployed` flavor** targets exactly `https://whumpo.com` (the private test platform). It allows HTTPS only.
-- The shell does not declare the `INTERNET` permission yet. Remote screens report "sign in required" or "not connected" and never show invented data. The package name is provisional (owner decision 2).
+- The app declares `INTERNET` for the bounded native transport. The provisional package does not activate server-side signing association; [identity configuration](android-identity.md#association-and-activation) remains required.
 
 ## Protected state and backups
 
@@ -47,8 +47,8 @@ Debug APKs are written to `android/app/build/outputs/apk/{local,deployed}/debug/
 
 ## Tests
 
-- `:core` unit tests (JVM, 19 tests): environment validation, account scope hashing, encrypted store (account switch, sign-out, restore after restart, foreign key, slot binding), and shell repositories.
-- App unit tests: Chat draft debounce/sign-out/account change, Projects loading state, Settings sign-out.
+- `:core` unit tests at identity commit `4468991` (JVM, 28 tests): environment validation, encrypted account state, sign-out/switch fences, exact session expiry, PKCE custody across process death, wrong/foreign/duplicate returns, uncertain exchange, reauthentication and late-response cancellation.
+- App unit tests at that commit: 12 per flavor, including bounded cookie-free native HTTP, strict current envelopes, rejection of redirected responses and the actual OkHttp 503 `Retry-After: 0` mutation-replay regression. Request bodies are explicitly one-shot.
 - Instrumentation tests: navigation and Tab semantics/headings for the four destinations, rotation (`recreate`), environment display, 200% font scale, Keystore round trip and associated-data binding, no-backup location and ciphertext-only storage, account switch/sign-out erasure, sign-out from the Settings screen, draft surviving recreation and restart, backup flag and rules, and the composer staying above the soft keyboard. The keyboard test is *skipped* (`assume`) if the emulator never shows an IME.
 
 ## CI emulator matrix
@@ -66,3 +66,16 @@ Standard GitHub-hosted runners are free for public repositories. Private reposit
 
 - **Passed locally:** the Gradle 9.7.1 distribution and wrapper JAR hashes match the pinned values (`gradle-wrapper.jar` SHA-256 `7a9ce74c…262c5d`). `:core:test` passed (19/19) using a scratch Gradle settings file that includes only `android/core`.
 - **Not run locally:** the authoring sandbox's egress policy blocks `dl.google.com`, which also serves Google Maven artifacts, so AGP, AndroidX and the Android SDK could not be resolved. The app's assemble, lint, unit and instrumentation tasks are verified only in CI. The first CI run is the first compile of the app module.
+
+
+## Current verification record (October 7, 2026)
+
+The earlier Google Maven/SDK egress blocker was resolved by the session's package-host access. Official SDK components were installed in the disposable `/workspace/whumpo-android-sdk`, with isolated Gradle cache and JDK. No SDK, downloaded dependency, signing key or build output was committed.
+
+At `4468991`, this command completed successfully in 3 minutes 35 seconds with two Gradle workers:
+
+```sh
+./gradlew --no-daemon --max-workers=2 :core:test testLocalDebugUnitTest testDeployedDebugUnitTest assembleLocalDebug assembleDeployedDebug lintLocalDebug lintDeployedDebug assembleLocalDebugAndroidTest assembleDeployedDebugAndroidTest
+```
+
+Results: 28 core tests and 12 app tests per flavor (52 total), zero lint issues in each flavor, both debug application APKs and both instrumentation APKs assembled. A separate checkout independently ran 15 identity-focused JVM tests. Evidence logs for this session are `/tmp/whumpo-native-client-full.log` and `/tmp/whumpo-verification/android-identity-independent.log`. These are local build and JVM results; no connected instrumentation, emulator, TalkBack, physical passkey, verified App Link, signed upgrade or release installation was run.

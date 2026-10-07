@@ -1,8 +1,10 @@
 # Native `/api/mobile/v1` contract
 
-**Current contract — October 7, 2026.** WH-081 froze this contract October 4. WH-082 delivered the Android shell; WH-083 now implements the nine identity/config routes below, the shared Android session and passkey authority, cookie-authenticated browser completion, PKCE exchange and configured Digital Asset Links in source. The remaining WH-084/085/086 workspace, photo and push operations are **planned**. Runtime identity evidence is in [android-identity](android-identity.md); no deployed mobile route, approved signing association, physical-device passkey or native customer acceptance is claimed. The [offline reference](../tools/prototypes/mobile-v1.mjs) and [synthetic fixtures](../tests/fixtures/mobile-v1/) remain contract checks; [mobile-identity](../tests/mobile-identity.mjs) exercises the real Worker and database handlers.
+**Current contract — October 7, 2026.** WH-081 froze this contract October 4. WH-082 delivered the Android shell; WH-083 now implements the nine identity/config routes below, the shared Android session and passkey authority, cookie-authenticated browser completion, PKCE exchange and configured Digital Asset Links in source. WH-084 now implements the workspace/Chat/history, exact review and bounded information-form server adapters in source ([workspace evidence](android-workspace.md)); photo and push operations remain **planned**. Runtime identity evidence is in [android-identity](android-identity.md); no deployed mobile route, approved signing association, physical-device passkey or native customer acceptance is claimed. The [offline reference](../tools/prototypes/mobile-v1.mjs) and [synthetic fixtures](../tests/fixtures/mobile-v1/) remain contract checks; [mobile-identity](../tests/mobile-identity.mjs) exercises the real Worker and database handlers.
 
-**Current build-2 amendment:** `GET /session` returns `account:{id,label}`. `id` is the opaque authoritative account UUID and is the sole account key for protected local data; a masked email label is never an identity key. The default minimum build is 2. This is a direct current-contract change, with no older-client adapter.
+**Current build-2 amendment:** `GET /session` returns `account:{id,label}`. `id` is the opaque authoritative account UUID and is the sole account key for protected local data; a masked email label is never an identity key. The account-key amendment first shipped with build 2. The current default and hard minimum floor is build 3. This is a direct current-contract change, with no older-client adapter.
+
+**Current build-3 amendment:** exact reviews include the complete application-source artifact described below, application restore requires fresh authentication, and Activity IDs are bounded opaque ASCII keys (up to 80 characters, `A–Z`, `a–z`, digits, `:`, `_`, `-`) because existing receipt writers prefix their IDs. These are direct current shapes; the runtime cannot lower its build-3 floor via configuration.
 
 Whumpo is current-version-only ([policy](current-version-policy.md)): one contract version, no old DTOs, no compatibility adapter, no browser downgrade. Anything outside this document is not a v1 operation. A change to a frozen shape requires a reviewed amendment here, fixtures, and a minimum-build bump.
 
@@ -19,7 +21,7 @@ Whumpo is current-version-only ([policy](current-version-policy.md)): one contra
 - Base `https://whumpo.com/api/mobile/v1` (HTTPS only; `local` mode may use the documented loopback origin). Responses are `application/json; charset=utf-8` with `cache-control: no-store`, `x-content-type-options: nosniff` and `referrer-policy: no-referrer`, except photo bytes (`image/jpeg`, `private, no-store`).
 - JSON requests are UTF-8, at most 16 KiB (interaction routes 32 KiB, matching [WH-105](chat-interactions.md)). Unknown or missing keys are rejected. Photo upload is the only binary request: `image/jpeg`, at most 1 MiB.
 - Rate limits reuse the platform limiters (per client address) plus a per-session limit; exceeding returns `429 rate_limited` with `retryAfterSeconds`.
-- Every success body carries `"version": 1`. Dates are ISO-8601 UTC. IDs are lowercase UUIDs. Server cursors are opaque.
+- Every success body carries `"version": 1`. Dates are ISO-8601 UTC. Resource IDs are lowercase UUIDs; Activity IDs use the bounded opaque key above. Server cursors are opaque, bound to owner/route/search, and never confer authority.
 
 ### Required headers
 
@@ -66,7 +68,7 @@ All paths are relative to `/api/mobile/v1`. Fixtures: [operations.json](../tests
 | `GET /session` | bearer | `session{expiresAt,freshUntil}`, `account{id,label}` (opaque account UUID and masked address, never the raw email) | `resolveIdentity` | none |
 | `POST /session/logout` | bearer | `{version}` → `{signedOut:true}`; the app clears local state even on `401` | identity `logout` | natural |
 
-### Workspace, Chat and reviews (WH-084)
+### Workspace, Chat and reviews (WH-084 — server implemented in source)
 
 | Operation | Auth | Request / response | Reuses | Idempotency |
 | --- | --- | --- | --- | --- |
@@ -125,11 +127,13 @@ Four controls are admitted. Each is the **exact** `ChatControl` shape from [`src
 | `specification.apply` | `{type:"specificationApply",reviewId,proposalDigest,expectedRevision}` | required | Save the exact private website version prepared from a content brief |
 | `site.confirm` | `{type:"confirm",kind:"site",reviewId}` | no | Publish the reviewed website version |
 | `application.confirm` | `{type:"confirm",kind:"application",reviewId}` | no | Activate the reviewed bounded application change |
-| `app.restore` | `{type:"appRestore",projectId,reviewId,confirmation:"RESTORE"}` | no | Restore reviewed application data |
+| `app.restore` | `{type:"appRestore",projectId,reviewId,confirmation:"RESTORE"}` | required | Restore reviewed application data |
 
-A review sent to the app is `{kind,reviewId,project,state,expiresAt,canApprove,control,requiresFreshPasskey,disclosure{title,lines},preview,unavailableReason}`. Invariants (checked offline): `canApprove` implies `state:"pending"`, a `control` whose type matches `kind` and `reviewId`, and no `unavailableReason`; otherwise `control` is `null`. A review whose capability the build did not declare arrives with `canApprove:false` and `unavailableReason:"client_update_required"`; an unknown `kind` makes the client show update-required with no enabled control. Expired, stale, foreign or withdrawn reviews expose no control. The [disclosure](../tests/fixtures/mobile-v1/reviews.json) lines are server-written exact-effect text; the app shows them before confirmation and does not synthesize them.
+A review sent to the app is `{kind,reviewId,project,state,expiresAt,canApprove,control,requiresFreshPasskey,disclosure{title,lines},preview,artifact,unavailableReason}`. Invariants (checked offline): `canApprove` implies `state:"pending"`, a `control` whose type matches `kind` and `reviewId`, and no `unavailableReason`; otherwise `control` is `null`. A review whose capability the build did not declare arrives with `canApprove:false` and `unavailableReason:"client_update_required"`; an unknown `kind` makes the client show update-required with no enabled control. Expired, stale, foreign or withdrawn reviews expose no control. The [disclosure](../tests/fixtures/mobile-v1/reviews.json) lines are server-written exact-effect text; the app shows them before confirmation and does not synthesize them.
 
-Preview `path` values are only `/api/site-versions/{id}/preview`, `/api/specification-reviews/{id}/preview|diff` and `/api/publication-reviews/{id}/diff`, opened in an authenticated Custom Tab. Any other path is rejected by the client.
+Application enable reviews include `artifact:{kind:"application-source",source,digest}` with the complete, byte-exact saved program (at most 8192 UTF-8 bytes) and its verified SHA-256. Other reviews carry `artifact:null`. The native client must show that code and every disclosure line before advertising or enabling `application.confirm`; it cannot truncate code or infer approval from a prose summary. Application disable and site unpublish remain outside these native controls. Application data restore requires the same ten-minute actual passkey proof as the shared browser handler.
+
+Preview `path` values are only `/api/site-versions/{id}/preview`, `/api/specification-reviews/{id}/preview|diff` and `/api/publication-reviews/{id}/diff`, opened in an authenticated Custom Tab. Any other path is rejected by the client. Current server preview paths require an existing web session and otherwise return 401 JSON; the planned sign-in/allowlisted-return browser entry still needs implementation and an unsigned-browser journey test before native review acceptance.
 
 Everything else stays web-only: provider-grant revocation, DNS/domain proof, GitHub backup, CMS, backend/application publication reviews beyond the above, version/photo deletion, unpublish and take-down shortcuts, and review-detail/shortcut controls. A native request naming them returns `400 unsupported_control`.
 
@@ -142,7 +146,7 @@ Everything else stays web-only: provider-grant revocation, DNS/domain proof, Git
 
 ## Errors
 
-Every error is `{version:1,error:{code,message,...}}` with the fixed status below; messages are plain and carry no stack, SQL, provider text or internal identifiers ([fixtures](../tests/fixtures/mobile-v1/errors.json)).
+Every error is `{version:1,error:{code,message,...}}`. Workspace/identity errors use the fixed status below; interaction errors additionally preserve the WH-105 code/status and optional `fieldId`, as specified above. messages are plain and carry no stack, SQL, provider text or internal identifiers ([fixtures](../tests/fixtures/mobile-v1/errors.json)).
 
 | Code | Status | Meaning and client action |
 | --- | --- | --- |
@@ -159,7 +163,7 @@ Every error is `{version:1,error:{code,message,...}}` with the fixed status belo
 | `rate_limited` | 429 | Wait `retryAfterSeconds`. |
 | `unavailable` | 503 | Platform or provider unavailable; authentication and help stay reachable. |
 
-The web identity code `client_upgrade_required` (409) belongs to `/api/auth/identity/v1`; mobile uses only the codes above.
+The web identity code `client_upgrade_required` (409) belongs to `/api/auth/identity/v1`; mobile uses the native codes above and the explicitly admitted WH-105 interaction errors.
 
 ## Journey ownership and evidence
 
@@ -184,8 +188,8 @@ WH-048 remains a prerequisite for **Android customer admission** only. It does n
 1. **Dispatcher — implemented.** [`src/index.ts`](../src/index.ts) dispatches the closed mobile router before the web cookie transport, rejects bearer material on non-mobile routes, and preserves the web Origin rule. Mobile requests reject cookies and Origin headers.
 2. **Principal — implemented.** The shared resolver, commit predicates and challenge verifier require the selected `web`/`android` client. Cross-client tokens fail. The native passkey origin derives from the configured signing certificate, with no debug default.
 3. **Handoff — implemented.** `mobile_identity_handoffs` binds the browser session/account/epoch and one-time PKCE exchange. The browser source must still resolve as ready at consumption. All proof times and source session expiry are retained.
-4. **Review metadata.** The web derives review controls from per-turn fields ([`chat-review-receipts.ts`](../src/chat-review-receipts.ts), `chat.ts`). The mobile `review` object is a new projection that must apply the same exact-state checks.
-5. **Resources.** Mobile projects/activity/versions are projections of existing reads without CMS fields. Add cursor pagination in the adapter.
+4. **Review metadata — implemented.** `src/mobile/reviews.ts` derives current native controls from the shared specification/comparison readers and exact Chat receipts. It excludes unpublish/disable aliases, preserves fresh proof and supplies the complete verified application source artifact.
+5. **Resources — implemented.** Mobile projects/Activity/history use bounded owner/route/search cursor pagination over existing reads. Saved versions remain bounded to 25. Actual prefixed Activity receipt keys round-trip without UUID coercion.
 6. **Push.** Device registration, outbox/event identity and the FCM adapter are WH-086 work over the [job design](background-jobs.md). No FCM acceptance exists.
 
 ## Explicitly outside v1
@@ -200,7 +204,7 @@ Cookie or `Origin`-based mobile access; bearer access to non-mobile routes; a ge
 4. **Native session cap.** Share the existing bounded session count with web, or give native its own cap. Default here: shared.
 5. **Native take-down.** Whether the beta must include urgent unpublish in the app, or keep it in the browser (this contract excludes it).
 6. **Push default.** Explicit opt-in per the Android doc, or default-on after the permission is granted. Default here: explicit in-app opt-in.
-7. **Error status for stale clients.** This contract uses `426` for `client_update_required`; the identity adapter uses `409`. Confirm or align.
+7. **Error status — resolved in source.** Mobile consistently uses `426 client_update_required`; the web identity adapter retains its separate `409 client_upgrade_required` contract.
 
 None of these is assumed by the fixtures beyond the stated defaults.
 
@@ -209,3 +213,5 @@ None of these is assumed by the fixtures beyond the stated defaults.
 Contract verification: `node tests/mobile-v1-contract.mjs` checks the registry against the repository sources, validates every fixture and rejection, the control and capability rules, session/handoff/idempotency reference semantics, the push payload, the secret/PII scan (including planted negatives) and that this document names every operation and error code. It does not run a Worker, database, device, provider or model, and a passing run does not establish any runtime, device or customer acceptance.
 
 Runtime verification for WH-083: `node tests/mobile-identity.mjs` and `node tests/mobile-identity.mjs --d1` run the actual Worker routes, shared signature verifier and current SQLite/local-D1 schema, including two-owner denial, races, reauthentication expiry, PKCE replay and cookie/Origin isolation. See [recorded boundaries](android-identity.md). Signing configuration, actual Digital Asset Links verification and device/provider acceptance remain separate.
+
+Runtime verification for WH-084: `node tests/mobile-workspace.mjs` and `node tests/mobile-workspace.mjs --d1` exercise actual Worker routes and shared current-domain commits; see [native workspace evidence](android-workspace.md).

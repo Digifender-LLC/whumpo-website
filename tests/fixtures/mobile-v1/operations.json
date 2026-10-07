@@ -334,7 +334,8 @@
         "preview": {
          "path": "/api/specification-reviews/33333333-3333-4333-8333-000000000001/preview"
         },
-        "unavailableReason": null
+        "unavailableReason": null,
+        "artifact": null
        },
        "interaction": null
       },
@@ -371,7 +372,8 @@
         "preview": {
          "path": "/api/site-versions/77777777-7777-4777-8777-000000000001/preview"
         },
-        "unavailableReason": null
+        "unavailableReason": null,
+        "artifact": null
        },
        "interaction": null
       }
@@ -426,7 +428,8 @@
        "preview": {
         "path": "/api/site-versions/77777777-7777-4777-8777-000000000001/preview"
        },
-       "unavailableReason": null
+       "unavailableReason": null,
+       "artifact": null
       },
       "interaction": null
      }
@@ -500,7 +503,8 @@
        "preview": {
         "path": "/api/specification-reviews/33333333-3333-4333-8333-000000000001/preview"
        },
-       "unavailableReason": null
+       "unavailableReason": null,
+       "artifact": null
       }
      ],
      "denied": 0,

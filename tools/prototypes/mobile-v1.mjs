@@ -12,6 +12,7 @@ const check=(ok,code,path)=>{if(!ok)fail(code,path);};
 const plain=v=>v!==null&&typeof v==='object'&&!Array.isArray(v)&&[Object.prototype,null].includes(Object.getPrototypeOf(v));
 
 export const contractVersion=1;
+export const currentMobileBuild=3;
 export const prefix='/api/mobile/v1';
 export const uuidPattern=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 
@@ -65,7 +66,7 @@ export function admitClient(header,{minimumBuild}){
  if(typeof header==='string'){check(/^[\x20-\x7e]{2,4096}$/.test(header),'invalid_request','Whumpo-Client');try{h=JSON.parse(header);}catch{fail('invalid_request','Whumpo-Client');}}
  clientHeader(h,'Whumpo-Client');
  check(h.contract===contractVersion,'client_update_required','contract');
- check(h.build>=minimumBuild,'client_update_required','build');
+ check(h.build>=Math.max(currentMobileBuild,minimumBuild),'client_update_required','build');
  check(h.interaction.versions.length===1&&h.interaction.versions[0]===1,'client_update_required','interaction.versions');
  for(const list of [h.controls,h.interaction.fieldTypes,h.interaction.bindings])check(new Set(list).size===list.length,'invalid_request','duplicate');
  return h;
@@ -76,7 +77,7 @@ export const reviewKinds=Object.freeze({
  specification:{capability:'specification.apply',type:'specificationApply',freshPasskey:true},
  site:{capability:'site.confirm',type:'confirm',freshPasskey:false,confirmKind:'site'},
  application:{capability:'application.confirm',type:'confirm',freshPasskey:false,confirmKind:'application'},
- 'app-restore':{capability:'app.restore',type:'appRestore',freshPasskey:false},
+ 'app-restore':{capability:'app.restore',type:'appRestore',freshPasskey:true},
 });
 const digest64=str(64,/^[0-9a-f]{64}$/,64);
 export const control=(v,p='control')=>{
@@ -93,9 +94,10 @@ const previewPath=str(120,/^\/api\/(?:site-versions\/[0-9a-f-]{36}\/preview|spec
 export const review=(v,p='review')=>{
  obj({kind:en(...Object.keys(reviewKinds)),reviewId:uuid(),project:nul(obj({id:uuid(),name:str(100,null,1)})),state:en('pending','applied','expired','superseded','unavailable'),
   expiresAt:iso(),canApprove:bool(),control:nul(control),requiresFreshPasskey:bool(),
-  disclosure:obj({title:str(120,null,1),lines:arr(str(300,null,1),8,1)}),preview:nul(obj({path:previewPath})),
+  disclosure:obj({title:str(120,null,1),lines:arr(str(300,null,1),8,1)}),preview:nul(obj({path:previewPath})),artifact:nul(obj({kind:lit('application-source'),source:(v,p)=>check(typeof v==='string'&&Buffer.byteLength(v)<=8192,'invalid_request',p),digest:digest64})),
   unavailableReason:nul(en('client_update_required','expired','stale','not_current'))})(v,p);
  const kind=reviewKinds[v.kind];
+ check(v.kind==='application'?v.artifact!==null&&createHash('sha256').update(v.artifact.source).digest('hex')===v.artifact.digest:v.artifact===null,'invalid_request',p+'.artifact');
  check(v.requiresFreshPasskey===kind.freshPasskey,'invalid_request',p+'.requiresFreshPasskey');
  if(v.canApprove){
   check(v.state==='pending'&&v.control!==null&&v.unavailableReason===null,'invalid_request',p+'.canApprove');
@@ -114,7 +116,7 @@ const turn=obj({id:uuid(),revision:int(1,2000),status:en('pending','completed','
  userText:str(1000),assistantText:nul(str(20000)),review:nul(review),interaction:nul(obj({interactionId:uuid(),state:en('open','submitted','canceled','superseded','expired')}))});
 const project=obj({id:uuid(),name:str(100,null,1),purpose:str(1000),status:str(40,/^[a-z_-]+$/,1),siteLive:bool(),backendLive:bool(),createdAt:iso(),updatedAt:iso()});
 const version=obj({id:uuid(),componentId:str(80,null,1),digest:str(64,/^[0-9a-f]{64}$/,64),createdAt:iso(),preview:obj({path:previewPath})});
-const activityItem=obj({id:uuid(),projectId:nul(uuid()),action:str(80,/^[a-z][a-z._-]*$/,1),summary:str(300,null,1),createdAt:iso()});
+const activityItem=obj({id:str(80,/^[A-Za-z0-9:_-]+$/,1),projectId:nul(uuid()),action:str(80,/^[a-z][a-z._-]*$/,1),summary:str(300,null,1),createdAt:iso()});
 const photo=obj({id:uuid(),name:str(100,null,1),width:int(1,1600),height:int(1,1600),size:int(1,1048576),status:en('pending','ready'),safetyStatus:en('pending','approved','blocked')});
 const sessionInfo=obj({token:str(64,/^[0-9a-f]{64}$/,64),expiresAt:iso(),freshUntil:nul(iso())});
 // WebAuthn JSON payloads are bounded opaque objects checked by the server's WebAuthn verifier, never trusted from clients.
@@ -233,7 +235,7 @@ export function pathParams(op,path){
  return Object.fromEntries(names.map((n,i)=>[n,m[i+1]]));
 }
 /** `req` = {headers:{authorization?,cookie?,'whumpo-client'},query,body}. Returns the admitted request or throws a wire code. */
-export function validateRequest(opId,req,{minimumBuild=1}={}){
+export function validateRequest(opId,req,{minimumBuild=currentMobileBuild}={}){
  const op=operationById[opId];check(op,'not_found','operation');
  const h=Object.fromEntries(Object.entries(req.headers??{}).map(([k,v])=>[k.toLowerCase(),v]));
  const client=admitClient(h['whumpo-client'],{minimumBuild});
@@ -281,7 +283,7 @@ export function authorize({session,account,opId,control=null,now}){
  check(session.epoch===account.authEpoch,'proof_required','revoked');
  check(account.stage==='ready','identity_incomplete','stage');
  if(!ungated.has(opId))check(account.onboardingComplete,'onboarding_required','onboarding');
- const fresh=session.proofMethod==='passkey'&&now-session.proofAt<=sessionPolicy.freshSeconds;
+ const fresh=session.proofMethod==='passkey'&&now-session.proofAt<sessionPolicy.freshSeconds;
  if(control&&reviewKindFor(control).freshPasskey)check(fresh,'proof_required','fresh_passkey');
  return {freshPasskey:fresh};
 }

@@ -147,7 +147,7 @@ function sameOrigin(request: Request): boolean {
 async function handle(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const { pathname } = new URL(request.url);
   const method = request.method;
-  const mobile=await handleMobileRequest(request,env);if(mobile)return mobile;
+  const mobile=await handleMobileRequest(request,env,ctx);if(mobile)return mobile;
   const handoff=await handleMobileHandoffRequest(request,env);if(handoff)return handoff;
   const identity=await handleIdentityRequest(request,env);if(identity)return identity;
   if (method === "GET" && pathname === "/api/health") return json({ status: "ok" });

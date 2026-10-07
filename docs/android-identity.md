@@ -1,8 +1,8 @@
 # Android identity and browser returns (WH-083)
 
-**October 7, 2026 — implemented and tested in source; no deployment or signed-device acceptance.** The nine identity/config endpoints in [the current mobile contract](mobile-api-v1.md#identity-and-session-wh-083--implemented-in-source) run through `src/mobile/http.ts`. They reuse the existing account, credential, session, challenge, recovery and commit authority. Other mobile workspace, photo and push endpoints remain closed pending WH-084–086.
+**October 7, 2026 — implemented and tested in source; no deployment or signed-device acceptance.** The nine identity/config endpoints in [the current mobile contract](mobile-api-v1.md#identity-and-session-wh-083--implemented-in-source) run through `src/mobile/http.ts`. They reuse the existing account, credential, session, challenge, recovery and commit authority. WH-084 workspace adapters are documented separately in [android-workspace](android-workspace.md); photo and push endpoints remain closed pending WH-085–086.
 
-The current API requires build 2 or newer and returns the authoritative opaque account UUID in `GET /session` with a masked label. Local private state is keyed by that UUID, never a label or token. This corrects the initial frozen contract directly; there is no old-client reader or compatibility protocol.
+The current API requires build 3 or newer and returns the authoritative opaque account UUID in `GET /session` with a masked label. Local private state is keyed by that UUID, never a label or token. This corrects the initial frozen contract directly; there is no old-client reader or compatibility protocol.
 
 ## Shared authority
 
@@ -10,7 +10,9 @@ Android login and reauthentication use the existing WebAuthn signature verifier 
 
 An enrolling or recovering account receives no Android session or restricted grant. The shared ready-account resolver and transaction predicate enforce epoch, active credential, completion and session expiry. Native and browser sessions share the ten-session cap. Account recovery/epoch changes, credential removal and logout apply through the same authority tables. Reauthentication changes the authenticated credential and actual proof time while preserving the native bearer and original absolute expiry. It never silently renews the seven-day lifetime.
 
-Mobile admission rejects Cookie and Origin headers. The native bearer is refused on non-mobile paths. Browser mutations retain the existing exact Origin check. The native router admits only the closed identity route set, validates a bounded current-version capability header and JSON envelope, applies address and session rate limits, and returns sanitized no-store errors. It never proxies arbitrary paths or invokes inference/providers.
+Mobile admission rejects Cookie and Origin headers. The native bearer is refused on non-mobile paths. Browser mutations retain the existing exact Origin check. The identity adapter admits only the closed identity route set, validates a bounded current-version capability header and JSON envelope, applies address and session rate limits, and returns sanitized no-store errors. It never proxies arbitrary paths or invokes inference/providers.
+
+The Android identity client at `4468991` implements all nine endpoints, Credential Manager passkeys, protected native session and independent PKCE custody, strict App Link staging, an explicit exchange action, and sign-out/account-switch generation fences. `GET /session` establishes the authoritative account UUID before account state opens. Both app flavors and instrumentation APKs compiled, lint reported zero issues, and 52 JVM tests passed; see [build evidence](android-build.md). This is source/local evidence, not installed device acceptance.
 
 ## Browser return
 
@@ -28,7 +30,7 @@ These non-secret server settings are deliberately unset by this change:
 | --- | --- |
 | `MOBILE_ANDROID_PACKAGE` | Approved application package identity; no provisional/debug fallback. |
 | `MOBILE_ANDROID_CERT_SHA256` | Approved app-signing certificate SHA-256 fingerprint, 32 uppercase hex byte pairs separated by colons. The native WebAuthn origin is derived from these bytes. |
-| `MOBILE_MINIMUM_BUILD` | Positive current minimum version code, default `2`; raise it to retire a build explicitly. |
+| `MOBILE_MINIMUM_BUILD` | Positive current minimum version code, default and hard current floor `3`; stale configuration cannot lower that floor. Raise it to retire a build explicitly. |
 
 Without the package and certificate, native issuance/verification/exchange remains unavailable and `/.well-known/assetlinks.json` returns 404. Configured Digital Asset Links declares only `common.handle_all_urls` and `common.get_login_creds` for the exact package/certificate. Configuring values does not prove domain association, signing custody, Play acceptance or a physical passkey journey. Server settings must match the approved release identity; do not install a debug signing identity on the deployed platform.
 
