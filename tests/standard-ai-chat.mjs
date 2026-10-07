@@ -13,7 +13,7 @@ const response=(text=JSON.stringify({reply:'Ready to help with your website.',ac
 const provider=async()=>{calls++;return response();};
 async function account(){const a=await workspaceFixture(db,m),user=a.account;identities.set(user,a);scopes.set(user,await a.scope());await db.prepare("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')").bind(user).run();return user;}
 async function snapshot(user){return (await db.prepare('SELECT * FROM stripe_paid_invoices WHERE user_id=? ORDER BY id').bind(user).all()).results;}
-async function state(user,id){return db.prepare('SELECT status FROM chat_turns WHERE id=? AND user_id=?').bind(id,user).first();}
+async function state(user,id){return db.prepare('SELECT status,assistant_text FROM chat_turns WHERE id=? AND user_id=?').bind(id,user).first();}
 try{
  const user=await account();
  const before=await snapshot(user),id=crypto.randomUUID();assert.equal((await sendAIChat(scope(user),user,id,0,'Help with my website',config,provider)).status,200);assert.equal((await readStandardAI(scope(user),user,id)).state,'completed');assert.equal((await state(user,id)).status,'completed');assert.equal(calls,1);assert.deepEqual(await snapshot(user),before);
@@ -21,6 +21,9 @@ try{
  const internal=await db.prepare('SELECT status,estimated_micros FROM inference_calls WHERE id=?').bind(id).first();assert.equal(internal.status,'observed');assert.ok(internal.estimated_micros>0);
  const bad=crypto.randomUUID();await sendAIChat(scope(user),user,bad,1,'Change the website',config,async()=>{calls++;return response('invalid proposal');});assert.equal((await state(user,bad)).status,'failed');assert.equal((await readStandardAI(scope(user),user,bad)).state,'completed');assert.deepEqual(await snapshot(user),before);
  const uncertain=crypto.randomUUID();await sendAIChat(scope(user),user,uncertain,2,'Inspect my website',config,async()=>{calls++;throw Error('Synthetic transport failure');});assert.equal((await state(user,uncertain)).status,'uncertain');assert.equal((await readStandardAI(scope(user),user,uncertain)).state,'uncertain');assert.deepEqual(await snapshot(user),before);
+ for(const failedId of [bad,uncertain])assert.doesNotMatch((await state(user,failedId)).assistant_text,/credits/i);
+ assert.match((await state(user,uncertain)).assistant_text,/not be sent again automatically/);
+ assert.match((await state(user,uncertain)).assistant_text,/Check your saved work/);
  // Competing messages claim one revision and create no orphan standard receipt.
  const race=await account();let entered,release;const started=new Promise(r=>entered=r),gate=new Promise(r=>release=r);let raceCalls=0;
  const one=crypto.randomUUID(),two=crypto.randomUUID();const run=sendAIChat(scope(race),race,one,0,'First request',config,async()=>{raceCalls++;entered();await gate;return response();});await started;
@@ -40,6 +43,7 @@ try{
  await sendAIChat(scope(reasoning),reasoning,reasoningId,0,'Inspect my workspace and explain its current layout.',config,async()=>{throw Error('Exact replay must not rerun either reasoning call');});
  // Internal spend capacity failure rolls back admission, never asks for customer credits.
  const capped=await account(),period=new Date().toISOString().slice(0,7);await ensureInferenceBudget(scope(capped),capped,period,'explore');await db.prepare('UPDATE inference_budgets SET spent_micros=budget_micros WHERE user_id=?').bind(capped).run();const capId=crypto.randomUUID(),priorCalls=calls;const rejected=await sendAIChat(scope(capped),capped,capId,0,'Help with my site',config,provider);assert.equal(rejected.status,503);assert.equal(calls,priorCalls);assert.equal(await readStandardAI(scope(capped),capped,capId),null);assert.equal(await state(capped,capId),null);
+ assert.doesNotMatch(rejected.error,/credits/i);assert.match(rejected.error,/saved work and Dashboard controls remain available/);
  // Lost admission acknowledgment does not generate a replacement provider request.
  const lost=await account(),lostId=crypto.randomUUID();let injected=false;
  const flaky=await identities.get(lost).scope(interceptDatabase(db,/INSERT INTO standard_ai_requests/,async()=>{},async()=>{if(!injected){injected=true;throw Error('Synthetic admission acknowledgment lost');}}));

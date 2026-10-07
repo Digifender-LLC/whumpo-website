@@ -105,7 +105,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
   } catch (cause) {
     // A failed batch rolls back the reservation together with the chat claim.
     // A lost acknowledgement is handled by the same message's persisted receipt on retry.
-    if(String(cause).includes('inference_budget')) return {status:503,error:'AI is temporarily unavailable while the platform’s testing capacity is reviewed. Your credits were not used. Your saved work and Dashboard controls remain available.'};
+    if(String(cause).includes('inference_budget')) return {status:503,error:'AI is temporarily unavailable while the platform’s testing capacity is reviewed. Your saved work and Dashboard controls remain available.'};
     throw cause;
   }
   if (inserted[taskClaim.length+1].meta.changes !== 1) return noReservation();
@@ -209,7 +209,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     if(persisted?.input_tokens != null){await reconcileChat(db,userId);return {status:200};}
     if(String(cause).includes('welcome_first_draft_changed')){
       await closeStandardAIAttempt(db,userId,id);
-      await db.prepare("UPDATE chat_turns SET status='failed',assistant_text='Your first project changed while I was drafting. No additional draft was saved and your credits were not used. Open your saved versions to continue.' WHERE id=? AND user_id=? AND status='pending'").bind(id,userId).run();
+      await db.prepare("UPDATE chat_turns SET status='failed',assistant_text='Your first project changed while I was drafting. No additional draft was saved. Open your saved versions to continue.' WHERE id=? AND user_id=? AND status='pending'").bind(id,userId).run();
       return {status:200};
     }
     if(String(cause).includes('composition_plan_changed')){
@@ -241,30 +241,30 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     }
     if(String(cause).includes('comparison_changed')){
       await closeStandardAIAttempt(db,userId,id);
-      await db.prepare("UPDATE chat_turns SET status='failed',assistant_text='A compared version was removed before the comparison could be saved. Request a fresh comparison. Your credits were not used.' WHERE id=? AND user_id=? AND status='pending'").bind(id,userId).run();
+      await db.prepare("UPDATE chat_turns SET status='failed',assistant_text='A compared version was removed before the comparison could be saved. Request a fresh comparison.' WHERE id=? AND user_id=? AND status='pending'").bind(id,userId).run();
       return {status:200};
     }
     if(cause instanceof DomainError || String(cause).includes('domain_claim_quota')) {
       await closeStandardAIAttempt(db,userId,id);
       const detail=cause instanceof DomainError?cause.message:'Domain test limit reached: 3 per project, 10 per account and 80 platform-wide.';
-      await db.prepare("UPDATE chat_turns SET status='failed',assistant_text=? WHERE id=? AND user_id=? AND status='pending'").bind(detail+' No domain change was applied and your credits were not used.',id,userId).run();
+      await db.prepare("UPDATE chat_turns SET status='failed',assistant_text=? WHERE id=? AND user_id=? AND status='pending'").bind(detail+' No domain change was applied.',id,userId).run();
       return {status:200};
     }
     if(cause instanceof ProposalError || String(cause).includes('site_version_quota') || String(cause).includes('project_quota') || String(cause).includes('version_photo_owner')) {
       if(cause instanceof ProposalError)console.warn(JSON.stringify({event:'ai_proposal_rejected',operation:id,reason:cause.reason,task:task?.form.intake?'project-intake':task?.form.selection?'project-selection':task?'information':'none',elapsedMs:Date.now()-started}));
       await closeStandardAIAttempt(db,userId,id);
-      await db.prepare("UPDATE chat_turns SET status='failed',assistant_text=? WHERE id=? AND user_id=? AND status='pending'").bind((cause instanceof ProposalError || String(cause).includes('version_photo_owner')) ? 'The proposed change did not pass validation, so nothing was applied and your credits were not used. Try describing a smaller change.' : String(cause).includes('project_quota') ? 'Your account has reached its 20-project test limit. No project or draft was created and your credits were not used.' : 'This project has reached its 25 saved-version limit. No change was applied and your credits were not used.',id,userId).run();
+      await db.prepare("UPDATE chat_turns SET status='failed',assistant_text=? WHERE id=? AND user_id=? AND status='pending'").bind((cause instanceof ProposalError || String(cause).includes('version_photo_owner')) ? 'The proposed change did not pass validation, so nothing was applied. Try describing a smaller change.' : String(cause).includes('project_quota') ? 'Your account has reached its 20-project test limit. No project or draft was created.' : 'This project has reached its 25 saved-version limit. No change was applied.',id,userId).run();
       return {status:200};
     }
     // Jarvis-style fixed categories: never log envelopes, prompts, credentials or raw errors.
     console.warn(JSON.stringify({ event: 'ai_request_failed', operation: id, kind: cause instanceof ProviderError ? cause.kind : 'persistence', reason: cause instanceof ProviderError ? cause.reason : undefined, elapsedMs: Date.now() - started }));
     if (cause instanceof ProviderError && ['configuration', 'rejected', 'output_limit'].includes(cause.kind)) {
       await closeStandardAIAttempt(db,userId,id);
-      const message = cause.kind === 'output_limit' ? 'The model reached its reply limit before finishing. Your credits were not used. Try a shorter or more focused question.' : 'The AI provider could not accept this request. Your credits were not used. Please try a new message later; Dashboard controls remain available.';
+      const message = cause.kind === 'output_limit' ? 'The model reached its reply limit before finishing. Try a shorter or more focused question.' : 'The AI provider could not accept this request. Please try a new message later; Dashboard controls remain available.';
       await db.prepare("UPDATE chat_turns SET status = 'failed', assistant_text = ? WHERE id = ? AND user_id = ? AND status = 'pending'").bind(message, id, userId).run();
     } else {
       await markStandardAIUncertain(db,userId,id);
-      await db.prepare("UPDATE chat_turns SET status = 'uncertain', assistant_text = 'The AI response could not be confirmed. Your credits were not used, and this message will not be sent again automatically. Check your saved work before asking again.' WHERE id = ? AND user_id = ? AND status = 'pending'").bind(id, userId).run();
+      await db.prepare("UPDATE chat_turns SET status = 'uncertain', assistant_text = 'The AI response could not be confirmed. This message will not be sent again automatically. Check your saved work before asking again.' WHERE id = ? AND user_id = ? AND status = 'pending'").bind(id, userId).run();
     }
   }
   return { status: 200 };

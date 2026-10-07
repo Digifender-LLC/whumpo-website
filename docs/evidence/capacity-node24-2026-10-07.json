@@ -1,0 +1,1006 @@
+{
+ "meta": {
+  "date": "2026-10-07T04:03:12.434Z",
+  "node": "24.19.0",
+  "platform": "linux x64",
+  "cpus": 5,
+  "memGiB": 17.6,
+  "smoke": false,
+  "scale": 1,
+  "tenants": 4,
+  "seed": 50,
+  "configuredLimiters": {
+   "platform": {
+    "AUTH_LIMITER": {
+     "limit": 10,
+     "period": 60
+    },
+    "API_LIMITER": {
+     "limit": 120,
+     "period": 60
+    }
+   },
+   "apps": {
+    "AUTH_LIMITER": {
+     "limit": 10,
+     "period": 60
+    },
+    "API_LIMITER": {
+     "limit": 120,
+     "period": 60
+    }
+   }
+  },
+  "localOnly": true
+ },
+ "phases": {
+  "A": {
+   "wallSeconds": 18.4,
+   "eventLoopDelayMs": {
+    "p50": 17.4,
+    "p99": 62.1,
+    "max": 270
+   },
+   "victim": {
+    "n": 516,
+    "p50": 278.3,
+    "p95": 585.1,
+    "p99": 669.9,
+    "max": 941.5,
+    "limited429": 0,
+    "serverErrors5xx": 0
+   },
+   "byKind": {
+    "contact_get": {
+     "n": 30,
+     "p50": 72.2,
+     "p95": 100.9,
+     "p99": 343.9,
+     "max": 343.9,
+     "codes": {
+      "200": 30
+     },
+     "tags": {}
+    },
+    "app_page": {
+     "n": 45,
+     "p50": 114.4,
+     "p95": 176.8,
+     "p99": 217.9,
+     "max": 217.9,
+     "codes": {
+      "200": 45
+     },
+     "tags": {}
+    },
+    "site": {
+     "n": 120,
+     "p50": 249,
+     "p95": 376.4,
+     "p99": 561.4,
+     "max": 568.5,
+     "codes": {
+      "200": 120
+     },
+     "tags": {}
+    },
+    "backend": {
+     "n": 120,
+     "p50": 257.4,
+     "p95": 366.4,
+     "p99": 439.1,
+     "max": 571.4,
+     "codes": {
+      "200": 120
+     },
+     "tags": {
+      "ok": 120
+     }
+    },
+    "contact_post": {
+     "n": 18,
+     "p50": 254.7,
+     "p95": 360.9,
+     "p99": 360.9,
+     "max": 360.9,
+     "codes": {
+      "200": 18
+     },
+     "tags": {}
+    },
+    "photo": {
+     "n": 75,
+     "p50": 358.5,
+     "p95": 460,
+     "p99": 596.7,
+     "max": 596.7,
+     "codes": {
+      "200": 75
+     },
+     "tags": {}
+    },
+    "visitor": {
+     "n": 108,
+     "p50": 546.5,
+     "p95": 669.9,
+     "p99": 934.3,
+     "max": 941.5,
+     "codes": {
+      "200": 108
+     },
+     "tags": {
+      "complete": 108
+     }
+    }
+   }
+  },
+  "S": {
+   "wallSeconds": 1.3,
+   "runtimeCalls": 55,
+   "victim": {
+    "n": 15,
+    "p50": 1315,
+    "p95": 1333.8,
+    "p99": 1333.8,
+    "max": 1333.8,
+    "codes": {
+     "200": 13,
+     "503": 2
+    },
+    "tags": {
+     "ok": 13,
+     "busy": 2
+    }
+   },
+   "noisy": {
+    "n": 40,
+    "p50": 771,
+    "p95": 1253.5,
+    "p99": 1291.8,
+    "max": 1291.8,
+    "codes": {
+     "422": 26,
+     "503": 14
+    },
+    "tags": {
+     "work_limit": 9,
+     "execution_failed": 17,
+     "busy": 14
+    }
+   }
+  },
+  "B": {
+   "wallSeconds": 53.2,
+   "eventLoopDelayMs": {
+    "p50": 38.4,
+    "p99": 164.4,
+    "max": 627.6
+   },
+   "victim": {
+    "n": 516,
+    "p50": 813.9,
+    "p95": 2170.5,
+    "p99": 3098.6,
+    "max": 4499.1,
+    "limited429": 0,
+    "serverErrors5xx": 1
+   },
+   "victimByKind": {
+    "contact_get": {
+     "n": 30,
+     "p50": 224.1,
+     "p95": 374.1,
+     "p99": 470.2,
+     "max": 470.2,
+     "codes": {
+      "200": 30
+     },
+     "tags": {}
+    },
+    "app_page": {
+     "n": 45,
+     "p50": 358.1,
+     "p95": 615.3,
+     "p99": 688.9,
+     "max": 688.9,
+     "codes": {
+      "200": 45
+     },
+     "tags": {}
+    },
+    "site": {
+     "n": 120,
+     "p50": 905.7,
+     "p95": 1297.9,
+     "p99": 2141.1,
+     "max": 3098.6,
+     "codes": {
+      "200": 120
+     },
+     "tags": {}
+    },
+    "backend": {
+     "n": 120,
+     "p50": 637.2,
+     "p95": 1427.8,
+     "p99": 2035.7,
+     "max": 2623,
+     "codes": {
+      "200": 119,
+      "503": 1
+     },
+     "tags": {
+      "ok": 119,
+      "busy": 1
+     }
+    },
+    "contact_post": {
+     "n": 18,
+     "p50": 996.6,
+     "p95": 1647.9,
+     "p99": 1647.9,
+     "max": 1647.9,
+     "codes": {
+      "200": 18
+     },
+     "tags": {}
+    },
+    "visitor": {
+     "n": 108,
+     "p50": 1803.3,
+     "p95": 3032.3,
+     "p99": 4457.7,
+     "max": 4499.1,
+     "codes": {
+      "200": 108
+     },
+     "tags": {
+      "complete": 108
+     }
+    },
+    "photo": {
+     "n": 75,
+     "p50": 775.9,
+     "p95": 1928.1,
+     "p99": 2701.1,
+     "max": 2701.1,
+     "codes": {
+      "200": 75
+     },
+     "tags": {}
+    }
+   },
+   "noisy": {
+    "n": 960,
+    "p50": 935,
+    "p95": 2180.1,
+    "p99": 3672.4,
+    "max": 4610.1,
+    "limited429": 250,
+    "serverErrors5xx": 16
+   },
+   "noisyByKind": {
+    "contact_get": {
+     "n": 200,
+     "p50": 236.2,
+     "p95": 431.7,
+     "p99": 598.3,
+     "max": 761,
+     "codes": {
+      "200": 120,
+      "429": 80
+     },
+     "tags": {}
+    },
+    "site": {
+     "n": 150,
+     "p50": 962.1,
+     "p95": 1530.9,
+     "p99": 3123.4,
+     "max": 3123.5,
+     "codes": {
+      "200": 150
+     },
+     "tags": {}
+    },
+    "backend": {
+     "n": 220,
+     "p50": 841.6,
+     "p95": 1522.3,
+     "p99": 2493.6,
+     "max": 2657.7,
+     "codes": {
+      "200": 33,
+      "422": 41,
+      "429": 130,
+      "503": 16
+     },
+     "tags": {
+      "execution_failed": 25,
+      "work_limit": 16,
+      "busy": 16,
+      "ok": 33,
+      "allowance_or_publication_unavailable": 130
+     }
+    },
+    "contact_post": {
+     "n": 60,
+     "p50": 976,
+     "p95": 2313.5,
+     "p99": 2962.6,
+     "max": 2962.6,
+     "codes": {
+      "200": 20,
+      "429": 40
+     },
+     "tags": {}
+    },
+    "photo": {
+     "n": 150,
+     "p50": 1425.5,
+     "p95": 2161.7,
+     "p99": 3672.4,
+     "max": 3721.6,
+     "codes": {
+      "200": 150
+     },
+     "tags": {}
+    },
+    "app_page": {
+     "n": 60,
+     "p50": 480.9,
+     "p95": 949.9,
+     "p99": 1579.6,
+     "max": 1579.6,
+     "codes": {
+      "200": 60
+     },
+     "tags": {}
+    },
+    "visitor": {
+     "n": 120,
+     "p50": 2046.8,
+     "p95": 4057.1,
+     "p99": 4493.6,
+     "max": 4610.1,
+     "codes": {
+      "200": 108,
+      "409": 12
+     },
+     "tags": {
+      "complete": 100,
+      "failed": 8,
+      "Application changed or execution allowance reached": 12
+     }
+    }
+   },
+   "d1Statements": 6382,
+   "runtimeCalls": 426,
+   "runtimePeakInflight": 7,
+   "previousPeak": 14,
+   "backendCharging": [
+    {
+     "tenant": "noisy",
+     "executed": 100,
+     "busy503": 30,
+     "refused429": 130,
+     "projectCounter": 100
+    },
+    {
+     "tenant": "victim-1",
+     "executed": 88,
+     "busy503": 0,
+     "refused429": 0,
+     "projectCounter": 88
+    },
+    {
+     "tenant": "victim-2",
+     "executed": 84,
+     "busy503": 1,
+     "refused429": 0,
+     "projectCounter": 84
+    },
+    {
+     "tenant": "victim-3",
+     "executed": 83,
+     "busy503": 2,
+     "refused429": 0,
+     "projectCounter": 83
+    }
+   ]
+  },
+  "L": {
+   "wallSeconds": 24.4,
+   "rows": [
+    {
+     "label": "public backend POST, one IP",
+     "requests": 40,
+     "ok": 20,
+     "limited429": 20,
+     "other": 0
+    },
+    {
+     "label": "public backend POST, distinct IPs afterwards",
+     "requests": 10,
+     "ok": 10,
+     "limited429": 0,
+     "other": 0
+    },
+    {
+     "label": "contact POST, one IP",
+     "requests": 15,
+     "ok": 10,
+     "limited429": 5,
+     "other": 0
+    },
+    {
+     "label": "contact POST, distinct IPs afterwards",
+     "requests": 3,
+     "ok": 3,
+     "limited429": 0,
+     "other": 0
+    },
+    {
+     "label": "photo GET, one IP",
+     "requests": 450,
+     "ok": 400,
+     "limited429": 50,
+     "other": 0
+    },
+    {
+     "label": "photo GET, distinct IPs afterwards",
+     "requests": 10,
+     "ok": 10,
+     "limited429": 0,
+     "other": 0
+    }
+   ],
+   "projectBackendCalls": 30,
+   "clientLimits": {
+    "backend": 20,
+    "contact": 10,
+    "photo": 400
+   }
+  },
+  "D": {
+   "wallSeconds": 23.9,
+   "platformBackendCallsBefore": 390,
+   "afterFillers": 590,
+   "afterVictimProbe": 605,
+   "fillerProjects": 10,
+   "fillerAccounts": 2,
+   "fillerCodes": {
+    "200": 200,
+    "429": 794,
+    "503": 6
+   },
+   "victimOwnProjectCallsBefore": 93,
+   "victimOwnProjectCallsAfter": 93,
+   "victimProbeCodes": {
+    "200": 5
+   },
+   "freshAccountProbeCodes": {
+    "200": 10
+   },
+   "accountDailySums": [
+    100,
+    100,
+    100,
+    98,
+    84,
+    83,
+    30,
+    10
+   ],
+   "largestAccountDailySum": 100,
+   "platformCap": 1000,
+   "accountCap": 500,
+   "projectCap": 100,
+   "fairShare": {
+    "reserveFrom": 500,
+    "perAccount": 100
+   }
+  },
+  "C": {
+   "samples": [
+    {
+     "path": "victim site page",
+     "requests": 10,
+     "ok": 10,
+     "codes": {
+      "200": 10
+     }
+    },
+    {
+     "path": "victim photo",
+     "requests": 10,
+     "ok": 10,
+     "codes": {
+      "200": 10
+     }
+    },
+    {
+     "path": "victim contact form GET",
+     "requests": 10,
+     "ok": 10,
+     "codes": {
+      "200": 10
+     }
+    },
+    {
+     "path": "victim visitor app page",
+     "requests": 10,
+     "ok": 10,
+     "codes": {
+      "200": 10
+     }
+    },
+    {
+     "path": "victim visitor transition",
+     "requests": 3,
+     "ok": 3,
+     "codes": {
+      "200": 3
+     }
+    },
+    {
+     "path": "victim public backend after filler accounts (fair share)",
+     "requests": 3,
+     "ok": 2,
+     "codes": {
+      "200": 2,
+      "429": 1
+     }
+    },
+    {
+     "path": "noisy tenant own site page",
+     "requests": 10,
+     "ok": 10,
+     "codes": {
+      "200": 10
+     }
+    }
+   ],
+   "runtimeRecoveryAfterHostile": [
+    "ok",
+    "ok",
+    "ok",
+    "ok",
+    "ok"
+   ]
+  },
+  "E": {
+   "readOpsBeforeCounterPreload": 740,
+   "noisyProjectCounterSetTo": 9990,
+   "platformCounterSetTo": 60000,
+   "noisyPhotoBurst": {
+    "requests": 20,
+    "ok": 10,
+    "status503": 10,
+    "status429": 0
+   },
+   "victimPhotoAfter": {
+    "requests": 5,
+    "ok": 5,
+    "status503": 0,
+    "status429": 0
+   },
+   "platformCeiling": {
+    "counterSetTo": 99995,
+    "victimPhotos": {
+     "requests": 10,
+     "ok": 5,
+     "status503": 5,
+     "status429": 0
+    }
+   },
+   "victimHtmlStatus": 200,
+   "platformReadCeiling": 100000,
+   "projectReadBudget": 10000
+  }
+ },
+ "runtimeBounds": [
+  {
+   "case": "benign sum",
+   "status": 200,
+   "result": "ok",
+   "ms": 5.1,
+   "nextBenign": "ok"
+  },
+  {
+   "case": "infinite loop",
+   "status": 422,
+   "result": "work_limit",
+   "ms": 6.7,
+   "nextBenign": "ok"
+  },
+  {
+   "case": "allocation growth (4 MiB heap)",
+   "status": 422,
+   "result": "execution_failed",
+   "ms": 50.5,
+   "nextBenign": "ok"
+  },
+  {
+   "case": "unbounded recursion",
+   "status": 422,
+   "result": "execution_failed",
+   "ms": 5.5,
+   "nextBenign": "ok"
+  },
+  {
+   "case": "unresolved promise",
+   "status": 422,
+   "result": "unresolved_promise",
+   "ms": 3.8,
+   "nextBenign": "ok"
+  },
+  {
+   "case": "oversized output (>16 KiB)",
+   "status": 422,
+   "result": "invalid_output",
+   "ms": 3.7,
+   "nextBenign": "ok"
+  },
+  {
+   "case": "source over 32 KiB",
+   "status": 422,
+   "result": "invalid_request",
+   "ms": 1.9,
+   "nextBenign": "ok"
+  },
+  {
+   "case": "input over 8 KiB",
+   "status": 422,
+   "result": "invalid_request",
+   "ms": 1.8,
+   "nextBenign": "ok"
+  },
+  {
+   "case": "request body over 48 KiB",
+   "status": 422,
+   "result": "invalid_request",
+   "ms": 1.7,
+   "nextBenign": "ok"
+  },
+  {
+   "case": "regex backtracking",
+   "status": 422,
+   "result": "work_limit",
+   "ms": 35.6,
+   "nextBenign": "ok"
+  }
+ ],
+ "runtimeConcurrency": [
+  {
+   "lanes": "distinct",
+   "workload": "benign",
+   "concurrency": 1,
+   "calls": 4,
+   "busy": 0,
+   "okOrGuestError": 4,
+   "p50": 3.2,
+   "p95": 3.9,
+   "max": 3.9,
+   "throughputPerSec": 280.5
+  },
+  {
+   "lanes": "distinct",
+   "workload": "benign",
+   "concurrency": 2,
+   "calls": 8,
+   "busy": 0,
+   "okOrGuestError": 8,
+   "p50": 5,
+   "p95": 6.7,
+   "max": 6.7,
+   "throughputPerSec": 330
+  },
+  {
+   "lanes": "distinct",
+   "workload": "benign",
+   "concurrency": 4,
+   "calls": 16,
+   "busy": 4,
+   "okOrGuestError": 12,
+   "p50": 9.4,
+   "p95": 10.7,
+   "max": 10.7,
+   "throughputPerSec": 407
+  },
+  {
+   "lanes": "distinct",
+   "workload": "benign",
+   "concurrency": 8,
+   "calls": 32,
+   "busy": 20,
+   "okOrGuestError": 12,
+   "p50": 13.6,
+   "p95": 22.7,
+   "max": 22.7,
+   "throughputPerSec": 497.3
+  },
+  {
+   "lanes": "distinct",
+   "workload": "benign",
+   "concurrency": 16,
+   "calls": 64,
+   "busy": 52,
+   "okOrGuestError": 12,
+   "p50": 15.5,
+   "p95": 18.5,
+   "max": 18.9,
+   "throughputPerSec": 946.3
+  },
+  {
+   "lanes": "distinct",
+   "workload": "spinning",
+   "concurrency": 1,
+   "calls": 4,
+   "busy": 0,
+   "okOrGuestError": 4,
+   "p50": 5.9,
+   "p95": 7.7,
+   "max": 7.7,
+   "throughputPerSec": 148.7
+  },
+  {
+   "lanes": "distinct",
+   "workload": "spinning",
+   "concurrency": 2,
+   "calls": 8,
+   "busy": 0,
+   "okOrGuestError": 8,
+   "p50": 8.8,
+   "p95": 13.9,
+   "max": 13.9,
+   "throughputPerSec": 177.5
+  },
+  {
+   "lanes": "distinct",
+   "workload": "spinning",
+   "concurrency": 4,
+   "calls": 16,
+   "busy": 4,
+   "okOrGuestError": 12,
+   "p50": 15.7,
+   "p95": 21,
+   "max": 21,
+   "throughputPerSec": 221.9
+  },
+  {
+   "lanes": "distinct",
+   "workload": "spinning",
+   "concurrency": 8,
+   "calls": 32,
+   "busy": 20,
+   "okOrGuestError": 12,
+   "p50": 18,
+   "p95": 23.4,
+   "max": 23.4,
+   "throughputPerSec": 395.2
+  },
+  {
+   "lanes": "distinct",
+   "workload": "spinning",
+   "concurrency": 16,
+   "calls": 64,
+   "busy": 52,
+   "okOrGuestError": 12,
+   "p50": 25.7,
+   "p95": 30.2,
+   "max": 30.5,
+   "throughputPerSec": 574.5
+  },
+  {
+   "lanes": "same",
+   "workload": "benign",
+   "concurrency": 1,
+   "calls": 4,
+   "busy": 0,
+   "okOrGuestError": 4,
+   "p50": 3.3,
+   "p95": 4.2,
+   "max": 4.2,
+   "throughputPerSec": 275.3
+  },
+  {
+   "lanes": "same",
+   "workload": "benign",
+   "concurrency": 2,
+   "calls": 8,
+   "busy": 0,
+   "okOrGuestError": 8,
+   "p50": 3.6,
+   "p95": 7,
+   "max": 7,
+   "throughputPerSec": 349
+  },
+  {
+   "lanes": "same",
+   "workload": "benign",
+   "concurrency": 4,
+   "calls": 16,
+   "busy": 8,
+   "okOrGuestError": 8,
+   "p50": 6.6,
+   "p95": 8.3,
+   "max": 8.3,
+   "throughputPerSec": 542.8
+  },
+  {
+   "lanes": "same",
+   "workload": "benign",
+   "concurrency": 8,
+   "calls": 32,
+   "busy": 24,
+   "okOrGuestError": 8,
+   "p50": 9.2,
+   "p95": 14.4,
+   "max": 15,
+   "throughputPerSec": 728.3
+  },
+  {
+   "lanes": "same",
+   "workload": "benign",
+   "concurrency": 16,
+   "calls": 64,
+   "busy": 56,
+   "okOrGuestError": 8,
+   "p50": 14.1,
+   "p95": 14.7,
+   "max": 15.4,
+   "throughputPerSec": 1094.7
+  },
+  {
+   "lanes": "same",
+   "workload": "spinning",
+   "concurrency": 1,
+   "calls": 4,
+   "busy": 0,
+   "okOrGuestError": 4,
+   "p50": 5.1,
+   "p95": 8.9,
+   "max": 8.9,
+   "throughputPerSec": 162.7
+  },
+  {
+   "lanes": "same",
+   "workload": "spinning",
+   "concurrency": 2,
+   "calls": 8,
+   "busy": 0,
+   "okOrGuestError": 8,
+   "p50": 5.9,
+   "p95": 10.1,
+   "max": 10.1,
+   "throughputPerSec": 202.3
+  },
+  {
+   "lanes": "same",
+   "workload": "spinning",
+   "concurrency": 4,
+   "calls": 16,
+   "busy": 8,
+   "okOrGuestError": 8,
+   "p50": 13.6,
+   "p95": 16.5,
+   "max": 16.5,
+   "throughputPerSec": 276.5
+  },
+  {
+   "lanes": "same",
+   "workload": "spinning",
+   "concurrency": 8,
+   "calls": 32,
+   "busy": 24,
+   "okOrGuestError": 8,
+   "p50": 14.8,
+   "p95": 19,
+   "max": 19.5,
+   "throughputPerSec": 470.4
+  },
+  {
+   "lanes": "same",
+   "workload": "spinning",
+   "concurrency": 16,
+   "calls": 64,
+   "busy": 56,
+   "okOrGuestError": 8,
+   "p50": 19.4,
+   "p95": 23.7,
+   "max": 23.9,
+   "throughputPerSec": 763.5
+  }
+ ],
+ "unitCost": {
+  "site": {
+   "requests": 20,
+   "d1PerRequest": 5,
+   "runtimeCallsPerRequest": 0,
+   "sequentialMeanMs": 33.5
+  },
+  "photo": {
+   "requests": 20,
+   "d1PerRequest": 6,
+   "runtimeCallsPerRequest": 0,
+   "sequentialMeanMs": 43.2
+  },
+  "contact_get": {
+   "requests": 20,
+   "d1PerRequest": 1,
+   "runtimeCallsPerRequest": 0,
+   "sequentialMeanMs": 8.3
+  },
+  "contact_post": {
+   "requests": 3,
+   "d1PerRequest": 5,
+   "runtimeCallsPerRequest": 0,
+   "sequentialMeanMs": 30.8
+  },
+  "backend": {
+   "requests": 3,
+   "d1PerRequest": 3,
+   "runtimeCallsPerRequest": 1,
+   "sequentialMeanMs": 26.3
+  },
+  "app_page": {
+   "requests": 20,
+   "d1PerRequest": 1,
+   "runtimeCallsPerRequest": 0,
+   "sequentialMeanMs": 9.5
+  },
+  "visitor": {
+   "requests": 3,
+   "d1PerRequest": 9,
+   "runtimeCallsPerRequest": 1,
+   "sequentialMeanMs": 76.3
+  }
+ },
+ "limiterProbe": [
+  {
+   "label": "contact form GET, one IP (API_LIMITER 120/60 s)",
+   "requests": 150,
+   "ok": 120,
+   "limited429": 30
+  },
+  {
+   "label": "contact form GET, distinct IP each request",
+   "requests": 150,
+   "ok": 150,
+   "limited429": 0
+  },
+  {
+   "label": "site page GET, one IP (no limiter in site host)",
+   "requests": 150,
+   "ok": 150,
+   "limited429": 0
+  },
+  {
+   "label": "public backend POST, one IP (20/client/project/day inside the project quota)",
+   "requests": 5,
+   "ok": 5,
+   "limited429": 0
+  },
+  {
+   "label": "visitor app page GET, one IP (API_LIMITER 120/60 s)",
+   "requests": 150,
+   "ok": 120,
+   "limited429": 30
+  }
+ ],
+ "limiterDenied": {
+  "AUTH": 0,
+  "API": 140
+ },
+ "d1StatementsTotal": 17657,
+ "runtimeCallsTotal": 997,
+ "runtimeServiceLatency": {
+  "calls": 997,
+  "p50": 66.9,
+  "p95": 238.3,
+  "p99": 340.8,
+  "max": 1027.2
+ },
+ "totalWallSeconds": 172.6
+}

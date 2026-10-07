@@ -14,7 +14,7 @@ node tools/capacity.mjs --json out.json --scale 2 --tenants 6 --seed 7
 
 - Options: `--smoke`, `--scale N` (site/photo volume multiplier, 1 to 4), `--tenants N` (2 to 8, one is always the noisy tenant), `--seed N` (deterministic job order), `--json FILE`. Also `pnpm capacity` with the same arguments.
 - The harness refuses to run if `.env`/`.dev.vars` files exist, strips the environment to the allowlist used by [verification profiles](verification.md) (no provider keys, proxies, `NODE_OPTIONS` or Wrangler auth, temporary `HOME`), and replaces global `fetch` with a guard that throws for any host other than `127.0.0.1`/`localhost`. All state lives in temporary directories removed at exit.
-- The repository requires Node.js 24. The recorded run used **Node 22.22.0**, which only prints a warning here (unlike `pnpm verify`, which refuses); re-record on Node 24 before relying on the numbers.
+- The repository requires Node.js 24. The October 4 historical runs used **Node 22.22.0**. The [October 7 re-recording](#node-24-re-recording--october-7-2026-utc) uses **Node 24.19.0** and retains the original raw report; the documentation pin is 24.21.0.
 - Volumes are bounded: a fixed job count per scenario, 3 closed-loop clients per victim tenant and 24 for the noisy tenant, no open-ended duration. The default completes in about 4 minutes on the recorded machine; most of that is the serialized local D1 fixture.
 
 ## Method
@@ -287,6 +287,22 @@ Conservative cohort admission, derived only from the ceilings above and the F1 r
 - **Fixture effects.** The local D1 binding serializes statements; the harness and all handlers share one Node event loop (delay reported above); the runtime is one Miniflare isolate; Turnstile, WebAuthn sign-in, email, AI inference, DNS and Cloudflare edge/CDN behavior are absent. Latencies are therefore only comparable within a run.
 - **Untested scale.** Real tenant counts, account-cap exhaustion by a single account, contact and visitor platform-cap exhaustion by traffic, quota rollover, month-scale R2 counts (the counter was pre-set), long-duration soak, memory growth, scheduled-job interference, large photos, multi-region distribution and any traffic above roughly 1,000 requests per phase.
 - **Variance.** Runs are not statistically replicated; `busy` counts in particular vary with timing (earlier runs of slightly different mixes saw 0 to 4 victim refusals in B). The seed fixes job order only.
+
+## Node 24 re-recording — October 7, 2026 UTC
+
+The full default envelope completed on source `ca17c6a` with `node tools/capacity.mjs --json /tmp/whumpo-verification/capacity-node24.json`: **Node 24.19.0**, Linux x64, 5 reported CPUs, 17.6 GiB memory, seed 50, scale 1, four tenants, **172.6 seconds**. The [complete synthetic report](evidence/capacity-node24-2026-10-07.json) retains every phase, runtime bound, statement count and outcome. This removes the Node 22 verification gap; it does not establish the exact documented 24.21.0 patch version. Other agents shared the host, so elapsed times are observations of this run, not a controlled comparison with October 4.
+
+| Boundary | Current local observation |
+| --- | --- |
+| Victims alone versus noisy traffic | 516 requests in each phase; p50 **278.3 → 813.9 ms**, p95 **585.1 → 2,170.5 ms**. The noisy phase had one victim backend `busy` response out of 120; all 108 victim transitions completed. The separate simultaneous burst had two victim `busy` responses out of 15. |
+| Single-client lockout | Backend **20/40** accepted, contact **10/15**, photos **400/450**; every remaining request was 429. Fresh-IP follow-ups all succeeded: 10 backend, 3 contact and 10 photo requests. |
+| Daily fair share | Two filler accounts executed 100 backend calls each; 794 filler attempts were limited and six refused busy. The platform reached **605/1,000** after probes. Existing victim **5/5** and fresh account **10/10** probes succeeded. |
+| Charging after runtime refusal | Project counters exactly matched executed backend calls: noisy 100, victims 88/84/83; busy counts 30/0/1/2 were not charged. |
+| Serving and recovery | Victim HTML, photos, contact forms and visitor pages each **10/10**; visitor changes **3/3**; direct benign runtime calls **5/5**. The later victim backend sample was **2/3**, with one 429 after the same project used its remaining allowance: it had 93 calls before the five daily-budget probes, then two successful recovery calls reached 100. This is the project ceiling, not exhaustion of the platform reserve. |
+| Photo isolation and platform ceiling | At the noisy project's 9,990-read preload, ten more photos succeeded and ten refused 503; another tenant's photos stayed **5/5**. With the platform counter at 99,995, exactly five further reads succeeded and five refused 503; HTML still served. Counter preloads test admission, not 100,000 actual requests. |
+| Runtime bounds | All nine hostile/oversized cases refused with their expected bounded error category; every immediate benign follow-up succeeded. |
+
+The run issued **17,657 D1 statements** and **997 runtime calls**. Statement counts per request were site 5, photo 6, contact read 1, contact submission 5, public backend 3, visitor page 1 and visitor transition 9; these are adapter calls, not billable D1 rows. The photo and daily reserve results reproduce the delivered WH-075 isolation behavior. Host contention, unrestricted site HTML, distributed callers, multi-isolate scheduling, time-based rollover, external alert delivery and live cost/capacity acceptance remain outside this run. WH-050/075 remain open at their broader acceptance boundaries. No deployed URL, provider, scanner, real customer data or paid service was used.
 
 ## Related
 

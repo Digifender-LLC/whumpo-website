@@ -34,6 +34,8 @@ try{
  assert.equal((await turn(reserved)).status,'failed');assert.equal((await readStandardAI(scope(reserved.user),reserved.user,reserved.id)).state,'released');assert.equal((await db.prepare('SELECT status FROM inference_calls WHERE id=?').bind(reserved.id).first()).status,'released');
  const unknown=await fixture();await reconcileChat(scope(unknown.user),unknown.user);
  assert.equal((await turn(unknown)).status,'uncertain');assert.equal((await readStandardAI(scope(unknown.user),unknown.user,unknown.id)).state,'uncertain');assert.equal((await db.prepare('SELECT status FROM inference_calls WHERE id=?').bind(unknown.id).first()).status,'uncertain');assert.ok((await db.prepare('SELECT reserved_micros FROM inference_budgets WHERE user_id=?').bind(unknown.user).first()).reserved_micros>0);
+ for(const failed of [rejected,unknown]){const reply=(await turn(failed)).assistant_text;assert.doesNotMatch(reply,/credits/i);assert.match(reply,/Check your saved work/);}
+ assert.match((await turn(unknown)).assistant_text,/not be sent twice/);
  // A late draft and result must roll back as one transaction after timeout.
  const event=crypto.randomUUID();await assert.rejects(()=>db.batch([db.prepare("INSERT INTO activity_events(id,user_id,action,summary,created_at) VALUES(?,?,'test','Synthetic late draft',?)").bind(event,unknown.user,now),db.prepare('UPDATE chat_turns SET input_tokens=10,output_tokens=10 WHERE id=?').bind(unknown.id)]),/chat_result_closed/);assert.equal(await db.prepare('SELECT id FROM activity_events WHERE id=?').bind(event).first(),null);
  let calls=0;await sendAIChat(scope(unknown.user),unknown.user,unknown.id,0,'Synthetic',config,async()=>{calls++;throw Error('No retry allowed');});assert.equal(calls,0);

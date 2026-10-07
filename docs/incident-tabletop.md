@@ -4,6 +4,8 @@
 
 The WH-007 acceptance item asks for a tabletop that records recovery gaps and owners without external messages. This record satisfies the written-trace form of that item only. A facilitated live exercise with a second participant, injected provider failures and an installed alert path has **not** happened and remains open.
 
+The [October 7 local checkpoint](#node-24-recheck-and-current-gaps--october-7-2026-utc) supersedes the toolchain gap and the listed source gaps where stated. The original trace below remains a historical record.
+
 ## What ran (offline, synthetic)
 
 Run in the task worktree after `pnpm install --frozen-lockfile`. The environment had Node.js v22.22.0, **not** the repository's required Node.js 24, so these results are supporting evidence, not a verification claim under the documented toolchain. Each uses disposable in-memory SQLite or a fake provider and makes no network or provider call.
@@ -106,5 +108,28 @@ There is one named person for every item because the project has a sole operator
 - No alert, outage or cost event was injected; no alert was tested.
 - No live account, provider or customer data was read. No external message was sent.
 - The evidence-hygiene check (Section 5 of the runbook) was run only over the two documents written for WH-007; it found no credential or customer content, but it cannot prove the absence of customer prose in future incident records.
-- Offline suites ran on Node.js v22.22.0 rather than the repository's Node.js 24; re-run them under Node 24 before citing them as release evidence.
+- The original offline suites ran on Node.js v22.22.0. The October 7 checkpoint below re-runs them on Node 24; neither run is a deployed drill.
 - WH-007 acceptance is **not complete**: the live exercise, alerting, and the gaps above remain. Do not close the execution issue from this record alone.
+
+## Node 24 recheck and current gaps — October 7, 2026 UTC
+
+Source `ca17c6a` plus the focused standard-AI copy correction passes all **13** executions below on **Node 24.19.0**, pnpm 11.19.0. Each command used the verification runner's environment allowlist and a temporary empty home, excluding provider credentials, proxies and live-test flags. D1 fixtures are local and disposable; the health probe calls only a loopback stub. The documentation's exact Node patch pin is 24.21.0, so this records the supported major without claiming that patch version.
+
+| Commands (`node --stack-trace-limit=0 tests/NAME.mjs`) | Current evidence |
+| --- | --- |
+| `maintenance`, `maintenance-inventory`, `maintenance-scheduled` | Independent scheduled failures/recovery, **41** read-only queues, four receipt families, **13** schema-checked shared counters with 50%/80% flags, private-data exclusion and no external fetches. |
+| `standard-ai-recovery`, `standard-ai-usage`, `standard-ai-chat`, `model-costs` | Saved-answer recovery, lost acknowledgements, owner/revision and dispatch races, uncertain-cost retention without redispatch, atomic budget refusal and no customer credit ledger. |
+| `secret-custody`, `release-manifest` | Nine declared secret names, private-artifact exclusion and synthetic partial-release/uncertain-command recovery. No actual keys or provider changes. |
+| `identity-recovery` | **64** refusal/race checks plus actual synthetic cryptographic signup and recovery journeys. No physical device or deployed identity claim. |
+| `operator-containment`, `operator-containment --d1` | Both SQLite and actual local D1: exact preview/apply, immutable audit, per-account/project public freezes and allowances, lifts/expiry, tenant isolation and preservation of saved customer data. |
+| `probe-health` | One bounded unauthenticated health GET, redirects refused, timeout/unreachable handling against a loopback stub. This does not test delivery or a deployed outage. |
+
+F3 is corrected in `src/ai-chat.ts` and `src/standard-ai-recovery.ts`: failures describe saved work, current limits and the next safe action without claiming a customer credit balance. The uncertain-result messages still tell owners to inspect saved work and still state that the same message will not be sent twice. Existing Chat/recovery tests now verify these actual responses alongside unchanged billing/receipt behavior. No schema, budget, provider dispatch or charging logic changed.
+
+Current source also supersedes three absolute gaps in the original trace:
+
+- **G1/G11:** shared-counter thresholds and a manual liveness probe exist and pass local checks. Scheduled probes, provider-specific outage detection, notification delivery and a second operator remain open.
+- **G3/F8:** [C15](incident-runbooks.md#2-controls-that-exist-today) implements reviewed public-allowance containment for an account/project. Site HTML takedown, operator workspace-session revocation and application-disable/visitor-session containment remain separate gaps; the local tool is not evidence of operational configuration or rehearsal.
+- **G12:** [restricted operator case, evidence and retention operations](content-safety.md#authenticated-operators-wh-132) exist in source with recorded local acceptance. This checkpoint only reconciles that source/document status; it does not run or activate them. Counsel review, operator onboarding, independent preservation procedure, CSAM detection and reporting acceptance remain open.
+
+The [Node 24 capacity record](capacity-and-fairness.md#node-24-re-recording--october-7-2026-utc) supplies the current bounded public-traffic evidence. WH-007 remains open for its facilitated operational exercise, installed alert delivery and unresolved recovery/custody decisions. No incident message, deployed control, real provider request, restricted evidence or customer data was involved.
