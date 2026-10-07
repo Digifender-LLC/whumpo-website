@@ -1428,7 +1428,7 @@ CREATE TABLE contact_notification_outbox (
  expires_at TEXT NOT NULL,
  accepted_at TEXT,
  provider_ref TEXT CHECK(provider_ref IS NULL OR length(provider_ref) BETWEEN 1 AND 100),
- last_error TEXT CHECK(last_error IS NULL OR last_error IN ('rejected','unavailable','exhausted','suppressed','expired','contained','uncertain','ceiling')),
+ last_error TEXT CHECK(last_error IS NULL OR last_error IN ('rejected','unavailable','exhausted','suppressed','expired','contained','uncertain','ceiling','not_sent')),
  CHECK((dispatch_id IS NULL)=(dispatched_at IS NULL)),
  CHECK((attempts=0)=(dispatch_id IS NULL)),
  CHECK(state NOT IN ('dispatching','uncertain') OR dispatch_id IS NOT NULL),
@@ -3795,7 +3795,8 @@ CREATE TRIGGER contact_outbox_update BEFORE UPDATE ON contact_notification_outbo
   OR NEW.attempts<OLD.attempts OR (OLD.accepted_at IS NOT NULL AND (NEW.accepted_at IS NOT OLD.accepted_at OR NEW.attempts IS NOT OLD.attempts OR NEW.provider_ref IS NOT OLD.provider_ref));
  SELECT RAISE(ABORT,'contact_outbox_dispatch') WHERE
   (OLD.state='queued' AND NEW.state NOT IN ('queued','dispatching','cancelled'))
-  OR (OLD.state='dispatching' AND NEW.state NOT IN ('queued','uncertain','accepted','failed'))
+  OR (OLD.state='dispatching' AND NEW.state NOT IN ('queued','uncertain','accepted','failed','cancelled'))
+  OR (OLD.state='dispatching' AND NEW.state='cancelled' AND NEW.last_error IS NOT 'not_sent')
   OR (OLD.state='dispatching' AND NEW.state='queued' AND NEW.last_error IS NOT 'unavailable')
   OR (NEW.state='dispatching' AND (OLD.state!='queued' OR NEW.attempts!=OLD.attempts+1 OR NEW.dispatch_id IS OLD.dispatch_id OR NEW.dispatched_at IS NULL OR NEW.last_error IS NOT NULL))
   OR (NEW.state!='dispatching' AND (NEW.attempts!=OLD.attempts OR NEW.dispatch_id IS NOT OLD.dispatch_id OR NEW.dispatched_at IS NOT OLD.dispatched_at));

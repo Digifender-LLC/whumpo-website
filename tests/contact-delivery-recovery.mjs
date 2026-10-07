@@ -93,6 +93,28 @@ try{
   assert.equal((await row("SELECT count(*) n FROM contact_notification_outbox WHERE project_id=? AND state='cancelled'",p.project)).n,1);
   assert.equal((await row("SELECT count(*) n FROM contact_notification_outbox WHERE project_id=? AND state='uncertain'",p.project)).n,1);
  });
+ await test('a visible post-claim freeze or revocation stops a provider call that has not started',async()=>{
+  for(const operation of ['closure','suppression']){
+   const p=await project();await p.submit();let calls=0,changed=false;
+   const race=interceptDatabase(db,claim,async()=>{},async()=>{
+    if(changed)return;changed=true;
+    if(operation==='closure'){const review=(await closureCall(p,'prepare',{requestId:id()})).review;const closing=await close(p,review);assert.equal(closing.closure.state,'waiting');}
+    else await run("INSERT INTO contact_notification_suppressions(user_id,address,reason,created_at) VALUES(?,?,'unsubscribe',?)",p.owner,p.destination.address,new Date().toISOString());
+   });
+   const result=await N.runContactDelivery(race,settings,async()=>{calls++;return {accepted:true};});assert.ok(changed);assert.equal(calls,0);assert.equal(result.cancelled,1);
+   const refused=await notice(p.project);assert.equal(refused.state,'cancelled');assert.equal(refused.last_error,'not_sent');assert.equal(refused.attempts,1);assert.ok(refused.dispatch_id);
+   await N.runContactDelivery(db,settings,async()=>{calls++;return {accepted:true};},{now:new Date(Date.now()+600000)});assert.equal(calls,0);
+   if(operation==='closure'){const done=await closureCall(p,'resume');assert.equal(done.closure.state,'complete');assert.equal(await row('SELECT id FROM users WHERE id=?',p.owner),null);}
+  }
+ });
+ await test('closure after the provider call starts preserves a truly uncertain effect',async()=>{
+  const p=await project();await p.submit();let calls=0;
+  const result=await N.runContactDelivery(db,settings,async()=>{
+   calls++;const review=(await closureCall(p,'prepare',{requestId:id()})).review;const closing=await close(p,review);assert.equal(closing.closure.state,'waiting');throw Error('Synthetic response lost after send began');
+  });assert.equal(result.uncertain,1);assert.equal(calls,1);assert.equal((await notice(p.project)).state,'uncertain');
+  await N.runContactDelivery(db,settings,async()=>assert.fail('No repeat after closure'),{now:new Date(Date.now()+600000)});
+  const waiting=await closureCall(p,'resume');assert.equal(waiting.closure.state,'waiting');assert.equal(waiting.closure.steps.find(s=>s.step==='operations').detail.unresolvedOperations,1);assert.ok(await row('SELECT id FROM users WHERE id=?',p.owner));
+ });
  await test('a queued notice cannot silently adopt a different provider or review',async()=>{
   const p=await project();await p.submit();const before=interceptDatabase(db,claim,()=>{throw Error('Synthetic stop before send');});
   await assert.rejects(N.runContactDelivery(before,settings,async()=>assert.fail('No send')),/Synthetic/);

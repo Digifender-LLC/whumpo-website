@@ -196,6 +196,15 @@ export async function runContactDelivery(db:Pick<D1Database,'prepare'|'batch'>,s
    claimed=claim.meta.changes;
   }catch(cause){if(String(cause).includes('contact_send_ceiling')){overCeiling=true;await cancel(row,'ceiling');continue;}if(String(cause).includes('contact_outbox_dispatch')){await cancel(row,null);continue;}throw cause;}
   if(!claimed)continue;
+  // A committed intent may wait before this continuation resumes. Refuse an already visible freeze/revocation at
+  // the effect point while this unique claimant still knows it has not called the provider. A later remote effect
+  // cannot be made atomic with D1; after the call starts, uncertainty must retain its receipt instead of cancelling.
+  const effectAt=currentInstant().toISOString();
+  const current=await db.prepare("SELECT o.id FROM contact_notification_outbox o JOIN contact_notification_destinations d ON d.id=o.destination_id AND d.user_id=o.user_id AND d.project_id=o.project_id WHERE o.id=? AND o.state='dispatching' AND o.dispatch_id=? AND o.provider=? AND o.review=? AND o.expires_at>? AND NOT EXISTS(SELECT 1 FROM account_closures WHERE account_id=o.user_id) AND NOT EXISTS(SELECT 1 FROM operator_contained_projects WHERE project_id=o.project_id AND scope='contact') AND ((o.kind='new_message' AND d.state='verified' AND EXISTS(SELECT 1 FROM contact_submissions s WHERE s.id=o.submission_id AND s.project_id=o.project_id AND s.expires_at>?)) OR (o.kind='verification' AND d.state='unverified' AND d.verification_code IS NOT NULL AND d.verification_expires_at>? AND o.idempotency_key='verify:'||d.id||':'||d.verification_code))").bind(row.id,dispatch,settings.provider,settings.review,effectAt,effectAt,effectAt).first();
+  if(!current){
+   if((await db.prepare("UPDATE contact_notification_outbox SET state='cancelled',last_error='not_sent' WHERE id=? AND state='dispatching' AND dispatch_id=?").bind(row.id,dispatch).run()).meta.changes)result.cancelled++;
+   continue;
+  }
   let outcome:ContactProviderOutcome;
   try{outcome=await withTimeout(sender({outboxId:row.id,idempotencyKey:row.idempotency_key,kind:row.kind,projectId:row.project_id,recipient:row.address,...(row.kind==='verification'?{verificationCode:row.code!}:{})},settings),timeout);}catch{outcome={accepted:false,retryable:false,uncertain:true};}
   if(outcome.accepted){
