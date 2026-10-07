@@ -5,7 +5,7 @@ import {join} from 'node:path';
 import {saveBuildSnapshot,verifyBuildSnapshot,readBuildInputs} from '../tools/build-snapshot.mjs';
 import {prepareRelease,archivedConfig,expectedServiceBindings} from '../tools/prepare-release.mjs';
 import {workerOrder,configFiles,readJSON,verifyRelease,applyRelease,fileInventory,validateCompatibility,digest,copyTree,assertWorker} from '../tools/release-manifest.mjs';
-import {currentSchemaArtifact,schemaSummary,currentSchemaPlan} from '../tools/current-schema.mjs';
+import {currentSchemaArtifact,currentSchemaFiles,schemaSummary,currentSchemaPlan} from '../tools/current-schema.mjs';
 import {bindingSummary} from '../tools/release-provider.mjs';
 
 const root=await mkdtemp(join(tmpdir(),'whumpo-release-'));
@@ -36,7 +36,7 @@ const reset=()=>{live=baseline();counts=Object.fromEntries(['schema',...workerOr
 let review;
 const prepare=()=>prepareRelease(root,driver,review,{git:()=>({commit:'a'.repeat(40),dirty:false})});
 try{
- for(const dir of ['src','frontend','web','public-app','tools','dist','src/workspace-identity','src/funnel-metrics','src/guest-previews','src/shared-modules','node_modules/wrangler','compiler-locks','schema'])await mkdir(join(root,dir),{recursive:true});
+ for(const dir of ['src','frontend','web','public-app','tools','dist','src/workspace-identity','src/mobile','src/funnel-metrics','src/guest-previews','src/shared-modules','node_modules/wrangler','compiler-locks','schema'])await mkdir(join(root,dir),{recursive:true});
  for(const name of ['package.json','pnpm-lock.yaml','vite.config.ts','tsconfig.json','tsconfig.frontend.json','tools/current-schema.mjs','schema/platform.sql','tools/build.mjs','tools/build-pwa.mjs','tools/build-snapshot.mjs','tools/deploy-platform.mjs','tools/check-specification-compiler.mjs','compiler-locks/project-content-v5.json','tools/check-service-client-compiler.mjs','compiler-locks/project-service-clients-v4.json'])await writeFile(join(root,name),'fixture');
  await writeFile(join(root,'node_modules/wrangler/package.json'),JSON.stringify({version:'4.test'}));
  for(const name of ['tools/artifact-protection.mjs','tools/secret-custody.mjs'])await writeFile(join(root,name),'fixture');
@@ -51,6 +51,7 @@ try{
  await writeFile(join(root,'src/workspace-identity/canonical-inputs.sql'),'CREATE TABLE users(id TEXT PRIMARY KEY);');
  await writeFile(join(root,'schema/platform.sql'),'CREATE TABLE projects(id TEXT PRIMARY KEY, user_id TEXT REFERENCES users(id));');
  await writeFile(join(root,'src/workspace-identity/schema.sql'),'CREATE TABLE identity_sessions(id TEXT PRIMARY KEY, user_id TEXT REFERENCES users(id));');
+ await writeFile(join(root,'src/mobile/schema.sql'),'CREATE TABLE mobile_identity_handoffs(id TEXT PRIMARY KEY, source_session_id TEXT REFERENCES identity_sessions(id));');
  await writeFile(join(root,'src/funnel-metrics/schema.sql'),'CREATE TABLE funnel_events(user_id TEXT REFERENCES users(id));');
  await writeFile(join(root,'src/guest-previews/schema.sql'),'CREATE TABLE guest_preview_links(owner_user_id TEXT REFERENCES users(id));');
  await writeFile(join(root,'src/shared-modules/schema.sql'),'CREATE TABLE module_instances(project_id TEXT REFERENCES projects(id));');
@@ -68,6 +69,7 @@ try{
  assert.deepEqual(expectedServiceBindings([{binding:'TEST',service:'worker',entrypoint:'API'}]),[{binding:'TEST',service:'worker',environment:'production',entrypoint:'API'}]);
  assert.throws(()=>expectedServiceBindings([{binding:'TEST',service:'worker',props:{unexpected:true}}]),/archive support/);
  assert.ok(manifest.files.some(f=>f.path==='workers/runtime/runtime.wasm'));
+ for(const path of currentSchemaFiles)assert.ok(manifest.files.some(file=>file.path==='source/'+path),'Current schema input missing from archived source: '+path);
  for(const name of ['project-content-v5.json','project-service-clients-v4.json'])assert.ok(manifest.files.some(f=>f.path==='source/compiler-locks/'+name),'Required compiler lock missing from archived source: '+name);
  assert.ok(!JSON.stringify(manifest).includes('DO_NOT_ARCHIVE'));
  assert.ok(!manifest.files.some(f=>f.path.includes('.secrets')||f.path.includes('node_modules')));
