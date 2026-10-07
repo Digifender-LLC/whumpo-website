@@ -42,6 +42,7 @@ import {listPhotos} from './files';
 import {photoRemovalCommand} from './photo-removal';
 import {applyServiceClientsCommand,serviceClientChatLinks} from './project-specification/service-clients/store';
 import {prepareAccessModuleCommand,prepareAccessStaffCommand} from './shared-modules/access-setup';
+import {prepareRecordsModuleCommand} from './shared-modules/records-setup';
 import {prepareFilesModuleCommand} from './shared-modules/files-setup';
 import {prepareFilesCollectionCommand} from './shared-modules/files-collection-setup';
 import {prepareGalleryPageCommand} from './shared-modules/files-gallery';
@@ -221,6 +222,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     // WH-126 owner visitor access setup prepares the existing exact specification review (saved by specificationApply).
     if(control?.action.type==='accessModuleReview')accessSetup=await prepareAccessModuleCommand(db,userId,input.id,command);
     if(control?.action.type==='accessStaffReview')accessSetup=await prepareAccessStaffCommand(db,userId,input.id,command);
+    if(control?.action.type==='recordsModuleReview')accessSetup=await prepareRecordsModuleCommand(db,userId,input.id,command);
     // WH-128 owner photo collection setup: the same slot, the existing exact specification review (saved by specificationApply).
     if(control?.action.type==='filesModuleReview')accessSetup=await prepareFilesModuleCommand(db,userId,input.id,command);
     if(control?.action.type==='filesCollectionReview')accessSetup=await prepareFilesCollectionCommand(db,userId,input.id,command);

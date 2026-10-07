@@ -31,6 +31,7 @@ export type ChatControl =
  | {type:'moduleActivationReview';projectId:string;instanceId:string;action:'activate'|'disable'}
  | {type:'accessModuleReview';projectId:string}
  | {type:'accessStaffReview';projectId:string}
+ | {type:'recordsModuleReview';projectId:string;attachment:{instanceId:string;collectionId:string}|null}
  | {type:'filesModuleReview';projectId:string}
  | {type:'filesCollectionReview';projectId:string;audience:'staff'|'visitor'}
  | {type:'galleryPageReview';projectId:string;instanceId:string;collectionId:string;pageId:string}
@@ -77,6 +78,14 @@ export function chatControl(value:unknown):{action:ChatControl;command:string;la
  if(a.type==='accessStaffReview'&&exact(a,['type','projectId'])&&Object.keys(a).length===2&&id(a.projectId)){
   const action={type:'accessStaffReview' as const,projectId:a.projectId};
   return {action,command:`/review-visitor-staff-setup ${action.projectId}`,label:'Review adding the staff role to visitor access. No visitor is granted a role.',recentAuth:false};
+ }
+ // WH-127 maintained visitor enquiry preset: logical collection ids only, no field values or caller-written schema.
+ if(a.type==='recordsModuleReview'&&exact(a,['type','projectId','attachment'])&&Object.keys(a).length===3&&id(a.projectId)){
+  const ref=a.attachment;
+  if(ref!==null&&(!ref||typeof ref!=='object'||Array.isArray(ref)||Object.keys(ref).length!==2||!Object.keys(ref).every(k=>['instanceId','collectionId'].includes(k))
+   ||!Object.values(ref).every(v=>typeof v==='string'&&/^[a-z][a-z0-9-]{0,39}$/.test(v))))return;
+  const action={type:'recordsModuleReview' as const,projectId:a.projectId,attachment:ref as {instanceId:string;collectionId:string}|null};
+  return {action,command:`/review-enquiry-setup ${action.projectId} ${action.attachment?`${action.attachment.instanceId} ${action.attachment.collectionId}`:'none'}`,label:'Review setting up a private visitor enquiry form.',recentAuth:false};
  }
  // WH-128 owner photo collection setup: the project id only. The server chooses the fixed standard files instance.
  if(a.type==='filesModuleReview'&&exact(a,['type','projectId'])&&Object.keys(a).length===2&&id(a.projectId)){

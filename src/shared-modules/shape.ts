@@ -36,14 +36,18 @@ export function validAccessRoleFacts(d:unknown):d is AccessRoleFacts{
 /** WH-127 `records.summary@1` view facts: per registered records instance, its state, revisions and retention, and per
  * schema the count of retained records by submitter kind; forms and views by id, audience and scope. Never a field
  * label, field value, visitor id or entry id (visitor-submitted values stay dashboard-only). */
-export type RecordsSummaryFacts={items:{localId:string;resourceId:string;state:'inactive'|'active'|'suspended'|'migrating';configRevision:number;retentionDays:30|90|365;
+export type RecordsSetupFacts={state:'website-required'|'access-required'|'not-configured'|'saved'|'registered'|'unavailable';instanceId:string|null;attachmentCollections:{instanceId:string;collectionId:string}[]};
+export type RecordsSummaryFacts={setup:RecordsSetupFacts;items:{localId:string;resourceId:string;state:'inactive'|'active'|'suspended'|'migrating';configRevision:number;retentionDays:30|90|365;
  schemas:{recordId:string;fieldsRevision:number;fields:number;records:{public:number;visitor:number;staff:number}}[];
  forms:{formId:string;recordId:string;submit:'public'|'visitor'|'staff';attachments:boolean}[];
  views:{viewId:string;recordId:string;audience:'staff'|'visitor';scope:'all'|'own'}[]}[]};
 const localName=(v:unknown)=>typeof v==='string'&&/^[a-z][a-z0-9-]{0,39}$/.test(v);
 const tally=(v:unknown)=>Number.isSafeInteger(v)&&Number(v)>=0&&Number(v)<=20000;
 export function validRecordsSummaryFacts(d:unknown):d is RecordsSummaryFacts{
- return exact(d,['items'])&&Array.isArray(d.items)&&d.items.length<=9&&d.items.every(i=>exact(i,['localId','resourceId','state','configRevision','retentionDays','schemas','forms','views'])
+ return exact(d,['setup','items'])&&exact(d.setup,['state','instanceId','attachmentCollections'])
+  &&['website-required','access-required','not-configured','saved','registered','unavailable'].includes(String(d.setup.state))&&(d.setup.instanceId===null||localName(d.setup.instanceId))
+  &&Array.isArray(d.setup.attachmentCollections)&&d.setup.attachmentCollections.length<=32&&d.setup.attachmentCollections.every(c=>exact(c,['instanceId','collectionId'])&&localName(c.instanceId)&&localName(c.collectionId))
+  &&Array.isArray(d.items)&&d.items.length<=9&&d.items.every(i=>exact(i,['localId','resourceId','state','configRevision','retentionDays','schemas','forms','views'])
   &&localName(i.localId)&&uuid(i.resourceId)&&['inactive','active','suspended','migrating'].includes(String(i.state))&&positive(i.configRevision)&&[30,90,365].includes(Number(i.retentionDays))
   &&Array.isArray(i.schemas)&&i.schemas.length>=1&&i.schemas.length<=4&&i.schemas.every(s=>exact(s,['recordId','fieldsRevision','fields','records'])&&localName(s.recordId)&&positive(s.fieldsRevision)
    &&Number.isSafeInteger(s.fields)&&Number(s.fields)>=1&&Number(s.fields)<=8&&exact(s.records,['public','visitor','staff'])&&tally((s.records as Record<string,unknown>).public)&&tally((s.records as Record<string,unknown>).visitor)&&tally((s.records as Record<string,unknown>).staff))

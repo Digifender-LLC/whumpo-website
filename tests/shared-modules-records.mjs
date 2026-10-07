@@ -531,6 +531,87 @@ try{
   await setRole(c,staff.visitorId,'revoke');assert.equal((await gateway(c,get(records,entry),staff)).body.code,'not_found');
  });
 
+ await check('bounded enquiry authoring: exact owner review, recovery, save, activation, signed submission and private panel',async()=>{
+  const c=await owner(),d=await owner(),setup={type:'recordsModuleReview',projectId:c.project,attachment:null};
+  const summary=async()=>{const r=await workspace(c,`/api/projects/${c.project}/module-records`);assert.equal(r.status,200);return r.body;};
+  assert.equal((await summary()).setup.state,'access-required');assert.equal((await control(c,setup)).status,409);
+  await configureFixtureModules(c.scope,c.user,c.project,[accessInstance]);await activation(c,'members');
+  assert.deepEqual((await summary()).setup,{state:'not-configured',instanceId:null,attachmentCollections:[]});
+  for(const action of [{...setup,schema:{}},{...setup,attachment:{instanceId:'uploads',collectionId:'proofs',fileId:id()}},{...setup,attachment:{}},{...setup,attachment:{instanceId:'bad/id',collectionId:'proofs'}},{type:'recordsModuleReview',projectId:c.project}])assert.ok(!m.chatControl(action));
+  assert.equal((await control(d,setup)).status,404);
+  const input={id:id(),revision:await revision(c),action:setup};
+  const first=await m.sendChatControl(c.scope,c.user,input);assert.equal(first.status,200,first.error);
+  const q=await row('SELECT * FROM project_spec_proposals WHERE id=?',input.id),spec=JSON.parse(q.spec_json),standard=spec.instances.at(-1);
+  assert.equal(standard.id,'visitor-enquiries');assert.deepEqual(standard.dependencies,['members']);assert.equal(standard.config.retentionDays,90);
+  assert.deepEqual(standard.config.schemas[0].fields.map(f=>[f.key,f.read,f.optional]),[['name','submitter',false],['message','submitter',false]]);
+  assert.deepEqual(standard.config.schemas[0].staffWrite,[]);assert.equal(standard.config.forms[0].submit,'visitor');assert.equal(standard.config.forms[0].uploadCollectionId,null);
+  assert.equal(standard.config.views[0].scope,'own');assert.deepEqual({module:standard.module,schema:standard.schema},pins('records'));
+  assert.equal((await m.sendChatControl(c.scope,c.user,input)).status,200,'Lost review response recovers the same turn');
+  assert.equal((await row('SELECT count(*) n FROM project_spec_proposals WHERE id=?',input.id)).n,1);
+  const synthetic=async(action=setup)=>{const t=id(),r=await revision(c)+1;await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,action_json) VALUES(?,?,?,'Synthetic enquiry setup','',strftime('%Y-%m-%dT%H:%M:%fZ','now'),?)",t,c.user,r,JSON.stringify(action));await run('UPDATE workspace_state SET revision=? WHERE user_id=?',r,c.user);return t;};
+  const copy=(turn,json)=>run('INSERT INTO project_spec_proposals SELECT ?,user_id,project_id,operation,expected_revision,draft_revision,base_version_id,target_version_id,base_digest,request_hash,proposal_digest,spec_digest,manifest_digest,policy_version,expires_at,?,lock_json,manifest_json,config_json,html,html_digest,diff_json,envelope_json FROM project_spec_proposals WHERE id=?',turn,json,q.id);
+  const tamper=[s=>s.instances.at(-1).config.retentionDays=365,s=>s.instances.at(-1).config.forms[0].submit='public',s=>s.instances.at(-1).config.schemas[0].fields[1].read='owner',s=>s.instances.at(-1).dependencies=[],s=>s.instances.at(-1).config.schemas[0].staffWrite=['message'],s=>s.name='Changed',s=>s.instances[0].config.roles=[]];
+  for(const change of tamper){const bad=structuredClone(spec);change(bad);await assert.rejects(copy(await synthetic(),JSON.stringify(bad)),/specification_changed/);}
+  await assert.rejects(copy(await synthetic({...setup,projectId:d.project}),q.spec_json),/specification_changed/);
+  await copy(await synthetic(),q.spec_json);
+  assert.equal(await instance(c,'visitor-enquiries'),null,'Preparation registers no module');
+  const save={type:'specificationApply',reviewId:q.id,proposalDigest:q.proposal_digest,expectedRevision:q.expected_revision};
+  const saveInput={id:id(),revision:await revision(c),action:save};assert.equal((await m.sendChatControl(c.scope,c.user,saveInput)).status,200);
+  assert.equal((await m.sendChatControl(c.scope,c.user,saveInput)).status,200,'Saved response loss is replayed without a second version');
+  assert.equal((await row('SELECT count(*) n FROM project_spec_applies WHERE proposal_id=?',q.id)).n,1);
+  assert.equal((await summary()).setup.state,'saved');assert.equal(await instance(c,'visitor-enquiries'),null,'Saving does not activate');
+  assert.equal((await control(c,setup)).status,400);
+  await activation(c,'visitor-enquiries');const records=await instance(c,'visitor-enquiries'),v=await visitor(c),other=await visitor(c);
+  const values={name:value('preset-name'),message:value('preset-message')},payload=envelope(records,'forms.submit',{target:{formId:'enquiry'},input:{values}});
+  assert.equal((await gateway(c,payload,null)).body.code,'forbidden');assert.equal((await ownerCall(c,payload)).body.code,'forbidden');
+  const sent=await gateway(c,payload,v);assert.equal(sent.status,200,JSON.stringify(sent.body));assert.equal((await gateway(c,payload,v)).body.receipt.replayed,true);assert.equal(await count(c),1);
+  const entryId=sent.body.result.entryId,read=envelope(records,'records.get',{target:{recordId:'enquiry',entryId}});
+  assert.deepEqual((await gateway(c,read,v)).body.result.values,values);assert.equal((await gateway(c,read,other)).body.code,'not_found');
+  const ownView=await gateway(c,envelope(records,'records.view',{target:{viewId:'mine',cursor:null}}),v);assert.deepEqual(ownView.body.result.items[0].values,values);
+  const panel=(await workspace(c,`/api/projects/${c.project}/module-records/${records.id}/enquiry`)).body;assert.deepEqual(panel.items[0].values,values);
+  const facts=await summary();assert.equal(facts.setup.state,'registered');assert.equal(facts.items[0].schemas[0].records.visitor,1);
+  for(const v of Object.values(values)){assert.ok(!JSON.stringify(facts).includes(v));assert.ok(!JSON.stringify(await m.readChat(c.scope,c.user)).includes(v));assert.ok(!JSON.stringify(await m.readViewBinding(c.scope,c.user,'records-summary',c.project)).includes(v));}
+  assert.equal((await row('SELECT count(*) n FROM publications WHERE project_id=?',c.project)).n,0);assert.equal((await row('SELECT count(*) n FROM module_access_roles WHERE project_id=?',c.project)).n,0);
+  await auth.revokeAppVisitor(c.scope,c.user,c.project,v.visitorId);assert.equal((await gateway(c,payload,v)).body.code,'forbidden','Saved receipt cannot revive revoked visitor authority');
+  assert.deepEqual((await ownerCall(c,read)).body.result.values,values,'Owner keeps revoked visitor records');
+  const prompt=m.agentPrompt({})+m.agentPrompt({},'website');for(const text of ['recordsModuleReview','review-enquiry-setup'])assert.ok(!prompt.includes(text));
+ });
+
+ await check('enquiry authoring only selects current same-project visitor uploads and refuses stale reviews or disabled dependencies',async()=>{
+  const c=await owner(),d=await owner();
+  const files={id:'visitor-files',kind:'files',...pins('files'),dependencies:['members'],config:{collections:[
+   {id:'visitor-uploads',read:'submitter',upload:['visitor'],maxBytes:1048576,mediaTypes:['image/jpeg'],gallery:{audience:'visitor'}},
+   {id:'staff-uploads',read:'staff',upload:['staff'],maxBytes:1048576,mediaTypes:['image/jpeg'],gallery:null},
+   {id:'private-uploads',read:'owner',upload:['visitor'],maxBytes:1048576,mediaTypes:['image/jpeg'],gallery:null}]}};
+  for(const o of [c,d]){await configureFixtureModules(o.scope,o.user,o.project,[accessInstance,files]);await activation(o,'members');await activation(o,'visitor-files');}
+  const attachment={instanceId:'visitor-files',collectionId:'visitor-uploads'},setup={type:'recordsModuleReview',projectId:c.project,attachment};
+  const summary=async()=>(await workspace(c,`/api/projects/${c.project}/module-records`)).body.setup;
+  assert.deepEqual((await summary()).attachmentCollections,[attachment]);
+  for(const ref of [{...attachment,instanceId:'foreign-files'},{...attachment,collectionId:'missing'},{...attachment,collectionId:'staff-uploads'},{...attachment,collectionId:'private-uploads'}])assert.equal((await control(c,{...setup,attachment:ref})).status,409);
+  assert.equal((await control(d,setup)).status,404);
+  await activation(c,'visitor-files','disable');assert.deepEqual((await summary()).attachmentCollections,[]);assert.equal((await control(c,setup)).status,409);await activation(c,'visitor-files');
+  const first=await control(c,setup);assert.equal(first.status,200,first.error);const q=await row('SELECT * FROM project_spec_proposals WHERE id=?',first.id);
+  assert.deepEqual(JSON.parse(q.spec_json).instances.at(-1).dependencies,['members','visitor-files']);assert.equal(JSON.parse(q.spec_json).instances.at(-1).config.forms[0].uploadCollectionId,'visitor-uploads');
+  // A newer head restored to the same modules still makes the old exact save stale; it never silently rebases.
+  const changed=structuredClone(files);changed.config.collections[0].maxBytes=1048575;
+  await configureFixtureModules(c.scope,c.user,c.project,[accessInstance,changed]);assert.deepEqual((await summary()).attachmentCollections,[],'Saved but unactivated file configuration is not offered');assert.equal((await control(c,setup)).status,409);
+  await configureFixtureModules(c.scope,c.user,c.project,[accessInstance,files]);
+  await assert.rejects(control(c,{type:'specificationApply',reviewId:q.id,proposalDigest:q.proposal_digest,expectedRevision:q.expected_revision}),e=>e.status===409,'A changed head requires a fresh exact review');
+  const fresh=await control(c,setup);assert.equal(fresh.status,200,fresh.error);const review=await row('SELECT * FROM project_spec_proposals WHERE id=?',fresh.id);
+  await activation(c,'visitor-files','disable');
+  const turn=id(),r=await revision(c)+1;await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,action_json) VALUES(?,?,?,'Synthetic late dependency','',datetime('now'),?)",turn,c.user,r,JSON.stringify(setup));await run('UPDATE workspace_state SET revision=? WHERE user_id=?',r,c.user);
+  await assert.rejects(run('INSERT INTO project_spec_proposals SELECT ?,user_id,project_id,operation,expected_revision,draft_revision,base_version_id,target_version_id,base_digest,request_hash,proposal_digest,spec_digest,manifest_digest,policy_version,expires_at,spec_json,lock_json,manifest_json,config_json,html,html_digest,diff_json,envelope_json FROM project_spec_proposals WHERE id=?',turn,review.id),/specification_changed/,'Disabled files win inside the preparation commit');
+  const saved=await control(c,{type:'specificationApply',reviewId:review.id,proposalDigest:review.proposal_digest,expectedRevision:review.expected_revision});assert.equal(saved.status,200,saved.error);
+  assert.equal((await control(c,{type:'moduleActivationReview',projectId:c.project,instanceId:'visitor-enquiries',action:'activate'})).status,409,'Saved config never bypasses current inactive dependencies');
+  await activation(c,'visitor-files');await activation(c,'visitor-enquiries');
+  const records=await instance(c,'visitor-enquiries'),v=await visitor(c),payload=envelope(records,'forms.submit',{target:{formId:'enquiry'},input:{values:{name:value('optional-name'),message:value('optional-message')},attachments:[]}});
+  assert.equal((await gateway(c,payload,v)).status,200,'Optional attachments permit an empty list');
+  assert.equal((await gateway(c,{...payload,requestId:id(),input:{...payload.input,attachments:[{fileId:id()}]}},v)).body.code,'not_found','Arbitrary foreign refs confer no file authority');
+  const principal=await moduleAccess.visitorPrincipal(db,v.session,c.project,records.id);
+  const late=interceptDatabase(db,/^INSERT INTO module_records/,()=>auth.revokeAppVisitor(c.scope,c.user,c.project,v.visitorId));
+  await fails(sharedModules.handleModuleRequest(late,principal,{...payload,requestId:id()}),'forbidden');assert.equal(await count(c),1,'Authority revocation rolls back the record and receipt');
+ });
+
  await check('records paths never reach owner-maintenance inference',async()=>{
   const inference=/^src\/(ai|ai-chat|ai-gateway|acknowledgment|site-agent|agent-[a-z-]+|standard-ai[a-z-]*|chat|backend-chat|app-upgrade-chat|app-recovery-chat|app-page-design)\.ts$|^src\/chat-interactions\/(agent|agent-request|model-continuation|continuation)\.ts$/;
   for(const entry of ['src/shared-modules/records.ts','src/shared-modules/records-export.ts','src/shared-modules/api.ts','src/app-gateway.ts']){
@@ -544,7 +625,7 @@ try{
  });
 
  assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
- process.stdout.write(`Shared module records passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — visitor/staff submissions through the visitor origin with validation, replay and conflicts, anonymous public intake through the contact admission (Turnstile, connection allowance, publication, atomic hourly cap and containment), field/record projection for owner, staff, submitter and anonymous callers on both origins, records.summary@1 counts and the owner panel routes, the owner records export serializer with its visitor-scoped slice and tamper-checked import validation, fixed contact inbox parity, approved own-upload attachments with current file policy and safety/deletion races, exact public publication review pins, configured views with bound cursors, staffWrite compare-and-swap updates with one winner and in-flight revocation, owner removal under safety holds, retention expiry, disable, stale configRevision, caps, sliding receipt windows with owner exemption, per-staff edit cap and 30-day receipt prune, revoked/erased visitors, closure counts and a static no-inference check. No network, model or provider use; no visitor value in Chat, receipts, events or logs.\n`);
+ process.stdout.write(`Shared module records passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — visitor/staff submissions through the visitor origin with validation, replay and conflicts, anonymous public intake through the contact admission (Turnstile, connection allowance, publication, atomic hourly cap and containment), field/record projection for owner, staff, submitter and anonymous callers on both origins, records.summary@1 counts and the owner panel routes, the owner records export serializer with its visitor-scoped slice and tamper-checked import validation, fixed contact inbox parity, approved own-upload attachments with current file policy and safety/deletion races, exact public publication review pins, bounded enquiry authoring through exact save and activation with logical attachment selection and lost-response recovery, configured views with bound cursors, staffWrite compare-and-swap updates with one winner and in-flight revocation, owner removal under safety holds, retention expiry, disable, stale configRevision, caps, sliding receipt windows with owner exemption, per-staff edit cap and 30-day receipt prune, revoked/erased visitors, closure counts and a static no-inference check. No network, model or provider use; no visitor value in Chat, receipts, events or logs.\n`);
 }catch(error){originals.error(String(error.stack||error).replace(/data:text\/javascript;base64,[A-Za-z0-9+/=]+/g,'<bundled module>'));process.exitCode=1;}
 finally{for(const k of consoleMethods)console[k]=originals[k];globalThis.fetch=originalFetch;await fixture.close();}
 

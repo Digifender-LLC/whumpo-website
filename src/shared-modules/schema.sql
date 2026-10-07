@@ -716,3 +716,42 @@ WHEN EXISTS(SELECT 1 FROM module_access_role_reviews r JOIN projects p ON p.id=r
   OR EXISTS(SELECT 1 FROM module_access_roles current WHERE current.review_id=r.id)
   OR EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=r.project_id)))
 BEGIN SELECT RAISE(ABORT,'module_access_receipt_retained'); END;
+
+-- WH-127 enquiry setup appends exactly one maintained records instance to the current head. The owner selects
+-- only an optional same-project current visitor collection. Active access/files scope is rechecked at commit;
+-- ordinary exact saving and later activation remain separate, and no public form, grant or page is introduced.
+CREATE TRIGGER project_spec_records_setup_admit BEFORE INSERT ON project_spec_proposals
+WHEN EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id AND t.user_id=NEW.user_id AND json_extract(t.action_json,'$.type')='recordsModuleReview') BEGIN
+ SELECT RAISE(ABORT,'specification_changed') WHERE NOT EXISTS(
+  SELECT 1 FROM chat_turns t JOIN project_spec_heads h ON h.project_id=NEW.project_id
+   JOIN project_spec_versions v ON v.version_id=h.version_id AND v.project_id=h.project_id
+   JOIN json_each(v.spec_json,'$.instances') access ON json_extract(access.value,'$.kind')='access'
+   JOIN module_instances ai ON ai.project_id=NEW.project_id AND ai.local_id=json_extract(access.value,'$.id') AND ai.kind='access'
+   JOIN module_activations aa ON aa.instance_id=ai.id AND aa.state='active'
+  WHERE t.id=NEW.id AND t.user_id=NEW.user_id AND json_extract(t.action_json,'$.projectId')=NEW.project_id
+   AND h.version_id IS NEW.base_version_id AND v.spec_digest IS NEW.base_digest
+   AND json(ai.config_json)=json(json_extract(access.value,'$.config'))
+   AND ai.module_digest=json_extract(access.value,'$.module.digest') AND ai.schema_digest=json_extract(access.value,'$.schema.digest')
+   AND json_array_length(NEW.spec_json,'$.instances')=json_array_length(v.spec_json,'$.instances')+1
+   AND json(json_remove(NEW.spec_json,'$.instances[#-1]'))=json(v.spec_json)
+   AND NOT EXISTS(SELECT 1 FROM json_each(v.spec_json,'$.instances') e WHERE json_extract(e.value,'$.id')='visitor-enquiries')
+   AND NOT EXISTS(SELECT 1 FROM module_instances i WHERE i.project_id=NEW.project_id AND i.local_id='visitor-enquiries')
+   AND (SELECT count(*) FROM json_each(NEW.spec_json,'$.instances[#-1]'))=6
+   AND json_extract(NEW.spec_json,'$.instances[#-1].id')='visitor-enquiries' AND json_extract(NEW.spec_json,'$.instances[#-1].kind')='records'
+   AND json_extract(NEW.spec_json,'$.instances[#-1].module.name')='module-records' AND json_extract(NEW.spec_json,'$.instances[#-1].schema.name')='records-data'
+   AND json(json_extract(NEW.spec_json,'$.instances[#-1].config'))=json_set(json('{"forms":[{"id":"enquiry","recordId":"enquiry","submit":"visitor","uploadCollectionId":null}],"retentionDays":90,"schemas":[{"fields":[{"key":"name","label":"Name","optional":false,"read":"submitter","type":"text"},{"key":"message","label":"Message","optional":false,"read":"submitter","type":"text"}],"fieldsRevision":1,"id":"enquiry","staffWrite":[]}],"views":[{"audience":"visitor","fields":["name","message"],"id":"mine","limit":25,"recordId":"enquiry","scope":"own"}]}'),'$.forms[0].uploadCollectionId',json_extract(t.action_json,'$.attachment.collectionId'))
+   AND ((json_type(t.action_json,'$.attachment')='null' AND json(json_extract(NEW.spec_json,'$.instances[#-1].dependencies'))=json_array(ai.local_id))
+    OR (json_type(t.action_json,'$.attachment')='object' AND EXISTS(
+     SELECT 1 FROM json_each(v.spec_json,'$.instances') files
+      JOIN module_instances fi ON fi.project_id=NEW.project_id AND fi.local_id=json_extract(files.value,'$.id') AND fi.kind='files'
+      JOIN module_activations fa ON fa.instance_id=fi.id AND fa.state='active'
+      JOIN json_each(files.value,'$.config.collections') collection ON json_extract(collection.value,'$.id')=json_extract(t.action_json,'$.attachment.collectionId')
+     WHERE json_extract(files.value,'$.kind')='files' AND fi.local_id=json_extract(t.action_json,'$.attachment.instanceId')
+      AND json(fi.config_json)=json(json_extract(files.value,'$.config'))
+      AND fi.module_digest=json_extract(files.value,'$.module.digest') AND fi.schema_digest=json_extract(files.value,'$.schema.digest')
+      AND json(fi.dependencies_json)=json_array(ai.id) AND json(json_extract(files.value,'$.dependencies'))=json_array(ai.local_id)
+      AND json_extract(collection.value,'$.read')='submitter' AND EXISTS(SELECT 1 FROM json_each(collection.value,'$.upload') u WHERE u.value='visitor')
+      AND json(json_extract(NEW.spec_json,'$.instances[#-1].dependencies'))=json_array(ai.local_id,fi.local_id)
+    )))
+ );
+END;

@@ -1,3 +1,4 @@
+import {readRecordsSetup} from './records-setup';
 import {contactResourceId,contactRecordsSummary,readContactRecords} from './contact-records';
 import {prepareRecordAttachments,readRecordAttachments} from './records-attachments';
 import {canonicalJSON,jsonDigest,plain} from '../project-specification/v2/json';
@@ -237,5 +238,5 @@ export async function readRecordsSummary(db:D1Database,user:string,project:strin
    forms:c.forms.map(f=>({formId:f.id,recordId:f.recordId,submit:f.submit,attachments:f.uploadCollectionId!==null})),
    views:c.views.map(v=>({viewId:v.id,recordId:v.recordId,audience:v.audience,scope:v.scope}))});
  }
- return {items};
+ return {setup:await readRecordsSetup(db,user,project),items};
 }
