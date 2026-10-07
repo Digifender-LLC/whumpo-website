@@ -46,3 +46,17 @@ export async function prepareAccessModuleCommand(db:D1Database,user:string,turn:
  // The existing review owns compilation, safety holds, staleness, bounds and the reply (BackendError on refusal).
  return prepareSpecification(db,user,turn,{kind:'specification',operation:'change',projectId:project,expectedRevision:spec.revision,operations:[{type:'modules.put',instance:standardAccessInstance()}]});
 }
+
+/** Declare the maintained staff role through the ordinary exact configuration review. This changes no visitor's
+ * role: saving, activation and each later grant retain their separate recent-sign-in reviews. */
+export async function prepareAccessStaffCommand(db:D1Database,user:string,turn:string,command:string){
+ if(!command.startsWith('/review-visitor-staff-setup '))return;
+ const m=/^\/review-visitor-staff-setup ([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})$/.exec(command);
+ if(!m||!uuid.test(turn))throw new ModuleError('invalid_request','Choose an owned project.');
+ await assertWorkspace(db,user);
+ const project=m[1],spec=await currentSpecification(db,user,project),instance=spec?.instances.find(i=>i.kind==='access');
+ if(!spec||!instance||instance.kind!=='access')throw new ModuleError('not_found','Set up visitor access before adding a staff role.');
+ if(instance.config.roles.length)throw new ModuleError('invalid_request','The staff role is already saved. Review activating the current visitor access configuration, then review each staff grant separately.');
+ const configured:Extract<ModuleInstance,{kind:'access'}>={...instance,config:{...instance.config,roles:['staff']}};
+ return prepareSpecification(db,user,turn,{kind:'specification',operation:'change',projectId:project,expectedRevision:spec.revision,operations:[{type:'modules.put',instance:configured}]});
+}

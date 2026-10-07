@@ -3931,7 +3931,7 @@ CREATE TRIGGER project_spec_proposal_admit BEFORE INSERT ON project_spec_proposa
     WHERE c.id=t.id AND c.state='pending' AND s.user_id=t.user_id AND i.project_id=NEW.project_id AND i.state='submitted'
     AND json_extract(i.envelope_json,'$.definition.continuationBinding') IN ('site.content-prepare@1','agent.task-continue@1')))))
    -- WH-126 owner visitor access setup: the typed accessModuleReview control of this project prepares a change.
-   OR (t.mode='guided' AND t.status='completed' AND NEW.operation='change' AND json_extract(t.action_json,'$.type')='accessModuleReview' AND json_extract(t.action_json,'$.projectId')=NEW.project_id)
+   OR (t.mode='guided' AND t.status='completed' AND NEW.operation='change' AND json_extract(t.action_json,'$.type') IN ('accessModuleReview','accessStaffReview') AND json_extract(t.action_json,'$.projectId')=NEW.project_id)
    -- WH-128 owner photo collection setup: the typed filesModuleReview control of this project prepares a change.
    OR (t.mode='guided' AND t.status='completed' AND NEW.operation='change' AND json_extract(t.action_json,'$.type')='filesModuleReview' AND json_extract(t.action_json,'$.projectId')=NEW.project_id)
    -- WH-128 published gallery: the typed galleryPageReview control of this project prepares a change.

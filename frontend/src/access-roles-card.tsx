@@ -14,10 +14,14 @@ export function AccessRolesCard({facts,projectId,owner}:{facts:AccessRoleFacts;p
   if(lock.current)return;lock.current=true;setError('');
   try{await runAction({type:'accessRoleReview',projectId,instanceId,visitorId,action});}catch(e){setError(message(e));}finally{lock.current=false;}
  }
+ async function setup(instanceId:string,activate:boolean){
+  if(lock.current)return;lock.current=true;setError('');
+  try{await runAction(activate?{type:'moduleActivationReview',projectId,instanceId,action:'activate'}:{type:'accessStaffReview',projectId});}catch(e){setError(message(e));}finally{lock.current=false;}
+ }
  if(!facts.items.length)return <p className="text-sm text-muted-foreground">No visitor access module is active for this project.</p>;
  return <div className="space-y-4">{facts.items.map(i=><section key={i.localId} aria-label={i.localId+' staff roles'} className="space-y-2 rounded-md bg-background p-4 text-sm">
    <p className="font-semibold break-words">{i.localId} · {states[i.state]}</p>
-   {!i.staffRole&&<p className="text-muted-foreground">This module does not declare the staff role.</p>}
+   {!i.staffRole&&<><p className="text-muted-foreground">Add the staff role to this project's visitor access, save the exact configuration review, then activate it. Nobody receives a role until you review their individual grant.</p>{owner&&<div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" className="min-h-11" disabled={commandBusy} onClick={()=>void setup(i.localId,false)}>Set up staff role</Button><Button type="button" variant="secondary" className="min-h-11" disabled={commandBusy} onClick={()=>void setup(i.localId,true)}>Review saved activation</Button></div>}</>}
    {!i.visitors.length&&<p className="text-muted-foreground">No enrolled visitors yet.</p>}
    <ul className="space-y-2">{i.visitors.map(v=><li key={v.visitorId} className="flex flex-wrap items-center gap-2">
     <span className="break-words">Visitor {v.visitorId.slice(0,8)} · enrolled {day(v.enrolledAt)}{v.revoked?' · access revoked':v.staff?` · staff${v.staffChangedAt?' since '+day(v.staffChangedAt):''}`:''}</span>

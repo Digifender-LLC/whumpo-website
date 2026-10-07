@@ -30,6 +30,7 @@ export type ChatControl =
  | {type:'specificationApply';reviewId:string;proposalDigest:string;expectedRevision:number}
  | {type:'moduleActivationReview';projectId:string;instanceId:string;action:'activate'|'disable'}
  | {type:'accessModuleReview';projectId:string}
+ | {type:'accessStaffReview';projectId:string}
  | {type:'filesModuleReview';projectId:string}
  | {type:'galleryPageReview';projectId:string;instanceId:string;collectionId:string;pageId:string}
  | {type:'moduleActivationApply';reviewId:string;reviewDigest:string;expectedRevision:number}
@@ -70,6 +71,11 @@ export function chatControl(value:unknown):{action:ChatControl;command:string;la
  if(a.type==='accessModuleReview'&&exact(a,['type','projectId'])&&Object.keys(a).length===2&&id(a.projectId)){
   const action={type:'accessModuleReview' as const,projectId:a.projectId};
   return {action,command:`/review-visitor-access-setup ${action.projectId}`,label:'Review setting up visitor access for this project.',recentAuth:false};
+ }
+ // WH-126 staff declaration uses only the owned project; the single saved access instance is selected by the server.
+ if(a.type==='accessStaffReview'&&exact(a,['type','projectId'])&&Object.keys(a).length===2&&id(a.projectId)){
+  const action={type:'accessStaffReview' as const,projectId:a.projectId};
+  return {action,command:`/review-visitor-staff-setup ${action.projectId}`,label:'Review adding the staff role to visitor access. No visitor is granted a role.',recentAuth:false};
  }
  // WH-128 owner photo collection setup: the project id only. The server chooses the fixed standard files instance.
  if(a.type==='filesModuleReview'&&exact(a,['type','projectId'])&&Object.keys(a).length===2&&id(a.projectId)){

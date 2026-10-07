@@ -41,7 +41,7 @@ import {dnsChatCommand,type DNSChatOptions} from './dns-chat';
 import {listPhotos} from './files';
 import {photoRemovalCommand} from './photo-removal';
 import {applyServiceClientsCommand,serviceClientChatLinks} from './project-specification/service-clients/store';
-import {prepareAccessModuleCommand} from './shared-modules/access-setup';
+import {prepareAccessModuleCommand,prepareAccessStaffCommand} from './shared-modules/access-setup';
 import {prepareFilesModuleCommand} from './shared-modules/files-setup';
 import {prepareGalleryPageCommand} from './shared-modules/files-gallery';
 import {BackendError} from './backend-error';
@@ -219,6 +219,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     if(control?.action.type==='accessRoleApply')moduleApply=await applyAccessRoleCommand(db,userId,input.id,command);
     // WH-126 owner visitor access setup prepares the existing exact specification review (saved by specificationApply).
     if(control?.action.type==='accessModuleReview')accessSetup=await prepareAccessModuleCommand(db,userId,input.id,command);
+    if(control?.action.type==='accessStaffReview')accessSetup=await prepareAccessStaffCommand(db,userId,input.id,command);
     // WH-128 owner photo collection setup: the same slot, the existing exact specification review (saved by specificationApply).
     if(control?.action.type==='filesModuleReview')accessSetup=await prepareFilesModuleCommand(db,userId,input.id,command);
     // WH-128 published gallery: the same slot, the existing exact specification review (saved by specificationApply).

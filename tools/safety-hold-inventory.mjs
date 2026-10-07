@@ -106,7 +106,7 @@ export const deletionSites={
  'src/profile.ts::funnel_events':excluded('Measurement-consent withdrawal must be honoured; events are content-free.'),
  'src/project-specification/store.ts::project_spec_proposals':excluded(proposals),
  'src/shared-modules/activation.ts::module_activation_reviews':excluded(proposals),
- 'src/shared-modules/access-roles.ts::module_access_role_reviews':excluded(proposals),
+ 'src/shared-modules/access-roles.ts::module_access_role_reviews':{decision:'blocked',mechanism:'safety_hold_module_access_review_retained + expiry queries exclude safety_held_projects',note:'Expired unapplied reviews and superseded 90-day terminal receipts are pruned only outside holds; the current grant/revoke provenance remains with its role row.'},
  'src/shared-modules/records.ts::module_records':{decision:'blocked',mechanism:'safety_hold_module_record_retained + cleanupModuleRecords excludes safety_held_projects',note:'WH-127 owner record removal (records.remove) is refused as unavailable inside a held project; retention expiry skips held projects and the delete trigger backs both. Visitor erasure cascades only through app_visitors, which the visitor hold refuses.'},
  'src/project-specification/service-clients/store.ts::service_client_proposals':excluded(proposals),
  'src/site-health.ts::site_health_budget':excluded('Platform monitoring budget; no customer content.'),

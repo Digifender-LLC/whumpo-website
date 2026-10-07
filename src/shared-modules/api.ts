@@ -1,3 +1,4 @@
+import {cleanupAccessRoleReviews} from './access-roles';
 import {fixedContactRequest} from './contact-records';
 import {canonicalJSON,jsonDigest} from '../project-specification/v2/json';
 import {workspacePredicate} from '../workspace-identity/admission';
@@ -108,6 +109,7 @@ export async function handleModuleRequest(db:D1Database,principal:ModulePrincipa
  * other operation is evaluated afresh against current state. Clients retry with the same requestId within minutes. */
 export const moduleReceiptRetentionSeconds=30*86400;
 export async function cleanupModuleRequestReceipts(db:D1Database){
+ await cleanupAccessRoleReviews(db);
  for(let batch=0;batch<10;batch++){
   const result=await db.prepare('DELETE FROM module_request_receipts WHERE rowid IN (SELECT rowid FROM module_request_receipts WHERE created_at<=unixepoch()-? ORDER BY created_at LIMIT 5000)').bind(moduleReceiptRetentionSeconds).run();
   if((result.meta?.changes??0)<5000)break;

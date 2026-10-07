@@ -408,7 +408,8 @@ END;
 CREATE TRIGGER module_access_role_apply_immutable BEFORE UPDATE ON module_access_role_applies BEGIN SELECT RAISE(ABORT,'module_access_immutable'); END;
 CREATE TRIGGER module_access_role_review_retained BEFORE DELETE ON module_access_role_reviews
 WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) AND EXISTS(SELECT 1 FROM app_visitors WHERE id=OLD.visitor_id)
- AND EXISTS(SELECT 1 FROM module_instances WHERE id=OLD.instance_id) AND EXISTS(SELECT 1 FROM module_access_role_applies WHERE review_id=OLD.id)
+ AND EXISTS(SELECT 1 FROM module_instances WHERE id=OLD.instance_id) AND EXISTS(SELECT 1 FROM module_access_role_applies WHERE review_id=OLD.id
+  AND (created_at>unixepoch()-7776000 OR EXISTS(SELECT 1 FROM module_access_roles WHERE review_id=OLD.id)))
 BEGIN SELECT RAISE(ABORT,'module_access_receipt_retained'); END;
 
 -- Revoking or erasing a visitor suppresses their grants and advances their access instance's revision, so
@@ -648,3 +649,30 @@ CREATE TRIGGER module_record_attachments_admit BEFORE INSERT ON module_records B
      AND NOT EXISTS(SELECT 1 FROM json_each(files.dependencies_json) d WHERE NOT EXISTS(SELECT 1 FROM module_activations a WHERE a.instance_id=d.value AND a.state='active'))
    ));
 END;
+
+
+-- WH-126 staff setup may only replace the existing access instance's empty roles array with ["staff"].
+-- Everything else, including enrollment, pins, identities, other modules and website content, stays byte-equivalent.
+CREATE TRIGGER project_spec_access_staff_setup_admit BEFORE INSERT ON project_spec_proposals
+WHEN EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id AND t.user_id=NEW.user_id AND json_extract(t.action_json,'$.type')='accessStaffReview') BEGIN
+ SELECT RAISE(ABORT,'specification_changed') WHERE NOT EXISTS(
+  SELECT 1 FROM project_spec_heads h JOIN project_spec_versions v ON v.version_id=h.version_id AND v.project_id=h.project_id
+   JOIN json_each(v.spec_json,'$.instances') access ON json_extract(access.value,'$.kind')='access'
+  WHERE h.project_id=NEW.project_id AND h.version_id IS NEW.base_version_id AND v.spec_digest IS NEW.base_digest
+   AND json_array_length(access.value,'$.config.roles')=0
+   AND json(json_set(v.spec_json,'$.instances['||access.key||'].config.roles',json('["staff"]')))=json(NEW.spec_json)
+ );
+END;
+
+
+-- Pending and terminal role-review cleanup observes project safety holds. Current provenance and the 90-day
+-- recovery window cannot be shortened by a direct receipt delete either. Parent erasure still cascades normally.
+CREATE TRIGGER safety_hold_module_access_review_retained BEFORE DELETE ON module_access_role_reviews
+WHEN EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
+BEGIN SELECT RAISE(ABORT,'safety_preservation_hold'); END;
+CREATE TRIGGER module_access_role_apply_retained BEFORE DELETE ON module_access_role_applies
+WHEN EXISTS(SELECT 1 FROM module_access_role_reviews r JOIN projects p ON p.id=r.project_id JOIN users u ON u.id=r.user_id
+ WHERE r.id=OLD.review_id AND (OLD.created_at>unixepoch()-7776000
+  OR EXISTS(SELECT 1 FROM module_access_roles current WHERE current.review_id=r.id)
+  OR EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=r.project_id)))
+BEGIN SELECT RAISE(ABORT,'module_access_receipt_retained'); END;

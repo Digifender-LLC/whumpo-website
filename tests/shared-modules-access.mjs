@@ -417,6 +417,63 @@ try{
   for(const t of ['module_access_states','module_access_roles','module_access_role_reviews','app_visitors','app_invitations'])assert.equal((await row(`SELECT count(*) n FROM ${t} WHERE project_id=?`,b.project)).n,0,t);
  });
 
+
+ await check('owner staff declaration is an exact saved configuration review, separate from activation and grants',async()=>{
+  const c=await owner(),d=await owner();await configure(c,[accessInstance([])]);await activation(c,'members');
+  const v=await visitor(c),before=await instance(c,'members'),setup={type:'accessStaffReview',projectId:c.project};
+  for(const action of [{...setup,roles:['staff']},{...setup,visitorId:v.visitorId},{...setup,instanceId:'members'},{type:'accessStaffReview'}])assert.ok(!m.chatControl(action));
+  assert.equal((await control(d,setup)).status,404);
+  assert.equal((await control(d,{type:'accessStaffReview',projectId:d.project})).status,404,'Visitor access must exist first');
+  const pending=await control(c,setup);assert.equal(pending.status,200,pending.error);
+  const q=await row('SELECT * FROM project_spec_proposals WHERE id=?',pending.id),spec=JSON.parse(q.spec_json);
+  assert.deepEqual(spec.instances.find(i=>i.kind==='access').config,{roles:['staff'],enrollment:'invitation'});
+  assert.ok(JSON.parse(q.envelope_json).requiredReviews.includes('permissions'));
+  assert.equal((await row('SELECT count(*) n FROM module_access_roles WHERE project_id=?',c.project)).n,0);
+  assert.deepEqual(JSON.parse((await instance(c,'members')).config_json).roles,[],'Preparing cannot activate staff');
+  const synthetic=async()=>{const t=id(),r=await revision(c)+1;await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,action_json) VALUES(?,?,?,'Synthetic staff setup','',strftime('%Y-%m-%dT%H:%M:%fZ','now'),?)",t,c.user,r,JSON.stringify(setup));await run('UPDATE workspace_state SET revision=? WHERE user_id=?',r,c.user);return t;};
+  const copy=(turn,spec)=>run('INSERT INTO project_spec_proposals SELECT ?,user_id,project_id,operation,expected_revision,draft_revision,base_version_id,target_version_id,base_digest,request_hash,proposal_digest,spec_digest,manifest_digest,policy_version,expires_at,?,lock_json,manifest_json,config_json,html,html_digest,diff_json,envelope_json FROM project_spec_proposals WHERE id=?',turn,spec,q.id);
+  for(const altered of [{...spec,name:'Unreviewed change'},{...spec,instances:[{...spec.instances[0],id:'another-access'}]},{...spec,instances:[]}])await assert.rejects(copy(await synthetic(),JSON.stringify(altered)),/specification_changed/);
+  await copy(await synthetic(),q.spec_json);
+  const save={type:'specificationApply',reviewId:q.id,proposalDigest:q.proposal_digest,expectedRevision:q.expected_revision};
+  assert.equal((await control(c,save)).status,200);assert.deepEqual(JSON.parse((await instance(c,'members')).config_json).roles,[],'Saved configuration still needs exact activation');
+  assert.equal((await control(c,roleAction(c,v.visitorId,'grant'))).status,403);
+  assert.equal((await control(c,setup)).status,400,'An already-saved role is not silently changed or activated');
+  await activation(c,'members');const current=await instance(c,'members');assert.equal(current.config_revision,before.config_revision+1);
+  assert.deepEqual((await me(c,current,v)).body.result.roles,[],'Declaring and activating staff never assigns it');
+  await setRole(c,v.visitorId,'grant');assert.deepEqual((await me(c,current,v)).body.result.roles,['staff']);
+  const prompt=m.agentPrompt({})+m.agentPrompt({},'website');assert.ok(!prompt.includes('accessStaffReview'));assert.ok(!prompt.includes('review-visitor-staff-setup'));
+ });
+
+ await check('terminal role receipts expire after 90 days without pruning current provenance, bypassing holds or replaying grants',async()=>{
+  const c=await owner();await configure(c,[accessInstance()]);await activation(c,'members');const v=await visitor(c),access=await instance(c,'members');
+  const grant=await setRole(c,v.visitorId,'grant'),revoke=await setRole(c,v.visitorId,'revoke'),pending=await roleReview(c,v.visitorId,'grant');
+  const oldApply=await row('SELECT a.id,t.revision FROM module_access_role_applies a JOIN chat_turns t ON t.id=a.id WHERE a.review_id=?',grant.id);
+  const savedRevision=await accessRevision(c),beforeRole=await row('SELECT * FROM module_access_roles WHERE project_id=?',c.project);
+  const lifted=await rows("SELECT name,sql FROM sqlite_master WHERE type='trigger' AND name IN ('module_access_role_review_immutable','module_access_role_apply_immutable')");
+  for(const t of lifted)await run('DROP TRIGGER '+t.name);
+  try{
+   await run('UPDATE module_access_role_reviews SET created_at=unixepoch()-91*86400,expires_at=unixepoch()-91*86400+600 WHERE project_id=?',c.project);
+   await run('UPDATE module_access_role_applies SET created_at=unixepoch()-91*86400 WHERE user_id=?',c.user);
+  }finally{for(const t of lifted)await run(t.sql);}
+  await assert.rejects(()=>run('DELETE FROM module_access_role_reviews WHERE id=?',revoke.id),/module_access_receipt_retained/);
+  await assert.rejects(()=>run('DELETE FROM module_access_role_applies WHERE review_id=?',revoke.id),/module_access_receipt_retained/,'Current receipt itself cannot be removed directly');
+  const caseId=id(),holdId=id();
+  await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES(?,?,'synthetic-role-retention','human:reviewer',unixepoch(),unixepoch()+31536000)",caseId,c.user);
+  await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES(?,?,?,'project',?,'synthetic-basis','human:approver',unixepoch(),unixepoch()+86400)",holdId,caseId,c.user,c.project);
+  await sharedModules.cleanupModuleRequestReceipts(db);assert.equal((await row('SELECT count(*) n FROM module_access_role_reviews WHERE project_id=?',c.project)).n,3);
+  await assert.rejects(()=>run('DELETE FROM module_access_role_reviews WHERE id=?',pending.id),/safety_preservation_hold/);
+  await run("UPDATE safety_preservation_holds SET released_at=unixepoch(),released_by='human:approver',release_ref='synthetic-release' WHERE id=?",holdId);
+  await sharedModules.cleanupModuleRequestReceipts(db);
+  assert.deepEqual((await rows('SELECT id FROM module_access_role_reviews WHERE project_id=?',c.project)).map(r=>r.id),[revoke.id]);
+  assert.equal((await row('SELECT count(*) n FROM module_access_role_applies WHERE user_id=?',c.user)).n,1);
+  assert.equal(await accessRevision(c),savedRevision);assert.deepEqual(await row('SELECT * FROM module_access_roles WHERE project_id=?',c.project),beforeRole);
+  assert.equal((await applyRole(c,grant)).status,404);assert.equal((await applyRole(c,pending)).status,404);
+  const replay=await m.sendChatControl(c.scope,c.user,{id:oldApply.id,revision:oldApply.revision-1,action:applyAction(grant)});assert.equal(replay.status,200,'Historical Chat replay recovers its original receipt only');
+  assert.deepEqual((await me(c,access,v)).body.result.roles,[]);assert.equal(await accessRevision(c),savedRevision);
+  await setRole(c,v.visitorId,'grant');await sharedModules.cleanupModuleRequestReceipts(db);
+  assert.deepEqual((await me(c,access,v)).body.result.roles,['staff'],'Only a new exact grant restores authority');
+ });
+
  await check('access paths never reach owner-maintenance inference',async()=>{
   const inference=/^src\/(ai|ai-chat|ai-gateway|acknowledgment|site-agent|agent-[a-z-]+|standard-ai[a-z-]*|chat|backend-chat|app-upgrade-chat|app-recovery-chat|app-page-design)\.ts$|^src\/chat-interactions\/(agent|agent-request|model-continuation|continuation)\.ts$/;
   for(const entry of ['src/shared-modules/access.ts','src/shared-modules/access-roles.ts','src/shared-modules/access-setup.ts','src/app-gateway.ts']){
@@ -429,6 +486,6 @@ try{
 
  assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
  for(const secret of [v1.session,v1.recoveryCode])assert.ok(!logs.join('\n').includes(secret));
- process.stdout.write(`Shared module access passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — instances saved through the exact owner specification review, access.me on the visitor origin with signed passkey visitors, workspace/foreign/anonymous cookie refusals, owner access.list and access.roles@1, exact grant/revoke reviews with recent sign-in, readback and replay without re-grant, one-winner races, in-flight revocation inside the commit, revoked/erased visitors, plan loss, disable, visitor identity owned by the access instance (gateway enrollment, sign-in, recovery, export and deletion review with no visitor application; disable signs out and old invitations never re-admit; one access instance per project; the application consumes it and its custom-function document descriptor validates against the access descriptor), the owner visitor access setup control (the exact standard website review with its shape repeated in the commit, then the separate save and activation reviews), the roles export serializer and its import validation, closure and cascades, and a static no-inference check. No network, model or provider use.\n`);
+ process.stdout.write(`Shared module access passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — instances saved through the exact owner specification review, access.me on the visitor origin with signed passkey visitors, workspace/foreign/anonymous cookie refusals, owner access.list and access.roles@1, exact grant/revoke reviews with recent sign-in, readback and replay without re-grant, one-winner races, in-flight revocation inside the commit, revoked/erased visitors, plan loss, disable, visitor identity owned by the access instance (gateway enrollment, sign-in, recovery, export and deletion review with no visitor application; disable signs out and old invitations never re-admit; one access instance per project; the application consumes it and its custom-function document descriptor validates against the access descriptor), the owner visitor access setup control (the exact standard website review with its shape repeated in the commit, then the separate save and activation reviews), owner staff declaration through exact save/activation reviews, bounded 90-day superseded receipt cleanup preserving current provenance and holds, the roles export serializer and its import validation, closure and cascades, and a static no-inference check. No network, model or provider use.\n`);
 }catch(error){originals.error(String(error.stack||error).replace(/data:text\/javascript;base64,[A-Za-z0-9+/=]+/g,'<bundled module>'));process.exitCode=1;}
 finally{for(const k of consoleMethods)console[k]=originals[k];globalThis.fetch=originalFetch;await fixture.close();}
