@@ -6,7 +6,7 @@ import {featurePredicate} from '../feature-admission';
 import {featureRequest} from '../feature-inclusion';
 import {ModuleError,type ModulePrincipal} from './policy';
 import type {ModuleInstanceFacts} from './shape';
-import {collectionsExportHook} from './collections';
+import {collectionsExportHook,collectionsRestoreHook} from './collections';
 import {accessRolesExportHook} from './access-export';
 import {filesExportHook,recordsExportHook} from './export-hooks';
 
@@ -26,7 +26,7 @@ export const pin=(kind:ModuleKind,part:'module'|'schema',digest:string):ModulePi
 /** WH-071 descriptor v1 for one registered instance. Logical references only: no owner identifier, physical
  * locator or secret. A kind without a delivered export serializer keeps every data set `excluded` and no export hook.
  * WH-129: the content kind's `directories` data set is eligible project data exported by `collectionsExportHook`
- * (the existing `whumpo-directory` v1 serializer). WH-126: the access kind's `project-roles` data set is exported by
+ * (the existing `whumpo-directory` v1 serializer), with the existing exact private snapshot review as its restore hook. WH-126: the access kind's `project-roles` data set is exported by
  * `accessRolesExportHook`; its `visitor-identity` data set is visitor-subject data exported only with the visitor's own
  * separate approval (their account export). WH-127/128: the records kind's `module-records` and the files kind's
  * `module-files` data sets are visitor-subject data exported by `recordsExportHook` and `filesExportHook` under WH-077's
@@ -38,7 +38,7 @@ export function moduleDescriptor(projectId:string,resourceId:string,instance:Mod
  return {contractVersion:1,ref:{projectId,resourceId},kind:instance.kind,module:instance.module,schema:instance.schema,
   ownership:{data:moduleKinds[instance.kind].lifecycleClasses.map(classId=>({id:classId,classId,subject:subjects[classId],export:!exportHook?'excluded':subjects[classId]==='visitor'?'separate-approval':'eligible'})),assets:[]},
   dependencies:dependencies.map(d=>({ref:{projectId,resourceId:d.resourceId},module:d.module})),
-  lifecycle:{exportFormat:1,exportHook,deleteHook:'project-cascade',restoreHook:'unsupported',migrateHook:'migration-required',portability:'platform-only'}};
+  lifecycle:{exportFormat:1,exportHook,deleteHook:'project-cascade',restoreHook:instance.kind==='content'?collectionsRestoreHook:'unsupported',migrateHook:'migration-required',portability:'platform-only'}};
 }
 
 export type CurrentSpecification={versionId:string;revision:number;digest:string;instances:ModuleInstance[];pages:{id:string;path:string}[]};

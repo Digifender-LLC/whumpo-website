@@ -32,6 +32,7 @@ export type ChatControl =
  | {type:'accessModuleReview';projectId:string}
  | {type:'accessStaffReview';projectId:string}
  | {type:'recordsModuleReview';projectId:string;attachment:{instanceId:string;collectionId:string}|null}
+ | {type:'collectionRestoreReview';projectId:string;resourceId:string;configRevision:number;snapshotId:string}
  | {type:'filesModuleReview';projectId:string}
  | {type:'filesCollectionReview';projectId:string;audience:'staff'|'visitor'}
  | {type:'galleryPageReview';projectId:string;instanceId:string;collectionId:string;pageId:string}
@@ -86,6 +87,11 @@ export function chatControl(value:unknown):{action:ChatControl;command:string;la
    ||!Object.values(ref).every(v=>typeof v==='string'&&/^[a-z][a-z0-9-]{0,39}$/.test(v))))return;
   const action={type:'recordsModuleReview' as const,projectId:a.projectId,attachment:ref as {instanceId:string;collectionId:string}|null};
   return {action,command:`/review-enquiry-setup ${action.projectId} ${action.attachment?`${action.attachment.instanceId} ${action.attachment.collectionId}`:'none'}`,label:'Review setting up a private visitor enquiry form.',recentAuth:false};
+ }
+ // WH-129 restores only a retained applied directory snapshot of this exact registered collection.
+ if(a.type==='collectionRestoreReview'&&exact(a,['type','projectId','resourceId','configRevision','snapshotId'])&&Object.keys(a).length===5&&id(a.projectId)&&id(a.resourceId)&&id(a.snapshotId)&&Number.isSafeInteger(a.configRevision)&&Number(a.configRevision)>=1&&Number(a.configRevision)<=999999999){
+  const action={type:'collectionRestoreReview' as const,projectId:a.projectId,resourceId:a.resourceId,configRevision:Number(a.configRevision),snapshotId:a.snapshotId};
+  return {action,command:`/review-directory-snapshot ${action.projectId} ${action.resourceId} ${action.configRevision} ${action.snapshotId}`,label:'Review restoring a saved directory snapshot to the private draft.',recentAuth:false};
  }
  // WH-128 owner photo collection setup: the project id only. The server chooses the fixed standard files instance.
  if(a.type==='filesModuleReview'&&exact(a,['type','projectId'])&&Object.keys(a).length===2&&id(a.projectId)){

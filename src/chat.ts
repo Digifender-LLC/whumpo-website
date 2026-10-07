@@ -30,6 +30,7 @@ import {cmsContentCommand} from './cms-content';
 import {cmsChatCommand} from './cms-projects';
 import {backendChatCommand} from './backend-chat';
 import {directoryCommand} from './directory';
+import {prepareCollectionRestoreCommand} from './shared-modules/collections';
 import {healthChatCommand,checkHealth,describeHealth} from './site-health';
 import {diffCommand} from './version-diff';
 import {contactCommand} from './contacts';
@@ -207,7 +208,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const githubGrant=control?.action.type==='githubGrant'?githubGrantChatControl(db,userId,command,dnsOptions):undefined;
   const external=githubGrant??cms??backend??hosting??dns??backup??health;
   const comparison=await diffCommand(db,userId,input.id,command);
-  const directory=await directoryCommand(db,userId,input.id,content);
+  let directory=await directoryCommand(db,userId,input.id,content);
   const contact=await contactCommand(db,userId,input.id,command)??await contactNotificationCommand(db,userId,input.id,command);
   const versionRemoval=await versionRemovalCommand(db,userId,input.id,command);
   const serviceClients=await applyServiceClientsCommand(db,userId,input.id,command);
@@ -223,6 +224,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     if(control?.action.type==='accessModuleReview')accessSetup=await prepareAccessModuleCommand(db,userId,input.id,command);
     if(control?.action.type==='accessStaffReview')accessSetup=await prepareAccessStaffCommand(db,userId,input.id,command);
     if(control?.action.type==='recordsModuleReview')accessSetup=await prepareRecordsModuleCommand(db,userId,input.id,command);
+    if(control?.action.type==='collectionRestoreReview')directory=await prepareCollectionRestoreCommand(db,userId,input.id,command);
     // WH-128 owner photo collection setup: the same slot, the existing exact specification review (saved by specificationApply).
     if(control?.action.type==='filesModuleReview')accessSetup=await prepareFilesModuleCommand(db,userId,input.id,command);
     if(control?.action.type==='filesCollectionReview')accessSetup=await prepareFilesCollectionCommand(db,userId,input.id,command);

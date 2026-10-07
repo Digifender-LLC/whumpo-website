@@ -755,3 +755,47 @@ WHEN EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id AND t.user_id=NEW.user_
     )))
  );
 END;
+
+-- WH-129 the module lifecycle restore adapter uses the existing exact directory review. The originating Chat
+-- control fences resource/revision and applied snapshot ancestry at preparation and confirmation. Current-only
+-- project-spec version admission owns the compiler pin; source and current head locks/configs must still agree.
+CREATE TRIGGER collection_restore_review_admit BEFORE INSERT ON directory_reviews
+WHEN EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id AND json_extract(t.action_json,'$.type')='collectionRestoreReview') BEGIN
+ SELECT RAISE(ABORT,'directory_changed') WHERE NOT EXISTS(
+  SELECT 1 FROM chat_turns t JOIN module_instances i ON i.id=json_extract(t.action_json,'$.resourceId')
+   JOIN projects p ON p.id=i.project_id AND p.owner_user_id=t.user_id
+   JOIN project_spec_versions source ON source.version_id=i.source_version_id AND source.project_id=i.project_id AND source.spec_digest=i.source_spec_digest
+   JOIN project_spec_heads h ON h.project_id=i.project_id JOIN project_spec_versions current ON current.version_id=h.version_id AND current.project_id=i.project_id
+   JOIN json_each(current.spec_json,'$.instances') configured ON json_extract(configured.value,'$.id')=i.local_id
+   JOIN directory_reviews snapshot ON snapshot.id=NEW.source_review_id AND snapshot.project_id=NEW.project_id AND snapshot.user_id=NEW.user_id
+  WHERE t.id=NEW.id AND t.user_id=NEW.user_id AND t.mode='guided' AND t.status='completed'
+   AND i.project_id=NEW.project_id AND i.kind='content' AND json_extract(t.action_json,'$.projectId')=NEW.project_id
+   AND i.config_revision=json_extract(t.action_json,'$.configRevision')
+   AND json_extract(i.descriptor_json,'$.lifecycle.restoreHook')='collections-directory-restore-v1'
+   AND json(source.lock_json)=json(current.lock_json) AND json_extract(current.spec_json,'$.schemaVersion')=3
+   AND json_extract(configured.value,'$.kind')='content' AND json_extract(configured.value,'$.module.digest')=i.module_digest
+   AND json_extract(configured.value,'$.schema.digest')=i.schema_digest AND json(json_extract(configured.value,'$.config'))=json(i.config_json)
+   AND snapshot.status='applied' AND snapshot.kind IN ('edit','publish') AND snapshot.snapshot_json=NEW.snapshot_json AND snapshot.digest=NEW.digest
+   AND NEW.kind='edit' AND NEW.source_review_id=json_extract(t.action_json,'$.snapshotId')
+ );
+END;
+CREATE TRIGGER collection_restore_review_confirm BEFORE UPDATE ON directory_reviews
+WHEN EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id AND json_extract(t.action_json,'$.type')='collectionRestoreReview') BEGIN
+ SELECT RAISE(ABORT,'directory_changed') WHERE NOT EXISTS(
+  SELECT 1 FROM chat_turns t JOIN module_instances i ON i.id=json_extract(t.action_json,'$.resourceId')
+   JOIN projects p ON p.id=i.project_id AND p.owner_user_id=t.user_id
+   JOIN project_spec_versions source ON source.version_id=i.source_version_id AND source.project_id=i.project_id AND source.spec_digest=i.source_spec_digest
+   JOIN project_spec_heads h ON h.project_id=i.project_id JOIN project_spec_versions current ON current.version_id=h.version_id AND current.project_id=i.project_id
+   JOIN json_each(current.spec_json,'$.instances') configured ON json_extract(configured.value,'$.id')=i.local_id
+   JOIN directory_reviews snapshot ON snapshot.id=NEW.source_review_id AND snapshot.project_id=NEW.project_id AND snapshot.user_id=NEW.user_id
+  WHERE t.id=NEW.id AND t.user_id=NEW.user_id AND t.mode='guided' AND t.status='completed'
+   AND i.project_id=NEW.project_id AND i.kind='content' AND json_extract(t.action_json,'$.projectId')=NEW.project_id
+   AND i.config_revision=json_extract(t.action_json,'$.configRevision')
+   AND json_extract(i.descriptor_json,'$.lifecycle.restoreHook')='collections-directory-restore-v1'
+   AND json(source.lock_json)=json(current.lock_json) AND json_extract(current.spec_json,'$.schemaVersion')=3
+   AND json_extract(configured.value,'$.kind')='content' AND json_extract(configured.value,'$.module.digest')=i.module_digest
+   AND json_extract(configured.value,'$.schema.digest')=i.schema_digest AND json(json_extract(configured.value,'$.config'))=json(i.config_json)
+   AND snapshot.status='applied' AND snapshot.kind IN ('edit','publish') AND snapshot.snapshot_json=NEW.snapshot_json AND snapshot.digest=NEW.digest
+   AND NEW.kind='edit' AND NEW.source_review_id=json_extract(t.action_json,'$.snapshotId')
+ );
+END;

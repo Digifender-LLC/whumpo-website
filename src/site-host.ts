@@ -30,7 +30,7 @@ const serving = {
   try{
    if(!(local||!!project)){
     const mapping=await env.DB.prepare("SELECT c.project_id FROM domain_connections c JOIN projects p ON p.id=c.project_id AND p.owner_user_id=c.user_id WHERE c.hostname=? AND c.state='active' AND c.serve_until>? AND c.provider_id IS NOT NULL").bind(url.hostname,new Date().toISOString()).first<{project_id:string}>();
-    if(!mapping||!/^\/(?:assets\/[0-9a-f-]{36}\.jpg)?$/.test(url.pathname))return new Response('Site not found',{status:404,headers});
+    if(!mapping||!/^\/(?:assets\/[0-9a-f-]{36}\.jpg|directory(?:\.json)?)?$/.test(url.pathname))return new Response('Site not found',{status:404,headers});
     url.pathname='/s/'+mapping.project_id+url.pathname;
    }
    const cmsImage=url.pathname.match(/^\/s\/([0-9a-f-]{36})\/cms\/media\/([0-9a-f-]{36})\/([0-9a-f]{64})\.jpg$/);
