@@ -16,8 +16,10 @@ try{
  const homes=[];
  for(let i=0;i<2;i++)runProfile('site',{cwd,run:(_cmd,args,options)=>{assert.deepEqual(args,['tests/customer-site-journey.mjs']);homes.push(options.env.HOME);return {status:0};}});
  assert.notEqual(homes[0],homes[1]);assert.ok(homes.every(h=>!existsSync(h)));
+ const fast=[];runProfile('fast',{cwd,run:(_cmd,args)=>{fast.push(args[0]);return {status:0};}});
+ assert.deepEqual(fast,['tests/ai.mjs','tests/prompt-data-boundaries.mjs','tests/ack-timing.mjs','tests/lifecycle-catalog.mjs','tests/connection-vault.mjs','tests/connector-catalog.mjs']);
  const protection=[];runProfile('protection',{cwd,run:(_cmd,args)=>{protection.push(args[0]);return {status:0};}});
- assert.deepEqual(protection,['tests/processing-boundaries.mjs','tests/deploy-ci.mjs','tests/secret-custody.mjs','tests/build-snapshot.mjs','tests/release-manifest.mjs','tests/release-provider.mjs','tests/connection-oauth-outcomes.mjs','tests/connection-key-backup.mjs','tests/restore-admission.mjs','tests/restore-inventory.mjs','tests/restore-inventory-freshness.mjs','tests/github-refresh-custody.mjs','tests/github-grant-revocation.mjs','tests/github-grant-chat.mjs','tests/mobile-identity.mjs']);
+ assert.deepEqual(protection,['tests/processing-boundaries.mjs','tests/deploy-ci.mjs','tests/secret-custody.mjs','tests/build-snapshot.mjs','tests/release-manifest.mjs','tests/release-provider.mjs','tests/connection-oauth-outcomes.mjs','tests/connection-key-backup.mjs','tests/restore-admission.mjs','tests/restore-inventory.mjs','tests/restore-inventory-freshness.mjs','tests/github-refresh-custody.mjs','tests/github-grant-revocation.mjs','tests/github-grant-chat.mjs','tests/mobile-identity.mjs','tests/connector-receipts.mjs']);
  writeFileSync(join(cwd,'.dev.vars'),'SYNTHETIC=1');
  assert.throws(()=>runProfile('fast',{cwd,run:()=>assert.fail('Must not launch')}),/Local/);
 }finally{rmSync(cwd,{recursive:true,force:true});}
