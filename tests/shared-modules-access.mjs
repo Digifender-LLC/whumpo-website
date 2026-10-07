@@ -458,11 +458,13 @@ try{
   await assert.rejects(()=>run('DELETE FROM module_access_role_reviews WHERE id=?',revoke.id),/module_access_receipt_retained/);
   await assert.rejects(()=>run('DELETE FROM module_access_role_applies WHERE review_id=?',revoke.id),/module_access_receipt_retained/,'Current receipt itself cannot be removed directly');
   const caseId=id(),holdId=id();
-  await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES(?,?,'synthetic-role-retention','human:reviewer',unixepoch(),unixepoch()+31536000)",caseId,c.user);
-  await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES(?,?,?,'project',?,'synthetic-basis','human:approver',unixepoch(),unixepoch()+86400)",holdId,caseId,c.user,c.project);
+  const reviewer=await workspaceFixture(db,m),approver=await workspaceFixture(db,m),reviewerRef='human:'+reviewer.account,approverRef='human:'+approver.account;
+  await run("INSERT INTO safety_case_roles(id,operator_ref,role,granted_by,granted_at) VALUES(?,?,'preservation_approver',?,unixepoch())",id(),approverRef,reviewerRef);
+  await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES(?,?,'synthetic-role-retention',?,unixepoch(),unixepoch()+31536000)",caseId,c.user,reviewerRef);
+  await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES(?,?,?,'project',?,'synthetic-basis',?,unixepoch(),unixepoch()+86400)",holdId,caseId,c.user,c.project,approverRef);
   await sharedModules.cleanupModuleRequestReceipts(db);assert.equal((await row('SELECT count(*) n FROM module_access_role_reviews WHERE project_id=?',c.project)).n,3);
   await assert.rejects(()=>run('DELETE FROM module_access_role_reviews WHERE id=?',pending.id),/safety_preservation_hold/);
-  await run("UPDATE safety_preservation_holds SET released_at=unixepoch(),released_by='human:approver',release_ref='synthetic-release' WHERE id=?",holdId);
+  await run("UPDATE safety_preservation_holds SET released_at=unixepoch(),released_by=?,release_ref='synthetic-release' WHERE id=?",approverRef,holdId);
   await sharedModules.cleanupModuleRequestReceipts(db);
   assert.deepEqual((await rows('SELECT id FROM module_access_role_reviews WHERE project_id=?',c.project)).map(r=>r.id),[revoke.id]);
   assert.equal((await row('SELECT count(*) n FROM module_access_role_applies WHERE user_id=?',c.user)).n,1);
