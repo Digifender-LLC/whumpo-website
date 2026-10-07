@@ -34,29 +34,33 @@ export function AccountLifecyclePage(){
   <header><h1 ref={heading} tabIndex={-1} className="text-3xl font-bold">Account data and closure</h1>
    <p className="mt-3 text-muted-foreground">Download a private copy of your account data, or close your Whumpo account. Both work without Chat, and each download or confirmation asks for a recent passkey check.</p></header>
   {loadError&&<div className="space-y-3"><p role="alert" className="rounded-md border p-3 text-sm">{loadError}</p><Button variant="secondary" className={wrap} onClick={()=>void load()}>Try again</Button></div>}
-  <ExportSection/>
+  {closure?.state!=='complete'&&<ExportSection/>}
   {closure===undefined?!loadError&&<p role="status" className="text-sm">Checking account status…</p>
-   :closure?<ClosureProgress initial={closure}/>:<ClosureSection onStarted={setClosure}/>}
+   :closure?<ClosureProgress initial={closure} onChanged={setClosure}/>:<ClosureSection onStarted={setClosure}/>}
  </div></main>;
 }
 
 function ExportSection(){
  const [visitorData,setVisitorData]=useState(false),[review,setReview]=useState<ExportReview|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[done,setDone]=useState('');
- const request=useRef<{id:string;visitorData:boolean}|null>(null);
+ const request=useRef<{id:string;visitorData:boolean}|null>(null),active=useRef(true);
+ useEffect(()=>{active.current=true;return()=>{active.current=false;};},[]);
+ const current=(generation:number)=>active.current&&generation===identityGeneration();
  async function prepare(){
-  if(busy)return;setBusy(true);setError('');setDone('');
+  if(busy)return;const generation=identityGeneration();setBusy(true);setError('');setDone('');
   if(request.current?.visitorData!==visitorData)request.current={id:newAccountRequestId(),visitorData};
-  try{const r=await prepareAccountExport(request.current.id,visitorData,transport);if(r.state==='ok')setReview(r.value);else{setError(r.message);if(r.code==='stale_review'||r.code==='request_conflict')request.current=null;}}
-  catch{setError('The export review could not be prepared. Try again.');}finally{setBusy(false);}
+  try{const r=await prepareAccountExport(request.current.id,visitorData,transport);if(!current(generation))return;if(r.state==='ok')setReview(r.value);else{setError(r.message);if(r.code==='stale_review'||r.code==='request_conflict')request.current=null;}}
+  catch{if(current(generation))setError('The export review could not be prepared. Try again.');}finally{if(current(generation))setBusy(false);}
  }
  async function download(){
-  if(busy||!review)return;setBusy(true);setError('');
+  if(busy||!review)return;const generation=identityGeneration();setBusy(true);setError('');
   try{
    const r=await downloadAccountExport(review,transport);
+   // A private response can settle after navigation or sign-out. It must not create a download in another view.
+   if(!current(generation))return;
    if(r.state==='error'){setError(r.message);if(r.code==='stale_review'){setReview(null);request.current=null;}return;}
    const url=URL.createObjectURL(r.value),link=document.createElement('a');link.href=url;link.download='whumpo-account-export.zip';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
    setDone('Your export was downloaded. Check that manifest.json is inside: an archive without it is incomplete.');setReview(null);request.current=null;
-  }catch{setError('The download was interrupted. Prepare a fresh export.');}finally{setBusy(false);}
+  }catch{if(current(generation))setError('The download was interrupted. Prepare a fresh export.');}finally{if(current(generation))setBusy(false);}
  }
  return <Card><CardHeader><CardTitle>Download your account data</CardTitle><CardDescription>Review exactly what is included, then download a ZIP built from your current data.</CardDescription></CardHeader><CardContent className="space-y-4">
   {!review?<>
@@ -75,7 +79,7 @@ function ExportSection(){
 }
 
 function ClosureSection({onStarted}:{onStarted:(status:ClosureStatus)=>void}){
- const [review,setReview]=useState<ClosureReview|null>(null),[confirmation,setConfirmation]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [review,setReview]=useState<ClosureReview|null>(null),[confirmation,setConfirmation]=useState(''),[uncertain,setUncertain]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const lock=useRef(false);
  async function prepare(){
   if(lock.current)return;lock.current=true;setBusy(true);setError('');setConfirmation('');
@@ -83,13 +87,23 @@ function ClosureSection({onStarted}:{onStarted:(status:ClosureStatus)=>void}){
   catch{setError('The closure review could not be prepared. Try again.');}finally{lock.current=false;setBusy(false);}
  }
  async function confirm(){
-  if(lock.current||!review||confirmation!=='CLOSE')return;lock.current=true;setBusy(true);setError('');
+  if(lock.current||uncertain||!review||confirmation!=='CLOSE')return;lock.current=true;setBusy(true);setError('');
   try{
    const r=await confirmAccountClosure(review,transport);
    if(r.state==='ok'){onStarted(r.value);return;}
-   setError(r.message);if(r.code==='stale_review'||r.code==='action_required')setReview(null);
+   setError(r.message);if(r.status>=500)setUncertain(true);if(r.code==='stale_review'||r.code==='action_required')setReview(null);
    if(r.code==='closure_exists'){const s=await readAccountClosure(transport);if(s.state==='ok'&&s.value)onStarted(s.value);}
-  }catch{setError('Closure confirmation did not finish. Check the account status before retrying.');}finally{lock.current=false;setBusy(false);}
+  }catch{setUncertain(true);setError('Closure confirmation did not finish. Check the account status before retrying.');}finally{lock.current=false;setBusy(false);}
+ }
+ async function checkStatus(){
+  if(lock.current)return;lock.current=true;setBusy(true);setError('');
+  try{
+   const result=await readAccountClosure(transport);
+   if(result.state==='error'){setError(result.message);return;}
+   if(result.value){onStarted(result.value);return;}
+   setUncertain(false);setError('Closure has not started. You can confirm this exact review again while it is current.');
+  }catch{setError('Account status could not load. Check again before retrying closure.');}
+  finally{lock.current=false;setBusy(false);}
  }
  return <Card><CardHeader><CardTitle>Close your account</CardTitle><CardDescription>Closing permanently deletes your Whumpo account after the steps below finish. Review exactly what is removed and what remains first.</CardDescription></CardHeader><CardContent className="space-y-4">
   {!review?<Button variant="secondary" className={wrap} disabled={busy} onClick={()=>void prepare()}>{busy?'Preparing…':'Review account closure'}</Button>
@@ -101,19 +115,20 @@ function ClosureSection({onStarted}:{onStarted:(status:ClosureStatus)=>void}){
    <h3 className="font-semibold">What happens</h3><ol className="list-decimal pl-5 text-sm space-y-1">{review.effects.map(e=><li key={e}>{e}</li>)}</ol>
    <h3 className="font-semibold">What remains after closure</h3><ul className="list-disc pl-5 text-sm space-y-1">{review.remainsAfterClosure.map(e=><li key={e}>{e}</li>)}</ul>
    {review.canConfirm?<>
-    <label className="grid gap-2 text-sm font-medium">Type CLOSE to confirm<Input value={confirmation} onChange={e=>setConfirmation(e.target.value)} disabled={busy} autoComplete="off" autoCapitalize="characters" spellCheck={false} className="min-h-11"/></label>
-    <div className="flex flex-wrap gap-3"><Button variant="destructive" className={wrap} disabled={busy||confirmation!=='CLOSE'} onClick={()=>void confirm()}>{busy?'Closing…':'Check passkey and close account'}</Button><Button variant="quiet" className={wrap} disabled={busy} onClick={()=>{setReview(null);setError('');}}>Cancel</Button></div>
+    <label className="grid gap-2 text-sm font-medium">Type CLOSE to confirm<Input value={confirmation} onChange={e=>setConfirmation(e.target.value)} disabled={busy||uncertain} autoComplete="off" autoCapitalize="characters" spellCheck={false} className="min-h-11"/></label>
+    <div className="flex flex-wrap gap-3"><Button variant="destructive" className={wrap} disabled={busy||uncertain||confirmation!=='CLOSE'} onClick={()=>void confirm()}>{busy?'Closing…':'Check passkey and close account'}</Button><Button variant="quiet" className={wrap} disabled={busy||uncertain} onClick={()=>{setReview(null);setError('');}}>Cancel</Button></div>
    </>:<div className="flex flex-wrap gap-3"><Button variant="secondary" className={wrap} disabled={busy} onClick={()=>void prepare()}>Review again</Button><Button variant="quiet" className={wrap} disabled={busy} onClick={()=>setReview(null)}>Cancel</Button></div>}
   </section>}
   {error&&<p role="alert" className="text-sm">{error}</p>}
+  {uncertain&&<Button variant="secondary" className={wrap} disabled={busy} onClick={()=>void checkStatus()}>{busy?'Checking…':'Check account status'}</Button>}
  </CardContent></Card>;
 }
 
-function ClosureProgress({initial}:{initial:ClosureStatus}){
+function ClosureProgress({initial,onChanged}:{initial:ClosureStatus;onChanged:(status:ClosureStatus)=>void}){
  const [status,setStatus]=useState(initial),[busy,setBusy]=useState(false),[error,setError]=useState('');
  async function resume(){
   if(busy)return;setBusy(true);setError('');
-  try{const r=await resumeAccountClosure(transport);if(r.state==='ok')setStatus(r.value);else setError(r.message);}
+  try{const r=await resumeAccountClosure(transport);if(r.state==='ok'){setStatus(r.value);onChanged(r.value);}else setError(r.message);}
   catch{setError('Closure could not continue right now. Try again shortly.');}finally{setBusy(false);}
  }
  const complete=status.state==='complete';
