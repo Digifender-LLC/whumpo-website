@@ -1,12 +1,14 @@
 # Whumpo product and delivery roadmap
 
-**Aligned October 2, 2026; 122 current tasks include explicit privacy and feature-admission handoffs.** The [alignment review](alignment.md) records corrected dependencies, shared contract ownership, current issue evidence and remaining launch gates. Stable task IDs and phase labels are preserved; phase and task numbers are not build order. This is a delivery plan, not a release or provider authorization.
+**Execution audit October 7, 2026; 144 current tasks across seven workstreams.** The [alignment review](alignment.md) records corrected dependencies, shared contract ownership, current issue evidence and remaining launch gates. Stable task IDs and phase labels are preserved; phase and task numbers are not build order. This is a delivery plan, not a release or provider authorization.
 
 Whumpo should first become a dependable way for an invited customer to create, improve, publish and recover a useful website or bounded application. The next investment should turn its substantial foundations into operated customer journeys. Broader Cloudflare capabilities follow demonstrated demand and measured economics.
 
 ## Start here
 
-- [GitHub execution hub](https://github.com/zemdregon/whumpo/issues/2): task issues, claims, progress and handoffs. The complete longer-term plan remains in the backlog below.
+- [Current execution session and complete remaining inventory](execution-session-2026-10-07.md): six isolated work lanes, current repository/PR evidence, all 144 task boundaries and independent checks. This is a dated coordination snapshot, not live acceptance or an issue-status synchronizer.
+
+- [GitHub execution hub](https://github.com/Digifender-LLC/whumpo-website/issues/2): task issues, claims, progress and handoffs. The complete longer-term plan remains in the backlog below.
 - [Logical resources and workload placement](../workload-placement.md): WH-071 interface, lifecycle/export and conditional hosting decision.
 - [Shared modules](../shared-modules.md): WH-067 contract, existing-service mapping and WH-123–130 slices (planned).
 - [Architecture and sequencing alignment](alignment.md): shared contracts, corrected dependency paths, current build order and persistent graph checks.
@@ -107,7 +109,7 @@ WH-104 covers inheritance/lower-tier bypasses, guest revocation and private asse
 
 Google restricted-scope verification/security assessment and its initial/recurring cost review, Microsoft publisher/tenant consent, HubSpot distribution eligibility, real consenting accounts and current provider quotas/prices are external acceptance gates. Details and official dated references are in the [pricing contract](../pricing-and-model-policy.md#provider-readiness-costs-and-sequencing). A configured binding or local mock does not satisfy them; provider delays hold paid launch under this full-set decision.
 
-October 1 live GitHub reconciliation confirmed WH-064/065 and WH-066 parent [#14](https://github.com/zemdregon/whumpo/issues/14), including children #15–17, closed as completed for the initial supported compiler scope. Reuse that implementation; general records/access/files and notifications/rules remain WH-067–069. [Alignment evidence](alignment.md) preserves the distinction.
+October 1 live GitHub reconciliation confirmed WH-064/065 and WH-066 parent [#14](https://github.com/Digifender-LLC/whumpo-website/issues/14), including children #15–17, closed as completed for the initial supported compiler scope. Reuse that implementation; general records/access/files and notifications/rules remain WH-067–069. [Alignment evidence](alignment.md) preserves the distinction.
 
 ## Accepted primary Chat experience — October 1, 2026
 
@@ -136,7 +138,7 @@ Recovery-key possession opens only restricted replacement enrollment. Lost-all-k
 
 | Packets | Priority / phase | Delivery and ordering |
 | --- | --- | --- |
-| WH-113 | P0 / F1; ready | [Protocol decision delivered](../workspace-identity.md), tracked in [#42](https://github.com/zemdregon/whumpo/issues/42); implementation/activation remain separate. |
+| WH-113 | P0 / F1; ready | [Protocol decision delivered](../workspace-identity.md), tracked in [#42](https://github.com/Digifender-LLC/whumpo-website/issues/42); implementation/activation remain separate. |
 | WH-114 / WH-115 | P0 / F1; planned | Passkey-only/two-key enrollment after WH-113/004, then recovery-kit download/print and restricted replacement flow. |
 | WH-116 / WH-117 | P1 / F1; planned | Classify data/readers/key custody after WH-113/009/020, then justified transparent protection after WH-116/004. |
 | WH-118 | P2 / F4; planned | Evaluate passkey-backed encryption after WH-115/116 against compatibility, normal-sign-in, content-recovery and no-recurring-unlock criteria. |
@@ -230,7 +232,7 @@ Future capabilities stay deferred until they have customer evidence and an opera
 
 **Owner decision, September 30, 2026; extension planned against `ba6dfc5`.** Whumpo should assemble and operate a shared, maintained platform: **configure existing capabilities first, compose them next, generate only the missing custom code, and allocate dedicated infrastructure only when the workload requires it.** Reduce duplicated implementation and idle capacity while preserving separate customer data, permissions and execution boundaries. Invest in this before marginal model-price optimization; existing safety, privacy, reliability and funded-spending requirements still apply.
 
-The complete design is in [composition architecture and operating strategy](composition-architecture.md). New packets **WH-064–WH-080** are appended to the [backlog](backlog.md) under **F5 — Configuration and shared capabilities**. F5 is an appended workstream, **not** a requirement to finish F0–F4 first. Begin the P0 [specification decision, WH-064](https://github.com/zemdregon/whumpo/issues/12), now alongside existing release prerequisites; avoid expanding unrelated premium-routing experiments before that foundation. Implementation is proposed unless the feature contract records delivery.
+The complete design is in [composition architecture and operating strategy](composition-architecture.md). New packets **WH-064–WH-080** are appended to the [backlog](backlog.md) under **F5 — Configuration and shared capabilities**. F5 is an appended workstream, **not** a requirement to finish F0–F4 first. Begin the P0 [specification decision, WH-064](https://github.com/Digifender-LLC/whumpo-website/issues/12), now alongside existing release prerequisites; avoid expanding unrelated premium-routing experiments before that foundation. Implementation is proposed unless the feature contract records delivery.
 
 ### Whumpo AI is the owner's maintainer
 
@@ -319,7 +321,7 @@ Keep full offline synchronization, iOS, customer Android-app generation, full wo
 
 ### Cumulative catalogue delivery — October 1, 2026
 
-WH-089 implements the [shared feature catalogue and Creator display rollout](../plan-feature-contract.md), tracked in [issue #44](https://github.com/zemdregon/whumpo/issues/44). Current source/API/UI/Chat use stable feature IDs and cumulative packaging; `personal`, prices, receipts and Stripe mappings remain compatible. Catalogue presentation has source, local acceptance and private-test deployment readback; runtime feature enforcement remains separate. WH-090 consumes this catalogue and existing subscription coverage; WH-105 can now use the shared identity and feature contracts. All individual features/providers and full paid-launch gates retain their acceptance requirements.
+WH-089 implements the [shared feature catalogue and Creator display rollout](../plan-feature-contract.md), tracked in [issue #44](https://github.com/Digifender-LLC/whumpo-website/issues/44). Current source/API/UI/Chat use stable feature IDs and cumulative packaging; `personal`, prices, receipts and Stripe mappings remain compatible. Catalogue presentation has source, local acceptance and private-test deployment readback; runtime feature enforcement remains separate. WH-090 consumes this catalogue and existing subscription coverage; WH-105 can now use the shared identity and feature contracts. All individual features/providers and full paid-launch gates retain their acceptance requirements.
 
 ## Dashboard PWA — October 1, 2026
 

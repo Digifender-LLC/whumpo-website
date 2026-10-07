@@ -80,7 +80,7 @@
         "docs/verification.md",
         "docs/safety-coverage.md"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/3",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/3",
       "owner": null,
       "evidence": [
         "2026-10-01 UTC reconciliation against main a3c5461: all 14 MVP checklist rows and later commitments now distinguish source, dated configuration, local/live evidence and device/activation gaps. Recorded release ee62cc7 has four verified Workers, 113 migrations and 16 assets at 04:28:59 UTC; natural hourly/daily maintenance and real stopped-release reconciliation supersede older missing-evidence claims. Current schema inventory verifies 148 tables/31 classes. README, acceptance, risk register and Cloudflare catalog reconciled; old CMS-first priority removed, CSAM/CMS/Stripe deferrals retained. Runtime/source/config files match recorded deployed source 3a9b61b; no new Cloudflare read, journey, security scan, scanner implementation or provider activation. Word v0.9, full customer/device/security/finance/restore acceptance remain explicit gaps. Detailed evidence and completion belong to docs/capability-matrix.md and issue #3."
@@ -129,7 +129,7 @@
         "tests/release-lock.mjs",
         "tests/release-bundles.mjs"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/39",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/39",
       "owner": null,
       "evidence": [
         "2026-10-01: issue #39 holds active release verification work on codex/release-verification. Existing release protocol is implemented; archive/compiler-lock correction and remaining focused checks are unfinished. Alignment does not close or redeploy this work.",
@@ -175,7 +175,7 @@
         "tests/verification-profiles.mjs",
         "tests/prompt-data-boundaries.mjs"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/4",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/4",
       "owner": null,
       "evidence": [
         "2026-10-01 UTC reconciliation from main edfb974: local fast/site/app profiles and runner checks revalidated through migrations 0001\u20130113. Fixed a stale prompt-boundary fixture by exercising actual Chat orchestration and bounded message chunking with synthetic transport and in-memory SQLite; runtime policy/limits unchanged. Removed the unused SITE_AI runner flag. Node 24.21.0/pnpm 11.19.0 pins and credential/failure isolation confirmed. Optional CI evaluation selects local-only verification: private repository confirmed; billing usage unavailable with current auth scope, so no workflow or paid usage activated. Full evidence and future activation prerequisites in docs/verification.md and issue #4. No scanner implementation, CMS functional testing, live model calls, deployment or new services."
@@ -218,7 +218,7 @@
         "src/billing.ts",
         "schema"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/5",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/5",
       "owner": null,
       "evidence": []
     },
@@ -306,7 +306,7 @@
         "tools/report-maintenance.mjs",
         "tools/maintenance-inventory.mjs"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/6",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/6",
       "owner": null,
       "evidence": [
         "2026-10-01T03:21:25.142Z: read-only live report confirms natural daily run at 03:17:59.757 UTC, all configured daily jobs complete, unconfigured GitHub/hosting skipped, and prior hourly health complete. All 27 queues and five receipt families readable; 26 queues empty, one known historical AI hold still actionable. No manual cleanup/retry or new automation. Three offline maintenance suites pass against 113 migrations. Acceptance complete; see docs/maintenance.md and issue #6. This is scheduler/diagnostic acceptance, not provider activation, scanner detection, or a waiver of unresolved work."
@@ -354,7 +354,7 @@
         "docs/incident-runbooks.md",
         "docs/incident-tabletop.md"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/105",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/105",
       "owner": null,
       "evidence": [
         "2026-10-04: runbooks (docs/incident-runbooks.md) and a written desk-check (docs/incident-tabletop.md) added against source 1343111; documentation only, no live drill, deployed control, alert injection or external message. Offline suites for maintenance, standard AI recovery, secret custody, release manifest and identity recovery passed on Node 22.22.0 (repository requires 24). Open: live/facilitated exercise, alert delivery, per-tenant operator controls, stolen-kit takeover path, off-device key custody and counsel/restricted safety handling (gaps G1-G12). Acceptance not complete."
@@ -454,7 +454,7 @@
         "docs/roadmap/chat-first-experience.md",
         "docs/roadmap/identity-and-data-protection.md"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/7",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/7",
       "owner": null,
       "evidence": [
         "2026-09-30 source/local evidence: commit 2dcbb7a adds a proposed lifecycle contract and explicit catalog covering all 133 control tables across 29 classes; schema and account-closure inventory checks passed with 107 migrations. Retention choices remain proposed; no closure/export activation or legal-compliance claim. See docs/data-lifecycle.md.",
@@ -509,7 +509,7 @@
         "tests/service-client-activation.mjs",
         "tests/natural-chat.mjs"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/8",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/8",
       "owner": null,
       "evidence": [
         "2026-10-01 UTC source/local reconciliation against 4e91a8b through migrations 0001\u20130113: docs/safety-coverage.md inventories 17 path families, actual screening/risk callers, known specification/service holds, mandatory versus supplemental checks, legacy/context gaps and concrete WH-011\u2013017 handoff. Agent safety knowledge now accurately states the unconfigured detectors and remaining coverage gaps. pnpm check/build, specification journey, service-client activation, natural Chat, 68 local document references and roadmap validation/render checks passed. Benign scripted fixtures only; no detector, CMS feature testing, provider activation or safety-launch acceptance. Release and completion evidence belongs in issue #8 and the coverage document.",
@@ -556,7 +556,7 @@
         "docs/data-lifecycle.md",
         "docs/background-jobs.md"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/21",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/21",
       "owner": null,
       "evidence": [
         "2026-10-01 UTC owner deferred CSAM scanning before implementation delivery. Unused uncommitted response helper/test and unfinished provider proposal removed; no scanner/provider deployment or activation. Issue #21 remains open and unclaimed for future planning. Existing quarantine/hold foundations are not detector coverage or safety-launch acceptance."
@@ -642,7 +642,7 @@
         "src/cms-publication-media.ts",
         "src/cms-media-preview.ts"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/137",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/137",
       "owner": null,
       "evidence": []
     },
@@ -686,7 +686,7 @@
         "src/ai-chat.ts",
         "src/publications.ts"
       ],
-      "issue": null,
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/171",
       "owner": null,
       "evidence": []
     },
@@ -727,7 +727,7 @@
         "src/content-risk-evidence.ts",
         "tools/review-content-risk.mjs"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/109",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/109",
       "owner": null,
       "evidence": []
     },
@@ -807,7 +807,7 @@
         "docs/data-lifecycle.md",
         "src/safety-cases.ts"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/132",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/132",
       "owner": null,
       "evidence": [
         "2026-10-04 UTC: owner decisions on issue #132, parts (a), (b) and (d), implemented in source with local verification only; not deployed, not configured, no operator bootstrapped. Changes the composed schema (schema/platform.sql), so it needs the owner-run empty-D1 schema cutover held on PR #160. (a) safety_preserved_records capacity raised from 10,000 to 50,000 and still fails closed: at capacity the preserving app-document write is refused. (b) New triggers safety_hold_app_document (previous revision kept on every app_documents state overwrite: visitor transition, recovery restore or migration apply) and safety_hold_app_recovery_document (app_recovery_documents cleared by recovery-point removal or visitor revocation are kept) inside an account or project hold. Customer writes still succeed. Object holds do not capture app documents. tools/safety-hold-inventory.mjs reclassifies both paths as preserved and also classifies two module review-expiry deletes from WH-125/126 (module_activation_reviews, module_access_role_reviews) that left the inventory failing on this branch; it now lists 85 sites with none unclassified. (d) docs/content-safety.md adds the outside-hold-control procedure for D1 Time Travel and customer-owned CMS/GitHub copies, required before case operations are activated. Recorded owner decisions: default case/evidence retention is one year with operator review at expiry, pending counsel (not implemented in code); visitors may not delete their own data while held (current behaviour, unchanged). Local checks: node tests/safety-case-operations.mjs passed 106 checks on SQLite and with --d1 on local D1 + local R2. Also passed: node tests/safety-cases.mjs (+ --d1), tests/chat-interaction-storage.mjs, tests/app-recovery.mjs, tests/lifecycle-catalog.mjs, pnpm check, node tools/verify.mjs fast and protection, pnpm build.",
@@ -889,7 +889,7 @@
         "src/content-policy.ts",
         "src/content-risk-evidence.ts"
       ],
-      "issue": null,
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/172",
       "owner": null,
       "evidence": []
     },
@@ -1068,7 +1068,7 @@
         "tools/benchmark.mjs",
         "tests/fixtures/customer-benchmark.json"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/9",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/9",
       "owner": null,
       "evidence": [
         "2026-09-30: offline benchmark foundation passed seven scripted fixture families with unchanged source manifest; all-call inference receipt accounting and unknown total expense preserved. Provider privacy comparison recorded. No real-provider quality/cost or confidential beta acceptance; see docs/customer-benchmarks.md.",
@@ -1290,7 +1290,7 @@
         "tests/photo-handoff.mjs",
         "docs/stripe-pricing-tables.md"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/10",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/10",
       "owner": null,
       "evidence": [
         "2026-10-01 UTC: initial/refresh error recovery, accessible reply notices, pending-turn presentation, keyboard focus and mobile sheet corrections verified with types/build, delivery/announcement/timing/loading checks and a synthetic loopback browser fixture at desktop/360/390 px. Draft and same-request identity survive workspace navigation; full reload persistence, complete owner journey and real screen-reader/device acceptance remain open. See docs/workspace-refinement-acceptance.md and issue #10. Deployment is recorded separately.",
@@ -1351,7 +1351,7 @@
         "docs/roadmap/identity-and-data-protection.md",
         "docs/roadmap/alignment.md"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/113",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/113",
       "owner": null,
       "evidence": [
         "2026-10-04 UTC source slice on branch claude/wh-025-funnel-metrics (not deployed): opt-in content-free funnel_events (allowlisted event/dimension CHECK, receipt keys, UTC minute) derived by the hourly funnel maintenance job from existing receipts, plus handler-side rejected-answer and cancel recorders; consent off by default (welcome bio step and Settings), not retroactive, deleted on withdrawal, 180-day pruning without re-derivation, account cascade and closure-inventory count; lifecycle class product-measurement; read-only suppressed operator report with receipt comparison; docs/funnel-metrics.md with proposed-until-baseline targets and an unsent feedback draft. node tests/funnel-metrics.mjs passes on SQLite and --d1 with actual handlers. Owner consent basis, retention and suppression floor remain undecided; signup, client prompts, print actions and surface changes are not measured. No live data, report run or feedback request sent."
@@ -1808,7 +1808,7 @@
         "tools/respond-usage-review.mjs",
         "docs/roadmap/alignment.md"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/135",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/135",
       "owner": null,
       "evidence": [
         "2026-10-04 UTC: owner contact decision (issue #135) implemented in source with local verification only; not deployed, not accepted, no schema change. Customer contact starts through the Whumpo agent; the support page form remains the path when Chat is unavailable. hello@whumpo.com is fixed public source copy (lockoutContact in src/support-shape.ts) shown only as a lockout path on /workspace/support and in the signed-out passkey/recovery help; it does not bypass passkey/kit recovery. The SUPPORT_CONTACT Worker variable is removed from src/support.ts, src/secrets.d.ts and tools/secret-custody.mjs; SUPPORT_HOURS remains unset (no published hours). The 72-hour internal flag and the Chat-unavailable support link are unchanged. Local checks: node tests/support-access.mjs (9 cases) and node tests/usage-review-requests.mjs passed; pnpm check, node tools/verify.mjs fast, node tools/verify.mjs protection and pnpm build passed. tests/helpers/support-journey.mjs was updated for the lockout copy but the Playwright browser journey (pnpm test:support-browser) was not run: Playwright is not installed in this environment. Agent-led intake/readback for general help requests is not built (Chat handles usage reviews only).",
@@ -1851,7 +1851,7 @@
         "src/contacts.ts",
         "docs/cloudflare-capability-roadmap.md"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/146",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/146",
       "owner": null,
       "evidence": [
         "2026-10-04 UTC, branch c/great-curie-8ryukc (draft PR #160, held for the owner empty-D1 cutover because the composed schema changes): implemented locally, NOT activated. Owner decisions from issue #146 are recorded in docs/contact-forms.md: Cloudflare Email Service, notify@whumpo.com, every-minute cron over the D1 outbox (Queues not chosen), $5/month ceiling, 10/hour and 50/day caps, exact Chat review plus Dashboard control, operator-reviewed suppression reset; removal during a safety hold stays refused (open). Source: src/contact-email.ts is the Cloudflare adapter (binding shape and error codes checked against developers.cloudflare.com on October 4, 2026; no idempotency key is documented, so uncertain calls are never resent) and the only activation path, which needs the provider var, review var and CONTACT_EMAIL send_email binding. src/contact-notifications.ts adds the runner (at most one call per claimed attempt, a 32-day ledger ceiling of 14,285 calls refused in the database), contact_destination_reviews (exact Chat review) and Dashboard routes and UI. tools/contact-suppression-reset*.mjs adds the preview/digest operator reset with an immutable audit row. No binding, var, cron, DNS or domain onboarding was added, nothing was deployed, and there was no live canary. Tests use synthetic transports only (pnpm test:contacts plus related suites, as listed in the PR). Remaining: owner activation steps, sending-domain DNS approval, re-verified beta pricing and plan entitlement, a live canary to approved addresses, and Queues-based bounce event intake (not chosen)."
@@ -1897,7 +1897,7 @@
         "frontend/src/traffic-card.tsx",
         "docs/roadmap/alignment.md"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/139",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/139",
       "owner": null,
       "evidence": []
     },
@@ -2117,7 +2117,7 @@
         "docs/stripe-sandbox.md",
         "docs/roadmap/alignment.md"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/30",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/30",
       "owner": null,
       "evidence": [
         "Sandbox slice authorized independently of commercial cost-period gates: optional onboarding Checkout, exact paid invoice coverage, renewal reconciliation and restricted billing portal. WH-022/023 remain prerequisites for real-money activation. Proration, refunds/disputes and resource-wallet funding remain open.",
@@ -2516,7 +2516,7 @@
         "src/site-traffic.ts",
         "docs/workload-placement.md"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/111",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/111",
       "owner": null,
       "evidence": [
         "2026-10-04 first slice (main ae96716 plus uncommitted work, Node 22.22.0, repository requires 24): local-only synthetic-client harness tools/capacity.mjs (pnpm capacity) and docs/capacity-and-fairness.md. Four synthetic tenants including one noisy tenant drove site, photo, contact, public backend and visitor-application paths over loopback against disposable local D1/R2 and the real QuickJS runtime; recorded latency percentiles, 429/503 responses, runtime bounds, D1 statements per request and a victim-versus-noisy comparison (victim p50 512 to 1084 ms, p95 1129 to 4091 ms; 4 of 120 victim public-backend calls refused busy). One tenant held to its project/account allowances; two filler accounts drained the shared 1,000/day backend budget and a victim under its own cap was refused; a pre-set shared R2 read counter denied every tenant's photos while HTML kept serving. Findings F1-F8 (shared first-come budgets, no admission control on the public site host, global tenant-blind runtime gate, allowances keyed by target, narrow per-IP coverage, time-only recovery, no alerts) are recorded, not fixed. Alerts and cohort limits are proposals pending owner decision. No live load, deployment, Cloudflare or provider contact; figures are not Cloudflare production limits and not cost evidence. Open: owner decision on cohort limits/alerts, remedies for F1-F5, Node 24 re-record, any live experiment (needs an exact bounded reviewed plan). Acceptance not complete."
@@ -2612,7 +2612,7 @@
         "tests/fixtures/job-envelope.mjs",
         "tests/job-envelope-contract.mjs"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/11",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/11",
       "owner": null,
       "evidence": [
         "2026-09-30 source/local evidence: docs/background-jobs.md selects D1-owned receipts and bounded scheduled passes initially, with dated provider cost/retry/retention comparison. File-backed SQLite prototype tests pass for uncertain scans and resumable cleanup; production D1 integration, connected load evidence and provider/operator activation remain separate gates. No new service or schedule enabled.",
@@ -2826,7 +2826,7 @@
         "tests/connectors-contract.mjs",
         "docs/integrations/github-connection.md"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/115",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/115",
       "owner": null,
       "evidence": [
         "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.",
@@ -2878,7 +2878,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-07 UTC: independent contract audit at ca17c6ad3f009b961916be6f4c2053a8eaa531e4 confirms the frozen contract and decomposition are delivered in source. tests/connectors-contract.mjs passed 71 offline checks against synthetic providers; documented provider/retention decisions and the runtime WH-141\u2013146 children remain separate. No child issue or completion state was fabricated. This accepts only the original contract/offline-reference handoff, not runtime, deployment, provider or parent acceptance. See docs/roadmap/execution-session-2026-10-07.md."
+      ]
     },
     {
       "id": "WH-141",
@@ -3470,7 +3472,7 @@
         "docs/project-specification.md",
         "docs/roadmap/alignment.md"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/12",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/12",
       "owner": null,
       "evidence": [
         "2026-10-01 alignment: live GitHub completion evidence re-read. Decision contract completed in d27b46a, issue #12; closed-schema/offline operation evidence only. Reuse it; service delivery remains separate."
@@ -3518,7 +3520,7 @@
         "docs/capability-planner.md",
         "docs/roadmap/alignment.md"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/13",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/13",
       "owner": null,
       "evidence": [
         "2026-10-01 alignment: live GitHub completion evidence re-read. Catalog/planner implementation completed in b457f6b and issue #13 with local and deployed readback evidence. General service modules remain WH-067\u2013069."
@@ -3567,7 +3569,7 @@
         "docs/project-service-clients.md",
         "docs/roadmap/alignment.md"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/14",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/14",
       "owner": null,
       "evidence": [
         "2026-09-30 issue readback for the tier extension: parent #14 remains open; #15 compiler/schema and #16 durable private proposal/apply/restore are closed with recorded source and synthetic acceptance. Forms/API child #17 remains open; content-only compilation is not complete WH-066/067 delivery. Source at review: 628c16f. This roadmap update does not verify a deployment.",
@@ -3609,7 +3611,8 @@
         "Evaluate proven libraries or managed services before building complex identity/payment engines",
         "Consume WH-071 logical storage/runtime interfaces and WH-116 data classification; freeze module instance/config/version and migration hooks before tables or client APIs. Add services to the delivered WH-066 compiler/catalog instead of replacing its supported adapters.",
         "Keep customer-application visitor/staff roles distinct from Whumpo workspace membership in WH-054. A staff upload rule does not grant owner Chat/admin access or require creating a parallel workspace authentication system.",
-        "Use WH-090 for owner feature admission/configuration and WH-105 for registered owner-facing bindings from the first module. Visitor/staff authorization remains the separate application policy; ordinary published serving does not become a workspace-subscription check or silently stop on plan loss."
+        "Use WH-090 for owner feature admission/configuration and WH-105 for registered owner-facing bindings from the first module. Visitor/staff authorization remains the separate application policy; ordinary published serving does not become a workspace-subscription check or silently stop on plan loss.",
+        "Accept the shared API foundation with direct/custom-client calls to the actual visitor-origin handlers and current disposable D1/R2, including all authorization, publication, quarantine and preservation criteria. WH-070 subsequently serves and accepts the presentation; do not make the API foundation depend on its downstream renderer."
       ],
       "acceptance": [
         "Authenticated scope and field/record/file permissions are enforced inside every API, including direct/custom frontend use",
@@ -3637,13 +3640,14 @@
         "docs/chat-interactions.md",
         "docs/shared-modules.md"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/107",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/107",
       "owner": null,
       "evidence": [
         "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.",
         "2026-10-04 UTC: decomposed into WH-123\u2013130 with the planned contract in docs/shared-modules.md. Planning only: no module table, API, binding or deployment exists; the parent acceptance is unchanged and closes only after every child.",
         "2026-10-04 UTC status note (WH-130): not complete and not accepted. Local synthetic evidence covers the delivered operations for each criterion; it is mapped in docs/shared-modules.md#wh-067-acceptance-map--october-4-2026-utc and comes from tests/shared-modules-compositions.mjs plus the registry/access/records/files/collections suites, SQLite and local D1/R2. Open before acceptance: the owner-run empty-D1 cutover and release of PR #160; the WH-126 identity ownership cutover (staff still needs an enabled visitor application); the WH-127 records export serializer and hooks, form attachments, TURNSTILE_SECRET on whumpo-apps and publication-revision binding of public forms; the WH-128 owner photo collection, owner module uploads, published galleries and files export; restricted preservation LC-06; an owner-reachable authoring path (the site agent prompt deliberately advertises no module operation, and capability entries are still planned); and a served composition (WH-070) with browser evidence. Live, browser and device acceptance has not been attempted.",
-        "2026-10-04 UTC status note (WH-126 identity cutover): module visitor and staff principals now belong to the access instance with no visitor application in any module suite; the acceptance map in docs/shared-modules.md is updated. WH-067 stays open and not accepted (see the remaining gaps there, including the owner path to save an access instance)."
+        "2026-10-04 UTC status note (WH-126 identity cutover): module visitor and staff principals now belong to the access instance with no visitor application in any module suite; the acceptance map in docs/shared-modules.md is updated. WH-067 stays open and not accepted (see the remaining gaps there, including the owner path to save an access instance).",
+        "2026-10-07 UTC: clarified the existing foundation/presentation boundary. WH-067/130 retain every scoped API, two-composition, tenant, replay, revocation, safety, preservation and zero-inference requirement; WH-070 retains served-browser presentation and accessibility acceptance after WH-067. This removes an implicit reverse dependency in the gap summary, changes no dependency edge and marks no runtime criterion complete. See docs/roadmap/execution-session-2026-10-07.md."
       ]
     },
     {
@@ -3779,7 +3783,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-07 UTC: clarified the existing foundation/presentation boundary. WH-067/130 retain every scoped API, two-composition, tenant, replay, revocation, safety, preservation and zero-inference requirement; WH-070 retains served-browser presentation and accessibility acceptance after WH-067. This removes an implicit reverse dependency in the gap summary, changes no dependency edge and marks no runtime criterion complete. See docs/roadmap/execution-session-2026-10-07.md."
+      ]
     },
     {
       "id": "WH-071",
@@ -3827,7 +3833,7 @@
         "tools/prototypes/workload-placement.mjs",
         "tests/workload-placement-prototype.mjs"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/47",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/47",
       "owner": null,
       "evidence": [
         "2026-10-01 WH-071 decision/source evidence against d9f5d26: docs/workload-placement.md freezes logical project/resource and exact module/schema identities, scoped adapter obligations, lifecycle/export descriptors and fenced migration handoff. Offline reference and 60 synthetic checks verify compatibility/rejections and marginal container examples; current official provider prices/limits reviewed. Existing shared D1/private R2/QuickJS remain. No production imports, runtime/config/schema changes, provider activation, customer migration or export acceptance. Execution/completion evidence belongs in issue #47.",
@@ -3974,7 +3980,7 @@
         "docs/roadmap/alignment.md",
         "docs/workload-placement.md"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/148",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/148",
       "owner": null,
       "evidence": [
         "2026-10-04 UTC: owner decision on issue #148 implemented in source with local verification only; not deployed, not accepted. Changes the composed schema (schema/platform.sql: operator_containments scope 'build', freeze-only CHECK; build_job_admit refuses an active build freeze with the generic build_job_capacity error; new operator_containment_build_cancel trigger), so it needs the owner-run empty-D1 schema cutover held on PR #160 and cannot ship through deploy ci. tools/operator-containment-input.mjs accepts scopes {build:'freeze'} for a project or account (no allowance; limits stay as built) and reports active build jobs in status. A freeze refuses new jobs and cancels running and succeeded-but-unpublished jobs in scope exactly like owner cancellation (no dispatch/finish/spend/publish; an already-sent test is not recalled; cleanup recorded by reconcileBuildJobs); published jobs and other projects/tenants are untouched; lift restores admission. The owner-facing 429 text in src/application-build.ts is now generic so a freeze is not disclosed. Local checks: node tests/build-jobs.mjs (new section 11, SQLite with the actual QuickJS runtime; a mutation removing the cancel trigger made it fail), node tests/operator-containment.mjs and --d1 (local D1), node tests/application-build.mjs, tests/maintenance-inventory.mjs, tests/lifecycle-catalog.mjs, tests/contact-notifications.mjs, pnpm check, node tools/verify.mjs fast and protection, and pnpm build passed. Not rehearsed against any deployed database."
@@ -4026,7 +4032,7 @@
         "docs/roadmap/alignment.md",
         "docs/workload-placement.md"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/128",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/128",
       "owner": null,
       "evidence": [
         "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass."
@@ -4322,7 +4328,7 @@
         "tools/prototypes/mobile-v1.mjs",
         "tests/mobile-v1-contract.mjs"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/117",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/117",
       "owner": null,
       "evidence": [
         "2026-09-30: docs/android-app.md records the accepted product/architecture baseline and current service mapping against f90bf5f plus the working tree. Exact v1 wire contracts and native implementation acceptance remain this lane's future work; no Android execution issue or release is claimed.",
@@ -4400,7 +4406,7 @@
         "Account recovery/passkey removal invalidates native sessions as well as browser sessions; retained trusted credentials and save-before-rotation recovery-kit behavior remain correct under the shared restricted recovery contract",
         "Only the closed supported native operation set is reachable; cookie-authenticated browser mutations still require valid Origin",
         "Local/disposable identity and contract tests pass before approved signed-app/device verification; mobile secrets never appear in URLs, logs, model context or generated content",
-        "Older supported v1 clients remain compatible; unknown controls have no approval and retired clients retain browser support/recovery access",
+        "Only the exact current native client/API contract is admitted; stale clients receive an explicit client_update_required response without legacy readers or compatibility adapters. Unknown controls never approve an action. Account support/recovery remains reachable through the current browser flow.",
         "One-key signup and incomplete recovery cannot issue or exchange a normal native session; lost-all-keys recovery requires two replacement passkeys and fresh passkey verification before handoff"
       ],
       "verification": [
@@ -4423,7 +4429,8 @@
       "issue": null,
       "owner": null,
       "evidence": [
-        "2026-10-02 UTC: removed stale numbered-additive-migration wording from active scope to match WH-120 and the complete-current-schema contract. Implementation uses current fixtures/reviewed empty test databases. Feature scope, dependencies and acceptance remain unchanged; this amendment does not implement the feature."
+        "2026-10-02 UTC: removed stale numbered-additive-migration wording from active scope to match WH-120 and the complete-current-schema contract. Implementation uses current fixtures/reviewed empty test databases. Feature scope, dependencies and acceptance remain unchanged; this amendment does not implement the feature.",
+        "2026-10-07 UTC: removed the superseded older-client compatibility criterion to match AGENTS.md, WH-120 and docs/mobile-api-v1.md. Current browser recovery remains required; stale native clients cannot acquire authority. Native implementation and signed-device acceptance remain separate."
       ]
     },
     {
@@ -4712,7 +4719,7 @@
         "tests/plan-catalogue.mjs",
         "tools/plan-catalogue-browser.mjs"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/44",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/44",
       "owner": null,
       "evidence": [
         "2026-10-01: cumulative version-1 launch feature catalogue and Creator display rollout implemented against 9cb2a62. personal IDs/prices/preferences/provider mappings and immutable receipts preserved. API/pricing/Settings/Chat distinguish planned inclusions, existing foundations, required provider consent and pending launch acceptance; all seven Business/Pro connections named and common security/recovery/export/standard AI retained. Catalogue, plan-period and synthetic subscription regressions, TypeScript/build/loading and connected loopback mobile/keyboard preference checks passed. No runtime feature enforcement, real billing/provider action, schema or deployment; WH-090 and feature/launch acceptance remain separate. See docs/plan-feature-contract.md and issue #44.",
@@ -4785,7 +4792,7 @@
         "docs/feature-admission.md",
         "docs/feature-acceptance.md"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/62",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/62",
       "owner": null,
       "evidence": [
         "2026-10-01: split into #63 current inclusion/preview-grant interface, #64 enforcement and #65 connected acceptance/test release. The foundation extends current invoice coverage rather than creating paid-plan truth. Parent stays open; inclusion alone is not authorization and no current handler is represented as gated until its adapter acceptance.",
@@ -4903,7 +4910,7 @@
         "docs/roadmap/alignment.md",
         "docs/plan-feature-contract.md"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/121",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/121",
       "owner": null,
       "evidence": [
         "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.",
@@ -4997,7 +5004,7 @@
         "docs/feature-inclusion.md",
         "docs/chat-interactions.md"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/130",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/130",
       "owner": null,
       "evidence": []
     },
@@ -5033,7 +5040,7 @@
         "docs/data-lifecycle.md",
         "docs/feature-inclusion.md"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/141",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/141",
       "owner": null,
       "evidence": []
     },
@@ -5745,7 +5752,7 @@
         "tests/chat-interaction-contract.mjs",
         "tests/fixtures/chat-interactions.json"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/51",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/51",
       "owner": null,
       "evidence": [
         "2026-10-01: accepted planning direction against 628c16f and the existing working tree; implementation and customer acceptance remain open. Live GitHub refresh was blocked by local command approval policy; no issue or claim created.",
@@ -5816,7 +5823,7 @@
         "src/chat-interactions/submitted-context.ts",
         "frontend/src/chat-resource-picker.tsx"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/87",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/87",
       "owner": "Codex /root (codex/identity-admission)",
       "evidence": [
         "2026-10-01: accepted planning direction against 628c16f and the existing working tree; implementation and customer acceptance remain open. Live GitHub refresh was blocked by local command approval policy; no issue or claim created.",
@@ -5895,7 +5902,7 @@
         "tests/helpers/live-chat.mjs",
         "docs/chat-renderer-acceptance.md"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/90",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/90",
       "owner": null,
       "evidence": [
         "2026-10-01: accepted planning direction against 628c16f and the existing working tree; implementation and customer acceptance remain open. Live GitHub refresh was blocked by local command approval policy; no issue or claim created.",
@@ -5974,7 +5981,7 @@
         "docs/chat-composition-acceptance.md",
         "tests/chat-interaction-selection-live.mjs"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/93",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/93",
       "owner": null,
       "evidence": [
         "2026-10-01: accepted planning direction against 628c16f and the existing working tree; implementation and customer acceptance remain open. Live GitHub refresh was blocked by local command approval policy; no issue or claim created.",
@@ -6039,7 +6046,7 @@
         "docs/workspace-views-acceptance.md",
         "docs/workspace-view-release.md"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/94",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/94",
       "owner": null,
       "evidence": [
         "2026-10-01: accepted planning direction against 628c16f and the existing working tree; implementation and customer acceptance remain open. Live GitHub refresh was blocked by local command approval policy; no issue or claim created.",
@@ -6099,7 +6106,7 @@
         "docs/chat-connection-handoffs.md",
         "docs/chat-routine-acceptance.md"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/95",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/95",
       "owner": null,
       "evidence": [
         "2026-10-01: accepted planning direction against 628c16f and the existing working tree; implementation and customer acceptance remain open. Live GitHub refresh was blocked by local command approval policy; no issue or claim created.",
@@ -6169,7 +6176,7 @@
         "tests/helpers/account-help-journey.mjs",
         "tests/workspace-identity-browser.mjs"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/100",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/100",
       "owner": null,
       "evidence": [
         "2026-10-01: accepted planning direction against 628c16f and the existing working tree; implementation and customer acceptance remain open. Live GitHub refresh was blocked by local command approval policy; no issue or claim created."
@@ -6270,7 +6277,7 @@
         "frontend/src/identity/flow.tsx",
         "docs/workspace-identity.md"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/42",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/42",
       "owner": null,
       "evidence": [
         "2026-10-01: docs/workspace-identity.md freezes the protocol against d415398: separate restricted grants/current account epochs, invitation-safe two-key signup/resume, shared kit prepare/save/commit, reviewed partial/all-loss recovery, fresh replacement assertion, emergency revocation and staged existing-account retirement with compatible rollback. Source and failure-transition review completed; WH-114/115 implementation and physical/live/native acceptance remain separate. No runtime, schema, credential or deployment change. Issue #42 records verification and delivery.",
@@ -6329,7 +6336,7 @@
         "docs/identity-recovery.md",
         "docs/identity-web.md"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/68",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/68",
       "owner": null,
       "evidence": [
         "2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.",
@@ -6406,7 +6413,7 @@
         "docs/identity-recovery.md",
         "docs/identity-web.md"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/69",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/69",
       "owner": null,
       "evidence": [
         "2026-10-01: WH-114A #70 implements the isolated current-policy account/attempt/credential/session/grant schema and shared principal/committing guard. WH-114B #71 owns verified ceremonies/enrollment, WH-115 #69 owns shared kits/restricted recovery, and WH-114C #72 connects them for one current-only test cutover. No live schema, auth route, credential or deployment changes; full implementation and acceptance remain open.",
@@ -6469,7 +6476,7 @@
         "tests/lifecycle-catalog.mjs",
         "tests/connection-vault.mjs"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/81",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/81",
       "owner": null,
       "evidence": [
         "2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.",
@@ -6563,7 +6570,7 @@
         "tests/release-provider.mjs",
         "tools/release-provider.mjs"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/82",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/82",
       "owner": null,
       "evidence": [
         "2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.",
@@ -6673,7 +6680,7 @@
         "tests/dashboard-pwa.mjs",
         "tests/dashboard-pwa-browser.mjs"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/49",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/49",
       "owner": null,
       "evidence": [
         "2026-10-01 local/source: installable workspace manifest, elephant 192/512px icons, Settings install/manual guidance and public-only offline worker implemented. Type/build, PWA cache/routing/version checks, build/release snapshot and lazy-loading checks pass. Disposable Chromium with actual local platform/D1 reports zero manifest/installability errors and verifies mobile layout, install dismissal, offline/reconnect and worker updates preserving an unsent draft. Deployment evidence follows in docs/dashboard-pwa.md and issue #49; physical-phone OS install remains unverified.",
@@ -6725,7 +6732,7 @@
         "frontend/src/workspace.tsx",
         "tests/current-interfaces.mjs"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/53",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/53",
       "owner": null,
       "evidence": [
         "2026-10-01 owner amendment: remove existing legacy fallbacks and assume current clients/schemas only. WH-105 strict client contract merged in PR #52. Runtime inventory and staged removal tracked in issue #53; full cleanup remains in progress.",
@@ -6776,7 +6783,7 @@
         "tests/benchmark-evidence.mjs",
         "tests/fixtures/customer-benchmark.json"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/80",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/80",
       "owner": null,
       "evidence": [
         "2026-10-02 UTC: extracted from open WH-020/#9 to supply its privacy foundation to WH-116. Current seven-family cohort at 9d64b9a passed with unchanged sources, 35 retained receipts and zero real-provider samples. Official model/privacy terms were rechecked. Current source adds closed evidence validation and compiler-lock fingerprinting; final connected rerun is recorded in the execution issue. Real-model comparison, confidential-route approval and provider activation remain open under WH-020/021.",
@@ -6823,7 +6830,7 @@
         "tests/feature-identity.mjs",
         "tests/feature-retention.mjs"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/65",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/65",
       "owner": null,
       "evidence": [
         "2026-10-02 UTC: maps the already completed WH-090C/#65 handoff without reopening it or expanding its historical acceptance. e21a106 verified current schema/identity/provider boundaries and live cleanup; e27e088 later changed only favicon assets. Future tier/collaboration adapters remain required by parent WH-090/#62."
@@ -6871,10 +6878,11 @@
         "docs/workload-placement.md",
         "docs/project-specification.md"
       ],
-      "issue": null,
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/162",
       "owner": null,
       "evidence": [
-        "2026-10-04 UTC: contract and offline reference only, no implementation. Merged PR #108 (2fbfd6c) added docs/shared-modules.md (marked planned: module kinds/pins, instance envelope v1, kind configurations, configRevision, none/additive-optional/migration-required hook classes on the WH-071 descriptor; whumpo-modules request envelope v1, closed operation set, derived principals, policy table, revocation and visitor/workspace host boundaries; contact/directory/photos/visitor identity mapping with gaps; WH-090/122 admission, WH-105 binding and WH-066 catalog registration points; dated library/managed-service evaluation), tools/prototypes/shared-modules.mjs (imports only node:crypto and the offline WH-071 prototype) and tests/shared-modules-contract.mjs, and decomposed WH-067 into WH-123–130. Re-run at ff3d410: node tests/shared-modules-contract.mjs passed 75 offline checks with synthetic identifiers; this proves frozen examples only, not runtime authorization, persistence, safety or acceptance. Both open owner decisions (records retention, visitor values in Chat) were decided by the owner on #107 and are recorded in the contract. WH-067 depends on every child WH-123–130 and no child reaches WH-070/072/077/080/104. No table, route, binding, provider, Cloudflare resource or deployment is added by WH-123; WH-124 (#157) separately implemented schema 3 in source. Live GitHub issue state was not re-read from this session."
+        "2026-10-04 UTC: contract and offline reference only, no implementation. Merged PR #108 (2fbfd6c) added docs/shared-modules.md (marked planned: module kinds/pins, instance envelope v1, kind configurations, configRevision, none/additive-optional/migration-required hook classes on the WH-071 descriptor; whumpo-modules request envelope v1, closed operation set, derived principals, policy table, revocation and visitor/workspace host boundaries; contact/directory/photos/visitor identity mapping with gaps; WH-090/122 admission, WH-105 binding and WH-066 catalog registration points; dated library/managed-service evaluation), tools/prototypes/shared-modules.mjs (imports only node:crypto and the offline WH-071 prototype) and tests/shared-modules-contract.mjs, and decomposed WH-067 into WH-123\u2013130. Re-run at ff3d410: node tests/shared-modules-contract.mjs passed 75 offline checks with synthetic identifiers; this proves frozen examples only, not runtime authorization, persistence, safety or acceptance. Both open owner decisions (records retention, visitor values in Chat) were decided by the owner on #107 and are recorded in the contract. WH-067 depends on every child WH-123\u2013130 and no child reaches WH-070/072/077/080/104. No table, route, binding, provider, Cloudflare resource or deployment is added by WH-123; WH-124 (#157) separately implemented schema 3 in source. Live GitHub issue state was not re-read from this session.",
+        "2026-10-07 UTC: independent contract audit at ca17c6ad3f009b961916be6f4c2053a8eaa531e4 confirms the frozen contract and decomposition are delivered in source. tests/shared-modules-contract.mjs passed 75 offline checks; the two WH-123 owner decisions are already recorded in docs/shared-modules.md. Mapped existing issue #162 remains open. This accepts only the original contract/offline-reference handoff, not runtime, deployment, provider or parent acceptance. See docs/roadmap/execution-session-2026-10-07.md."
       ]
     },
     {
@@ -6916,7 +6924,7 @@
         "src/project-specification/v3/schema.ts",
         "docs/data-lifecycle.json"
       ],
-      "issue": "https://github.com/zemdregon/whumpo/issues/157",
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/157",
       "owner": null,
       "evidence": []
     },
@@ -6958,7 +6966,7 @@
         "docs/chat-interactions.md",
         "src/project-specification/service-clients/activation.ts"
       ],
-      "issue": null,
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/161",
       "owner": null,
       "evidence": [
         "2026-10-04 UTC: source and local verification only; not deployed, not accepted, issue not created or claimed from this session. Branch c/great-curie-8ryukc (PR #160) adds the current schema input src/shared-modules/schema.sql (module_instances, module_activations, module_activation_reviews/links/applies, module_request_receipts; lifecycle class module-registry) with commit triggers, src/shared-modules/{policy,registry,activation,api,bindings,shape}.ts (whumpo-modules v1 envelope with client_update_required and typed ModuleError codes; resolveResource and decideModule; exact owner activation/disable reviews via moduleActivationReview/moduleActivationApply ChatControls with recent passkey sign-in, core.forms/core.editing prepare check and confirm inclusion composed into the applied-receipt insert; idempotent request receipts), module.instances@1 as the feature-null modules view with an owner card, and the apply button in Chat. No kind data handler, visitor-origin route or visitor session binding is delivered (moduleHandlers is empty; visitor principals cannot commit until WH-126). The content compiler still refuses instance-bearing specifications (UNAVAILABLE_CAPABILITY); lifting it is a separate compiler identity cutover, so the registry is reachable only from fixtures that rewrite the saved head in a disposable database. Local checks: node tests/shared-modules-registry.mjs passed 11 groups on SQLite and with --d1 on local D1 (two owners/projects, Starter, revocation, stale proof, replay, concurrent winners, lost-ack readback, withdrawn/stale catalog variants, plan loss, commit-time races, closure/cascades, static no-inference check); feature-admission, 14 offline chat-interaction suites, guest-preview, site-diagnostics, workspace-view, lifecycle, closure, release-manifest, restore-admission, pnpm check, verify fast and protection passed. The schema change requires the owner-run empty-database cutover (pnpm run deploy prepare/apply with schemaChange initialize); deploy ci refuses it and the PR must not merge without the owner.",
@@ -7004,7 +7012,7 @@
         "src/app-auth.ts",
         "src/app-access.ts"
       ],
-      "issue": null,
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/163",
       "owner": null,
       "evidence": [
         "2026-10-04 UTC: partial slice; source and local verification only; not deployed, not accepted, issue not created or claimed from this session; WH-126 stays open. Branch c/great-curie-8ryukc (PR #160) extends the pending current schema input src/shared-modules/schema.sql with module_access_states (access revision), module_access_roles (staff grants and revoked suppressions), module_access_role_reviews/links/applies and commit triggers (lifecycle class project-roles admitted), adds src/shared-modules/access.ts (visitorPrincipal from the project visitor session cookie only, visitorPredicate composed into module commits and read fences, access.me and owner access.list handlers, access.roles@1 roster) and access-roles.ts (exact owner accessRoleReview/accessRoleApply ChatControls with recent passkey sign-in; grant composes core.editing, revoke needs identity and ownership only), the visitor-origin POST /modules route in src/app-gateway.ts, the access-roles view card and the Chat apply button. Visitor revocation and reviewed erasure suppress/delete grants and advance the access revision. Not done: moving visitor identity ownership from app_spaces to the access instance (staff still require an enabled visitor application), registering the per-visitor document as an execution resource, and a roles export serializer; access.prepareRole/confirmRole stay unavailable. Local checks: node tests/shared-modules-access.mjs passed 11 groups on SQLite and with --d1 on local D1 (signed-passkey visitors, actual gateway, anonymous/workspace/foreign/cross-origin cookie refusals, visitor cookie refused on the workspace origin, two projects, non-owner account, replay without re-grant, one-winner race, revoke inside an in-flight staff commit, revoked and erased visitors, plan loss, disable, closure/cascades, static no-inference check); shared-modules-registry (SQLite and --d1), shared-modules-contract, app-auth, app-data, app-recovery, app-lifecycle, visitor-deletion-review, verify app (customer app journey, owner erasure, task-list journey), lifecycle-catalog, restore-admission, account-closure-inventory, feature-admission, 14 offline chat-interaction suites, guest-preview, site-diagnostics, workspace-view-bindings/components, processing-boundaries, pnpm check, verify fast, verify protection and pnpm build passed (browser suites needing @playwright/test were not run). The schema change still requires the owner-run empty-database cutover (pnpm run deploy prepare/apply with schemaChange initialize, one cutover with WH-125); deploy ci refuses it and the PR must not merge without the owner.",
@@ -7050,7 +7058,7 @@
         "src/backend-form-shape.ts",
         "docs/job-envelope.md"
       ],
-      "issue": null,
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/164",
       "owner": null,
       "evidence": [
         "2026-10-04 UTC: partial slice; source and local verification only; not deployed, not accepted, issue not created or claimed from this session; WH-127 stays open. Branch c/great-curie-8ryukc (PR #160) adds module_records and module_record_events to the pending current schema input src/shared-modules/schema.sql (lifecycle class module-records admitted) and src/shared-modules/records.ts handlers registered in the WH-125 engine: visitor/staff forms.submit through the access session (nested values, bounded field validation, opaque entry id), records.get/records.view with the policy field projection and own-record scope repeated in each query and cursors bound to view, principal, configRevision and access revision, records.update (owner any field, staff staffWrite only, revision compare-and-swap) and owner records.remove (any activation state, refused inside safety holds). Commit triggers repeat instance/form/schema/retention/visitor/caps; content-free events prove each write and are the form.accepted handoff. Retention expiry (current retentionDays) runs in the contacts maintenance job and skips held projects; the delete site is classified blocked in tools/safety-hold-inventory.mjs. Owner routes on the workspace origin: POST /api/projects/P/modules and GET /api/projects/P/module-records/R/S. Verified: tests/shared-modules-records.mjs (SQLite and --d1, 9 groups, two owners/projects, roles, revocation, replay), registry/access/lifecycle/restore-admission/contacts/maintenance/app-auth/app-lifecycle suites, pnpm check, verify fast/protection, pnpm build. Remaining: anonymous public intake with Turnstile and caps, contact inbox as a fixed-schema instance, records.summary@1 and dashboard panel, visitor-subject export serializer and descriptor hooks, attachments (WH-128). Schema change: same owner-run empty-database cutover; deploy ci refuses it.",
@@ -7076,7 +7084,7 @@
       "outcome": "Staff or visitors upload files into collections governed by role policy, and permitted viewers see only approved files, without any public bucket.",
       "scope": [
         "Extend project_files with instance/collection and uploader identity by current-schema cutover; keep JPEG cleaning, 1 MiB bound, create-only R2 and reservations",
-        "files.prepareUpload/putBytes/read/gallery on the visitor origin; owner collection for existing project photos and the Chat upload handoff",
+        "files.putBytes/read/gallery on the visitor origin with declared metadata and bytes in one bounded request; owner collection for existing project photos and the Chat upload handoff. Keep removal on the existing exact owner photo-removal review; reject retired prepareUpload/requestRemoval operation names explicitly instead of retaining unavailable compatibility stubs.",
         "Pending safety receipt on every upload; approved exact-digest reads with byte re-hash; reviewed removal and cleanup queue",
         "Descriptor lifecycle hooks and export serializer for eligible approved files"
       ],
@@ -7098,7 +7106,7 @@
         "src/photo-safety.ts",
         "docs/safety-coverage.md"
       ],
-      "issue": null,
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/165",
       "owner": null,
       "evidence": [
         "2026-10-04 UTC: partial slice; source and local verification only; not deployed, not accepted, issue not created or claimed from this session; WH-128 stays open. Branch c/great-curie-8ryukc (PR #160) adds module_files to the pending current schema input src/shared-modules/schema.sql (lifecycle class module-files admitted, 215 tables) as a 1:1 row beside an ordinary project_files photo row, so the WH-013 pipeline applies unchanged: cleanPhoto, 1 MiB and collection maxBytes, create-only private R2 object under photos/ with a server key, photo quotas, the pending project_photo_safety receipt written with the ready row, the approved_project_photos exact-digest view, byte re-hash, photo removal review, safety holds, cleanup queue and orphan sweep. src/shared-modules/files.ts registers files.putBytes (visitor origin POST /modules/upload, JPEG body with the envelope in a header; declared type/length/SHA-256 checked; no caller name, path, prefix or bucket), files.gallery and files.read (approved bytes only, re-hashed, sandboxed image response). Staff upload is the collection role policy (policy table, engine receipt predicate, module_file_admit with the staff role on the governing access instance and 10/hour/visitor); over-wide galleries are refused by the validator and at serving time. Module uploads are excluded from the owner photo library, Chat pickers, website specifications, the agent's photo context, workspace inspection and saved work, and get server-assigned names. Visitor erasure and files-instance removal delete their photo rows (blocked inside holds; classified in tools/safety-hold-inventory.mjs). whumpo-apps gains the existing private FILES binding. Verified: tests/shared-modules-files.mjs (SQLite with in-memory bucket and --d1 with local R2, 8 groups), tests/files.mjs, photo-versions, photo-removal, shared-modules-records/registry/access, contacts, app-auth, app-lifecycle, chat-interaction-photos, saved-work, workspace-view-bindings, agent-inspection, guest-preview-photos, current-website-specifications, lifecycle-catalog, restore-admission, safety-hold-inventory, pnpm check, verify fast/protection, pnpm build. Remaining: existing photos as an owner collection, owner module uploads and Chat handoff, prepareUpload/requestRemoval as module operations, form attachments, galleries in published websites, descriptor hooks and export serializer, scanner integration (owner-deferred). Schema change: same owner-run empty-database cutover; deploy ci refuses it.",
@@ -7106,7 +7114,8 @@
         "2026-10-04 UTC: owner collections and published galleries slice; source and local verification only; not deployed, not accepted; WH-128 stays open. module_files gains owner rows (uploader_kind owner, no visitor): the owner's files.putBytes on the workspace module route names an existing ready project photo by id and exact SHA-256 and files it into a collection whose upload lists owner, with no second photo row, object or reservation; module_file_admit repeats the active instance, owner upload policy and a ready same-project photo. ownerLibrarySQL and saved work exclude only staff/visitor uploads, so filed photos stay in the owner library; instance removal deletes only staff/visitor photo rows; module_file_not_published refuses staff/visitor uploads as website photos. The typed owner Chat control galleryPageReview (ids only, not advertised to the site agent) prepares the existing exact specification review with one pages.setPhotos of the newest approved owner-filed photos (at most four, photo-page@1); project_spec_gallery_admit repeats the shape inside the commit; saving is specificationApply and going public is the existing exact publication review with the unchanged WH-013 approval and re-hash gates. No compiler identity change (project-content@5 unchanged). Verified: tests/shared-modules-files.mjs (SQLite and --d1 with local R2, 10 groups), files, photo-versions, photo-removal, chat-interaction-photos/contract, chat-temporary-views, saved-work, workspace-view-bindings, agent-inspection, guest-preview-photos, current-website-specifications, restore-admission, specification-compiler, lifecycle-catalog, app-auth, app-lifecycle, contacts, shared-modules-registry/access/records/collections/compositions (SQLite and --d1), safety-hold-inventory, pnpm check, verify fast/protection, pnpm build. Schema change: same owner-run empty-database cutover; deploy ci refuses it. Remaining: Chat upload handoff directly into a collection, removing a photo from a collection, an owner panel control (files instances are fixture-configured only), prepareUpload/requestRemoval as operations, scanner integration (owner-deferred).",
         "2026-10-04 UTC: owner Photos panel controls slice; source and local verification only; not deployed, not accepted, not exercised in a browser; WH-128 stays open. No schema, authority or review change. GET /api/projects/P/module-files (owner only; readOwnerFileCollections in src/shared-modules/files-gallery.ts, OwnerFileCollections in shape.ts) returns saved page ids/paths, unfiled ready owner photos with their exact SHA-256 and owner collections with owner-filed photo ids and safety state (never staff/visitor uploads; dashboard only, not Chat or model context). The Photos panel (frontend/src/photo-collections.tsx, client frontend/src/lib/photo-collections.ts) adds Add to collection on ready photos (owner files.putBytes envelope {fileId, sha256} on the workspace module route, one request id reused per photo and collection until confirmed) and a Collections and gallery pages section whose Prepare gallery page button sends the typed galleryPageReview control through runAction; saving and publishing stay the existing exact reviews. Verified: tests/shared-modules-files.mjs (11 groups, SQLite with in-memory bucket and --d1 with local D1/R2; new group drives the panel client through the real routes: owner-only facts, exact envelope, lost-ack replay with the same request id, gallery refused while held and prepared after approval with nothing saved, disabled instance refused, no staff/visitor uploads listed, no prompt mention), tests/files.mjs, photo-versions, photo-removal, chat-interaction-photos, saved-work, agent-inspection, shared-modules-registry/access/compositions, pnpm check, verify fast/protection, pnpm build. Remaining: Chat upload handoff directly into a collection, removing a photo from a collection without deleting it, prepareUpload/requestRemoval as operations, owner authoring of files instances (fixture-only), scanner integration (owner-deferred).",
         "2026-10-04 UTC: owner photo collection setup slice; source and local verification only; not deployed, not accepted, not exercised in a browser; WH-128 stays open. The typed owner Chat control filesModuleReview {projectId} (src/shared-modules/files-setup.ts; never accepted from model output, not advertised to the site agent) prepares the existing exact specification review with one modules.put of a fixed standard files instance: id photos, current catalog module-files/files-data pins, no dependencies, one collection library (owner read, owner-only upload, 1 MiB, JPEG, no gallery; schema review class only). Refused with reasons for a project without a website (404), an existing saved or registered owner collection, a taken photos instance id or library collection id (400) and foreign projects (404). Saving is specificationApply (recent sign-in) and activation the separate moduleActivationReview/Apply pair. project_spec_proposal_admit gains a filesModuleReview branch and the new project_spec_files_setup_admit trigger (src/shared-modules/schema.sql) requires head plus exactly that appended instance (exact key counts). GET /api/projects/P/module-files returns setup states; the Photos panel Collections and gallery pages section offers Set up photo collection and Review activating photo collection. Verified: tests/shared-modules-files.mjs (12 groups, SQLite with in-memory bucket and --d1 with local D1/R2; new group covers malformed/foreign controls, exact instance and pins, linked review, 13 tampered proposals refused inside the commit, exact copy accepted, separate save and activation, panel setup states and client actions, filing into the set-up collection, disable, repeated setup, existing collection, taken ids, no website, prompt check), shared-modules-access (SQLite and --d1), shared-modules-registry/compositions/contract, chat-interaction-photos, service-safety, current-website-specifications, specification-compiler, safety-hold-inventory, pnpm check, verify fast/protection, pnpm build. Schema change: same owner-run empty-database cutover; deploy ci refuses it. Remaining: Chat upload handoff directly into a collection, removing a photo from a collection without deleting it, prepareUpload/requestRemoval as operations, staff/visitor files instances (fixture-only), scanner integration (owner-deferred).",
-        "2026-10-04 UTC: Remove from collection slice; source and local verification only; not deployed, not accepted, not exercised in a browser; WH-128 stays open. No schema, trigger, review, Chat surface or module operation change (the closed WH-123 operation set is unchanged). POST /api/projects/P/module-files/remove (owner only; removeOwnerFileFromCollection in src/shared-modules/files-gallery.ts) takes exactly {resourceId, collectionId, fileId} and deletes one owner-filed photo's module_files row only: the photo, its private object, safety receipt and saved versions stay, nothing is queued, and the photo returns to the unfiled list. Idempotent (removed:false when already out). Staff/visitor uploads are not_found, non-owner collections forbidden, malformed bodies invalid_request; works while disabled and inside a safety hold (deletes no content; new WH-132 inventory site classified excluded). Conservative choice: refused (409) while the current saved head version or the live publication shows the photo, repeated inside the deleting statement, because a gallery page is a snapshot of photo ids; the owner changes the page first or uses the photo removal review. The Photos panel shows Remove from collection on filed photos. Verified: tests/shared-modules-files.mjs (13 groups, SQLite with in-memory bucket and --d1 with local D1/R2; new group drives the panel client through the real route: exact body, lost-ack retry, photo/receipt/object kept, re-filing, foreign/unknown/non-owner/staff-upload/malformed refusals, refusal while the saved website shows the photo, removal while disabled and inside a project hold, prompt check), safety-case-operations, shared-modules-compositions, photo-removal, files, photo-versions, saved-work, safety-hold-inventory (94 sites), pnpm check, verify fast/protection, pnpm build. Remaining: Chat upload handoff directly into a collection, prepareUpload/requestRemoval as operations, staff/visitor files instances (fixture-only), scanner integration (owner-deferred)."
+        "2026-10-04 UTC: Remove from collection slice; source and local verification only; not deployed, not accepted, not exercised in a browser; WH-128 stays open. No schema, trigger, review, Chat surface or module operation change (the closed WH-123 operation set is unchanged). POST /api/projects/P/module-files/remove (owner only; removeOwnerFileFromCollection in src/shared-modules/files-gallery.ts) takes exactly {resourceId, collectionId, fileId} and deletes one owner-filed photo's module_files row only: the photo, its private object, safety receipt and saved versions stay, nothing is queued, and the photo returns to the unfiled list. Idempotent (removed:false when already out). Staff/visitor uploads are not_found, non-owner collections forbidden, malformed bodies invalid_request; works while disabled and inside a safety hold (deletes no content; new WH-132 inventory site classified excluded). Conservative choice: refused (409) while the current saved head version or the live publication shows the photo, repeated inside the deleting statement, because a gallery page is a snapshot of photo ids; the owner changes the page first or uses the photo removal review. The Photos panel shows Remove from collection on filed photos. Verified: tests/shared-modules-files.mjs (13 groups, SQLite with in-memory bucket and --d1 with local D1/R2; new group drives the panel client through the real route: exact body, lost-ack retry, photo/receipt/object kept, re-filing, foreign/unknown/non-owner/staff-upload/malformed refusals, refusal while the saved website shows the photo, removal while disabled and inside a project hold, prompt check), safety-case-operations, shared-modules-compositions, photo-removal, files, photo-versions, saved-work, safety-hold-inventory (94 sites), pnpm check, verify fast/protection, pnpm build. Remaining: Chat upload handoff directly into a collection, prepareUpload/requestRemoval as operations, staff/visitor files instances (fixture-only), scanner integration (owner-deferred).",
+        "2026-10-07 UTC delegated product decision: the delivered one-request files.putBytes upload and existing exact owner photo-removal review are the current paths. Retire the dormant files.prepareUpload/files.requestRemoval names rather than adding a second upload/reservation or approval protocol. The files lane owns matching source/reference checks and direct Chat-to-collection continuity; their acceptance is recorded separately when verified."
       ]
     },
     {
@@ -7141,7 +7150,7 @@
         "docs/directories.md",
         "src/directory.ts"
       ],
-      "issue": null,
+      "issue": "https://github.com/Digifender-LLC/whumpo-website/issues/166",
       "owner": null,
       "evidence": [
         "2026-10-04 UTC: source and local verification only; not deployed, not accepted, issue not created or claimed from this session; WH-129 stays open until accepted. Branch c/great-curie-8ryukc (PR #160) makes the project directory the content-collections instance (directory-listing@1) without a schema change: at most one content instance per project governs the existing directories/directory_reviews/directory_exports rows. src/shared-modules/collections.ts registers collections.readPublic (target {collectionId}, read) through the shared resolver, policy table and read fence, serving only the approved snapshot via the same publicDirectory reader as /directory.json (unpublished, offline or parent-restore-invalidated is unavailable; drafts, revisions and history never appear) on the visitor origin and the owner module route. Owner edits keep the existing directory Chat reviews; no write, staff path or collection type is added. The content descriptor marks directories eligible project data with exportHook collections-directory-export-v1 (deleteHook project-cascade, restoreHook unsupported); exportCollectionSnapshot returns exportDirectory's whumpo-directory v1 document (owner, current configRevision, every activation state, withdrawn or restaged pin) and validateDirectoryExport is its import validation. Compiler identity, schema inputs and module pins unchanged. Conservative default: the public site routes /directory and /directory.json keep serving without an instance (requiring activation would gate the free directory behind core.editing; owner decision). Verified: tests/shared-modules-collections.mjs (SQLite and --d1, 7 groups), tests/directories.mjs and tests/directory-history.mjs (local D1), shared-modules-registry/access/records/files (SQLite and --d1), shared-modules-contract, tools/safety-hold-inventory.mjs, pnpm check, verify fast/protection, pnpm build. Remaining: custom-domain directory paths, a lifecycle restore/import hook, the site-route decision; deploys only with the owner-run empty-database cutover that the module registry needs."
@@ -7165,7 +7174,8 @@
       "scope": [
         "Build two synthetic compositions (a staff portal and a visitor intake/gallery) against the same records/files/access instances on the visitor origin",
         "Cross-tenant, cross-user, role, direct-API, replay and revocation fixtures over actual handlers with maintenance inference unavailable",
-        "Run the existing contact, directory, photo and app lifecycle suites relevant to each slice and record evidence levels"
+        "Run the existing contact, directory, photo and app lifecycle suites relevant to each slice and record evidence levels",
+        "Exercise both synthetic compositions through the actual visitor-origin handlers with disposable current D1/R2. Keep served-browser composition, visual diversity and accessibility acceptance in downstream WH-070; local API evidence never substitutes for those checks or for a release."
       ],
       "acceptance": [
         "Every WH-067 acceptance criterion maps to passing local evidence; live or device acceptance is reported separately",
@@ -7185,7 +7195,8 @@
       "issue": null,
       "owner": null,
       "evidence": [
-        "2026-10-04 UTC: local synthetic evidence only; not deployed, not browser-tested, not live- or customer-accepted; issue not created or claimed from this session; WH-130 stays open. Branch c/great-curie-8ryukc (PR #160, held for the owner empty-D1 cutover) adds two synthetic compositions, tests/fixtures/module-compositions/staff-portal.mjs and visitor-intake.mjs, that call only same-origin POST /modules and /modules/upload with the whumpo-modules v1 envelope and a manifest of resource ids and configRevisions. A static check refuses auth, cookie, session, principal/role, SQL, storage-location, absolute-origin, handler and inference code and any import in both. tests/shared-modules-compositions.mjs (11 groups, passing on SQLite with an in-memory private bucket and with --d1 on local D1/R2) drives both against the same access/records/files/content instances of two tenants through the actual visitor gateway, module engine, handlers, commit triggers, activation/role/directory/publication reviews and owner workspace routes. It covers cross-user, role, cross-tenant and direct-API refusals; replay (a write readback, conflict, anonymous replay without re-verification, replay refused after revocation); staff and visitor revocation, disable and a stale manifest after an additive field; approved-only files with re-hash; no values in Chat, model context, receipts or logs; no public bucket; and no maintainer inference, with fetch throwing and the import graphs checked. The harness plays the browser: no Worker serves a composition yet (WH-070) and Playwright is not installed. The acceptance map and the exact gaps that block the first criterion are in docs/shared-modules.md#wh-067-acceptance-map--october-4-2026-utc: WH-126 identity cutover, WH-127/128 export serializers and form attachments, the owner photo collection, owner uploads and published galleries, LC-06, the owner authoring path, a served composition, and the deployed cutover."
+        "2026-10-04 UTC: local synthetic evidence only; not deployed, not browser-tested, not live- or customer-accepted; issue not created or claimed from this session; WH-130 stays open. Branch c/great-curie-8ryukc (PR #160, held for the owner empty-D1 cutover) adds two synthetic compositions, tests/fixtures/module-compositions/staff-portal.mjs and visitor-intake.mjs, that call only same-origin POST /modules and /modules/upload with the whumpo-modules v1 envelope and a manifest of resource ids and configRevisions. A static check refuses auth, cookie, session, principal/role, SQL, storage-location, absolute-origin, handler and inference code and any import in both. tests/shared-modules-compositions.mjs (11 groups, passing on SQLite with an in-memory private bucket and with --d1 on local D1/R2) drives both against the same access/records/files/content instances of two tenants through the actual visitor gateway, module engine, handlers, commit triggers, activation/role/directory/publication reviews and owner workspace routes. It covers cross-user, role, cross-tenant and direct-API refusals; replay (a write readback, conflict, anonymous replay without re-verification, replay refused after revocation); staff and visitor revocation, disable and a stale manifest after an additive field; approved-only files with re-hash; no values in Chat, model context, receipts or logs; no public bucket; and no maintainer inference, with fetch throwing and the import graphs checked. The harness plays the browser: no Worker serves a composition yet (WH-070) and Playwright is not installed. The acceptance map and the exact gaps that block the first criterion are in docs/shared-modules.md#wh-067-acceptance-map--october-4-2026-utc: WH-126 identity cutover, WH-127/128 export serializers and form attachments, the owner photo collection, owner uploads and published galleries, LC-06, the owner authoring path, a served composition, and the deployed cutover.",
+        "2026-10-07 UTC: clarified the existing foundation/presentation boundary. WH-067/130 retain every scoped API, two-composition, tenant, replay, revocation, safety, preservation and zero-inference requirement; WH-070 retains served-browser presentation and accessibility acceptance after WH-067. This removes an implicit reverse dependency in the gap summary, changes no dependency edge and marks no runtime criterion complete. See docs/roadmap/execution-session-2026-10-07.md."
       ]
     }
   ]

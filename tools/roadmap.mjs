@@ -5,7 +5,7 @@ import {fileURLToPath} from 'node:url';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const sourcePath=resolve(root,'docs/roadmap/backlog.json');
 const outputPath=resolve(root,'docs/roadmap/backlog.md');
-const repository='https://github.com/zemdregon/whumpo';
+const repository='https://github.com/Digifender-LLC/whumpo-website';
 const priorities=['P0','P1','P2'];
 const taskFields=['id','title','phase','priority','readiness','kind','size','dependsOn','blockers','outcome','scope','acceptance','verification','references','issue','owner','evidence'];
 const fail=message=>{throw Error(message);};
@@ -52,7 +52,7 @@ export async function validateRoadmap(data){
   for(const key of ['dependsOn','blockers','evidence'])strings(task[key],`${label}.${key}`);
   for(const key of ['issue','owner'])if(task[key]!==null&&!nonempty(task[key]))fail(`${label}.${key} must be null or a nonempty string`);
   if(task.issue!==null){
-   if(!/^https:\/\/github\.com\/zemdregon\/whumpo\/issues\/[1-9]\d*$/.test(task.issue))fail(`${label}: issue must be a Whumpo GitHub issue URL`);
+   if(!/^https:\/\/github\.com\/Digifender-LLC\/whumpo-website\/issues\/[1-9]\d*$/.test(task.issue))fail(`${label}: issue must be a current Whumpo GitHub issue URL`);
    if(issueURLs.has(task.issue))fail(`${label}: duplicate issue mapping ${task.issue}`);
    issueURLs.add(task.issue);
   }

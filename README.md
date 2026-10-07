@@ -1,10 +1,10 @@
 # Whumpo
 
-Whumpo is an invitation-only AI website and application platform in private testing at **https://whumpo.com**. The signed-in workspace is `/workspace/`; customer sites use project subdomains of **whumpo.site**. Source: private **zemdregon/whumpo** repository. Historical `whumpo-*` service names remain internal infrastructure identifiers.
+Whumpo is an invitation-only AI website and application platform in private testing at **https://whumpo.com**. The signed-in workspace is `/workspace/`; customer sites use project subdomains of **whumpo.site**. Source: private **Digifender-LLC/whumpo-website** repository. Historical `whumpo-*` service names remain internal infrastructure identifiers.
 
 **MVP is not complete.** Start with the [dated capability matrix](docs/capability-matrix.md), [current readiness assessment](docs/acceptance.md) and [delivery contract](docs/mvp.md). Detailed feature documents distinguish implemented code, configured services and verified customer journeys; an implemented integration is not automatically available to customers.
 
-For future work, use the [product and delivery roadmap](docs/roadmap/README.md), the [architecture and sequencing alignment](docs/roadmap/alignment.md), its [prioritized task backlog](docs/roadmap/backlog.md), and [agent execution guide](docs/roadmap/execution.md). Run `node tools/roadmap.mjs next` for planning candidates, then check their linked GitHub issues for current ownership and completion evidence.
+For future work, use the [product and delivery roadmap](docs/roadmap/README.md), the [architecture and sequencing alignment](docs/roadmap/alignment.md), its [prioritized task backlog](docs/roadmap/backlog.md), and [agent execution guide](docs/roadmap/execution.md). The [October 7 execution session](docs/roadmap/execution-session-2026-10-07.md) records current work lanes and the full 144-task inventory. Run `node tools/roadmap.mjs next` for planning candidates, then check their linked GitHub issues for current ownership and completion evidence.
 
 Development follows the owner's [current-version-only policy](docs/current-version-policy.md): remove legacy routes/adapters and reset obsolete test data directly. All environments are testing; preservation migrations are unnecessary. The linked inventory records the removed paths and their test deployment. The test platform runs the complete current schema and shared workspace identity/admission contract; see [current deployment evidence](docs/chat-routine-release.md). CMS functional testing remains deferred.
 
@@ -69,7 +69,7 @@ The owner authorized Workers Paid ($5/month) resources, with GitHub restricted t
 - [Workload placement contract](docs/workload-placement.md) — logical resources, scoped adapters and lifecycle/export requirements; broader hosting remains conditional
 - [Pooled build jobs](docs/build-jobs.md) — owner-requested bounded builds with per-job lease, expiry, cleanup records and deterministic diagnostics; no always-on per-customer capacity (source implementation; Containers owner-gated)
 - [Project specification decision](docs/project-specification.md) — versioned configuration, supported change operations and the offline composition contract
-- [Shared module contract](docs/shared-modules.md) — planned WH-067 content, records/forms, files and access module APIs, authorization model and delivery slices
+- [Shared module contract](docs/shared-modules.md) — WH-067 content, records/forms, files and access API implementations and their remaining authoring, lifecycle and acceptance gaps
 - [Capability catalog and planner](docs/capability-planner.md) — reuse existing configuration and helpers; record bounded missing behavior before generating source
 - [Guest preview links and feedback](docs/guest-previews.md) — WH-092 first slice: expiring, revocable, hash-stored links to one saved version on an isolated host, with bounded accountless comments; owner API only, source and local tests only
 - [Content-free funnel measurements](docs/funnel-metrics.md) — WH-025 opt-in milestones, aggregate operator report and draft feedback request; source and local tests only, targets proposed until the first cohort baseline
@@ -78,7 +78,7 @@ The owner authorized Workers Paid ($5/month) resources, with GitHub restricted t
 - [Content safety and US customer eligibility](docs/content-safety.md) — CSAM scanning is planned and owner-deferred; existing holds are not detection. Wider safety acceptance remains open
 - [Chat tools and navigation](docs/workspace-agent.md)
 - [Natural-language Chat and agent knowledge](docs/natural-language-chat.md): messages, explicit approvals, scoped lookups and the retrieval decision.
-- [Chat interaction contract](docs/chat-interactions.md) — versioned forms, views and exact action handoffs; production interaction storage/rendering remain planned.
+- [Chat interaction contract](docs/chat-interactions.md) — delivered versioned forms, shared storage/rendering and exact action handoffs; whole-experience and physical-device acceptance remain separate.
 - [Domain ownership](docs/domains.md) and [custom hosting](docs/integrations/domain-hosting.md)
 - [GitHub authorization](docs/integrations/github-connection.md) and [reviewed backups](docs/integrations/github-backups.md)
 - [Cloudflare authorization](docs/integrations/cloudflare-connection.md) and [reviewed DNS](docs/integrations/cloudflare-dns.md)

@@ -11,8 +11,8 @@ This guide supplements [AGENTS.md](../../AGENTS.md). Feature contracts remain au
 5. For an unmapped task, refine its scope and external prerequisites first, then create/locate an issue and save its URL in the backlog. For large tasks, create small child issues and dependency links; retain the parent exit criteria. If GitHub is unavailable, use one explicit local coordinator/claim record and reconcile before parallel work resumes.
 
 ```sh
-gh issue list --repo zemdregon/whumpo --state all --search 'WH-001 in:title' --json number,title,state,url
-gh issue view ISSUE_NUMBER --repo zemdregon/whumpo --json title,body,state,stateReason,assignees,labels,comments,blockedBy,blocking,closedByPullRequestsReferences,url
+gh issue list --repo Digifender-LLC/whumpo-website --state all --search 'WH-001 in:title' --json number,title,state,url
+gh issue view ISSUE_NUMBER --repo Digifender-LLC/whumpo-website --json title,body,state,stateReason,assignees,labels,comments,blockedBy,blocking,closedByPullRequestsReferences,url
 node tools/roadmap.mjs show WH-001 > /tmp/whumpo-task.md
 ```
 

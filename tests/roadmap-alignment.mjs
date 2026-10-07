@@ -21,4 +21,10 @@ for(const [from,to] of [['WH-121','WH-020'],['WH-122','WH-090'],['WH-116','WH-02
 }
 const cycle=structuredClone(current);task(cycle,'WH-122').dependsOn.push('WH-090');
 await assert.rejects(validateRoadmap(cycle),/cycle/i);refused++;
+// Issue identity follows the transferred repository. Old-owner URLs must not
+// keep rendering unusable execution links after the canonical mapping changes.
+for(const issue of ['https://github.com/zemdregon/whumpo/issues/3','https://github.com/Digifender-LLC/unrelated/issues/3']){
+ const data=structuredClone(current);task(data,'WH-001').issue=issue;
+ await assert.rejects(validateRoadmap(data),/current Whumpo GitHub issue URL/);refused++;
+}
 console.log(`Roadmap handoffs passed: current graph accepted; ${refused} missing-prerequisite, downstream-gate and cycle regressions refused.`);

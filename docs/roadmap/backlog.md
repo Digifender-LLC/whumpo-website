@@ -65,7 +65,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/3. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/3. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -125,7 +125,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/39. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/39. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -184,7 +184,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/4. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/4. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -240,7 +240,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/5. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/5. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -295,7 +295,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/6. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/6. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -359,7 +359,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/53. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/53. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -432,7 +432,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/11. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/11. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -553,7 +553,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/105. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/105. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -676,7 +676,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/7. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/7. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -744,7 +744,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/8. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/8. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -799,7 +799,7 @@ Planning dependencies: WH-010, WH-009. Verify completion in current issue eviden
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/21. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/21. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -906,7 +906,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/137. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/137. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -961,7 +961,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/171. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -1014,7 +1014,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/109. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/109. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -1066,7 +1066,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/172. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -1288,7 +1288,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/9. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/9. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -1405,7 +1405,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/111. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/111. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -1517,7 +1517,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/42. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/42. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -1586,7 +1586,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/68. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/68. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -1674,7 +1674,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/69. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/69. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -1735,7 +1735,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/80. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/80. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -1841,7 +1841,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/132. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/132. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -1975,7 +1975,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/10. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/10. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -2051,7 +2051,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/81. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/81. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -2155,7 +2155,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/82. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/82. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -2233,7 +2233,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/113. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/113. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -2735,7 +2735,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/135. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/135. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -2787,7 +2787,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/146. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/146. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -2842,7 +2842,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/139. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/139. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -3223,7 +3223,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/121. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/121. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -3407,7 +3407,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/51. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/51. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -3485,7 +3485,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/87. Planning owner: Codex /root (codex/identity-admission). Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/87. Planning owner: Codex /root (codex/identity-admission). Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -3575,7 +3575,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/90. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/90. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -3664,7 +3664,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/93. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/93. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -3740,7 +3740,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/94. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/94. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -3811,7 +3811,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/95. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/95. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -3890,7 +3890,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/100. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/100. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -4011,7 +4011,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/49. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/49. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -4117,7 +4117,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/130. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/130. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -4165,7 +4165,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/141. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/141. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -4506,7 +4506,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/30. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/30. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -5019,7 +5019,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/115. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/115. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -5082,7 +5082,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/44. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/44. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -5148,7 +5148,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/62. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/62. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -5749,7 +5749,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/65. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/65. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -5808,7 +5808,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-07 UTC: independent contract audit at ca17c6ad3f009b961916be6f4c2053a8eaa531e4 confirms the frozen contract and decomposition are delivered in source. tests/connectors-contract.mjs passed 71 offline checks against synthetic providers; documented provider/retention decisions and the runtime WH-141–146 children remain separate. No child issue or completion state was fabricated. This accepts only the original contract/offline-reference handoff, not runtime, deployment, provider or parent acceptance. See docs/roadmap/execution-session-2026-10-07.md.
 
 ## WH-141 — Shared connector catalog, typed request builder and operation admission in source
 
@@ -6573,7 +6573,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/12. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/12. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -6632,7 +6632,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/13. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/13. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -6691,7 +6691,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/14. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/14. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -6719,6 +6719,7 @@ Composed interfaces and custom frontends reuse the same maintained tenant-scoped
 - Consume WH-071 logical storage/runtime interfaces and WH-116 data classification; freeze module instance/config/version and migration hooks before tables or client APIs. Add services to the delivered WH-066 compiler/catalog instead of replacing its supported adapters.
 - Keep customer-application visitor/staff roles distinct from Whumpo workspace membership in WH-054. A staff upload rule does not grant owner Chat/admin access or require creating a parallel workspace authentication system.
 - Use WH-090 for owner feature admission/configuration and WH-105 for registered owner-facing bindings from the first module. Visitor/staff authorization remains the separate application policy; ordinary published serving does not become a workspace-subscription check or silently stop on plan loss.
+- Accept the shared API foundation with direct/custom-client calls to the actual visitor-origin handlers and current disposable D1/R2, including all authorization, publication, quarantine and preservation criteria. WH-070 subsequently serves and accepts the presentation; do not make the API foundation depend on its downstream renderer.
 
 ### Acceptance criteria
 
@@ -6757,7 +6758,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/107. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/107. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -6765,6 +6766,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/107. Planning owner: Unassigne
 - 2026-10-04 UTC: decomposed into WH-123–130 with the planned contract in docs/shared-modules.md. Planning only: no module table, API, binding or deployment exists; the parent acceptance is unchanged and closes only after every child.
 - 2026-10-04 UTC status note (WH-130): not complete and not accepted. Local synthetic evidence covers the delivered operations for each criterion; it is mapped in docs/shared-modules.md#wh-067-acceptance-map--october-4-2026-utc and comes from tests/shared-modules-compositions.mjs plus the registry/access/records/files/collections suites, SQLite and local D1/R2. Open before acceptance: the owner-run empty-D1 cutover and release of PR #160; the WH-126 identity ownership cutover (staff still needs an enabled visitor application); the WH-127 records export serializer and hooks, form attachments, TURNSTILE_SECRET on whumpo-apps and publication-revision binding of public forms; the WH-128 owner photo collection, owner module uploads, published galleries and files export; restricted preservation LC-06; an owner-reachable authoring path (the site agent prompt deliberately advertises no module operation, and capability entries are still planned); and a served composition (WH-070) with browser evidence. Live, browser and device acceptance has not been attempted.
 - 2026-10-04 UTC status note (WH-126 identity cutover): module visitor and staff principals now belong to the access instance with no visitor application in any module suite; the acceptance map in docs/shared-modules.md is updated. WH-067 stays open and not accepted (see the remaining gaps there, including the owner path to save an access instance).
+- 2026-10-07 UTC: clarified the existing foundation/presentation boundary. WH-067/130 retain every scoped API, two-composition, tenant, replay, revocation, safety, preservation and zero-inference requirement; WH-070 retains served-browser presentation and accessibility acceptance after WH-067. This removes an implicit reverse dependency in the gap summary, changes no dependency edge and marks no runtime criterion complete. See docs/roadmap/execution-session-2026-10-07.md.
 
 ## WH-071 — Specify workload placement and bounded custom execution paths
 
@@ -6822,7 +6824,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/47. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/47. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -6939,7 +6941,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/128. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/128. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -7105,11 +7107,12 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/162. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
 - 2026-10-04 UTC: contract and offline reference only, no implementation. Merged PR #108 (2fbfd6c) added docs/shared-modules.md (marked planned: module kinds/pins, instance envelope v1, kind configurations, configRevision, none/additive-optional/migration-required hook classes on the WH-071 descriptor; whumpo-modules request envelope v1, closed operation set, derived principals, policy table, revocation and visitor/workspace host boundaries; contact/directory/photos/visitor identity mapping with gaps; WH-090/122 admission, WH-105 binding and WH-066 catalog registration points; dated library/managed-service evaluation), tools/prototypes/shared-modules.mjs (imports only node:crypto and the offline WH-071 prototype) and tests/shared-modules-contract.mjs, and decomposed WH-067 into WH-123–130. Re-run at ff3d410: node tests/shared-modules-contract.mjs passed 75 offline checks with synthetic identifiers; this proves frozen examples only, not runtime authorization, persistence, safety or acceptance. Both open owner decisions (records retention, visitor values in Chat) were decided by the owner on #107 and are recorded in the contract. WH-067 depends on every child WH-123–130 and no child reaches WH-070/072/077/080/104. No table, route, binding, provider, Cloudflare resource or deployment is added by WH-123; WH-124 (#157) separately implemented schema 3 in source. Live GitHub issue state was not re-read from this session.
+- 2026-10-07 UTC: independent contract audit at ca17c6ad3f009b961916be6f4c2053a8eaa531e4 confirms the frozen contract and decomposition are delivered in source. tests/shared-modules-contract.mjs passed 75 offline checks; the two WH-123 owner decisions are already recorded in docs/shared-modules.md. Mapped existing issue #162 remains open. This accepts only the original contract/offline-reference handoff, not runtime, deployment, provider or parent acceptance. See docs/roadmap/execution-session-2026-10-07.md.
 
 ## WH-124 — Cut over to specification schema 3 with module pins and data classes
 
@@ -7160,7 +7163,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/157. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/157. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -7215,7 +7218,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/161. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -7272,7 +7275,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/163. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -7329,7 +7332,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/164. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -7354,7 +7357,7 @@ Staff or visitors upload files into collections governed by role policy, and per
 ### Scope
 
 - Extend project_files with instance/collection and uploader identity by current-schema cutover; keep JPEG cleaning, 1 MiB bound, create-only R2 and reservations
-- files.prepareUpload/putBytes/read/gallery on the visitor origin; owner collection for existing project photos and the Chat upload handoff
+- files.putBytes/read/gallery on the visitor origin with declared metadata and bytes in one bounded request; owner collection for existing project photos and the Chat upload handoff. Keep removal on the existing exact owner photo-removal review; reject retired prepareUpload/requestRemoval operation names explicitly instead of retaining unavailable compatibility stubs.
 - Pending safety receipt on every upload; approved exact-digest reads with byte re-hash; reviewed removal and cleanup queue
 - Descriptor lifecycle hooks and export serializer for eligible approved files
 
@@ -7387,7 +7390,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/165. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -7397,6 +7400,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 - 2026-10-04 UTC: owner Photos panel controls slice; source and local verification only; not deployed, not accepted, not exercised in a browser; WH-128 stays open. No schema, authority or review change. GET /api/projects/P/module-files (owner only; readOwnerFileCollections in src/shared-modules/files-gallery.ts, OwnerFileCollections in shape.ts) returns saved page ids/paths, unfiled ready owner photos with their exact SHA-256 and owner collections with owner-filed photo ids and safety state (never staff/visitor uploads; dashboard only, not Chat or model context). The Photos panel (frontend/src/photo-collections.tsx, client frontend/src/lib/photo-collections.ts) adds Add to collection on ready photos (owner files.putBytes envelope {fileId, sha256} on the workspace module route, one request id reused per photo and collection until confirmed) and a Collections and gallery pages section whose Prepare gallery page button sends the typed galleryPageReview control through runAction; saving and publishing stay the existing exact reviews. Verified: tests/shared-modules-files.mjs (11 groups, SQLite with in-memory bucket and --d1 with local D1/R2; new group drives the panel client through the real routes: owner-only facts, exact envelope, lost-ack replay with the same request id, gallery refused while held and prepared after approval with nothing saved, disabled instance refused, no staff/visitor uploads listed, no prompt mention), tests/files.mjs, photo-versions, photo-removal, chat-interaction-photos, saved-work, agent-inspection, shared-modules-registry/access/compositions, pnpm check, verify fast/protection, pnpm build. Remaining: Chat upload handoff directly into a collection, removing a photo from a collection without deleting it, prepareUpload/requestRemoval as operations, owner authoring of files instances (fixture-only), scanner integration (owner-deferred).
 - 2026-10-04 UTC: owner photo collection setup slice; source and local verification only; not deployed, not accepted, not exercised in a browser; WH-128 stays open. The typed owner Chat control filesModuleReview {projectId} (src/shared-modules/files-setup.ts; never accepted from model output, not advertised to the site agent) prepares the existing exact specification review with one modules.put of a fixed standard files instance: id photos, current catalog module-files/files-data pins, no dependencies, one collection library (owner read, owner-only upload, 1 MiB, JPEG, no gallery; schema review class only). Refused with reasons for a project without a website (404), an existing saved or registered owner collection, a taken photos instance id or library collection id (400) and foreign projects (404). Saving is specificationApply (recent sign-in) and activation the separate moduleActivationReview/Apply pair. project_spec_proposal_admit gains a filesModuleReview branch and the new project_spec_files_setup_admit trigger (src/shared-modules/schema.sql) requires head plus exactly that appended instance (exact key counts). GET /api/projects/P/module-files returns setup states; the Photos panel Collections and gallery pages section offers Set up photo collection and Review activating photo collection. Verified: tests/shared-modules-files.mjs (12 groups, SQLite with in-memory bucket and --d1 with local D1/R2; new group covers malformed/foreign controls, exact instance and pins, linked review, 13 tampered proposals refused inside the commit, exact copy accepted, separate save and activation, panel setup states and client actions, filing into the set-up collection, disable, repeated setup, existing collection, taken ids, no website, prompt check), shared-modules-access (SQLite and --d1), shared-modules-registry/compositions/contract, chat-interaction-photos, service-safety, current-website-specifications, specification-compiler, safety-hold-inventory, pnpm check, verify fast/protection, pnpm build. Schema change: same owner-run empty-database cutover; deploy ci refuses it. Remaining: Chat upload handoff directly into a collection, removing a photo from a collection without deleting it, prepareUpload/requestRemoval as operations, staff/visitor files instances (fixture-only), scanner integration (owner-deferred).
 - 2026-10-04 UTC: Remove from collection slice; source and local verification only; not deployed, not accepted, not exercised in a browser; WH-128 stays open. No schema, trigger, review, Chat surface or module operation change (the closed WH-123 operation set is unchanged). POST /api/projects/P/module-files/remove (owner only; removeOwnerFileFromCollection in src/shared-modules/files-gallery.ts) takes exactly {resourceId, collectionId, fileId} and deletes one owner-filed photo's module_files row only: the photo, its private object, safety receipt and saved versions stay, nothing is queued, and the photo returns to the unfiled list. Idempotent (removed:false when already out). Staff/visitor uploads are not_found, non-owner collections forbidden, malformed bodies invalid_request; works while disabled and inside a safety hold (deletes no content; new WH-132 inventory site classified excluded). Conservative choice: refused (409) while the current saved head version or the live publication shows the photo, repeated inside the deleting statement, because a gallery page is a snapshot of photo ids; the owner changes the page first or uses the photo removal review. The Photos panel shows Remove from collection on filed photos. Verified: tests/shared-modules-files.mjs (13 groups, SQLite with in-memory bucket and --d1 with local D1/R2; new group drives the panel client through the real route: exact body, lost-ack retry, photo/receipt/object kept, re-filing, foreign/unknown/non-owner/staff-upload/malformed refusals, refusal while the saved website shows the photo, removal while disabled and inside a project hold, prompt check), safety-case-operations, shared-modules-compositions, photo-removal, files, photo-versions, saved-work, safety-hold-inventory (94 sites), pnpm check, verify fast/protection, pnpm build. Remaining: Chat upload handoff directly into a collection, prepareUpload/requestRemoval as operations, staff/visitor files instances (fixture-only), scanner integration (owner-deferred).
+- 2026-10-07 UTC delegated product decision: the delivered one-request files.putBytes upload and existing exact owner photo-removal review are the current paths. Retire the dormant files.prepareUpload/files.requestRemoval names rather than adding a second upload/reservation or approval protocol. The files lane owns matching source/reference checks and direct Chat-to-collection continuity; their acceptance is recorded separately when verified.
 
 ## WH-130 — Accept shared modules across two frontend compositions
 
@@ -7415,6 +7419,7 @@ Two different frontends use one module API contract with no custom authenticatio
 - Build two synthetic compositions (a staff portal and a visitor intake/gallery) against the same records/files/access instances on the visitor origin
 - Cross-tenant, cross-user, role, direct-API, replay and revocation fixtures over actual handlers with maintenance inference unavailable
 - Run the existing contact, directory, photo and app lifecycle suites relevant to each slice and record evidence levels
+- Exercise both synthetic compositions through the actual visitor-origin handlers with disposable current D1/R2. Keep served-browser composition, visual diversity and accessibility acceptance in downstream WH-070; local API evidence never substitutes for those checks or for a release.
 
 ### Acceptance criteria
 
@@ -7447,6 +7452,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 ### Evidence
 
 - 2026-10-04 UTC: local synthetic evidence only; not deployed, not browser-tested, not live- or customer-accepted; issue not created or claimed from this session; WH-130 stays open. Branch c/great-curie-8ryukc (PR #160, held for the owner empty-D1 cutover) adds two synthetic compositions, tests/fixtures/module-compositions/staff-portal.mjs and visitor-intake.mjs, that call only same-origin POST /modules and /modules/upload with the whumpo-modules v1 envelope and a manifest of resource ids and configRevisions. A static check refuses auth, cookie, session, principal/role, SQL, storage-location, absolute-origin, handler and inference code and any import in both. tests/shared-modules-compositions.mjs (11 groups, passing on SQLite with an in-memory private bucket and with --d1 on local D1/R2) drives both against the same access/records/files/content instances of two tenants through the actual visitor gateway, module engine, handlers, commit triggers, activation/role/directory/publication reviews and owner workspace routes. It covers cross-user, role, cross-tenant and direct-API refusals; replay (a write readback, conflict, anonymous replay without re-verification, replay refused after revocation); staff and visitor revocation, disable and a stale manifest after an additive field; approved-only files with re-hash; no values in Chat, model context, receipts or logs; no public bucket; and no maintainer inference, with fetch throwing and the import graphs checked. The harness plays the browser: no Worker serves a composition yet (WH-070) and Playwright is not installed. The acceptance map and the exact gaps that block the first criterion are in docs/shared-modules.md#wh-067-acceptance-map--october-4-2026-utc: WH-126 identity cutover, WH-127/128 export serializers and form attachments, the owner photo collection, owner uploads and published galleries, LC-06, the owner authoring path, a served composition, and the deployed cutover.
+- 2026-10-07 UTC: clarified the existing foundation/presentation boundary. WH-067/130 retain every scoped API, two-composition, tenant, replay, revocation, safety, preservation and zero-inference requirement; WH-070 retains served-browser presentation and accessibility acceptance after WH-067. This removes an implicit reverse dependency in the gap summary, changes no dependency edge and marks no runtime criterion complete. See docs/roadmap/execution-session-2026-10-07.md.
 
 ## WH-068 — Implement shared notification templates and delivery configuration
 
@@ -7613,7 +7619,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-07 UTC: clarified the existing foundation/presentation boundary. WH-067/130 retain every scoped API, two-composition, tenant, replay, revocation, safety, preservation and zero-inference requirement; WH-070 retains served-browser presentation and accessibility acceptance after WH-067. This removes an implicit reverse dependency in the gap summary, changes no dependency edge and marks no runtime criterion complete. See docs/roadmap/execution-session-2026-10-07.md.
 
 ## WH-072 — Design project data provisioning, migrations and recovery boundaries
 
@@ -7725,7 +7731,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/148. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/148. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -8010,7 +8016,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/166. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -8139,7 +8145,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 ### Execution coordination
 
-Issue: https://github.com/zemdregon/whumpo/issues/117. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+Issue: https://github.com/Digifender-LLC/whumpo-website/issues/117. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
 
 ### Evidence
 
@@ -8228,7 +8234,7 @@ An Android owner can authenticate and reach supported platform services through 
 - [ ] Account recovery/passkey removal invalidates native sessions as well as browser sessions; retained trusted credentials and save-before-rotation recovery-kit behavior remain correct under the shared restricted recovery contract
 - [ ] Only the closed supported native operation set is reachable; cookie-authenticated browser mutations still require valid Origin
 - [ ] Local/disposable identity and contract tests pass before approved signed-app/device verification; mobile secrets never appear in URLs, logs, model context or generated content
-- [ ] Older supported v1 clients remain compatible; unknown controls have no approval and retired clients retain browser support/recovery access
+- [ ] Only the exact current native client/API contract is admitted; stale clients receive an explicit client_update_required response without legacy readers or compatibility adapters. Unknown controls never approve an action. Account support/recovery remains reachable through the current browser flow.
 - [ ] One-key signup and incomplete recovery cannot issue or exchange a normal native session; lost-all-keys recovery requires two replacement passkeys and fresh passkey verification before handoff
 
 ### Verification
@@ -8263,6 +8269,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 ### Evidence
 
 - 2026-10-02 UTC: removed stale numbered-additive-migration wording from active scope to match WH-120 and the complete-current-schema contract. Implementation uses current fixtures/reviewed empty test databases. Feature scope, dependencies and acceptance remain unchanged; this amendment does not implement the feature.
+- 2026-10-07 UTC: removed the superseded older-client compatibility criterion to match AGENTS.md, WH-120 and docs/mobile-api-v1.md. Current browser recovery remains required; stale native clients cannot acquire authority. Native implementation and signed-device acceptance remain separate.
 
 ## WH-084 — Deliver the native Chat, project and explicit-review journey
 
