@@ -135,8 +135,8 @@ export async function disconnectGitHub(db:D1Database,userId:string,configuration
  await cleanupGitHub(db,configuration,transport,userId);return connectionStatus(db,userId,configuration);
 }
 
-export async function githubInstallations(db:D1Database,userId:string,configuration:GitHubConfig|undefined,transport:typeof fetch=fetch){
- const config=required(configuration),access=await githubAccess(db,userId,config,transport,{projectId:null,operation:'read'});
+export async function githubInstallations(db:D1Database,userId:string,configuration:GitHubConfig|undefined,transport:typeof fetch=fetch,expectedToken?:string){
+ const config=required(configuration),access=await githubAccess(db,userId,config,transport,{projectId:null,operation:'read'},expectedToken);
  const data=await readJSON(await access.send('installations.list'));
  // Recheck after the entire bounded body, not just after receiving headers.
  await access.assertCurrent();
@@ -150,11 +150,11 @@ export async function githubInstallations(db:D1Database,userId:string,configurat
 }
 
 /** Internal capability. Recovery is bound to an owned dispatched receipt and exact read paths. */
-export async function githubAccess(db:D1Database,userId:string,configuration:GitHubConfig|undefined,transport:typeof fetch,usage:ConnectionUse){
+export async function githubAccess(db:D1Database,userId:string,configuration:GitHubConfig|undefined,transport:typeof fetch,usage:ConnectionUse,expectedToken?:string){
  const config=required(configuration),use={...usage};
  if(!('recoveryId' in use))await requireFeature(db,connectionFeature(userId,'github',use.projectId,use.operation));
  const current=await db.prepare("SELECT c.github_user_id,t.id FROM github_connections c JOIN github_token_vault t ON t.id=c.active_token_id AND t.user_id=c.user_id WHERE c.user_id=? AND t.state='active' AND t.expires_at>? AND NOT EXISTS(SELECT 1 FROM github_refresh_custody WHERE token_id=t.id AND client_id!=?)").bind(userId,new Date().toISOString(),config.clientId).first<{github_user_id:string;id:string}>();
- if(!current)throw new ConnectionError(401,'Connect GitHub again before using repository backups.');
+ if(!current||expectedToken&&current.id!==expectedToken)throw new ConnectionError(401,'Connect GitHub again before using repository backups.');
  async function assertCurrent(operation='recoveryId' in use?null:use.operation){
   await assertWorkspace(db,userId);
   if('recoveryId' in use){

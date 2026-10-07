@@ -1,3 +1,5 @@
+import {handleConnectorLookupRequest} from './connectors/http';
+import {ConnectorLookupError,cleanupConnectorLookups} from './connectors/lookups';
 import {ConnectorReviewError} from './connector-receipts';
 import {ConnectorOperationError} from './connector-catalog';
 import {handleMobileRequest,mobileAssetLinks} from './mobile/http';
@@ -502,6 +504,7 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
   if (method === 'POST' && pathname === '/api/billing/subscription/checkout') return json(await startSubscription(env.DB,env,user.id,(await body(request))??{},transport));
   if (method === 'POST' && pathname === '/api/billing/portal') return json(await billingPortal(env.DB,env,user.id,transport));
   if (method === "GET" && pathname === "/api/billing") return json({ ...await getBilling(env.DB, user.id), checkoutMode: "test" });
+  const lookupReply=await handleConnectorLookupRequest(request,env.DB,user.id,{github:githubConfig(env),cloudflare:cloudflareConfig(env),transport});if(lookupReply)return lookupReply;
   if (method === "GET" && pathname === "/api/connections") return json({...await connectionStatus(env.DB,user.id,githubConfig(env)),cloudflare:await cloudflareStatus(env.DB,user.id,cloudflareConfig(env))});
   const directoryHistoryRoute=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/directory\/history$/);
   if(method==='GET'&&directoryHistoryRoute)return json(await directoryHistory(env.DB,user.id,directoryHistoryRoute[1]));
@@ -646,10 +649,10 @@ export default {
     if(_event.cron==='* * * * *'){const delivery=contactDelivery(env);if(delivery)await runContactDelivery(env.DB,delivery.settings,delivery.sender);return;}
     const imports={name:'imports' as const,run:()=>scanBackendImports(env.DB)};
     if(_event.cron==='47 * * * *'){
-      await runMaintenance(env.DB,[imports,{name:'chat_drafts',run:()=>cleanupInteractionDrafts(env.DB)},
+      await runMaintenance(env.DB,[imports,{name:'chat_drafts',run:async()=>{await cleanupInteractionDrafts(env.DB);await cleanupConnectorLookups(env.DB);}},
       {name:'identity',run:async()=>{await cleanIdentityCeremonies(env.DB);await cleanMobileHandoffs(env.DB);}},{name:'hosting',enabled:!!hostingConfig(env),run:()=>maintainHosting(env.DB,hostingConfig(env))},{name:'health',run:()=>maintainHealth(env.DB)},{name:'funnel',run:()=>maintainFunnelEvents(env.DB)}]);return;
     }
-    await runMaintenance(env.DB,[imports,{name:'chat_drafts',run:()=>cleanupInteractionDrafts(env.DB)},
+    await runMaintenance(env.DB,[imports,{name:'chat_drafts',run:async()=>{await cleanupInteractionDrafts(env.DB);await cleanupConnectorLookups(env.DB);}},
       {name:'identity',run:async()=>{await cleanIdentityCeremonies(env.DB);await cleanMobileHandoffs(env.DB);}},
       {name:'fair_use',run:()=>cleanupFairUseObservations(env.DB)},
       {name:'traffic',run:async()=>{await cleanupTraffic(env.DB);await cleanupPublicClients(env.DB);}},
@@ -681,7 +684,7 @@ export default {
       if(cause instanceof WorkspaceViewError)return comparisonErrorResponse(request,json({error:cause.message,code:cause.code},cause.status));
       if(cause instanceof IdentityError)return comparisonErrorResponse(request,json({error:cause.message,code:cause.code},cause.status));
       if(cause instanceof ModuleError)return comparisonErrorResponse(request,json(cause.body(),cause.status));
-      if (cause instanceof ConnectorReviewError || cause instanceof ConnectorOperationError || cause instanceof FeatureInclusionError || cause instanceof GuestPreviewError || cause instanceof CMSProjectError || cause instanceof BackendError || cause instanceof DirectoryError || cause instanceof HealthError || cause instanceof DiffError || cause instanceof ContactError || cause instanceof ConnectionError || cause instanceof ConnectionVaultError || cause instanceof DomainError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return comparisonErrorResponse(request,error(cause.status, cause.message));
+      if (cause instanceof ConnectorLookupError || cause instanceof ConnectorReviewError || cause instanceof ConnectorOperationError || cause instanceof FeatureInclusionError || cause instanceof GuestPreviewError || cause instanceof CMSProjectError || cause instanceof BackendError || cause instanceof DirectoryError || cause instanceof HealthError || cause instanceof DiffError || cause instanceof ContactError || cause instanceof ConnectionError || cause instanceof ConnectionVaultError || cause instanceof DomainError || cause instanceof BillingError || cause instanceof FileError || cause instanceof StorageLimitError) return comparisonErrorResponse(request,error(cause.status, cause.message));
       console.error(JSON.stringify({ event: "request.failed", requestId, category: "unexpected" }));
       return comparisonErrorResponse(request,json({ error: "Internal error", requestId }, 500));
     }

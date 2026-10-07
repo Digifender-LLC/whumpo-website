@@ -1,3 +1,4 @@
+import {ConnectorLookup} from './connector-lookup';
 import {useState} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import type {ConnectionProvider,ConnectionHandoff} from '../../src/connection-handoff-shape';
@@ -44,6 +45,7 @@ export function ConnectionConsent({provider,status,handoff=null,disabled=false,r
    <Button variant="secondary" className="min-h-11" disabled={disabled||busy} onClick={()=>void run(refresh)}>Check connection status</Button>
    {(status.connected||status.revocationPending||status.authorizationPending)&&<Button variant="secondary" className="min-h-11" disabled={disabled||busy} onClick={()=>setDisconnect(true)}>Disconnect {label}</Button>}
   </div>
+  {status.connected&&status.inclusion.read&&<ConnectorLookup provider={provider} disabled={disabled||busy||!status.enabled}/> }
   {notice&&<p role="alert" className="text-sm break-words">{notice}</p>}
   <Dialog open={disconnect} onOpenChange={value=>{if(!busy)setDisconnect(value)}}><DialogContent><DialogHeader><DialogTitle>Disconnect {label}?</DialogTitle><DialogDescription>This disables this account connection for Whumpo and cancels pending authorization. Existing published sites and saved backups are retained. Provider cleanup may remain pending.</DialogDescription></DialogHeader><DialogFooter><Button variant="secondary" disabled={busy} onClick={()=>setDisconnect(false)}>Keep connection</Button><Button variant="destructive" disabled={busy||disabled} onClick={()=>void run(async()=>{await send(`/connections/${provider}/disconnect`);setDisconnect(false);await refresh();})}>Disconnect {label}</Button></DialogFooter></DialogContent></Dialog>
  </div>;

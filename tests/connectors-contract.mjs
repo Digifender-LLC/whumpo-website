@@ -39,7 +39,7 @@ await test('operation data classes are current lifecycle classes or the reserved
  for(const [p,e] of Object.entries(connectorCatalog.providers))for(const [id,op] of Object.entries(e.operations)){
   if(op.dataClass==='connector-receipts'){assert.equal(classes.has('connector-receipts'),false,'proposed class is registered by WH-143');continue;}
   assert.ok(classes.has(op.dataClass),`${p}.${id}`);
-  assert.equal(classes.get(op.dataClass),e.readiness==='planned'?'planned':'current',`${p}.${id}`);
+  assert.equal(classes.get(op.dataClass),'current',`${p}.${id}: admitted metadata storage does not promote provider readiness`);
  }
 });
 const invalid=(name,mutate,code)=>test(name,()=>{const c=clone();mutate(c);throws(()=>validateCatalog(c),code);});

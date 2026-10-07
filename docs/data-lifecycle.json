@@ -2273,45 +2273,46 @@
     },
     {
       "id": "connector-content",
-      "tables": [],
+      "tables": [
+        "connector_lookup_consents"
+      ],
       "scope": "owner",
-      "purpose": "Bounded external mailbox/calendar/CRM content and reviewed action receipts.",
-      "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation.",
-      "proposedRetention": "Extend the existing class lifecycle and LC-01–09 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
-      "deletionAuthority": "Future exact domain authority with current identity and preservation checks; this metadata permits no deletion.",
-      "exportPolicy": "Future class-specific allowlist; no credentials, restricted evidence or cross-tenant data.",
+      "purpose": "Exact owner-requested external lookup consent metadata. Parameters and minimized external results remain transient only.",
+      "currentRetention": "Current source retains digests, provider/operation and captured credential identifiers, destination, state and timestamps for a maximum fifteen-minute authorization window. Expiry denies use immediately. Preparation and hourly maintenance each remove up to 100 expired rows; account deletion cascades them. No query or result is stored in D1, R2, Chat history, telemetry or inference context.",
+      "proposedRetention": "Transient show-and-discard content; no saved content. Remove expired consent metadata with bounded maintenance. Restores must discard consent authority and require fresh owner review.",
+      "deletionAuthority": "Bounded expiry cleanup and account cascade remove consent metadata. Owner cancellation voids unconsumed permission; it cannot authorize another read. These rows are temporary authority, not retained action outcomes.",
+      "exportPolicy": "No credential IDs, query digests or consent authority in customer exports. Owner status exposes only the opaque consent ID, operation, parameter digest, destination, state and expiry. External result is displayed transiently and is not an export artifact.",
       "references": [
+        "docs/connectors.md",
+        "src/connectors/schema.sql",
+        "src/connectors/lookups.ts",
         "docs/data-protection.md",
-        "docs/roadmap/backlog.json",
         "docs/inference-privacy.md"
       ],
-      "storageStatus": "planned",
+      "storageStatus": "current",
       "protection": {
-        "profile": "planned-adapter",
+        "profile": "managed-readable",
         "storage": [
-          "not-admitted"
+          "control-d1"
         ],
         "readers": [
-          "Current scoped consent and exact owner/member requested use."
+          "Current admitted workspace owner and exact source-owned provider read adapter."
         ],
         "processors": [
-          "Reviewed provider connector; confidential data requires a separately approved model route and minimization."
+          "Single-use consent admission, bounded metadata cleanup and transient minimized owner-panel rendering; no model route."
         ],
         "remainingExposure": [
-          "Planned controls are not implemented; the adapter must register actual storage, copies, keys and provider access before admission."
+          "Provider replies and exact request parameters are transient plaintext in authorized Worker/browser memory. Planned mailbox/calendar/CRM adapters remain refused. No approved confidential inference route exists."
         ],
-        "decision": "planned-adapter",
-        "rationale": "Reserve classification in the existing lifecycle inventory so future features cannot create unclassified personal data or duplicate authority.",
+        "decision": "retain-and-verify",
+        "rationale": "Digest-only authorization metadata uses current D1 access controls; transient external content is not retained and never becomes model or tool authority.",
         "requirements": [
           "DP-02",
           "DP-03",
           "DP-04",
           "DP-05"
         ]
-      },
-      "implementationPackets": [
-        "WH-056"
-      ]
+      }
     },
     {
       "id": "chat-interaction-assertion",

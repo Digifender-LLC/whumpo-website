@@ -46,7 +46,7 @@ async function current(){const manifest=await capture();permit(manifest);return 
 const options=manifest=>({db,manifest,keyBackup,evidenceSource,expectedStreamId:streamId,objects,now:()=>now});
 let refusals=0;
 async function held(input,code){const report=await inspectIsolatedRestore(input);assert.deepEqual(report.holds,[code]);assert.equal(report.status,'held');assert.equal(report.servingAllowed,false);assert.equal(report.providerDispatchAllowed,false);assert.ok(!JSON.stringify(report).includes(canary));assert.ok(!JSON.stringify(report).includes(objectKey));refusals++;return report;}
-async function passed(input){const result=await inspectIsolatedRestore(input);assert.equal(result.status,'verified',JSON.stringify(result));assert.equal(result.servingAllowed,false);assert.equal(result.providerDispatchAllowed,false);assert.equal(result.retirementAllowed,false);assert.equal(result.tables,220);return result;}
+async function passed(input){const result=await inspectIsolatedRestore(input);assert.equal(result.status,'verified',JSON.stringify(result));assert.equal(result.servingAllowed,false);assert.equal(result.providerDispatchAllowed,false);assert.equal(result.retirementAllowed,false);assert.equal(result.tables,221);return result;}
 const altered=(mutate)=>({async fetch(request){const response=await evidenceSource.fetch(request);const body=await response.json();await mutate(body);return Response.json(body);}});
 const originalFetch=globalThis.fetch;globalThis.fetch=async()=>assert.fail('Restore verification cannot dispatch to any real provider');
 try{
@@ -65,6 +65,8 @@ try{
  assert.ok(!JSON.stringify(manifest).includes(canary));assert.ok(!JSON.stringify(manifest).includes(objectKey));assert.ok(!JSON.stringify(manifest).includes(JSON.parse(keyring).keys[0].secret));
  await held(options(manifest),'independent-evidence');permit(manifest);
  const good=await passed(options(manifest));assert.equal(good.keys.credentials,4);assert.equal(good.objects,1);
+ const lookup=id();await db.prepare("INSERT INTO connector_lookup_consents(id,user_id,provider,operation_id,credential_id,operation_digest,params_digest,destination,created_at,expires_at) VALUES(?,?,'github','installations.list','synthetic-credential',?,?,'owner-panel','2020-01-01T00:00:00.000Z','2020-01-01T00:15:00.000Z')").bind(lookup,owner.account,'a'.repeat(64),'b'.repeat(64)).run();
+ await held(options(await current()),'connector-consent-authority');await db.prepare('DELETE FROM connector_lookup_consents WHERE id=?').bind(lookup).run();
  // Neither a still-current native bearer nor a pending browser handoff can be
  // rehydrated by restore. Scrubbing creates a new manifest; this verifier never writes.
  const nativeId=id();

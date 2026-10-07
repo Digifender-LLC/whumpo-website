@@ -116,9 +116,9 @@ export async function disconnectCloudflare(db:D1Database,userId:string,configura
  await db.batch([db.prepare('UPDATE cloudflare_oauth_states SET cancelled=1 WHERE user_id=?').bind(userId),db.prepare("UPDATE cloudflare_token_vault SET state='revoking' WHERE user_id=?").bind(userId)]);
  await cleanupCloudflare(db,configuration,transport,userId);return cloudflareStatus(db,userId,configuration);
 }
-export async function cloudflareZones(db:D1Database,userId:string,configuration:CloudflareConfig|undefined,page=1,transport:typeof fetch=fetch){
+export async function cloudflareZones(db:D1Database,userId:string,configuration:CloudflareConfig|undefined,page=1,transport:typeof fetch=fetch,expectedToken?:string){
  const config=required(configuration),scope=connectionFeature(userId,'cloudflare',null,'read');await requireFeature(db,scope);if(!Number.isSafeInteger(page)||page<1||page>100)throw new ConnectionError(400,'Choose a valid zone page.');
- const access=await cloudflareAccess(db,userId,config,transport,{projectId:null,operation:'read'});
+ const access=await cloudflareAccess(db,userId,config,transport,{projectId:null,operation:'read'},expectedToken);
  const data=await access.send('zones.list',{page});
  if(data.success!==true||!Array.isArray(data.result)||data.result.length>50)throw new ConnectionError(503,'Cloudflare returned invalid zone data.');
  const zones=data.result.flatMap((entry:unknown)=>{if(!entry||typeof entry!=='object')return [];const z=entry as Record<string,unknown>;return typeof z.id==='string'&&/^[0-9a-f]{32}$/.test(z.id)&&typeof z.name==='string'&&z.name.length<=253&&/^[a-z0-9.-]+$/.test(z.name)?[{id:z.id,name:z.name,status:z.status==='active'?'active':'not_active'}]:[];});

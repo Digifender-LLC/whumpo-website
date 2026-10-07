@@ -258,6 +258,8 @@ function checkUnsettled(state){
  requireCheck(!state.rows.get('safety_preservation_holds').some(row=>row.released_at===null)
   &&!state.rows.get('safety_disclosures').some(row=>['requested','approved'].includes(row.state))
   &&!state.rows.get('safety_evidence_objects').some(row=>row.stored_at===null),'preservation-hold');
+ // One-use lookup permissions are transient authority; a restore cannot re-create consent.
+ requireCheck(state.rows.get('connector_lookup_consents').length===0,'connector-consent-authority');
  // Native CMS storage/derived keys have their own deferred recovery adapters.
  for(const table of ['cms_instances','cms_media_uploads','cms_wordpress_sources'])requireCheck(state.rows.get(table).length===0,'cms-recovery-unavailable');
  for(const table of ['identity_sessions','identity_grants'])for(const session of state.rows.get(table)){

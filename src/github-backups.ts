@@ -16,10 +16,10 @@ function parseRepo(value:Record<string,unknown>):Repo{
  return {id:Number(value.id),owner:owner.login,name:value.name,private:value.private,branch:value.default_branch,size:typeof value.size==='number'?value.size:-1};
 }
 async function repository(access:Access,owner:string,name:string){if(!validName(owner,name))throw new ConnectionError(400,'Invalid repository name.');const value=await readGitHubJSON(await access.send('repository.get',{owner,name}));await access.assertCurrent();return parseRepo(value);}
-export async function githubRepositories(db:D1Database,userId:string,config:GitHubConfig|undefined,installation:number,page:number,transport:typeof fetch=fetch){
+export async function githubRepositories(db:D1Database,userId:string,config:GitHubConfig|undefined,installation:number,page:number,transport:typeof fetch=fetch,expectedToken?:string){
  if(!Number.isSafeInteger(installation)||installation<1||!Number.isSafeInteger(page)||page<1||page>50)throw new ConnectionError(400,'Invalid repository page.');
- if(!(await githubInstallations(db,userId,config,transport)).installations.some(i=>i.id===installation))throw new ConnectionError(404,'Installation not found.');
- const access=await githubAccess(db,userId,config,transport,{projectId:null,operation:'read'}),data=await readGitHubJSON(await access.send('repositories.list',{installation,page}));
+ if(!(await githubInstallations(db,userId,config,transport,expectedToken)).installations.some(i=>i.id===installation))throw new ConnectionError(404,'Installation not found.');
+ const access=await githubAccess(db,userId,config,transport,{projectId:null,operation:'read'},expectedToken),data=await readGitHubJSON(await access.send('repositories.list',{installation,page}));
  await access.assertCurrent();
  if(!Array.isArray(data.repositories)||data.repositories.length>20)throw new ConnectionError(503,'GitHub returned invalid repositories.');
  const repositories=data.repositories.flatMap(r=>{try{return [parseRepo(r as Record<string,unknown>)];}catch{return [];}});

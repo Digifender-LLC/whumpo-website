@@ -7,8 +7,8 @@ await validateLifecycleReferences(catalog);
 const {db,schemaFiles}=await currentLifecycleSchema();
 try{
  const report=inspectLifecycleSchema(db,catalog);
- assert.equal(report.tableCount,220);assert.equal(report.classCount,52);assert.equal(schemaFiles.length,7);
- assert.equal(report.plannedClassCount,6);assert.equal(report.protectionClasses.length,58);
+ assert.equal(report.tableCount,221);assert.equal(report.classCount,53);assert.equal(schemaFiles.length,8);
+ assert.equal(report.plannedClassCount,5);assert.equal(report.protectionClasses.length,58);
  const native=report.protectionClasses.find(g=>g.id==='native-identity-handoffs');assert.equal(native.storageStatus,'current');assert.match(native.proposedRetention,/Exclude from all customer exports and restore/);
  assert.ok(report.tables.find(t=>t.name==='mobile_identity_handoffs').ownerPath.includes('users'));
  assert.equal(report.protectionStatus,'decision-not-runtime-enforcement');
@@ -86,5 +86,5 @@ try{
  db.exec('PRAGMA query_only=ON');assert.deepEqual(inspectLifecycleSchema(db,catalog),report);assert.doesNotMatch(JSON.stringify(report),/PRIVATE_OWNER|PRIVATE_EMAIL|PRIVATE_SALT|PRIVATE_HASH/);
  db.exec('PRAGMA query_only=OFF');db.exec('CREATE TABLE new_personal_data(id TEXT,user_id TEXT REFERENCES users(id),secret TEXT)');db.exec('PRAGMA query_only=ON');
  assert.throws(()=>inspectLifecycleSchema(db,catalog),/missing: new_personal_data/);
- console.log(`Lifecycle catalog passed: 220 tables, 52 current/6 planned classes, ${invalidCatalogs.length+invalidReferences.length} rejected contract/reference cases, complete protection/recovery metadata, owner FK blockers, and zero application-data reads. No runtime authority granted.`);
+ console.log(`Lifecycle catalog passed: 221 tables, 53 current/5 planned classes, ${invalidCatalogs.length+invalidReferences.length} rejected contract/reference cases, complete protection/recovery metadata, owner FK blockers, and zero application-data reads. No runtime authority granted.`);
 }finally{db.close();}
