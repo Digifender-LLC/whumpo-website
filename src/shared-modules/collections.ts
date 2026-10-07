@@ -57,7 +57,7 @@ export async function exportCollectionSnapshot(db:D1Database,user:string,project
 /** Owner lifecycle restore hook prepares the existing exact applied-snapshot-to-private-draft review. It does not
  * import an arbitrary export, execute a module, publish or apply the review. Existing directory confirmation remains
  * the sole authority. Disabled modules retain owner recovery; withdrawn or stale pins require a current review. */
-export async function prepareCollectionRestore(db:D1Database,user:string,turn:string,project:string,resourceId:string,configRevision:number,snapshotId:string){
+async function requireCollectionRestore(db:D1Database,user:string,project:string,resourceId:string,configRevision:number){
  await assertWorkspace(db,user);
  const row=await db.prepare(`SELECT i.kind,i.local_id,i.config_revision,i.config_json,i.config_digest,i.module_digest,i.schema_digest,i.descriptor_json,i.descriptor_digest,
   source.lock_json,head.spec_json current_spec_json,head.lock_json current_lock_json FROM module_instances i JOIN projects p ON p.id=i.project_id
@@ -76,6 +76,17 @@ export async function prepareCollectionRestore(db:D1Database,user:string,turn:st
  if(descriptor.lifecycle?.restoreHook!==collectionsRestoreHook||await jsonDigest(descriptor)!==row.descriptor_digest||await jsonDigest(config)!==row.config_digest)throw new ModuleError('unavailable');
  const saved=(JSON.parse(row.current_spec_json) as {instances:{id:string;kind:string;module:{digest:string};schema:{digest:string};config:unknown}[]}).instances.find(i=>i.id===row.local_id);
  if(!saved||saved.kind!=='content'||saved.module.digest!==row.module_digest||saved.schema.digest!==row.schema_digest||await jsonDigest(saved.config)!==row.config_digest)throw new ModuleError('stale_configuration');
+}
+/** Repeat the live catalog check at the actual confirmation boundary. Applied reviews are nonmutating receipts. */
+export async function checkCollectionRestoreConfirmation(db:D1Database,user:string,reviewId:string){
+ const row=await db.prepare("SELECT t.action_json FROM directory_reviews r JOIN chat_turns t ON t.id=r.id AND t.user_id=r.user_id WHERE r.id=? AND r.user_id=? AND r.status='pending' AND json_extract(t.action_json,'$.type')='collectionRestoreReview'")
+  .bind(reviewId,user).first<{action_json:string}>();
+ if(!row)return;
+ const action=JSON.parse(row.action_json) as {projectId:string;resourceId:string;configRevision:number};
+ await requireCollectionRestore(db,user,action.projectId,action.resourceId,action.configRevision);
+}
+export async function prepareCollectionRestore(db:D1Database,user:string,turn:string,project:string,resourceId:string,configRevision:number,snapshotId:string){
+ await requireCollectionRestore(db,user,project,resourceId,configRevision);
  try{return await directoryAction(db,user,turn,{operation:'restore',projectId:project,snapshotId});}
  catch(error){if(!(error instanceof DirectoryError))throw error;throw new ModuleError(error.status===404?'not_found':error.status===400?'invalid_request':'unavailable');}
 }

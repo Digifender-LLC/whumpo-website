@@ -30,7 +30,7 @@ import {cmsContentCommand} from './cms-content';
 import {cmsChatCommand} from './cms-projects';
 import {backendChatCommand} from './backend-chat';
 import {directoryCommand} from './directory';
-import {prepareCollectionRestoreCommand} from './shared-modules/collections';
+import {prepareCollectionRestoreCommand,checkCollectionRestoreConfirmation} from './shared-modules/collections';
 import {healthChatCommand,checkHealth,describeHealth} from './site-health';
 import {diffCommand} from './version-diff';
 import {contactCommand} from './contacts';
@@ -208,7 +208,11 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const githubGrant=control?.action.type==='githubGrant'?githubGrantChatControl(db,userId,command,dnsOptions):undefined;
   const external=githubGrant??cms??backend??hosting??dns??backup??health;
   const comparison=await diffCommand(db,userId,input.id,command);
-  let directory=await directoryCommand(db,userId,input.id,content);
+  let directory:Awaited<ReturnType<typeof directoryCommand>>;
+  try{
+    if(control?.action.type==='confirm'&&control.action.kind==='directory')await checkCollectionRestoreConfirmation(db,userId,control.action.reviewId);
+    directory=await directoryCommand(db,userId,input.id,content);
+  }catch(error){if(error instanceof ModuleError)return {status:error.status,error:error.message};throw error;}
   const contact=await contactCommand(db,userId,input.id,command)??await contactNotificationCommand(db,userId,input.id,command);
   const versionRemoval=await versionRemovalCommand(db,userId,input.id,command);
   const serviceClients=await applyServiceClientsCommand(db,userId,input.id,command);

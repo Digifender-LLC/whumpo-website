@@ -24,11 +24,12 @@ const contentInstance={id:'listings',kind:'content',...pins('content'),dependenc
 // Variant bundles change exactly one trusted catalog fact (withdrawn kind or a different digest) around the same handlers.
 async function variant(replace){
  const plugin={name:'catalog-variant',setup(b){b.onLoad({filter:/src[\\/]project-specification[\\/]catalog\.ts$/},async args=>{const source=await readFile(args.path,'utf8'),changed=replace(source);assert.notEqual(changed,source);return {contents:changed,loader:'ts'};});}};
- const out=await build({stdin:{contents:`export {handleModuleRequest} from './src/shared-modules/api';export {exportCollectionSnapshot,prepareCollectionRestore} from './src/shared-modules/collections';export {admitWorkspace} from './src/workspace-identity/admission';export {resolveIdentity} from './src/workspace-identity/authority';`,resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false,plugins:[plugin],logLevel:'silent'});
+ const out=await build({stdin:{contents:`export {sendChatControl} from './src/chat';export {handleModuleRequest} from './src/shared-modules/api';export {exportCollectionSnapshot,prepareCollectionRestore} from './src/shared-modules/collections';export {admitWorkspace} from './src/workspace-identity/admission';export {resolveIdentity} from './src/workspace-identity/authority';`,resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false,plugins:[plugin],logLevel:'silent'});
  return import('data:text/javascript;base64,'+Buffer.from(out.outputFiles[0].contents).toString('base64'));
 }
 const withdrawn=await variant(s=>s.replace("modulePin('content','available')","modulePin('content','withdrawn')"));
 const restaged=await variant(s=>s.replace("digest:compilerArtifacts.modules[kind].module}","digest:kind==='content'?'0'.repeat(64):compilerArtifacts.modules[kind].module}"));
+const compilerWithdrawn=await variant(s=>s.replace(/(id:'project-content',version:[0-9]+,digest:compilerArtifacts.compiler,state:)'available'/,"$1'withdrawn'"));
 
 const revision=async o=>(await m.readChat(o.scope,o.user)).state.revision;
 async function control(o,action){const turn=id();return {id:turn,...await m.sendChatControl(o.scope,o.user,{id:turn,revision:await revision(o),action})};}
@@ -205,6 +206,12 @@ try{
   const review=await row('SELECT * FROM directory_reviews WHERE id=?',input.id);assert.equal(review.source_review_id,listing);assert.equal(review.kind,'edit');assert.equal(review.status,'pending');assert.equal(review.digest,original.digest);
   assert.equal((await m.directory.readDirectory(a.scope,a.user,a.project)).revision,before);assert.deepEqual(await publicJSON(a),live,'Prepare publishes nothing');
   assert.equal((await m.readChat(a.scope,a.user)).turns.find(t=>t.id===input.id).directory_confirmation_id,input.id);
+  // A current review never outruns a later trusted catalog withdrawal or restage at confirmation.
+  for(const variant of [withdrawn,restaged,compilerWithdrawn]){
+   const scoped=await variant.admitWorkspace(db,await variant.resolveIdentity(db,{version:1,client:'web',kind:'session',token:a.token}));
+   const denied=await variant.sendChatControl(scoped,a.user,{id:id(),revision:await revision(a),action:{type:'confirm',kind:'directory',reviewId:input.id}});
+   assert.equal(denied.status,409,JSON.stringify(denied));assert.equal((await m.directory.readDirectory(a.scope,a.user,a.project)).revision,before);
+  }
   // Admission repeats resource revision and exact source even for a forged internal statement.
   const forged=id(),rev=await revision(a)+1;await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,action_json) VALUES(?,?,?,'Synthetic stale restore','',datetime('now'),?)",forged,a.user,rev,JSON.stringify({...action,configRevision:action.configRevision+1}));await run('UPDATE workspace_state SET revision=? WHERE user_id=?',rev,a.user);
   await assert.rejects(run("INSERT INTO directory_reviews(id,user_id,project_id,kind,snapshot_json,digest,expected_revision,publication_revision,expires_at,source_review_id) SELECT ?,user_id,project_id,kind,snapshot_json,digest,expected_revision,publication_revision,expires_at,source_review_id FROM directory_reviews WHERE id=?",forged,input.id),/directory_changed/);
