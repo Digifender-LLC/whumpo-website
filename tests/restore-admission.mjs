@@ -46,7 +46,7 @@ async function current(){const manifest=await capture();permit(manifest);return 
 const options=manifest=>({db,manifest,keyBackup,evidenceSource,expectedStreamId:streamId,objects,now:()=>now});
 let refusals=0;
 async function held(input,code){const report=await inspectIsolatedRestore(input);assert.deepEqual(report.holds,[code]);assert.equal(report.status,'held');assert.equal(report.servingAllowed,false);assert.equal(report.providerDispatchAllowed,false);assert.ok(!JSON.stringify(report).includes(canary));assert.ok(!JSON.stringify(report).includes(objectKey));refusals++;return report;}
-async function passed(input){const result=await inspectIsolatedRestore(input);assert.equal(result.status,'verified',JSON.stringify(result));assert.equal(result.servingAllowed,false);assert.equal(result.providerDispatchAllowed,false);assert.equal(result.retirementAllowed,false);assert.equal(result.tables,219);return result;}
+async function passed(input){const result=await inspectIsolatedRestore(input);assert.equal(result.status,'verified',JSON.stringify(result));assert.equal(result.servingAllowed,false);assert.equal(result.providerDispatchAllowed,false);assert.equal(result.retirementAllowed,false);assert.equal(result.tables,220);return result;}
 const altered=(mutate)=>({async fetch(request){const response=await evidenceSource.fetch(request);const body=await response.json();await mutate(body);return Response.json(body);}});
 const originalFetch=globalThis.fetch;globalThis.fetch=async()=>assert.fail('Restore verification cannot dispatch to any real provider');
 try{
@@ -65,6 +65,15 @@ try{
  assert.ok(!JSON.stringify(manifest).includes(canary));assert.ok(!JSON.stringify(manifest).includes(objectKey));assert.ok(!JSON.stringify(manifest).includes(JSON.parse(keyring).keys[0].secret));
  await held(options(manifest),'independent-evidence');permit(manifest);
  const good=await passed(options(manifest));assert.equal(good.keys.credentials,4);assert.equal(good.objects,1);
+ // Neither a still-current native bearer nor a pending browser handoff can be
+ // rehydrated by restore. Scrubbing creates a new manifest; this verifier never writes.
+ const nativeId=id();
+ await db.prepare("INSERT INTO mobile_identity_handoffs(id,browser_hash,purpose,state_hash,code_challenge,redirect_uri,signing_origin,created_at,expires_at) VALUES(?,?,'signin',?,?,'https://whumpo.com/app/return',?,unixepoch(),unixepoch()+300)").bind(nativeId,'1'.repeat(64),'2'.repeat(64),'c'.repeat(43),'android:apk-key-hash:'+'d'.repeat(43)).run();
+ await held(options(await current()),'native-reauthentication-required');
+ await db.prepare('DELETE FROM mobile_identity_handoffs WHERE id=?').bind(nativeId).run();
+ await db.prepare("INSERT INTO identity_sessions SELECT ?,?,account_id,policy_version,auth_epoch,'android',credential_id,proof_method,proof_at,issued_at,expires_at FROM identity_sessions WHERE id=?").bind(nativeId,'3'.repeat(64),owner.authority).run();
+ await held(options(await current()),'native-reauthentication-required');
+ await db.prepare('DELETE FROM identity_sessions WHERE id=?').bind(nativeId).run();
  for(const proof of [undefined,{},JSON.stringify(keyBackup)])await held({...options(manifest),keyBackup:proof},'key-backup-binding');
  await held({...options(manifest),keyring,keyBackup:undefined},'current-input');
  await held({...options(manifest),keyBackup:{...keyBackup}},'key-backup-unavailable');

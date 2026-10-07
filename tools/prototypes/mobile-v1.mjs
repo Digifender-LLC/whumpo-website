@@ -144,7 +144,7 @@ export const operations=Object.freeze([
  {id:'session.reauthVerify',method:'POST',path:'/session/reauth/verify',auth:'bearer',wave:'WH-083',source:[['src/workspace-identity/ceremonies.ts','reauthenticationVerify']],
   body:obj({version:v1,challengeId:uuid(),credential:webauthn}),write:true,idempotency:'challenge-once',response:obj({version:v1,session:obj({expiresAt:iso(),freshUntil:iso()})})},
  {id:'session.read',method:'GET',path:'/session',auth:'bearer',wave:'WH-083',source:[['src/workspace-identity/authority.ts','resolveIdentity']],
-  query:{},body:null,write:false,idempotency:'none',response:obj({version:v1,session:obj({expiresAt:iso(),freshUntil:nul(iso())}),account:obj({label:str(80,/^[^\s@]{1,3}\*{3}@[^\s@]+$/,1)})})},
+  query:{},body:null,write:false,idempotency:'none',response:obj({version:v1,session:obj({expiresAt:iso(),freshUntil:nul(iso())}),account:obj({id:uuid(),label:str(80,/^[^\s@]{1,3}\*{3}@[^\s@]+$/,1)})})},
  {id:'session.logout',method:'POST',path:'/session/logout',auth:'bearer',wave:'WH-083',source:[['src/workspace-identity/http.ts','logout']],
   body:obj({version:v1}),write:true,idempotency:'natural',response:obj({version:v1,signedOut:lit(true)})},
  {id:'bootstrap.read',method:'GET',path:'/bootstrap',auth:'bearer',wave:'WH-084',source:[['src/onboarding.ts','onboardingComplete'],['src/chat.ts','readChat']],

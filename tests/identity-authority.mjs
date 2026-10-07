@@ -56,7 +56,7 @@ try{
  await denies(()=>check({prepare:db.prepare},p,workspace),'proof_required');
  await denies(()=>resolve(db,{...request(as.token),role:'owner'}),'invalid_identity_request');
  await denies(()=>resolve(db,{...request(as.token),version:0}),'client_upgrade_required');
- await denies(()=>resolve(db,{...request(as.token),client:'android'}),'invalid_identity_request');
+ await denies(()=>resolve(db,{...request(as.token),client:'android'}),'proof_required');
  await denies(()=>resolve(db,{...request(as.token),kind:'automatic'}),'invalid_identity_request');
  await denies(()=>resolve(db,request('short')),'proof_required');
  await denies(()=>resolve(db,request(newSessionToken())),'proof_required');

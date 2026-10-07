@@ -12,12 +12,13 @@ export function identityRecord(value:unknown,keys:string[]):Record<string,unknow
  if(data.version!==1)throw new IdentityError(409,'client_upgrade_required','Update Whumpo to continue.');
  return data;
 }
+export type IdentityCeremonyContext=Readonly<{origin:string;rpID:string;client:'web'|'android'}>;
 export function identityRequestContext(request:Request,env:IdentityEnvironment){
  const mode=String(env.ENVIRONMENT);
  if(mode!=='local'&&mode!=='test')throw identityUnavailable();
  const origin=mode==='local'?'http://localhost:8787':'https://whumpo.com',rpID=new URL(origin).hostname;
  if(request.method!=='POST'||request.headers.get('origin')!==origin||new URL(request.url).origin!==origin)throw invalidIdentityRequest();
- return {origin,rpID};
+ return {origin,rpID,client:'web' as const};
 }
 export function identityDatabaseError(error:unknown):never{
  if(error instanceof IdentityError)throw error;

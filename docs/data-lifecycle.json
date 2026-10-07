@@ -142,9 +142,9 @@
         "identity_challenges"
       ],
       "scope": "mixed",
-      "purpose": "Hashed ordinary sessions, restricted grants and one-use browser ceremonies.",
+      "purpose": "Hashed browser and Android sessions, restricted browser grants and one-use client-bound passkey ceremonies.",
       "currentRetention": "Expiry denies authority immediately. Daily maintenance removes at most 500 expired rows per table. Sessions last at most seven days from proof, grants thirty minutes, challenges five minutes. User deletion explicitly clears bound challenges; credential/account deletion cascades sessions/grants.",
-      "proposedRetention": "Retain only current authority; any restore must discard these records and require fresh verification. Never rehydrate browser sessions from backups.",
+      "proposedRetention": "Retain only current authority; any restore must discard these records and require fresh verification. Never rehydrate browser or Android sessions from backups.",
       "deletionAuthority": "Verified logout, shared revocation engine and bounded expiry maintenance.",
       "exportPolicy": "No bearer hashes, tokens, challenges, challenge payloads, proof bodies or authority IDs in customer exports, Chat or telemetry.",
       "references": [
@@ -171,6 +171,50 @@
         ],
         "decision": "retain-and-verify",
         "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
+      "id": "native-identity-handoffs",
+      "tables": [
+        "mobile_identity_handoffs"
+      ],
+      "scope": "mixed",
+      "purpose": "Single-use PKCE S256 return from completed browser identity to an Android session, bound to the current browser account, source session, epoch, exact redirect and approved signing origin.",
+      "currentRetention": "Authority expires after five minutes; issued exchange codes last at most sixty seconds. Start and hourly/daily identity maintenance delete at most 500 expired rows per pass, including consumed rows. Bound account or source-session deletion cascades immediately; unbound rows contain no account. Stored hashes never renew authority.",
+      "proposedRetention": "Exclude from all customer exports and restore candidates. The isolated restore verifier refuses native sessions/challenges and handoff rows; the reviewed restore scrub must discard them, then require new passkey authentication. Never restore a historical return code, session or approval.",
+      "deletionAuthority": "Bound source-session or account deletion and bounded expiry maintenance; no owner Chat, model or customer workload reader.",
+      "exportPolicy": "No token/state/code hashes, PKCE challenge, signing binding or source session IDs in exports, Chat, generated content or telemetry.",
+      "references": [
+        "src/mobile/schema.sql",
+        "src/mobile/handoff.ts",
+        "src/mobile/http.ts",
+        "docs/android-app.md",
+        "docs/mobile-api-v1.md",
+        "tools/restore-admission.mjs"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "identity-verifiers",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Exact cookie-Origin browser completion and Android PKCE exchange handlers only"
+        ],
+        "processors": [
+          "Shared current identity verification, one-time return exchange and bounded expiry maintenance; no inference or provider dispatch"
+        ],
+        "remainingExposure": [
+          "Bound account/session identifiers and proof metadata are server-readable; raw bearer, code, state and verifier are not stored. A one-time code appears only in the verified App Link and expires within sixty seconds."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Hash non-recoverable return secrets, retain only the brief fixed exchange binding and refuse native authority in restored copies. Signing association and physical-device acceptance remain external gates.",
         "requirements": [
           "DP-02",
           "DP-03",

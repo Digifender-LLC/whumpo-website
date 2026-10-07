@@ -1,5 +1,9 @@
 // Wrangler generates resource binding types; secret values are set separately.
 interface Env {
+  // Native association is disabled until an approved package and signing certificate are configured.
+  MOBILE_ANDROID_PACKAGE?: string;
+  MOBILE_ANDROID_CERT_SHA256?: string;
+  MOBILE_MINIMUM_BUILD?: string;
   CLOUDFLARE_CLIENT_ID?: string;
   CLOUDFLARE_CLIENT_SECRET?: string;
   CLOUDFLARE_DOMAINS_TOKEN?: string;

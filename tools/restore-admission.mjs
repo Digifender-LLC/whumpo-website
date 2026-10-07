@@ -239,6 +239,11 @@ function applyEvidence(evidence,state,contract){
 }
 
 function checkUnsettled(state){
+ // Native authority is never rehydrated from an archive, even with a current epoch.
+ // A reviewed scrub must discard these rows and a current passkey starts new access.
+ requireCheck(state.rows.get('mobile_identity_handoffs').length===0
+  &&!state.rows.get('identity_sessions').some(row=>row.client==='android')
+  &&!state.rows.get('identity_challenges').some(row=>row.client==='android'),'native-reauthentication-required');
  const checks=[
   ['github_backups','state',['dispatching','uncertain']],['cloudflare_dns_actions','state',['sending','uncertain']],
   ['domain_connections','state',['creating','uncertain','provisioning','disconnecting']],

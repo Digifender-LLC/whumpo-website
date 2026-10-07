@@ -1,5 +1,7 @@
 import {ConnectorReviewError} from './connector-receipts';
 import {ConnectorOperationError} from './connector-catalog';
+import {handleMobileRequest,mobileAssetLinks} from './mobile/http';
+import {handleMobileHandoffRequest,mobileHandoffPage,cleanMobileHandoffs} from './mobile/handoff';
 import {projectRuntime} from './runtime-lane';
 import {safetyService,serviceSafetyReviews,readServiceSafetyReview,prepareServiceSafetyReview,confirmServiceSafetyReview} from './service-safety';
 import {listSavedWork,readSavedWork} from './saved-work';
@@ -143,6 +145,8 @@ function sameOrigin(request: Request): boolean {
 async function handle(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const { pathname } = new URL(request.url);
   const method = request.method;
+  const mobile=await handleMobileRequest(request,env);if(mobile)return mobile;
+  const handoff=await handleMobileHandoffRequest(request,env);if(handoff)return handoff;
   const identity=await handleIdentityRequest(request,env);if(identity)return identity;
   if (method === "GET" && pathname === "/api/health") return json({ status: "ok" });
   if (method === "POST" && pathname === "/api/stripe/webhook") return json(await stripeBillingWebhook(request, env.DB, env));
@@ -643,10 +647,10 @@ export default {
     const imports={name:'imports' as const,run:()=>scanBackendImports(env.DB)};
     if(_event.cron==='47 * * * *'){
       await runMaintenance(env.DB,[imports,{name:'chat_drafts',run:()=>cleanupInteractionDrafts(env.DB)},
-      {name:'identity',run:()=>cleanIdentityCeremonies(env.DB)},{name:'hosting',enabled:!!hostingConfig(env),run:()=>maintainHosting(env.DB,hostingConfig(env))},{name:'health',run:()=>maintainHealth(env.DB)},{name:'funnel',run:()=>maintainFunnelEvents(env.DB)}]);return;
+      {name:'identity',run:async()=>{await cleanIdentityCeremonies(env.DB);await cleanMobileHandoffs(env.DB);}},{name:'hosting',enabled:!!hostingConfig(env),run:()=>maintainHosting(env.DB,hostingConfig(env))},{name:'health',run:()=>maintainHealth(env.DB)},{name:'funnel',run:()=>maintainFunnelEvents(env.DB)}]);return;
     }
     await runMaintenance(env.DB,[imports,{name:'chat_drafts',run:()=>cleanupInteractionDrafts(env.DB)},
-      {name:'identity',run:()=>cleanIdentityCeremonies(env.DB)},
+      {name:'identity',run:async()=>{await cleanIdentityCeremonies(env.DB);await cleanMobileHandoffs(env.DB);}},
       {name:'fair_use',run:()=>cleanupFairUseObservations(env.DB)},
       {name:'traffic',run:async()=>{await cleanupTraffic(env.DB);await cleanupPublicClients(env.DB);}},
       {name:'funnel',run:()=>maintainFunnelEvents(env.DB)},
@@ -664,9 +668,13 @@ export default {
     const requestId = crypto.randomUUID();
     if(String(env.ENVIRONMENT)!=='local'&&new URL(request.url).origin!=='https://whumpo.com')return error(404,'Not found');
     try {
+      const nativePath=new URL(request.url).pathname;
+      if(request.headers.has('authorization')&&nativePath!=='/api/mobile'&&!nativePath.startsWith('/api/mobile/'))return error(400,'Bearer access is limited to native routes.');
       const contactMatch=new URL(request.url).pathname.match(/^\/contact\/([0-9a-f-]{36})$/);
       if(contactMatch)return contactPage(request,env,contactMatch[1]);
       if (new URL(request.url).pathname.startsWith("/api/")) return comparisonErrorResponse(request,await handle(request, env, ctx));
+      if(new URL(request.url).pathname==='/.well-known/assetlinks.json')return request.method==='GET'?mobileAssetLinks(env):error(404,'Not found');
+      const handoffPage=mobileHandoffPage(request);if(handoffPage)return handoffPage;
       return env.ASSETS.fetch(request);
     } catch (cause) {
       if(String(cause).includes('connection_write_key_changed'))return comparisonErrorResponse(request,error(503,new ConnectionVaultError('write-key').message));

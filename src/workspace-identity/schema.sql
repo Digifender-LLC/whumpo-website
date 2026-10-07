@@ -56,7 +56,7 @@ CREATE TABLE identity_sessions (
  account_id TEXT NOT NULL REFERENCES identity_accounts(account_id) ON DELETE CASCADE,
  policy_version INTEGER NOT NULL CHECK(policy_version=1),
  auth_epoch INTEGER NOT NULL CHECK(auth_epoch BETWEEN 1 AND 9007199254740991),
- client TEXT NOT NULL CHECK(client='web'),
+ client TEXT NOT NULL CHECK(client IN ('web','android')),
  credential_id TEXT NOT NULL,
  proof_method TEXT NOT NULL CHECK(proof_method='passkey'),
  proof_at INTEGER NOT NULL CHECK(proof_at>=0),
@@ -98,9 +98,9 @@ CREATE TABLE identity_challenges (
  challenge TEXT NOT NULL CHECK(length(challenge) BETWEEN 32 AND 256),
  kind TEXT NOT NULL CHECK(kind IN ('signup','login','add','reauth','recovery_complete')),
  policy_version INTEGER NOT NULL CHECK(policy_version=1),
- client TEXT NOT NULL CHECK(client='web'),
- origin TEXT NOT NULL CHECK(origin IN ('https://whumpo.com','http://localhost:8787')),
- rp_id TEXT NOT NULL CHECK((origin='https://whumpo.com' AND rp_id='whumpo.com') OR (origin='http://localhost:8787' AND rp_id='localhost')),
+ client TEXT NOT NULL CHECK(client IN ('web','android')),
+ origin TEXT NOT NULL,
+ rp_id TEXT NOT NULL CHECK((client='web' AND ((origin='https://whumpo.com' AND rp_id='whumpo.com') OR (origin='http://localhost:8787' AND rp_id='localhost'))) OR (client='android' AND rp_id='whumpo.com' AND length(origin)=64 AND substr(origin,1,21)='android:apk-key-hash:' AND substr(origin,22) NOT GLOB '*[^A-Za-z0-9_-]*')),
  account_id TEXT,
  email TEXT,
  invite_hash TEXT,
@@ -119,6 +119,7 @@ CREATE TABLE identity_challenges (
  CHECK((kind='signup' AND account_id IS NOT NULL AND email IS NOT NULL AND invite_hash IS NOT NULL AND eligibility_version IS NOT NULL AND authority_id IS NULL)
   OR (kind='login' AND account_id IS NULL AND authority_id IS NULL)
   OR (kind IN ('add','reauth','recovery_complete') AND account_id IS NOT NULL AND authority_id IS NOT NULL AND authority_kind IS NOT NULL AND auth_epoch IS NOT NULL AND credential_revision IS NOT NULL)),
+ CHECK(client='web' OR kind IN ('login','reauth')),
  UNIQUE(account_id,request_id)
 ) STRICT;
 CREATE INDEX identity_challenges_expiry ON identity_challenges(expires_at);
@@ -338,7 +339,7 @@ SELECT s.id AS authority_id,'session' AS kind,s.token_hash,s.account_id,'workspa
 FROM identity_sessions s
 JOIN identity_accounts a ON a.account_id=s.account_id
 JOIN identity_credentials c ON c.id=s.credential_id AND c.account_id=s.account_id
-WHERE a.policy_version=1 AND s.policy_version=1 AND s.client='web' AND s.auth_epoch=a.auth_epoch
+WHERE a.policy_version=1 AND s.policy_version=1 AND s.client IN ('web','android') AND s.auth_epoch=a.auth_epoch
  AND a.stage='ready' AND a.current_attempt_id IS NULL AND a.kit_generation>0 AND a.completion_receipt_id IS NOT NULL
  AND c.status='active' AND s.proof_method='passkey'
  AND s.proof_at<=unixepoch() AND s.issued_at<=unixepoch() AND s.expires_at>unixepoch()

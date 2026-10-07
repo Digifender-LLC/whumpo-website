@@ -3,7 +3,7 @@ import {customerEligibilityVersion} from '../content-policy';
 import {hashToken,newSessionToken} from '../security';
 import {IdentityError,assertCurrentIdentity,identityPredicate,resolveIdentity,type IdentityPrincipal,type IdentityPolicy} from './authority';
 
-import {identityRecord as record,identityRequestContext as context,identityDatabaseError as databaseError,identityChanged as changed,identityUnavailable as unavailable,invalidIdentityRequest as invalid,identityUUID as uuid,type IdentityEnvironment as Environment} from './protocol';
+import {identityRecord as record,identityRequestContext as context,identityDatabaseError as databaseError,identityChanged as changed,identityUnavailable as unavailable,invalidIdentityRequest as invalid,identityUUID as uuid,type IdentityEnvironment as Environment,type IdentityCeremonyContext} from './protocol';
 type Kind='signup'|'login'|'add'|'reauth'|'recovery_complete';
 type Challenge={id:string;kind:Kind;challenge:string;origin:string;rp_id:string;policy_version:number;client:string;account_id:string|null;
  email:string|null;invite_hash:string|null;eligibility_version:string|null;authority_id:string|null;authority_kind:string|null;
@@ -54,24 +54,24 @@ async function turnstile(request:Request,env:Environment,token:unknown,origin:st
   if(result?.success!==true||result.hostname!==new URL(origin).hostname||result.action!=='register')throw proof();
  }catch(error){if(error instanceof IdentityError)throw error;throw unavailable();}
 }
-export async function consumeIdentityChallenge(db:D1Database,token:unknown,kind:Kind,rp:ReturnType<typeof context>){
- if(typeof token!=='string'||!/^[0-9a-f]{64}$/.test(token))throw proof();
+export async function consumeIdentityChallenge(db:D1Database,token:unknown,kind:Kind,rp:IdentityCeremonyContext){
+ if(typeof token!=='string'||!(rp.client==='android'?uuid:/^[0-9a-f]{64}$/).test(token))throw proof();
  // Invalid responses and wrong-kind attempts burn the presented challenge too.
- const c=await db.prepare('DELETE FROM identity_challenges WHERE token_hash=? RETURNING *,unixepoch() AS consumed_at').bind(await hashToken(token)).first<Challenge>();
- if(!c||c.kind!==kind||c.expires_at<=c.consumed_at||c.policy_version!==1||c.client!=='web'||c.origin!==rp.origin||c.rp_id!==rp.rpID)throw proof();
+ const c=await db.prepare(`DELETE FROM identity_challenges WHERE ${rp.client==='android'?'id':'token_hash'}=? RETURNING *,unixepoch() AS consumed_at`).bind(rp.client==='android'?token:await hashToken(token)).first<Challenge>();
+ if(!c||c.kind!==kind||c.expires_at<=c.consumed_at||c.policy_version!==1||c.client!==rp.client||c.origin!==rp.origin||c.rp_id!==rp.rpID)throw proof();
  return c;
 }
-export async function saveIdentityChallenge(db:D1Database,rp:ReturnType<typeof context>,kind:Kind,challenge:string,fields:{accountId?:string;email?:string;inviteHash?:string;p?:IdentityPrincipal;requestId:string;requestHash:string;name?:string}){
+export async function saveIdentityChallenge(db:D1Database,rp:IdentityCeremonyContext,kind:Kind,challenge:string,fields:{accountId?:string;email?:string;inviteHash?:string;p?:IdentityPrincipal;requestId:string;requestHash:string;name?:string}){
  const id=crypto.randomUUID(),token=newSessionToken(),p=fields.p;
  const gate=p?identityPredicate(db,p,(kind==='reauth'||kind==='recovery_complete')?{purpose:p.purpose,freshPasskey:false,bindIdentityRevision:true}:operationPolicy(p)):null;
  // INSERT ... SELECT allows the same committing guard as credential changes.
- const query=`INSERT INTO identity_challenges SELECT ?,?,?,?,1,'web',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,unixepoch(),unixepoch()+300${gate?` WHERE ${gate.sql}`:''}`;
- const statement=db.prepare(query).bind(id,await hashToken(token),challenge,kind,rp.origin,rp.rpID,fields.accountId??p?.accountId??null,fields.email??null,fields.inviteHash??null,kind==='signup'?customerEligibilityVersion:null,
+ const query=`INSERT INTO identity_challenges SELECT ?,?,?,?,1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,unixepoch(),unixepoch()+300${gate?` WHERE ${gate.sql}`:''}`;
+ const statement=db.prepare(query).bind(id,await hashToken(token),challenge,kind,rp.client,rp.origin,rp.rpID,fields.accountId??p?.accountId??null,fields.email??null,fields.inviteHash??null,kind==='signup'?customerEligibilityVersion:null,
   p?.authorityId??null,p?.kind??null,p?.authEpoch??null,p?.credentialRevision??null,p?.attempt?.id??null,p?.attempt?.revision??null,fields.requestId,fields.requestHash,fields.name??null,...(gate?.params??[]));
  try{if((await statement.run()).meta.changes!==1)throw changed();}catch(error){databaseError(error);}
- return {challengeToken:token};
+ return {challengeToken:rp.client==='android'?id:token};
 }
-async function registration(db:D1Database,rp:ReturnType<typeof context>,accountId:string,email:string){
+async function registration(db:D1Database,rp:IdentityCeremonyContext,accountId:string,email:string){
  const keys=await db.prepare('SELECT id FROM identity_credentials WHERE account_id=? ORDER BY id').bind(accountId).all<{id:string}>();
  if(keys.results.length>=10)throw new IdentityError(409,'identity_changed','Ten passkeys are already saved. Review a removal before adding another.');
  return generateRegistrationOptions({rpName:'Whumpo',rpID:rp.rpID,userName:email,userID:new Uint8Array(encoder.encode(accountId)),attestationType:'none',
@@ -98,9 +98,10 @@ async function verifyRegistration(c:Challenge,input:unknown){
   return verified.registrationInfo.credential;
  }catch{throw proof();}
 }
-async function issued(db:D1Database,kind:'session'|'grant',token:string){
- const principal=await resolveIdentity(db,{version:1,client:'web',kind,token});
- // Transport must put token in its matching secure HttpOnly cookie, never a JSON body/log.
+async function issued(db:D1Database,kind:'session'|'grant',token:string,client:'web'|'android'='web'){
+ const principal=await resolveIdentity(db,{version:1,client,kind,token});
+ // Web transport uses its matching secure HttpOnly cookie; Android uses only its
+ // bounded no-store native response. Neither transport logs tokens.
  return {kind,token,principal};
 }
 export async function signupVerify(request:Request,env:Environment,challengeToken:unknown,input:unknown){
@@ -172,13 +173,13 @@ export async function addPasskeyVerify(request:Request,env:Environment,p:Identit
  return {operationId:c.request_id,credentialId:key.id};
 }
 
-export async function loginOptions(request:Request,env:Environment,input:unknown){
- const rp=context(request,env);record(input,['version']);await cleanIdentityCeremonies(env.DB);
+export async function loginOptions(request:Request,env:Environment,input:unknown,rp:IdentityCeremonyContext=context(request,env)){
+ record(input,['version']);await cleanIdentityCeremonies(env.DB);
  const options=await generateAuthenticationOptions({rpID:rp.rpID,userVerification:'required'}),requestId=crypto.randomUUID();
  return {options,...await saveIdentityChallenge(env.DB,rp,'login',options.challenge,{requestId,requestHash:await hashToken(JSON.stringify(['login',requestId]))})};
 }
-export async function reauthenticationOptions(request:Request,env:Environment,p:IdentityPrincipal,input:unknown){
- const rp=context(request,env);record(input,['version']);
+export async function reauthenticationOptions(request:Request,env:Environment,p:IdentityPrincipal,input:unknown,rp:IdentityCeremonyContext=context(request,env)){
+ if(p.client!==rp.client)throw proof();record(input,['version']);
  await assertCurrentIdentity(env.DB,p,{purpose:p.purpose,freshPasskey:false,bindIdentityRevision:true});
  const keys=await env.DB.prepare('SELECT id FROM identity_authentication_candidates WHERE account_id=? ORDER BY id').bind(p.accountId).all<{id:string}>();
  if(!keys.results.length)throw proof();
@@ -203,11 +204,15 @@ export async function verifyIdentityAssertion(env:Environment,c:Challenge,input:
  const now=await env.DB.prepare('SELECT unixepoch() AS at').first<{at:number}>();if(!now)throw unavailable();
  return {key,newCounter,verifiedAt:now.at};
 }
-async function authenticate(request:Request,env:Environment,challengeToken:unknown,input:unknown,p?:IdentityPrincipal){
- const rp=context(request,env),c=await consumeIdentityChallenge(env.DB,challengeToken,p?'reauth':'login',rp),data=record(input,['version','credential']);
+async function authenticate(request:Request,env:Environment,challengeToken:unknown,input:unknown,p?:IdentityPrincipal,rp:IdentityCeremonyContext=context(request,env),retainedToken?:string){
+ if(p&&p.client!==rp.client)throw proof();
+ const c=await consumeIdentityChallenge(env.DB,challengeToken,p?'reauth':'login',rp),data=record(input,['version','credential']);
  if(p){boundIdentityChallenge(c,p);await assertCurrentIdentity(env.DB,p,{purpose:p.purpose,freshPasskey:false,bindIdentityRevision:true});}
  const {key,newCounter,verifiedAt}=await verifyIdentityAssertion(env,c,data.credential,p);
- const nonce=crypto.randomUUID(),token=newSessionToken(),tokenHash=await hashToken(token),authorityId=crypto.randomUUID();
+ if(rp.client==='android'&&key.stage!=='ready')throw new IdentityError(403,'identity_incomplete','Complete account setup or recovery in the browser.');
+ // Native reauthentication preserves the bearer and its original absolute expiry.
+ if(rp.client==='android'&&p&&(!retainedToken||!await env.DB.prepare('SELECT 1 FROM identity_sessions WHERE id=? AND token_hash=?').bind(p.authorityId,await hashToken(retainedToken)).first()))throw proof();
+ const nonce=crypto.randomUUID(),token=rp.client==='android'&&p?retainedToken!:newSessionToken(),tokenHash=await hashToken(token),authorityId=crypto.randomUUID();
  const gate=p?identityPredicate(env.DB,p,{purpose:p.purpose,freshPasskey:false,bindIdentityRevision:true}):null;
  const admission=env.DB.prepare(`INSERT INTO identity_ceremony_receipts SELECT ?,?,?,?, ?,?,?,unixepoch() FROM identity_authentication_candidates
   WHERE id=? AND account_id=? AND public_key=? AND counter=? AND stage=? AND auth_epoch=? AND credential_revision=? AND attempt_id IS ? AND attempt_revision IS ? AND ?>unixepoch()${gate?` AND ${gate.sql}`:''}`)
@@ -218,8 +223,8 @@ async function authenticate(request:Request,env:Environment,challengeToken:unkno
  const attempt=p?.attempt??(key.attempt_id===null?null:{id:key.attempt_id,revision:key.attempt_revision!});
  const purpose=p?.purpose??(key.stage==='enrolling'?'enrollment':'recovery');
  const authority=authorityKind==='session'
-  ?env.DB.prepare(`INSERT INTO identity_sessions SELECT ?,?,?,1,?,'web',?,'passkey',?,unixepoch(),? WHERE ${receiptGate} RETURNING id`)
-   .bind(authorityId,tokenHash,key.account_id,key.auth_epoch,key.id,verifiedAt,verifiedAt+604800,c.request_id,nonce)
+  ?env.DB.prepare(`INSERT INTO identity_sessions SELECT ?,?,?,1,?, ?,?,'passkey',?,unixepoch(),? WHERE ${receiptGate} RETURNING id`)
+   .bind(authorityId,tokenHash,key.account_id,key.auth_epoch,rp.client,key.id,verifiedAt,rp.client==='android'&&p?p.expiresAt:verifiedAt+604800,c.request_id,nonce)
   :env.DB.prepare(`INSERT INTO identity_grants SELECT ?,?,?,1,?,'web',?,?,'passkey',?,?,?,NULL,unixepoch(),? WHERE ${receiptGate} RETURNING id`)
    .bind(authorityId,tokenHash,key.account_id,key.auth_epoch,purpose,attempt!.id,verifiedAt,attempt!.revision,key.id,verifiedAt+1800,c.request_id,nonce);
  try{
@@ -229,7 +234,7 @@ async function authenticate(request:Request,env:Environment,challengeToken:unkno
   ]);
   if(result[0].meta.changes!==1||result[result.length-1].results.length!==1)throw changed();
  }catch(error){databaseError(error);}
- return issued(env.DB,authorityKind,token);
+ return issued(env.DB,authorityKind,token,rp.client);
 }
-export const loginVerify=(request:Request,env:Environment,challengeToken:unknown,input:unknown)=>authenticate(request,env,challengeToken,input);
-export const reauthenticationVerify=(request:Request,env:Environment,p:IdentityPrincipal,challengeToken:unknown,input:unknown)=>authenticate(request,env,challengeToken,input,p);
+export const loginVerify=(request:Request,env:Environment,challengeToken:unknown,input:unknown,rp?:IdentityCeremonyContext)=>authenticate(request,env,challengeToken,input,undefined,rp);
+export const reauthenticationVerify=(request:Request,env:Environment,p:IdentityPrincipal,challengeToken:unknown,input:unknown,rp?:IdentityCeremonyContext,retainedToken?:string)=>authenticate(request,env,challengeToken,input,p,rp,retainedToken);
