@@ -1,3 +1,5 @@
+import {contactResourceId,contactRecordsSummary,readContactRecords} from './contact-records';
+import {prepareRecordAttachments,readRecordAttachments} from './records-attachments';
 import {canonicalJSON,jsonDigest,plain} from '../project-specification/v2/json';
 import type {RecordField,RecordsConfig} from '../project-specification/v3/modules';
 import {ModuleError,type ModulePrincipal} from './policy';
@@ -13,14 +15,14 @@ import type {ModuleContext,ModuleHandlers,ModuleReadHandler,ModuleWriteHandler} 
  * that this request's record write actually happened (create, revision compare-and-swap or removal). Submitted values
  * are returned only to principals whose decision allows those fields, and never appear in errors or receipts. */
 type Schema=RecordsConfig['schemas'][number];
-type RecordRow={id:string;schema_id:string;form_id:string;fields_revision:number;submitter_kind:'public'|'visitor'|'staff';visitor_id:string|null;values_json:string;revision:number;created_at:number;updated_at:number;expires_at:number};
+type RecordRow={id:string;schema_id:string;form_id:string;fields_revision:number;submitter_kind:'public'|'visitor'|'staff';visitor_id:string|null;values_json:string;attachments_json:string;revision:number;created_at:number;updated_at:number;expires_at:number};
 const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(v);
 const localId=(v:unknown):v is string=>typeof v==='string'&&/^[a-z][a-z0-9-]{0,39}$/.test(v);
 const invalid=()=>new ModuleError('invalid_request');
 const exact=(v:unknown,keys:string[]):v is Record<string,unknown>=>plain(v)&&Object.keys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k));
 const iso=(seconds:number)=>new Date(seconds*1000).toISOString();
 const control=/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
-const recordColumns='r.id,r.schema_id,r.form_id,r.fields_revision,r.submitter_kind,r.visitor_id,r.values_json,r.revision,r.created_at,r.updated_at,r.expires_at';
+const recordColumns='r.id,r.schema_id,r.form_id,r.fields_revision,r.submitter_kind,r.visitor_id,r.values_json,r.attachments_json,r.revision,r.created_at,r.updated_at,r.expires_at';
 export type {RecordRow};
 
 function config(context:ModuleContext):RecordsConfig{
@@ -38,8 +40,8 @@ export function fieldValue(field:RecordField,value:unknown){
 }
 /** `input: {values}`: every required field, optional fields may be omitted (stored as absent), no other key. Values are
  * nested so field keys never collide with the envelope's authority-key refusal. */
-function submittedValues(schema:Schema,input:unknown){
- if(!exact(input,['values'])||!plain(input.values))throw invalid();
+function submittedValues(schema:Schema,input:unknown,attachments:boolean){
+ if(!exact(input,attachments?['values','attachments']:['values'])||!plain(input.values))throw invalid();
  const values=input.values,out:Record<string,unknown>={};
  if(Object.keys(values).some(k=>!schema.fields.some(f=>f.key===k)))throw invalid();
  for(const field of schema.fields){
@@ -82,21 +84,23 @@ function event(db:D1Database,context:ModuleContext,entryId:string,kind:'form.acc
 /** forms.submit — visitor and staff intake through the access session, and anonymous intake on `public` forms. An
  * anonymous submission reaches this handler only after the engine ran the visitor gateway's public admission (the contact
  * form's Turnstile Siteverify and per-connection allowance); `module_record_admit` repeats the public form, live
- * publication and the contact-equivalent atomic caps inside the commit. Forms with an upload collection wait for the
- * files module (WH-128). Result: opaque entry id only. */
+ * publication and the contact-equivalent atomic caps inside the commit. Optional attachments name this submitter's
+ * approved uploads in the configured files collection; the commit repeats their exact digest and safety. Result: opaque entry id only. */
 const submit:ModuleWriteHandler=async(db,context)=>{
  const visitor=visitorOf(context.principal);
  if(!visitor&&context.principal.kind!=='public')throw new ModuleError('forbidden');
  if(!exact(context.request.target,['formId']))throw invalid();
  const form=config(context).forms.find(f=>f.id===context.request.target!.formId);if(!form)throw new ModuleError('not_found');
  if(!visitor&&form.submit!=='public')throw new ModuleError('forbidden');
- if(form.uploadCollectionId!==null)throw new ModuleError('unavailable','Attachments for this form are not available yet.');
- const schema=schemaOf(context,form.recordId),values=submittedValues(schema,context.request.input);
+ if(form.submit==='public'&&!await db.prepare(`SELECT 1 FROM module_activations a JOIN module_activation_reviews r ON r.id=a.review_id JOIN publications p ON p.project_id=r.project_id
+  WHERE a.instance_id=? AND a.state='active' AND p.version_id IS NOT NULL AND p.revision=r.publication_revision`).bind(context.resource.resourceId).first())throw new ModuleError('unavailable','Public intake needs a fresh activation review for this website publication.');
+ const schema=schemaOf(context,form.recordId),values=submittedValues(schema,context.request.input,form.uploadCollectionId!==null);
+ const attachments=await prepareRecordAttachments(db,context,form.uploadCollectionId,context.request.input!);
  const entryId=crypto.randomUUID(),now=Math.floor(Date.now()/1000),retention=config(context).retentionDays*86400;
  const submitter=visitor?(visitor.roles.length?'staff':'visitor'):'public';
  return {statements:[
-  db.prepare('INSERT INTO module_records(id,instance_id,project_id,schema_id,form_id,fields_revision,submitter_kind,visitor_id,values_json,revision,created_request_id,last_request_id,created_at,updated_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,1,?,?,?,?,?)')
-   .bind(entryId,context.resource.resourceId,context.resource.projectId,schema.id,form.id,schema.fieldsRevision,submitter,visitor?.visitorId??null,canonicalJSON(values,8192),context.request.requestId,context.request.requestId,now,now,now+retention),
+  db.prepare('INSERT INTO module_records(id,instance_id,project_id,schema_id,form_id,fields_revision,submitter_kind,visitor_id,values_json,attachments_json,revision,created_request_id,last_request_id,created_at,updated_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,1,?,?,?,?,?)')
+   .bind(entryId,context.resource.resourceId,context.resource.projectId,schema.id,form.id,schema.fieldsRevision,submitter,visitor?.visitorId??null,canonicalJSON(values,8192),canonicalJSON(attachments,2048),context.request.requestId,context.request.requestId,now,now,now+retention),
   event(db,context,entryId,'form.accepted',1,now)
  ],result:{accepted:true,formId:form.id,entryId}};
 };
@@ -106,7 +110,8 @@ const submit:ModuleWriteHandler=async(db,context)=>{
 const get:ModuleReadHandler=async(db,context)=>{
  if(!exact(context.request.target,['recordId','entryId'])||!uuid(context.request.target.entryId)||context.request.input!==null)throw invalid();
  const schema=schemaOf(context,context.request.target.recordId);
- return view(await readRecord(db,context,schema.id,context.request.target.entryId),context.decision.fields??[],context.principal.kind==='owner');
+ const row=await readRecord(db,context,schema.id,context.request.target.entryId);
+ return {...view(row,context.decision.fields??[],context.principal.kind==='owner'),attachments:await readRecordAttachments(db,context.principal,row.attachments_json)};
 };
 
 type Cursor={v:1;k:string;c:number;a:number;t:number;i:string};
@@ -139,7 +144,7 @@ const list:ModuleReadHandler=async(db,context)=>{
  const where={sql:`r.instance_id=? AND r.project_id=? AND r.schema_id=? AND ${window.sql}${own?' AND r.visitor_id=?':''}`,params:[context.resource.resourceId,context.resource.projectId,v.recordId,...window.params,...(own?[visitor.visitorId]:[])]};
  const key=await jsonDigest(['view',context.resource.resourceId,v.id,visitor.visitorId,visitor.sessionHash]);
  const {rows,next}=await page(db,where,{key,configRevision:context.resource.configRevision,accessRevision:visitor.accessRevision},v.limit,t.cursor);
- return {viewId:v.id,items:rows.map(r=>view(r,fields,false)),next};
+ return {viewId:v.id,items:await Promise.all(rows.map(async r=>({...view(r,fields,false),attachments:await readRecordAttachments(db,context.principal,r.attachments_json)}))),next};
 };
 
 /** records.update — owner (any field) or current staff (only `staffWrite` fields, decided from `target.changes` by the
@@ -191,6 +196,7 @@ export const recordsHandlers:ModuleHandlers=Object.freeze({'forms.submit':submit
  * loss. Never a Chat binding or model input. */
 export async function readOwnerRecords(db:D1Database,user:string,project:string,resourceId:string,schemaId:string,after:string|null){
  if(!uuid(project)||!uuid(resourceId)||!localId(schemaId))throw new ModuleError('not_found');
+ if(resourceId===await contactResourceId(project))return readContactRecords(db,user,project,resourceId,schemaId,after);
  const row=await db.prepare(`SELECT i.id,i.project_id,i.local_id,i.kind,i.module_digest,i.schema_digest,i.config_json,i.config_digest,i.config_revision FROM module_instances i JOIN projects p ON p.id=i.project_id
   WHERE i.id=? AND i.project_id=? AND p.owner_user_id=? AND i.kind='records'`).bind(resourceId,project,user).first<RegistryRow>();
  if(!row)throw new ModuleError('not_found');
@@ -199,7 +205,7 @@ export async function readOwnerRecords(db:D1Database,user:string,project:string,
  const window=live(instance.config.retentionDays),fields=schema.fields.map(f=>f.key);
  const {rows,next}=await page(db,{sql:`r.instance_id=? AND r.project_id=? AND r.schema_id=? AND ${window.sql}`,params:[resourceId,project,schema.id,...window.params]},
   {key:await jsonDigest(['owner',resourceId,schema.id,user]),configRevision:row.config_revision,accessRevision:0},50,after);
- return {resourceId,recordId:schema.id,configRevision:row.config_revision,fields:schema.fields.map(f=>({key:f.key,label:f.label,type:f.type})),items:rows.map(r=>view(r,fields,true)),next};
+ return {resourceId,recordId:schema.id,configRevision:row.config_revision,fields:schema.fields.map(f=>({key:f.key,label:f.label,type:f.type})),items:await Promise.all(rows.map(async r=>({...view(r,fields,true),attachments:await readRecordAttachments(db,{kind:'owner',userId:user,projectId:project},r.attachments_json)}))),next};
 }
 
 /** Retention expiry (scheduled): records past their stored window or the instance's current `retentionDays`, in bounded
@@ -217,7 +223,8 @@ export async function cleanupModuleRecords(db:D1Database){
  * 2026: visitor-submitted values stay dashboard-only). */
 export async function readRecordsSummary(db:D1Database,user:string,project:string):Promise<RecordsSummaryFacts>{
  if(!uuid(project)||!await db.prepare('SELECT 1 FROM projects WHERE id=? AND owner_user_id=?').bind(project,user).first())throw new ModuleError('not_found','Project not found.');
- const items:RecordsSummaryFacts['items']=[];
+ const contact=await contactRecordsSummary(db,user,project);
+ const items:RecordsSummaryFacts['items']=contact?[contact]:[];
  for(const row of (await registeredInstances(db,project)).filter(r=>r.kind==='records').slice(0,8)){
   if(row.state===null)continue;
   const instance=await instanceOf(row);if(instance.kind!=='records')continue;

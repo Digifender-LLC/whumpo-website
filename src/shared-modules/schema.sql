@@ -62,6 +62,8 @@ CREATE TABLE module_activation_reviews (
  next_config_revision INTEGER NOT NULL CHECK(next_config_revision>=1 AND next_config_revision BETWEEN expected_config_revision AND expected_config_revision+1),
  expected_activation_revision INTEGER NOT NULL CHECK(expected_activation_revision>=0),
  widening INTEGER NOT NULL CHECK(widening IN (0,1)),
+ -- Exact live website review target for anonymous forms; NULL means public intake stays unavailable.
+ publication_revision INTEGER CHECK(publication_revision IS NULL OR publication_revision>=1),
  request_hash TEXT NOT NULL CHECK(length(request_hash)=64),
  review_digest TEXT NOT NULL CHECK(length(review_digest)=64 AND review_digest NOT GLOB '*[^0-9a-f]*'),
  created_at INTEGER NOT NULL CHECK(created_at>0),
@@ -131,6 +133,11 @@ CREATE TRIGGER module_activation_review_admit BEFORE INSERT ON module_activation
   WHERE t.id=NEW.id AND t.user_id=NEW.user_id AND json_extract(t.action_json,'$.type')='moduleActivationReview' AND json_extract(t.action_json,'$.projectId')=NEW.project_id
   AND json_extract(t.action_json,'$.instanceId')=NEW.local_id AND json_extract(t.action_json,'$.action')=NEW.action);
  SELECT RAISE(ABORT,'module_activation_changed') WHERE abs(NEW.created_at-unixepoch())>60;
+ SELECT RAISE(ABORT,'module_activation_changed') WHERE NEW.action='activate' AND NEW.kind='records'
+  AND EXISTS(SELECT 1 FROM json_each(NEW.config_json,'$.forms') f WHERE json_extract(f.value,'$.submit')='public')
+  AND NEW.publication_revision IS NOT (SELECT revision FROM publications WHERE project_id=NEW.project_id AND version_id IS NOT NULL);
+ SELECT RAISE(ABORT,'module_activation_changed') WHERE NEW.publication_revision IS NOT NULL AND
+  (NEW.action!='activate' OR NEW.kind!='records' OR NOT EXISTS(SELECT 1 FROM json_each(NEW.config_json,'$.forms') f WHERE json_extract(f.value,'$.submit')='public'));
  SELECT RAISE(ABORT,'module_activation_changed') WHERE NEW.action='activate' AND NOT EXISTS(SELECT 1 FROM project_spec_heads h JOIN project_spec_versions v ON v.version_id=h.version_id AND v.project_id=h.project_id
   WHERE h.project_id=NEW.project_id AND h.version_id=NEW.source_version_id AND v.spec_digest=NEW.source_spec_digest);
  SELECT RAISE(ABORT,'module_activation_changed') WHERE NEW.expected_config_revision=0 AND EXISTS(SELECT 1 FROM module_instances WHERE id=NEW.resource_id OR (project_id=NEW.project_id AND local_id=NEW.local_id));
@@ -169,6 +176,9 @@ CREATE TRIGGER module_activation_apply_admit BEFORE INSERT ON module_activation_
    WHERE h.project_id=r.project_id AND h.version_id=r.source_version_id AND v.spec_digest=r.source_spec_digest))
   OR (r.action='activate' AND EXISTS(SELECT 1 FROM json_each(r.dependencies_json) d WHERE NOT EXISTS(SELECT 1 FROM module_instances i JOIN module_activations a ON a.instance_id=i.id
    WHERE i.id=d.value AND i.project_id=r.project_id AND a.state='active')))));
+ SELECT RAISE(ABORT,'module_activation_changed') WHERE EXISTS(SELECT 1 FROM module_activation_reviews r WHERE r.id=NEW.review_id AND r.action='activate' AND r.kind='records'
+  AND EXISTS(SELECT 1 FROM json_each(r.config_json,'$.forms') f WHERE json_extract(f.value,'$.submit')='public')
+  AND r.publication_revision IS NOT (SELECT revision FROM publications WHERE project_id=r.project_id AND version_id IS NOT NULL));
  SELECT RAISE(ABORT,'module_activation_held') WHERE EXISTS(SELECT 1 FROM module_activation_reviews r JOIN project_spec_held h ON h.version_id=r.source_version_id WHERE r.id=NEW.review_id AND r.action='activate');
 END;
 -- WH-126: one visitor identity namespace per project. The specification validator already allows one access instance;
@@ -428,6 +438,8 @@ CREATE TABLE module_records (
  -- Anonymous submissions to a `public` form have no visitor identity; visitor and staff submissions always have one.
  visitor_id TEXT REFERENCES app_visitors(id) ON DELETE CASCADE CHECK((submitter_kind='public')=(visitor_id IS NULL)),
  values_json TEXT NOT NULL CHECK(json_valid(values_json) AND json_type(values_json)='object' AND length(CAST(values_json AS BLOB))<=8192),
+ -- Immutable logical references, at most four. They confer no read grant and never store bytes or object locators.
+ attachments_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(attachments_json) AND json_type(attachments_json)='array' AND json_array_length(attachments_json)<=4 AND length(CAST(attachments_json AS BLOB))<=2048),
  revision INTEGER NOT NULL CHECK(revision>=1),
  created_request_id TEXT NOT NULL CHECK(length(created_request_id)=36),
  last_request_id TEXT NOT NULL CHECK(length(last_request_id)=36),
@@ -464,8 +476,10 @@ CREATE INDEX module_record_events_entry ON module_record_events(entry_id);
 CREATE TRIGGER module_record_admit BEFORE INSERT ON module_records BEGIN
  SELECT RAISE(ABORT,'module_request_unavailable') WHERE NOT EXISTS(SELECT 1 FROM module_instances i JOIN module_activations a ON a.instance_id=i.id AND a.state='active'
   WHERE i.id=NEW.instance_id AND i.project_id=NEW.project_id AND i.kind='records'
-  AND EXISTS(SELECT 1 FROM json_each(i.config_json,'$.forms') f WHERE json_extract(f.value,'$.id')=NEW.form_id AND json_extract(f.value,'$.recordId')=NEW.schema_id AND json_extract(f.value,'$.uploadCollectionId') IS NULL
-   AND (NEW.submitter_kind!='public' OR json_extract(f.value,'$.submit')='public'))
+  AND EXISTS(SELECT 1 FROM json_each(i.config_json,'$.forms') f WHERE json_extract(f.value,'$.id')=NEW.form_id AND json_extract(f.value,'$.recordId')=NEW.schema_id
+   AND (NEW.submitter_kind!='public' OR json_extract(f.value,'$.submit')='public')
+   AND (json_extract(f.value,'$.submit')!='public' OR EXISTS(SELECT 1 FROM module_activation_reviews reviewed JOIN publications published ON published.project_id=reviewed.project_id
+    WHERE reviewed.id=a.review_id AND published.project_id=NEW.project_id AND published.version_id IS NOT NULL AND published.revision=reviewed.publication_revision)))
   AND EXISTS(SELECT 1 FROM json_each(i.config_json,'$.schemas') s WHERE json_extract(s.value,'$.id')=NEW.schema_id AND json_extract(s.value,'$.fieldsRevision')=NEW.fields_revision)
   AND NEW.expires_at=NEW.created_at+86400*json_extract(i.config_json,'$.retentionDays'))
   OR NEW.submitter_kind='public' AND NOT EXISTS(SELECT 1 FROM publications WHERE project_id=NEW.project_id AND version_id IS NOT NULL);
@@ -488,6 +502,7 @@ END;
 CREATE TRIGGER module_record_update BEFORE UPDATE ON module_records
 WHEN NEW.id IS NOT OLD.id OR NEW.instance_id IS NOT OLD.instance_id OR NEW.project_id IS NOT OLD.project_id OR NEW.schema_id IS NOT OLD.schema_id OR NEW.form_id IS NOT OLD.form_id
  OR NEW.fields_revision IS NOT OLD.fields_revision OR NEW.submitter_kind IS NOT OLD.submitter_kind OR NEW.visitor_id IS NOT OLD.visitor_id OR NEW.created_request_id IS NOT OLD.created_request_id
+ OR NEW.attachments_json IS NOT OLD.attachments_json
  OR NEW.created_at IS NOT OLD.created_at OR NEW.expires_at IS NOT OLD.expires_at OR NEW.revision!=OLD.revision+1 OR NEW.last_request_id=OLD.last_request_id OR NEW.updated_at<OLD.updated_at
  OR OLD.expires_at<=unixepoch()
 BEGIN SELECT RAISE(ABORT,'module_request_stale'); END;
@@ -610,4 +625,26 @@ WHEN EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id AND t.user_id=NEW.user_
    WHERE mf.file_id=json_extract(ph.value,'$.id') AND mf.project_id=NEW.project_id AND mf.uploader_kind='owner' AND f.status='ready'
    AND i.local_id=json_extract(t.action_json,'$.instanceId') AND mf.collection_id=json_extract(t.action_json,'$.collectionId')))
  );
+END;
+
+-- WH-127 attachment admission. A reference is resolved by the server and checked again in the committing batch:
+-- exact dependency, configured collection, own upload, current uploader role, active files and approved digest.
+CREATE TRIGGER module_record_attachments_admit BEFORE INSERT ON module_records BEGIN
+ SELECT RAISE(ABORT,'module_request_forbidden') WHERE json_array_length(NEW.attachments_json)>0 AND NEW.visitor_id IS NULL;
+ SELECT RAISE(ABORT,'module_request_stale') WHERE
+  (SELECT count(DISTINCT json_extract(value,'$.fileId')) FROM json_each(NEW.attachments_json))!=json_array_length(NEW.attachments_json)
+  OR EXISTS(SELECT 1 FROM json_each(NEW.attachments_json) ref WHERE json_type(ref.value)!='object' OR (SELECT count(*) FROM json_each(ref.value))!=4
+   OR NOT EXISTS(SELECT 1 FROM module_instances records JOIN json_each(records.config_json,'$.forms') form
+    JOIN module_instances files ON files.id=json_extract(ref.value,'$.resourceId') AND files.project_id=records.project_id AND files.kind='files'
+    JOIN module_activations active ON active.instance_id=files.id AND active.state='active'
+    JOIN json_each(files.config_json,'$.collections') collection ON json_extract(collection.value,'$.id')=json_extract(ref.value,'$.collectionId')
+    JOIN module_files mf ON mf.instance_id=files.id AND mf.project_id=records.project_id AND mf.collection_id=json_extract(collection.value,'$.id')
+    JOIN project_files f ON f.id=mf.file_id AND f.project_id=mf.project_id JOIN approved_project_photos safe ON safe.id=f.id AND safe.digest=f.digest
+    WHERE records.id=NEW.instance_id AND records.project_id=NEW.project_id AND json_extract(form.value,'$.id')=NEW.form_id
+     AND json_extract(form.value,'$.uploadCollectionId')=mf.collection_id AND files.id IN (SELECT value FROM json_each(records.dependencies_json))
+     AND mf.file_id=json_extract(ref.value,'$.fileId') AND mf.visitor_id=NEW.visitor_id AND mf.uploader_kind!='owner'
+     AND f.status='ready' AND f.digest=json_extract(ref.value,'$.sha256')
+     AND EXISTS(SELECT 1 FROM json_each(collection.value,'$.upload') u WHERE u.value=NEW.submitter_kind)
+     AND NOT EXISTS(SELECT 1 FROM json_each(files.dependencies_json) d WHERE NOT EXISTS(SELECT 1 FROM module_activations a WHERE a.instance_id=d.value AND a.state='active'))
+   ));
 END;

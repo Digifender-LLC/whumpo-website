@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
+import {execFileSync} from 'node:child_process';
 import {authenticator} from './app-authenticator.mjs';
 import {currentSiteFixtureHandlers,createFixtureProject,configureFixtureModules} from './current-site-fixture.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
-import {workspaceFixture} from './helpers/workspace-identity.mjs';
+import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.mjs';
 import {accountClosureInventory} from '../tools/account-closure-inventory.mjs';
 import {validateDescriptor} from '../tools/prototypes/workload-placement.mjs';
 Error.stackTraceLimit=0;
@@ -153,6 +154,8 @@ try{
   // A verified anonymous submission still needs a published website (repeated inside the commit).
   assert.equal((await publicGateway(a,submission(records,'public-form',publicValues()),{ip:'192.0.2.24',verify:good(records)})).body.code,'unavailable');
   await publish(a);
+  assert.equal((await publicGateway(a,submission(records,'public-form',publicValues()),{ip:'192.0.2.24',verify:good(records)})).body.code,'unavailable','Publication alone cannot activate anonymous intake');
+  await activation(a,'requests');
   const ok=submission(records,'public-form',publicValues()),sent=await publicGateway(a,ok,{ip:'192.0.2.24',verify:good(records)});assert.equal(sent.status,200,JSON.stringify(sent.body));
   assert.deepEqual(Object.keys(sent.body.result).sort(),['accepted','entryId','formId']);assert.ok(!markers.some(x=>JSON.stringify(sent.body).includes(x)));
   const saved=await row('SELECT * FROM module_records WHERE id=?',sent.body.result.entryId);assert.equal(saved.submitter_kind,'public');assert.equal(saved.visitor_id,null);
@@ -173,7 +176,7 @@ try{
   // A public-only instance needs no access dependency; the hourly project cap is atomic and owner removal never recycles it.
   const enquiries={id:'enquiries',kind:'records',...pins('records'),dependencies:[],config:{retentionDays:90,schemas:[{id:'enquiry',fieldsRevision:1,fields:[{key:'message',label:'Message',type:'text',optional:false,read:'owner'}],staffWrite:[]}],
    forms:[{id:'ask',recordId:'enquiry',submit:'public',uploadCollectionId:null}],views:[]}};
-  await configureFixtureModules(b.scope,b.user,b.project,[accessInstance,recordsInstance(),enquiries]);await activation(b,'enquiries');await publish(b);
+  await configureFixtureModules(b.scope,b.user,b.project,[accessInstance,recordsInstance(),enquiries]);await publish(b);await activation(b,'enquiries');
   const ask=await instance(b,'enquiries'),askGood=siteverify({success:true,hostname:new URL(b.host).hostname,action:'module-form',cdata:ask.id});
   const askOne=(n)=>publicGateway(b,envelope(ask,'forms.submit',{target:{formId:'ask'},input:{values:{message:value('enquiry')}}}),{ip:`198.51.100.${n}`,verify:askGood});
   const results=await Promise.all(Array.from({length:21},(_,n)=>askOne(n+1)));
@@ -312,7 +315,7 @@ try{
   const r=await row('SELECT * FROM module_records WHERE project_id=? LIMIT 1',a.project);
   await assert.rejects(()=>run('UPDATE module_records SET values_json=? WHERE id=?','{}',r.id),/module_request_stale/);
   await assert.rejects(()=>run("INSERT INTO module_record_events VALUES(?,?,?,?,'record.updated',99,unixepoch())",records.id,id(),a.project,r.id),/module_request_stale/);
-  await assert.rejects(()=>run("INSERT INTO module_records VALUES(?,?,?,'request','request-form',1,'visitor',?,'{}',1,?,?,unixepoch(),unixepoch(),unixepoch()+86400)",id(),theirs.id,a.project,v1.visitorId,id(),id()),/module_request_unavailable/);
+  await assert.rejects(()=>run("INSERT INTO module_records VALUES(?,?,?,'request','request-form',1,'visitor',?,'{}','[]',1,?,?,unixepoch(),unixepoch(),unixepoch()+86400)",id(),theirs.id,a.project,v1.visitorId,id(),id()),/module_request_unavailable/);
  });
 
  await check('receipt windows: sliding instance cap, owner exemption, per-staff edit cap, replay and 30-day prune',async()=>{
@@ -423,6 +426,111 @@ try{
   for(const t of ['module_records','module_record_events'])assert.equal((await row(`SELECT count(*) n FROM ${t} WHERE project_id=?`,b.project)).n,0,t);
  });
 
+
+ await check('fixed contact records reuse the unchanged inbox, private scope, settings revision and retention',async()=>{
+  const c=await owner();await publish(c);
+  const turn=id(),review=await m.sendChat(c.scope,c.user,{id:turn,revision:await revision(c),content:'/contact-on '+c.project});assert.equal(review.status,200);
+  assert.equal((await m.sendChat(c.scope,c.user,{id:id(),revision:await revision(c),content:'/confirm-contact '+turn})).status,200);
+  const contact=await m.contacts.activeContact(db,c.project),message={id:id(),name:value('contact-name'),email:'synthetic@example.invalid',message:'Private <script> & '.repeat(90)};
+  await m.contacts.saveContact(db,c.project,contact.revision,message);
+  const summary=(await workspace(c,`/api/projects/${c.project}/module-records`)).body,fixed=summary.items.find(i=>i.localId==='contact-inbox');
+  assert.ok(fixed);assert.equal(fixed.retentionDays,30);assert.equal(fixed.state,'active');assert.equal(fixed.schemas[0].records.public,1);
+  for(const leak of [message.id,message.name,message.message])assert.ok(!JSON.stringify(summary).includes(leak));
+  const resource={id:fixed.resourceId,config_revision:fixed.configRevision},request=envelope(resource,'records.get',{target:{recordId:'messages',entryId:message.id}});
+  const owned=await ownerCall(c,request);assert.equal(owned.status,200,JSON.stringify(owned.body));assert.deepEqual(owned.body.result.values,{name:message.name,email:message.email,message:message.message.trim()});
+  const page=(await workspace(c,`/api/projects/${c.project}/module-records/${fixed.resourceId}/messages`)).body;assert.equal(page.removal,'contact');assert.deepEqual(page.items[0],owned.body.result);
+  const inbox=await m.contacts.contactInbox(c.scope,c.user,c.project);assert.equal(inbox.messages[0].message,page.items[0].values.message);
+  assert.equal((await ownerCall(c,envelope(resource,'records.view',{target:{viewId:'inbox',cursor:null}}))).body.result.items.length,1);
+  assert.equal((await gateway(c,request,null)).body.code,'forbidden');assert.equal((await ownerCall(b,request)).body.code,'not_found');
+  assert.equal((await workspace(b,`/api/projects/${c.project}/module-records/${fixed.resourceId}/messages`)).status,404);
+  for(const operation of ['forms.submit','records.update','records.remove'])assert.equal((await ownerCall(c,envelope(resource,operation,{target:{recordId:'messages',entryId:message.id}}))).body.code,'forbidden');
+  assert.equal((await ownerCall(c,{...request,configRevision:fixed.configRevision+1})).body.code,'stale_configuration');
+  await publish(c);assert.equal((await workspace(c,`/api/projects/${c.project}/module-records`)).body.items.find(i=>i.localId==='contact-inbox').state,'inactive');
+  assert.equal((await ownerCall(c,request)).status,200,'Existing owner messages survive public intake disable');
+  assert.equal((await workspace(c,`/api/contact-messages/${message.id}`,{method:'DELETE'})).status,200);
+  assert.equal((await ownerCall(c,request)).body.code,'not_found');assert.ok(await row('SELECT 1 FROM contact_receipts WHERE id=?',message.id),'Original anti-resurrection receipt remains');
+ });
+
+
+ await check('public form activation pins the exact website revision and requires a new review after publication',async()=>{
+  const c=await owner();await configureFixtureModules(c.scope,c.user,c.project,[accessInstance,recordsInstance()]);await activation(c,'members');await activation(c,'requests');
+  const records=await instance(c,'requests'),v=await visitor(c),principal={kind:'public',projectId:c.project};
+  const submit=database=>sharedModules.handleModuleRequest(database,principal,submission(records,'public-form'),undefined,{publicAdmission:async()=>{}});
+  assert.equal((await row('SELECT r.publication_revision FROM module_activations a JOIN module_activation_reviews r ON r.id=a.review_id WHERE a.instance_id=?',records.id)).publication_revision,null);
+  await publish(c);await fails(submit(db),'unavailable');await activation(c,'requests');
+  const pinned=await row('SELECT r.publication_revision FROM module_activations a JOIN module_activation_reviews r ON r.id=a.review_id WHERE a.instance_id=?',records.id);
+  assert.equal(pinned.publication_revision,(await row('SELECT revision FROM publications WHERE project_id=?',c.project)).revision);await submit(db);
+  await publish(c);await fails(submit(db),'unavailable');assert.equal((await gateway(c,submission(records),v)).status,200,'Signed-in visitor form is independent of website publication');
+  const review=await control(c,{type:'moduleActivationReview',projectId:c.project,instanceId:'requests',action:'activate'});assert.equal(review.status,200);
+  const stored=await row('SELECT * FROM module_activation_reviews WHERE id=?',review.id);await publish(c);
+  const stale=await control(c,{type:'moduleActivationApply',reviewId:stored.id,reviewDigest:stored.review_digest,expectedRevision:stored.expected_activation_revision});assert.equal(stale.status,409);
+  await activation(c,'requests');await submit(db);
+  const before=(await row('SELECT count(*) n FROM module_records WHERE instance_id=?',records.id)).n;
+  const changedDuringCommit=interceptDatabase(db,/^INSERT INTO module_records/,()=>publish(c));
+  await fails(submit(changedDuringCommit),'unavailable');assert.equal((await row('SELECT count(*) n FROM module_records WHERE instance_id=?',records.id)).n,before,'Changed publication rolls back the whole request');
+ });
+
+ await check('approved own uploads attach atomically; record reads intersect current files scope and safety',async()=>{
+  const c=await owner(),d=await owner();
+  const media={id:'uploads',kind:'files',...pins('files'),dependencies:['members'],config:{collections:[
+   {id:'proofs',read:'submitter',upload:['visitor','staff'],maxBytes:1048576,mediaTypes:['image/jpeg'],gallery:{audience:'visitor'}},
+   {id:'private-proof',read:'owner',upload:['staff'],maxBytes:1048576,mediaTypes:['image/jpeg'],gallery:null}]}};
+  const forms={...recordsInstance(),dependencies:['members','uploads']};forms.config={...forms.config,forms:[
+   {id:'request-form',recordId:'request',submit:'visitor',uploadCollectionId:'proofs'},
+   {id:'staff-form',recordId:'request',submit:'staff',uploadCollectionId:'private-proof'}]};
+  const currentSpec=JSON.parse((await row('SELECT v.spec_json FROM project_spec_heads h JOIN project_spec_versions v ON v.version_id=h.version_id WHERE h.project_id=?',c.project)).spec_json);
+  assert.throws(()=>m.validateSpecification({...currentSpec,instances:[accessInstance,media,{...forms,config:{...forms.config,forms:[{...forms.config.forms[0],submit:'public'}]}}]}),e=>e.code==='INCOMPATIBLE','Anonymous attachment configuration is refused by the current compiler');
+  for(const o of [c,d]){await configureFixtureModules(o.scope,o.user,o.project,[accessInstance,media,forms]);for(const kind of ['members','uploads','requests'])await activation(o,kind);}
+  const submitter=await visitor(c),other=await visitor(c),staff=await visitor(c),foreign=await visitor(d);await setRole(c,staff.visitorId,'grant');
+  const records=await instance(c,'requests'),files=await instance(c,'uploads'),foreignFiles=await instance(d,'uploads');
+  const bytes=new Uint8Array(execFileSync('python3',['-c',"from PIL import Image; import sys; Image.new('RGB',(16,16),(20,40,60)).save(sys.stdout.buffer,format='JPEG')"]));
+  const objects=new Map(),FILES={put:async(key,data)=>{objects.set(key,new Uint8Array(data));return {key};},get:async key=>{const data=objects.get(key);return data?{size:data.length,arrayBuffer:async()=>data.slice().buffer,body:{cancel:async()=>{}}}:null;}};
+  async function upload(o,resource,v,collectionId='proofs'){
+   const payload=envelope(resource,'files.putBytes',{target:{collectionId},input:{mediaType:'image/jpeg',byteLength:bytes.length,sha256:Buffer.from(await crypto.subtle.digest('SHA-256',bytes)).toString('hex')}});
+   const response=await appGateway.applicationGateway(new Request(o.host+'/modules/upload',{method:'POST',headers:{origin:o.host,cookie:v.cookie,'content-type':'image/jpeg','whumpo-module-request':Buffer.from(JSON.stringify(payload)).toString('base64url')},body:bytes}),{...env,FILES});
+   const result=await response.json();assert.equal(response.status,200,JSON.stringify(result));return result.result.fileId;
+  }
+  const approve=file=>run("UPDATE project_photo_safety SET state='approved',csam_check='clear',sexual_check='clear',scanner_reference='synthetic-attachment',expires_at=? WHERE file_id=?",new Date(Date.now()+3600000).toISOString(),file);
+  const block=file=>run("UPDATE project_photo_safety SET state='blocked',sexual_check='matched',scanner_reference='synthetic-attachment-block',expires_at=NULL WHERE file_id=?",file);
+  const own=await upload(c,files,submitter),others=await upload(c,files,other),foreignFile=await upload(d,foreignFiles,foreign),privateFile=await upload(c,files,staff,'private-proof');
+  const send=(file,who=submitter,form='request-form')=>{const payload=submission(records,form);payload.input.attachments=file===null?[]:[{fileId:file}];return {payload,run:()=>gateway(c,payload,who)};};
+  assert.equal((await send(own).run()).body.code,'not_found','Pending uploads cannot be attached');
+  assert.equal((await gateway(c,send(null).payload,null)).body.code,'forbidden');
+  assert.equal((await ownerCall(c,send(null).payload)).body.code,'forbidden');
+  for(const file of [own,others,foreignFile,privateFile])await approve(file);
+  for(const file of [others,foreignFile,privateFile])assert.equal((await send(file).run()).body.code,'not_found','Foreign uploader, project and collection are indistinguishable');
+  const accepted=send(own),saved=await accepted.run();assert.equal(saved.status,200,JSON.stringify(saved.body));const entry=saved.body.result.entryId;
+  assert.equal((await accepted.run()).body.receipt.replayed,true);assert.equal((await gateway(c,{...accepted.payload,input:{...accepted.payload.input,attachments:[]}},submitter)).body.code,'request_conflict');
+  for(const attachments of [[{fileId:own},{fileId:own}],Array.from({length:5},()=>({fileId:id()})),[{fileId:own,sha256:'0'.repeat(64)}],null])assert.equal((await gateway(c,{...send(own).payload,input:{...accepted.payload.input,attachments}},submitter)).body.code,'invalid_request');
+  assert.equal((await send(null).run()).status,200,'Attachments are optional on a configured form');
+  await assert.rejects(()=>run("UPDATE module_records SET attachments_json='[]',revision=revision+1,last_request_id=? WHERE id=?",id(),entry),/module_request_stale/);
+  const ownRead=await gateway(c,get(records,entry),submitter);assert.equal(ownRead.body.result.attachments[0].fileId,own);assert.equal(ownRead.body.result.attachments[0].resourceId,files.id);
+  assert.equal((await gateway(c,get(records,entry),staff)).body.result.attachments[0].fileId,own);
+  assert.equal((await gateway(c,get(records,entry),other)).body.code,'not_found');
+  const privateSaved=await send(privateFile,staff,'staff-form').run();assert.equal(privateSaved.status,200,JSON.stringify(privateSaved.body));
+  assert.deepEqual((await gateway(c,get(records,privateSaved.body.result.entryId),staff)).body.result.attachments,[],'Reading a record never grants its owner-only file');
+  assert.equal((await ownerCall(c,get(records,privateSaved.body.result.entryId))).body.result.attachments[0].fileId,privateFile);
+  const exported=await m.moduleRecordsExport.exportRecords(c.scope,c.user,c.project,records.id,records.config_revision,{recordId:'request',visitorId:submitter.visitorId});
+  assert.equal(exported.records.find(r=>r.entryId===entry).attachments[0].fileId,own);await m.moduleRecordsExport.validateRecordsExport(exported);
+  const changed=structuredClone(exported);changed.records[0].attachments=[{fileId:own,resourceId:files.id,collectionId:'proofs',sha256:'x',configRevision:files.config_revision}];changed.recordsSha256=await m.hashToken(JSON.stringify(changed.records));
+  await fails(m.moduleRecordsExport.validateRecordsExport(changed),'invalid_request');
+  // Safety changes after preflight still win in the committing trigger. The entire record/event/receipt rolls back.
+  const before=(await row('SELECT count(*) n FROM module_records WHERE instance_id=?',records.id)).n;
+  const principal=await moduleAccess.visitorPrincipal(db,submitter.session,c.project,records.id);
+  assert.equal(principal.kind,'visitor');
+  const late=interceptDatabase(db,/^INSERT INTO module_records/,()=>block(own));
+  await fails(sharedModules.handleModuleRequest(late,principal,send(own).payload),'stale_configuration');
+  assert.equal((await row('SELECT count(*) n FROM module_records WHERE instance_id=?',records.id)).n,before);
+  for(const who of [submitter,staff])assert.deepEqual((await gateway(c,get(records,entry),who)).body.result.attachments,[]);
+  assert.deepEqual((await ownerCall(c,get(records,entry))).body.result.attachments,[],'Blocked file identifiers disappear for owner too');
+  const removable=await upload(c,files,submitter);await approve(removable);const second=await send(removable).run();assert.equal(second.status,200);
+  const removing=interceptDatabase(db,/^INSERT INTO module_records/,()=>run('DELETE FROM project_files WHERE id=?',removable));
+  await fails(sharedModules.handleModuleRequest(removing,principal,send(removable).payload),'stale_configuration');
+  assert.deepEqual((await ownerCall(c,get(records,second.body.result.entryId))).body.result.attachments,[],'Removed uploads leave records intact but no stale link');
+  assert.equal((await row('SELECT count(*) n FROM module_records WHERE instance_id=?',records.id)).n,before+1);
+  await setRole(c,staff.visitorId,'revoke');assert.equal((await gateway(c,get(records,entry),staff)).body.code,'not_found');
+ });
+
  await check('records paths never reach owner-maintenance inference',async()=>{
   const inference=/^src\/(ai|ai-chat|ai-gateway|acknowledgment|site-agent|agent-[a-z-]+|standard-ai[a-z-]*|chat|backend-chat|app-upgrade-chat|app-recovery-chat|app-page-design)\.ts$|^src\/chat-interactions\/(agent|agent-request|model-continuation|continuation)\.ts$/;
   for(const entry of ['src/shared-modules/records.ts','src/shared-modules/records-export.ts','src/shared-modules/api.ts','src/app-gateway.ts']){
@@ -436,7 +544,7 @@ try{
  });
 
  assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
- process.stdout.write(`Shared module records passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — visitor/staff submissions through the visitor origin with validation, replay and conflicts, anonymous public intake through the contact admission (Turnstile, connection allowance, publication, atomic hourly cap and containment), field/record projection for owner, staff, submitter and anonymous callers on both origins, records.summary@1 counts and the owner panel routes, the owner records export serializer with its visitor-scoped slice and tamper-checked import validation, configured views with bound cursors, staffWrite compare-and-swap updates with one winner and in-flight revocation, owner removal under safety holds, retention expiry, disable, stale configRevision, caps, sliding receipt windows with owner exemption, per-staff edit cap and 30-day receipt prune, revoked/erased visitors, closure counts and a static no-inference check. No network, model or provider use; no visitor value in Chat, receipts, events or logs.\n`);
+ process.stdout.write(`Shared module records passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — visitor/staff submissions through the visitor origin with validation, replay and conflicts, anonymous public intake through the contact admission (Turnstile, connection allowance, publication, atomic hourly cap and containment), field/record projection for owner, staff, submitter and anonymous callers on both origins, records.summary@1 counts and the owner panel routes, the owner records export serializer with its visitor-scoped slice and tamper-checked import validation, fixed contact inbox parity, approved own-upload attachments with current file policy and safety/deletion races, exact public publication review pins, configured views with bound cursors, staffWrite compare-and-swap updates with one winner and in-flight revocation, owner removal under safety holds, retention expiry, disable, stale configRevision, caps, sliding receipt windows with owner exemption, per-staff edit cap and 30-day receipt prune, revoked/erased visitors, closure counts and a static no-inference check. No network, model or provider use; no visitor value in Chat, receipts, events or logs.\n`);
 }catch(error){originals.error(String(error.stack||error).replace(/data:text\/javascript;base64,[A-Za-z0-9+/=]+/g,'<bundled module>'));process.exitCode=1;}
 finally{for(const k of consoleMethods)console[k]=originals[k];globalThis.fetch=originalFetch;await fixture.close();}
 

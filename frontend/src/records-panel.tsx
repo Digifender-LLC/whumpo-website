@@ -8,8 +8,8 @@ import {Section} from './workspace-pages';
 import {ConfirmButton,ProjectSelect,QueryStatus,StaleProject,useProjectSelection} from './workspace-controls';
 
 type Item=RecordsSummaryFacts['items'][number];
-type RecordPage={resourceId:string;recordId:string;configRevision:number;fields:{key:string;label:string;type:string}[];
- items:{entryId:string;revision:number;createdAt:string;updatedAt:string;submittedBy:'public'|'visitor'|'staff';visitorId:string|null;values:Record<string,unknown>}[];next:string|null};
+type RecordPage={resourceId:string;recordId:string;configRevision:number;removal?:'contact';fields:{key:string;label:string;type:string}[];
+ items:{entryId:string;revision:number;createdAt:string;updatedAt:string;submittedBy:'public'|'visitor'|'staff';visitorId:string|null;values:Record<string,unknown>;attachments:{fileId:string}[]}[];next:string|null};
 const states={inactive:'Disabled',active:'Active',suspended:'Suspended',migrating:'Migrating'} as const;
 const who={public:'Anonymous form',visitor:'Visitor',staff:'Staff'} as const;
 const total=(s:Item['schemas'][number])=>s.records.public+s.records.visitor+s.records.staff;
@@ -19,7 +19,7 @@ const shown=(v:unknown)=>typeof v==='boolean'?(v?'Yes':'No'):String(v);
  * panel is a navigation only; values are read there from the owner list route, not through Chat or this binding. */
 export function RecordsSummaryCard({facts,projectId}:{facts:RecordsSummaryFacts;projectId:string}){
  if(!facts.items.length)return <p className="text-sm text-muted-foreground">No records module is registered for this project.</p>;
- return <div className="space-y-4">{facts.items.map(i=><section key={i.localId} aria-label={i.localId+' records'} className="space-y-2 rounded-md bg-background p-4 text-sm">
+ return <div className="space-y-4">{facts.items.map(i=><section key={i.resourceId} aria-label={i.localId+' records'} className="space-y-2 rounded-md bg-background p-4 text-sm">
    <p className="font-semibold break-words">{i.localId} · {states[i.state]} · kept {i.retentionDays} days</p>
    <ul className="space-y-1">{i.schemas.map(s=><li key={s.recordId}>{s.recordId}: {total(s)} record{total(s)===1?'':'s'} ({s.records.public} anonymous, {s.records.visitor} visitor, {s.records.staff} staff)</li>)}</ul>
    {i.forms.length>0&&<p className="text-muted-foreground">Forms: {i.forms.map(f=>`${f.formId} (${f.submit})`).join(', ')}</p>}
@@ -55,13 +55,15 @@ function RecordList({project,resourceId,recordId,onChanged}:{project:string;reso
   setError('');
   const requestId=pending.current.get(entryId)??crypto.randomUUID();pending.current.set(entryId,requestId);
   try{
-   await api(`/projects/${project}/modules`,{method:'POST',body:JSON.stringify({api:'whumpo-modules',version:1,operation:'records.remove',resourceId,configRevision:q.data!.configRevision,requestId,target:{recordId,entryId},input:null})});
+   if(q.data!.removal==='contact')await api(`/contact-messages/${entryId}`,{method:'DELETE'});
+   else await api(`/projects/${project}/modules`,{method:'POST',body:JSON.stringify({api:'whumpo-modules',version:1,operation:'records.remove',resourceId,configRevision:q.data!.configRevision,requestId,target:{recordId,entryId},input:null})});
    pending.current.delete(entryId);await q.refetch();onChanged();
   }catch(e){setError(message(e));throw e;}
  }
  return <div className="space-y-4"><QueryStatus pending={q.isPending} error={q.error}/>
   {q.data?.items.map(item=><Section key={item.entryId} title={who[item.submittedBy]+' · '+new Date(item.createdAt).toLocaleString()}>
    <dl className="space-y-2 text-sm">{q.data.fields.map(f=><div key={f.key} className="flex flex-wrap gap-x-3"><dt className="text-muted-foreground">{f.label}</dt><dd className="whitespace-pre-wrap break-words">{Object.hasOwn(item.values,f.key)?shown(item.values[f.key]):'—'}</dd></div>)}</dl>
+   {item.attachments.length>0&&<section aria-label="Attachments" className="mt-4 grid gap-3 sm:grid-cols-2">{item.attachments.map((attachment,index)=><a key={attachment.fileId} href={'/api/files/'+attachment.fileId} target="_blank" rel="noopener noreferrer" className="block rounded-lg border p-2"><img src={'/api/files/'+attachment.fileId} alt={'Submitted attachment '+(index+1)} loading="lazy" className="max-h-60 w-full object-contain"/></a>)}</section>}
    <div className="mt-4"><ConfirmButton label="Delete record" description="Permanently delete this record? It cannot be restored." run={()=>remove(item.entryId)}/></div>
   </Section>)}
   {q.data&&!q.data.items.length&&<p className="text-sm text-muted-foreground">{cursor?'No more records.':'No records yet.'}</p>}

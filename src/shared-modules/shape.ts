@@ -43,13 +43,13 @@ export type RecordsSummaryFacts={items:{localId:string;resourceId:string;state:'
 const localName=(v:unknown)=>typeof v==='string'&&/^[a-z][a-z0-9-]{0,39}$/.test(v);
 const tally=(v:unknown)=>Number.isSafeInteger(v)&&Number(v)>=0&&Number(v)<=20000;
 export function validRecordsSummaryFacts(d:unknown):d is RecordsSummaryFacts{
- return exact(d,['items'])&&Array.isArray(d.items)&&d.items.length<=8&&d.items.every(i=>exact(i,['localId','resourceId','state','configRevision','retentionDays','schemas','forms','views'])
+ return exact(d,['items'])&&Array.isArray(d.items)&&d.items.length<=9&&d.items.every(i=>exact(i,['localId','resourceId','state','configRevision','retentionDays','schemas','forms','views'])
   &&localName(i.localId)&&uuid(i.resourceId)&&['inactive','active','suspended','migrating'].includes(String(i.state))&&positive(i.configRevision)&&[30,90,365].includes(Number(i.retentionDays))
   &&Array.isArray(i.schemas)&&i.schemas.length>=1&&i.schemas.length<=4&&i.schemas.every(s=>exact(s,['recordId','fieldsRevision','fields','records'])&&localName(s.recordId)&&positive(s.fieldsRevision)
    &&Number.isSafeInteger(s.fields)&&Number(s.fields)>=1&&Number(s.fields)<=8&&exact(s.records,['public','visitor','staff'])&&tally((s.records as Record<string,unknown>).public)&&tally((s.records as Record<string,unknown>).visitor)&&tally((s.records as Record<string,unknown>).staff))
   &&Array.isArray(i.forms)&&i.forms.length<=4&&i.forms.every(f=>exact(f,['formId','recordId','submit','attachments'])&&localName(f.formId)&&localName(f.recordId)&&['public','visitor','staff'].includes(String(f.submit))&&typeof f.attachments==='boolean')
   &&Array.isArray(i.views)&&i.views.length<=8&&i.views.every(v=>exact(v,['viewId','recordId','audience','scope'])&&localName(v.viewId)&&localName(v.recordId)&&['staff','visitor'].includes(String(v.audience))&&['all','own'].includes(String(v.scope))))
-  &&new Set(d.items.map(i=>(i as {localId:string}).localId)).size===d.items.length;
+  &&new Set(d.items.map(i=>(i as {resourceId:string}).resourceId)).size===d.items.length;
 }
 
 /** WH-128 owner photo-collection panel facts (dashboard only, owner route GET /api/projects/P/module-files): the saved

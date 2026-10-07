@@ -1,6 +1,7 @@
+import {ContactError} from './contact-store';
+export {ContactError,activeContact,contactInbox} from './contact-store';
 import {requireServiceClientActivation} from './project-specification/service-clients/activation';
 import {hashToken} from './security';
-export class ContactError extends Error {constructor(public status:number,message:string){super(message);}}
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export async function contactCommand(db:D1Database,userId:string,turnId:string,command:string){
  const [verb,id,...extra]=command.split(/\s+/);
@@ -26,9 +27,6 @@ export async function contactCommand(db:D1Database,userId:string,turnId:string,c
   db.prepare('INSERT INTO contact_reviews(id,user_id,project_id,enabled,expected_revision,publication_revision,expires_at) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(turnId,userId,id,enabled,p.revision,p.publication_revision??-1,new Date(Date.now()+600000).toISOString(),turnId,userId)
  ]);
 }
-export async function activeContact(db:D1Database,projectId:string){
- return db.prepare('SELECT p.name,c.revision FROM contact_settings c JOIN publications s ON s.project_id=c.project_id JOIN projects p ON p.id=c.project_id WHERE c.project_id=? AND c.enabled=1 AND s.version_id IS NOT NULL AND s.revision=c.publication_revision AND NOT EXISTS(SELECT 1 FROM service_client_blocked_contacts WHERE project_id=c.project_id)').bind(projectId).first<{name:string;revision:number}>();
-}
 /** Call only after Origin, bounded body, rate limit and server-side bot verification. */
 export async function saveContact(db:D1Database,projectId:string,revision:number,data:Record<string,unknown>){
  const {id,name,email,message}=data;
@@ -42,12 +40,6 @@ export async function saveContact(db:D1Database,projectId:string,revision:number
  // A concurrent duplicate or lost acknowledgement must never be reported as a different payload's success.
  const saved=await db.prepare('SELECT request_hash FROM contact_receipts WHERE id=? AND project_id=?').bind(id,projectId).first<{request_hash:string}>();
  if(saved?.request_hash!==hash)throw new ContactError(409,'This form was already used. Reload it to send another message.');
-}
-export async function contactInbox(db:D1Database,userId:string,projectId:string){
- const project=await db.prepare('SELECT p.name,c.enabled,c.publication_revision,s.revision,s.version_id FROM projects p LEFT JOIN contact_settings c ON c.project_id=p.id LEFT JOIN publications s ON s.project_id=p.id WHERE p.id=? AND p.owner_user_id=?').bind(projectId,userId).first<{name:string;enabled:number|null;publication_revision:number|null;revision:number|null;version_id:string|null}>();
- if(!project)throw new ContactError(404,'Project not found.');
- const {results}=await db.prepare('SELECT m.id,m.name,m.email,m.message,m.created_at,m.expires_at FROM contact_submissions m JOIN projects p ON p.id=m.project_id WHERE p.id=? AND p.owner_user_id=? AND m.expires_at>? ORDER BY m.created_at DESC,m.id DESC LIMIT 100').bind(projectId,userId,new Date().toISOString()).all();
- return {project:{id:projectId,name:project.name},enabled:!!await activeContact(db,projectId),messages:results};
 }
 export async function deleteContact(db:D1Database,userId:string,id:string){
  await db.prepare('DELETE FROM contact_submissions WHERE id=? AND project_id IN(SELECT id FROM projects WHERE owner_user_id=?)').bind(id,userId).run();

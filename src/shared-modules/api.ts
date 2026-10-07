@@ -1,3 +1,4 @@
+import {fixedContactRequest} from './contact-records';
 import {canonicalJSON,jsonDigest} from '../project-specification/v2/json';
 import {workspacePredicate} from '../workspace-identity/admission';
 import {ModuleError,decideModule,moduleOperations,moduleRequest,type ModuleDecision,type ModuleOperation,type ModulePrincipal,type ModuleRequest} from './policy';
@@ -52,6 +53,7 @@ async function authorize(db:D1Database,principal:ModulePrincipal,request:ModuleR
 export type ModuleRequestOptions={publicAdmission?:(context:ModuleContext)=>Promise<void>;files?:R2Bucket;upload?:Uint8Array};
 export async function handleModuleRequest(db:D1Database,principal:ModulePrincipal,input:unknown,handlers:ModuleHandlers=moduleHandlers,options:ModuleRequestOptions={}){
  const request=moduleRequest(input),op=moduleOperations[request.operation];
+ const fixed=await fixedContactRequest(db,principal,request);if(fixed)return fixed;
  const context=await authorize(db,principal,request,{files:options.files??null,upload:options.upload??null});
  const handler=handlers[request.operation];
  if(!op.write){

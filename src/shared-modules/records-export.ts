@@ -1,3 +1,4 @@
+import {readRecordAttachments,type RecordAttachmentView} from './records-attachments';
 import {hashToken} from '../security';
 import {jsonDigest,plain} from '../project-specification/v2/json';
 import {validateInstances,type RecordField} from '../project-specification/v3/modules';
@@ -20,7 +21,7 @@ const local=/^[a-z][a-z0-9-]{0,39}$/;
 const iso=(seconds:number)=>new Date(seconds*1000).toISOString();
 const pageSize=200;
 type ExportField={key:string;label:string;type:RecordField['type'];optional:boolean;read:RecordField['read'];options?:{value:string;label:string}[]};
-type ExportRecord={entryId:string;formId:string;fieldsRevision:number;submittedBy:'public'|'visitor'|'staff';visitorId:string|null;revision:number;createdAt:string;updatedAt:string;expiresAt:string;values:Record<string,unknown>};
+type ExportRecord={entryId:string;formId:string;fieldsRevision:number;submittedBy:'public'|'visitor'|'staff';visitorId:string|null;revision:number;createdAt:string;updatedAt:string;expiresAt:string;values:Record<string,unknown>;attachments:RecordAttachmentView[]};
 export type RecordsExportOptions={recordId:string;visitorId?:string|null;after?:string|null};
 
 /** Owner only (current workspace identity and project ownership), in every activation state and with the catalog pin
@@ -42,8 +43,8 @@ export async function exportRecords(db:D1Database,user:string,project:string,res
  const window=live(instance.config.retentionDays);
  const where={sql:`r.instance_id=? AND r.project_id=? AND r.schema_id=? AND ${window.sql}${subject?' AND r.visitor_id=?':''}`,params:[resourceId,project,schema.id,...window.params,...(subject?[subject]:[])]};
  const {rows,next}=await page(db,where,{key:await jsonDigest(['records-export',resourceId,schema.id,user,subject??'']),configRevision:row.config_revision,accessRevision:0},pageSize,after);
- const records:ExportRecord[]=rows.map(r=>({entryId:r.id,formId:r.form_id,fieldsRevision:r.fields_revision,submittedBy:r.submitter_kind,visitorId:r.visitor_id,revision:r.revision,
-  createdAt:iso(r.created_at),updatedAt:iso(r.updated_at),expiresAt:iso(r.expires_at),values:JSON.parse(r.values_json) as Record<string,unknown>}));
+ const records:ExportRecord[]=await Promise.all(rows.map(async r=>({entryId:r.id,formId:r.form_id,fieldsRevision:r.fields_revision,submittedBy:r.submitter_kind,visitorId:r.visitor_id,revision:r.revision,
+  createdAt:iso(r.created_at),updatedAt:iso(r.updated_at),expiresAt:iso(r.expires_at),values:JSON.parse(r.values_json) as Record<string,unknown>,attachments:await readRecordAttachments(db,{kind:'owner',userId:user,projectId:project},r.attachments_json)})));
  const fields:ExportField[]=schema.fields.map(f=>({key:f.key,label:f.label,type:f.type,optional:f.optional,read:f.read,...(f.type==='choice'?{options:f.options.map(o=>({value:o.value,label:o.label}))}:{})}));
  return {format:'whumpo-module-records',schemaVersion:1,project:{id:project},
   instance:{resourceId,localId:row.local_id,configRevision:row.config_revision,retentionDays:instance.config.retentionDays},
@@ -79,12 +80,16 @@ export async function validateRecordsExport(value:unknown){
  if(value.next!==null&&(typeof value.next!=='string'||value.next.length>400||!/^[A-Za-z0-9_-]+$/.test(value.next)))return fail();
  const seen=new Set<string>();let previous:string|null=null;
  for(const r of records as unknown[]){
-  if(!exact(r,['entryId','formId','fieldsRevision','submittedBy','visitorId','revision','createdAt','updatedAt','expiresAt','values'])||typeof r.entryId!=='string'||!uuid.test(r.entryId)||seen.has(r.entryId)
+  if(!exact(r,['entryId','formId','fieldsRevision','submittedBy','visitorId','revision','createdAt','updatedAt','expiresAt','values','attachments'])||typeof r.entryId!=='string'||!uuid.test(r.entryId)||seen.has(r.entryId)
    ||typeof r.formId!=='string'||!local.test(r.formId)||!count(r.fieldsRevision)||(r.fieldsRevision as number)>(schema.fieldsRevision as number)||!count(r.revision)
    ||!['public','visitor','staff'].includes(r.submittedBy as string)||(r.submittedBy==='public')!==(r.visitorId===null)||r.visitorId!==null&&(typeof r.visitorId!=='string'||!uuid.test(r.visitorId))
    ||subject!==null&&r.visitorId!==subject.visitorId||!time(r.createdAt)||!time(r.updatedAt)||!time(r.expiresAt)
    ||String(r.updatedAt)<String(r.createdAt)||Date.parse(String(r.expiresAt))<=Date.parse(String(r.createdAt))||Date.parse(String(r.expiresAt))-Date.parse(String(r.createdAt))>365*86400000
    ||previous!==null&&String(r.createdAt)>previous||!plain(r.values))return fail();
+  if(!Array.isArray(r.attachments)||r.attachments.length>4||r.attachments.some(a=>!exact(a,['fileId','resourceId','collectionId','sha256','configRevision'])
+   ||typeof a.fileId!=='string'||!uuid.test(a.fileId)||typeof a.resourceId!=='string'||!uuid.test(a.resourceId)
+   ||typeof a.collectionId!=='string'||!local.test(a.collectionId)||typeof a.sha256!=='string'||!/^[0-9a-f]{64}$/.test(a.sha256)||!count(a.configRevision))
+   ||new Set(r.attachments.map(a=>a.fileId)).size!==r.attachments.length||r.submittedBy==='public'&&r.attachments.length)return fail();
   seen.add(r.entryId);previous=String(r.createdAt);
   const values=r.values;
   if(Object.keys(values).some(k=>!fields.some(f=>f.key===k)))return fail();

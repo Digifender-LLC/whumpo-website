@@ -14,17 +14,19 @@ import {catalogState,currentSpecification,instanceOf,moduleDescriptor,moduleFeat
  * kinds, states and revisions only: no configuration value or visitor-submitted value enters Chat. */
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 type Action='activate'|'disable';
-type Review={id:string;user_id:string;project_id:string;resource_id:string;local_id:string;kind:ModuleInstance['kind'];action:Action;feature_id:'core.forms'|'core.editing';source_version_id:string;source_spec_digest:string;module_digest:string;schema_digest:string;config_json:string;config_digest:string;descriptor_json:string;descriptor_digest:string;dependencies_json:string;expected_config_revision:number;next_config_revision:number;expected_activation_revision:number;widening:number;request_hash:string;created_at:number;expires_at:number};
+type Review={id:string;user_id:string;project_id:string;resource_id:string;local_id:string;kind:ModuleInstance['kind'];action:Action;feature_id:'core.forms'|'core.editing';source_version_id:string;source_spec_digest:string;module_digest:string;schema_digest:string;config_json:string;config_digest:string;descriptor_json:string;descriptor_digest:string;dependencies_json:string;expected_config_revision:number;next_config_revision:number;expected_activation_revision:number;widening:number;publication_revision:number|null;request_hash:string;created_at:number;expires_at:number};
 type SavedReview=Review&{review_digest:string};
 const kindNames={content:'content collection',records:'records and forms',files:'files and galleries',access:'visitor access'} as const;
 const changed=()=>new ModuleError('stale_configuration','This module review changed or expired. Ask for a fresh review.');
 /** The digest binds every reviewed field, so the confirming control approves exactly what was shown. */
+const hasPublicForms=(kind:string,config:string)=>kind==='records'&&(JSON.parse(config) as {forms:{submit:string}[]}).forms.some(f=>f.submit==='public');
+const livePublication=async(db:D1Database,project:string)=>(await db.prepare('SELECT revision FROM publications WHERE project_id=? AND version_id IS NOT NULL').bind(project).first<{revision:number}>())?.revision??null;
 const reviewDigest=(r:Review)=>jsonDigest({contract:'module-activation-review@1',...r},65536);
 
 function describe(r:Review,dependencies:string[]){
  const name=`“${r.local_id}” ${kindNames[r.kind]} module`;
  if(r.action==='disable')return `Review disabling the ${name}\nVisitor, staff and public requests stop at their next request. Saved configuration, owner reads, export and re-activation stay available. Nothing is deleted.\nApproval requires a recent sign-in. Review expires: ${new Date(r.expires_at*1000).toISOString()}`;
- return `Review activating the ${name}\n${r.expected_config_revision===0?'Registers this module':r.next_config_revision>r.expected_config_revision?'Applies the changed saved configuration':'Re-activates the saved configuration'} at configuration revision ${r.next_config_revision}, from the current saved website configuration.\n${r.widening?'This allows new people to submit or read through this module.\n':''}${dependencies.length?`Depends on active modules: ${dependencies.join(', ')}.\n`:''}While active, the module serves its configured visitors only through its own checks. Activation publishes no page, sends no message and runs no AI. Visitor-submitted values stay in your dashboard and never enter Chat or AI requests.\nApproval requires a recent sign-in. Review expires: ${new Date(r.expires_at*1000).toISOString()}`;
+ return `Review activating the ${name}\n${r.expected_config_revision===0?'Registers this module':r.next_config_revision>r.expected_config_revision?'Applies the changed saved configuration':'Re-activates the saved configuration'} at configuration revision ${r.next_config_revision}, from the current saved website configuration.\n${r.widening?'This allows new people to submit or read through this module.\n':''}${dependencies.length?`Depends on active modules: ${dependencies.join(', ')}.\n`:''}${hasPublicForms(r.kind,r.config_json)?r.publication_revision===null?'Anonymous public forms remain off until a website is published and a fresh module activation is approved.\n':`Public forms are bound to website publication revision ${r.publication_revision}; publishing, restoring or unpublishing requires a fresh module activation review.\n`:''}While active, the module serves its configured visitors only through its own checks. Activation publishes no page, sends no message and runs no AI. Visitor-submitted values stay in your dashboard and never enter Chat or AI requests.\nApproval requires a recent sign-in. Review expires: ${new Date(r.expires_at*1000).toISOString()}`;
 }
 function link(db:D1Database,user:string,turn:string,review:string,hash:string){
  return db.prepare('INSERT INTO module_activation_links(turn_id,review_id,reply_digest) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(turn,review,hash,turn,user);
@@ -50,7 +52,7 @@ export async function prepareModuleActivationCommand(db:D1Database,user:string,t
   if(!['active','suspended'].includes(row.state))throw new ModuleError('unavailable','This module is not active.');
   review={id:turn,user_id:user,project_id:project,resource_id:row.id,local_id:row.local_id,kind:row.kind,action,feature_id:moduleFeature(row.kind),source_version_id:row.source_version_id,source_spec_digest:row.source_spec_digest,
    module_digest:row.module_digest,schema_digest:row.schema_digest,config_json:row.config_json,config_digest:row.config_digest,descriptor_json:row.descriptor_json,descriptor_digest:row.descriptor_digest,dependencies_json:row.dependencies_json,
-   expected_config_revision:row.config_revision,next_config_revision:row.config_revision,expected_activation_revision:row.activation_revision,widening:0,request_hash:'',created_at:now,expires_at:now+600};
+   expected_config_revision:row.config_revision,next_config_revision:row.config_revision,expected_activation_revision:row.activation_revision,widening:0,publication_revision:null,request_hash:'',created_at:now,expires_at:now+600};
  }else{
   const spec=await currentSpecification(db,user,project);
   if(!spec)throw new ModuleError('not_found','Save a website configuration that includes this module first.');
@@ -67,7 +69,8 @@ export async function prepareModuleActivationCommand(db:D1Database,user:string,t
    if(!d||d.state!=='active')throw new ModuleError('unavailable',`Activate the “${id}” module first.`);
    dependencies.push(id);return {resourceId:d.id,module:pin(d.kind,'module',d.module_digest)};
   });
-  const configDigest=await jsonDigest(instance.config);
+  const configDigest=await jsonDigest(instance.config),publicForms=instance.kind==='records'&&instance.config.forms.some(f=>f.submit==='public');
+  const publicationRevision=publicForms?await livePublication(db,project):null;
   let widening=false,next=1;
   if(row){
    if(row.kind!==instance.kind||row.module_digest!==instance.module.digest||row.schema_digest!==instance.schema.digest)throw new ModuleError('incompatible');
@@ -78,12 +81,13 @@ export async function prepareModuleActivationCommand(db:D1Database,user:string,t
     catch(error){if(error instanceof SpecificationError)throw new ModuleError('incompatible');throw error;}
     next=row.config_revision+1;
    }
-   if(row.state==='active'&&next===row.config_revision&&row.source_version_id===spec.versionId)throw new ModuleError('invalid_request','This module is already active with the current saved configuration.');
+   const previousPublication=(await db.prepare('SELECT r.publication_revision FROM module_activations a JOIN module_activation_reviews r ON r.id=a.review_id WHERE a.instance_id=?').bind(row.id).first<{publication_revision:number|null}>())?.publication_revision??null;
+   if(row.state==='active'&&next===row.config_revision&&row.source_version_id===spec.versionId&&previousPublication===publicationRevision)throw new ModuleError('invalid_request','This module is already active with the current saved configuration.');
   }else widening=classifyModuleChange(undefined,instance).permissions;
   const resourceId=row?.id??crypto.randomUUID(),descriptor=moduleDescriptor(project,resourceId,instance,deps);
   review={id:turn,user_id:user,project_id:project,resource_id:resourceId,local_id:localId,kind:instance.kind,action,feature_id:feature,source_version_id:spec.versionId,source_spec_digest:spec.digest,
    module_digest:instance.module.digest,schema_digest:instance.schema.digest,config_json:canonicalJSON(instance.config,16384),config_digest:configDigest,descriptor_json:canonicalJSON(descriptor),descriptor_digest:await jsonDigest(descriptor),
-   dependencies_json:JSON.stringify(deps.map(d=>d.resourceId)),expected_config_revision:row?.config_revision??0,next_config_revision:row?next:1,expected_activation_revision:row?.activation_revision??0,widening:widening?1:0,request_hash:'',created_at:now,expires_at:now+600};
+   dependencies_json:JSON.stringify(deps.map(d=>d.resourceId)),expected_config_revision:row?.config_revision??0,next_config_revision:row?next:1,expected_activation_revision:row?.activation_revision??0,widening:widening?1:0,publication_revision:publicationRevision,request_hash:'',created_at:now,expires_at:now+600};
  }
  review.request_hash=await jsonDigest({kind:'moduleActivationReview',projectId:project,instanceId:localId,action});
  const saved:SavedReview={...review,review_digest:await reviewDigest(review)},keys=Object.keys(saved) as (keyof SavedReview)[],reply=describe(review,dependencies);
@@ -116,6 +120,7 @@ async function pendingReview(db:D1Database,user:string,id:string){
   if(catalog==='stale')throw new ModuleError('stale_module_version');
   const spec=await currentSpecification(db,user,r.project_id);
   if(!spec||spec.versionId!==r.source_version_id||spec.digest!==r.source_spec_digest)throw changed();
+  if(hasPublicForms(r.kind,r.config_json)&&await livePublication(db,r.project_id)!==r.publication_revision)throw changed();
  }
  return r;
 }
@@ -136,7 +141,7 @@ export async function applyModuleActivationCommand(db:D1Database,user:string,tur
  if(r.review_digest!==digest||r.expected_activation_revision!==expectedRevision)throw changed();
  const activate=r.action==='activate',state=activate?'active':'inactive';
  const gate=activate?featurePredicate(db,featureRequest({userId:user,projectId:r.project_id,featureId:r.feature_id,operation:'confirm'})):{sql:'1',params:[] as unknown[]};
- return {reply:activate?`Activated the “${r.local_id}” ${kindNames[r.kind]} module at configuration revision ${r.next_config_revision}. It serves only through its own checks while active; disabling stays available at any time.`
+ return {reply:activate?`Activated the “${r.local_id}” ${kindNames[r.kind]} module at configuration revision ${r.next_config_revision}. ${hasPublicForms(r.kind,r.config_json)?r.publication_revision===null?'Public forms remain off until publication and a fresh activation review. ':'Public forms are bound to publication revision '+r.publication_revision+'. ':''}It serves only through its own checks while active; disabling stays available at any time.`
   :`Disabled the “${r.local_id}” ${kindNames[r.kind]} module. Visitor, staff and public requests now stop; saved configuration, owner reads and export stay available.`,
  statements:[
   db.prepare(`INSERT INTO module_activation_applies(id,user_id,review_id,review_digest,request_hash,admitted,state,activation_revision,created_at)
