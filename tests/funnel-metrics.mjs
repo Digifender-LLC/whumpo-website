@@ -104,9 +104,9 @@ try{
   assert.equal(handled['publication_confirmed/website_publish'],undefined,'Receipt-derived events wait for the sweep');
   assert.ok(await derive()>0);
   assert.deepEqual(await tally(owner.user),{'welcome_completed/welcome':1,'draft_created/website':1,'interaction_started/content_change':2,'interaction_draft_saved/content_change':1,
-   'interaction_validation_failed/content_change':1,'interaction_submitted/content_change':1,'interaction_resumed/content_change':1,'interaction_continued/succeeded':1,
+   'interaction_validation_failed/content_change':1,'interaction_submitted/content_change':1,'interaction_continued/succeeded':1,
    'interaction_canceled/content_change':1,'edit_accepted/website_content':1,'review_prepared/website_publish':1,'publication_confirmed/website_publish':1,
-   'workspace_returned/day_7':1,'workspace_returned/day_30':1});
+   'workspace_returned/day_7':1,'workspace_returned/day_30':1},'A draft saved and submitted seconds later is not a resumed form');
   await assertContentFree([silent.user,declined.user,silent.project,declined.project]);
  });
  await test('operator aggregate matches operation receipts and suppresses small cells',async()=>{
@@ -154,6 +154,60 @@ try{
   assert.equal((await accountClosureInventory(db,closing.account)).counts.funnelEvents,2000);
   await run('DELETE FROM users WHERE id=?',closing.account);
   assert.equal((await row('SELECT count(*) n FROM funnel_events WHERE user_id=?',closing.account)).n,0,'Account deletion cascades');
+ });
+ await test('interaction_resumed requires a 30-minute gap after the previous saved draft, once per form',async()=>{
+  const minute=60000,consentAt=Date.now()-6*3600000,iso=ms=>new Date(ms).toISOString(),t0=consentAt+60*minute;
+  assert.equal(funnel.funnelResumeGapMinutes,30);
+  // Consent moved back so rewritten receipt times are inside it; only the stored consent time changes.
+  await run('UPDATE user_profiles SET measurement_consented_at=?,revision=revision+1 WHERE user_id=?',iso(consentAt),silent.user);
+  assert.equal((await row('SELECT count(*) n FROM funnel_measured_accounts WHERE user_id=?',silent.user)).n,1);
+  // Real handlers write every receipt; the plan then gives each request an exact server time (offsets in ms from t0).
+  const plans={
+   below:[['save-draft',0],['submit',30*minute-1]],
+   exact:[['save-draft',0],['submit',30*minute]],
+   'above-save':[['save-draft',0],['save-draft',30*minute+1]],
+   'above-cancel':[['save-draft',0],['cancel',45*minute]],
+   'no-draft':[['submit',90*minute]],
+   // Continuous editing: each save follows the previous one by 20 minutes (100 minutes in all).
+   continuous:[['save-draft',0],['save-draft',20*minute],['save-draft',40*minute],['submit',60*minute]],
+   // Resumed at +31 minutes; later activity and a long final gap add nothing (one event per form).
+   repeated:[['save-draft',0],['save-draft',31*minute],['save-draft',36*minute],['submit',200*minute]],
+   // A draft saved before consent was never measured, so it cannot make a later action a measured resume.
+   'before-consent':[['save-draft',-61*minute],['submit',40*minute]]};
+  const forms={},submits={};
+  // A newly issued form supersedes the open one, so each plan runs to completion before the next form.
+  for(const [name,plan] of Object.entries(plans)){
+   forms[name]=(await store.issueContentBrief(silent.scope,silent.user,{originTurnId:await origin(silent),projectId:silent.project,contentIds:['headline','section-1-text']})).envelope;
+   for(const [step,[operation]] of plan.entries()){
+    if(step&&plan[step-1][0]==='save-draft')await new Promise(resolve=>setTimeout(resolve,1100)); // The store admits one draft save per second.
+    const request={version:1,requestId:id(),interactionId:forms[name].id,definitionDigest:forms[name].definitionDigest,expectedAnswerRevision:step,operation,...(operation==='cancel'?{}:{answers:{'field-1':'Answer '+marker,'field-2':'Detail '+marker}})};
+    await store.mutateInteraction(silent.scope,silent.user,request);if(operation==='submit')submits[name]=request;
+   }
+  }
+  // Receipts are immutable; the fixture lifts that trigger only to set exact times, then restores it.
+  const guard=(await row("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='chat_interaction_request_fixed'")).sql;
+  await run('DROP TRIGGER chat_interaction_request_fixed');
+  try{for(const [name,plan] of Object.entries(plans))for(const [step,[,offset]] of plan.entries())
+   assert.equal((await run('UPDATE chat_interaction_requests SET created_at=? WHERE interaction_id=? AND answer_revision=?',iso(t0+offset),forms[name].id,step+1)).meta.changes,1);}
+  finally{await run(guard);}
+  await assert.rejects(()=>run("UPDATE chat_interaction_requests SET created_at='2026-01-01T00:00:00.000Z'"),/chat_interaction_immutable/);
+  const lengths=Object.fromEntries(Object.keys(plans).map(n=>[n,plans[n].length]));
+  for(const [name,count] of Object.entries(lengths))assert.equal((await row('SELECT count(*) n FROM chat_interaction_requests WHERE interaction_id=?',forms[name].id)).n,count);
+  await derive();
+  const resumed=await rows("SELECT source_key,occurred_at,dimension FROM funnel_events WHERE user_id=? AND event='interaction_resumed'",silent.user),at=ms=>iso(ms).slice(0,16)+'Z';
+  assert.deepEqual(resumed.map(r=>r.source_key).sort(),['exact','above-save','above-cancel','repeated'].map(n=>'interaction:'+forms[n].id).sort(),'below, no-draft, continuous and pre-consent forms never resume');
+  assert.ok(resumed.every(r=>r.dimension==='content_change'));
+  const time=name=>resumed.find(r=>r.source_key==='interaction:'+forms[name].id).occurred_at;
+  assert.equal(time('exact'),at(t0+30*minute));assert.equal(time('above-save'),at(t0+30*minute+1));assert.equal(time('repeated'),at(t0+31*minute),'The first qualifying action is the resume time');
+  // Replaying a request reuses its receipt; a repeated sweep adds nothing; each form keeps exactly one event.
+  const before=(await row('SELECT count(*) n FROM chat_interaction_requests')).n;
+  await store.mutateInteraction(silent.scope,silent.user,submits.exact);await derive();
+  assert.equal((await row('SELECT count(*) n FROM chat_interaction_requests')).n,before);
+  assert.equal((await row("SELECT count(*) n FROM funnel_events WHERE user_id=? AND event='interaction_resumed'",silent.user)).n,4);
+  await assertContentFree([]);
+  // Withdrawal removes these events so later cases keep their counts.
+  await profile.updateProfile(silent.scope,silent.user,{revision:(await profile.readProfile(db,silent.user)).revision,measurement_consent:false});
+  assert.equal((await row('SELECT count(*) n FROM funnel_events WHERE user_id=?',silent.user)).n,0);
  });
  await test('identity friction is measured separately, after consent, without credentials or recovery data',async()=>{
   const request=()=>new Request('https://whumpo.com/api/auth/identity/v1/test',{method:'POST',headers:{origin:'https://whumpo.com'}});

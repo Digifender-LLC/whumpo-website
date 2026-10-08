@@ -1,8 +1,8 @@
 # Content-free funnel measurements (WH-025)
 
-## Status — October 4, 2026 UTC
+## Status — October 8, 2026 UTC
 
-**Implemented in source; verified only with local SQLite and local D1 fixtures.** Not deployed, no live data read, and no cohort baseline exists. The opt-in consent default below is an agent decision awaiting owner confirmation. Every numeric target on this page and in the [roadmap](roadmap/README.md#what-to-measure) is **proposed until the first cohort baseline**.
+**Implemented in source; verified only with local SQLite and local D1 fixtures.** Not deployed, no live data read, and no cohort baseline exists. The owner decided consent, retention, suppression and the resumed-form gap on October 8, 2026 (see [Owner decisions](#owner-decisions-recorded)); pre-welcome counters and any report run or feedback send remain open. Every numeric target on this page and in the [roadmap](roadmap/README.md#what-to-measure) is **proposed until the first cohort baseline**.
 
 No new Cloudflare product, plan or paid service is used. Rows live in the existing private control D1 database and are maintained by the existing hourly and daily [Cron Triggers](https://developers.cloudflare.com/workers/configuration/cron-triggers/).
 
@@ -16,7 +16,7 @@ Whumpo had no analytics or measurement consent before this work. The only relate
 - Turning it off clears the time and deletes that account's `funnel_events` rows in the same D1 batch as the profile update.
 - Passkey signup and first-key enrollment happen before the account reaches welcome, so they are **never measured** under this choice. Identity friction is limited to later passkeys, recovery-kit saves and recovery.
 
-**Owner decision requested:** confirm opt-in, or authorize a different basis (for example, a beta participation agreement or anonymous unlinked daily counters for pre-welcome identity steps). Do not change the default without that decision.
+**Owner decision (October 8, 2026 UTC):** explicit opt-in, off by default, is confirmed. A different basis (for example a beta participation agreement or anonymous unlinked counters for pre-welcome identity steps) needs a new owner decision.
 
 ## Event contract
 
@@ -37,7 +37,18 @@ Whumpo had no analytics or measurement consent before this work. The only relate
 | | `enrollment_completed`, `enrollment_cancelled` | `enrollment` | `identity_effect_receipts` |
 | | `recovery_started`, `recovery_secured`, `recovery_completed` | `recovery` | `identity_effect_receipts` |
 
-`interaction_resumed` is any later save, submit or cancel after an earlier saved draft. It is a proxy and does not prove a separate visit. `recovery_kit_saved` is the customer's save acknowledgment, not proof that a kit was stored, printed or can recover the account.
+### `interaction_resumed` definition
+
+Owner decision (October 8, 2026 UTC): a form counts as resumed only after a gap of at least **30 minutes** (`funnelResumeGapMinutes`). This replaces the earlier proxy that counted any later action after a saved draft.
+
+- **Receipts compared.** Each save-draft, submit and cancel writes one immutable `chat_interaction_requests` row with a server `created_at` (millisecond UTC) and a gapless `answer_revision`. A replayed request reuses its row, so replays change nothing. The `draft_saved_at` column on the form is not used: it is overwritten by every save and cleared on submit or cancel.
+- **Rule.** A request R resumes the form when the request with `answer_revision = R.answer_revision − 1` is a **save-draft** and `R.created_at ≥ that draft's created_at + 30 minutes`. The comparison is exact: 29:59.999 does not count, exactly 30:00.000 does. R may be a later save-draft, a submit or a cancel.
+- **Gap from the previous request, not the first draft.** Continuous editing with saves less than 30 minutes apart never resumes, however long the whole session lasts. A first request with no earlier draft never resumes.
+- **At most once per form.** The event key is `interaction:<id>` and `occurred_at` is the minute of the first qualifying request. Later long gaps, repeated saves and replayed sweeps add nothing.
+- **Consent.** Both the earlier draft and the resuming request must be at or after the current consent time, and the resuming request inside retention. A draft saved before consent is unmeasured and cannot start a measured resume.
+- **Limits.** A 30-minute gap still does not prove a separate visit or device. It means the owner returned to the form after a pause. Cancel after the pause counts as a return to the form.
+
+`recovery_kit_saved` is the customer's save acknowledgment, not proof that a kit was stored, printed or can recover the account.
 
 ### Never stored
 
@@ -62,13 +73,13 @@ Each account is limited to about 2,000 rows (the consent view stops admission at
 - Rows older than 180 days (`funnelRetentionDays`) are pruned by the `funnel` job. Derivations only consider receipts inside the same cutoff, so pruned rows are never recreated. Return windows close before day 180.
 - Consent withdrawal deletes the account's rows immediately.
 - `funnel_events.user_id` cascades on account deletion. The operator [closure inventory](account-closure.md) reports `funnelEvents`.
-- The [lifecycle catalog](data-lifecycle.json) classifies `funnel_events` as `product-measurement`. The 180-day window is proposed, not owner-approved.
+- The [lifecycle catalog](data-lifecycle.json) classifies `funnel_events` as `product-measurement`. The 180-day window is owner-approved (October 8, 2026 UTC) as the test-stage retention; changing it needs a new decision.
 
 ## Operator aggregate report
 
 `node tools/report-funnel.mjs [--days 1-180] [--minimum 3-50]` reads the remote control database with existing operator authorization and prints JSON. It is read-only and returns only event names, dimensions, counts and median minutes. It never returns account, project, receipt or source identifiers. It has not been run against the test environment.
 
-- Cells with fewer than `--minimum` accounts (default five) are replaced by `{suppressed:true}`. Activation stages, times to first draft/publication, identity counts and the receipt comparison all use the same rule. If fewer than the minimum accounts consent, comparison rows show only their status.
+- Cells with fewer than `--minimum` accounts (default five, owner-approved as the floor on October 8, 2026 UTC) are replaced by `{suppressed:true}`. Activation stages, times to first draft/publication, identity counts and the receipt comparison all use the same rule. If fewer than the minimum accounts consent, comparison rows show only their status.
 - The activation cohort is consenting accounts whose welcome completed inside the window. Stages are reach counts: welcome, first draft, accepted edit, review prepared, publication confirmed, and day-7/day-30 return.
 - `receiptComparison` counts the actual source receipts independently (consenting accounts, after consent, inside retention) and reports `match`, `events_below_receipts` (sweep not yet run or quota reached) or `events_above_receipts` (a receipt was removed later, such as a project or form removal; otherwise investigate).
 - Identity events are reported separately from first-project welcome, with `recoveryStartedWithoutCompletion` as the only abandonment proxy.
@@ -114,11 +125,17 @@ These are starting hypotheses only. Replace them explicitly after the first cons
 
 ## Verification
 
-`node tests/funnel-metrics.mjs` and `node tests/funnel-metrics.mjs --d1` drive actual welcome, profile, form, website creation/apply, publication and identity enrollment/recovery handlers against a disposable current-schema database. They cover the contract `CHECK`s and immutability, the off-by-default choice, non-consenting complete journeys (zero rows), replayed completions/confirmations/submissions and repeated sweeps (exactly one event per receipt), withdrawal deletion, no backfill after renewed consent, cancellation template capture, retention pruning without re-derivation, the per-account quota, account-deletion cascade and closure inventory count, receipt comparison (`match` for every metric), small-cell suppression, and scans of stored rows and reports for seeded private markers, emails, other accounts' identifiers, credential IDs, token hashes, kit verifiers and recovery keys. These are synthetic local results, not live acceptance.
+`node tests/funnel-metrics.mjs` and `node tests/funnel-metrics.mjs --d1` drive actual welcome, profile, form, website creation/apply, publication and identity enrollment/recovery handlers against a disposable current-schema database. They cover the contract `CHECK`s and immutability, the off-by-default choice, non-consenting complete journeys (zero rows), replayed completions/confirmations/submissions and repeated sweeps (exactly one event per receipt), the resumed-form gap (real handlers write the receipts, then exact times are set: 29:59.999 below, exactly 30:00.000, 30:00.001 above, cancel after the pause, no earlier draft, continuous 20-minute saves, a single event despite repeated activity and a replayed request, and a draft saved before consent), withdrawal deletion, no backfill after renewed consent, cancellation template capture, retention pruning without re-derivation, the per-account quota, account-deletion cascade and closure inventory count, receipt comparison (`match` for every metric), small-cell suppression, and scans of stored rows and reports for seeded private markers, emails, other accounts' identifiers, credential IDs, token hashes, kit verifiers and recovery keys. These are synthetic local results, not live acceptance.
+
+## Owner decisions recorded
+
+Answers given by the owner on October 8, 2026 UTC. Each authorizes only the decision named; none authorizes deployment, a cutover, a report run or sending anything.
+
+1. **Consent basis:** explicit opt-in, off by default. Unchanged from the implementation.
+2. **Retention and suppression:** keep the 180-day event retention and suppress report cells below five accounts. Unchanged from the implementation.
+3. **Resumed forms:** require at least 30 minutes between the saved draft and the subsequent action. Implemented as defined above; the previous any-later-action proxy is removed with no compatibility path. No schema change: the sweep derives events from existing request receipts, and no event has been recorded outside local fixtures.
 
 ## Open owner decisions
 
-1. Confirm opt-in consent, or name a different basis (see above).
-2. Approve or change the proposed 180-day retention and five-account suppression floor.
-3. Decide whether pre-welcome identity steps should get anonymous, unlinked aggregate counters.
-4. Authorize any operator report run against the test database, and any sending of the feedback request (recipients, channel, timing).
+1. Decide whether pre-welcome identity steps should get anonymous, unlinked aggregate counters.
+2. Authorize any operator report run against the test database, and any sending of the feedback request (recipients, channel, timing).
