@@ -10,6 +10,7 @@
     "test:usage-review-requests": "node tests/usage-review-requests.mjs && node tests/support-access.mjs && node tests/support-chat.mjs",
     "test:support-browser": "node tests/workspace-identity-browser.mjs --support",
     "test:specification-compiler": "node tests/specification-compiler.mjs",
+    "test:customer-presentation-contract": "node tests/customer-presentation-contract.mjs",
     "test:specification-journey": "node tests/specification-journey.mjs",
     "test:specification-review": "node tests/specification-review-details.mjs && node tests/specification-review-display.mjs",
     "test:chat-fields": "node tests/chat-interaction-fields.mjs && node tests/chat-interaction-fields-browser.mjs",
