@@ -1,0 +1,148 @@
+# Shadow cost-event contract
+
+**WH-022 first slice (WH-168), October 8, 2026 UTC; source baseline `ca17c6a`. Status: planned — a proposed contract plus an offline reference, not an implemented ledger.** This freezes one versioned, immutable event envelope for real usage and provider cost, maps the existing producers onto it with exact gaps, and splits [WH-022](roadmap/backlog.md#wh-022--collect-authoritative-shadow-resource-and-task-cost-events) into WH-168–172. It adds no table, column, binding, route, producer change, provider call, deployment or customer charge. The [offline reference](../tools/prototypes/cost-events.mjs) and [conformance suite](../tests/cost-events-contract.mjs) are not imported by the product.
+
+Evidence levels used here: **proposed contract** (this document), **offline reference** (the prototype and suite), **existing source** (code on `main`), **runtime integration** (WH-169/170, not started), **live acceptance** (WH-023 closed-period data, not started). Passing the reference proves the contract is self-consistent and that it reproduces today's receipts; it proves nothing about real spend.
+
+## Purpose and authority
+
+Real usage and provider costs must be reconcilable *before* customers are charged for anything. A cost event is **evidence about what the platform consumed or owes**. It is never authority to charge, credit, admit, throttle or enforce:
+
+- **No billing authority.** `customerUnits` is the constant `0` in version 1, and any field that names a unit, debit, credit, charge, balance, wallet, entitlement, price or invoice is refused. Customer debits, premium funding and entitlement stay in the WH-042/043/044 ledgers; this ledger has no reserve, debit, credit or grant operation.
+- **Standard AI stays internal.** Standard assistance records `aiTier: "standard"` with zero customer units. A premium gateway attempt records its provider cost, and its customer debit stays in the gateway buckets ([`customer_actual`](../src/gateway-spend.ts)); the event never repeats that figure.
+- **Shadow is not expense.** The Muse `subscription-shadow` estimate ($0.10/$0.20 per million tokens in [`museTestRate`](../src/model-policy.ts)) is hypothetical. It is reported in its own bucket and never counted as provider expense or compared with an invoice.
+- **Evidence for the fair-use Monitor, not a trigger.** [Fair-use](pricing-and-model-policy.md#unlimited-standard-ai-under-fair-use--september-29-2026-decision) enforcement stays disabled; events feed [company finance review](company-finance-review.md) and WH-023 only.
+- Visitors, deterministic jobs and view rendering never invoke the owner maintainer to produce or repair an event ([composition architecture](roadmap/composition-architecture.md)).
+
+## Dependency evidence refresh
+
+Read-only `gh issue view`, October 8, 2026 UTC. Planning dependencies from the backlog: WH-020, WH-006, WH-071.
+
+| Dependency | Live state | What this slice uses |
+| --- | --- | --- |
+| WH-006 (#6) | Closed as completed (PR #24) | Per-job operational reporting pattern; no new maintenance job is added here |
+| WH-071 (#47) | Closed as completed | Logical `{projectId, resourceId}` identities and the admission classes in [workload placement](workload-placement.md); physical locators stay server-only |
+| WH-020 (#9) | **Open**; the offline/privacy deliverable is extracted as WH-121 and the real-provider cohort remains outstanding | Not needed for the envelope. Real task-cost percentiles and a premium price still need it, so those are *not* claimed here |
+| WH-022 | No execution issue exists (`gh issue list --search 'WH-022 in:title'` returned none) | No claim recorded; this is a local planning/offline slice |
+
+Dependencies are therefore not all satisfied by completed live evidence; the contract and offline reference do not require WH-020's real-provider acceptance, and no child below depends on WH-023, WH-044 or WH-104.
+
+## Envelope, version 1
+
+A cost event is a closed JSON object. Unknown, missing or billing-, locator-, content- or client-time-shaped fields are refused with a specific code. There is no reader for other versions ([current-version policy](current-version-policy.md)).
+
+| Field | Rule |
+| --- | --- |
+| `contractVersion` | Exactly `1` |
+| `source` | Registered producer (`inference-receipt`, `gateway-settlement`, `storage-operations`, `cloudflare-usage-import`, `liability-register`, `notification-delivery`, `connector-call`). A source may emit only its registered dimensions |
+| `sourceEventId`, `providerEventId` | Producer-stable identifier (≤128 characters of `[A-Za-z0-9._:-]`) and the provider's own event/log ID when one exists. Both are preserved verbatim across placement and tariff changes |
+| `revision` | Integer ≥1, monotone per identity. A later revision replaces an earlier one; it never adds to it |
+| `idempotencyKey` | Must equal SHA-256 of canonical `{dimension, source, sourceEventId}`. Producers cannot invent keys |
+| `kind` | `usage` (metered) or `liability` (non-metered cost: floors, minimums, licenses, renewals, support, retained staging, uncertain operations); fixed by the dimension |
+| `dimension`, `workload` | Closed registry entries (below) |
+| `workClass`, `taskRef`, `attempt` | `task`, `retry`, `control` (acknowledgments, safety, reconciliation, orchestration) or `standing` (no task). Task, retry and control cost names its opaque task and stays a separate line; retry is attempt ≥2; standing cost has no task |
+| `attribution` | Tenant `{scope:"tenant", ownerId, projectId|null, resourceId|null}` using WH-071 stable IDs, or `{scope:"platform", pool}` (`shared-account`, `control-plane`, `closed-account`). Physical locators (database, bucket, script, namespace, gateway, account ID, hostname, URL) are refused |
+| `placementClass` | Label only (`static`, `shared-api`, `isolated-function`, `persistent-process`, `platform`), as of `occurredAt`; it is not part of identity or tariff selection |
+| `quantity` | `{state:"known", value, unit}` with a non-negative safe integer in the dimension's fixed unit, or `{state:"unknown", reason}` |
+| `cost` | One of five bases, below. Money is integer USD microdollars |
+| `outcome` | `settled`, `pending`, `uncertain` or `released` |
+| `customerUnits` | Exactly `0` |
+| `aiTier` | `standard`, `premium` or `null`; non-null only for `ai.*` dimensions |
+| `detail` | Closed per-dimension integer map (for `ai.inference.call`: `inputTokens`, `outputTokens`); no free text |
+| `occurredAt`, `observedAt` | UTC millisecond timestamps; `observedAt ≥ occurredAt`. The ledger adds `receivedAt` and a receive sequence itself; a producer-supplied value is refused |
+
+Cost bases: `tariff` (the ledger prices a *known* quantity from a pinned `{id, version}` tariff), `receipt` (the source computed it from an immutable rate snapshot), `provider-reported` (a provider, gateway or invoice figure), `shadow` (hypothetical inference estimate, `ai.*` only) and `unknown` (`reason` from a closed list plus `exposureMicros`, an upper bound or `null` for unbounded). Free text never appears: reasons are `rate-missing`, `usage-not-reported`, `usage-pending`, `outcome-unknown`, `provider-lag`, `unpriced`, `not-measured`, `invoice-pending`, `entitlement-unknown`.
+
+Only `provider-reported` is ever "actual provider expense". `tariff`, `receipt` and `provider-reported` together are the **known estimate** used for reconciliation; `shadow` is reported separately; `unknown` is counted, never summed as zero.
+
+## Append rules
+
+| Situation | Rule |
+| --- | --- |
+| Duplicate / redelivery | Same key, revision and content: no-op (`duplicate`). The same key and revision with different content: `IDEMPOTENCY_CONFLICT`, nothing written. Adapters derive `observedAt` and `placementClass` from the source row so a redelivery reproduces the stored bytes |
+| Delayed / out of order | Aggregates use the highest revision per identity, so any arrival order converges (the suite replays 31 orders). A lower revision arriving later is stored for audit as `stale-revision` and not counted. Receive sequence, not event time, orders arrival |
+| Late for a closed period | Accepted, flagged `lateAfterClose`, and reported as a **restatement** with its delta; the closed snapshot is never rewritten |
+| Tenant mismatch | The registered owner of `projectId` must equal `ownerId`, and the resource must belong to that project; otherwise `TENANT_MISMATCH` and no write. Unknown project: `UNKNOWN_PROJECT`. A later revision cannot move cost to another owner. A closed project is `PROJECT_CLOSED`: late provider cost is recorded at `platform/closed-account` scope instead |
+| Unknown rate or quantity | A `tariff` event naming an unknown or unpriced tariff is refused (`UNKNOWN_TARIFF`, `UNPRICED_DIMENSION`). The producer records `cost: unknown, rate-missing` instead; it is counted as unknown with its exposure and keeps reconciliation `incomplete` |
+| Pending or uncertain operation | Must carry `cost: unknown` with the reserved hold as `exposureMicros`. It becomes known only through a later revision (`settled` or `released`). A lost response is never retried and never priced as zero |
+| Released reservation | Quantity known `0`, cost known (`0`); it consumed nothing |
+| Tariff pinning | The event keeps the tariff `{id, version}` it was priced under, which must be effective at `occurredAt`. Publishing a later tariff, or moving the resource to another placement class, never reprices it |
+| Account-wide allowance | Tariff cost is marginal. A free allowance is metadata of the *account* and may not be allocated to tenants (`ALLOWANCE_ALLOCATION`); two tenants each under the allowance both carry marginal cost, and the difference to the invoice appears as an account-level residual |
+| Rounding | Cost is held as an exact fraction and rounded up **once per reported total**, so splitting usage into many events cannot raise a total (the scenario calculator's "partitioning cannot inflate" invariant) |
+| Content and secrets | Content-, secret- and token-shaped values, free text and locator-shaped keys are refused; the suite scans canonical bytes for secret patterns |
+
+## Registries
+
+The registries are closed. A later feature packet registers its **dimension, workload, tariff entry and adapter together** in one reviewed change; nothing is added at runtime and no event for an unregistered entry is accepted. Registering a planned entry does not provision the feature, set a price or grant authority.
+
+**Provider dimensions** (unit → provider tariff block; planning tariff `pool-proposal@1`, October 8, 2026 mirrors [`resourceTariff`](../src/resource-economics.ts), a Whumpo proposal rather than an invoice): `worker.requests`, `worker.cpu_ms`, `r2.storage`, `r2.class_a_ops`, `r2.class_b_ops`, `d1.rows_read`, `d1.rows_written`, `d1.storage`, `container.vcpu_seconds`, `container.memory_gib_seconds`, `container.disk_gb_seconds`, `container.egress`, `do.requests`, `do.duration`, `do.rows_read`, `do.rows_written`, `do.storage`, `stream.storage`, `stream.delivery`, plus `ai.inference.call` (priced by receipts, not a tariff). Registered but unpriced until reviewed: `notification.message`, `connector.provider_call`. Quick/standard/intensive/advanced task estimates in the scenario calculator are modeled completion targets, not measurable dimensions — task classes are not recorded.
+
+**Liability dimensions:** `liability.account-minimum` (for example the Workers account floor), `liability.provider-minimum` (prepaid blocks), `liability.license`, `liability.renewal` (verification / security-assessment renewals), `liability.support`, `liability.staging-retained` (retained staging and feedback) and `liability.uncertain-operation`. Unknown amounts stay explicit; an unresolved uncertain operation holds reconciliation `incomplete` until a later revision closes it.
+
+**Workloads** attribute cost to the customer capability it supports, so WH-023 and [WH-078](roadmap/backlog.md#wh-078--measure-composition-reuse-and-full-lifecycle-cost-per-outcome) can compute cost per outcome. Source today: `chat-ai`, `site-publication`, `app-runtime`, `storage-files`, `contact-intake`, `platform-standing`. Registered for later packets (all `planned`): `kit-preview` (WH-091), `guest-preview` and `comments` (WH-092), `leads` (WH-093), `notifications` (WH-068), `connector-read` and `connector-action` (WH-056, provider packets WH-096–100), `collaboration` (WH-090), `staging` (WH-101), `portfolio-bulk` (WH-102, WH-103). These packets are **not** dependencies of WH-022; they register through this interface when they are built.
+
+## Aggregation and reconciliation
+
+`summary` reports, per period, owner or pool, and by dimension, work class and workload: units, the tariff/receipt/provider-reported/known-estimate/shadow microdollars, unknown event and unknown-quantity counts, bounded exposure, unbounded-exposure events, pending and uncertain counts and zero customer units. Keys are sorted, so reports do not depend on arrival order.
+
+`reconcile(period, invoice)` compares an authenticated provider invoice (provider, invoice ID, period, USD total, line sums) with the events for that provider and returns the invoice total, known usage, known liabilities, the excluded shadow total, an explicit signed **residual**, unknown and unfinished counts, bounded and unbounded exposure and late-after-close count. Status is `incomplete` while anything is unknown or unfinished, `reconciled` only when the residual is within the stated tolerance, and `unexplained-residual` otherwise. A negative residual is account-level upside (shared allowance, credit or rounding), never a tenant credit; floors, provider minimums, licenses, renewals, support and staging appear as liability lines rather than being allocated silently to tenants. The reference does not import invoices; WH-171 owns the import.
+
+## Existing producers mapped onto the envelope
+
+| Producer (existing source) | Maps to | Exact gaps |
+| --- | --- | --- |
+| [`inference_calls`](../src/model-costs.ts) receipts (Chat orchestrator/ack) | `inference-receipt` → `ai.inference.call`, `chat-ai`; ack → `control`, others → `task`; status → revision (reserved 1, dispatched 2, uncertain 3, observed 4, released 4); shadow cost from `estimated_micros`; reserved hold as unknown exposure | **G-C1** no project/resource on Chat turns, so attribution is owner-level (`projectId: null`). **G-C2** only `created_at` exists; no per-status timestamps, so `observedAt = created_at`. **G-C3** rows update in place and keep no history; emission must hook each transition or snapshot the current status. **G-C4** `cost_basis` is only `subscription-shadow` or `unpriced`; no provider-reported cost, so `actualProviderExpenseMicros` stays `null`. Retries across Chat turns are not linked |
+| [`gateway_spend_attempts`](../src/gateway-spend.ts) | `gateway-settlement` → `ai.inference.call`; `receipt` cost from `provider_actual`; tier from the snapshot; `customer_actual` deliberately dropped | **G-C5** no timestamps on the attempt (the caller must supply them from the request/provider receipt). **G-C6** `provider_actual` is computed from the rate snapshot plus per-call fee, not a provider-reported amount. `gateway_provider_receipts.event_id`/`log_id` are the provider IDs to preserve but carry no cost. Dispatch is inactive in live routing |
+| [`standard_ai_requests`](../src/standard-ai-usage.ts) | Not emitted: it describes the same request as the inference receipts, so emitting it would double count tokens | Used only to cross-check the terminal state |
+| [`storage_project_usage` / `storage_usage`](../src/storage-budget.ts) | `storage-operations` → `r2.class_b_ops` at project scope; the counter value is the revision, so the latest reading wins in any order | **G-C7** counts *admitted* public photo reads (WH-075), not provider-billed Class B operations; platform `storage_usage` has no project and write operations have no per-project counter; no stored-byte, D1, Worker, Durable Object, Container or Stream dimension is collected anywhere (**G-C8**) |
+| [`task-cost-report`](../src/task-cost-report.ts), [`fair-use-inference-report`](../src/fair-use-inference-report.ts), [`fair-use-observation`](../src/fair-use-observation.ts) | Consumers of the same receipts. The suite proves the adapter's shadow total and held exposure equal `task-cost-report`'s over real SQLite semantics | **G-C9** they read `inference_calls` directly; any switch to events is a later, optional change |
+| [`fair-use-finance`](../src/fair-use-finance.ts) | Seven operator-attested cost categories; every dimension maps to one of `inference`, `hosting`, `support`, `other` | **G-C10** attested summaries, no provider statement reconciliation, until WH-171/WH-023 |
+| [`resource-economics`](../src/resource-economics.ts), [scenario report](economics/resource-pool-scenarios.json) | Tariff source; the suite reproduces all four published workloads from measured units within 1 microdollar per dimension | Task classes (quick/standard/intensive/advanced) are modeled, not measured |
+| `app_runs`, `backend_public_usage`, `build_jobs`, `contact_submissions`, `public_client_usage` | Existing counters that later slices can adapt to `worker.requests`/workload events | **G-C11** none emits cost events today |
+
+## Cloudflare billing and usage data sources
+
+Official pages read on **October 8, 2026**. Account entitlement, plan, retention and pricing **require verification** with the owner's account before any import is built; nothing here has been called.
+
+| Source | What it offers | Caveat for Whumpo |
+| --- | --- | --- |
+| [GraphQL Analytics API](https://developers.cloudflare.com/analytics/graphql-api/) and [limits](https://developers.cloudflare.com/analytics/graphql-api/limits/) | Aggregated request and resource datasets | Adaptive datasets retain at least 31 days; aggregates follow per-plan limits and sampling. Not an invoice |
+| [Workers metrics and analytics](https://developers.cloudflare.com/workers/observability/metrics-and-analytics/) and [observability](https://developers.cloudflare.com/workers/observability/) | Requests, CPU time, duration (GB-seconds), per-Worker metrics | Worker metrics are retained about three months in weekly windows; per-project attribution is not provided for shared Workers |
+| [AI Gateway costs](https://developers.cloudflare.com/ai-gateway/observability/costs/) and [logging](https://developers.cloudflare.com/ai-gateway/observability/logging/) | Token counts and an *estimated* cost per request; custom pricing | The cost is an estimation, available only where responses return tokens and a model name; logs follow Workers Logs pricing ([AI Gateway pricing](https://developers.cloudflare.com/ai-gateway/reference/pricing/)) |
+| [Billing API: billable usage](https://developers.cloudflare.com/api/resources/billing/subresources/usage/) | PayGo billable-usage records with billed/contracted cost per charge | Version 1 is Alpha and version 2 is Alpha and *Restricted*; entitlement and stability unverified. The only listed source of provider-billed cost |
+| [R2 metrics](https://developers.cloudflare.com/r2/platform/metrics-analytics/), [D1 metrics](https://developers.cloudflare.com/d1/observability/metrics-analytics/) | Operation and storage metrics | Provider measurement semantics and rounding differ from billing |
+| [Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/) | Account floor and block rates | Account minimums are liabilities, not per-tenant usage |
+
+Operator-exported statements (CSV/JSON kept in ignored `.secrets/`) are the default import path; an API integration needs its own reviewed read-only scope ([Cloudflare OAuth](integrations/cloudflare-connection.md)) and never a token in logs or model context.
+
+## Privacy, retention and closure
+
+Events are **content-free**: no prompts, replies, emails, free text, source, credentials or physical locators. The task reference is opaque; the owner/project/resource IDs are the only personal linkage. A new lifecycle class `cost-events` (purpose: reconciling provider cost; readers: operators; deletion and export boundary; key custody) must be registered in [data lifecycle](data-lifecycle.md) and [data protection](data-protection.md) by WH-170 before a table exists; the existing short operational windows are not extended silently. On account closure the owner link is removed (`redactOwner`: attribution becomes `platform/closed-account`, task reference cleared) while company totals are retained, and later cost of the closed project is recorded at platform scope. How long company totals and provider evidence are kept is an **owner decision** below; this document sets no statutory retention and makes no compliance claim.
+
+## Verification
+
+`node tests/cost-events-contract.mjs` (registered as `pnpm test:cost-events-contract`; also in `pnpm verify fast`) runs 19 reference checks and 6 agreement checks, then 42 mutants of the reference, each of which must be caught by its named check. Agreement checks read the existing code and data only: the tariff catalogue and the four economic scenarios against `src/resource-economics.ts`, adapter totals against `taskCostReport` over a real SQLite fixture (including pending, uncertain, released and unpriced rows), the receipt status vocabularies against `schema/platform.sql`, finance categories against `src/fair-use-finance.ts`, and import isolation. It uses synthetic identifiers and no database, network, credential or model.
+
+It does **not** prove: D1 storage or atomic emission, producer hooks, provider-usage import, invoice reconciliation against real statements, any real-period cost, WH-020's real-provider task cost, or live acceptance.
+
+## Delivery slices
+
+| ID | Slice | Depends on | Evidence required |
+| --- | --- | --- | --- |
+| WH-168 | This contract, offline reference and decomposition | WH-071, WH-006 | Offline suite and mutants |
+| WH-169 | Envelope validation, registries and pure adapters for the three existing producers in `src/`, no schema | WH-168 | Unit tests against actual receipt rows; `pnpm check`; existing model-cost and gateway suites |
+| WH-170 | Append-only event storage in the current canonical schema, atomic idempotent append, shadow emission at receipt transitions, lifecycle/closure registration | WH-169 | Disposable-D1 tests; **owner-run empty-D1 cutover for the new table** (changes the composed schema, so the automatic deploy refuses it) |
+| WH-171 | Operator-only provider usage/invoice import, liability register and aggregate reconciliation report | WH-170 | Fixture statements; no live Cloudflare call unless separately authorized |
+| WH-172 | Connected local acceptance of the whole parent acceptance list | WH-170, WH-171 | Disposable D1 end to end; existing economic scenarios compared with measured units |
+
+WH-022 depends on all five. **None depends on WH-023, WH-044 or WH-104**: WH-023 consumes the events for two complete cost periods, and premium funding (WH-044) writes its own ledger. Live shadow collection on the test deployment and closed-period data are WH-023 inputs, not WH-022 acceptance. The roadmap check rejects any path from a child to WH-023, WH-041, WH-044, WH-047, WH-049 or WH-104.
+
+## Open owner decisions
+
+None is assumed; each recommended default is a proposal.
+
+1. **Retention of attributable events and company totals.** Recommended: keep attributed events while the project exists, anonymize on closure, keep company totals and provider statements for the period the accountant or tax adviser requires.
+2. **Premium cost events.** Recommended: premium gateway attempts emit `provider-reported`/`receipt` cost with zero customer units, and the wallet debit stays in the WH-044 ledger.
+3. **Billable-usage API entitlement.** Recommended: start from operator-exported statements; ask the owner to confirm Billing API access before WH-171 considers a read-only integration.
+4. **Premium price and Unified Billing.** Whether AI Gateway Unified Billing or direct provider billing is used changes the cost basis; this contract records whichever is chosen without deciding it.
+5. **Support and moderation cost allocation.** Recommended: platform-level liabilities, not allocated to tenants, until two measured periods exist.
