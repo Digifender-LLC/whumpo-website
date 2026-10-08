@@ -22,10 +22,10 @@ async function suite(m){
  let count=0,n=0;
  const test=async(name,fn)=>{try{await fn();count++;}catch(error){throw new Error(name,{cause:error});}};
  const throws=(fn,code)=>assert.throws(fn,e=>{assert.equal(e.code,code,e.message);return true;});
- const fresh=(registry=m.defaultRegistry)=>{
+ const fresh=(registry=m.defaultRegistry,extra={})=>{
   const dir=m.createIdentityDirectory();
   dir.addProject(P1,O1);dir.addResource(P1,R1);dir.addProject(P2,O2);dir.addResource(P2,R2);
-  return {dir,ledger:m.createLedger({directory:dir,registry,now:()=>'2026-10-08T00:00:00.000Z'})};
+  return {dir,ledger:m.createLedger({directory:dir,registry,now:()=>'2026-10-08T00:00:00.000Z',...extra})};
  };
  const usage=(over={})=>{
   const e={contractVersion:1,source:'cloudflare-usage-import',sourceEventId:`cf-${++n}`,providerEventId:null,revision:1,kind:'usage',dimension:'worker.requests',workload:'app-runtime',
@@ -144,6 +144,22 @@ async function suite(m){
   throws(()=>ledger.append(usage({outcome:'pending',cost:{basis:'receipt',micros:0,ref:'r1'}})),'OUTCOME_COST');
   throws(()=>ledger.append(usage({outcome:'released'})),'OUTCOME_COST');
   throws(()=>ledger.append(usage({outcome:'released',quantity:{state:'known',value:0,unit:'request'},cost:{basis:'unknown',reason:'unpriced',exposureMicros:null}})),'OUTCOME_COST');
+  // A released reservation consumed nothing: known zero quantity, zero cost and no token detail, whatever the cost basis.
+  const released=(over={})=>usage({outcome:'released',quantity:{state:'known',value:0,unit:'request'},cost:{basis:'receipt',micros:0,ref:'rel'},...over});
+  for(const cost of [{basis:'receipt',micros:500,ref:'rel'},{basis:'provider-reported',micros:1,ref:'rel'}])throws(()=>ledger.append(released({cost})),'OUTCOME_COST');
+  throws(()=>ledger.append(released({quantity:{state:'known',value:1,unit:'request'}})),'OUTCOME_COST');
+  const inferred=m.eventFromInferenceCall(call({id:'rel-1',status:'released'}));
+  const variant=(sourceEventId,over)=>{const v={...inferred,sourceEventId,...over};v.idempotencyKey=m.idempotencyKey(v);return v;};
+  throws(()=>ledger.append(variant('rel-2',{cost:{basis:'receipt',micros:500,ref:'rate'}})),'OUTCOME_COST');
+  throws(()=>ledger.append(variant('rel-3',{cost:{basis:'shadow',micros:1,ref:'rate'}})),'OUTCOME_COST');
+  throws(()=>ledger.append(variant('rel-4',{detail:{inputTokens:10,outputTokens:0}})),'OUTCOME_COST');
+  throws(()=>ledger.append(variant('rel-5',{detail:{inputTokens:0,outputTokens:3}})),'OUTCOME_COST');
+  assert.equal(ledger.summary({period:'2026-10'}).events,0);
+  assert.equal(ledger.append(released()).status,'accepted');
+  assert.equal(ledger.append(inferred).status,'accepted');
+  assert.equal(ledger.append(variant('rel-6',{detail:{inputTokens:0,outputTokens:0}})).status,'accepted');
+  const none=ledger.summary({period:'2026-10'});
+  assert.equal(none.events,3);assert.equal(none.knownEstimateMicros,0);assert.equal(none.receiptMicros,0);assert.equal(none.shadowMicros,0);assert.equal(none.units.request,0);
   const e=m.eventFromGatewayAttempt({id:'gw-1',user_id:O1,task_id:'task-9',snapshot:JSON.stringify({tier:'standard',rate:{id:'rate-1'}}),status:'uncertain',provider_reserved:900,input_tokens:null,output_tokens:null,provider_actual:null},{occurredAt:OCT});
   ledger.append(e);
   const s=ledger.summary({period:'2026-10'});
@@ -303,19 +319,243 @@ async function suite(m){
   throws(()=>ledger.reconcile('2026-10',invoice(100,{period:'2026-09'})),'INVALID_INVOICE');
   throws(()=>ledger.reconcile('2026-10',{...invoice(100),extra:1}),'UNKNOWN_FIELD');
  });
- await test('account closure removes the owner link but keeps company totals',()=>{
-  const {ledger,dir}=fresh();
-  ledger.append(usage());ledger.append(m.eventFromInferenceCall(call()));ledger.append(usage({attribution:{scope:'tenant',ownerId:O2,projectId:P2,resourceId:R2}}));
+ // ---------- Isolation of every read surface and of the pricing registry ----------
+ await test('every read surface returns an isolated copy and the caller keeps no handle on stored events',()=>{
+  const {ledger}=fresh();
+  const input=m.eventFromInferenceCall(call({id:'iso-1'}));
+  ledger.append(input);
+  // The caller edits its own object after append: stored history is unchanged.
+  input.cost.micros=999;input.detail.inputTokens=1;input.attribution.ownerId=O2;
+  const expected=ledger.summary({period:'2026-10'});
+  assert.equal(expected.shadowMicros,140);
+  const head=ledger.exportHeads({})[0];
+  head.cost.micros=999;head.detail.inputTokens=0;head.attribution.ownerId='mutated';head.quantity.value=7;
+  ledger.exportHeads()[0].cost.micros=999;
+  assert.deepEqual(ledger.summary({period:'2026-10'}),expected);
+  assert.equal(ledger.exportHeads({})[0].cost.micros,140);assert.equal(ledger.exportHeads({})[0].attribution.ownerId,O1);
+  const report=ledger.summary({period:'2026-10'});
+  report.byDimension['ai.inference.call'].shadowMicros=1;report.byWorkload['chat-ai'].shadowMicros=1;report.units.call=0;delete report.byWorkClass.task;
+  assert.deepEqual(ledger.summary({period:'2026-10'}),expected);
+  const closed=ledger.closePeriod('2026-10');
+  closed.shadowMicros=1;closed.byWorkload['chat-ai'].shadowMicros=1;
+  const restated=ledger.restatement('2026-10');
+  assert.equal(restated.closedSnapshot.shadowMicros,140);
+  restated.closedSnapshot.shadowMicros=0;restated.closedSnapshot.byWorkClass.task.shadowMicros=0;restated.currentSummary.shadowMicros=0;
+  const again=ledger.restatement('2026-10');
+  assert.equal(again.closedSnapshot.shadowMicros,140);assert.equal(again.closedSnapshot.byWorkClass.task.shadowMicros,140);assert.equal(again.currentSummary.shadowMicros,140);
+  const repeat=ledger.closePeriod('2026-10');repeat.shadowMicros=0;
+  assert.equal(ledger.closePeriod('2026-10').shadowMicros,140);
+ });
+ await test('the ledger prices from a frozen registry snapshot, so a caller edit cannot reprice pinned history',()=>{
+  const custom=structuredClone(m.defaultRegistry);
+  const {ledger}=fresh(custom);
+  ledger.append(usage({dimension:'r2.class_b_ops',workload:'storage-files',quantity:{state:'known',value:1_000_000,unit:'operation'}}));
+  assert.equal(ledger.summary({period:'2026-10'}).tariffMicros,360_000);
+  const rates=custom.tariffs['pool-proposal'][1].rates;
+  rates['r2.class_b_ops'].micros=1;delete rates['worker.requests'];
+  custom.tariffs['pool-proposal'][1].effectiveTo='2026-10-01T00:00:00.000Z';custom.dimensions['r2.class_b_ops'].unit='gigabyte';
+  assert.equal(ledger.summary({period:'2026-10'}).tariffMicros,360_000);
+  // New events are still priced from the construction-time snapshot, not the edited registry.
+  assert.equal(ledger.append(usage({quantity:{state:'known',value:1_000_000,unit:'request'}})).status,'accepted');
+  assert.equal(ledger.summary({period:'2026-10'}).tariffMicros,660_000);
+  // The exported registry and every catalogue inside it are immutable.
+  assert.throws(()=>{m.defaultRegistry.tariffs['pool-proposal'][1].rates['r2.class_b_ops'].micros=1;},TypeError);
+  assert.throws(()=>{m.tariffs['pool-proposal'][2]={};},TypeError);assert.throws(()=>{m.dimensions['gpu.hours']={};},TypeError);
+  assert.throws(()=>{m.workloads['invented']={};},TypeError);assert.throws(()=>{m.sources['invented']={};},TypeError);
+  assert.equal(m.tariffs['pool-proposal'][1].rates['r2.class_b_ops'].micros,360_000);
+ });
+
+ // ---------- Exact integers ----------
+ await test('amounts beyond the exactly representable range are refused on every reported surface, never rounded',()=>{
+  const MAX=Number.MAX_SAFE_INTEGER;
+  const unsafe=fn=>throws(fn,'AMOUNT_UNSAFE');
+  const shadow=(id,micros)=>m.eventFromInferenceCall(call({id,estimated_micros:micros}));
+  const fill=(events,registry)=>{const {ledger}=fresh(registry);for(const e of events)ledger.append(e);return ledger;};
+  // A figure that is exactly representable is reported exactly; one more event that cannot be is refused, not reported as ...992.
+  assert.equal(fill([shadow('big-1',MAX)]).summary({period:'2026-10'}).shadowMicros,MAX);
+  unsafe(()=>fill([shadow('big-1',MAX),shadow('big-2',2)]).summary({period:'2026-10'}));
+  unsafe(()=>fill([shadow('big-1',MAX),shadow('big-2',1)]).summary({period:'2026-10'}));
+  assert.equal(fill([shadow('big-1',MAX-2),shadow('big-2',2)]).summary({period:'2026-10'}).shadowMicros,MAX);
+  // Quantity, with an unknown cost so only the unit total overflows.
+  const qty=()=>usage({quantity:{state:'known',value:MAX,unit:'request'},cost:{basis:'unknown',reason:'rate-missing',exposureMicros:null}});
+  assert.equal(fill([qty()]).summary({period:'2026-10'}).units.request,MAX);
+  unsafe(()=>fill([qty(),qty()]).summary({period:'2026-10'}));
+  // Bounded exposure.
+  const held=()=>usage({quantity:{state:'unknown',reason:'usage-not-reported'},cost:{basis:'unknown',reason:'usage-not-reported',exposureMicros:MAX}});
+  unsafe(()=>fill([held(),held()]).summary({period:'2026-10'}));
+  // Money: each basis alone, and a known estimate whose parts are individually exact but whose sum is not.
+  const money=basis=>liability('liability.account-minimum',{basis,micros:MAX,ref:'big'});
+  for(const basis of ['receipt','provider-reported'])unsafe(()=>fill([money(basis),money(basis)]).summary({period:'2026-10'}));
+  unsafe(()=>fill([money('receipt'),money('provider-reported')]).summary({period:'2026-10'}));
+  assert.equal(fill([money('receipt')]).summary({period:'2026-10'}).knownEstimateMicros,MAX);
+  // Tariff cost: units stay exact (4e15) while the 4.5 micro-dollar rate pushes the priced total past the limit.
+  const ops=()=>usage({dimension:'r2.class_a_ops',workload:'storage-files',quantity:{state:'known',value:2_000_000_000_000_000,unit:'operation'}});
+  assert.equal(fill([ops()]).summary({period:'2026-10'}).tariffMicros,9_000_000_000_000_000);
+  unsafe(()=>fill([ops(),ops()]).summary({period:'2026-10'}));
+  // Period delta: exact at the limit, refused beyond it.
+  const late=(micros)=>liability('liability.account-minimum',{basis:'provider-reported',micros,ref:'late'});
+  const restate=fill([]);restate.closePeriod('2026-10');
+  restate.append(late(MAX));
+  assert.equal(restate.restatement('2026-10').knownEstimateDeltaMicros,MAX);
+  restate.append(late(1));
+  unsafe(()=>restate.restatement('2026-10'));
+  // Reconciliation: line sums, residual, exposure and tolerance.
+  const invoice=(total,lines)=>({provider:'cloudflare',invoiceId:'inv-big',period:'2026-10',currency:'USD',totalMicros:total,lines});
+  const both=fill([usage({cost:{basis:'provider-reported',micros:MAX,ref:'a'}}),liability('liability.account-minimum',{basis:'provider-reported',micros:MAX,ref:'b'})]);
+  unsafe(()=>both.reconcile('2026-10',invoice(0,[])));
+  assert.equal(both.reconcile('2026-10',invoice(MAX,[{category:'all',amountMicros:MAX}]),{toleranceMicros:MAX}).usageKnownMicros,MAX);
+  const exposures=fill([held(),liability('liability.uncertain-operation',{basis:'unknown',reason:'outcome-unknown',exposureMicros:MAX},{outcome:'uncertain'})]);
+  unsafe(()=>exposures.summary({period:'2026-10'}));
+  unsafe(()=>exposures.reconcile('2026-10',invoice(0,[])));
+  throws(()=>both.reconcile('2026-10',invoice(MAX,[{category:'a',amountMicros:MAX},{category:'b',amountMicros:1},{category:'c',amountMicros:1}])),'INVOICE_LINES_MISMATCH');
+  throws(()=>both.reconcile('2026-10',invoice(2**53,[{category:'a',amountMicros:2**53}])),'INVALID_INVOICE');
+  for(const bad of [Number.NaN,Infinity,-1,1.5,'5',null,2**53])throws(()=>both.reconcile('2026-10',invoice(MAX,[{category:'all',amountMicros:MAX}]),{toleranceMicros:bad}),'INVALID_TOLERANCE');
+ });
+
+ // ---------- Revisions: identity is fixed, observations advance ----------
+ await test('revisions keep their identity fields and only advance observations and cost resolution, in any arrival order',()=>{
+  const rev=(revision,over={})=>usage({sourceEventId:'rev-x',revision,...over});
+  const pendingRev=()=>rev(1,{outcome:'pending',quantity:{state:'unknown',reason:'usage-pending'},cost:{basis:'unknown',reason:'usage-pending',exposureMicros:700}});
+  const tariffRev=()=>rev(2,{providerEventId:'prov-1',observedAt:'2026-10-03T00:00:00.000Z'});
+  const actualRev=()=>rev(3,{providerEventId:'prov-1',cost:{basis:'provider-reported',micros:450,ref:'inv-9'},observedAt:'2026-10-04T00:00:00.000Z'});
+  const sequence=[pendingRev(),tariffRev(),actualRev()];
+  // Unknown -> known and a learned provider ID are legitimate advances; every arrival order converges.
+  const result=order=>{const {ledger}=fresh();for(const i of order)ledger.append(structuredClone(sequence[i]));return ledger;};
+  const expected=JSON.stringify(result([0,1,2]).summary({period:'2026-10'}));
+  for(const order of [[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]]){
+   const ledger=result(order);
+   assert.equal(JSON.stringify(ledger.summary({period:'2026-10'})),expected,order.join());
+   const [head]=ledger.exportHeads({});assert.equal(head.revision,3);assert.equal(head.providerEventId,'prov-1');assert.equal(head.cost.micros,450);
+  }
+  const final=JSON.parse(expected);
+  assert.equal(final.providerReportedMicros,450);assert.equal(final.unknownEvents,0);assert.equal(final.boundedExposureMicros,0);assert.equal(final.pending,0);
+  // A refused pair is refused whichever revision arrives second.
+  const bothOrders=(lower,higher,code)=>{
+   const first=fresh().ledger;first.append(structuredClone(lower));throws(()=>first.append(structuredClone(higher)),code);
+   const second=fresh().ledger;second.append(structuredClone(higher));throws(()=>second.append(structuredClone(lower)),code);
+   assert.equal(first.summary({}).events+second.summary({}).events,2,'the refused revision is not stored');
+  };
+  const known=over=>rev(1,{providerEventId:'prov-1',...over});
+  // Cost cannot move to another period, workload, placement label or owner.
+  bothOrders(known(),rev(2,{providerEventId:'prov-1',occurredAt:'2026-11-02T00:00:00.000Z',observedAt:'2026-11-02T01:00:00.000Z'}),'IMMUTABLE_FIELD');
+  bothOrders(known(),rev(2,{providerEventId:'prov-1',workload:'storage-files'}),'IMMUTABLE_FIELD');
+  bothOrders(known(),rev(2,{providerEventId:'prov-1',placementClass:'isolated-function'}),'IMMUTABLE_FIELD');
+  bothOrders(known(),rev(2,{providerEventId:'prov-1',attribution:{scope:'tenant',ownerId:O2,projectId:P2,resourceId:R2}}),'TENANT_MISMATCH');
+  // The provider's ID is preserved once known: it cannot change or disappear.
+  bothOrders(known(),rev(2,{providerEventId:'prov-2'}),'IMMUTABLE_FIELD');
+  bothOrders(known(),rev(2,{providerEventId:null}),'IMMUTABLE_FIELD');
+  // Task, attempt and tier identify the work.
+  const inference=(status,over={})=>({...m.eventFromInferenceCall(call({id:'idf-1',status})),...over});
+  bothOrders(inference('reserved'),inference('observed',{taskRef:'another-turn'}),'IMMUTABLE_FIELD');
+  bothOrders(inference('reserved'),inference('observed',{workClass:'retry',attempt:2}),'IMMUTABLE_FIELD');
+  bothOrders(inference('reserved'),inference('observed',{aiTier:'premium'}),'IMMUTABLE_FIELD');
+  const ack=(status,over={})=>({...m.eventFromInferenceCall(call({id:'idf-ack',role:'ack',status})),...over});
+  bothOrders(ack('reserved'),ack('observed',{attempt:2}),'IMMUTABLE_FIELD');
+  // A pinned tariff version is the price basis; a revision cannot reprice under another version, but may replace it with an actual.
+  const overlap=structuredClone(m.defaultRegistry);
+  overlap.tariffs['pool-proposal'][2]={...structuredClone(overlap.tariffs['pool-proposal'][1]),rates:{...overlap.tariffs['pool-proposal'][1].rates,'worker.requests':{perUnits:1_000_000,micros:600_000}}};
+  const priced=(revision,version,over={})=>rev(revision,{cost:{basis:'tariff',tariff:{id:'pool-proposal',version}},...over});
+  {
+   const {ledger}=fresh(overlap);ledger.append(priced(1,1));
+   throws(()=>ledger.append(priced(2,2)),'IMMUTABLE_FIELD');
+   assert.equal(ledger.append(rev(2,{cost:{basis:'provider-reported',micros:450,ref:'inv-9'}})).status,'accepted');
+   throws(()=>ledger.append(priced(3,2)),'IMMUTABLE_FIELD');
+   assert.equal(ledger.summary({period:'2026-10'}).providerReportedMicros,450);
+   const reverse=fresh(overlap).ledger;reverse.append(priced(2,2));throws(()=>reverse.append(priced(1,1)),'IMMUTABLE_FIELD');
+  }
+  // Observations do not run backwards: a known cost or quantity is not made unknown again, a terminal outcome is final.
+  const settled=(over={})=>rev(1,{cost:{basis:'provider-reported',micros:450,ref:'inv-9'},...over});
+  bothOrders(settled(),rev(2,{outcome:'uncertain',cost:{basis:'unknown',reason:'outcome-unknown',exposureMicros:450}}),'REVISION_REGRESSION');
+  bothOrders(settled(),rev(2,{cost:{basis:'unknown',reason:'invoice-pending',exposureMicros:450}}),'REVISION_REGRESSION');
+  bothOrders(settled(),rev(2,{cost:{basis:'provider-reported',micros:450,ref:'inv-9'},quantity:{state:'unknown',reason:'usage-not-reported'}}),'REVISION_REGRESSION');
+  bothOrders(settled(),rev(2,{outcome:'released',quantity:{state:'known',value:0,unit:'request'},cost:{basis:'receipt',micros:0,ref:'rel'}}),'REVISION_REGRESSION');
+  bothOrders(settled({observedAt:'2026-10-05T00:00:00.000Z'}),settled({revision:2,observedAt:'2026-10-04T00:00:00.000Z',cost:{basis:'provider-reported',micros:500,ref:'inv-9'}}),'REVISION_REGRESSION');
+ });
+ await test('closing a period twice never rewrites the closed snapshot',()=>{
+  const {ledger}=fresh();
+  ledger.append(usage());
+  const first=ledger.closePeriod('2026-10');
+  assert.equal(first.tariffMicros,300);
+  ledger.append(usage({quantity:{state:'known',value:2000,unit:'request'},observedAt:'2026-11-03T00:00:00.000Z'}));
+  assert.deepEqual(ledger.closePeriod('2026-10'),first);
+  const restated=ledger.restatement('2026-10');
+  assert.deepEqual(restated.closedSnapshot,first);assert.equal(restated.lateEvents,1);assert.equal(restated.knownEstimateDeltaMicros,600);assert.equal(restated.currentSummary.tariffMicros,900);
+  // Further late arrivals and further close calls leave the first snapshot, the late flags and the baseline of the delta alone.
+  ledger.append(usage({quantity:{state:'known',value:3000,unit:'request'},observedAt:'2026-11-04T00:00:00.000Z'}));
+  assert.deepEqual(ledger.closePeriod('2026-10'),first);
+  const later=ledger.restatement('2026-10');
+  assert.deepEqual(later.closedSnapshot,first);assert.equal(later.lateEvents,2);assert.equal(later.knownEstimateDeltaMicros,1500);
+  assert.equal(ledger.reconcile('2026-10',{provider:'cloudflare',invoiceId:'inv-2',period:'2026-10',currency:'USD',totalMicros:1800,lines:[{category:'workers',amountMicros:1800}]}).lateAfterClose,2);
+  throws(()=>ledger.closePeriod('2026-1'),'INVALID_PERIOD');
+ });
+
+ // ---------- Account closure ----------
+ await test('account closure replaces every linkable identifier with a keyed tombstone while keeping totals, dedupe and recovery',()=>{
+  const KEY_A='0123456789abcdef0123456789abcdef',KEY_B='fedcba9876543210fedcba9876543210';
+  const gatewayRow=(over={})=>({id:'gw-secret-id',user_id:O1,task_id:'task-secret',snapshot:JSON.stringify({tier:'premium',rate:{id:'rate-2'}}),status:'settled',provider_reserved:5000,input_tokens:10,output_tokens:5,provider_actual:900,...over});
+  const build=(closureKey)=>{
+   const {ledger,dir}=fresh(m.defaultRegistry,{closureKey});
+   const storage=m.eventFromProjectStorageUsage({project_id:P1,period:'2026-10',read_ops:9},{ownerId:O1,observedAt:OCT_SEEN});
+   const events={
+    storage,gateway:m.eventFromGatewayAttempt(gatewayRow(),{occurredAt:OCT,providerEventId:'prov-secret-id'}),done:m.eventFromInferenceCall(call({id:'call-done',turn_id:'turn-done'})),
+    flightA:m.eventFromInferenceCall(pending({id:'call-secret-a',turn_id:'turn-secret-a'})),flightB:m.eventFromInferenceCall(pending({id:'call-secret-b',turn_id:'turn-secret-b'})),
+    resource:usage({sourceEventId:'cf-resource-1'}),other:usage({attribution:{scope:'tenant',ownerId:O2,projectId:P2,resourceId:R2}})
+   };
+   for(const e of Object.values(events))ledger.append(e);
+   return {ledger,dir,events};
+  };
+  const {ledger,dir,events}=build(KEY_A);
   const before=ledger.summary({period:'2026-10'});
-  assert.ok(ledger.redactOwner(O1)>=2);
-  const after=ledger.summary({period:'2026-10'});
-  assert.deepEqual({...after,byWorkClass:null,byWorkload:null,byDimension:null},{...before,byWorkClass:null,byWorkload:null,byDimension:null});
+  const linkable=[O1,P1,R1,'gw-secret-id','task-secret','prov-secret-id','call-done','turn-done','call-secret-a','turn-secret-a','call-secret-b','turn-secret-b',
+   ...['storage','gateway','done','flightA','flightB','resource'].map(k=>events[k].idempotencyKey),'cf-resource-1'];
+  const surfaces=()=>JSON.stringify([ledger.exportHeads({}),ledger.exportHeads({period:'2026-10'}),ledger.summary({period:'2026-10'})]);
+  assert.ok(linkable.every(id=>surfaces().includes(id)),'sanity: the identifiers are visible before closure');
+  assert.equal(ledger.redactOwner(O1),6);
+  assert.equal(ledger.redactOwner(O1),0);
+  // Nothing the ledger reports names the owner, project, resource, task, provider record or the original idempotency identity.
+  const after=surfaces();
+  for(const id of linkable)assert.ok(!after.includes(id),`still linkable: ${id}`);
+  assert.deepEqual(ledger.summary({period:'2026-10'}),before);
+  assert.equal(ledger.summary({period:'2026-10',ownerId:O1}).events,0);assert.equal(ledger.summary({period:'2026-10',pool:'closed-account'}).events,6);assert.equal(ledger.summary({period:'2026-10',ownerId:O2}).events,1);
+  const heads=ledger.exportHeads({pool:'closed-account'});
+  assert.equal(new Set(heads.map(e=>e.sourceEventId)).size,6);
+  for(const e of heads){
+   assert.deepEqual(e.attribution,{scope:'platform',pool:'closed-account'});assert.equal(e.taskRef,null);assert.equal(e.providerEventId,null);assert.match(e.sourceEventId,/^closed:[0-9a-f]{32}$/);
+   assert.equal(e.idempotencyKey,m.idempotencyKey(e),'the tombstone still satisfies the derived-key rule');
+  }
+  // The tombstone is keyed: another key gives other identifiers, the same key the same ones. An unkeyed hash would not.
+  const tombstones=l=>l.exportHeads({pool:'closed-account'}).map(e=>e.sourceEventId).sort();
+  const same=build(KEY_A),other=build(KEY_B);same.ledger.redactOwner(O1);other.ledger.redactOwner(O1);
+  assert.deepEqual(tombstones(same.ledger),tombstones(ledger));assert.notDeepEqual(tombstones(other.ledger),tombstones(ledger));
+  // Dedupe survives closure: a redelivery of the producer's original bytes is a no-op and a conflicting one is refused.
+  for(const k of ['storage','gateway','done','flightA'])assert.equal(ledger.append(structuredClone(events[k])).status,'duplicate',k);
+  const conflict={...events.done,detail:{inputTokens:1,outputTokens:1}};
+  throws(()=>ledger.append(conflict),'IDEMPOTENCY_CONFLICT');
+  assert.deepEqual(ledger.summary({period:'2026-10'}),before);
+  // Recovery survives closure: an in-flight operation resolves through its later revision, re-scoped to closed-account, exactly once.
+  const observed=m.eventFromInferenceCall(call({id:'call-secret-a',turn_id:'turn-secret-a'}));
+  assert.equal(ledger.append(observed).status,'accepted');
+  const recovered=ledger.summary({period:'2026-10'});
+  assert.equal(recovered.events,before.events);assert.equal(recovered.shadowMicros,before.shadowMicros+140);assert.equal(recovered.boundedExposureMicros,before.boundedExposureMicros-500);assert.equal(recovered.pending,before.pending-1);
   assert.equal(ledger.summary({period:'2026-10',ownerId:O1}).events,0);
-  assert.equal(ledger.summary({period:'2026-10',pool:'closed-account'}).events,2);
-  assert.ok(!JSON.stringify(ledger.exportHeads({})).includes(O1));assert.ok(!JSON.stringify(ledger.exportHeads({})).includes(P1));
+  assert.ok(!surfaces().includes('call-secret-a'));
+  // The producer may also re-emit at platform scope (the documented recovery for a closed project).
+  assert.equal(ledger.append({...m.eventFromInferenceCall(call({id:'call-secret-b',turn_id:'turn-secret-b'})),attribution:{scope:'platform',pool:'closed-account'}}).status,'accepted');
+  assert.equal(ledger.summary({period:'2026-10'}).events,before.events);assert.equal(ledger.summary({period:'2026-10'}).pending,0);
+  // Cost of a closed identity cannot move to another owner or pool, and a closed owner is never re-linked.
+  const later=(over)=>{const e={...observed,revision:5,...over};return e;};
+  throws(()=>ledger.append(later({attribution:{scope:'tenant',ownerId:O2,projectId:null,resourceId:null}})),'TENANT_MISMATCH');
+  throws(()=>ledger.append(later({attribution:{scope:'platform',pool:'shared-account'}})),'TENANT_MISMATCH');
+  throws(()=>ledger.append(m.eventFromInferenceCall(call({id:'post-close'}))),'OWNER_CLOSED');
+  assert.equal(ledger.append({...m.eventFromInferenceCall(call({id:'post-close'})),attribution:{scope:'platform',pool:'closed-account'}}).status,'accepted');
   dir.closeProject(P1);
   throws(()=>ledger.append(usage({sourceEventId:'cf-late'})),'PROJECT_CLOSED');
   assert.equal(ledger.append(usage({sourceEventId:'cf-late',attribution:{scope:'platform',pool:'closed-account'}})).status,'accepted');
+  // A later reading of a redacted storage counter still replaces the earlier one instead of adding to it.
+  const reading=m.eventFromProjectStorageUsage({project_id:P1,period:'2026-10',read_ops:12},{ownerId:O1,observedAt:OCT_SEEN});
+  assert.equal(ledger.append(reading).status,'accepted');
+  assert.equal(ledger.summary({period:'2026-10',pool:'closed-account'}).byDimension['r2.class_b_ops'].units.operation,12);
+  assert.ok(!surfaces().includes(P1));
  });
  return count;
 }
@@ -424,7 +664,7 @@ const mutants=[
  ['idempotency key not verified',"check(input.idempotencyKey===idempotencyKey(input),","check(true,"],
  ['tenant mismatch accepted',"check(p.ownerId===a.ownerId,'TENANT_MISMATCH'","check(true,'TENANT_MISMATCH'"],
  ['resource of another project accepted',"check(a.resourceId===null||p.resources.has(a.resourceId),'TENANT_MISMATCH'","check(true,'TENANT_MISMATCH'"],
- ['revision may change attribution',"canonical(rec.first.attribution)!==canonical(e.attribution)||rec.first.dimension!==e.dimension","false"],
+ ['revision may change attribution',"check(canonical(lower.attribution)===canonical(higher.attribution),'TENANT_MISMATCH'","check(true,'TENANT_MISMATCH'"],
  ['closed project still accepted',"check(!p.closed,'PROJECT_CLOSED'","check(true,'PROJECT_CLOSED'"],
  ['unknown cost not counted',"else{b.unknownEvents++;if(c.exposureMicros===null)b.unboundedExposure++;else b.boundedExposure+=BigInt(c.exposureMicros);}","else{}"],
  ['pending operation priced',"if(input.outcome==='pending'||input.outcome==='uncertain')check(","if(false)check("],
@@ -448,18 +688,55 @@ const mutants=[
  ['physical locator accepted',"check(!LOCATOR_KEY.test(k)||keys.includes(k),'PHYSICAL_LOCATOR'","check(true,'PHYSICAL_LOCATOR'"],
  ['client-assigned time accepted',"check(!['receivedAt','receivedSeq','late'].includes(k),'CLIENT_ASSIGNED'","check(true,'CLIENT_ASSIGNED'"],
  ['late events not flagged',"const lateAfterClose=closed.has(periodOf(e))&&seq>closed.get(periodOf(e)).closedSeq;","const lateAfterClose=false;"],
- ['closed snapshot rewritten',"closedSnapshot:c.snapshot","closedSnapshot:now_"],
- ['residual silently absorbed',"const status=unknown>0?'incomplete':Math.abs(residualMicros)<=toleranceMicros?'reconciled':'unexplained-residual';","const status='reconciled';"],
+ ['closed snapshot rewritten',"closedSnapshot:structuredClone(c.snapshot)","closedSnapshot:current"],
+ ['residual silently absorbed',"const status=unknown>0?'incomplete':(residual<0n?-residual:residual)<=BigInt(toleranceMicros)?'reconciled':'unexplained-residual';","const status='reconciled';"],
  ['unknown ignored by reconciliation',"const status=unknown>0?'incomplete':","const status="],
  ['shadow compared with the invoice',"const priced=events.filter(e=>e.cost.basis!=='shadow'),shadow=events.filter(e=>e.cost.basis==='shadow');","const priced=events,shadow=[];"],
  ['liability not separated',"addTo(registry.dimensions[e.dimension].kind==='liability'?liabilities:usage,e,registry);","addTo(usage,e,registry);"],
- ['owner link kept on closure',"if(rec.first.attribution.ownerId!==ownerId)continue;","continue;"],
+ ['owner link kept on closure',"if(first.attribution.ownerId!==ownerId)continue;","continue;"],
  ['unit not checked',"check(q.unit===dim.unit,'UNIT_MISMATCH'","check(true,'UNIT_MISMATCH'"],
  ['source may emit any dimension',"check(dim.sources.includes(input.source),'SOURCE_DIMENSION'","check(true,'SOURCE_DIMENSION'"],
  ['unknown workload accepted',"check(Object.hasOwn(registry.workloads,input.workload),'UNKNOWN_WORKLOAD'","check(true,'UNKNOWN_WORKLOAD'"],
  ['unknown version accepted',"check(input.contractVersion===contractVersion,'UNSUPPORTED_VERSION'","check(true,'UNSUPPORTED_VERSION'"],
- ['invoice lines not summed',"check(invoice.lines.reduce((s,l)=>s+l.amountMicros,0)===invoice.totalMicros,'INVOICE_LINES_MISMATCH'","check(true,'INVOICE_LINES_MISMATCH'"],
+ ['invoice lines not summed',"check(invoice.lines.reduce((s,l)=>s+BigInt(l.amountMicros),0n)===BigInt(invoice.totalMicros),'INVOICE_LINES_MISMATCH'","check(true,'INVOICE_LINES_MISMATCH'"],
  ['standing cost may name a task',"if(input.workClass==='standing')check(input.taskRef===null&&input.attempt===1,'OVERHEAD_CLASS'","if(input.workClass==='standing')check(true,'OVERHEAD_CLASS'"],
+ // --- review corrections: isolation, exact amounts, released, revision identity, close-once, closure boundary ---
+ ['exported heads share nested objects',".map(({canon,...e})=>structuredClone(e))",".map(({canon,...e})=>e)"],
+ ['restatement aliases the closed snapshot',"closedSnapshot:structuredClone(c.snapshot)","closedSnapshot:c.snapshot"],
+ ['close returns the stored snapshot',"return structuredClone(closed.get(period).snapshot);","return closed.get(period).snapshot;"],
+ ['ledger shares the caller registry',"const registry=deepFreeze(structuredClone(supplied));validateRegistry(registry);","const registry=supplied;validateRegistry(registry);"],
+ ['exported registry mutable',"export const defaultRegistry=deepFreeze({sources,dimensions,workloads,tariffs});","export const defaultRegistry={sources,dimensions,workloads,tariffs};"],
+ ['unsafe amounts rounded',"const exact=(v,what)=>{check(v>=-MAX_SAFE&&v<=MAX_SAFE,'AMOUNT_UNSAFE'","const exact=(v,what)=>{check(true,'AMOUNT_UNSAFE'"],
+ ['unit totals converted unchecked',"[k,exact(v,`units.${k}`)]","[k,Number(v)]"],
+ ['shadow total converted unchecked',"shadowMicros:exact(b.shadow,'shadowMicros')","shadowMicros:Number(b.shadow)"],
+ ['known estimate converted unchecked',"knownEstimateMicros:exact(known,'knownEstimateMicros')","knownEstimateMicros:Number(known)"],
+ ['exposure converted unchecked',"boundedExposureMicros:exact(b.boundedExposure,'boundedExposureMicros')","boundedExposureMicros:Number(b.boundedExposure)"],
+ ['reconciliation exposure sum unchecked',"boundedExposureMicros:exact(usage.boundedExposure+liabilities.boundedExposure,'boundedExposureMicros')","boundedExposureMicros:Number(usage.boundedExposure+liabilities.boundedExposure)"],
+ ['residual converted unchecked',"residualMicros:exact(residual,'residualMicros')","residualMicros:Number(residual)"],
+ ['tolerance unchecked',"check(isInt(toleranceMicros),'INVALID_TOLERANCE'","check(true,'INVALID_TOLERANCE'"],
+ ['released cost not enforced',"&&(input.cost.micros??0)===0",""],
+ ['released token detail not enforced',"&&Object.values(input.detail).every(v=>v===0)",""],
+ ['revision may move occurredAt',"'attempt','placementClass','occurredAt','aiTier'","'attempt','placementClass','aiTier'"],
+ ['revision may change workload',"['workload','workClass','taskRef'","['workClass','taskRef'"],
+ ['revision may change placement',"'attempt','placementClass','occurredAt'","'attempt','occurredAt'"],
+ ['revision may change task',"'workClass','taskRef','attempt','placementClass'","'workClass','attempt','placementClass'"],
+ ['revision may change attempt',"'taskRef','attempt','placementClass'","'taskRef','placementClass'"],
+ ['revision may change tier',"'occurredAt','aiTier']","'occurredAt']"],
+ ['provider event ID replaceable',"check(lower.providerEventId===null||lower.providerEventId===higher.providerEventId,'IMMUTABLE_FIELD'","check(true,'IMMUTABLE_FIELD'"],
+ ['revision may reprice the tariff pin',"check(lower.cost.basis!=='tariff'||higher.cost.basis!=='tariff'||canonical(lower.cost.tariff)===canonical(higher.cost.tariff),'IMMUTABLE_FIELD'","check(true,'IMMUTABLE_FIELD'"],
+ ['observedAt may run backwards',"check(higher.observedAt>=lower.observedAt,'REVISION_REGRESSION'","check(true,'REVISION_REGRESSION'"],
+ ['outcome may regress',"check(outcomeRank[higher.outcome]>=outcomeRank[lower.outcome]&&(outcomeRank[lower.outcome]<2||lower.outcome===higher.outcome),'REVISION_REGRESSION'","check(true,'REVISION_REGRESSION'"],
+ ['known quantity may be unknown again',"check(lower.quantity.state==='unknown'||higher.quantity.state==='known','REVISION_REGRESSION'","check(true,'REVISION_REGRESSION'"],
+ ['known cost may be unknown again',"check(lower.cost.basis==='unknown'||higher.cost.basis!=='unknown','REVISION_REGRESSION'","check(true,'REVISION_REGRESSION'"],
+ ['period close overwrites the snapshot',"if(!closed.has(period))closed.set(period,{closedSeq:seq,snapshot:summary({period})});","closed.set(period,{closedSeq:seq,snapshot:summary({period})});"],
+ ['closure keeps the source event ID',"({...e,sourceEventId:tomb.sourceEventId,","({...e,sourceEventId:e.sourceEventId,"],
+ ['closure keeps the idempotency key',"sourceEventId:tomb.sourceEventId,idempotencyKey:tomb.idempotencyKey,","sourceEventId:tomb.sourceEventId,idempotencyKey:e.idempotencyKey,"],
+ ['closure keeps the provider event ID',"idempotencyKey:tomb.idempotencyKey,providerEventId:null,","idempotencyKey:tomb.idempotencyKey,providerEventId:e.providerEventId,"],
+ ['closure keeps the task reference',"providerEventId:null,taskRef:null,attribution:","providerEventId:null,taskRef:e.taskRef,attribution:"],
+ ['closure tombstone unkeyed',"createHmac('sha256',closureKey).update(","createHash('sha256').update("],
+ ['closed identity not found again',"rec=identities.get(tomb.idempotencyKey);","rec=undefined;"],
+ ['closed identity may move owner',"check(a.scope==='tenant'?mac('owner',a.ownerId)===rec.ownerMac:a.pool==='closed-account','TENANT_MISMATCH'","check(true,'TENANT_MISMATCH'"],
+ ['closed owner receives tenant cost again',"check(!closedOwners.has(mac('owner',e.attribution.ownerId)),'OWNER_CLOSED'","check(true,'OWNER_CLOSED'"],
 ];
 // Each mutant must be caught by the check written for that property, not by an unrelated failure.
 const killedBy={
@@ -478,7 +755,20 @@ const killedBy={
  'residual silently absorbed':'provider minimums','unknown ignored by reconciliation':'provider minimums',
  'shadow compared with the invoice':'reconciliation reports','liability not separated':'provider minimums','invoice lines not summed':'reconciliation reports',
  'owner link kept on closure':'account closure','unit not checked':'unknown versions, fields','source may emit any dimension':'unknown versions, fields',
- 'unknown workload accepted':'unknown versions, fields','unknown version accepted':'unknown versions, fields'
+ 'unknown workload accepted':'unknown versions, fields','unknown version accepted':'unknown versions, fields',
+ 'exported heads share nested objects':'every read surface','restatement aliases the closed snapshot':'every read surface','close returns the stored snapshot':'every read surface',
+ 'ledger shares the caller registry':'the ledger prices from a frozen registry','exported registry mutable':'the ledger prices from a frozen registry',
+ 'unsafe amounts rounded':'amounts beyond the exactly representable range','unit totals converted unchecked':'amounts beyond the exactly representable range','shadow total converted unchecked':'amounts beyond the exactly representable range',
+ 'known estimate converted unchecked':'amounts beyond the exactly representable range','exposure converted unchecked':'amounts beyond the exactly representable range',
+ 'reconciliation exposure sum unchecked':'amounts beyond the exactly representable range','residual converted unchecked':'amounts beyond the exactly representable range','tolerance unchecked':'amounts beyond the exactly representable range',
+ 'released cost not enforced':'a pending or uncertain','released token detail not enforced':'a pending or uncertain',
+ 'revision may move occurredAt':'revisions keep their identity fields','revision may change workload':'revisions keep their identity fields','revision may change placement':'revisions keep their identity fields',
+ 'revision may change task':'revisions keep their identity fields','revision may change attempt':'revisions keep their identity fields','revision may change tier':'revisions keep their identity fields',
+ 'provider event ID replaceable':'revisions keep their identity fields','revision may reprice the tariff pin':'revisions keep their identity fields','observedAt may run backwards':'revisions keep their identity fields',
+ 'outcome may regress':'revisions keep their identity fields','known quantity may be unknown again':'revisions keep their identity fields','known cost may be unknown again':'revisions keep their identity fields',
+ 'period close overwrites the snapshot':'closing a period twice',
+ 'closure keeps the source event ID':'account closure','closure keeps the idempotency key':'account closure','closure keeps the provider event ID':'account closure','closure keeps the task reference':'account closure',
+ 'closure tombstone unkeyed':'account closure','closed identity not found again':'account closure','closed identity may move owner':'account closure','closed owner receives tenant cost again':'account closure'
 };
 let killed=0;
 for(const [name,find,replace] of mutants){
