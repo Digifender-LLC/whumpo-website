@@ -6,6 +6,7 @@ import {stableCMSDatabase,captureCMSDatabase,restoreCapturedCMSDatabase} from '.
 import {fileInventory,copyTree,same} from './release-manifest.mjs';
 import {writePrivate,readPrivate,pathCheck} from './operator-private-files.mjs';
 import {captureRestoreArchive,captureRestoreRecordSnapshot,restoreRecordIdentity} from './restore-admission.mjs';
+import {DrillHold,isRecoveryAuthority,recoveryAuthorityDatabase,reobserveRecoveryAuthority} from './recovery-authority.mjs';
 
 // WH-008 local disaster-recovery drill helpers. Operator/local only: there is no
 // HTTP listener, route binding, publisher, provider adapter or SQL writer for a
@@ -17,7 +18,7 @@ const id=v=>typeof v==='string'&&/^[a-zA-Z0-9_-]{1,128}$/.test(v);
 const ident=s=>'"'+s.replaceAll('"','""')+'"';
 const fenced={servingAllowed:false,providerDispatchAllowed:false,retirementAllowed:false};
 const limits={objects:10000,objectBytes:1048576,statements:20000,sqlBytes:64*1024*1024};
-export class DrillHold extends Error{constructor(code){super('Recovery drill step held: '+code);this.code=code;}}
+export {DrillHold};
 const hold=(value,code)=>{if(!value)throw new DrillHold(code);};
 const pointFile='recovery-point.json';
 
@@ -60,13 +61,31 @@ async function readObject(objects,entry){
 }
 async function privateDirectory(path){await mkdir(path,{mode:0o700});await pathCheck(join(path,'x'),{external:true,parent:true});return path;}
 
-/** Capture one local recovery point: two equal logical control-database reads,
- * an isolated SQLite round trip, every referenced private object body and the
- * selected Worker build outputs. The manifest is written last as the completion
- * marker. It is restricted operator data; capture grants no restore authority. */
-export async function captureRecoveryPoint({sourceDb,objects,directory,snapshotId,workers={},now=Date.now}){
- hold(id(snapshotId),'point-identity');await pathCheck(directory,{external:true,parent:true});await privateDirectory(directory);
+const accountId=v=>typeof v==='string'&&/^[0-9a-f]{32}$/.test(v);
+const sourceShape=source=>!!source&&typeof source==='object'&&['account-client','injected-client'].includes(source.provenance)&&accountId(source.accountId)&&/^[0-9a-f-]{36}$/.test(source.databaseId)
+ &&['apps','sites','platform'].every(role=>typeof source.versions?.[role]==='string')&&sha(source.schema?.sqlSha256)&&sha(source.schema?.objectsSha256)
+ &&Number.isSafeInteger(source.observed?.before)&&Number.isSafeInteger(source.observed?.after)&&source.continuity==='bracketing-observations';
+
+/** Capture one local recovery point from the recovery SOURCE AUTHORITY: the single
+ * database bound to the active platform Worker while apps and sites are bound to it
+ * (tools/recovery-authority.mjs). A raw database adapter is refused. The authority
+ * is observed again before and after the two equal logical control reads; any change
+ * of binding, Worker version or schema refuses and writes nothing. That proves the
+ * endpoints, not that nothing moved in between (no write fence or monotonic
+ * generation exists). Then an isolated SQLite round trip, every referenced private
+ * object body and the selected Worker build outputs. The manifest is written last
+ * as the completion marker. It is restricted operator data; capture grants no
+ * restore authority. A lost reply means discarding the point for a new snapshotId:
+ * never recompute a digest from the archive. */
+export async function captureRecoveryPoint({authority,objects,directory,snapshotId,workers={},now=Date.now,...unknown}){
+ hold(isRecoveryAuthority(authority),'source-not-authority');hold(Object.keys(unknown).length===0,'point-input');
+ hold(id(snapshotId),'point-identity');await pathCheck(directory,{external:true,parent:true});
+ const sourceDb=recoveryAuthorityDatabase(authority);
+ await reobserveRecoveryAuthority(authority);
  const capturedAt=now(),control=await stableCMSDatabase(query(sourceDb),{maxRows:200000});
+ await reobserveRecoveryAuthority(authority);
+ const observedAfter=now();
+ await privateDirectory(directory);
  const scratch=new DatabaseSync(':memory:');
  try{
   restoreCapturedCMSDatabase(scratch,control.snapshot);
@@ -82,10 +101,11 @@ export async function captureRecoveryPoint({sourceDb,objects,directory,snapshotI
   for(const [role,source] of Object.entries(workers)){hold(id(role),'worker-artifact');workerInventory[role]=await copyTree(source,join(directory,'workers',role));}
   await writePrivate(join(directory,'control.json'),Buffer.from(JSON.stringify(control.snapshot)));
   const objectList=entries.map(e=>({key:e.key,size:e.size,sha256:e.sha256,metadata:e.metadata}));
-  const point={format:'whumpo-recovery-point-v1',environment:'test',snapshotId,capturedAt,control:{sha256:control.digest,rows:control.rows,bytes:control.bytes},objects:{count:objectList.length,bytes:objectList.reduce((n,o)=>n+o.size,0),sha256:digest(JSON.stringify(objectList)),entries:objectList},workers:Object.fromEntries(Object.entries(workerInventory).map(([role,files])=>[role,{files,sha256:digest(JSON.stringify(files))}])),notIncluded:['Worker secret values','independent suppression authority','provider-side state','customer DNS/zone and GitHub copies','native CMS resources']};
+  const source={provenance:authority.provenance,accountId:authority.accountId,databaseId:authority.databaseId,versions:{...authority.versions},schema:{sqlSha256:authority.schema.sqlSha256,objectsSha256:authority.schema.objectsSha256},observed:{before:capturedAt,after:observedAfter},continuity:'bracketing-observations'};
+  const point={format:'whumpo-recovery-point-v2',environment:'test',snapshotId,capturedAt,source,control:{sha256:control.digest,rows:control.rows,bytes:control.bytes},objects:{count:objectList.length,bytes:objectList.reduce((n,o)=>n+o.size,0),sha256:digest(JSON.stringify(objectList)),entries:objectList},workers:Object.fromEntries(Object.entries(workerInventory).map(([role,files])=>[role,{files,sha256:digest(JSON.stringify(files))}])),notIncluded:['Worker secret values','independent suppression authority','provider-side state','customer DNS/zone and GitHub copies','native CMS resources']};
   const pointBytes=Buffer.from(JSON.stringify(point));await writePrivate(join(directory,pointFile),pointBytes);
   // Record pointDigest outside the archive directory; every later read requires it.
-  return {snapshotId,pointDigest:digest(pointBytes),capturedAt,controlDigest:control.digest,controlRows:control.rows,controlBytes:control.bytes,objects:point.objects.count,objectBytes:point.objects.bytes,workers:Object.keys(point.workers)};
+  return {snapshotId,pointDigest:digest(pointBytes),capturedAt,source:{accountId:source.accountId,databaseId:source.databaseId,versions:source.versions},controlDigest:control.digest,controlRows:control.rows,controlBytes:control.bytes,objects:point.objects.count,objectBytes:point.objects.bytes,workers:Object.keys(point.workers)};
  }finally{scratch.close();}
 }
 
@@ -97,7 +117,7 @@ export async function verifyRecoveryPoint(directory,expectedDigest){
  try{bytes=await readPrivate(join(directory,pointFile),1024*1024*16);}catch{throw new DrillHold('point-missing');}
  hold(digest(bytes)===expectedDigest,'point-digest');
  try{point=JSON.parse(bytes);}catch{throw new DrillHold('point-format');}
- hold(point?.format==='whumpo-recovery-point-v1'&&point.environment==='test'&&id(point.snapshotId),'point-format');
+ hold(point?.format==='whumpo-recovery-point-v2'&&point.environment==='test'&&id(point.snapshotId)&&sourceShape(point.source),'point-format');
  try{bytes=await readPrivate(join(directory,'control.json'),limits.sqlBytes);}catch{throw new DrillHold('control-missing');}
  hold(digest(bytes)===point.control.sha256,'control-digest');snapshot=JSON.parse(bytes);
  hold(Array.isArray(point.objects.entries)&&digest(JSON.stringify(point.objects.entries))===point.objects.sha256,'object-manifest');
