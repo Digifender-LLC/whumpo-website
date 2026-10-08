@@ -93,6 +93,8 @@ assert.notEqual(reads('scoped'),reads('unscoped'));
 await probe.scope('chat-insert',()=>probed.db.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,mode,status,created_at) VALUES('turn-a2','workspace-a',2,'MARKER-CHAT-A2','','ai','completed','2026-10-01')").run());
 assert.ok(!JSON.stringify(probe.actions('chat-insert')).includes('MARKER'),'the authorizer never sees bound or literal values');
 assert.ok(authorizerLimitations.some(l=>/does not see predicates or bound values/.test(l))&&authorizerLimitations.some(l=>/--d1/.test(l)));
+// Restoring clears; it cannot restore an authorizer set by other code, and the limitations say so rather than claim it.
+assert.ok(authorizerLimitations.some(l=>/cannot read an existing authorizer.*replaced and then cleared/.test(l)));
 
 // ---- 4. cleanup per fixture: the hook is restored and a later fixture is unaffected ----
 const sql=probed.sql;
@@ -116,7 +118,9 @@ assert.equal(unavailableAuthorizerProbe.available,false);
 assert.match(unavailableAuthorizerProbe.reason,/miniflare, --d1/);
 assert.equal(unavailableAuthorizerProbe.scope('x',()=>42),42);
 assert.deepEqual(unavailableAuthorizerProbe.report('x').tables,{});assert.equal(unavailableAuthorizerProbe.report().available,false);
-assert.equal(unavailableAuthorizerProbe.references('projects','owner_user_id'),false);
+// Reading actions fails loudly, so `references(...) === false` can never pass vacuously on an unprobed D1 fixture.
+assert.throws(()=>unavailableAuthorizerProbe.references('projects','owner_user_id'),/exists only for the in-memory SQLite fixture/);
+assert.throws(()=>unavailableAuthorizerProbe.actions(),/exists only for the in-memory SQLite fixture/);
 assert.throws(()=>unavailableAuthorizerProbe.compile('SELECT 1'),/exists only for the in-memory SQLite fixture/);
 if(process.argv.includes('--d1-fixture')){
  const fixture=await databaseFixture({d1:true,probe:true,allowedArguments:['--d1-fixture']});

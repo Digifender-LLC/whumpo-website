@@ -1,7 +1,7 @@
 {
  "version": 1,
  "status": "proposed-not-frozen",
- "purpose": "WH-054 packet 1a classification of every column that references users(id). Proposed engineering classification; no owner decision is recorded here and nothing is accepted. The schema freeze (packet 1b) is refused while any entry is proposed or undecided.",
+ "purpose": "WH-054 packet 1a classification of every column that references users(id). Proposed engineering classification; nothing is accepted. Two owner answers recorded in the contract on October 8, 2026 (member-only accounts, the five-active-member limit) are copied onto their questions; they change no entry's class or status, and the four remaining product questions are open. The schema freeze (packet 1b) is refused while any entry is not accepted or any question is open.",
  "contract": "docs/workspace-collaboration.md",
  "evidence": "docs/workspace-collaboration-evidence.md",
  "baseline": {
@@ -26,7 +26,7 @@
    "accepted": "Reserved for the child-1 schema review. No entry is accepted at this baseline."
   },
   "evidenceLevels": {
-   "review-spike": "Classified by the October 8 feasibility review (in-memory SQLite spike, 19 of 22 assertions); a mechanical key rename, not an implementation.",
+   "review-spike": "Classified by the October 8 feasibility review. The in-memory spike was one mechanical key rename with 22 schema-wide assertions (19 passed); it did not exercise this entry's disposition, so the entry is not fixture-proven.",
    "source-reading": "Proposed from repository source reading only; no fixture or test has exercised the disposition."
   },
   "roles": "tenant, account, actor, custody, payer and epoch are separate roles on separate intended columns; none stands in for another. account keeps REFERENCES users; the others never reference users.",
@@ -39,11 +39,11 @@
  },
  "questions": [
   {"id":"payer-on-transfer","item":1,"anchor":"docs/workspace-collaboration.md#remaining-product-questions","ownerAnswerRecorded":false,"summary":"Who is the payer of record after a transfer, and what the recipient must do before completion."},
-  {"id":"member-only-accounts","item":2,"anchor":"docs/workspace-collaboration.md#remaining-product-questions","ownerAnswerRecorded":false,"summary":"Whether a person holding only memberships may enter without creating a workspace."},
-  {"id":"retention-and-closure-window","item":3,"anchor":"docs/workspace-collaboration.md#remaining-product-questions","ownerAnswerRecorded":false,"summary":"Retention of suspended rows, workspace audit, actor rows, invitations and the provider login in terminal revocation receipts; closure cancellation window."},
-  {"id":"member-limit","item":4,"anchor":"docs/workspace-collaboration.md#remaining-product-questions","ownerAnswerRecorded":false,"summary":"Whether the engineering default of 5 active members counts owners, and whether pricing copy may mention a limit."},
-  {"id":"late-payment-continuity","item":5,"anchor":"docs/workspace-collaboration.md#remaining-product-questions","ownerAnswerRecorded":false,"summary":"How late a renewal may be recorded and still keep members without an owner resume (settlement window)."},
-  {"id":"funded-workspace-bound","item":6,"anchor":"docs/workspace-collaboration.md#remaining-product-questions","ownerAnswerRecorded":false,"summary":"Bound on platform-funded budgets and project quota across the workspaces one account may own or fund."}
+  {"id":"member-only-accounts","anchor":"docs/workspace-collaboration.md#owner-decisions-recorded","ownerAnswerRecorded":true,"ownerAnswer":{"recordedOn":"2026-10-08","answer":"A person with a completed account may join and use an invited workspace without first creating their own workspace or project; member-only accounts are allowed.","anchor":"docs/workspace-collaboration.md#member-only-accounts"},"summary":"Whether a person holding only memberships may enter without creating a workspace."},
+  {"id":"retention-and-closure-window","item":2,"anchor":"docs/workspace-collaboration.md#remaining-product-questions","ownerAnswerRecorded":false,"summary":"Retention of suspended rows, workspace audit, actor rows, invitations and the provider login in terminal revocation receipts (GitHub login included); closure cancellation window."},
+  {"id":"member-limit","anchor":"docs/workspace-collaboration.md#owner-decisions-recorded","ownerAnswerRecorded":true,"ownerAnswer":{"recordedOn":"2026-10-08","answer":"The first release permits five active members per workspace, including owners. It is an initial capacity limit, not a pricing commitment.","anchor":"docs/workspace-collaboration.md#member-limit"},"summary":"Whether the engineering default of 5 active members counts owners, and whether pricing copy may mention a limit."},
+  {"id":"late-payment-continuity","item":3,"anchor":"docs/workspace-collaboration.md#remaining-product-questions","ownerAnswerRecorded":false,"summary":"How late a renewal may be recorded and still keep members without an owner resume (settlement window)."},
+  {"id":"funded-workspace-bound","item":4,"anchor":"docs/workspace-collaboration.md#remaining-product-questions","ownerAnswerRecorded":false,"summary":"Bound on platform-funded budgets and project quota across the workspaces one account may own or fund (not the first workspace of a member-only account, which follows ordinary creation rules)."}
  ],
  "columns": [
   {"column":"activity_events.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace+actor","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id","actor":"actor_ref"},"status":"proposed","evidenceLevel":"review-spike","basis":"Activity log of a project; who acted","evidence":["docs/workspace-collaboration.md#actor-references-chat-identity-and-receipt-principals"]},

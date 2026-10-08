@@ -137,8 +137,38 @@ const lint=(triggers)=>{const db=new DatabaseSync(':memory:');db.exec(typed+'\n'
  CREATE TRIGGER via_cast BEFORE INSERT ON reviews BEGIN SELECT RAISE(ABORT,'x') WHERE CAST(NEW.workspace_id AS TEXT)=(SELECT id FROM users LIMIT 1); END;`);
  assert.deepEqual(result.lint.findings,[]);
  assert.ok(result.coverage.lint.byTypePair['account/untyped']>=2,JSON.stringify(result.coverage.lint.byTypePair));
- assert.ok(validatorLimitations.some(l=>/Function results, CASE branches, CAST results/.test(l)));
+ assert.ok(validatorLimitations.some(l=>/CASE branches, CAST results/.test(l)));
  assert.ok(validatorLimitations.some(l=>/not proof|not a proof|proves a body resolves/.test(l)));
+}
+
+{
+ // Review regressions. A view's own comparison belongs to the view, never to an object that only reads it (it used to
+ // be recorded again in whichever object first read the view, so findings depended on object order).
+ const reader=lint(`
+ CREATE VIEW leaky AS SELECT r.id FROM reviews r JOIN users u ON u.id=r.workspace_id;
+ CREATE TRIGGER reads_leaky BEFORE INSERT ON holds BEGIN SELECT RAISE(ABORT,'x') WHERE EXISTS(SELECT 1 FROM leaky WHERE id=NEW.id); END;`);
+ assert.deepEqual(reader.lint.findings.map(f=>f.object),['leaky']);
+ const alone=lint(`CREATE VIEW leaky AS SELECT r.id FROM reviews r JOIN users u ON u.id=r.workspace_id;`);
+ assert.equal(alone.lint.findings[0].fingerprint,reader.lint.findings[0].fingerprint);
+ assert.equal(reader.coverage.lint.comparisons,alone.coverage.lint.comparisons+1);
+ // An operand that can carry an account (a UNION view column, COALESCE with an untyped value) is still cross-type
+ // against a workspace column; row values compare element by element.
+ const mixed=lint(`
+ CREATE VIEW either AS SELECT user_id AS k FROM holds UNION ALL SELECT id FROM projects;
+ CREATE TRIGGER union_cross BEFORE INSERT ON reviews BEGIN SELECT RAISE(ABORT,'x') WHERE EXISTS(SELECT 1 FROM either WHERE k=NEW.workspace_id); END;
+ CREATE TRIGGER coalesce_untyped BEFORE INSERT ON reviews BEGIN SELECT RAISE(ABORT,'x') WHERE coalesce(NEW.user_id,NEW.note)=NEW.workspace_id; END;
+ CREATE TRIGGER row_value BEFORE INSERT ON reviews BEGIN SELECT RAISE(ABORT,'x') WHERE (NEW.id,NEW.user_id)=(NEW.id,NEW.workspace_id); END;
+ CREATE TRIGGER row_in BEFORE INSERT ON reviews BEGIN SELECT RAISE(ABORT,'x') WHERE (NEW.project_id,NEW.user_id) IN (SELECT id,workspace_id FROM projects); END;`);
+ const flagged=new Map(mixed.lint.findings.map(f=>[f.object,f]));
+ for(const name of ['union_cross','coalesce_untyped','row_value','row_in'])assert.ok(flagged.has(name),`${name} not flagged: ${mixed.lint.findings.map(f=>f.comparison)}`);
+ assert.equal(flagged.get('union_cross').types,'mixed/workspace');assert.equal(flagged.get('row_in').comparison,'reviews.user_id IN projects.workspace_id');
+ assert.equal(mixed.lint.findings.filter(f=>f.object==='row_value').length,1,'the same-typed element pair is not a finding');
+ // Row values or IN operands the resolver cannot pair fail closed instead of producing no comparison.
+ const unpaired=lint(`
+ CREATE TRIGGER in_table BEFORE INSERT ON reviews BEGIN SELECT RAISE(ABORT,'x') WHERE NEW.workspace_id IN users; END;
+ CREATE TRIGGER row_vs_scalar BEFORE INSERT ON reviews BEGIN SELECT RAISE(ABORT,'x') WHERE (NEW.id,NEW.user_id) IN (SELECT id FROM users); END;`);
+ mention(unpaired,/trigger in_table uses unsupported SQL: IN users/);mention(unpaired,/trigger row_vs_scalar uses unsupported SQL: IN \(SELECT \.\.\.\) whose row width/);
+ assert.equal(unpaired.coverage.lint.triggersAnalyzed,0);
 }
 
 // ---- 5. unsupported SQL is reported, never skipped ----
