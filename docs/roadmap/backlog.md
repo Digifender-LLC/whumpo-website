@@ -2,7 +2,7 @@
 
 > Generated from `backlog.json` by `node tools/roadmap.mjs render`. Edit the JSON source, then render again.
 
-Reviewed 2026-10-01 against source `db8b740ab2346f55f2985593b1ec531a99027630`. 157 planned tasks.
+Reviewed 2026-10-01 against source `db8b740ab2346f55f2985593b1ec531a99027630`. 164 planned tasks.
 
 Planning readiness and dependencies describe the plan. Current execution, claims, blockers, and completion evidence live in GitHub Issues. A ready task is only a candidate: verify live dependency completion and authorization before work.
 
@@ -7596,7 +7596,7 @@ Distinctive sites and portals use different presentation while retaining the sam
 
 ### Dependencies and blockers
 
-Planning dependencies: WH-066, WH-067. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+Planning dependencies: WH-066, WH-067, WH-161, WH-162, WH-163, WH-164, WH-165, WH-166, WH-167. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
 No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
 
@@ -7610,6 +7610,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [src/app-page-design.ts](../../src/app-page-design.ts)
 - [web/visitor.js](../../web/visitor.js)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [docs/customer-presentation.md](../../docs/customer-presentation.md)
 
 ### Execution coordination
 
@@ -7617,7 +7618,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-08 UTC: decomposed into WH-161–167 with the planned contract in docs/customer-presentation.md, the offline reference tools/prototypes/customer-presentation.mjs and the mutation-checked conformance suite tests/customer-presentation-contract.mjs (fast profile). Planning only: no specification schema, compiler identity, route, table, catalog entry, binding, dependency or deployment exists. WH-070 acceptance is unchanged and closes only after every child. Five owner decisions are open (custom-component hosting, custom-component writes, model-produced custom script, owner authoring path, visual acceptance). Live GitHub issue state was not read from this session.
 
 ## WH-072 — Design project data provisioning, migrations and recovery boundaries
 
@@ -8375,6 +8376,377 @@ Planning dependencies: WH-159, WH-036. Verify completion in current issue eviden
 
 - [docs/notifications.md](../../docs/notifications.md)
 - [docs/contact-forms.md](../../docs/contact-forms.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-161 — Freeze the customer presentation contract and decompose WH-070
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **ready**. Kind: decision. Size: S.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Every WH-070 slice builds against one frozen presentation shape, scoped module client, custom-component boundary and change classification instead of inventing its own.
+
+### Scope
+
+- Freeze the three extension levels (design tokens, presentation-kit@1 composition, sandboxed custom component) with versioned shapes and their separate placement in the project specification: kit and template pins versus module instances and declared uses
+- Freeze the frontend/backend contract: presentable WH-067 operations over the same-origin whumpo-modules v1 envelope, the compiled client manifest with configRevision staleness, the host bridge and the custom-component frame headers
+- Define the focused owner-maintenance context, change classification and review reuse, independent visual/accessibility evaluation, the WH-107/109 renderer separation and exact gaps against current mechanisms
+- Evaluate CSS custom properties, design-token formats, Web Components, sandboxed iframes and srcdoc with dated official sources; add an offline reference and a mutation-checked conformance suite without Worker imports
+
+### Acceptance criteria
+
+- [ ] docs/customer-presentation.md states the frozen shapes, isolation boundary, reused gates, existing-mechanism gaps, owner decisions and child slices, marked planned
+- [ ] Offline checks reject unknown/stale versions and pins, forbidden capabilities, backend/authority keys, permission widening, presentation forks, undeclared or unused dependencies, oversize or disallowed content and missing accessibility declarations, and prove presentation changes leave module pins and configRevision untouched while template and dependency changes are reported separately
+- [ ] The conformance suite fails on deliberately broken copies of the reference
+- [ ] WH-070 keeps its acceptance and depends on every child; no child reaches WH-028/080/104
+- [ ] Open owner decisions are listed rather than assumed
+
+### Verification
+
+- node tests/customer-presentation-contract.mjs (also in node tools/verify.mjs fast)
+- node tools/roadmap.mjs validate, alignment and render --check
+- git diff --check
+
+### Dependencies and blockers
+
+Planning dependencies: WH-066, WH-071, WH-123. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/customer-presentation.md](../../docs/customer-presentation.md)
+- [tools/prototypes/customer-presentation.mjs](../../tools/prototypes/customer-presentation.mjs)
+- [tests/customer-presentation-contract.mjs](../../tests/customer-presentation-contract.mjs)
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+- [docs/project-specification.md](../../docs/project-specification.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-08 UTC: contract and offline reference only, no implementation; first committed on branch claude/wh-070-presentation-contract from origin/main ca17c6a and ported on 2026-10-09 UTC onto origin/main d3ebaf2 as the local branch claude/wh-070-presentation-contract-main (not pushed, no PR), with fact-check corrections to the child-slice mapping, the visitor-host CSP wording, the S13a citation and the runtime target/input keys in the contract. node tests/customer-presentation-contract.mjs passed 121 offline checks with invented identifiers and killed 32/32 mutations of the reference; this proves frozen examples only, not a renderer, sandbox, CSP enforcement, rendered accessibility or runtime authorization. No schema, route, binding, dependency, provider, Cloudflare resource or deployment is added. Five owner decisions remain open in the contract.
+
+## WH-162 — Add the presentation section to the project specification
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Owners can save a validated design, composition and declared module dependencies in the specification without anything serving yet, and presentation edits never touch module instances.
+
+### Scope
+
+- Cut over to specification schema 4 with a nullable top-level presentation section and a new compiler identity; reset schema-3 test specifications with no reader or conversion
+- Add a trusted presentation catalog (presentation-kit@1 and templates, available/withdrawn) beside the compiler and module catalogs
+- Implement the presentation operations, exact uses/binding/audience validation and separate module, template, dependency and custom-component classification in the existing proposal/apply/restore path
+- Keep website pages, design.theme and the site-page@1/photo-page@1 renderers unchanged
+
+### Acceptance criteria
+
+- [ ] Schema 4 rejects unknown versions and fields, stale kit/template pins, undeclared or unused dependencies, permission-widening placements and missing landmark/heading structure
+- [ ] Presentation operations cannot change instances, module pins or configRevision; template and dependency changes return their own review classes; duplicate instances made for presentation are refused
+- [ ] Existing specification creation, change, restore and module configuration journeys still pass
+
+### Verification
+
+- node tools/check-specification-compiler.mjs --check and node tests/specification-compiler.mjs
+- node tests/current-website-specifications.mjs and node tests/specification-journey.mjs on disposable SQLite/local D1
+- pnpm check
+
+### Dependencies and blockers
+
+Planning dependencies: WH-161, WH-124. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/customer-presentation.md](../../docs/customer-presentation.md)
+- [docs/project-specification.md](../../docs/project-specification.md)
+- [src/project-specification/v3/schema.ts](../../src/project-specification/v3/schema.ts)
+- [src/project-specification/catalog.ts](../../src/project-specification/catalog.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-163 — Build presentation-kit@1 and the deterministic composition compiler
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+A saved composition compiles to byte-identical frontend assets and a client manifest that call only the maintained module APIs, with a private preview.
+
+### Scope
+
+- Implement the closed kit components (navigation, text, record form/list/detail/editor, gallery interactions, upload, directory, account) as platform-authored code over the whumpo-modules v1 envelope
+- Compile design tokens to a same-origin stylesheet and surfaces to static assets plus a manifest pinning each used instance resourceId and configRevision
+- Serve a private no-store sandboxed preview with synthetic module responses; never call live module APIs with an owner session
+- Keep generated bytes deterministic and bounded for preview, publication and export
+
+### Acceptance criteria
+
+- [ ] Identical specification, kit and registry inputs give identical bytes and digests with zero model calls
+- [ ] Kit components contain no authentication, authorization, storage or inference code, proven by a static import graph
+- [ ] Rendered preview passes automated contrast, landmark, heading and keyboard checks at 360/390 px and desktop
+- [ ] A manifest becomes stale when a used instance advances configRevision
+
+### Verification
+
+- Focused compiler/digest tests and a static import-graph check
+- Local browser checks of the preview with keyboard and narrow viewports and inspected screenshots
+- pnpm check and pnpm build
+
+### Dependencies and blockers
+
+Planning dependencies: WH-162, WH-126, WH-127, WH-128, WH-129. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/customer-presentation.md](../../docs/customer-presentation.md)
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+- [public-app/index.html](../../public-app/index.html)
+- [src/app-host.ts](../../src/app-host.ts)
+- [tests/fixtures/module-compositions/staff-portal.mjs](../../tests/fixtures/module-compositions/staff-portal.mjs)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-164 — Serve reviewed customer compositions on the visitor origin
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Visitors and staff use a published composition on the project visitor origin only after an exact owner presentation review, with module APIs unchanged.
+
+### Scope
+
+- Add the exact presentation publication review binding the specification version, manifest and artifact digests and each used instance resourceId, configRevision and activation state
+- Serve compiled surfaces from the visitor Worker under the current visitor host CSP; hide a composition when a bound instance changes, is disabled or loses authority until it is reviewed again
+- Register lifecycle and export classes for presentation releases in the same change; this is a current-schema change that needs the owner-run empty-database cutover
+- Prove visitor rendering and refresh use zero maintainer inference
+
+### Acceptance criteria
+
+- [ ] Unreviewed, stale or withdrawn compositions are never served; module activation, website publication and public-form admission reviews remain separate and unchanged
+- [ ] Cross-tenant, cross-role and direct-API requests from a served composition get the same decisions as the WH-130 fixtures
+- [ ] Visitor serving keeps working with a throwing fetch and no AI binding
+
+### Verification
+
+- Disposable SQLite/local D1 suites for review replay, stale and concurrent reviews and withdrawal
+- Connected local HTTP journey through the actual visitor gateway
+- pnpm check
+
+### Dependencies and blockers
+
+Planning dependencies: WH-163, WH-125. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/customer-presentation.md](../../docs/customer-presentation.md)
+- [docs/app-data.md](../../docs/app-data.md)
+- [src/app-host.ts](../../src/app-host.ts)
+- [src/app-gateway.ts](../../src/app-gateway.ts)
+- [docs/releases.md](../../docs/releases.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-165 — Host sandboxed custom frontend components behind the module bridge
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **blocked**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+A project can add one small custom interaction that runs in an opaque-origin frame, reaches only its declared module operations and never gains credentials, storage, network or backend authority.
+
+### Scope
+
+- Private immutable artifact store with digest binding, size bounds and static content checks
+- Component document route with the frozen CSP sandbox header, per-surface frame-src 'self' and the frame API v1 host bridge that owns every envelope field
+- Accessibility declaration review, iframe naming and bounded resizing; custom-component review class in preview and publication
+- Focused owner-maintenance edits limited to the component, its own artifact and its contracts
+
+### Acceptance criteria
+
+- [ ] In real browsers the frame has an opaque origin, cannot read cookies or storage, cannot fetch, navigate the top page or open popups, and a direct module call from it is refused
+- [ ] Undeclared operations, bridge-owned fields, static target overrides and writes other than forms.submit are refused by the bridge and again by the module API
+- [ ] A focused edit changes only the targeted component; other component source never enters model context; custom source never runs in the control Worker or QuickJS
+
+### Verification
+
+- Bridge and static-check tests plus adversarial browser fixtures in each available engine
+- Keyboard, accessible-name and reduced-motion checks of a sample component
+- pnpm check
+
+### Dependencies and blockers
+
+Planning dependencies: WH-164. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+- Owner decision on custom-component hosting (docs/customer-presentation.md open decision 1)
+- Owner acceptance of model-produced custom script in visitor browsers (docs/customer-presentation.md open decision 3)
+
+### References
+
+- [docs/customer-presentation.md](../../docs/customer-presentation.md)
+- [src/guest-previews/guest.ts](../../src/guest-previews/guest.ts)
+- [src/app-host.ts](../../src/app-host.ts)
+- [tools/prototypes/customer-presentation.mjs](../../tools/prototypes/customer-presentation.mjs)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-166 — Let the owner agent make focused presentation edits
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Owners ask in Chat for a look or layout change and get an exact presentation review that changes only the requested part.
+
+### Scope
+
+- Add presentation entries to the capability catalog and planner so design and composition are preferred before custom code
+- Load only the targeted placement or component, its contracts and the design tokens into the bounded maintenance context; never other source, visitor values or credentials
+- Present presentation reviews through the existing Chat review renderer and server-generated controls
+- Advertise presentation operations to the site agent only as the owner authoring decision allows
+
+### Acceptance criteria
+
+- [ ] Representative typography, navigation and gallery-interaction requests produce presentation-only changes with no new instance, backend source or infrastructure plan
+- [ ] Focused-edit preservation holds: unrelated surfaces, components, dependencies and modules stay byte-identical
+- [ ] Visitor rendering and module calls never invoke the maintainer, and the model cannot approve
+
+### Verification
+
+- Offline planner fixtures and scripted agent scenarios with injected replies
+- Focused-edit preservation and context-minimization checks
+- pnpm check
+
+### Dependencies and blockers
+
+Planning dependencies: WH-163, WH-065, WH-105. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/customer-presentation.md](../../docs/customer-presentation.md)
+- [docs/capability-planner.md](../../docs/capability-planner.md)
+- [src/app-page-design.ts](../../src/app-page-design.ts)
+- [docs/chat-interactions.md](../../docs/chat-interactions.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-167 — Accept three distinct compositions over identical module APIs
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: verification. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Three visibly different customer compositions, one with a custom component, pass the same API/permission conformance and are evaluated separately for visual diversity and accessibility.
+
+### Scope
+
+- Build three synthetic compositions over the same records, files, access and content instances of two tenants on the visitor origin
+- Run identical cross-tenant, role, direct-API, replay and revocation conformance cases against each through the actual handlers with maintenance inference unavailable
+- Evaluate visual distinctness and accessibility (keyboard, focus, screen reader, contrast, target size, reduced motion, 360/390 px) independently of functional results
+- Verify deterministic compiled export and focused-edit preservation; label exports that still need Whumpo module APIs
+
+### Acceptance criteria
+
+- [ ] Every WH-070 acceptance criterion maps to passing local evidence; live, device and customer acceptance are reported separately
+- [ ] Conformance results are identical across the three compositions, and no composition contains authentication, authorization, storage or inference code
+- [ ] Visual and accessibility results are recorded per composition and never inferred from functional reuse
+
+### Verification
+
+- Connected local suite over the actual visitor gateway and disposable stores
+- Browser accessibility checks and inspected screenshots
+- Export digest comparison
+
+### Dependencies and blockers
+
+Planning dependencies: WH-164, WH-165, WH-166. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/customer-presentation.md](../../docs/customer-presentation.md)
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+- [tests/shared-modules-compositions.mjs](../../tests/shared-modules-compositions.mjs)
+- [docs/verification.md](../../docs/verification.md)
 
 ### Execution coordination
 

@@ -97,7 +97,8 @@ export function alignmentProblems(data){
   67:[65,66,71,122,105,116],75:[52,122,113,116],77:[67,71,76],
   81:[105,113],83:[115],90:[89,113,122,54,56,...Array.from({length:13},(_,i)=>91+i)],92:[105,116],
   104:[31,32,80,90,112],106:[122,105,116],
-  48:[5,17,19,117],49:[23,41,104,112],20:[121],116:[121,113,9],122:[89,113]
+  48:[5,17,19,117],49:[23,41,104,112],20:[121],116:[121,113,9],122:[89,113],
+  70:[161,162,163,164,165,166,167]
  };
  for(let feature=91;feature<=103;feature++)required[feature]=[122,105,116];
  // WH-068 notification children (WH-154 contract): the parent waits for its contract, connected acceptance and canary.
@@ -121,6 +122,8 @@ export function alignmentProblems(data){
  // contract (WH-186) also stays upstream of the account export and module implementations it supports.
  for(let child=186;child<=191;child++)forbidden[child]=[49,72,104];
  forbidden[186].push(18,67);
+ // WH-070 children (WH-161–167) feed the composed pilot and paid-tier gates; they never depend on them.
+ for(let child=161;child<=167;child++)forbidden[child]=[28,80,104];
  for(const [from,targets] of Object.entries(required))for(const to of targets){
   if(!tasks.has(id(from))||!tasks.has(id(to)))problems.push(`Missing alignment task ${id(from)} or ${id(to)}`);
   else if(!reaches(id(from),id(to)))problems.push(`${id(from)} must follow shared prerequisite ${id(to)}`);
