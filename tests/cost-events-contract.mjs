@@ -15,7 +15,7 @@ const prototypeURL=new URL('../tools/prototypes/cost-events.mjs',import.meta.url
 const prototypeSource=readFileSync(prototypeURL,'utf8');
 const O1='aaaaaaaa-aaaa-4aaa-8aaa-000000000001',O2='aaaaaaaa-aaaa-4aaa-8aaa-000000000002';
 const P1='bbbbbbbb-bbbb-4bbb-8bbb-000000000001',P2='bbbbbbbb-bbbb-4bbb-8bbb-000000000002';
-const R1='cccccccc-cccc-4ccc-8ccc-000000000001',R2='cccccccc-cccc-4ccc-8ccc-000000000002';
+const R1='cccccccc-cccc-4ccc-8ccc-000000000001',R2='cccccccc-cccc-4ccc-8ccc-000000000002',P3='bbbbbbbb-bbbb-4bbb-8bbb-000000000003',R3='cccccccc-cccc-4ccc-8ccc-000000000003';
 const OCT='2026-10-02T00:00:00.000Z',OCT_SEEN='2026-10-02T01:00:00.000Z';
 
 async function suite(m){
@@ -557,6 +557,140 @@ async function suite(m){
   assert.equal(ledger.summary({period:'2026-10',pool:'closed-account'}).byDimension['r2.class_b_ops'].units.operation,12);
   assert.ok(!surfaces().includes(P1));
  });
+ await test('the closure key is a private copy and only a string or Uint8Array of at least 16 encoded bytes is accepted',()=>{
+  const tombstone=l=>l.exportHeads({})[0].sourceEventId;
+  const run=(key)=>{const {ledger}=fresh(m.defaultRegistry,{closureKey:key});const e=usage({sourceEventId:'key-1'});ledger.append(e);ledger.redactOwner(O1);return {ledger,e};};
+  // The caller keeps its buffer and edits it after closure: the ledger must neither follow the edit nor reveal the owner again.
+  for(const make of [()=>new Uint8Array(32).fill(1),()=>Buffer.alloc(32,1),()=>new Uint8Array(64).fill(1).subarray(8,40)]){
+   const key=make(),{ledger,e}=run(key),expected=tombstone(ledger);
+   key.fill(2);
+   assert.equal(ledger.append(structuredClone(e)).status,'duplicate');
+   assert.equal(ledger.summary({}).events,1);assert.equal(ledger.exportHeads({})[0].attribution.scope,'platform');
+   assert.equal(tombstone(ledger),expected);
+   assert.equal(tombstone(run(make()).ledger),expected,'an identical separate key gives the same digests');
+  }
+  assert.equal(fresh(m.defaultRegistry,{closureKey:'é'.repeat(8)}).ledger.summary({}).events,0);
+  for(const bad of ['','a'.repeat(15),'é'.repeat(7),new Uint8Array(15),new ArrayBuffer(32),new DataView(new ArrayBuffer(32)),new Uint16Array(32),[...Array(32).keys()],32,null,{length:32}])
+   throws(()=>fresh(m.defaultRegistry,{closureKey:bad}),'INVALID_CLOSURE_KEY');
+ });
+ await test('closure pseudonymises cost references and closed-account ingress and refuses to re-link a closed identity',()=>{
+  const surfaces=l=>JSON.stringify([l.exportHeads({}),l.summary({})]);
+  const platform=e=>({...e,attribution:{scope:'platform',pool:'closed-account'}});
+  // A cost reference is a free producer string: it can carry an owner or project ID and must not survive closure.
+  {
+   const {ledger}=fresh();
+   const ref=(sourceEventId,cost,over={})=>usage({sourceEventId,cost,...over});
+   const receipt=ref('ref-1',{basis:'receipt',micros:7,ref:`rcpt:${P1}`}),reported=ref('ref-2',{basis:'provider-reported',micros:11,ref:O1},{workload:'storage-files'}),shadow=m.eventFromInferenceCall(call({id:'ref-3'}));
+   for(const e of [receipt,reported,shadow])ledger.append(e);
+   const before=ledger.summary({});
+   assert.ok([`rcpt:${P1}`,O1,'muse-test-shadow-v1'].every(x=>surfaces(ledger).includes(x)),'sanity: the references are visible before closure');
+   assert.equal(ledger.redactOwner(O1),3);
+   for(const x of [P1,O1,R1,'rcpt:','muse-test-shadow-v1'])assert.ok(!surfaces(ledger).includes(x),`still linkable: ${x}`);
+   assert.deepEqual(ledger.summary({}),before);
+   const refs=()=>Object.fromEntries(ledger.exportHeads({}).map(e=>[e.dimension+e.workload,e.cost.ref]));
+   assert.ok(Object.values(refs()).every(r=>/^closed:[0-9a-f]{32}$/.test(r)));
+   // Replays and later revisions converge: the same reference gives the same pseudonym, a new one gives another, and none is raw.
+   const was=refs();
+   assert.equal(ledger.append(structuredClone(receipt)).status,'duplicate');
+   assert.equal(ledger.append({...receipt,revision:2,quantity:{state:'known',value:2000,unit:'request'},observedAt:'2026-10-03T00:00:00.000Z'}).status,'accepted');
+   assert.deepEqual(refs(),was);assert.equal(ledger.summary({}).events,before.events);
+   const replaced=ledger.append({...receipt,revision:3,cost:{basis:'receipt',micros:9,ref:`rcpt2:${P1}`},observedAt:'2026-10-04T00:00:00.000Z'});
+   assert.equal(replaced.status,'accepted');assert.notDeepEqual(refs(),was);assert.ok(!surfaces(ledger).includes(P1));
+   assert.equal(ledger.summary({}).receiptMicros,9);assert.equal(ledger.summary({}).providerReportedMicros,11);
+   // Export records are reports, not append envelopes: a closed task head has no task, and its tombstone ID is reserved.
+   const {receivedAt,receivedSeq,lateAfterClose,...envelope}=ledger.exportHeads({workload:'chat-ai'})[0];
+   assert.equal(envelope.workClass,'task');assert.equal(envelope.taskRef,null);
+   throws(()=>ledger.append(envelope),'INVALID_EVENT');
+   throws(()=>ledger.append(usage({sourceEventId:`closed:${'0'.repeat(32)}`})),'INVALID_EVENT');
+  }
+  // Closed project: the tenant emission is refused, so the producer re-emits at closed-account scope, which is canonicalised on ingress.
+  {
+   const {ledger,dir}=fresh();dir.closeProject(P1);
+   const reading=read_ops=>m.eventFromProjectStorageUsage({project_id:P1,period:'2026-10',read_ops},{ownerId:O1,observedAt:OCT_SEEN});
+   const first=reading(5),second=reading(9);
+   throws(()=>ledger.append(first),'PROJECT_CLOSED');
+   assert.equal(ledger.append(platform(first)).status,'accepted');
+   assert.ok(!surfaces(ledger).includes(P1));assert.match(ledger.exportHeads({})[0].sourceEventId,/^closed:[0-9a-f]{32}$/);
+   assert.equal(ledger.summary({pool:'closed-account'}).units.operation,5);
+   assert.equal(ledger.redactOwner(O1),0);
+   assert.equal(ledger.append(platform(structuredClone(first))).status,'duplicate');
+   throws(()=>ledger.append(platform({...first,quantity:{state:'known',value:6,unit:'operation'}})),'IDEMPOTENCY_CONFLICT');
+   assert.equal(ledger.append(platform(second)).status,'accepted');
+   assert.equal(ledger.summary({}).units.operation,9);assert.equal(ledger.summary({}).events,1);assert.ok(!surfaces(ledger).includes(P1));
+   // Ownership of a closed-account record cannot be proven, so a tenant emission of the same identity is refused and writes nothing.
+   throws(()=>ledger.append(first),'TENANT_MISMATCH');throws(()=>ledger.append(second),'TENANT_MISMATCH');
+   assert.equal(ledger.summary({}).units.operation,9);assert.equal(ledger.exportHeads({ownerId:O1}).length,0);
+  }
+  // Platform first, then tenant, and tenant first, then platform, on an open project: both orders are refused rather than guessed.
+  {
+   const a=fresh().ledger,b=fresh().ledger,tenant=usage({sourceEventId:'order-1'}),closedForm=platform(tenant);
+   a.append(closedForm);throws(()=>a.append(tenant),'TENANT_MISMATCH');
+   b.append(tenant);throws(()=>b.append(closedForm),'TENANT_MISMATCH');
+   // After the owner closes, the closed-account emission is the closed form of the same identity: a redelivery, not a second cost.
+   b.redactOwner(O1);assert.equal(b.append(closedForm).status,'duplicate');assert.equal(b.append(tenant).status,'duplicate');assert.equal(b.summary({}).events,1);
+   assert.deepEqual(a.summary({}),b.summary({}));
+  }
+ });
+ await test('closure keeps revision validation: erased identifiers are compared through keyed digests in every arrival order',()=>{
+  const setup=()=>{const f=fresh();f.dir.addProject(P3,O1);f.dir.addResource(P3,R3);return f.ledger;};
+  const tenant=(projectId,resourceId=null,ownerId=O1)=>({scope:'tenant',ownerId,projectId,resourceId});
+  const base=(over={})=>usage({sourceEventId:'cl-1',workClass:'task',taskRef:'task:original',providerEventId:'provider:original',cost:{basis:'provider-reported',micros:10,ref:P1},...over});
+  const refused=[
+   ['project',{revision:2,attribution:tenant(P3)},'TENANT_MISMATCH'],['resource',{revision:2,attribution:tenant(P3,R3)},'TENANT_MISMATCH'],
+   ['owner',{revision:2,attribution:tenant(P2,R2,O2)},'TENANT_MISMATCH'],['pool',{revision:2,attribution:{scope:'platform',pool:'shared-account'}},'TENANT_MISMATCH'],
+   ['task',{revision:2,taskRef:'task:changed'},'IMMUTABLE_FIELD'],['provider replaced',{revision:2,providerEventId:'provider:other'},'IMMUTABLE_FIELD'],['provider dropped',{revision:2,providerEventId:null},'IMMUTABLE_FIELD'],
+   ['same revision project',{attribution:tenant(P3)},'TENANT_MISMATCH'],['same revision task',{taskRef:'task:changed'},'IDEMPOTENCY_CONFLICT'],
+   ['same revision provider',{providerEventId:'provider:other'},'IDEMPOTENCY_CONFLICT'],['same revision reference',{cost:{basis:'provider-reported',micros:10,ref:O1}},'IDEMPOTENCY_CONFLICT'],
+   ['same revision quantity',{quantity:{state:'known',value:11,unit:'request'}},'IDEMPOTENCY_CONFLICT']
+  ];
+  // The same refusal, with the same code, whether or not the account closed in between.
+  for(const closedFirst of [false,true])for(const [name,over,code] of refused){
+   const ledger=setup();ledger.append(base());if(closedFirst)assert.equal(ledger.redactOwner(O1),1);
+   const before=JSON.stringify([ledger.summary({}),ledger.exportHeads({})]);
+   throws(()=>ledger.append(base(over)),code);
+   assert.equal(JSON.stringify([ledger.summary({}),ledger.exportHeads({})]),before,`${name} wrote something${closedFirst?' after closure':''}`);
+  }
+  for(const closedFirst of [false,true]){
+   const ledger=setup();ledger.append(base());if(closedFirst)ledger.redactOwner(O1);
+   assert.equal(ledger.append(base()).status,'duplicate');
+   assert.equal(ledger.append(base({revision:2,quantity:{state:'known',value:12,unit:'request'},cost:{basis:'receipt',micros:12,ref:`rcpt:${P1}`},observedAt:'2026-10-03T00:00:00.000Z'})).status,'accepted');
+   assert.equal(ledger.summary({}).units.request,12);assert.equal(ledger.summary({}).receiptMicros,12);
+  }
+  // A chain whose provider ID is learned late: every arrival order, with the account closing at every position, reports the same totals.
+  const link=(revision,over)=>usage({sourceEventId:'il-1',revision,workClass:'task',taskRef:'task:il',...over});
+  const chain=[
+   link(1,{outcome:'pending',quantity:{state:'unknown',reason:'usage-pending'},cost:{basis:'unknown',reason:'usage-pending',exposureMicros:700}}),
+   link(2,{providerEventId:'provider:il',observedAt:'2026-10-03T00:00:00.000Z'}),
+   link(3,{providerEventId:'provider:il',cost:{basis:'provider-reported',micros:450,ref:P1},observedAt:'2026-10-04T00:00:00.000Z'})
+  ];
+  const expected=(()=>{const l=setup();for(const e of chain)l.append(e);return JSON.stringify(l.summary({}));})();
+  assert.equal(JSON.parse(expected).providerReportedMicros,450);assert.equal(JSON.parse(expected).unknownEvents,0);
+  const raw=[O1,P1,R1,'task:il','provider:il','il-1'];
+  for(const order of [[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]])for(let at=1;at<=3;at++){
+   const ledger=setup();
+   order.forEach((i,position)=>{if(position===at)ledger.redactOwner(O1);ledger.append(structuredClone(chain[i]));});
+   if(at===3)ledger.redactOwner(O1);
+   assert.equal(JSON.stringify(ledger.summary({})),expected,`${order} closing before position ${at}`);
+   const [head]=ledger.exportHeads({});assert.equal(head.revision,3);assert.equal(head.providerEventId,null);assert.equal(head.taskRef,null);
+   assert.ok(raw.every(x=>!JSON.stringify(ledger.exportHeads({})).includes(x)),`${order} closing before position ${at} left an identifier`);
+   // The provider ID, once known, still cannot be replaced or dropped.
+   throws(()=>ledger.append(link(4,{providerEventId:'provider:other',cost:{basis:'provider-reported',micros:450,ref:P1},observedAt:'2026-10-05T00:00:00.000Z'})),'IMMUTABLE_FIELD');
+   throws(()=>ledger.append(link(4,{providerEventId:null,cost:{basis:'provider-reported',micros:450,ref:P1},observedAt:'2026-10-05T00:00:00.000Z'})),'IMMUTABLE_FIELD');
+  }
+  // Closing before the first late event: the period and the owner are closed, then a revision, a redelivery and a new identity arrive.
+  {
+   const ledger=setup();for(const e of chain)ledger.append(e);
+   const snapshot=ledger.closePeriod('2026-10');ledger.redactOwner(O1);
+   assert.equal(ledger.append(structuredClone(chain[2])).status,'duplicate');assert.equal(ledger.restatement('2026-10').lateEvents,0);
+   assert.equal(ledger.append(link(4,{providerEventId:'provider:il',cost:{basis:'provider-reported',micros:500,ref:P1},observedAt:'2026-10-05T00:00:00.000Z'})).status,'accepted');
+   const fresh1=usage({sourceEventId:'il-late',cost:{basis:'provider-reported',micros:7,ref:P1}});
+   throws(()=>ledger.append(fresh1),'OWNER_CLOSED');
+   assert.equal(ledger.append({...fresh1,attribution:{scope:'platform',pool:'closed-account'}}).status,'accepted');
+   const r=ledger.restatement('2026-10');
+   assert.deepEqual(r.closedSnapshot,snapshot);assert.equal(r.lateEvents,2);assert.equal(r.knownEstimateDeltaMicros,57);
+   assert.ok(raw.concat('il-late').every(x=>!JSON.stringify([ledger.exportHeads({}),r]).includes(x)));
+  }
+ });
  return count;
 }
 
@@ -660,11 +794,11 @@ await checkOnce('the reference imports only node builtins, performs no network c
 const mutants=[
  ['every revision counted',"const heads=()=>[...identities.values()].map(r=>r.revisions.get(Math.max(...r.revisions.keys())));","const heads=()=>[...identities.values()].flatMap(r=>[...r.revisions.values()]);"],
  ['lowest revision wins',"r.revisions.get(Math.max(...r.revisions.keys())));","r.revisions.get(Math.min(...r.revisions.keys())));"],
- ['conflicting redelivery accepted',"check(same.canon===canon,'IDEMPOTENCY_CONFLICT'","check(true,'IDEMPOTENCY_CONFLICT'"],
+ ['conflicting redelivery accepted',"check(same.fp===fp,'IDEMPOTENCY_CONFLICT'","check(true,'IDEMPOTENCY_CONFLICT'"],
  ['idempotency key not verified',"check(input.idempotencyKey===idempotencyKey(input),","check(true,"],
  ['tenant mismatch accepted',"check(p.ownerId===a.ownerId,'TENANT_MISMATCH'","check(true,'TENANT_MISMATCH'"],
  ['resource of another project accepted',"check(a.resourceId===null||p.resources.has(a.resourceId),'TENANT_MISMATCH'","check(true,'TENANT_MISMATCH'"],
- ['revision may change attribution',"check(canonical(lower.attribution)===canonical(higher.attribution),'TENANT_MISMATCH'","check(true,'TENANT_MISMATCH'"],
+ ['revision may change attribution',"if(rec)check(attrMac===rec.attrMac||(rec.closed&&closedAccount),'TENANT_MISMATCH'","if(rec)check(true,'TENANT_MISMATCH'"],
  ['closed project still accepted',"check(!p.closed,'PROJECT_CLOSED'","check(true,'PROJECT_CLOSED'"],
  ['unknown cost not counted',"else{b.unknownEvents++;if(c.exposureMicros===null)b.unboundedExposure++;else b.boundedExposure+=BigInt(c.exposureMicros);}","else{}"],
  ['pending operation priced',"if(input.outcome==='pending'||input.outcome==='uncertain')check(","if(false)check("],
@@ -687,7 +821,7 @@ const mutants=[
  ['content detail accepted',"for(const k of Object.keys(input.detail))check(!CONTENT_KEY.test(k),'CONTENT_FIELD',`detail.${k}`);",""],
  ['physical locator accepted',"check(!LOCATOR_KEY.test(k)||keys.includes(k),'PHYSICAL_LOCATOR'","check(true,'PHYSICAL_LOCATOR'"],
  ['client-assigned time accepted',"check(!['receivedAt','receivedSeq','late'].includes(k),'CLIENT_ASSIGNED'","check(true,'CLIENT_ASSIGNED'"],
- ['late events not flagged',"const lateAfterClose=closed.has(periodOf(e))&&seq>closed.get(periodOf(e)).closedSeq;","const lateAfterClose=false;"],
+ ['late events not flagged',"const lateAfterClose=closed.has(periodOf(stored))&&seq>closed.get(periodOf(stored)).closedSeq;","const lateAfterClose=false;"],
  ['closed snapshot rewritten',"closedSnapshot:structuredClone(c.snapshot)","closedSnapshot:current"],
  ['residual silently absorbed',"const status=unknown>0?'incomplete':(residual<0n?-residual:residual)<=BigInt(toleranceMicros)?'reconciled':'unexplained-residual';","const status='reconciled';"],
  ['unknown ignored by reconciliation',"const status=unknown>0?'incomplete':","const status="],
@@ -701,7 +835,7 @@ const mutants=[
  ['invoice lines not summed',"check(invoice.lines.reduce((s,l)=>s+BigInt(l.amountMicros),0n)===BigInt(invoice.totalMicros),'INVOICE_LINES_MISMATCH'","check(true,'INVOICE_LINES_MISMATCH'"],
  ['standing cost may name a task',"if(input.workClass==='standing')check(input.taskRef===null&&input.attempt===1,'OVERHEAD_CLASS'","if(input.workClass==='standing')check(true,'OVERHEAD_CLASS'"],
  // --- review corrections: isolation, exact amounts, released, revision identity, close-once, closure boundary ---
- ['exported heads share nested objects',".map(({canon,...e})=>structuredClone(e))",".map(({canon,...e})=>e)"],
+ ['exported heads share nested objects',".map(({cmp,fp,...e})=>structuredClone(e))",".map(({cmp,fp,...e})=>e)"],
  ['restatement aliases the closed snapshot',"closedSnapshot:structuredClone(c.snapshot)","closedSnapshot:c.snapshot"],
  ['close returns the stored snapshot',"return structuredClone(closed.get(period).snapshot);","return closed.get(period).snapshot;"],
  ['ledger shares the caller registry',"const registry=deepFreeze(structuredClone(supplied));validateRegistry(registry);","const registry=supplied;validateRegistry(registry);"],
@@ -717,12 +851,12 @@ const mutants=[
  ['released cost not enforced',"&&(input.cost.micros??0)===0",""],
  ['released token detail not enforced',"&&Object.values(input.detail).every(v=>v===0)",""],
  ['revision may move occurredAt',"'attempt','placementClass','occurredAt','aiTier'","'attempt','placementClass','aiTier'"],
- ['revision may change workload',"['workload','workClass','taskRef'","['workClass','taskRef'"],
+ ['revision may change workload',"['workload','workClass','attempt'","['workClass','attempt'"],
  ['revision may change placement',"'attempt','placementClass','occurredAt'","'attempt','occurredAt'"],
- ['revision may change task',"'workClass','taskRef','attempt','placementClass'","'workClass','attempt','placementClass'"],
- ['revision may change attempt',"'taskRef','attempt','placementClass'","'taskRef','placementClass'"],
+ ['revision may change task',"check(lower.cmp.task===higher.cmp.task,'IMMUTABLE_FIELD'","check(true,'IMMUTABLE_FIELD'"],
+ ['revision may change attempt',"'workClass','attempt','placementClass'","'workClass','placementClass'"],
  ['revision may change tier',"'occurredAt','aiTier']","'occurredAt']"],
- ['provider event ID replaceable',"check(lower.providerEventId===null||lower.providerEventId===higher.providerEventId,'IMMUTABLE_FIELD'","check(true,'IMMUTABLE_FIELD'"],
+ ['provider event ID replaceable',"check(lower.cmp.provider===null||lower.cmp.provider===higher.cmp.provider,'IMMUTABLE_FIELD'","check(true,'IMMUTABLE_FIELD'"],
  ['revision may reprice the tariff pin',"check(lower.cost.basis!=='tariff'||higher.cost.basis!=='tariff'||canonical(lower.cost.tariff)===canonical(higher.cost.tariff),'IMMUTABLE_FIELD'","check(true,'IMMUTABLE_FIELD'"],
  ['observedAt may run backwards',"check(higher.observedAt>=lower.observedAt,'REVISION_REGRESSION'","check(true,'REVISION_REGRESSION'"],
  ['outcome may regress',"check(outcomeRank[higher.outcome]>=outcomeRank[lower.outcome]&&(outcomeRank[lower.outcome]<2||lower.outcome===higher.outcome),'REVISION_REGRESSION'","check(true,'REVISION_REGRESSION'"],
@@ -733,10 +867,19 @@ const mutants=[
  ['closure keeps the idempotency key',"sourceEventId:tomb.sourceEventId,idempotencyKey:tomb.idempotencyKey,","sourceEventId:tomb.sourceEventId,idempotencyKey:e.idempotencyKey,"],
  ['closure keeps the provider event ID',"idempotencyKey:tomb.idempotencyKey,providerEventId:null,","idempotencyKey:tomb.idempotencyKey,providerEventId:e.providerEventId,"],
  ['closure keeps the task reference',"providerEventId:null,taskRef:null,attribution:","providerEventId:null,taskRef:e.taskRef,attribution:"],
- ['closure tombstone unkeyed',"createHmac('sha256',closureKey).update(","createHash('sha256').update("],
- ['closed identity not found again',"rec=identities.get(tomb.idempotencyKey);","rec=undefined;"],
- ['closed identity may move owner',"check(a.scope==='tenant'?mac('owner',a.ownerId)===rec.ownerMac:a.pool==='closed-account','TENANT_MISMATCH'","check(true,'TENANT_MISMATCH'"],
- ['closed owner receives tenant cost again',"check(!closedOwners.has(mac('owner',e.attribution.ownerId)),'OWNER_CLOSED'","check(true,'OWNER_CLOSED'"],
+ ['closure tombstone unkeyed',"createHmac('sha256',keyBytes).update(","createHash('sha256').update("],
+ ['closed identity not found again',"if(!rec){rec=identities.get(tomb.idempotencyKey);redirected=rec!==undefined;}",""],
+ ['closed identity may move owner',"attrMac===rec.attrMac||(rec.closed&&closedAccount)","attrMac===rec.attrMac||rec.closed"],
+ ['closed owner receives tenant cost again',"check(!closedOwners.has(mac('owner',raw.attribution.ownerId)),'OWNER_CLOSED'","check(true,'OWNER_CLOSED'"],
+ ['closure key kept by reference',"const keyBytes=Buffer.from(closureKey);","const keyBytes=closureKey;"],
+ ['closure key type unchecked',"check(typeof closureKey==='string'||closureKey instanceof Uint8Array,'INVALID_CLOSURE_KEY'","check(true,'INVALID_CLOSURE_KEY'"],
+ ['closure key size unchecked',"check(keyBytes.length>=16,'INVALID_CLOSURE_KEY'","check(true,'INVALID_CLOSURE_KEY'"],
+ ['closure keeps the cost reference',"cost:Object.hasOwn(e.cost,'ref')?{...e.cost,ref:pseudonym('ref',e.cost.ref)}:e.cost});","cost:e.cost});"],
+ ['closed-account ingress keeps raw identifiers',"const stored=redirected||closedAccount?closedForm(raw,tomb):raw;","const stored=redirected?closedForm(raw,tomb):raw;"],
+ ['tombstone prefix may be forged',"check(!input.sourceEventId.startsWith('closed:'),'INVALID_EVENT'","check(true,'INVALID_EVENT'"],
+ ['comparison digests taken after erasure',"const cmp={task:raw.taskRef===null?null:mac('task',raw.taskRef),provider:raw.providerEventId===null?null:mac('provider',raw.providerEventId)};","const cmp={task:stored.taskRef===null?null:mac('task',stored.taskRef),provider:stored.providerEventId===null?null:mac('provider',stored.providerEventId)};"],
+ ['same-revision conflict ignores erased fields',"const fp=mac('revision',canonical({...raw,attribution:rec?.attrMac??attrMac}));","const fp=mac('revision',canonical({...closedForm(raw,tomb),attribution:rec?.attrMac??attrMac}));"],
+ ['attribution digest ignores project and resource',"const attributionMac=a=>mac('attribution',canonical(a));","const attributionMac=a=>mac('attribution',canonical({scope:a.scope,ownerId:a.ownerId,pool:a.pool}));"],
 ];
 // Each mutant must be caught by the check written for that property, not by an unrelated failure.
 const killedBy={
@@ -768,7 +911,10 @@ const killedBy={
  'outcome may regress':'revisions keep their identity fields','known quantity may be unknown again':'revisions keep their identity fields','known cost may be unknown again':'revisions keep their identity fields',
  'period close overwrites the snapshot':'closing a period twice',
  'closure keeps the source event ID':'account closure','closure keeps the idempotency key':'account closure','closure keeps the provider event ID':'account closure','closure keeps the task reference':'account closure',
- 'closure tombstone unkeyed':'account closure','closed identity not found again':'account closure','closed identity may move owner':'account closure','closed owner receives tenant cost again':'account closure'
+ 'closure tombstone unkeyed':'account closure','closed identity not found again':'account closure','closed identity may move owner':'account closure','closed owner receives tenant cost again':'account closure',
+ 'closure key kept by reference':'the closure key is a private copy','closure key type unchecked':'the closure key is a private copy','closure key size unchecked':'the closure key is a private copy',
+ 'closure keeps the cost reference':'closure pseudonymises cost references','closed-account ingress keeps raw identifiers':'closure pseudonymises cost references','tombstone prefix may be forged':'closure pseudonymises cost references',
+ 'comparison digests taken after erasure':'account closure','same-revision conflict ignores erased fields':'closure keeps revision validation','attribution digest ignores project and resource':'closure keeps revision validation'
 };
 let killed=0;
 for(const [name,find,replace] of mutants){
