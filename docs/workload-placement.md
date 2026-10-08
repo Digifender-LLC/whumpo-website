@@ -289,7 +289,7 @@ Read from official documentation on **October 8, 2026**. Whumpo's actual plan en
 
 **Open owner decisions.**
 
-1. Keep the current `no-store` Worker delivery until live volume justifies B (recommended), or schedule B now.
+1. **Decided by the owner, October 8, 2026:** keep the current `no-store` Worker delivery (design A); revisit B only if live volume shows material D1/R2/CPU cost. This authorizes no delivery change, cache, purge, configuration or deployment.
 2. Revocation latency: next request (recommended; required by B as designed) versus an accepted bounded window, which would allow caching outside the gate.
 3. Whether to narrow `run_worker_first` for platform-owned files on `whumpo.com` and `whumpo-apps` (moves those requests to the free static-asset path; needs a header/origin-check review).
 4. Whether each public photo view should keep its three D1 counter writes (abuse and storage-budget protection) or move to a cheaper limiter.
