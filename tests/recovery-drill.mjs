@@ -16,6 +16,7 @@ import {fixtureKeyring,initializeFixtureKeys,fixtureCiphertext} from './helpers/
 import {keyBackupFixture} from './helpers/key-backup.mjs';
 import {currentSiteFixtureHandlers,createFixtureProject,changeFixtureWebsite,enableFixtureVisitorAccess,fixtureVisitorSQL} from './current-site-fixture.mjs';
 import {memoryBucket,isolatedTargets,seedCredentials,syntheticJPEG} from './helpers/recovery-drill.mjs';
+import {startRestoredStack,exerciseRestoredStacks} from './helpers/recovery-serving.mjs';
 import {compileWorker} from '../tools/release-provider.mjs';
 import {archivedConfig} from '../tools/prepare-release.mjs';
 import {workerOrder,configFiles,fileInventory,copyTree} from '../tools/release-manifest.mjs';
@@ -200,6 +201,23 @@ try{
   assert.deepEqual(await fileInventory(restoredPayload),pinned,'Wrangler left the restored payload unchanged');
  });
 
+
+
+ // ---- Execute the RESTORED bundles (no recompilation) with their restored asset trees against a
+ // second, disposable restore of the same point, in loopback-only workerd. The verified candidate above stays
+ // unrouted and unserved; this probe grants no customer-traffic authority and uses no provider or credential.
+ const probePinned=await fileInventory(restoredPayload);
+ const probe=await phase('executeRestoredBundles',async()=>{
+  const bundles=Object.fromEntries(workerOrder.map(role=>[role,restoredDir(role)])),assetDirs={apps:restoredDir('assets-apps'),platform:restoredDir('assets-platform')};
+  const launch=roles=>startRestoredStack({bundles,entries,configs,assets:assetDirs,persist:join(directory,'probe-state'),roles});
+  const documents=[];for(const visitor of visitors){const row=await db.prepare('SELECT revision,state_json FROM app_documents WHERE visitor_id=?').bind(visitor.who).first();documents.push({revision:row.revision,state:JSON.parse(row.state_json)});}
+  return exerciseRestoredStacks({launch,point:{directory:pointA,digest:pointDigestA,controlDigest:capture.controlDigest},
+   ids:{site,neighbour:neighbour.project,gardenPhotos,strayPhoto,app,page,visitors,ownerToken:owner.token,ownerAccount:owner.account,canary,objectKeys},assetDirs,
+   photos:publishedPhotos.map((row,i)=>({bytes:syntheticJPEG(i+1),digest:row.digest})),publishedHTML,documents,
+   makeStranger:async target=>{const stranger=await workspaceFixture(target,m);await createFixtureProject(await stranger.scope(target),stranger.account,'Second owner project','Synthetic second owner on the probe copy');return stranger;}});
+ });
+ assert.deepEqual(await fileInventory(restoredPayload),probePinned,'Executing the restored bundles left them unchanged');
+ assert.equal((await captureCMSDatabase(async sql=>(await target.DRILL_A.prepare(sql).all()).results,{maxRows:200000})).digest,capture.controlDigest,'The verified candidate was neither routed to nor changed by the probe');
  // ---- Missing/corrupt keys, archives and artifacts fail visibly.
  const recoveryKey=stored.recoveryKeyFile,moved=recoveryKey+'.moved';
  await rename(recoveryKey,moved);holds.missingRecoveryKey=(await inspect()).holds;await rename(moved,recoveryKey);
@@ -313,7 +331,7 @@ try{
  const lost={prepare(){throw Error('source lost');},batch(){throw Error('source lost');}};
  const orphan=await openRestoreInventory({inventoryFile,expectedStreamId:streamId,sourceDb:lost});closers.push(()=>orphan.close());
  holds.sourceLost=(await inspectOnce({evidenceSource:orphan.evidenceSource})).holds;assert.deepEqual(holds.sourceLost,['independent-evidence']);
- assert.equal((await restoreDiscrepancies(target.DRILL_A,lost)).sourceAvailable,false);
+ const lostReport=await restoreDiscrepancies(target.DRILL_A,lost);assert.deepEqual([lostReport.sourceAvailable,lostReport.reconciliation,'sourceHold' in lostReport],[false,'unavailable-without-current-source',false]);
 
  // ---- A point captured during in-flight provider work never dispatches or admits.
  const inflight=id();
@@ -327,6 +345,8 @@ try{
  const inspectB=()=>inspectIsolatedRestore({db:target.DRILL_B,manifest:manifestB,keyBackup,evidenceSource:inventory.evidenceSource,expectedStreamId:streamId,objects:isolatedObjects(target.OBJECTS_B)});
  const executed=executions;
  holds.inFlightSource=(await inspectB()).holds;assert.deepEqual(holds.inFlightSource,['independent-evidence'],'Unresolved current effects refuse evidence');
+ // The source is readable; the dispatched AI request (a real unsettled effect) is what holds the comparison, not a lost source.
+ holds.inFlightReport=await restoreDiscrepancies(target.DRILL_B,db);assert.deepEqual([holds.inFlightReport.sourceAvailable,holds.inFlightReport.reconciliation,holds.inFlightReport.sourceHold,'counts' in holds.inFlightReport],[true,'held-current-source-unsettled','uncertain-effect',false]);
  await db.prepare("UPDATE standard_ai_requests SET state='completed',input_tokens=1,output_tokens=1 WHERE id=?").bind(inflight).run();
  await inventory.observe({operationId:'drill-inflight-terminal',selection:{kind:'external-effect',store:'standard_ai_requests',effectId:inflight}});
  holds.inFlightCandidate=(await retryIndependentEvidence(inspectB)).holds;// The settled source row now differs from the archived in-flight row, so the derived
@@ -338,6 +358,7 @@ try{
  const summary={suite:'WH-008 isolated local disaster-recovery drill',node:process.versions.node,
   inventory:{controlRows:capture.controlRows,controlBytes:capture.controlBytes,restoreStatements:control.statements,objects:capture.objects,objectBytes:capture.objectBytes,runtimeFiles:worker.files,workerArtifacts:Object.fromEntries(Object.entries(restoredWorkers).map(([role,r])=>[role,r.files])),publishedSitePhotos:artifacts.publishedSitePhotos,credentials:admitted.keys.credentials,keyIds:admitted.keys.keyIds.length,tables:admitted.tables,artifacts:{publishedSites:artifacts.publishedSites,publishedBackends:artifacts.publishedBackends,applications:artifacts.applications,applicationDocuments:artifacts.applicationDocuments}},
   measured:{phasesMs:phases,restoreToVerifiedMs:rto,lossSinceSnapshot:{...loss.tables.lostSinceSnapshot,objects:1},pointAgeAtDisasterMs:disasterAt-capture.capturedAt},
+  execution:probe,
   holds,afterRevocationTables:gaps.tables,drillRefusals:refusals,independentEvidenceRetries:independentEvidenceRetries.length,afterRevocationCounts:gaps.counts,servingAllowed:false,providerDispatchAllowed:false,retirementAllowed:false,remoteAccess:false};
  console.log(JSON.stringify(summary,null,1));
 }finally{
