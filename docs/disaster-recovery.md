@@ -37,7 +37,7 @@ Recovery point A held:
 - One published site version, one enabled visitor application with an applied page review, and 2 visitor documents written through actual QuickJS transitions.
 - 2 private object bodies (91 bytes) and 4 runtime build files (worker plus Wasm).
 
-No native CMS resources were included; admission holds those as `cms-recovery-unavailable`. Published-site photos, GitHub backups, domains, Stripe state and interrupted key-rotation/cutover scenarios were not exercised. Worker recovery was exercised with the runtime bundle only; other Worker artifacts remain untested in this drill.
+No native CMS resources were included; admission holds those as `cms-recovery-unavailable`. GitHub backups, domains and Stripe state were not exercised. *At the time of those first two runs* published-site photos, interrupted key rotations/cutovers and the non-runtime Workers were also not exercised; the [coverage extension](#coverage-extension--october-8-2026-utc) below adds them and supersedes that limitation (the earlier numbers above are kept unchanged as the first observations).
 
 ## Measured results — October 8, 2026 UTC
 
@@ -116,7 +116,73 @@ Untested: remote D1 batch, statement and size limits for a one-batch restore; ex
 - **Evidence deadline under load.** The inventory's fixed ten-second evidence deadline covers two full source observations. With a local-D1 source on this contended host, observed independent-evidence holds were consistent with the fixed ten-second deadline; the source uses the SQLite adapter instead. The test retries independent-evidence holds (missing/unavailable/malformed evidence, non-200 responses, timeouts) up to three attempts, and reports the count as `independentEvidenceRetries` (0 in the recorded run). Real data volume may need a reviewed deadline or a faster observation path before operational use.
 - **In-flight work blocks a point.** A recovery point captured while provider work is in flight can never be admitted. Take a new point after settlement.
 
+## Coverage extension — October 8, 2026 UTC
+
+**Branch `claude/wh-008-recovery-coverage`, local synthetic evidence only; still not a cloud restore, live acceptance or an approved promise.** Same rules as above: no remote Cloudflare call, listener, provider dispatch, customer traffic, paid service or key retirement; fixtures and keys are invented, no real vault key or recovery file was read. No CMS functional test was run. The proposed targets above are unchanged and still unapproved.
+
+Run with `corepack pnpm --config.verify-deps-before-run=false test:recovery-drill` and `... test:recovery-drill-keys` (sequential, shared 2-vCPU host, load average about 10). The drill's output was inspected by hand; both ended with exit 0.
+
+### 1. Published-site photos (in `tests/recovery-drill.mjs`)
+
+- **Source.** Two photos are uploaded through the actual `uploadPhoto` gate, held (423) until a safety receipt exists, then approved by the same synthetic trusted receipt `tests/photo-versions.mjs` uses (no scanner exists; no production gate was disabled). The source refuses attaching a held photo and another project's photo (423). A `pages.setPhotos` version is applied and published through the actual Chat handlers. The JPEGs are envelope-valid synthetic bytes (`syntheticJPEG`), accepted unchanged by `cleanPhoto`, but not decodable images. A third approved photo belongs to an unpublished neighbouring project.
+- **Capture and restore.** The point now holds 5 object bodies (2 private, 2 published photos, 1 neighbour photo). Every body, including the photos, is deleted at the disaster and restored from the archive into the isolated R2 bucket. Re-restoring is idempotent (0 written, 5 skipped).
+- **Finding fixed in `tools/recovery-drill.mjs`.** The public host (`src/site-host.ts`) serves a photo only if the stored object has custom metadata `sha256` equal to the row digest. The first packet's `restoreObjects` passed `{sha256}` as a put option, which is not an R2 put option (by inspection; the old code was not re-executed). A byte-exact restore could therefore still fail to serve. Capture now records each object's content type and `sha256` metadata in the pinned manifest; restore writes them (`httpMetadata`, `customMetadata`); an existing object with different metadata is `restore-target-conflict`; any other custom metadata is refused at capture as `object-metadata` (tested).
+- **`reconcileArtifacts(db, objects)`** now also checks every published photo: file row present (`site-photo-pointer`), same project (`site-photo-project`), `ready` plus the production `approved_project_photos` view (`site-photo-safety`), exact bytes (`site-photo-bytes`) and the host's metadata rule (`site-photo-metadata`). It reads only.
+- **Evidence.** The restored candidate reconciles consistent with 2 published photos. On throwaway copies (archived control rows in in-memory SQLite, bodies restored into a memory bucket, because the real host handler writes usage counters) the *actual site-host handler* serves the exact published HTML and the exact photo bytes (digest equal to the row), returns 404 for a photo outside the published version and for the same photo through the neighbouring project, and returns 503 when the body is missing, altered, or restored without its metadata. Matching reconciliation holds: `site-photo-bytes`, `site-photo-bytes`, `site-photo-metadata`; restoring exact bytes with metadata returns to no holds and 200. Archived-row edits: a version-photo mapped to the other project → `site-photo-project`; receipt set to pending → `site-photo-safety`; digest changed → `site-photo-bytes` + `site-photo-safety`; the mapped edit also fails admission with `manifest-mismatch`.
+- **Not done.** The `site-photo-pointer` hold (dangling file row) was not exercised: foreign keys prevent building that fixture and the production source cannot create it. The candidate was never served; the host handler ran on scratch copies using *source* code, not the restored sites bundle. `tests/photo-versions.mjs`, `tests/files.mjs` and `tests/photo-removal.mjs` need Python Pillow, which is not installed on this host, so they were **not run**.
+
+### 2. Interrupted key rotations and cutovers (new `tests/recovery-drill-keys.mjs`, `pnpm test:recovery-drill-keys`)
+
+Actual current modules throughout: `src/connection-rotation.ts` journal/registry/policy, the vault primitive, write policy, SQLite triggers, `tools/restore-inventory.mjs`, `tools/connection-key-backup.mjs` capsules and `inspectIsolatedRestore`; recovery targets are empty local Miniflare D1 databases. Two complete restores into D1 (mid-rotation and completed rotation) plus archived read-only copies for the other points.
+
+| Interruption / scenario | Observed result |
+| --- | --- |
+| Activation committed, reply lost, nothing rotated | Same reply read back on retry (revision 2, no repeat); wrong-keyring batch refused; point registered with a capsule lacking the retained source key is refused at registration; with the correct capsule, admission while the *source* is still mid-rotation → `independent-evidence` |
+| Half rotated (2 of 4), restored into D1 | Restore digest equals the point; the candidate keeps the exact mixed state (2 records under the old key, 2 under the new, rotation `running`); admission → `independent-evidence` (source unsettled); `restoreDiscrepancies` is `sourceAvailable:false` while the source rotation is unsettled |
+| Source finishes after a lost batch acknowledgement | Same batch ID reads back the same receipt; status complete, 0 remaining, 4 rotated |
+| Owner session revoked afterwards | Pending flows removed with it. The mid-rotation candidate would **resurrect** `identity_sessions` 1, `github_oauth_states` 1, `cloudflare_oauth_states` 1, **roll back** `connection_key_rotations` 1 and lose `connection_rotation_batches` 1 since the point; admission → `suppressed-record`; the candidate is held, unchanged (digest equal), not scrubbed. Same hold for the activated-nothing-rotated archive and the pre-rotation archive (which would also roll back the key policy and two vault rows) |
+| Restored old key tries to act | Source refuses re-activating the retired key (`unavailable`), `sealConnectionWrite` under it (`write-key`) and a direct vault insert under it (`connection_write_key_changed`). Retired key: 0 live references, `retirementAllowed:false`; 3 registered archives still require it |
+| Completed rotation, restored into D1 | `verified`, 2 credentials authenticate, key IDs `drill-next` + retained `fixture-current`, restore and source have zero differences; serving/dispatch/retirement all false |
+| Wrong or lost key custody on that candidate | Old-keys-only or new-keys-only capsule → `key-backup-binding`; recovery key file removed → `key-backup-unavailable`, restored → `verified` |
+| Archive permanently withdrawn | `independent-evidence` |
+| Key verifier (registry fingerprint) edited in an archived copy | Registers, but admission → `stale-authority` |
+| Unresolved OAuth exchange | Source refuses a further rotation (`unavailable`) and refuses evidence (`independent-evidence`); after a terminal outcome receipt is recorded the recovered exchange row still holds (`suppressed-record`) and stays visible |
+| Database cutover: new empty current database with initialized key policy | Not a restore target (`restore-target-not-empty`); against that new source the old generation's candidate → `suppressed-record`, and the report counts the old identity (3), credential (5) and other (2) records as would-be-resurrected |
+
+7 explicit `DrillHold`/`unavailable` refusals were counted and 0 independent-evidence retries were needed.
+
+**Behaviour found (recorded, nothing in shared fences or the inventory was changed):**
+
+1. With the real inventory, any unsettled rotation or OAuth exchange in the *current* source blocks evidence for **every** candidate, and the loss report degrades to the misleading label `unavailable-without-current-source`. After it settles, older candidates fail as `suppressed-record`/`stale-authority`, because their rows changed.
+2. Candidate-level `key-rotation-unsettled`, `key-policy` and `key-identity` are therefore unreachable through the real inventory for older archives (the current-source comparison and the capsule binding come first). They stay covered with synthetic evidence in `tests/restore-admission.mjs`. A truly forged verifier is still caught, as `stale-authority`.
+3. Nothing tracks which archives still need a retired key (here 3); retirement stays blocked by design but is not derivable from the tool.
+4. `restoreDiscrepancies` now classifies rotation, batch, guard, exchange, outcome, staging, claim and grant-revocation tables as credential-class records for WH-019. It reports counts only.
+
+**Not done / still open (WH-019, WH-117, parent gates):** the deployment journal's interrupted-cutover states are covered only by `tests/release-manifest.mjs` (fake provider), not inside this drill; restoring into the exact database named by a prepared release is untested; no suppression authority survives total control-database loss; no real recovery key, off-host custody or provider reconciliation; the tool does not reconcile or replay anything.
+
+### 3. All four Worker bundles
+
+`buildWorkerArtifacts` compiles `runtime`, `apps`, `sites` and `platform` once with the release tooling's `compileWorker` (local Wrangler dry run, credential-free environment, real `dist` from `node tools/build.mjs`). The point archives the four compiled outputs (4, 3, 3 and 3 files) plus the platform (38 files) and apps (3 files) asset trees. The compiled outputs are deleted at the disaster; asset trees are checkout directories and are left in place.
+
+- **Recovered bytes.** All six archives are restored with `restoreWorkerArtifact` and equal the inventories taken before the disaster (independent of the point manifest). Existing damage tests still apply to the runtime archive (`worker-artifact-digest`).
+- **Deployable inputs.** `replayRestoredBundles` writes the archived release configuration for each role and runs the same local `wrangler deploy --no-bundle --dry-run` as `tests/release-bundles.mjs` over the *restored* bytes; every JavaScript/Wasm module reproduces byte-for-byte and the payload is unchanged (25.9 s in the final run).
+- **Only the restored runtime bundle was executed** (workerd/QuickJS, as before). The apps, sites and platform bundles were **not** loaded in workerd, bound to resources, routed or served; restoring the runtime proves nothing about them. This is recovered-bytes evidence, not connected HTTP serving acceptance, deployment, or service-binding/secret readback.
+
+### Measured in this extension (October 8, 2026 UTC, load average about 10)
+
+| Run | Result |
+| --- | --- |
+| Main drill, second extended run | pass, 3 m 10 s wall; restore start to verified candidate 44.2 s (now includes copying six archives); build of four Workers 11.1 s; control restore 20.5 s; restored-bundle dry-run replay 19.5 s |
+| Main drill, final run | pass, 4 m 30 s wall; restore to verified 70.9 s; four-Worker build 27.6 s; control restore 29.8 s; replay 25.9 s; 13 refusals; 0 independent-evidence retries |
+| Key drill, first passing run | pass, 82 s wall; mid-rotation D1 restore 17.7 s |
+| Key drill, final run | pass, 3 m 58 s wall (higher load); mid-rotation D1 restore 31.4 s, completed-rotation restore 24.8 s, its admission 11.5 s; 7 refusals; 0 retries |
+
+The control point now holds 112 rows (737,016 bytes) restored as 1,164 statements. The 20–70 s restore times reflect a contended host and still say nothing about Cloudflare.
+
+**Guard canaries (each run once, then reverted):** restoring objects without their metadata failed the drill at `restore-target-conflict`; removing the photo metadata check failed it at the `metadata-lost` case (reconciliation returned no hold). Other checks (`pnpm check`, the existing photo, rotation and restore suites, `node tools/verify.mjs`) were **not** run for this extension; only the two drill scripts and `node --check` were.
+
 ## Acceptance status
 
 - Digests and pointers, visible key/artifact failures, fencing, recorded identity/publication differences, and local measurements: demonstrated locally.
 - Not done: live or remote restore, independent off-host custody, measured cloud RPO/RTO, CMS recovery, WH-019 reconciliation, owner approval of the targets above, and any traffic switch.
+- Added October 8, 2026 (local synthetic only): published-site photo restore/reconcile, interrupted rotation/cutover holds, and recovered bytes of all four Worker bundles — see the coverage extension. Still not done: any connected HTTP serving of restored bundles, deployment-journal cutover inside the drill, WH-019 reconciliation and suppression survival, and every item in the list above.
