@@ -8116,6 +8116,9 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [tools/prototypes/notifications.mjs](../../tools/prototypes/notifications.mjs)
 - [src/contact-email.ts](../../src/contact-email.ts)
 - [src/contact-notifications.ts](../../src/contact-notifications.ts)
+- [src/notification-catalog.ts](../../src/notification-catalog.ts)
+- [tests/notifications-source.mjs](../../tests/notifications-source.mjs)
+- [tests/notifications-contract.mjs](../../tests/notifications-contract.mjs)
 
 ### Execution coordination
 
@@ -8123,7 +8126,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-08 UTC: source-complete locally, not deployed. Local commit on branch claude/wh-155-notification-catalog, stacked on claude/wh-068-notification-contract (PR #180, open at the time); not pushed or merged, issue not created or claimed from this session. Added src/notification-catalog.ts (deeply frozen catalog with pinned canonical-JSON SHA-256 template digests, the whumpo-notify sender, cloudflare-email provider facts and error classes, closed template/catalog/configuration validators, deterministic plain-text segment renderer; Web Crypto digests via the existing canonicalJSON/jsonDigest helpers, no node:crypto). contactEmailMessage now renders the contact.new-message@1 and owner.destination-verification@1 catalog templates and stays synchronous; its output was compared with the pre-change function for both notices and eight invalid-code cases and is byte-identical, and the sender, spending ceiling and provider error classification now read the catalog with unchanged results. The appointment templates stay planned and are not renderable; no provider, sender, binding, cron, DNS, schema or outbox change. Added tests/notifications-source.mjs (pnpm test:notifications-source, in the fast verification profile): 14 checks and 21/21 deliberate source mutants caught, covering immutability, reference agreement on rejected shapes, closed fields, planned/withdrawn/stale-pin behavior, async mutation boundary, byte-identical notices and the no-inference/no-node-builtin import boundary; tests/notifications-contract.mjs now also compares the reference with the source catalog (31 reference + 7 agreement/static checks, 20/20 reference mutants). Synthetic values only. Provider review and price facts are the historical WH-036 review (October 4, 2026) and the October 8, 2026 documentation read, not re-verified; entitlement and pricing still require verification. Does not prove D1 storage, delivery, consent flows or any activation; parent WH-068 stays open and WH-156 to 160 remain.
 
 ## WH-156 — Shared notification outbox, receipt states and bounded reconciliation
 
