@@ -3287,6 +3287,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 ### Evidence
 
 - 2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.
+- 2026-10-08 UTC: partial source only, not complete. Branch claude/wh-093-lead-domain adds the pure lead domain core (`src/shared-modules/leads-domain.ts`: closed stage vocabulary, civil due dates with an explicit caller reference date, owner notes validation, strict change validation and revision-checked application, decision-independent filter validation) with `tests/leads-domain.mjs` in the fast verify profile, and the `docs/business-leads.md` contract. No storage, schema, routes, handlers, Chat/view/native adapters, eligibility wiring, export/deletion, dashboard or browser journey exists, so every acceptance criterion above remains unmet. Intake sources, lead retention and due-date timezone are pending owner decisions and no answer is assumed. Routine owner operations must go through the WH-105/107/109/110 shared adapters; a dashboard alone does not satisfy this task. Not merged, deployed or accepted; no issue is mapped.
 
 ## WH-095 — Report Business submission and lead conversion outcomes honestly
 
