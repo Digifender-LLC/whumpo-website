@@ -109,6 +109,7 @@
     "test:cms-d1-restore": "node tests/cms-d1-restore.mjs",
     "test:recovery-drill": "node tests/recovery-drill.mjs",
     "test:recovery-drill-keys": "node tests/recovery-drill-keys.mjs",
+    "test:recovery-authority": "node tests/recovery-authority.mjs",
     "cms:verify-recovery": "node tools/verify-cms-recovery.mjs",
     "test:backend-publication": "node tests/backend-publication.mjs",
     "test:backend-forms": "node tests/backend-forms.mjs",

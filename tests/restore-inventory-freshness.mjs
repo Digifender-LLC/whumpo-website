@@ -9,12 +9,13 @@ import {fixtureKeyring,initializeFixtureKeys} from './helpers/connection-keyring
 import {keyBackupFixture} from './helpers/key-backup.mjs';
 import {createRestoreInventory,openRestoreInventory} from '../tools/restore-inventory.mjs';
 import {inspectIsolatedRestore,restoreManifestDigest} from '../tools/restore-admission.mjs';
+import {syntheticAuthority} from './helpers/synthetic-platform.mjs';
 
 Error.stackTraceLimit=0;
 const directory=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-inventory-freshness-'),inventoryFile=join(directory,'current.whumpo-restore-inventory'),streamId='fresh-source',id=()=>crypto.randomUUID();
 const fixture=await sqliteD1(),{db,sql}=fixture,{identity:m}=await currentFixtureModules([]),keys=await keyBackupFixture(),keyring=fixtureKeyring(),{proof:keyBackup}=await keys.create(keyring);
 const copies=[],handles=[];let refusals=0,verified=0;const network=globalThis.fetch;globalThis.fetch=()=>assert.fail('No network permitted');
-const open=async(sourceDb=db)=>{const h=await openRestoreInventory({inventoryFile,expectedStreamId:streamId,...(sourceDb?{sourceDb}:{})});handles.push(h);return h;};
+const open=async(source=db)=>{const h=await openRestoreInventory({inventoryFile,expectedStreamId:streamId,...(source?{authority:await syntheticAuthority(source)}:{})});handles.push(h);return h;};
 const copy=async()=>{const file=join(directory,id()+'.sqlite');await backup(sql,file);const copied=new DatabaseSync(file,{readOnly:true});copies.push(copied);return sqliteD1Adapter(copied);};
 const register=async inventory=>{const candidate=await copy(),manifest=await inventory.registerArchive({archiveDb:candidate,snapshotId:id(),keyBackup});return {candidate,manifest};};
 const inspect=({candidate,manifest},inventory)=>inspectIsolatedRestore({db:candidate,manifest,keyBackup,evidenceSource:inventory.evidenceSource,expectedStreamId:streamId});
@@ -122,11 +123,13 @@ try{
 
  // A source with an obsolete or incomplete schema cannot issue fresh evidence.
  const wrongSource=new DatabaseSync(':memory:');wrongSource.exec('CREATE TABLE users(id TEXT PRIMARY KEY)');
- try{const wrong=await open(sqliteD1Adapter(wrongSource));await assertResult(current,wrong,'independent-evidence');}finally{wrongSource.close();}
+ // It is now refused when the authority is opened (the observer cannot read its registry), before any evidence request can exist.
+ try{await assert.rejects(()=>syntheticAuthority(sqliteD1Adapter(wrongSource)),{code:'source-observation'});refusals++;}finally{wrongSource.close();}
  // Old operator inventories are explicitly refused; no migration/old reader.
  const oldFile=join(directory,'obsolete.whumpo-restore-inventory');await writeFile(oldFile,Buffer.alloc(0),{mode:0o600});
  const obsolete=new DatabaseSync(oldFile);obsolete.exec("CREATE TABLE identity(singleton INTEGER PRIMARY KEY,version INTEGER CHECK(version=1)); INSERT INTO identity VALUES(1,1)");obsolete.close();
- await reject(()=>openRestoreInventory({inventoryFile:oldFile,expectedStreamId:streamId,sourceDb:db}));
+ const oldAuthority=await syntheticAuthority(db);
+ await reject(()=>openRestoreInventory({inventoryFile:oldFile,expectedStreamId:streamId,authority:oldAuthority}));
 
  // Bounds apply to the entire derived batch. There is no partial suppression
  // prefix, truncation or empty-history replacement when 513 removals are seen.

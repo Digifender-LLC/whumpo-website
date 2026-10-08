@@ -11,6 +11,8 @@ import {keyBackupFixture} from './helpers/key-backup.mjs';
 import {createRestoreInventory,openRestoreInventory} from '../tools/restore-inventory.mjs';
 import {captureRestoreConstraint,inspectIsolatedRestore,restoreManifestDigest} from '../tools/restore-admission.mjs';
 import {assertArtifactPath} from '../tools/artifact-protection.mjs';
+import {recoveryAuthorityDatabase} from '../tools/recovery-authority.mjs';
+import {syntheticAuthority} from './helpers/synthetic-platform.mjs';
 
 Error.stackTraceLimit=0;
 const directory=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-inventory-'),inventoryFile=join(directory,'current.whumpo-restore-inventory');
@@ -19,21 +21,27 @@ const keys=await keyBackupFixture(),keyring=fixtureKeyring(),stored=await keys.c
 const {identity:m}=await currentFixtureModules([]);
 const opened=[],copies=[];let refusals=0;
 const reject=async f=>{await assert.rejects(f,/unavailable|could not be observed/);refusals++;};
-const open=async(sourceDb=db)=>{const h=await openRestoreInventory({inventoryFile,expectedStreamId:streamId,...(sourceDb?{sourceDb}:{})});opened.push(h);return h;};
+let authority;
+// The source is always an authority over a synthetic platform (tests/helpers/synthetic-platform.mjs); a null source opens the read-only status handle.
+const open=async(source=db)=>{const h=await openRestoreInventory({inventoryFile,expectedStreamId:streamId,...(source?{authority:source===db?authority:await syntheticAuthority(source)}:{})});opened.push(h);return h;};
 const copy=async()=>{const file=join(directory,id()+'.sqlite');await backup(sql,file);const isolated=new DatabaseSync(file,{readOnly:true});copies.push(isolated);return sqliteD1Adapter(isolated);};
 const request=(manifest,change={})=>new Request('https://restore-evidence.internal/v2/check',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({version:2,snapshotId:manifest.snapshotId,manifestDigest:restoreManifestDigest(manifest),challenge:id(),...change})});
 const inspect=(candidate,manifest,inventory)=>inspectIsolatedRestore({db:candidate,manifest,keyBackup,evidenceSource:inventory.evidenceSource,expectedStreamId:streamId});
 const held=async(candidate,manifest,inventory,code)=>{const result=await inspect(candidate,manifest,inventory);assert.deepEqual(result.holds,[code]);assert.equal(result.servingAllowed,false);assert.equal(result.providerDispatchAllowed,false);assert.equal(result.retirementAllowed,false);refusals++;};
 const network=globalThis.fetch;globalThis.fetch=()=>assert.fail('Operator inventory must not access real providers');
 try{
- await initializeFixtureKeys(db,keyring);const owner=await workspaceFixture(db,m);
+ await initializeFixtureKeys(db,keyring);const owner=await workspaceFixture(db,m);authority=await syntheticAuthority(db);
  await db.prepare("UPDATE users SET email='PRIVATE_INVENTORY_PROFILE_CANARY' WHERE id=?").bind(owner.account).run();
  const init=await createRestoreInventory({inventoryFile,streamId});assert.equal(init.archives,0);assert.equal(init.independentCustodyAccepted,false);
  await reject(()=>createRestoreInventory({inventoryFile,streamId}));
  await reject(()=>openRestoreInventory({inventoryFile,expectedStreamId:'wrong-stream'}));
  await reject(()=>openRestoreInventory({inventoryFile:join(directory,'missing.whumpo-restore-inventory'),expectedStreamId:streamId}));
  const inventory=await open(),archive=await copy(),snapshotId=id();
- await reject(()=>inventory.registerArchive({archiveDb:db,snapshotId,keyBackup}));
+ await reject(()=>inventory.registerArchive({archiveDb:recoveryAuthorityDatabase(authority),snapshotId,keyBackup}));
+ // A raw adapter is never a source: neither as the authority nor under the retired key.
+ await reject(()=>openRestoreInventory({inventoryFile,expectedStreamId:streamId,authority:db}));
+ await reject(()=>openRestoreInventory({inventoryFile,expectedStreamId:streamId,sourceDb:db}));
+ await reject(()=>openRestoreInventory({inventoryFile,expectedStreamId:streamId,authority:{...authority}}));
  await reject(()=>inventory.registerArchive({archiveDb:archive,snapshotId,keyBackup:{...keyBackup}}));
  const manifest=await inventory.registerArchive({archiveDb:archive,snapshotId,keyBackup});
  assert.equal((await inspect(archive,manifest,inventory)).status,'verified');

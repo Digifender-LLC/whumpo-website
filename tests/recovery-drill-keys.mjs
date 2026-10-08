@@ -16,6 +16,7 @@ import {fixtureKeyring} from './helpers/connection-keyring.mjs';
 import {keyBackupFixture} from './helpers/key-backup.mjs';
 import {memoryBucket,isolatedTargets,seedCredentials} from './helpers/recovery-drill.mjs';
 import {createRestoreInventory,openRestoreInventory} from '../tools/restore-inventory.mjs';
+import {syntheticAuthority} from './helpers/synthetic-platform.mjs';
 import {inspectIsolatedRestore} from '../tools/restore-admission.mjs';
 import {restoreCapturedCMSDatabase,captureCMSDatabase} from '../tools/cms-database-snapshot.mjs';
 import {currentSchemaArtifact,currentSchemaPlan,inspectSchema} from '../tools/current-schema.mjs';
@@ -45,11 +46,12 @@ try{
  // ---- Independent authority and encrypted key custody. Backups hold only invented keys.
  const streamId='recovery-keys-stream',inventoryFile=join(directory,'operator.whumpo-restore-inventory');
  await createRestoreInventory({inventoryFile,streamId});
- const inventory=await openRestoreInventory({inventoryFile,expectedStreamId:streamId,sourceDb:db});closers.push(()=>inventory.close());
+ const authority=await syntheticAuthority(db);
+ const inventory=await openRestoreInventory({inventoryFile,expectedStreamId:streamId,authority});closers.push(()=>inventory.close());
  const backups=await keyBackupFixture();closers.push(()=>backups.close());
  const backup={a:(await backups.create(ringA)).proof,b:(await backups.create(ringB)).proof,bOnly:(await backups.create(ringBOnly)).proof};
  const none=isolatedObjects(memoryBucket()),empty=memoryBucket();
- const point=async name=>{const dir=join(directory,'points',name),captured=await captureRecoveryPoint({sourceDb:db,objects:empty,directory:dir,snapshotId:'keys-'+name});return {...captured,dir};};
+ const point=async name=>{const dir=join(directory,'points',name),captured=await captureRecoveryPoint({authority,objects:empty,directory:dir,snapshotId:'keys-'+name});return {...captured,dir};};
  const register=async(p,keyBackup,inv=inventory)=>{const archived=await openArchivedControl(p.dir,p.pointDigest);try{return await inv.registerArchive({archiveDb:archived.db,snapshotId:p.snapshotId,keyBackup});}finally{archived.close();}};
  const admit=(candidate,manifest,keyBackup,{inv=inventory,stream=streamId,once=false}={})=>{
   const run=()=>inspectIsolatedRestore({db:candidate,manifest,keyBackup,evidenceSource:inv.evidenceSource,expectedStreamId:stream,objects:none});
@@ -208,7 +210,7 @@ try{
  await drillHold(()=>restoreControlD1(cutover.db,p2.dir,p2.pointDigest),'restore-target-not-empty');
  const cutoverStream='recovery-keys-cutover-stream',cutoverFile=join(directory,'cutover.whumpo-restore-inventory');
  await createRestoreInventory({inventoryFile:cutoverFile,streamId:cutoverStream});
- const cutoverInventory=await openRestoreInventory({inventoryFile:cutoverFile,expectedStreamId:cutoverStream,sourceDb:cutover.db});closers.push(()=>cutoverInventory.close());
+ const cutoverInventory=await openRestoreInventory({inventoryFile:cutoverFile,expectedStreamId:cutoverStream,authority:await syntheticAuthority(cutover.db)});closers.push(()=>cutoverInventory.close());
  const cutoverManifest=await register(p2,backup.b,cutoverInventory);
  holds.afterDatabaseCutover=(await admit(target.DRILL_D,cutoverManifest,backup.b,{inv:cutoverInventory,stream:cutoverStream})).holds;
  assert.equal(holds.afterDatabaseCutover.length,1);assert.ok(['suppressed-record','removed-owner','stale-authority'].includes(holds.afterDatabaseCutover[0]),JSON.stringify(holds.afterDatabaseCutover));

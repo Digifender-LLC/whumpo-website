@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,readFile,rm,symlink} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,readFile,readdir,rm,symlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {saveBuildSnapshot,verifyBuildSnapshot,readBuildInputs} from '../tools/build-snapshot.mjs';
@@ -7,6 +7,7 @@ import {prepareRelease,archivedConfig,expectedServiceBindings} from '../tools/pr
 import {workerOrder,configFiles,readJSON,verifyRelease,applyRelease,fileInventory,validateCompatibility,digest,copyTree,assertWorker} from '../tools/release-manifest.mjs';
 import {currentSchemaArtifact,schemaSummary,currentSchemaPlan} from '../tools/current-schema.mjs';
 import {bindingSummary} from '../tools/release-provider.mjs';
+import {ciRelease} from '../tools/deploy-ci.mjs';
 
 const root=await mkdtemp(join(tmpdir(),'whumpo-release-'));
 let artifact;
@@ -140,6 +141,35 @@ try{
  driver.initialize=async()=>{mutations++;live.schema=artifact.expected;throw Error('Private SQL failure');};
  await assert.rejects(()=>applyRelease(unknownSchema.directory,driver),/stopped at schema/);assert.equal(counts.runtime,0);
  await assert.rejects(()=>applyRelease(unknownSchema.directory,driver),/Schema command outcome is unresolved/);assert.equal(mutations,1);driver.initialize=originalInitialize;
+ // WH-008: no journaled path adopts a populated database restored from a recovery point. The restored database is modelled as
+ // the configured, UNBOUND replacement holding the exact current schema with data, while every Worker still selects the baseline.
+ // (The fake provider models bindings and schema summaries only; D1 import limits and real binding readback are untested.)
+ // Each refusal comes before any provider write, journal or release directory.
+ const releases=join(root,'.secrets/releases'),releaseCount=async()=>(await readdir(releases)).length;
+ const restored=()=>{resetToEmpty();live.schema=artifact.expected;};
+ const untouched=async(attempt,pattern)=>{
+  const directories=await releaseCount();
+  await assert.rejects(attempt,pattern);
+  assert.equal(mutations,0);assert.deepEqual(Object.values(counts),[0,0,0,0,0]);assert.equal(await releaseCount(),directories);
+ };
+ for(const [schemaChange,pattern] of [['none',/replacement must start from an empty reviewed database/],['initialize',/Invalid schema change classification/],['restore',/Invalid schema change classification/],['adopt',/Invalid schema change classification/]]){
+  restored();review={...normalReview,schemaChange,testDataResetAuthorized:true,cutoverReview:'Restored recovery point as the replacement database'};
+  await untouched(()=>prepare(),pattern);
+ }
+ // The retired restore fields are rejected in every state, restored or empty, never interpreted as an adoption review.
+ for(const setup of [restored,resetToEmpty])for(const extra of [{restoreReview:'recovery point reviewed'},{restoreEvidence:{pointDigest:'f'.repeat(64)}},{migrations:[]}]){
+  setup();review={...normalReview,...(live.schema.objects?{}:{schemaChange:'initialize',testDataResetAuthorized:true,cutoverReview:'Disposable test data, new unbound database'}),...extra};
+  await untouched(()=>prepare(),/Retired release compatibility fields/);
+ }
+ // A restore into the prepared target AFTER review and before apply is a changed baseline: the journal refuses it unwritten.
+ resetToEmpty();const raced=await prepare();live.schema=artifact.expected;
+ await assert.rejects(()=>applyRelease(raced.directory,driver),/Remote schema changed before release/);
+ assert.equal(mutations,0);assert.deepEqual(Object.values(counts),[0,0,0,0,0]);
+ assert.ok(!(await readdir(raced.directory)).includes('journal.json'),'No journal is written for a refused baseline');
+ // The merge-to-main path refuses the same state before preparing anything.
+ restored();
+ await untouched(()=>ciRelease(root,driver,{env:{WORKERS_CI:'1'},commit:()=>({commit:'a'.repeat(40),dirty:false}),log:()=>{}}),/configured control database differs/);
+ resetToEmpty(); // the initialize review the following compatibility checks use
  const plan=currentSchemaPlan(artifact,schemaSummary([]));
  assert.throws(()=>validateCompatibility({...review,schemaSha256:'wrong'},plan),/complete current schema/);
  assert.throws(()=>validateCompatibility({...review,previousWorkersCompatible:true},plan),/compatibility/);
@@ -165,5 +195,5 @@ try{
  await mkdir(join(recovered,'.secrets'));await writeFile(join(recovered,'.secrets/build-snapshot.json'),JSON.stringify(manifest.build));
  assert.deepEqual(await readBuildInputs(recovered),manifest.build.inputs);
  assert.deepEqual(await verifyBuildSnapshot(recovered),manifest.build);
- console.log('Current-schema release manifests passed: immutable four-Worker artifacts/assets/SQL, no secret copies, exact current schema, empty unbound initialization, active DB/reset refusals, drift refusal, persisted intent, partial failures at all four steps, reconciliation without duplicate deployment, uncertain-command holds, nonempty CMS registration/binding preservation and recovered build inputs including compiler locks.');
+ console.log('Current-schema release manifests passed: immutable four-Worker artifacts/assets/SQL, no secret copies, exact current schema, empty unbound initialization, active DB/reset refusals, drift refusal, persisted intent, partial failures at all four steps, reconciliation without duplicate deployment, uncertain-command holds, nonempty CMS registration/binding preservation, recovered build inputs including compiler locks, and zero-mutation refusal of every adoption path for a restored populated database (none/initialize/invented restore/retired fields/changed baseline/CI).');
 }finally{await rm(root,{recursive:true,force:true});}
