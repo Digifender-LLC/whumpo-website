@@ -1,4 +1,4 @@
-import {createHash} from 'node:crypto';
+import {createHash,createHmac,randomBytes} from 'node:crypto';
 
 // WH-022 / WH-168 offline reference for the planned shadow cost-event contract (docs/cost-events.md).
 // Builtins only: no Worker import, database, network, credential or provider. It freezes the envelope, the
@@ -14,6 +14,11 @@ export class CostEventError extends Error{
 }
 const check=(ok,code,detail)=>{if(!ok)throw new CostEventError(code,detail);};
 const isInt=(v,min=0)=>Number.isSafeInteger(v)&&v>=min;
+const deepFreeze=v=>{if(v!==null&&typeof v==='object'&&!Object.isFrozen(v)){Object.freeze(v);for(const x of Object.values(v))deepFreeze(x);}return v;};
+// Every reported figure is an exact integer. Totals are summed as BigInt and a figure beyond the safe-integer range is refused
+// (AMOUNT_UNSAFE), never rounded, so a report cannot silently differ from the sum of the events it reports.
+const MAX_SAFE=BigInt(Number.MAX_SAFE_INTEGER);
+const exact=(v,what)=>{check(v>=-MAX_SAFE&&v<=MAX_SAFE,'AMOUNT_UNSAFE',`${what} is outside the exactly representable range and is refused rather than rounded`);return Number(v);};
 const plain=v=>v!==null&&typeof v==='object'&&!Array.isArray(v)&&Object.getPrototypeOf(v)===Object.prototype;
 const SAFE=/^[A-Za-z0-9._:-]{1,128}$/,UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/,STAMP=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/,DIGEST=/^[0-9a-f]{64}$/;
 const SECRET=/sk-[A-Za-z0-9]{8,}|Bearer\s|-----BEGIN|eyJ[A-Za-z0-9_-]{10,}\./;
@@ -92,7 +97,8 @@ const rates={
  'do.storage':rate(1000,200_000),'stream.storage':rate(1,5000),'stream.delivery':rate(1,1000)
 };
 export const tariffs={'pool-proposal':{1:{status:'proposal',effectiveFrom:'2026-09-30T00:00:00.000Z',effectiveTo:null,rates,accountAllowance:null,allowanceAllocation:'account-wide-not-allocated'}}};
-export const defaultRegistry={sources,dimensions,workloads,tariffs};
+// Frozen: the exported registry (and the sources, dimensions, workloads and tariffs inside it) cannot be edited by a caller.
+export const defaultRegistry=deepFreeze({sources,dimensions,workloads,tariffs});
 
 export function validateRegistry(registry){
  for(const [id,d] of Object.entries(registry.dimensions)){
@@ -175,7 +181,7 @@ export function validateEvent(input,registry=defaultRegistry){
  const text=canonical(input);check(!SECRET.test(text),'SECRET_IN_EVENT','secret-shaped value');
  // Outcome and cost must agree so an unfinished or unknown operation can never read as a known (or zero) cost.
  if(input.outcome==='pending'||input.outcome==='uncertain')check(input.cost.basis==='unknown','OUTCOME_COST',`${input.outcome} cost is explicit unknown`);
- if(input.outcome==='released')check(input.quantity.state==='known'&&input.quantity.value===0&&input.cost.basis!=='unknown','OUTCOME_COST','a released reservation consumed nothing');
+ if(input.outcome==='released')check(input.quantity.state==='known'&&input.quantity.value===0&&input.cost.basis!=='unknown'&&(input.cost.micros??0)===0&&Object.values(input.detail).every(v=>v===0),'OUTCOME_COST','a released reservation consumed nothing: known zero quantity, zero cost and no token detail');
  if(input.cost.basis==='tariff'){
   check(dim.kind==='usage'&&input.quantity.state==='known','OUTCOME_COST','a tariff prices a known quantity');
   const t=registry.tariffs[input.cost.tariff.id]?.[input.cost.tariff.version];
@@ -202,6 +208,7 @@ export function createIdentityDirectory(){
 
 const bucket=()=>({events:0,units:{},tariffNum:0n,receipt:0n,providerReported:0n,shadow:0n,unknownEvents:0,unknownQuantity:0,boundedExposure:0n,unboundedExposure:0,pending:0,uncertain:0});
 const ceilScaled=n=>(n+costScale-1n)/costScale;
+const knownOf=b=>ceilScaled(b.tariffNum)+b.receipt+b.providerReported;
 // Reports are canonical: key order never depends on the order events arrived in.
 const sorted=o=>Object.fromEntries(Object.entries(o).sort(([a],[b])=>a<b?-1:a>b?1:0));
 function addTo(b,e,registry){
@@ -220,18 +227,46 @@ function addTo(b,e,registry){
  else{b.unknownEvents++;if(c.exposureMicros===null)b.unboundedExposure++;else b.boundedExposure+=BigInt(c.exposureMicros);}
 }
 function present(b){
- const tariff=ceilScaled(b.tariffNum),known=tariff+b.receipt+b.providerReported;
- return {events:b.events,units:sorted(Object.fromEntries(Object.entries(b.units).map(([k,v])=>[k,Number(v)]))),
-  tariffMicros:Number(tariff),receiptMicros:Number(b.receipt),providerReportedMicros:Number(b.providerReported),knownEstimateMicros:Number(known),
-  shadowMicros:Number(b.shadow),unknownEvents:b.unknownEvents,unknownQuantity:b.unknownQuantity,
-  boundedExposureMicros:Number(b.boundedExposure),unboundedExposureEvents:b.unboundedExposure,pending:b.pending,uncertain:b.uncertain,customerUnits:0};
+ const tariff=ceilScaled(b.tariffNum),known=knownOf(b);
+ return {events:b.events,units:sorted(Object.fromEntries(Object.entries(b.units).map(([k,v])=>[k,exact(v,`units.${k}`)]))),
+  tariffMicros:exact(tariff,'tariffMicros'),receiptMicros:exact(b.receipt,'receiptMicros'),providerReportedMicros:exact(b.providerReported,'providerReportedMicros'),knownEstimateMicros:exact(known,'knownEstimateMicros'),
+  shadowMicros:exact(b.shadow,'shadowMicros'),unknownEvents:b.unknownEvents,unknownQuantity:b.unknownQuantity,
+  boundedExposureMicros:exact(b.boundedExposure,'boundedExposureMicros'),unboundedExposureEvents:b.unboundedExposure,pending:b.pending,uncertain:b.uncertain,customerUnits:0};
 }
 
-export function createLedger({directory,registry=defaultRegistry,now=()=>new Date().toISOString()}){
- validateRegistry(registry);
- const identities=new Map(),closed=new Map();let seq=0;
+// Revisions of one identity (source, sourceEventId, dimension) may only ADVANCE. These fields name the event and where its
+// cost falls, so they never change after the first revision: a revision cannot move cost to another period (occurredAt), owner,
+// workload or attempt. Everything else is an observation that legitimately moves forward and is checked in advances().
+const identityFields=['workload','workClass','taskRef','attempt','placementClass','occurredAt','aiTier'];
+const outcomeRank={pending:0,uncertain:1,settled:2,released:2};
+// What an account closure leaves of one revision: no owner, task or provider ID, and an opaque keyed source/idempotency identity.
+const tombstoned=(e,tomb)=>({...e,sourceEventId:tomb.sourceEventId,idempotencyKey:tomb.idempotencyKey,providerEventId:null,taskRef:null,attribution:{scope:'platform',pool:'closed-account'}});
+// `lower` has the lower revision. The pairwise rule is symmetric in arrival order, so any order of a valid set converges and an
+// invalid pair is refused whichever side arrives second.
+function advances(lower,higher){
+ for(const f of identityFields)check(canonical(lower[f])===canonical(higher[f]),'IMMUTABLE_FIELD',`${f} is fixed by the first revision`);
+ check(canonical(lower.attribution)===canonical(higher.attribution),'TENANT_MISMATCH','a later revision cannot change attribution');
+ // The provider's own ID may be learned later (null -> value) but never replaced or dropped.
+ check(lower.providerEventId===null||lower.providerEventId===higher.providerEventId,'IMMUTABLE_FIELD','providerEventId is preserved once known');
+ // A tariff pin is the price basis: a revision cannot reprice the event under another tariff version.
+ check(lower.cost.basis!=='tariff'||higher.cost.basis!=='tariff'||canonical(lower.cost.tariff)===canonical(higher.cost.tariff),'IMMUTABLE_FIELD','the pinned tariff is fixed once priced');
+ check(higher.observedAt>=lower.observedAt,'REVISION_REGRESSION','observedAt does not move backwards');
+ check(outcomeRank[higher.outcome]>=outcomeRank[lower.outcome]&&(outcomeRank[lower.outcome]<2||lower.outcome===higher.outcome),'REVISION_REGRESSION','an outcome only advances and a terminal outcome is final');
+ check(lower.quantity.state==='unknown'||higher.quantity.state==='known','REVISION_REGRESSION','a known quantity is not made unknown again');
+ check(lower.cost.basis==='unknown'||higher.cost.basis!=='unknown','REVISION_REGRESSION','a known cost is not made unknown again');
+}
+
+export function createLedger({directory,registry:supplied=defaultRegistry,now=()=>new Date().toISOString(),closureKey=randomBytes(32)}){
+ // The ledger prices from a private frozen snapshot: later edits to the caller's registry cannot reprice pinned history.
+ const registry=deepFreeze(structuredClone(supplied));validateRegistry(registry);
+ check((typeof closureKey==='string'||closureKey instanceof Uint8Array)&&closureKey.length>=16,'INVALID_REGISTRY','closureKey must be at least 16 bytes');
+ const identities=new Map(),closed=new Map(),closedOwners=new Set();let seq=0;
  const periodOf=e=>e.occurredAt.slice(0,7);
  const heads=()=>[...identities.values()].map(r=>r.revisions.get(Math.max(...r.revisions.keys())));
+ // Keyed digests: after account closure the only retained linkage is HMAC(closureKey, original ID). It cannot be reversed or
+ // guessed from a project/owner UUID without the key, so it is pseudonymous evidence that lives exactly as long as the key.
+ const mac=(domain,value)=>createHmac('sha256',closureKey).update(`${domain}:${value}`).digest('hex');
+ const tombstoneOf=e=>{const sourceEventId=`closed:${mac('identity',e.idempotencyKey).slice(0,32)}`;return {sourceEventId,idempotencyKey:idempotencyKey({source:e.source,sourceEventId,dimension:e.dimension})};};
  function ownership(e){
   const a=e.attribution;if(a.scope!=='tenant')return;
   const p=directory.lookup(a.projectId??'');
@@ -242,22 +277,34 @@ export function createLedger({directory,registry=defaultRegistry,now=()=>new Dat
   check(a.resourceId===null||p.resources.has(a.resourceId),'TENANT_MISMATCH','resource is not part of the project');
  }
  function append(input){
-  const e=validateEvent(input,registry);ownership(e);
-  const key=e.idempotencyKey,canon=canonical(e);
-  let rec=identities.get(key);
-  if(!rec){rec={revisions:new Map(),first:e};identities.set(key,rec);}
-  const same=rec.revisions.get(e.revision);
+  let e=validateEvent(input,registry);const callerKey=e.idempotencyKey;
+  let rec=identities.get(callerKey),redirected=false;
+  if(!rec){const tomb=tombstoneOf(e);rec=identities.get(tomb.idempotencyKey);
+   if(rec){
+    // The identity was redacted at account closure. Its later revisions and redeliveries still converge on it, re-scoped to
+    // closed-account, so recovery and dedupe survive closure without re-linking the owner or counting the cost twice.
+    redirected=true;const a=e.attribution;
+    check(a.scope==='tenant'?mac('owner',a.ownerId)===rec.ownerMac:a.pool==='closed-account','TENANT_MISMATCH','cost of a closed account stays at closed-account scope and cannot move to another owner');
+    e=tombstoned(e,tomb);
+   }
+  }
+  if(!redirected){
+   ownership(e);
+   if(e.attribution.scope==='tenant')check(!closedOwners.has(mac('owner',e.attribution.ownerId)),'OWNER_CLOSED','a closed account no longer receives tenant-scoped cost; record it at platform closed-account scope');
+  }
+  const canon=canonical(e),same=rec?.revisions.get(e.revision);
   if(same){
    check(same.canon===canon,'IDEMPOTENCY_CONFLICT','same source event and revision with different content');
-   return {status:'duplicate',key,revision:e.revision};
+   return {status:'duplicate',key:callerKey,revision:e.revision};
   }
-  // Every revision of one identity keeps its first attribution, so a restatement cannot move cost between tenants.
-  if(canonical(rec.first.attribution)!==canonical(e.attribution)||rec.first.dimension!==e.dimension)throw new CostEventError('TENANT_MISMATCH','a later revision cannot change attribution');
-  const topBefore=rec.revisions.size?Math.max(...rec.revisions.keys()):0;
+  const prior=rec?[...rec.revisions.values()]:[];
+  for(const p of prior){if(p.revision<e.revision)advances(p,e);else advances(e,p);}
+  const topBefore=prior.length?Math.max(...rec.revisions.keys()):0;
+  if(!rec){rec={revisions:new Map(),ownerMac:null};identities.set(e.idempotencyKey,rec);}
   seq++;
   const lateAfterClose=closed.has(periodOf(e))&&seq>closed.get(periodOf(e)).closedSeq;
   rec.revisions.set(e.revision,{...e,canon,receivedSeq:seq,receivedAt:now(),lateAfterClose});
-  return {status:e.revision>topBefore?'accepted':'stale-revision',key,revision:e.revision};
+  return {status:e.revision>topBefore?'accepted':'stale-revision',key:callerKey,revision:e.revision};
  }
  const select=({period,ownerId,pool,workClass,workload}={})=>heads().filter(e=>(period===undefined||periodOf(e)===period)&&(ownerId===undefined||e.attribution.ownerId===ownerId)
   &&(pool===undefined||e.attribution.pool===pool)&&(workClass===undefined||e.workClass===workClass)&&(workload===undefined||e.workload===workload));
@@ -269,22 +316,26 @@ export function createLedger({directory,registry=defaultRegistry,now=()=>new Dat
   const map=o=>sorted(Object.fromEntries(Object.entries(o).map(([k,v])=>[k,present(v)])));
   return {period:filter.period??null,...present(total),byDimension:map(byDimension),byWorkClass:map(byWorkClass),byWorkload:map(byWorkload)};
  }
+ // Closing is idempotent: the first close fixes the snapshot and a repeat returns that same snapshot. Nothing after it can
+ // rewrite it; later arrivals surface only through restatement().
  function closePeriod(period){
   check(/^\d{4}-\d\d$/.test(period),'INVALID_PERIOD',period);
-  const snapshot=summary({period});closed.set(period,{closedSeq:seq,snapshot:structuredClone(snapshot)});return snapshot;
+  if(!closed.has(period))closed.set(period,{closedSeq:seq,snapshot:summary({period})});
+  return structuredClone(closed.get(period).snapshot);
  }
  function restatement(period){
   const c=closed.get(period);check(c,'PERIOD_OPEN',period);
   const late=select({period}).filter(e=>e.lateAfterClose);
-  const now_=summary({period});
-  return {period,closedSnapshot:c.snapshot,lateEvents:late.length,knownEstimateDeltaMicros:now_.knownEstimateMicros-c.snapshot.knownEstimateMicros,currentSummary:now_};
+  const current=summary({period});
+  return {period,closedSnapshot:structuredClone(c.snapshot),lateEvents:late.length,knownEstimateDeltaMicros:exact(BigInt(current.knownEstimateMicros)-BigInt(c.snapshot.knownEstimateMicros),'knownEstimateDeltaMicros'),currentSummary:current};
  }
  function reconcile(period,invoice,{toleranceMicros=0}={}){
+  check(isInt(toleranceMicros),'INVALID_TOLERANCE','toleranceMicros must be a non-negative safe integer');
   check(plain(invoice),'INVALID_INVOICE','invoice');
   shape(invoice,['provider','invoiceId','period','currency','totalMicros','lines'],'invoice');
   check(SAFE.test(invoice.invoiceId)&&invoice.currency==='USD'&&invoice.period===period&&isInt(invoice.totalMicros),'INVALID_INVOICE','fields');
   check(typeof invoice.provider==='string'&&Array.isArray(invoice.lines)&&invoice.lines.every(l=>plain(l)&&SAFE.test(l.category)&&isInt(l.amountMicros)),'INVALID_INVOICE','lines');
-  check(invoice.lines.reduce((s,l)=>s+l.amountMicros,0)===invoice.totalMicros,'INVOICE_LINES_MISMATCH','lines must sum to the total');
+  check(invoice.lines.reduce((s,l)=>s+BigInt(l.amountMicros),0n)===BigInt(invoice.totalMicros),'INVOICE_LINES_MISMATCH','lines must sum to the total');
   const events=select({period}).filter(e=>registry.dimensions[e.dimension].provider===invoice.provider);
   const priced=events.filter(e=>e.cost.basis!=='shadow'),shadow=events.filter(e=>e.cost.basis==='shadow');
   const usage=bucket(),liabilities=bucket(),sh=bucket();
@@ -293,28 +344,36 @@ export function createLedger({directory,registry=defaultRegistry,now=()=>new Dat
   const u=present(usage),l=present(liabilities),s=present(sh);
   // A pending or uncertain operation always has an unknown cost (see validateEvent), so unknown > 0 also covers unfinished work.
   const unknown=u.unknownEvents+l.unknownEvents,held=u.pending+u.uncertain+l.pending+l.uncertain;
-  const residualMicros=invoice.totalMicros-u.knownEstimateMicros-l.knownEstimateMicros;
+  const residual=BigInt(invoice.totalMicros)-knownOf(usage)-knownOf(liabilities);
   // A residual is reported, never silently absorbed. It is only "reconciled" when nothing is unknown or unfinished.
-  const status=unknown>0?'incomplete':Math.abs(residualMicros)<=toleranceMicros?'reconciled':'unexplained-residual';
+  const status=unknown>0?'incomplete':(residual<0n?-residual:residual)<=BigInt(toleranceMicros)?'reconciled':'unexplained-residual';
   const lateAfterClose=select({period}).filter(e=>e.lateAfterClose).length;
   return {period,provider:invoice.provider,invoiceId:invoice.invoiceId,invoiceTotalMicros:invoice.totalMicros,usageKnownMicros:u.knownEstimateMicros,
-   liabilityKnownMicros:l.knownEstimateMicros,shadowExcludedMicros:s.shadowMicros,residualMicros,unknownEvents:unknown,
-   boundedExposureMicros:u.boundedExposureMicros+l.boundedExposureMicros,unboundedExposureEvents:u.unboundedExposureEvents+l.unboundedExposureEvents,
+   liabilityKnownMicros:l.knownEstimateMicros,shadowExcludedMicros:s.shadowMicros,residualMicros:exact(residual,'residualMicros'),unknownEvents:unknown,
+   boundedExposureMicros:exact(usage.boundedExposure+liabilities.boundedExposure,'boundedExposureMicros'),unboundedExposureEvents:u.unboundedExposureEvents+l.unboundedExposureEvents,
    unfinishedEvents:held,lateAfterClose,periodClosed:closed.has(period),status,
    allowanceTreatment:'account-wide allowances are never allocated to tenants; a negative residual is account upside, not tenant credit'};
  }
- // Account closure keeps company totals but removes the owner link; later cost of the closed project is platform-scope.
+ // Account closure. Company totals are kept; the owner link and every identifier that could name the owner, project, resource,
+ // task or provider record are replaced: attribution becomes platform/closed-account, task and provider IDs are cleared and the
+ // source/idempotency identity becomes an opaque keyed tombstone. What remains is pseudonymous (see closureKey), not anonymous:
+ // timestamps, workload, quantities and costs stay, and the keyed digests below can be re-derived by whoever holds the key.
  function redactOwner(ownerId){
+  const ownerMac=mac('owner',ownerId);closedOwners.add(ownerMac);
   let changed=0;
-  for(const rec of identities.values()){
-   if(rec.first.attribution.ownerId!==ownerId)continue;
-   const anon={scope:'platform',pool:'closed-account'};
-   rec.first={...rec.first,attribution:anon};
-   for(const [rev,e] of rec.revisions){const copy={...e,attribution:anon,taskRef:null};copy.canon=canonical((({canon,receivedSeq,receivedAt,lateAfterClose,...rest})=>rest)(copy));rec.revisions.set(rev,copy);changed++;}
+  for(const [key,rec] of [...identities]){
+   const first=rec.revisions.values().next().value;
+   if(first.attribution.ownerId!==ownerId)continue;
+   const tomb=tombstoneOf({...first,idempotencyKey:key});
+   for(const [rev,e] of rec.revisions){
+    const copy=tombstoned(e,tomb);
+    copy.canon=canonical((({canon,receivedSeq,receivedAt,lateAfterClose,...rest})=>rest)(copy));rec.revisions.set(rev,copy);changed++;
+   }
+   rec.ownerMac=ownerMac;identities.delete(key);identities.set(tomb.idempotencyKey,rec);
   }
   return changed;
  }
- return {append,summary,closePeriod,restatement,reconcile,redactOwner,exportHeads:(filter)=>select(filter).map(({canon,...e})=>e)};
+ return {append,summary,closePeriod,restatement,reconcile,redactOwner,exportHeads:(filter)=>select(filter).map(({canon,...e})=>structuredClone(e))};
 }
 
 // ---------- Existing-producer mapping (pure; the product's source adapters are WH-169) ----------
