@@ -6514,7 +6514,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-08 UTC (branch claude/wh-118-passkey-encryption-feasibility from ca17c6a; not merged or deployed): docs/passkey-encryption-feasibility.md records the planned evaluation: dated official-source PRF capability review (W3C WebAuthn L3 Recommendation of 2026-08-25, MDN/browser-compat-data, WebKit, Firefox, Yubico, 1Password and Bitwarden; Safari/iOS assertion PRF, Windows Hello, Google Password Manager, hybrid and third-party provider behavior remain unverified or conflicting), a candidate per-passkey content-key wrapping design with a separate content recovery key, the readable-processing boundary, a friction measurement plan, adoption criteria A1-A8 and owner decisions D1-D7. Recommendation: no adoption for beta, MVP or any default. Synthetic emulation only: tools/prototypes/passkey-key-wrapping.mjs with tests/passkey-key-wrapping-contract.mjs (pnpm test:passkey-key-wrapping-contract, added to verify fast) passed 20 named checks and killed 16/16 named mutants with emulated PRF outputs; this is not evidence of browser, device or provider PRF support. Physical-device/provider enrollment, sync and recovery evidence, real friction measurements and the owner adoption decision remain open, so WH-118 stays open. WH-048/049 and ordinary account access do not depend on PRF; no source behavior, schema, prompt or production encryption changed.
 
 # F5 — Configuration and shared capabilities
 
