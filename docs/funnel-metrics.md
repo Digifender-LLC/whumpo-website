@@ -77,9 +77,10 @@ Each account is limited to about 2,000 rows (the consent view stops admission at
 
 ## Operator aggregate report
 
-`node tools/report-funnel.mjs [--days 1-180] [--minimum 3-50]` reads the remote control database with existing operator authorization and prints JSON. It is read-only and returns only event names, dimensions, counts and median minutes. It never returns account, project, receipt or source identifiers. It has not been run against the test environment.
+`node tools/report-funnel.mjs [--days 1-180] [--minimum 5-50]` reads the remote control database with existing operator authorization and prints JSON. It is read-only and returns only event names, dimensions, counts and median minutes. It never returns account, project, receipt or source identifiers. It has not been run against the test environment.
 
-- Cells with fewer than `--minimum` accounts (default five, owner-approved as the floor on October 8, 2026 UTC) are replaced by `{suppressed:true}`. Activation stages, times to first draft/publication, identity counts and the receipt comparison all use the same rule. If fewer than the minimum accounts consent, comparison rows show only their status.
+- Cells with fewer than `--minimum` accounts are replaced by `{suppressed:true}`. Activation stages, times to first draft/publication, identity counts and the receipt comparison all use the same rule. If fewer than the minimum accounts consent, comparison rows show only their status.
+- Five accounts is the owner-approved floor (October 8, 2026 UTC) and the default. `funnelReport` and the command line both reject a lower value (1–4) and anything above 50; an operator may only choose a stricter floor. Lowering it needs a new owner decision.
 - The activation cohort is consenting accounts whose welcome completed inside the window. Stages are reach counts: welcome, first draft, accepted edit, review prepared, publication confirmed, and day-7/day-30 return.
 - `receiptComparison` counts the actual source receipts independently (consenting accounts, after consent, inside retention) and reports `match`, `events_below_receipts` (sweep not yet run or quota reached) or `events_above_receipts` (a receipt was removed later, such as a project or form removal; otherwise investigate).
 - Identity events are reported separately from first-project welcome, with `recoveryStartedWithoutCompletion` as the only abandonment proxy.
