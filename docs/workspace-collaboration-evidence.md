@@ -1,6 +1,6 @@
 # WH-054 feasibility review: evidence, method and limits
 
-**October 8, 2026 (UTC). Evidence level: repository source plus in-memory SQLite and a small in-memory simulation. Nothing here is live acceptance, a deployment, a Stripe or Cloudflare observation, or an implementation.** This supports the [workspace collaboration contract](workspace-collaboration.md); the contract states what the platform will do, and this page records what was measured, how, and what the measurements cannot show.
+**October 8, 2026 (UTC). Evidence level: repository source plus in-memory SQLite and a small in-memory simulation. Nothing here is live acceptance, a deployment, a Stripe or Cloudflare observation, or an implementation.** This supports the [workspace collaboration contract](workspace-collaboration.md); the contract states what the platform will do, and this page records what was measured, how, and what the measurements cannot show. Two evidence kinds are kept apart throughout: the **feasibility review's measurements and counts** (in-memory SQLite, AST and simulation, taken at `b319f33`) and a later **source-classified dispositions** follow-up (repository source reading only; [below](#source-classified-dispositions-follow-up-source-reading-only)). The follow-up does not recompute or replace the review's counts.
 
 The reviewed tree was the contract commit `b319f33` on the WH-054 branch, whose source and schema are identical to baseline `ca17c6a` (the branch differs only in documentation). The review only read the repository and wrote nothing into it. The exploratory scripts and their raw output were kept outside the repository and are deliberately not part of this record: the figures below are what remains useful, and the child-1a registry tool (see [child packets](workspace-collaboration.md#child-packets)) is the supported way to regenerate them.
 
@@ -33,9 +33,9 @@ The reviewed tree was the contract commit `b319f33` on the WH-054 branch, whose 
 
 Composite foreign keys that carry `user_id`: `chat_interaction_submissions` to `chat_interactions(id, user_id)` and to `chat_interaction_requests(user_id, request_id)`; `chat_interaction_tasks` to `chat_conversations(id, user_id)`; `chat_interactions` to `chat_interaction_tasks(id, user_id, conversation_id)`; `inference_calls` to `inference_budgets(user_id, period)`. One foreign-key cycle exists among `app_spaces`, `app_migration_checks`, `app_migration_approvals`, `app_recovery_points` and `app_restore_reviews`.
 
-## Classification of the 111 columns (proposed, not frozen)
+## Classification of the 111 columns (historical review counts; proposed, not frozen)
 
-Class meaning is in the [contract](workspace-collaboration.md#coordinated-current-schema-consequences). `[NA]`/`[R]` mark `NO ACTION`/`RESTRICT`, the 24 columns that block a raw cascade. Columns are `user_id` unless named.
+These are the counts as the feasibility review left them at `b319f33`, including **6 `unknown` and 1 `polymorphic`** entries that the review could not classify. They are kept as the historical record and are **not edited** when later source reading classifies those entries; see the [follow-up](#source-classified-dispositions-follow-up-source-reading-only) for what changed and why the totals are not recomputed. Class meaning is in the [contract](workspace-collaboration.md#coordinated-current-schema-consequences). `[NA]`/`[R]` mark `NO ACTION`/`RESTRICT`, the 24 columns that block a raw cascade. Columns are `user_id` unless named.
 
 | Class | Count | Tables |
 | --- | --- | --- |
@@ -45,7 +45,7 @@ Class meaning is in the [contract](workspace-collaboration.md#coordinated-curren
 | `workspace+custody` | 12 | `cloudflare_oauth_states`, `cloudflare_token_vault`, `connection_chat_links`, `connection_oauth_exchanges` [R], `connection_oauth_outcomes`, `connection_rotation_guards` (`owner_id`) [R], `github_backups`, `github_connections`, `github_grant_revocations` [R], `github_oauth_states`, `github_refresh_custody` [R], `github_token_vault` |
 | `workspace+payer` | 4 | `stripe_customers`, `stripe_paid_invoices`, `stripe_subscription_orders`, `stripe_subscriptions` |
 | `polymorphic` | 1 | `photo_scan_tickets`: `kind = 'profile'` is account data; `project` and `cms` are tenant data (split) |
-| `unknown` | 6 | `workspace_state`, `workspace_preferences`, `workspace_layout_receipts` (the contract defers them); `content_screening_decisions`, `content_risk_evidence`, `content_risk_reversals` (subject is a person or a workspace) |
+| `unknown` | 6 | `workspace_state`, `workspace_preferences`, `workspace_layout_receipts` (the review deferred them); `content_screening_decisions`, `content_risk_evidence`, `content_risk_reversals` (the review could not tell whether the subject is a person or a workspace) |
 
 Non-foreign-key identity columns that a mechanical rename must not touch: `file_cleanup.owner_user_id` and `domain_reconciliations.user_id` (tenant copies, textual); `safety_cases`, `safety_preservation_holds`, `safety_preserved_records` and `safety_evidence_objects` `.subject_user_id` and `operator_containments.subject_id` (hold and containment subjects); `module_request_receipts.principal_hash`; the textual `confirmed_by` columns on `publication_actions`, `contact_reviews`, `contact_destination_reviews`, `directory_reviews`; `fair_use_reviews.opened_by`/`resolved_by` and `usage_review_requests.answered_by` (operator or actor text); `identity_challenges.account_id` (account, nullable); provider `github_user_id` (the authorizer's provider identity); and the Cloudflare `account_id` columns on `cms_deployments`, `cms_resource_jobs` and `gateway_provider_receipts` (provider accounts, not persons).
 
@@ -74,6 +74,34 @@ Encrypted custody contexts: `whumpo:{provider}:{purpose}:{user}:{id}` in five st
 SQLite accepted `CREATE TRIGGER` bodies naming unknown columns and failed only at the first statement that fired them, so the existing artifact check cannot see this class of defect.
 
 **Not exercised:** closure purge, custody resealing, billing, the lease, any handler, NOT NULL actor columns (these need rebuilt `CREATE` statements), and the miniflare `--d1` mode.
+
+## Source-classified dispositions (follow-up, source reading only)
+
+**Evidence level: repository source read in place at the contract commit, with no test, build, database, in-memory SQLite run or simulation.** Nothing below measures behavior; each claim is an anchor to a file the follow-up read, and the dispositions are **engineering recommendations derived from current semantics**, not owner choices. The contract carries the proposals ([dispositions](workspace-collaboration.md#source-classified-dispositions-for-the-seven-undecided-entries-and-two-refinements)); this section records what was read and what it cannot show.
+
+**Relation to the review's counts.** The review's `unknown` (6) and `polymorphic` (1) counts above describe what the review could not decide at the time. The follow-up *source-classifies* those seven entries and refines two already-classified ones (`github_connections`, counted in `workspace+custody`, and `backend_nominations`, counted in `workspace+actor`). Two of the seven change shape: `content_risk_evidence` and `content_risk_reversals` gain typed account/workspace subject columns, and `photo_scan_tickets` splits into two tables, so the 111-column and per-class totals **change when the registry is authored** and are deliberately not restated here.
+
+| Entry | Source anchors read (paths relative to the repository root) | What the source shows |
+| --- | --- | --- |
+| `workspace_state` | `schema/platform.sql` (table near line 24, welcome trigger near 4292); `src/chat.ts`, `src/ai-chat.ts`, `src/standard-ai-usage.ts`, `src/chat-interactions/{continuation,store,task-context}.ts`; `src/site-agent.ts` | A per-person Chat concurrency head; `step`, `idea`, `brief_project_id`, `brief_stage` are only reset, and `step='ready'` predicates mean "the head exists". The search for readers of the other three fields found none, which makes them removal candidates, not proven dead |
+| `workspace_preferences`, `workspace_layout_receipts` | `schema/platform.sql` (triggers `workspace_layout_receipt_immutable`, `workspace_layout_receipt_current`, `workspace_layout_current_update`); `src/workspace-layout.ts` | Layout written only through the person's own pending AI Chat turn or a direct mutation; the receipt trigger requires the Chat turn to share the person |
+| `content_screening_decisions` | `schema/platform.sql` (table near 1535, readers near 2085–2148, triggers near 3829–3840, `specification_held` triggers); `src/content-screening.ts` (HMAC message with `target.userId`), `src/content-screening-decisions.ts`, `src/project-specification/store.ts`, `src/project-specification/service-clients/{owned,store}.ts` | A requirement bound to content digest; read as a gate through the project owner; the only writer, `reserveContentScreening`, has no runtime caller (tests only) |
+| `content_risk_evidence`, `content_risk_reversals` | `schema/platform.sql` (tables near 1555–1566, triggers near 3842–3855, `safety_case_evidence_admit` near 5016); `src/content-risk-evidence.ts`, `src/content-risk.ts`, `tools/content-risk-review-input.mjs`, `tools/review-content-risk.mjs` | Operator-only immutable ledger; retained-while-`users`-row-exists guards; case evidence must share the case subject |
+| `photo_scan_tickets` | `schema/platform.sql` (table near 1517, one-reserved index near 2001, triggers near 3787–3799); `src/photo-scan-results.ts`; `tools/account-closure-inventory.mjs` | A transient scanner attempt, with `kind` selecting a person or a project/CMS id; no runtime caller (tests only) |
+| `github_connections` | `schema/platform.sql` (tables near 204 and 222, index `github_grant_pending_client`); `src/github-connection.ts`, `src/github-backups.ts`, `src/github-grant-revocation.ts`; `tools/safety-hold-inventory.mjs` | One row and one OAuth state per account; backups bind the connection identity and token; the app-wide grant revocation deletes a person's whole grant for the OAuth client and is already disclosed as reaching other authorizations |
+| `backend_nominations` | `schema/platform.sql` (trigger `backend_nomination_update` near 3609); `src/backend-nominations.ts`; `docs/shared-components.md`; `docs/data-lifecycle.json` (class `shared-reuse`) | Consent is a typed confirmation recorded as `consent_at`; every transition re-checks that the consenter is the current project owner through `owner_user_id` |
+
+**What the follow-up cannot show.** No behavior was run. Absence of a reader or caller was established by text and structural search over `src`, `tools` and `schema`, which cannot see dynamic or composed SQL, so every "removal candidate" and "no runtime caller" statement is a finding to re-confirm in the canonical-input review. The key shapes, triggers and predicates are designs, not fixtures. The proposals do not exercise closure order, billing, custody resealing or any handler.
+
+**Additional no-op regressions required.** The review's spike showed a hold that stopped protecting a project after a mechanical rename. The dispositions add cases of the same kind, each of which must fail first against a mechanical rename before the rewritten body is accepted:
+
+1. A `required = 1` content-screening decision still blocks website, service-client and activation actions after conversion and after an ownership transfer, and identical content from a second member gets no fresh decision (a gate comparing `d.user_id = p.owner_user_id` after one side is re-keyed never matches and publishes held content).
+2. Retention guards on content-risk evidence and reversals refuse deletion while their own subject kind (account or workspace) exists; a guard comparing a workspace id with `users` never matches.
+3. A nomination consented to by a former owner is not effective for the new owner, and no row is relabeled.
+4. Transfer revokes the sender-authorized GitHub slot at token level, does not invoke the app-wide grant revocation, and leaves other workspaces' connections untouched; recovery for an unknown outcome stays accurate.
+5. Two members of one workspace keep independent Chat heads and layouts (no collision, no cross-reading), and a transfer does not move either.
+
+These are required test designs, not results. None has been written or run, and no gate described here exists in the repository yet.
 
 ## SQL surface and what static analysis cannot see
 
@@ -107,4 +135,4 @@ Source facts that make the lease problem real: `stripe_paid_invoices.created_at`
 
 ## Not done, and unknown
 
-There was no live D1, Stripe or GitHub access. Closure purge order, transfer obligations, custody resealing and total conversion effort are unmeasured beyond the counts above. The `github_connections` cardinality, the seven undecided columns, the `backend_nominations` consent semantics (an engineering or legal reading) and the hold-subject model need decisions recorded in the contract.
+There was no live D1, Stripe or GitHub access. Closure purge order, transfer obligations, custody resealing and total conversion effort are unmeasured beyond the counts above. The `github_connections` cardinality, the seven formerly undecided entries and the `backend_nominations` consent semantics now have **source-only proposed dispositions** that no fixture has exercised; the child-1 schema review must accept them. The hold-subject model remains an input to the existing WH-133/LC-06 review. The retention of the provider `login` in terminal GitHub revocation receipts is part of the open retention question, not a new one. Workspace-level bounds on platform-funded budgets are an unanswered owner question; the review adopted no cap.
