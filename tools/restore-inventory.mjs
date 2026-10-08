@@ -17,6 +17,11 @@ const hash=v=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v);
 const text=v=>JSON.stringify(v);
 const same=(a,b)=>text(a)===text(b);
 const limit={archives:256,events:512,bytes:32*1024*1024,evidenceBytes:262144};
+/** Authority tables whose CURRENT-source rows are watched even when the archive never contained them (a stop or allowance
+ * created after the point would otherwise be lost without any hold). Fixed and source-declared: never taken from a caller,
+ * a request or the archive. Every retained row counts (active, lifted or expired alike), so the outcome does not depend on
+ * when, or in which archive order, an evidence run first saw the row. Events carry the table, key and digest only. */
+export const restoreAuthorityTables=Object.freeze(['operator_containments']);
 const schema=`
  CREATE TABLE identity(singleton INTEGER PRIMARY KEY CHECK(singleton=1),version INTEGER NOT NULL CHECK(version=2),environment TEXT NOT NULL CHECK(environment='test'),stream_id TEXT NOT NULL UNIQUE) STRICT;
  CREATE TABLE archive(snapshot_id TEXT PRIMARY KEY NOT NULL,manifest_digest TEXT NOT NULL,manifest TEXT NOT NULL CHECK(json_valid(manifest)),records TEXT NOT NULL CHECK(json_valid(records)),sequence INTEGER NOT NULL CHECK(sequence>=0),key_backup TEXT NOT NULL CHECK(json_valid(key_backup)),recorded_at INTEGER NOT NULL CHECK(recorded_at>0)) STRICT;
@@ -202,6 +207,15 @@ export async function openRestoreInventory({inventoryFile,expectedStreamId,autho
      const data={table:record.table,key:record.key,...(row?{sha256:row.sha256}:{})};
      const sequence=state.events.length+additions.length+1;
      additions.push({sequence,operation_id:'source-'+createHash('sha256').update(text([sequence,data])).digest('hex'),selection:{kind:'record',table:record.table,key:record.key},kind:row?'record-current':'record-suppressed',data});
+    }
+    // Current-source rows of a declared authority table that neither this archive nor any earlier event names get one
+    // record-current event each. The candidate lacks them, so the verifier holds it as stale-authority. A declared table the
+    // archive schema lacks, or more events than the bound below allows, refuses evidence: no row is dropped or truncated.
+    if(!restoreAuthorityTables.every(table=>archive.manifest.tables.some(t=>t.table===table)))throw denied();
+    for(const row of source.records){
+     if(!restoreAuthorityTables.includes(row.table)||watched.has(restoreRecordIdentity(row)))continue;
+     const data={table:row.table,key:row.key,sha256:row.sha256},sequence=state.events.length+additions.length+1;
+     additions.push({sequence,operation_id:'source-'+createHash('sha256').update(text([sequence,data])).digest('hex'),selection:{kind:'record',table:row.table,key:row.key},kind:'record-current',data});
     }
     const events=[...state.events,...additions];
     if(events.length>limit.events||Buffer.byteLength(text(events))+4096>limit.evidenceBytes)throw denied();
