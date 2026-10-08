@@ -1,4 +1,5 @@
 import {ContactError} from './contacts';
+import {notificationCatalog} from './notification-catalog';
 /**
  * WH-036 contact notifications. The private inbox (`contact_submissions`) is the source of truth; a notice is only a
  * content-free "you have a new message, read it in Whumpo" signal to an owner-reviewed, provider-verified address.
@@ -20,7 +21,8 @@ export type ContactNotificationEnv={CONTACT_NOTIFICATION_PROVIDER?:string;CONTAC
  * including rejected and uncertain ones.
  */
 export const contactMonthlyCeilingCents=500;
-export const implementedContactNotificationProviders:Readonly<Record<string,{sendCeiling:number}>>=Object.freeze({'cloudflare-email':Object.freeze({sendCeiling:Math.floor(contactMonthlyCeilingCents*1000/35)})});
+/** The ceiling is the reviewed provider fact in the source notification catalog (WH-155); a missing fact fails closed to 0 calls. */
+export const implementedContactNotificationProviders:Readonly<Record<string,{sendCeiling:number}>>=Object.freeze({'cloudflare-email':Object.freeze({sendCeiling:Math.max(0,notificationCatalog.providers['cloudflare-email']?.ceiling?.callsPer32Days??0)})});
 /** Never carries the visitor's name, email or message. `verificationCode` exists only for kind 'verification' (the owner proves the address). */
 export type ContactNotice={outboxId:string;idempotencyKey:string;kind:'verification'|'new_message';projectId:string;recipient:string;verificationCode?:string};
 /**
