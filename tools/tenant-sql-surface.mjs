@@ -24,8 +24,8 @@ export const workerConfigs=['wrangler.jsonc','wrangler.sites.jsonc','wrangler.ap
 // Helpers that take an account ID as the tenant today (feature-admission.ts and workspace-identity/admission.ts).
 export const tenantHelpers=['assertWorkspace','workspacePredicate','requireFreshWorkspace','workspaceTransport','workspaceBindings','workspacePrincipal','admitWorkspace','assertFeature','featurePredicate','requireFeature','connectionInclusion','inclusionPredicate','requireFeatureScope','featureRequest'];
 export const surfaceLimitations=Object.freeze([
- 'Only calls named prepare on a property (`x.prepare(...)`) in src/**/*.ts are SQL sites. SQL passed to exec, batch strings, or built by another function and passed on is not seen.',
- 'Interpolated and non-literal statements are listed, not resolved. Each is an allowlist entry with a reviewed reason; a new one fails the gate.',
+ 'Only calls named prepare on a property (`x.prepare(...)` or `x[\'prepare\'](...)`) in src/**/*.ts are SQL sites; a destructured or aliased prepare is not seen. SQL passed to exec, batch strings, or built by another function and passed on is not seen.',
+ 'Interpolated and non-literal statements are listed, not resolved. Table-name interpolations (and templates the SQL tokenizer cannot read), concatenations and non-literal arguments are allowlist entries with a reviewed reason and a new one fails the gate. Other interpolated templates (placeholder lists, predicate or column fragments) are counted but not gated, and a table interpolation is recognised only directly after FROM, JOIN, INTO, UPDATE or TABLE.',
  'Trigger-side writes (a statement can fire triggers that touch other tables) are invisible here; the validator and the SQLite authorizer probe cover trigger text and executed paths.',
  'Helper calls are matched by callee name from the syntax tree, without type resolution, so a same-named local function would be counted.',
  'Table names are read from the SQL text of literal and static-template statements after FROM, JOIN, INTO, UPDATE and TABLE. A table reached only through an interpolation, a view or a trigger is not named.',
@@ -82,14 +82,15 @@ function classifyArgument(file,node){
   for(const span of node.templateSpans){sql+=`__INTERP_${i++}__`+span.literal.text;}
   // A table name can also be interpolated by a template nested inside an interpolation:
   // `... AND ${stores.map(s=>`NOT EXISTS(SELECT 1 FROM ${s.table})`).join(' AND ')}`.
-  let nested=0;
+  let nested=0,unreadable=false;
   for(const span of node.templateSpans)walk(span.expression,inner=>{
    if(!isKind(inner,'TemplateExpression'))return;
    let innerSql=inner.head.text,k=0;for(const part of inner.templateSpans)innerSql+=`__INTERP_${k++}__`+part.literal.text;
-   nested+=sqlTables(innerSql).dynamicTable;
+   const read=sqlTables(innerSql);nested+=read.dynamicTable;unreadable||=read.unreadable;
   });
   const probe=sqlTables(sql);
-  return {kind:'interpolated-template',sql,interpolations:node.templateSpans.length,tableInterpolations:probe.dynamicTable+nested,argument:text};
+  // A template the SQL tokenizer cannot read cannot be shown free of a table interpolation, so it is gated like one.
+  return {kind:'interpolated-template',sql,interpolations:node.templateSpans.length,tableInterpolations:probe.dynamicTable+nested,unreadableTemplate:unreadable||probe.unreadable,argument:text};
  }
  // 'a' + 'b' is statically known; anything else concatenated or passed through a variable is not.
  const parts=[];const flatten=n=>{if(isKind(n,'ParenthesizedExpression'))return flatten(n.expression);if(isKind(n,'BinaryExpression')&&n.operatorToken.kind===SyntaxKind.PlusToken){return flatten(n.left)&&flatten(n.right);}if(isKind(n,'StringLiteral')||isKind(n,'NoSubstitutionTemplateLiteral')){parts.push(n.text);return true;}return false;};
@@ -121,9 +122,10 @@ export function extractSurface({cwd=root,overrides={}}={}){
     if(isKind(node,'VariableDeclaration')&&isKind(node.name,'Identifier')&&tenantHelpers.includes(node.name.text))helperCalls[node.name.text].definedIn.push(path);
     if(!isKind(node,'CallExpression'))return;
     const callee=node.expression;
-    const name=isKind(callee,'Identifier')?callee.text:isKind(callee,'PropertyAccessExpression')?callee.name.text:null;
+    const elementName=isKind(callee,'ElementAccessExpression')&&(isKind(callee.argumentExpression,'StringLiteral')||isKind(callee.argumentExpression,'NoSubstitutionTemplateLiteral'))?callee.argumentExpression.text:null;
+    const name=isKind(callee,'Identifier')?callee.text:isKind(callee,'PropertyAccessExpression')?callee.name.text:elementName;
     if(name&&Object.hasOwn(helperCalls,name)){const h=helperCalls[name];h.calls++;h.byFile[path]=(h.byFile[path]??0)+1;}
-    if(name==='prepare'&&isKind(callee,'PropertyAccessExpression')&&node.arguments.length){
+    if(name==='prepare'&&(isKind(callee,'PropertyAccessExpression')||elementName)&&node.arguments.length){
      const c=classifyArgument(file,node.arguments[0]);
      const symbol=symbolOf(node),base=`${path}|${symbol}|${c.kind}|${c.argument}`,n=seen.get(base)??0;seen.set(base,n+1);
      const tables=c.sql===undefined?{names:[],dynamicTable:0}:sqlTables(c.sql);
@@ -172,7 +174,7 @@ export function workerEntries(cwd,surface){
  return entries;
 }
 
-export const isTableInterpolation=s=>s.kind==='interpolated-template'&&s.tableInterpolations>0;
+export const isTableInterpolation=s=>s.kind==='interpolated-template'&&(s.tableInterpolations>0||s.unreadableTemplate===true);
 export const isDynamic=s=>isTableInterpolation(s)||s.kind==='concatenation'||s.kind==='non-literal';
 const dynamicKind=s=>isTableInterpolation(s)?'table-interpolation':'non-literal';
 

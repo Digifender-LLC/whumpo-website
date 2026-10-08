@@ -26,7 +26,7 @@ const message=error=>String(error?.message??error).replace(/\s+/g,' ').slice(0,2
 export const validatorLimitations=Object.freeze([
  'The reparse check compiles statements; it proves a body resolves against the schema, not that it is correct.',
  'Each trigger is compiled in isolation, so nested trigger chains are checked per trigger, not as a combined program.',
- 'The lint compares column operands it can resolve to base columns. Function results, CASE branches, CAST results, literals and parameters are untyped and never reported.',
+ 'The lint compares column operands it can resolve to base columns (row values element by element). Function results other than COALESCE/IFNULL/NULLIF, CASE branches, CAST results, literals and parameters are untyped and never reported.',
  'Assignments (SET, INSERT ... VALUES/SELECT) between account- and workspace-typed columns are not compared, only comparison operators, IN, BETWEEN, NULLIF and CASE-operand matching.',
  'Types describe columns, not values. A comparison of two columns with the same type can still join the wrong rows.',
  'An unsupported SQL construct is reported as unsupported; it is never silently skipped and never counted as clean.',
@@ -139,7 +139,8 @@ export function typeResolver(db,overlay=new Map()){
 }
 
 const describe=side=>side.refs.length?side.refs.map(r=>`${r.table}.${r.column}`).sort().join('|'):side.text;
-const crossType=(l,r)=>(l==='account'&&r==='workspace')||(l==='workspace'&&r==='account');
+// A side that can carry several types (COALESCE, a UNION view column) is cross-type if any pairing is.
+const crossType=(l,r)=>(l.includes('account')&&r.includes('workspace'))||(l.includes('workspace')&&r.includes('account'));
 
 export function lintBodies(objects,{tables,typeOf}){
  const parsedViews=new Map(),triggers=[],unsupported=[];
@@ -155,7 +156,7 @@ export function lintBodies(objects,{tables,typeOf}){
   for(const c of analysis.comparisons){
    const pair=[c.left.type,c.right.type].sort().join('/');
    report.byTypePair[pair]=(report.byTypePair[pair]??0)+1;
-   if(!crossType(c.left.type,c.right.type))continue;
+   if(!crossType(c.left.types,c.right.types))continue;
    const [a,b]=[describe(c.left),describe(c.right)].sort(),op=c.op;
    const base=`${object}|${a}|${op}|${b}`,n=occurrences.get(base)??0;occurrences.set(base,n+1);
    report.findings.push({fingerprint:digest(`${base}|${n}`),object,kind,comparison:`${describe(c.left)} ${op} ${describe(c.right)}`,types:`${c.left.type}/${c.right.type}`});

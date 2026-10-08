@@ -31,14 +31,17 @@ export const authorizerLimitations=Object.freeze([
  'It covers only statements prepared while a scope is active, that is only the paths a test actually exercised.',
  'It exists only for the in-memory SQLite adapter. Local D1 through miniflare (--d1) exposes opaque prepared statements and has no authorizer.',
  'Isolation of values needs two-workspace fixtures with unique markers.',
+ 'Scopes are one shared label, so statements prepared by concurrent async work while a scope is open are attributed to that scope.',
+ 'Node cannot read an existing authorizer. The probe refuses only a second probe of its own; an authorizer set by other code would be replaced and then cleared by restore(), so use it only on a database nothing else hooks (the fixtures create their own).',
 ]);
 const installed=new WeakSet();
 const actionNames=new Map([[constants.SQLITE_READ,'read'],[constants.SQLITE_INSERT,'insert'],[constants.SQLITE_UPDATE,'update'],[constants.SQLITE_DELETE,'delete']]);
 
 /**
  * Report-only SQLite authorizer scoped to named blocks. Install it per fixture and call `restore()` (or the
- * fixture's `close()`) to remove the hook; Node offers no way to read the previous authorizer, so restoring
- * means clearing it, and the probe refuses to wrap an authorizer it did not install itself.
+ * fixture's `close()`) to remove the hook. Node offers no way to read the previous authorizer, so restoring
+ * means clearing it: a second probe of its own on the same database is refused, but an authorizer installed by
+ * other code cannot be detected and would be replaced, so the probe is only for databases nothing else hooks.
  */
 export function authorizerProbe(sql){
  if(installed.has(sql))throw Error('An authorizer probe is already installed on this database');
@@ -90,14 +93,18 @@ export function authorizerProbe(sql){
  };
  return probe;
 }
-/** What a --d1/R2 (miniflare) fixture reports: the hook cannot exist there, and saying so is the result. */
+/**
+ * What a --d1/R2 (miniflare) fixture reports: the hook cannot exist there, and saying so is the result. Reading
+ * recorded actions throws instead of returning nothing, so an assertion that a statement does not reference a
+ * column cannot pass vacuously on a fixture that recorded nothing.
+ */
 export const unavailableAuthorizerProbe=Object.freeze({
  available:false,
  reason:'The SQLite authorizer exists only for the in-memory SQLite fixture. Local D1 (miniflare, --d1) exposes opaque prepared statements and cannot be probed.',
  compile(){throw Error(this.reason);},
  scope(name,body){return body();},
- actions(){return [];},
+ actions(){throw Error(this.reason);},
  report(){return {available:false,reason:this.reason,tables:{},limitations:authorizerLimitations,proof:'none'};},
- references(){return false;},
+ references(){throw Error(this.reason);},
  restore(){},
 });
