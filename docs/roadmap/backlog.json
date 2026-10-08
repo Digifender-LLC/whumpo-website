@@ -644,7 +644,9 @@
       ],
       "issue": "https://github.com/zemdregon/whumpo/issues/137",
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-08 UTC: source and local verification only; the mapped issue #137 is open and owner questions on quarantine-before-native-import (S04), blocked-state ownership, blocked-object retention and permanent hold for native media remain open. PR #138 (728e068) added src/cms-media-safety.ts, wired exact-artifact coverage into CMS uploads, previews, WordPress comparison/import, publication and public CMS media delivery, and added tests/cms-media-safety.mjs. Re-run on 2026-10-08 UTC at origin/main ca17c6a (Node 24.21.0, aarch64 Linux, disposable local SQLite/local D1, no network, credential or remote Cloudflare/GitHub operation). node tests/cms-media-safety.mjs passed 15 checks (pending, missing, stale, incomplete, ambiguous and blocked coverage hold owner preview, draft preview, WordPress comparison, publication review/freeze/inline and GET/HEAD public CMS media; blocked media withdraw referencing articles; custom hosts never route CMS media; clearance grants no publication) and node tests/cms-media-preview.mjs passed; pnpm check passed. The first run failed only because the host python3 lacks Pillow (fixture JPEGs); it passed with a PATH shim to an existing virtualenv that has Pillow, with no repository change. Synthetic JPEGs on disposable local D1/R2 only: this is not CMS feature acceptance, live CMS testing or detector testing, and delivery aliases not named above (for example export) were not separately re-traced."
+      ]
     },
     {
       "id": "WH-014",
@@ -773,7 +775,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-08 UTC: source and local verification only. PR #110 (21be249) added the six restricted safety-case tables with triggers that block ordinary account, project and contact deletion under an unreleased hold, src/safety-cases.ts, tests/safety-cases.mjs and the lifecycle/closure registrations; WH-132 (#133) later builds on it. Re-run on 2026-10-08 UTC at origin/main ca17c6a (Node 24.21.0, aarch64 Linux, disposable local SQLite/local D1, no network, credential or remote Cloudflare/GitHub operation). node tests/safety-cases.mjs passed 84 checks on SQLite and node tests/safety-cases.mjs --d1 passed 84 checks on local D1; tests/content-risk-evidence.mjs, tests/content-risk-review.mjs, tests/account-closure-inventory.mjs and tests/lifecycle-catalog.mjs (219 tables, 51 current/6 planned classes) passed. Synthetic benign placeholders only. This does not prove a scanner, provider, reporting duty, operator onboarding, qualified procedure review (WH-133, blocked) or any live activation; parent WH-015 (#109, open) keeps its full acceptance. Deployed state was not re-read from this session."
+      ]
     },
     {
       "id": "WH-132",
@@ -1899,7 +1903,9 @@
       ],
       "issue": "https://github.com/zemdregon/whumpo/issues/139",
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-08 UTC: source and local verification only; the mapped issue #139 is open and its owner questions were answered on 2026-10-04. PR #140 (5d75ba7) added src/site-diagnostics.ts and src/site-diagnostics-shape.ts, the site-health view bindings and card, telemetry states and budgeted non-blocking traffic measurement with bot/check exclusions. Re-run on 2026-10-08 UTC at origin/main ca17c6a (Node 24.21.0, aarch64 Linux, disposable local SQLite/local D1, no network, credential or remote Cloudflare/GitHub operation). node tests/site-diagnostics.mjs passed 12 groups on SQLite and with --d1 on local D1; node tests/site-health.mjs and node tests/site-traffic.mjs passed; pnpm check passed. Synthetic fixtures with fetch disabled: this does not show deployment, live provider/DNS/TLS behaviour or customer acceptance."
+      ]
     },
     {
       "id": "WH-038",
@@ -2878,7 +2884,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-08 UTC: contract and offline reference only, no runtime implementation. PR #116 (8df22a9) added docs/connectors.md (frozen catalog, authority, consent, receipt, credential, gap-map, planned-provider and delivery-slice sections, marked planned), tools/prototypes/connectors.mjs and tests/connectors-contract.mjs and decomposed WH-056 into WH-140..146. Re-run at ca17c6a: node tests/connectors-contract.mjs passed 71 offline checks (synthetic providers; no database, network, credential or model); node tools/roadmap.mjs validate, alignment and render --check passed. This proves the frozen catalog and reference runtime and their agreement with the existing pure GitHub/Cloudflare recovery, vault and catalogue functions only. It does not prove the D1-backed adapters (WH-142), request-bound consent, refresh/revocation or rule authority implementations (WH-143..145), connected synthetic acceptance (WH-146), provider readiness or any live acceptance; WH-056 stays open and depends on every child. No mapped issue exists for WH-140 (parent WH-056 is #115, open; live issue state read-only on 2026-10-08)."
+      ]
     },
     {
       "id": "WH-141",
@@ -4999,7 +5007,9 @@
       ],
       "issue": "https://github.com/zemdregon/whumpo/issues/130",
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-08 UTC: source and local verification only; the mapped issue #130 is open and its owner questions were answered on 2026-10-04. PR #131 (f991b18) added src/guest-previews/bindings.ts, ids-only Chat controls and the guest-previews view/panel over the existing WH-150 handlers. Re-run on 2026-10-08 UTC at origin/main ca17c6a (Node 24.21.0, aarch64 Linux, disposable local SQLite/local D1, no network, credential or remote Cloudflare/GitHub operation). node tests/guest-preview-bindings.mjs passed 8 groups on SQLite and with --d1 on local D1 (exact prepared confirmation before issuance, token only in the issuing response and never in any table, Chat turn, transcript, view or model context, forged/foreign/null identifiers, inert comments out of model context, management after inclusion ends); pnpm check passed. Synthetic data with fetch disabled; no deployment or real-browser acceptance is implied (see WH-152)."
+      ]
     },
     {
       "id": "WH-152",
@@ -5035,7 +5045,9 @@
       ],
       "issue": "https://github.com/zemdregon/whumpo/issues/141",
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-08 UTC: local browser verification only; the mapped issue #141 is open. PR #142 (be5662a) added the Chromium owner and guest journey in tests/guest-preview-browser.mjs. Re-run on 2026-10-08 UTC at origin/main ca17c6a (Node 24.21.0, aarch64 Linux, disposable local SQLite/local D1, no network, credential or remote Cloudflare/GitHub operation). node tests/guest-preview-browser.mjs passed in headless Chromium at desktop 1280x800 keyboard and mobile 390x844 against the built owner panel, the platform Worker and the sites handler with local D1/R2 (owner prepare/confirm/revoke/resolve/delete, one-time link, accountless sandboxed preview with an approved private photo, keyboard comment, no cookie or stored/logged token, large text and reflow). The run used a Playwright module and Pillow borrowed from other existing local installs (WHUMPO_PLAYWRIGHT and a PATH shim) with no repository change. This is not a deployed, real-device, screen-reader or customer acceptance, and the release and live acceptance of guest previews remain WH-153."
+      ]
     },
     {
       "id": "WH-153",
@@ -6918,7 +6930,9 @@
       ],
       "issue": "https://github.com/zemdregon/whumpo/issues/157",
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-08 UTC: source and local verification only; the mapped issue #157 is open. PR #158 (ff3d410) replaced specification schema 2 with schema 3 (module instances pinned to a trusted module catalog, planned module-records/module-files/project-roles lifecycle classes) and removed the schema 2 reader. Re-run on 2026-10-08 UTC at origin/main ca17c6a (Node 24.21.0, aarch64 Linux, disposable local SQLite/local D1, no network, credential or remote Cloudflare/GitHub operation). node tools/check-specification-compiler.mjs --check passed (the compiler identity has since advanced to project-content@5 through the WH-125 cutover in #160, so the project-content@3 identity named in the original change no longer applies), node tests/specification-compiler.mjs, node tests/current-website-specifications.mjs and node tests/specification-journey.mjs (local D1) passed, node tools/lifecycle-catalog.mjs reported 219 tables with 51 current/6 planned classes, and pnpm check (both tsc projects) passed. Individual schema 3 rejection cases (PNG, >1 MiB collections, public read audiences) were not separately traced in this re-run beyond those suites passing. Deployed state was not re-read."
+      ]
     },
     {
       "id": "WH-125",
