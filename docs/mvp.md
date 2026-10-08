@@ -23,20 +23,20 @@ Current requirement-by-requirement evidence and remaining gates are in [the capa
 - [ ] End-to-end verification covers tenant isolation, auth replay, budget concurrency, provider failures, publish/restore, and mobile usability.
 - [ ] Technical design and operations instructions reflect the actual deployed implementation and remaining limitations.
 
-## Current commercial direction (draft; payments disabled)
+## Current commercial direction (draft; real-money payments disabled)
 
 | Plan | Monthly USD | Annual USD |
 | --- | ---: | ---: |
 | Starter | $17 | $170 |
-| Personal | $30 | $300 |
+| Creator (`personal` identity) | $30 | $300 |
 | Business | $79 | $790 |
 | Business Pro | $139 | $1,390 |
 
 The owner reconfirmed **unlimited standard site work under fair use** on September 30; advanced models consume explicitly approved credits. Standard assistance does not draw down shared infrastructure capacity. The existing fair-use controls continue with tier-sensitive observation and **Monitor mode as the default**. Monitor sends no fair-use warnings and imposes no throttles or restrictions. Active enforcement requires an operator choice and verified company-wide profit deterioration with substantially stable revenue, plus the individual review/notice workflow. Company financial attribution and enforcement remain unfinished. Cost alone does not establish abuse.
 
-Premium model add-ons/credits and separately approved infrastructure spending remain distinct. Annual plans propose standard-domain benefits under a wholesale cost cap; domain redemption is not implemented. Stripe remains disconnected at the owner's request, so subscriptions, credit purchases and domain purchases are unavailable. See [current pricing, routing and fair-use contracts](pricing-and-model-policy.md) and [payment foundation](payments.md).
+Premium model add-ons/credits and separately approved infrastructure spending remain distinct. Annual plans propose standard-domain benefits under a wholesale cost cap; domain redemption is not implemented. Stripe is sandbox-only: the owner authorized sandbox setup on October 1, 2026 ([sandbox record](stripe-sandbox.md)), and real-money subscriptions, credit purchases and domain purchases remain unavailable. See [current pricing, routing and fair-use contracts](pricing-and-model-policy.md) and [payment foundation](payments.md).
 
-Explore currently has 50 monthly test units with atomic reservation/settlement and opt-in use of existing test credits. The older $5/100-credit product and Launch/Studio receipts are legacy test mechanics, not the new premium API-credit tariff or launch plans. Keep unknown outcomes reserved for reconciliation and never automatically retry a potentially billable request. Browser input cannot grant an entitlement. Historical milestones below retain earlier pricing and scope for provenance; they are not current offers.
+Standard assistance has no customer metering: the test-unit ledger, test-credit product and Launch/Studio receipts were removed by the October 1 current-only billing reset (`node tests/billing.mjs` on October 8 checks that no retired tables, plans or routes remain; see [standard AI accounting](standard-ai-accounting.md)). Keep unknown outcomes reserved for reconciliation and never automatically retry a potentially billable request. Browser input cannot grant an entitlement. Historical milestones below retain earlier pricing and scope for provenance; they are not current offers.
 
 ## Provider interface
 

@@ -172,3 +172,133 @@ node tools/roadmap.mjs render && node tools/roadmap.mjs render --check && node t
 ```
 
 All of the above exited 0. The only failures were the first `cms-media-safety` and `guest-preview-browser` attempts, caused by missing Pillow and missing `@playwright/test` in this checkout, not by the code under test. Read-only GitHub queries: `gh issue list --state all`, `gh issue view` (#5, #109, #115, #130, #137, #139, #141, #157, #162, #171, #172), `gh pr view` (#116, #159, #170, #174), `gh pr list --state open`. No push, no remote write, no Cloudflare call.
+
+## Slice 2 refresh - October 8, 2026 UTC
+
+Second slice of [WH-001](backlog.md): refresh documents that state facts about current capability. Source commit: `ca17c6ad3f009b961916be6f4c2053a8eaa531e4` (`origin/main`, 2026-10-04), plus the documentation-only first-slice commit `0f01dcf` it is stacked on (PR #179). Branch `claude/wh-001-refresh-summaries`. Repository-tree checks, local offline tests and read-only `gh` queries only: no Cloudflare read, deployment, provider call, browser journey or device test. No source, schema or test file changed, and no status was upgraded to accepted or live. This closes drift item 2 above for README, acceptance, the matrix and the two catalogs named there; WH-001 stays open.
+
+Re-checked October 9, 2026 UTC after rebasing (branch `claude/wh-001-refresh-summaries-rb`) onto the rebased first slice, which sits on `origin/main` `92a001f` plus the test-only `9847281` (#202); see [slice 2 re-check](#slice-2-re-check-after-rebase-october-9-2026-utc).
+
+Method: for each document, every claim that a script, file listing, `package.json`, Wrangler config or offline test can confirm was compared with the tree. A throwaway read-only checker (kept outside the repository) validated relative Markdown links and anchors, backticked repo paths and `pnpm` script names in the eight edited files. Dated release readbacks, live observations and acceptance records were left alone and are listed below as not re-verified. Wording follows the [current-version policy](../current-version-policy.md): no migration-count language describes the current state, and historical counts are labelled historical.
+
+### Facts re-verified (tree or offline test, October 8)
+
+| Fact | Result | Command |
+| --- | --- | --- |
+| Composed schema | 219 tables, 1,050 objects, 6 source files, SHA-256 `68617fbf7b3757411247514411e3a7beb637df9ce1d1b090a22fc03c1c6f2742`; the same digest string is recorded for the October 4 initialization in [releases](../releases.md) | `currentSchemaArtifact()` from `tools/current-schema.mjs` (one-line `node --input-type=module -e`) |
+| Data classes | 219 tables, 51 current and 6 planned classes | `node tools/lifecycle-catalog.mjs`, `node tests/lifecycle-catalog.mjs`, `node tests/current-schema.mjs` |
+| Roadmap | 144 tasks, 7 phases | `node tools/roadmap.mjs validate` |
+| Control database in config | `whumpo-control-2026-10-04` (`dba4c707-...`) in `wrangler.jsonc`, `wrangler.sites.jsonc`, `wrangler.apps.jsonc` | `grep database_ wrangler*.jsonc` |
+| Maintenance | 41 queues, four receipt families; 14 jobs; crons `17 3 * * *`, `47 * * * *`, `* * * * *` | `tests/maintenance-inventory.mjs`, `maintenance.mjs`, `maintenance-scheduled.mjs` passed; `src/maintenance.ts`; `wrangler.jsonc` |
+| Plans | Starter 1700/17000, Creator (`personal`) 3000/30000, Business 7900/79000, Business Pro 13900/139000 cents | `src/plans.ts` |
+| Billing | No retired tables, plans or routes; no customer metering | `node tests/billing.mjs` passed |
+| AI route | `AI_BASE_URL` OpenCode Go, `AI_MODEL` `muse-spark-1.3-contributor`, `AI_PROTOCOL` `responses`; adapter 60-second timeout and `redirect: "manual"` | `wrangler.jsonc`, `src/ai.ts` |
+| Verify profiles | `fast`, `protection`, `site`, `app`; `fast` exit 0 | `tools/verify.mjs`, `node tools/verify.mjs fast` |
+| Word design | `docs/whumpo_mvp_design.docx` text says Version 0.9 (and mentions v0.5) | `unzip -p ... word/document.xml` |
+| Feature acceptance suites | `feature-inclusion --d1` 728 decisions; `feature-identity` 434 checks on SQLite and `--d1`; `feature-admission --d1` 37 refusal cases; `feature-retention` on SQLite and `--d1` | all passed |
+| Shared modules suites | `shared-modules-contract` 75 checks, `-registry` 13 groups, `-access` 17 groups, `-records` 13 groups | passed (records: see drift item 2) |
+| Hosted CI | `ci.yml` (type-check and build, roadmap sync, secret scan) and `android.yml` are in the tree; the latest `ci.yml` runs on `main` (`ca17c6a`, `e5902dc`) concluded success; the latest `android.yml` run (branch `codex/roadmap-completion-20261007`) concluded failure; `Check` and `Secret scan` registrations still show as active but no such files are in the tree | read-only `gh api repos/zemdregon/whumpo/actions/workflows`, `gh run list` |
+| Removed code | The passkey server module, the auth UI component, the owner-recovery-concurrency and owner-passkeys-http test files were deleted by `fca926e`; no `PASSWORD_PEPPER` or `profile/password` remains in `src` | `git log --diff-filter=D`, `grep` |
+| Links, anchors, paths, scripts | Clean for the eight edited files after the edits | throwaway checker |
+
+### Claims changed (before -> after)
+
+| File | Before | After | Basis |
+| --- | --- | --- | --- |
+| `docs/capability-matrix.md` | "does not declare the MVP or the 63-task roadmap complete" | "...or the roadmap complete" | 144 tasks now |
+| | no current-tree section | new "Current-tree update - October 8, 2026 UTC" table: schema (113 migrations / 148 tables / 31 classes -> no numbered migrations, 219 / 51 + 6, 1,050 objects), control database, latest-release pointer, roadmap size, maintenance (27 queues / five families / ten jobs -> 41 / four / 14, plus a third cron), hosted CI, passkey source paths, billing receipts; plus a list of capabilities with source after the baseline and no matrix row | commands above |
+| | "Latest recorded deployment is [visitor deletion reviews]" | "As of October 1 the latest recorded deployment was ..." | newer records exist in `releases.md` and `chat-routine-release.md` |
+| | heading "Latest recorded release and operations" | "Recorded release and operations - October 1, 2026 UTC (historical)" | same |
+| | "no hosted Actions workflow enabled" | "...on October 1 (since added: ...)" | `ci.yml` added October 3 |
+| | row 13 "hosted CI not activated after free-only evaluation" | "no hosted CI on October 1 (`ci.yml` added October 3...)" | same |
+| | row 3 links to the removed passkey module and auth component; "recovery selection and code/session rotation" in present tense | links to `src/workspace-identity/http.ts`, `frontend/src/identity/flow.tsx`, the protocol and restricted-recovery docs; October 1 protocol labelled superseded | deleted paths; `owner-recovery.md` banner |
+| | row 9 "atomic legacy receipts" | "atomic receipts (legacy paths since removed)" | billing test |
+| | "Account deletion/export...": "148-table/31-class schema catalog through migration 0113" | October 1 and October 8 values side by side | lifecycle catalog |
+| | "Capability reuse...": "deployed through migration 0113" | "October 1: deployed through migration 0113; now part of the complete current schema" | no numbered migrations |
+| | "Operational health": "27 queues/five receipt families and ten-job telemetry, migrations 0106/0107" | October 1 and October 8 values side by side | maintenance suites |
+| | Audit boundary "148 tables/31 classes across 113 migrations" | labelled October 1 result, October 8 value added | lifecycle catalog |
+| `docs/acceptance.md` | no refresh note | top blockquote: tree facts corrected, dated paragraphs not re-verified, 219 / 51 + 6, 144 tasks, `ci.yml` present, "26/122" historical | |
+| | "optional hosted CI remains unactivated under the free-only constraint" | not activated October 1; `ci.yml` added October 3 | `ci.yml` |
+| | A1 "21 passing local regression cases" | adds that the two suites it names were removed by `fca926e` and cannot be re-run | `git log --diff-filter=D` |
+| | Priority 2 "covers 156 tables/37 current classes and eight planned classes as of October 2" | "covered ..."; October 8 values 219 / 51 + 6 | lifecycle catalog |
+| | Requirement map "Stripe binding set absent in fresh inspection ... Payment setup is intentionally deferred by the owner; do not create an account" and "atomic test ledgers and opt-in test credits" | September 30 observation labelled; sandbox accepted October 1 per `stripe-sandbox.md` (not re-verified); real-money activation gated; no customer metering | `stripe-sandbox.md`, `payments.md`, billing test |
+| | the September 29 criteria table named the passkey server module by path | "the former passkey server module (removed by `fca926e`; now `src/workspace-identity/`)" | deleted path |
+| | "Lifecycle metadata covers 156 tables/37 classes" (October 1 identity packet) | "then covered ... (October 8: 219 / 51 + 6)" | lifecycle catalog |
+| | "The latest revised Word design is version 0.5" | v0.5 as of September 29; the file is now v0.9 | docx text |
+| | pointer to the matrix "reconciled against main a3c5461" | adds "(with an October 8 current-tree update)" | |
+| `docs/feature-acceptance.md` | `connection-history-ui.mjs` "verifies rendered history..." | recorded as verified when recorded; **October 8 re-run fails** at `Missing Reconnect`; cause not diagnosed | test run |
+| | "Platform/apps/sites select current control database `9a321890-...`" and "exact 156-table / 702-object" | labelled the October 2 readback; current config binds `whumpo-control-2026-10-04`, source schema is 219 / 1,050 | `wrangler*.jsonc`, schema artifact |
+| `README.md` | "see current deployment evidence (chat-routine-release.md)" only | adds the October 4 PR #160 cutover record in `releases.md`, dated and not re-read live | `releases.md` |
+| | schema row "`schema/platform.sql` and current identity SQL" | the six SQL files, 219 tables, 51 + 6 classes | `currentSchemaFiles` |
+| | "`pnpm verify` (fast), site, or app" | adds `protection` | `tools/verify.mjs` |
+| | Chat interaction contract "production interaction storage/rendering remain planned" | storage, renderer and routine adapters implemented and deployed in the October 3 test releases per dated records; owner-experience, device and customer acceptance open | `src/chat-interactions/`, `chat-interactions.md` |
+| | Shared module contract "planned WH-067 ... delivery slices" | frozen contract plus WH-124 to WH-130 source and local tests; deployed in the October 4 cutover per the release record; no customer or live acceptance | `src/shared-modules/`, suites, `releases.md` |
+| | Guest previews "owner API only" | owner Chat/view controls and HTTP API; still source and local tests only | `guest-previews.md`, `src/guest-previews/` |
+| `docs/mvp.md` | plan table row "Personal" | "Creator (`personal` identity)" | `src/plans.ts`, README |
+| | "Stripe remains disconnected at the owner's request, so subscriptions, credit purchases and domain purchases are unavailable" | Stripe sandbox-only since October 1; real-money items unavailable | `stripe-sandbox.md` |
+| | "Explore currently has 50 monthly test units ... opt-in use of existing test credits ... legacy test mechanics" | no customer metering; test-unit ledger, credit product and Launch/Studio receipts removed by the October 1 billing reset | billing test, `standard-ai-accounting.md` |
+| | heading "(draft; payments disabled)" | "(draft; real-money payments disabled)" | sandbox |
+| `docs/security-risk-actions.md` | owner-recovery row described the code and all/some/none flow in present tense | labelled the October 1 protocol no longer implemented; points to restricted recovery | `fca926e`, grep |
+| `docs/cloudflare-capability-roadmap.md` | "confirms ... 113 applied migrations" | labelled historical; the October 4 cutover initialized 219 tables | `releases.md` |
+| | Email Sending row "no binding, var, cron or domain onboarding is configured"; "not activated" | `wrangler.jsonc` declares the `CONTACT_EMAIL` binding, two vars and the `* * * * *` cron (`e5902dc`); onboarding and delivery not verified; status "configured in source, activation not verified" | `wrangler.jsonc` |
+
+### Not re-verified (left as written)
+
+- Every release id, Worker version, asset count, table/object count, binding inventory and timestamp in dated paragraphs of [acceptance](../acceptance.md), [capability matrix](../capability-matrix.md), [feature acceptance](../feature-acceptance.md), [deployment](../deployment.md) and [releases](../releases.md) (for example 177 tables / 806 objects, 39 assets, 116 migrations, release `ebe32e52-...`). The October 4 record's schema digest matches the local composed schema; the live database and Workers were not read.
+- All live-evidence cells and the September 30 and October 1 snapshot tables, natural maintenance reports, Stripe sandbox acceptance, real-Muse samples, Orca and browser journeys (they need tools not installed here), physical-device and provider-consent statements, zero registered CMS instances and zero-credential counts.
+- "26/122 tasks complete" and similar totals (the backlog has no completion field), WH-004 completion, and the A1 21, A2 13 and A3 17 case counts (the A1 suites no longer exist; A2 and A3 suites were not re-run).
+- That Monitor mode is live (only the source seed row `requested_mode='monitor'` was seen), the Word design beyond its version string, Cloudflare product and pricing text, and the rest of the risk register and Cloudflare catalog.
+- Not examined: `docs/docs-code-sync.md`, `docs/tenant-authority-audit.md`, the body of `docs/owner-recovery.md`, `docs/data-protection.md`, `docs/deployment.md`, `docs/verification.md`.
+
+### Drift found and not fixed (outside this slice's files, or needing source or test changes)
+
+1. `node tests/connection-history-ui.mjs` fails on `main` with `Missing Reconnect`. It is in no verify profile, so CI does not catch it. Needs an implementer decision: update the test or restore the control.
+2. `node tests/shared-modules-records.mjs` failed once with `UNIQUE constraint failed: module_request_receipts.instance_id, module_request_receipts.request_id` and passed on the immediate re-run. Other tests were running in parallel at the time; possibly timing- or concurrency-dependent. Not diagnosed.
+3. `docs/deployment.md` "Current resources" still lists D1 `whumpo-control` (`418b20b6-...`) while all checked-in configs bind `whumpo-control-2026-10-04` (`dba4c707-...`). `docs/shared-modules.md` header still says "not deployed ... pending cutover" although `releases.md` records the October 4 cutover. `docs/contact-forms.md` says delivery stays inactive until activation while the Wrangler config now carries the binding and cron. `docs/verification.md` keeps the October 1 "no workflow added" decision. `docs/tenant-authority-audit.md` and `docs/owner-recovery.md` cite deleted paths and suites as historical evidence. The comment at `src/index.ts` line 638 says no cron for contact notices is configured, but the cron is now in `wrangler.jsonc`.
+4. The `Check` and `Secret scan` workflow registrations in GitHub remain active though no such files exist on `main`; the latest `android.yml` run failed (branch `codex/roadmap-completion-20261007`, 2026-10-07). Neither was investigated.
+5. The capability matrix still has no rows for the capabilities listed in its October 8 update.
+
+### Owner decisions
+
+- Whether the stale `connection-history-ui` test should be fixed or its feature-acceptance row downgraded, and whether it belongs in a verify profile (it is the cited evidence for the "inclusion, configuration and consent stay distinct" row).
+- Whether to retire the stale GitHub workflow registrations and fix or disable the failing `android.yml` run.
+- Which of `deployment.md`, `shared-modules.md`, `contact-forms.md` and `verification.md` is the next slice, and whether the old baseline database `418b20b6-...` (kept per `releases.md`) should be retired. Nothing here authorizes a remote operation.
+
+### Slice 2 re-check after rebase (October 9, 2026 UTC)
+
+The merges in between (#175, #178, #180) changed no schema, Wrangler, maintenance, billing or identity file. Re-run on the rebased tree with `TMPDIR` set to a private directory:
+
+| Fact | October 9 result |
+| --- | --- |
+| Composed schema | Unchanged: `currentSchemaArtifact().expected` is 219 tables, 1,050 objects, SHA-256 `68617fbf...6f2742`, six files; `tools/lifecycle-catalog.mjs` and `tests/lifecycle-catalog.mjs` report 219 tables, 51 current and 6 planned classes. |
+| Roadmap | **151 tasks**, 7 phases (`roadmap validate`): #180 added WH-154..160. `acceptance.md` and the capability matrix now state both values with dates. |
+| Maintenance, billing | `maintenance-inventory` (41 queues, four receipt families), `maintenance`, `maintenance-scheduled`, `billing`: passed; crons unchanged. |
+| Feature suites | `feature-inclusion --d1` 728 decisions; `feature-identity` 434 checks on SQLite and `--d1`; `feature-admission --d1` 37 refusal cases; `feature-retention` on SQLite and `--d1`: passed. |
+| Shared modules | `-contract` 75 checks, `-registry` 13 groups, `-access` 17 groups, `-records` 13 groups: passed (records passed on the first run this time). |
+| `connection-history-ui` | Still fails with `Missing Reconnect` (drift item 1 unchanged). |
+| Hosted CI | Read-only `gh run list --workflow ci.yml --branch main`: the runs for `64cab65`, `cf39edd` and `92a001f` (October 9) concluded **failure**. In the latest run "Type-check and build" succeeded and "Secret scan" failed: gitleaks reported 5 findings (redacted in the log; not inspected or investigated here). This supersedes the October 8 "latest `ci.yml` runs on `main` succeeded" for the current state; the matrix row now says so. |
+| Capability list | The matrix's list of capabilities without a row now also names the planned [notification contract](../notifications.md) (WH-068/WH-154). |
+
+Drift added by the re-check: 6. The `ci.yml` "Secret scan" job fails on `main` since the October 9 merges (5 redacted gitleaks findings). The deploy path (Workers Builds) does not run gitleaks, so this does not block deployment, but `main` is not green in GitHub. Owner or a security-scoped session should inspect the findings; nothing here read or rotated any secret.
+
+### Commands run (slice 2)
+
+```sh
+git fetch origin && git checkout -b claude/wh-001-refresh-summaries origin/claude/wh-001-reconcile-evidence
+corepack pnpm install --frozen-lockfile
+node tools/roadmap.mjs show WH-001
+node tools/lifecycle-catalog.mjs && node tests/lifecycle-catalog.mjs && node tests/current-schema.mjs
+node tests/maintenance-inventory.mjs && node tests/maintenance.mjs && node tests/maintenance-scheduled.mjs
+node tests/billing.mjs
+node tests/feature-inclusion.mjs --d1
+node tests/feature-identity.mjs && node tests/feature-identity.mjs --d1
+node tests/feature-admission.mjs --d1
+node tests/feature-retention.mjs && node tests/feature-retention.mjs --d1
+node tests/connection-history-ui.mjs                  # FAILED: Missing Reconnect
+node tests/shared-modules-contract.mjs && node tests/shared-modules-registry.mjs && node tests/shared-modules-access.mjs
+node tests/shared-modules-records.mjs                 # first run failed (UNIQUE constraint), second run passed
+node tools/verify.mjs fast                            # exit 0
+gh api repos/zemdregon/whumpo/actions/workflows; gh run list --repo zemdregon/whumpo --workflow ci.yml   # and android.yml
+node tools/roadmap.mjs render && node tools/roadmap.mjs render --check && node tools/roadmap.mjs validate && node tools/roadmap.mjs alignment
+git diff --check
+```
