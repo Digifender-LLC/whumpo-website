@@ -128,7 +128,7 @@ export function validateTemplate(t,path='template'){
  for(const [name,v] of Object.entries(t.variables)){
   check(/^[a-z][A-Za-z0-9]{0,30}$/.test(name),'INVALID_ID',`${path}.variables.${name}`);
   shape(v,['source','type'],`${path}.variables.${name}`);
-  check(Object.hasOwn(variableSources,v.source)&&variableSources[v.source].includes(v.type),'INVALID_VARIABLE',`${path}.variables.${name}`);
+  check(typeof v.source==='string'&&typeof v.type==='string'&&Object.hasOwn(variableSources,v.source)&&variableSources[v.source].includes(v.type),'INVALID_VARIABLE',`${path}.variables.${name}`);
   // Owner and staff notices are content-free: no visitor-submitted value leaves the private panel by email.
   if(v.source==='record')check(t.audiences.length===1&&t.audiences[0]==='submitter','CONTENT_IN_NOTICE',`${path}.variables.${name}`);
   if(v.type==='code')check(t.trigger==='destination.verification','INVALID_VARIABLE',`${path}.variables.${name}`);
@@ -142,8 +142,8 @@ export function validateTemplate(t,path='template'){
    if(Object.hasOwn(s,'text')){
     check(typeof s.text==='string'&&(multiline?!/[\u0000-\u0009\u000b-\u001f\u007f]/.test(s.text):lineSafe(s.text)),'HEADER_INJECTION',p);
     check(!/\{\{|\}\}|\$\{/.test(s.text),'TEMPLATE_SYNTAX',p);chars+=s.text.length;
-   }else if(Object.hasOwn(s,'var')){check(Object.hasOwn(t.variables,s.var),'UNDECLARED_VARIABLE',p);used.add(s.var);chars+=80;}
-   else if(Object.hasOwn(s,'link')){check(!multiline?false:Object.hasOwn(platformLinks,s.link),'UNKNOWN_LINK',p);chars+=platformLinks[s.link].length;}
+   }else if(Object.hasOwn(s,'var')){check(typeof s.var==='string'&&Object.hasOwn(t.variables,s.var),'UNDECLARED_VARIABLE',p);used.add(s.var);chars+=80;}
+   else if(Object.hasOwn(s,'link')){check(multiline&&typeof s.link==='string'&&Object.hasOwn(platformLinks,s.link),'UNKNOWN_LINK',p);chars+=platformLinks[s.link].length;}
    else check(false,'INVALID_SEGMENT',p);
   });
   check(chars<=maxChars,'TOO_LONG',`${path}.${where}`);
@@ -170,7 +170,7 @@ export function validateCatalog(c){
  for(const [id,s] of Object.entries(c.senders)){
   const path=`senders.${id}`;
   shape(s,['address','displayName','provider','domainOwner','state','dnsReview'],path);
-  check(Object.hasOwn(c.providers,s.provider),'UNKNOWN_PROVIDER',path);
+  check(typeof s.provider==='string'&&Object.hasOwn(c.providers,s.provider),'UNKNOWN_PROVIDER',path);
   check(['verified','unverified','planned'].includes(s.state),'INVALID_SENDER',path);
   check(['platform','customer'].includes(s.domainOwner),'INVALID_SENDER',path);
   check(typeof s.displayName==='string'&&/^[A-Za-z0-9 ]{1,40}$/.test(s.displayName),'HEADER_INJECTION',`${path}.displayName`);
@@ -189,8 +189,8 @@ export const templateDigest=t=>digest(t);
 
 /** Classify a provider error code. Unknown codes, internal errors, throws and timeouts are uncertain. */
 export function classifyProviderError(catalog,providerId,code){
- const e=catalog.providers[providerId]?.errorClasses;
- if(!e)return 'uncertain';
+ if(typeof providerId!=='string'||typeof code!=='string'||!Object.hasOwn(catalog.providers,providerId))return 'uncertain';
+ const e=catalog.providers[providerId].errorClasses;
  if(e.suppressed.includes(code))return 'suppressed';
  if(e.notTaken.includes(code))return 'not-taken';
  if(e.rejected.includes(code))return 'rejected';
@@ -204,8 +204,8 @@ export function validateConfiguration(cfg,catalog=notificationCatalog){
  check(cfg.contractVersion===contractVersion,'UNSUPPORTED_VERSION','configuration.contractVersion');
  check(typeof cfg.id==='string'&&/^[a-z][a-z0-9-]{0,39}$/.test(cfg.id),'INVALID_ID','configuration.id');
  shape(cfg.template,['id','version','digest'],'configuration.template');
+ check(typeof cfg.template.id==='string'&&Number.isSafeInteger(cfg.template.version)&&Object.hasOwn(catalog.templates,`${cfg.template.id}@${cfg.template.version}`),'UNKNOWN_TEMPLATE','configuration.template');
  const entry=catalog.templates[`${cfg.template.id}@${cfg.template.version}`];
- check(entry,'UNKNOWN_TEMPLATE','configuration.template');
  check(entry.state==='available','TEMPLATE_WITHDRAWN','configuration.template');
  const t=entry.template;
  check(cfg.template.digest===templateDigest(t),'STALE_TEMPLATE','configuration.template.digest');
@@ -215,9 +215,10 @@ export function validateConfiguration(cfg,catalog=notificationCatalog){
  check(typeof cfg.trigger.resourceId==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(cfg.trigger.resourceId),'INVALID_ID','configuration.trigger.resourceId');
  check(typeof cfg.trigger.formId==='string'&&/^[a-z][a-z0-9-]{0,39}$/.test(cfg.trigger.formId),'INVALID_ID','configuration.trigger.formId');
  check(t.audiences.includes(cfg.recipientScope),'SCOPE_NOT_ALLOWED','configuration.recipientScope');
+ check(typeof cfg.sender==='string'&&Object.hasOwn(catalog.senders,cfg.sender),'UNKNOWN_SENDER','configuration.sender');
  const sender=catalog.senders[cfg.sender];
- check(sender,'UNKNOWN_SENDER','configuration.sender');
  check(sender.state==='verified','SENDER_NOT_VERIFIED','configuration.sender');
+ check(Object.hasOwn(catalog.providers,sender.provider),'UNKNOWN_PROVIDER','configuration.sender');
  const provider=catalog.providers[sender.provider];
  check(provider.review,'UNREVIEWED_PROVIDER','configuration.sender');
  check(provider.price,'UNPRICED_PROVIDER','configuration.sender');
