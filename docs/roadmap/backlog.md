@@ -244,7 +244,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/5. Planning owner: Unassigned.
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-08 UTC slice 1 at ca17c6a (source/local fixtures only; not exhaustive; WH-004 remains open): docs/boundary-audit.md and docs/boundary-audit.json register all 206 mounted platform matchers and 38 typed Chat controls in 28 families with authority/Origin/freshness/target/replay/stale cells, checked by the offline tests/boundary-audit.mjs (protection profile) against a TypeScript syntax-tree extraction with source and registry mutation checks. Three low-severity findings reproduced by executed fixtures awaiting owner decisions: B1 cross-tenant platform-wide review capacity exhaustion, B2 runbook C10 recent-authentication claims not enforced, B3 guest-preview control effect outside the Chat revision check. No src, schema, remote or deployment change.
 
 ## WH-006 — Add privacy-safe operational health and maintenance diagnostics
 

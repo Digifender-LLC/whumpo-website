@@ -189,7 +189,8 @@
     "test:identity-current": "node tests/identity-authority.mjs && node tests/identity-ceremonies.mjs && node tests/identity-kits.mjs && node tests/identity-recovery.mjs && node tests/identity-http.mjs && node tests/workspace-admission.mjs",
     "db:status": "node tools/database.mjs status",
     "test:current-schema": "node tests/current-schema.mjs",
-    "test:photo-upload-recovery": "node tests/photo-upload-recovery.mjs"
+    "test:photo-upload-recovery": "node tests/photo-upload-recovery.mjs",
+    "test:boundary-audit": "node tests/boundary-audit.mjs"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
