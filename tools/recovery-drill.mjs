@@ -40,11 +40,23 @@ async function referencedObjects(db){
  const rows=await query(db)("SELECT object_key AS key,size,digest AS sha256 FROM project_files UNION ALL SELECT storage_key,size,sha256 FROM safety_evidence_objects WHERE stored_at IS NOT NULL AND disposed_at IS NULL ORDER BY 1");
  hold(rows.length<=limits.objects,'object-bound');return rows;
 }
+// R2 serving checks (public photos, restricted evidence) read the stored SHA-256
+// custom metadata and the content type, so a restored body without them would
+// pass byte checks yet fail to serve. Only that fixed metadata is preserved; any
+// other custom metadata is refused instead of being silently dropped.
+const contentType=v=>v===null||typeof v==='string'&&/^[a-z0-9][a-z0-9.+-]{0,63}\/[a-z0-9][a-z0-9.+-]{0,63}$/.test(v);
+const objectMetadata=(object,sha256)=>{
+ const custom=object.customMetadata??{},type=object.httpMetadata?.contentType??null;
+ hold(Object.keys(custom).every(k=>k==='sha256')&&(custom.sha256===undefined||custom.sha256===sha256)&&contentType(type),'object-metadata');
+ return {contentType:type,customSha256:custom.sha256===undefined?null:custom.sha256};
+};
+const putOptions=metadata=>({...(metadata.contentType?{httpMetadata:{contentType:metadata.contentType}}:{}),...(metadata.customSha256?{customMetadata:{sha256:metadata.customSha256}}:{})});
+const sameMetadata=(object,metadata)=>{try{return JSON.stringify(objectMetadata(object,metadata.customSha256??''))===JSON.stringify(metadata);}catch{return false;}};
 async function readObject(objects,entry){
- let body;
- try{const object=await objects.get(entry.key);hold(object&&object.size===entry.size,'missing-objects');body=Buffer.from(await object.arrayBuffer());}
+ let body,metadata;
+ try{const object=await objects.get(entry.key);hold(object&&object.size===entry.size,'missing-objects');body=Buffer.from(await object.arrayBuffer());metadata=objectMetadata(object,entry.sha256);}
  catch(error){if(error instanceof DrillHold)throw error;throw new DrillHold('missing-objects');}
- hold(body.length===entry.size&&body.length<=limits.objectBytes&&digest(body)===entry.sha256,'object-integrity');return body;
+ hold(body.length===entry.size&&body.length<=limits.objectBytes&&digest(body)===entry.sha256,'object-integrity');return {body,metadata};
 }
 async function privateDirectory(path){await mkdir(path,{mode:0o700});await pathCheck(join(path,'x'),{external:true,parent:true});return path;}
 
@@ -63,13 +75,13 @@ export async function captureRecoveryPoint({sourceDb,objects,directory,snapshotI
   await privateDirectory(join(directory,'objects'));const written=new Set();
   for(const entry of entries){
    hold(sha(entry.sha256)&&Number.isSafeInteger(entry.size),'object-integrity');
-   const body=await readObject(objects,entry);
+   const {body,metadata}=await readObject(objects,entry);entry.metadata=metadata;
    if(!written.has(entry.sha256)){await writePrivate(join(directory,'objects',entry.sha256),body);written.add(entry.sha256);}
   }
   const workerInventory={};
   for(const [role,source] of Object.entries(workers)){hold(id(role),'worker-artifact');workerInventory[role]=await copyTree(source,join(directory,'workers',role));}
   await writePrivate(join(directory,'control.json'),Buffer.from(JSON.stringify(control.snapshot)));
-  const objectList=entries.map(e=>({key:e.key,size:e.size,sha256:e.sha256}));
+  const objectList=entries.map(e=>({key:e.key,size:e.size,sha256:e.sha256,metadata:e.metadata}));
   const point={format:'whumpo-recovery-point-v1',environment:'test',snapshotId,capturedAt,control:{sha256:control.digest,rows:control.rows,bytes:control.bytes},objects:{count:objectList.length,bytes:objectList.reduce((n,o)=>n+o.size,0),sha256:digest(JSON.stringify(objectList)),entries:objectList},workers:Object.fromEntries(Object.entries(workerInventory).map(([role,files])=>[role,{files,sha256:digest(JSON.stringify(files))}])),notIncluded:['Worker secret values','independent suppression authority','provider-side state','customer DNS/zone and GitHub copies','native CMS resources']};
   const pointBytes=Buffer.from(JSON.stringify(point));await writePrivate(join(directory,pointFile),pointBytes);
   // Record pointDigest outside the archive directory; every later read requires it.
@@ -128,7 +140,8 @@ export async function restoreControlD1(target,directory,expectedDigest){
  return {statements:statements.length,rows:roundtrip.rows,digest:roundtrip.digest};
 }
 
-/** Idempotently copy archived object bodies into an isolated private bucket.
+/** Idempotently copy archived object bodies, with their content type and stored
+ * SHA-256 metadata, into an isolated private bucket.
  * Exact existing copies are skipped, so an interrupted restore can resume; an
  * unexpected or different object refuses the target rather than overwriting it. */
 export async function restoreObjects(target,directory,expectedDigest){
@@ -142,9 +155,9 @@ export async function restoreObjects(target,directory,expectedDigest){
  let written=0,skipped=0;
  for(const entry of point.objects.entries){
   const present=await target.get(entry.key);
-  if(present){const body=Buffer.from(await present.arrayBuffer());hold(body.length===entry.size&&digest(body)===entry.sha256,'restore-target-conflict');skipped++;continue;}
+  if(present){const body=Buffer.from(await present.arrayBuffer());hold(body.length===entry.size&&digest(body)===entry.sha256&&sameMetadata(present,entry.metadata),'restore-target-conflict');skipped++;continue;}
   const body=await readPrivate(join(directory,'objects',entry.sha256),limits.objectBytes);hold(digest(body)===entry.sha256,'object-digest');
-  await target.put(entry.key,body,{sha256:entry.sha256});written++;
+  await target.put(entry.key,body,putOptions(entry.metadata));written++;
  }
  return {objects:point.objects.entries.length,written,skipped,preexisting:listed};
 }
@@ -161,13 +174,29 @@ export async function restoreWorkerArtifact(directory,expectedDigest,role,target
 export const isolatedObjects=bucket=>Object.freeze({get:key=>bucket.get(key)});
 
 /** Publication and application pointers in an isolated candidate must name the
- * exact restored artifacts. Counts and hold codes only; no bodies or identifiers. */
-export async function reconcileArtifacts(db){
+ * exact restored artifacts. Counts and hold codes only; no bodies or identifiers.
+ * `objects` is the isolated private bucket capability: published-site photos are
+ * checked against the same rules the public host applies before serving them
+ * (same-project file, current safety approval, exact size/digest, stored
+ * SHA-256 metadata). This is a read-only check; it serves nothing. */
+export async function reconcileArtifacts(db,objects){
  const q=query(db),holds=new Set();
  const sites=await q('SELECT p.project_id,v.project_id AS version_project,v.html,v.digest FROM publications p LEFT JOIN site_versions v ON v.id=p.version_id WHERE p.version_id IS NOT NULL');
  for(const s of sites){if(s.version_project!==s.project_id)holds.add('site-pointer');else if(digest(s.html)!==s.digest)holds.add('site-artifact-digest');}
- const photos=await q('SELECT f.object_key FROM publications p JOIN version_photos vp ON vp.version_id=p.version_id LEFT JOIN project_files f ON f.id=vp.file_id');
- if(photos.some(r=>r.object_key===null))holds.add('site-photo-pointer');
+ const photos=await q('SELECT p.project_id,f.project_id AS file_project,f.object_key,f.size,f.digest,f.status,EXISTS(SELECT 1 FROM approved_project_photos a WHERE a.id=f.id AND a.project_id=p.project_id AND a.digest=f.digest) AS approved FROM publications p JOIN version_photos vp ON vp.version_id=p.version_id LEFT JOIN project_files f ON f.id=vp.file_id WHERE p.version_id IS NOT NULL');
+ for(const photo of photos){
+  if(photo.object_key===null){holds.add('site-photo-pointer');continue;}
+  if(photo.file_project!==photo.project_id)holds.add('site-photo-project');
+  else if(photo.status!=='ready'||photo.approved!==1)holds.add('site-photo-safety');
+  let object=null;
+  try{object=objects?await objects.get(photo.object_key):null;}catch{}
+  if(!object||object.size!==photo.size)holds.add('site-photo-bytes');
+  else{
+   let bytes;try{bytes=Buffer.from(await object.arrayBuffer());}catch{}
+   if(!bytes||bytes.length!==photo.size||digest(bytes)!==photo.digest)holds.add('site-photo-bytes');
+   else if(object.customMetadata?.sha256!==photo.digest||object.httpMetadata?.contentType!=='image/jpeg')holds.add('site-photo-metadata');
+  }
+ }
  const backends=await q('SELECT b.project_id,v.project_id AS version_project,v.source,v.digest FROM backend_publications b LEFT JOIN backend_versions v ON v.id=b.version_id WHERE b.version_id IS NOT NULL');
  for(const b of backends){if(b.version_project!==b.project_id)holds.add('backend-pointer');else if(digest(b.source)!==b.digest)holds.add('backend-artifact-digest');}
  const apps=await q('SELECT a.project_id,a.enabled,v.project_id AS version_project,v.source,v.digest,s.review_id,r.status AS page_status FROM app_spaces a LEFT JOIN backend_versions v ON v.id=a.version_id LEFT JOIN app_page_settings s ON s.project_id=a.project_id LEFT JOIN app_page_reviews r ON r.id=s.review_id');
@@ -184,7 +213,7 @@ export async function reconcileArtifacts(db){
 // resurrected by a restore; changed rows would roll back current authority.
 const identityTables=new Set(['users','identity_accounts','identity_sessions','identity_grants','identity_credentials','identity_recovery_kits','app_visitors','app_sessions','app_passkeys','app_recovery_codes','app_invitations']);
 const publicationTables=new Set(['publications','backend_publications','app_page_settings','app_spaces','publication_actions']);
-const credentialTables=new Set(['github_token_vault','cloudflare_token_vault','github_refresh_custody','github_oauth_states','cloudflare_oauth_states','connection_key_registry','connection_key_policy']);
+const credentialTables=new Set(['github_token_vault','cloudflare_token_vault','github_refresh_custody','github_oauth_states','cloudflare_oauth_states','connection_key_registry','connection_key_policy','connection_key_rotations','connection_rotation_batches','connection_rotation_guards','connection_oauth_exchanges','connection_oauth_outcomes','github_grant_revocations','github_token_staging','github_revocation_claims']);
 const classify=table=>identityTables.has(table)?'identity':publicationTables.has(table)?'publication':credentialTables.has(table)?'credential':table.startsWith('app_')?'application-data':'other';
 
 /** Compare an isolated candidate with the operator-selected current source.

@@ -9,13 +9,18 @@ import {createHash} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
 import {mkdtemp,mkdir,rm,readdir,writeFile,readFile,rename,cp,unlink} from 'node:fs/promises';
 import {join} from 'node:path';
-import {execFileSync} from 'node:child_process';
 import {performance} from 'node:perf_hooks';
 import {sqliteD1,sqliteD1Adapter} from './sqlite-d1.mjs';
 import {workspaceFixture,workspaceSession} from './helpers/workspace-identity.mjs';
 import {fixtureKeyring,initializeFixtureKeys,fixtureCiphertext} from './helpers/connection-keyring.mjs';
 import {keyBackupFixture} from './helpers/key-backup.mjs';
-import {currentSiteFixtureHandlers,createFixtureProject,enableFixtureVisitorAccess,fixtureVisitorSQL} from './current-site-fixture.mjs';
+import {currentSiteFixtureHandlers,createFixtureProject,changeFixtureWebsite,enableFixtureVisitorAccess,fixtureVisitorSQL} from './current-site-fixture.mjs';
+import {memoryBucket,isolatedTargets,seedCredentials,syntheticJPEG} from './helpers/recovery-drill.mjs';
+import {compileWorker} from '../tools/release-provider.mjs';
+import {archivedConfig} from '../tools/prepare-release.mjs';
+import {workerOrder,configFiles,fileInventory,copyTree} from '../tools/release-manifest.mjs';
+import {runWrangler} from '../tools/cms-release.mjs';
+import {fixtureEnvironment} from '../tools/verify.mjs';
 import {createRestoreInventory,openRestoreInventory} from '../tools/restore-inventory.mjs';
 import {inspectIsolatedRestore} from '../tools/restore-admission.mjs';
 import {restoreCapturedCMSDatabase,captureCMSDatabase} from '../tools/cms-database-snapshot.mjs';
@@ -38,18 +43,27 @@ try{
  // The source platform uses the actual D1 query adapter over SQLite, like the
  // restore-inventory suites: its full observations must fit the inventory's fixed
  // ten-second evidence deadline. Private object bodies sit in a separate store.
- fixture=await phase('setupSource',()=>sqliteD1());const {db}=fixture,bodies=new Map();
- const files={get:async key=>{const b=bodies.get(key);return b?{size:b.length,arrayBuffer:async()=>Uint8Array.from(b).buffer}:null;},put:async(key,value)=>{bodies.set(key,Buffer.from(value));},delete:async key=>{bodies.delete(key);}};
- const build=join(directory,'build'),runtimeBuild=join(build,'runtime');await mkdir(build,{mode:0o700});
- await phase('buildRuntimeArtifact',async()=>execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','deploy','--config','wrangler.runtime.jsonc','--dry-run','--outdir',runtimeBuild],{stdio:'pipe',maxBuffer:16*1024*1024}));
+ fixture=await phase('setupSource',()=>sqliteD1());const {db}=fixture,files=memoryBucket();
+ // Build all four Workers once with the release tooling's own compile step (local
+ // Wrangler dry run, credential-free environment). Their output is archived, destroyed
+ // and restored below; the original inventories are kept for independent comparison.
+ const build=join(directory,'build'),runtimeBuild=join(build,'runtime'),buildEnv=fixtureEnvironment(process.env,join(directory,'home'));await mkdir(build,{mode:0o700});await mkdir(buildEnv.HOME,{mode:0o700});
+ const configs={},entries={},builds={};
+ await phase('buildWorkerArtifacts',async()=>{
+  for(const role of workerOrder){
+   configs[role]=JSON.parse(await readFile(configFiles[role],'utf8'));builds[role]=join(build,role);
+   entries[role]=await compileWorker(process.cwd(),role,configs[role],builds[role],directory,{env:buildEnv});
+  }
+ });
+ const buildInventories={};for(const role of workerOrder)buildInventories[role]=await fileInventory(builds[role]);
+ const assetTrees={'assets-platform':'dist','assets-apps':'public-app'};
+ for(const [role,path] of Object.entries(assetTrees))buildInventories[role]=await fileInventory(path);
  sourceRuntime=await workerd(runtimeBuild);let executions=0;
  // Direct handler calls bypass the platform's per-project lane wrapper; supply an opaque lane.
  const runtimeService={fetch:(url,init={})=>{executions++;const headers=new Headers(init.headers);if(!headers.has('x-whumpo-lane'))headers.set('x-whumpo-lane',lane());return sourceRuntime.dispatchFetch(url,{...init,headers});}};
  // Isolated targets: a separate Wrangler state directory with EMPTY D1 databases
  // and buckets. No routes, service bindings or schema are configured for them.
- const isolatedConfig=join(directory,'isolated.json');
- await writeFile(isolatedConfig,JSON.stringify({name:'whumpo-recovery-drill-isolated',compatibility_date:'2026-09-29',d1_databases:['A','B'].map((n,i)=>({binding:'DRILL_'+n,database_name:'drill-'+n.toLowerCase(),database_id:`${i+3}${i+3}${i+3}${i+3}${i+3}${i+3}${i+3}${i+3}-0000-4000-8000-000000000000`})),r2_buckets:['A','B'].map(n=>({binding:'OBJECTS_'+n,bucket_name:'drill-objects-'+n.toLowerCase()}))}));
- const {getPlatformProxy}=await import('wrangler');isolated=await getPlatformProxy({configPath:isolatedConfig,persist:{path:join(directory,'isolated-state')},remoteBindings:false});
+ isolated=await isolatedTargets(directory,{databases:['A','B'],buckets:['A','B']});
  const target=isolated.env;
  globalThis.fetch=()=>assert.fail('The recovery drill must not dispatch to any real provider');
 
@@ -60,12 +74,7 @@ try{
  assert.equal((await m.sendChat(scope,owner.account,{id:review,revision,content:'/publish '+siteVersion})).status,200);
  revision=(await m.readChat(scope,owner.account)).state.revision;
  assert.equal((await m.sendChatControl(scope,owner.account,{id:id(),revision,action:{type:'confirm',kind:'site',reviewId:review}})).status,200);
- for(const provider of ['github','cloudflare'])for(const purpose of ['token','pkce']){
-  const record=id(),cipher=await fixtureCiphertext(keyring,`whumpo:${provider}:${purpose}:${owner.account}:${record}`,canary);
-  if(purpose==='pkce')await db.prepare(`INSERT INTO ${provider}_oauth_states(user_id,state_hash,authority_id,verifier_ciphertext,expires_at) VALUES(?,?,?,?,'2099-01-01')`).bind(owner.account,record,owner.authority,cipher).run();
-  else if(provider==='github')await db.prepare("INSERT INTO github_token_vault VALUES(?,?,?,'2099-01-01','revoking')").bind(record,owner.account,cipher).run();
-  else await db.prepare("INSERT INTO cloudflare_token_vault(id,user_id,ciphertext,expires_at,created_at,state) VALUES(?,?,?,'2099-01-01','2026-10-08','revoking')").bind(record,owner.account,cipher).run();
- }
+ await seedCredentials(db,keyring,owner,canary);
  const objectRow=async(project,name,bytes)=>{const key='private-drill/'+id();await files.put(key,bytes);await db.prepare("INSERT INTO project_files(id,project_id,name,object_key,digest,size,width,height,status,created_at) VALUES(?,?,?,?,?,?,1,1,'pending',?)").bind(id(),project,name,key,hash(bytes),bytes.length,new Date().toISOString()).run();return key;};
  const objectKeys=[await objectRow(site,'Garden plan',Buffer.from('Synthetic private garden plan '+canary)),await objectRow(site,'Planting notes',Buffer.from('Synthetic private planting notes'))];
  // Visitor application: actual owner handlers and actual QuickJS transitions.
@@ -86,6 +95,28 @@ try{
  };
  const before=await reference(db,sourceRuntime);assert.equal(before.documents,2);
 
+ // ---- Published-site photos through the actual upload, safety-gate, version and
+ // publication handlers. The only synthetic input is the trusted safety receipt that
+ // a real scanner would supply (as in tests/photo-versions.mjs); no production gate is disabled.
+ // The owner's plan allows one live site, so the photo version replaces the published version of the same site;
+ // a second, unpublished project holds a photo that must never be reachable through the first.
+ const neighbour=await createFixtureProject(scope,owner.account,'Unpublished neighbour','Synthetic recovery drill neighbour','clay');
+ const upload=async(project,name,seed)=>{const photoId=id();await m.uploadPhoto(new Request('https://whumpo.com/',{method:'PUT',headers:{'content-type':'image/jpeg','x-whumpo-photo-handoff':'null','x-photo-name':encodeURIComponent(name)},body:syntheticJPEG(seed)}),{DB:scope,FILES:files},owner.account,project,photoId);return photoId;};
+ const gardenPhotos=[await upload(site,'Garden bed',1),await upload(site,'Greenhouse',2)],strayPhoto=await upload(neighbour.project,'Photo of another project',3);
+ await assert.rejects(()=>m.readPhoto({DB:scope,FILES:files},owner.account,gardenPhotos[0]),{status:423});
+ await assert.rejects(()=>changeFixtureWebsite(scope,owner.account,site,[{type:'pages.setPhotos',pageId:'home',photos:[{id:gardenPhotos[0],alt:'Held photo'}]}],m),{status:423});
+ for(const file of [...gardenPhotos,strayPhoto])await db.prepare("UPDATE project_photo_safety SET state='approved',csam_check='clear',sexual_check='clear',scanner_reference='synthetic-drill',expires_at=? WHERE file_id=?").bind(new Date(Date.now()+3600000).toISOString(),file).run();
+ await assert.rejects(()=>changeFixtureWebsite(scope,owner.account,site,[{type:'pages.setPhotos',pageId:'home',photos:[{id:strayPhoto,alt:'Wrong project'}]}],m),{status:423},'The source refuses another project\'s photo');
+ const photoVersion=await changeFixtureWebsite(scope,owner.account,site,[{type:'pages.setPhotos',pageId:'home',photos:gardenPhotos.map((photo,i)=>({id:photo,alt:'Drill photo '+(i+1)}))}],m);
+ const photoReview=id();revision=(await m.readChat(scope,owner.account)).state.revision;
+ assert.equal((await m.sendChat(scope,owner.account,{id:photoReview,revision,content:'/publish '+photoVersion})).status,200);
+ revision=(await m.readChat(scope,owner.account)).state.revision;
+ assert.equal((await m.sendChatControl(scope,owner.account,{id:id(),revision,action:{type:'confirm',kind:'site',reviewId:photoReview}})).status,200);
+ const publishedPhotos=(await db.prepare('SELECT f.id,f.object_key,f.digest FROM publications p JOIN version_photos vp ON vp.version_id=p.version_id JOIN project_files f ON f.id=vp.file_id WHERE p.project_id=? ORDER BY vp.position').bind(site).all()).results;
+ assert.deepEqual(publishedPhotos.map(r=>r.id),gardenPhotos);
+ const photoKeys=[...publishedPhotos.map(r=>r.object_key),(await db.prepare('SELECT object_key FROM project_files WHERE id=?').bind(strayPhoto).first()).object_key];
+ const publishedHTML=(await db.prepare('SELECT v.html FROM publications p JOIN site_versions v ON v.id=p.version_id WHERE p.project_id=?').bind(site).first()).html;
+
  // ---- Independent authority and encrypted key custody, outside the data archive.
  const inventoryFile=join(directory,'operator.whumpo-restore-inventory'),streamId='recovery-drill-stream';
  await createRestoreInventory({inventoryFile,streamId});
@@ -93,8 +124,8 @@ try{
  const keys=await keyBackupFixture();closers.push(()=>keys.close());const stored=await keys.create(keyring),keyBackup=stored.proof;
  await mkdir(join(directory,'points'),{mode:0o700});
  const pointA=join(directory,'points','A'),snapshotA='drill-point-a';
- const capture=await phase('captureRecoveryPoint',()=>captureRecoveryPoint({sourceDb:db,objects:files,directory:pointA,snapshotId:snapshotA,workers:{runtime:runtimeBuild}}));
- assert.equal(capture.objects,2);assert.deepEqual(capture.workers,['runtime']);
+ const capture=await phase('captureRecoveryPoint',()=>captureRecoveryPoint({sourceDb:db,objects:files,directory:pointA,snapshotId:snapshotA,workers:{...builds,...assetTrees}}));
+ assert.equal(capture.objects,5);assert.deepEqual(capture.workers,Object.keys(buildInventories));
  const pointDigestA=capture.pointDigest,archived=await openArchivedControl(pointA,pointDigestA);
  const manifest=await phase('registerArchive',async()=>{try{return await inventory.registerArchive({archiveDb:archived.db,snapshotId:snapshotA,keyBackup});}finally{archived.close();}});
  const pointBytes=await readFile(join(pointA,'control.json'));
@@ -102,11 +133,12 @@ try{
  assert.ok(!JSON.stringify(capture).includes(canary)&&!JSON.stringify(manifest).includes(canary));
 
  // ---- Loss window, then the disaster: new work after the point, every private
- // object body lost and the runtime build output gone. D1 remains readable here.
+ // object body lost (including published photos) and every compiled Worker output gone.
+ // D1 remains readable here. The asset trees are checkout directories and are left in place.
  const disasterAt=Date.now();
  await objectRow(site,'Created after the recovery point',Buffer.from('Lost synthetic upload'));
- for(const key of [...objectKeys])await files.delete(key);
- await rm(runtimeBuild,{recursive:true});
+ for(const key of [...objectKeys,...photoKeys])await files.delete(key);
+ await rm(build,{recursive:true});
 
  // ---- Restore into isolated resources.
  const restoreStart=performance.now();
@@ -128,16 +160,20 @@ try{
  const inspect=(extra={})=>retryIndependentEvidence(()=>inspectOnce(extra));
  const partial=await inspect();assert.deepEqual(partial.holds,['missing-objects']);holds.partialObjects=partial.holds;
  const resumed=await phase('restoreObjects',()=>restoreObjects(target.OBJECTS_A,pointA,pointDigestA));
- assert.deepEqual({written:resumed.written,skipped:resumed.skipped},{written:1,skipped:1});
- assert.deepEqual(await restoreObjects(target.OBJECTS_A,pointA,pointDigestA),{objects:2,written:0,skipped:2,preexisting:2},'Repeated restore writes nothing');
- const restoredBuild=join(directory,'restored-runtime');
- const worker=await phase('restoreWorkerArtifact',()=>restoreWorkerArtifact(pointA,pointDigestA,'runtime',restoredBuild));
+ assert.deepEqual({written:resumed.written,skipped:resumed.skipped},{written:4,skipped:1});
+ assert.deepEqual(await restoreObjects(target.OBJECTS_A,pointA,pointDigestA),{objects:5,written:0,skipped:5,preexisting:5},'Repeated restore writes nothing');
+ // Recovered bytes only: each archived Worker output and asset tree is copied out and
+ // compared with the inventory taken before the disaster (independent of the point manifest).
+ const restoredPayload=join(directory,'restored-payload'),restoredDir=role=>role.startsWith('assets-')?join(restoredPayload,'assets',role.slice(7)):join(restoredPayload,'workers',role),restoredBuild=restoredDir('runtime'),restoredWorkers={};
+ await phase('restoreWorkerArtifacts',async()=>{for(const role of Object.keys(buildInventories))restoredWorkers[role]=await restoreWorkerArtifact(pointA,pointDigestA,role,restoredDir(role));});
+ for(const role of Object.keys(buildInventories))assert.deepEqual(await fileInventory(restoredDir(role)),buildInventories[role],'Restored '+role+' equals its pre-disaster inventory');
+ const worker=restoredWorkers.runtime;
  const admitted=await phase('inspectIsolatedRestore',()=>inspect());
  assert.equal(admitted.status,'verified',JSON.stringify(admitted));
  assert.deepEqual([admitted.servingAllowed,admitted.providerDispatchAllowed,admitted.retirementAllowed],[false,false,false]);
- assert.equal(admitted.keys.credentials,4);assert.equal(admitted.objects,2);
- const artifacts=await phase('reconcileArtifacts',()=>reconcileArtifacts(target.DRILL_A));
- assert.equal(artifacts.status,'consistent',JSON.stringify(artifacts));assert.equal(artifacts.publishedSites,1);assert.equal(artifacts.enabledApplications,1);assert.equal(artifacts.applicationDocuments,2);
+ assert.equal(admitted.keys.credentials,4);assert.equal(admitted.objects,5);
+ const artifacts=await phase('reconcileArtifacts',()=>reconcileArtifacts(target.DRILL_A,objects));
+ assert.equal(artifacts.status,'consistent',JSON.stringify(artifacts));assert.equal(artifacts.publishedSites,1);assert.equal(artifacts.publishedSitePhotos,2);assert.equal(artifacts.enabledApplications,1);assert.equal(artifacts.applicationDocuments,2);
  restoredRuntime=await workerd(restoredBuild);
  const after=await phase('restoredQuickJS',()=>reference(target.DRILL_A,restoredRuntime));
  assert.deepEqual(after,before,'Restored program, documents and runtime artifact reproduce the pre-disaster outputs');
@@ -147,6 +183,22 @@ try{
  // The candidate stays unchanged and unrouted: nothing in the drill wrote to it.
  assert.equal((await captureCMSDatabase(async sql=>(await target.DRILL_A.prepare(sql).all()).results,{maxRows:200000})).digest,capture.controlDigest);
  assert.ok(!JSON.stringify([admitted,artifacts,loss]).includes(canary)&&!JSON.stringify([admitted,artifacts,loss]).includes(owner.account));
+ // The restored bytes of all four Workers are accepted by the release tooling's own
+ // archived no-bundle path (local Wrangler dry run) and reproduce every module byte-for-byte.
+ // This is not a deployment, a workerd execution or an HTTP serving test of those bundles.
+ await phase('replayRestoredBundles',async()=>{
+  const config=join(restoredPayload,'config');await mkdir(config,{recursive:true});
+  for(const role of workerOrder)await writeFile(join(config,role+'.json'),JSON.stringify(archivedConfig(role,configs[role],entries[role],[])));
+  const pinned=await fileInventory(restoredPayload);
+  for(const role of workerOrder){
+   const out=join(directory,'replay',role);
+   await runWrangler(['deploy','--config',join(config,role+'.json'),'--no-bundle','--dry-run','--outdir',out],join(directory,role+'-replay.log'),{env:buildEnv});
+   const replayed=await fileInventory(out),modules=buildInventories[role].filter(f=>/\.(?:js|wasm)$/.test(f.path));
+   assert.ok(modules.length>0);
+   for(const file of modules)assert.equal(replayed.find(f=>f.path===file.path)?.sha256,file.sha256,'Replayed module differs: '+role+'/'+file.path);
+  }
+  assert.deepEqual(await fileInventory(restoredPayload),pinned,'Wrangler left the restored payload unchanged');
+ });
 
  // ---- Missing/corrupt keys, archives and artifacts fail visibly.
  const recoveryKey=stored.recoveryKeyFile,moved=recoveryKey+'.moved';
@@ -174,19 +226,68 @@ try{
  await target.OBJECTS_A.delete(objectKeys[0]);assert.equal((await restoreObjects(target.OBJECTS_A,pointA,pointDigestA)).written,1);
  await target.OBJECTS_A.put('unexpected/object','x');await drillHold(()=>restoreObjects(target.OBJECTS_A,pointA,pointDigestA),'restore-target-not-isolated');await target.OBJECTS_A.delete('unexpected/object');
  assert.equal((await inspect()).status,'verified','Retried object restore returns to the verified state');
+ // Unknown custom metadata cannot be preserved by the point, so capture refuses it instead of dropping it.
+ await drillHold(async()=>captureRecoveryPoint({sourceDb:db,directory:join(directory,'points','metadata'),snapshotId:'drill-metadata',objects:{get:async key=>{const o=await target.OBJECTS_A.get(key);return o&&{size:o.size,arrayBuffer:()=>o.arrayBuffer(),httpMetadata:o.httpMetadata,customMetadata:{...o.customMetadata,note:'unpreserved'}};}}}),'object-metadata');
  // A changed published artifact in a candidate copy (immutability triggers are
  // created after rows, so edit the archived cells): pointers and manifest refuse it.
  const {snapshot}=await verifyRecoveryPoint(pointA,pointDigestA);
+ const cell=v=>"CAST(X'"+Buffer.from(v).toString('hex').toUpperCase()+"' AS TEXT)";
  const tamperedCopy=async(changes)=>{
   const copy=structuredClone(snapshot);
-  for(const [table,column,value] of changes){const t=copy.tables.find(x=>x.name===table),i=t.columns.indexOf(column);for(const row of t.rows)row[i]=value;}
+  for(const [table,column,value,only] of changes){const t=copy.tables.find(x=>x.name===table),i=t.columns.indexOf(column);for(const row of t.rows)if(!only||only(row,t.columns))row[i]=value;}
   const sql=new DatabaseSync(':memory:');restoreCapturedCMSDatabase(sql,copy);return sql;
  };
  for(const [changes,expected] of [[[['site_versions','html',"'Tampered page'"]],['site-artifact-digest']],[[['site_versions','html',"'Tampered page'"],['backend_versions','digest',"'"+'0'.repeat(64)+"'"]],['app-program-digest','site-artifact-digest']]]){
   const sql=await tamperedCopy(changes);
   try{
-   const copy=sqliteD1Adapter(sql),report=await reconcileArtifacts(copy);assert.deepEqual(report.holds,expected);holds['tampered:'+expected.join('+')]=report.holds;
+   const copy=sqliteD1Adapter(sql),report=await reconcileArtifacts(copy,objects);assert.deepEqual(report.holds,expected);holds['tampered:'+expected.join('+')]=report.holds;
    holds.tamperedCandidate=(await inspect({db:copy})).holds;assert.deepEqual(holds.tamperedCandidate,['manifest-mismatch']);
+  }finally{sql.close();}
+ }
+
+ // ---- Published-site photos: the restored rows and restored bytes are checked against the
+ // rules the actual public host applies. Everything below uses throwaway copies (archived
+ // control rows in SQLite, restored bodies in a memory bucket), because the real host handler
+ // writes usage counters; the candidate itself is never served or changed.
+ const scratchSQL=new DatabaseSync(':memory:');restoreCapturedCMSDatabase(scratchSQL,snapshot);
+ const scratchDB=sqliteD1Adapter(scratchSQL),scratchBucket=memoryBucket();
+ try{
+  assert.equal((await restoreObjects(scratchBucket,pointA,pointDigestA)).written,5);
+  const serve=(path,method='GET',db=scratchDB)=>{const parts=path.split('/');return m.host.fetch(new Request('https://'+parts[2]+'.whumpo.site/'+parts.slice(3).join('/'),{method}),{DB:db,FILES:scratchBucket});};
+  const photoPath=`/s/${site}/assets/${gardenPhotos[0]}.jpg`;
+  const page=await serve(`/s/${site}/`);assert.equal(page.status,200);assert.equal(await page.text(),publishedHTML,'Restored rows publish the exact version HTML');
+  for(const [index,photo] of gardenPhotos.entries()){
+   const response=await serve(`/s/${site}/assets/${photo}.jpg`);assert.equal(response.status,200);
+   const bytes=new Uint8Array(await response.arrayBuffer());assert.deepEqual(bytes,syntheticJPEG(index+1),'Restored bytes are the exact uploaded photo');assert.equal(hash(bytes),publishedPhotos[index].digest);
+  }
+  assert.equal((await serve(`/s/${site}/assets/${strayPhoto}.jpg`)).status,404,'A photo outside the published version is not served');
+  assert.equal((await serve(`/s/${neighbour.project}/assets/${gardenPhotos[0]}.jpg`)).status,404,'A photo cannot be served through another project');
+  const restoredReport=await reconcileArtifacts(scratchDB,scratchBucket);assert.deepEqual([restoredReport.status,restoredReport.publishedSitePhotos],['consistent',2]);
+  // Missing, altered and metadata-less bodies fail visibly in both the reconciliation and the serving path.
+  const goodBody=Buffer.from(syntheticJPEG(1)),stored=scratchBucket.objects.get(publishedPhotos[0].object_key);
+  const variant=async(label,put,code,status)=>{
+   await scratchBucket.delete(publishedPhotos[0].object_key);if(put)await scratchBucket.put(publishedPhotos[0].object_key,...put);
+   holds['photo:'+label]=(await reconcileArtifacts(scratchDB,scratchBucket)).holds;assert.deepEqual(holds['photo:'+label],code?[code]:[],label);
+   assert.equal((await serve(photoPath)).status,status,label);
+  };
+  const flipped=Buffer.from(goodBody);flipped[flipped.length-4]^=1;
+  await variant('missing-body',null,'site-photo-bytes',503);
+  await variant('altered-body',[flipped,{httpMetadata:stored.httpMetadata,customMetadata:stored.customMetadata}],'site-photo-bytes',503);
+  await variant('metadata-lost',[goodBody,{}],'site-photo-metadata',503);
+  await variant('restored-exactly',[goodBody,{httpMetadata:stored.httpMetadata,customMetadata:stored.customMetadata}],undefined,200);
+ }catch(error){scratchSQL.close();throw error;}
+ scratchSQL.close();
+ // Archived-row edits: the wrong project's photo, an unapproved receipt and a changed digest.
+ const photoTamper=[
+  ['wrong-project',[['version_photos','file_id',cell(strayPhoto),(row,columns)=>row[columns.indexOf('file_id')]===cell(gardenPhotos[1])]],['site-photo-project']],
+  ['unapproved',[['project_photo_safety','state',"'pending'",(row,columns)=>row[columns.indexOf('file_id')]===cell(gardenPhotos[0])]],['site-photo-safety']],
+  ['changed-digest',[['project_files','digest',"'"+'0'.repeat(64)+"'",(row,columns)=>row[columns.indexOf('id')]===cell(gardenPhotos[1])]],['site-photo-bytes','site-photo-safety']],
+ ];
+ for(const [label,changes,expected] of photoTamper){
+  const sql=await tamperedCopy(changes);
+  try{
+   const copy=sqliteD1Adapter(sql),report=await reconcileArtifacts(copy,objects);holds['photo:'+label]=report.holds;assert.deepEqual(report.holds,expected,label);
+   if(label==='wrong-project'){holds.tamperedPhotoCandidate=(await inspect({db:copy})).holds;assert.deepEqual(holds.tamperedPhotoCandidate,['manifest-mismatch']);}
   }finally{sql.close();}
  }
 
@@ -235,7 +336,7 @@ try{
  assert.equal(executions,executed,'Admission and reconciliation dispatched no runtime work');
 
  const summary={suite:'WH-008 isolated local disaster-recovery drill',node:process.versions.node,
-  inventory:{controlRows:capture.controlRows,controlBytes:capture.controlBytes,restoreStatements:control.statements,objects:capture.objects,objectBytes:capture.objectBytes,runtimeFiles:worker.files,credentials:admitted.keys.credentials,keyIds:admitted.keys.keyIds.length,tables:admitted.tables,artifacts:{publishedSites:artifacts.publishedSites,publishedBackends:artifacts.publishedBackends,applications:artifacts.applications,applicationDocuments:artifacts.applicationDocuments}},
+  inventory:{controlRows:capture.controlRows,controlBytes:capture.controlBytes,restoreStatements:control.statements,objects:capture.objects,objectBytes:capture.objectBytes,runtimeFiles:worker.files,workerArtifacts:Object.fromEntries(Object.entries(restoredWorkers).map(([role,r])=>[role,r.files])),publishedSitePhotos:artifacts.publishedSitePhotos,credentials:admitted.keys.credentials,keyIds:admitted.keys.keyIds.length,tables:admitted.tables,artifacts:{publishedSites:artifacts.publishedSites,publishedBackends:artifacts.publishedBackends,applications:artifacts.applications,applicationDocuments:artifacts.applicationDocuments}},
   measured:{phasesMs:phases,restoreToVerifiedMs:rto,lossSinceSnapshot:{...loss.tables.lostSinceSnapshot,objects:1},pointAgeAtDisasterMs:disasterAt-capture.capturedAt},
   holds,afterRevocationTables:gaps.tables,drillRefusals:refusals,independentEvidenceRetries:independentEvidenceRetries.length,afterRevocationCounts:gaps.counts,servingAllowed:false,providerDispatchAllowed:false,retirementAllowed:false,remoteAccess:false};
  console.log(JSON.stringify(summary,null,1));
