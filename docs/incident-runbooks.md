@@ -312,7 +312,7 @@ Authoritative contract: [releases](releases.md#recovery-decisions). Summary of r
 
 [D1 Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/) is a documented provider capability (up to 30 days on Workers Paid per the October 2 reading). Whumpo has not demonstrated a restore, and it does not include Worker secrets, private R2 bodies or independent deletion suppressions (G10). Do not restore over a live database or assume an old backup is current authority: an admitted restore must reconcile epochs, withdrawn publications, deletion records, uncertain provider results and key IDs **before** serving or dispatch. The isolated verifier (`tools/restore-admission.mjs`) never grants serving or dispatch. Preserve the incident record and escalate to the owner; use the [restore admission contract](restore-admission.md) rather than improvising.
 
-A synthetic isolated local drill of this outline (control D1, private objects, Worker artifacts, QuickJS app data) is recorded in [disaster recovery](disaster-recovery.md). It proves local fencing and visible failures only; cloud restore, independent custody and WH-019 reconciliation remain open.
+A synthetic isolated local drill of this outline (control D1, private objects, Worker artifacts, QuickJS app data, and the restored Workers executed in loopback-only workerd) is recorded in [disaster recovery](disaster-recovery.md). It proves local fencing and visible failures only; cloud restore, independent custody and WH-019 reconciliation remain open.
 
 ## 13. Recovery and return to normal
 

@@ -114,6 +114,23 @@ try{
  assert.deepEqual(Object.values(counts),[1,1,1,1,1]);
  assert.deepEqual(live.workers.platform.databases,[{binding:'DB',id:databaseId}]);
  await applyRelease(initialized.directory,driver);assert.deepEqual(Object.values(counts),[1,1,1,1,1]);
+ // WH-008: an owner cutover interrupted after any Worker step. The new database is initialized exactly once; the platform
+ // Worker (the last step) keeps selecting the baseline database, and `observe` reads the active platform's database as authority,
+ // until it is deployed. Resume settles the interrupted step and never re-initializes or redeploys a confirmed one.
+ for(const role of workerOrder){
+  resetToEmpty();const release=await prepare();failAfter=role;
+  await assert.rejects(()=>applyRelease(release.directory,driver),new RegExp('stopped at '+role));
+  const interrupted=await readJSON(join(release.directory,'journal.json'));
+  assert.deepEqual([interrupted.status,interrupted.steps.schema.status,interrupted.steps[role].status,interrupted.steps[role].operationConfirmed],['needs-reconciliation','confirmed','unknown',true]);
+  assert.deepEqual(live.schema,artifact.expected,'The target is initialized before any Worker moves');assert.equal(counts.schema,1);
+  const bound=name=>live.workers[name].databases[0]?.id;
+  assert.equal(bound('platform'),role==='platform'?databaseId:previousDatabaseId,'The platform keeps the baseline database as authority until its own step');
+  const reached=workerOrder.indexOf(role);
+  for(const [index,name] of workerOrder.entries())if(name!=='runtime')assert.equal(bound(name),index<=reached?databaseId:previousDatabaseId,name+' database binding during the interruption');
+  assert.equal((await applyRelease(release.directory,driver)).status,'deployed');
+  assert.deepEqual(Object.values(counts),[1,1,1,1,1],'Resume neither re-initializes nor redeploys a confirmed step');
+  for(const name of workerOrder)if(name!=='runtime')assert.equal(bound(name),databaseId);
+ }
  resetToEmpty();live.workers.sites.databases=[{binding:'DB',id:databaseId}];await assert.rejects(()=>prepare(),/not bound to an active Worker/);assert.equal(mutations,0);
  resetToEmpty();live.cms=[cmsFixture];await assert.rejects(()=>prepare(),/retirement review/);assert.equal(mutations,0);
  resetToEmpty();live.schema=artifact.expected;review=normalReview;await assert.rejects(()=>prepare(),/replacement must start/);assert.equal(mutations,0);

@@ -18,6 +18,7 @@ import {memoryBucket,isolatedTargets,seedCredentials} from './helpers/recovery-d
 import {createRestoreInventory,openRestoreInventory} from '../tools/restore-inventory.mjs';
 import {inspectIsolatedRestore} from '../tools/restore-admission.mjs';
 import {restoreCapturedCMSDatabase,captureCMSDatabase} from '../tools/cms-database-snapshot.mjs';
+import {currentSchemaArtifact,currentSchemaPlan,inspectSchema} from '../tools/current-schema.mjs';
 import {captureRecoveryPoint,verifyRecoveryPoint,openArchivedControl,restoreControlD1,restoreDiscrepancies,isolatedObjects,DrillHold} from '../tools/recovery-drill.mjs';
 
 Error.stackTraceLimit=0;
@@ -93,7 +94,8 @@ try{
  assert.deepEqual(await target.DRILL_C.prepare('SELECT r.state,r.target_key,p.active_key,p.revision FROM connection_key_rotations r,connection_key_policy p').first(),{state:'running',target_key:'drill-next',active_key:'drill-next',revision:2});
  holds.midRotation=(await admit(target.DRILL_C,m1b,backup.b,{once:true})).holds;assert.deepEqual(holds.midRotation,['independent-evidence']);
  // The current-record snapshot itself is refused while a rotation is unsettled, so even the loss report is unavailable.
- holds.midRotationReport=await restoreDiscrepancies(target.DRILL_C,db);assert.deepEqual([holds.midRotationReport.sourceAvailable,holds.midRotationReport.reconciliation],[false,'unavailable-without-current-source']);
+ // The source is present and readable; it is the unsettled rotation that blocks comparison, which must not read as a lost source.
+ holds.midRotationReport=await restoreDiscrepancies(target.DRILL_C,db);assert.deepEqual(holds.midRotationReport,{servingAllowed:false,providerDispatchAllowed:false,retirementAllowed:false,sourceAvailable:true,reconciliation:'held-current-source-unsettled',sourceHold:'key-rotation-unsettled'});
 
  // ---- Deterministic local recovery with the existing authority: finish the rotation
  // after a lost acknowledgement. The same batch ID reads back the same receipt.
@@ -134,6 +136,15 @@ try{
  const p2=await phase('capturePoint2',()=>point('p2')),m2=await register(p2,backup.b);
  assert.deepEqual(m2.keyIds,['drill-next'],'A completed rotation needs only the active key for this archive');
  const restoreD=await phase('restoreCompletedRotationD1',()=>restoreControlD1(target.DRILL_D,p2.dir,p2.pointDigest));assert.equal(restoreD.digest,p2.controlDigest);
+ // The release tooling classifies a database by its observed schema only. A restored, populated control database is exactly
+ // the current schema, so the release contract treats it as `none` (an already-current database, never an initializable
+ // one), and a distinct empty database as `initialize`. The contract has no state in which a populated restored database
+ // becomes the Workers' control database: that is the recorded cutover gap, not something this drill performs.
+ const schemaArtifact=await currentSchemaArtifact(),emptyTarget=new DatabaseSync(':memory:');
+ try{
+  assert.equal(currentSchemaPlan(schemaArtifact,await inspectSchema(target.DRILL_D)).mode,'none','The restored database is exactly the current schema');
+  assert.equal(currentSchemaPlan(schemaArtifact,await inspectSchema(sqliteD1Adapter(emptyTarget))).mode,'initialize','An empty database is the only initialization target');
+ }finally{emptyTarget.close();}
  const admitted=await phase('admitCompletedRotation',()=>admit(target.DRILL_D,m2,backup.b));
  assert.equal(admitted.status,'verified',JSON.stringify(admitted));assert.deepEqual([admitted.keys.keyIds,admitted.keys.credentials],[['drill-next','fixture-current'],2]);
  assert.deepEqual([admitted.servingAllowed,admitted.providerDispatchAllowed,admitted.retirementAllowed],[false,false,false]);
@@ -169,12 +180,25 @@ try{
  assert.equal((await rotation.connectionKeyRetirementStatus(db,'drill-next')).unsettledExchanges,1);
  const p3=await point('p3'),m3=await register(p3,backup.b),c3=await archivedCandidate(p3);
  holds.unresolvedExchangeSource=(await admit(c3,m3,backup.b,{once:true})).holds;assert.deepEqual(holds.unresolvedExchangeSource,['independent-evidence'],'The source refuses evidence while the exchange is unresolved');
+ // The same real block, seen by the loss report: the source exists and is readable, but its unresolved exchange holds the comparison.
+ holds.unresolvedExchangeReport=await restoreDiscrepancies(c3,db);assert.deepEqual([holds.unresolvedExchangeReport.sourceAvailable,holds.unresolvedExchangeReport.reconciliation,holds.unresolvedExchangeReport.sourceHold,'counts' in holds.unresolvedExchangeReport],[true,'held-current-source-unsettled','uncertain-effect',false]);
+ assert.ok(!JSON.stringify(holds.unresolvedExchangeReport).includes(exchange)&&!JSON.stringify(holds.unresolvedExchangeReport).includes(owner.account),'The hold report names no identifier');
  await db.prepare("INSERT INTO connection_oauth_outcomes(id,user_id,provider,client_id,state_hash,key_id,revision,state,reason,http_status,dispatched_at) SELECT token_id,user_id,provider,client_id,state_hash,key_id,revision,'rejected','bad_verification_code',200,created_at FROM connection_oauth_exchanges WHERE token_id=?").bind(exchange).run();
  await db.prepare('DELETE FROM connection_oauth_exchanges WHERE token_id=?').bind(exchange).run();
  await inventory.observe({operationId:'drill-exchange-terminal',selection:{kind:'external-effect',store:'connection_oauth_exchanges',effectId:exchange}});
  holds.unresolvedExchangeCandidate=(await retryIndependentEvidence(()=>admit(c3,m3,backup.b,{once:true}))).holds;
  assert.ok(['suppressed-record','stale-authority','uncertain-effect'].includes(holds.unresolvedExchangeCandidate[0]),JSON.stringify(holds.unresolvedExchangeCandidate));
  assert.ok(await c3.prepare('SELECT token_id FROM connection_oauth_exchanges WHERE token_id=?').bind(exchange).first(),'The recovered exchange row is kept visible, not erased');
+
+ // ---- A source that exists but is not the current schema is held as invalid; one that cannot be read at all is unavailable.
+ const foreign=new DatabaseSync(':memory:');
+ try{
+  holds.foreignSourceReport=await restoreDiscrepancies(c3,sqliteD1Adapter(foreign));
+  assert.deepEqual([holds.foreignSourceReport.sourceAvailable,holds.foreignSourceReport.reconciliation,holds.foreignSourceReport.sourceHold],[true,'held-current-source-invalid','current-schema']);
+ }finally{foreign.close();}
+ const unreachable={prepare(){throw Error('source lost');},batch(){throw Error('source lost');}};
+ holds.lostSourceReport=await restoreDiscrepancies(c3,unreachable);
+ assert.deepEqual([holds.lostSourceReport.sourceAvailable,holds.lostSourceReport.reconciliation,'sourceHold' in holds.lostSourceReport],[false,'unavailable-without-current-source',false]);
 
  // ---- Database cutover: a new empty current database with initialized key policy replaces the
  // old control database. It is not a restore target, and the old generation's authority is not
