@@ -54,13 +54,13 @@
    "id": "B2",
    "severity": "low",
    "title": "Incident runbook C10 says owner withdrawal/disconnect controls need recent authentication; the code accepts an old passkey proof",
-   "status": "reproduced (executed for site unpublish; structural for the rest)",
-   "owner": "Owner decision: require recent authentication in code (src change) or correct docs/incident-runbooks.md C10",
-   "reproduction": "node tests/boundary-recent-auth.mjs (expected to exit 1 until resolved)",
+   "status": "resolved October 8, 2026 by correcting the runbook (executed characterization for site unpublish; structural for the rest)",
+   "owner": "Owner decision, October 8, 2026: correct docs/incident-runbooks.md C10; no code change",
+   "reproduction": "node tests/boundary-recent-auth.mjs (characterization, exit 0)",
    "evidence": [
     {
      "file": "docs/incident-runbooks.md",
-     "contains": "each needs the existing review, recent authentication and rate limits"
+     "contains": "each needs the existing review and a current session"
     },
     {
      "file": "src/chat-controls.ts",
@@ -76,7 +76,7 @@
     },
     {
      "file": "tests/boundary-recent-auth.mjs",
-     "contains": "B2 reproduced"
+     "contains": "B2 characterized"
     }
    ]
   },
