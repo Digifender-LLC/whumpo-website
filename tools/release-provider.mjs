@@ -43,6 +43,12 @@ export async function releaseProvider(root=process.cwd(),{api:providedApi}={}){
  const base=configs.platform,api=providedApi??cloudflareClient(base.account_id),db=remoteD1(api,base.d1_databases.find(b=>b.binding==='DB').database_id);
  return {
   configs,
+  // Account scope and database access for read-only recovery source authority
+  // (tools/recovery-authority.mjs). Both come from this provider's own client, so
+  // an observation and the database opened from it cannot disagree about the account.
+  accountId:base.account_id,
+  apiOrigin:providedApi?'injected-client':'account-client',
+  openDatabase:databaseId=>remoteD1(api,databaseId),
   withLock:(manifest,work)=>withPlatformLock(remoteD1(api,manifest.before.workers.platform.databases.find(d=>d.binding==='DB').id),work),
   async verifyToolchain(manifest,directory){
    if(Number(process.versions.node.split('.')[0])!==24||JSON.parse(await readFile(join(root,'node_modules/wrangler/package.json'),'utf8')).version!==manifest.toolchain.wrangler)throw Error('Restore the pinned Node/Wrangler toolchain before applying this release');

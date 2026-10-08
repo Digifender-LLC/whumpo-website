@@ -6,6 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {pathCheck,readPrivate,writePrivate} from './operator-private-files.mjs';
 import {captureRestoreArchive,captureRestoreRecordSnapshot,restoreRecordIdentity,captureRestoreConstraint,restoreManifestDigest} from './restore-admission.mjs';
 import {withRecoveredConnectionKeys} from './connection-key-backup.mjs';
+import {isRecoveryAuthority,recoveryAuthorityDatabase,reobserveRecoveryAuthority} from './recovery-authority.mjs';
 
 // A separate operator authority, not a table in the recovered application DB.
 // No network listener, provider adapter, service activation or key retirement.
@@ -52,7 +53,7 @@ function metadata(db,streamId){
 function status(state,streamId){return {version:2,scope:'operator-restore-inventory',streamId,archives:state.archives.length,permitted:state.archives.length-state.withdrawn.size,withdrawn:state.withdrawn.size,currentSequence:state.events.length,servingAllowed:false,providerDispatchAllowed:false,retirementAllowed:false,independentCustodyAccepted:false};}
 // Source reads are read-only and may ignore cancellation. Bound each request's
 // observations so a stalled adapter cannot leave the serialized handle wedged.
-async function observeSource(sourceDb,signal,deadline){
+async function bounded(operation,signal,deadline){
  if(signal.aborted||Date.now()>=deadline)throw denied();
  let timer,cancel;
  try{
@@ -62,10 +63,14 @@ async function observeSource(sourceDb,signal,deadline){
     timer=setTimeout(cancel,Math.max(1,deadline-Date.now()));
     if(signal.aborted)cancel();
    }),
-   captureRestoreRecordSnapshot(sourceDb),
+   operation(),
   ]);
  }finally{clearTimeout(timer);signal.removeEventListener('abort',cancel);}
 }
+const observeSource=(authority,signal,deadline)=>bounded(()=>captureRestoreRecordSnapshot(recoveryAuthorityDatabase(authority)),signal,deadline);
+// The source authority (platform-bound database, one binding for apps, sites and
+// platform, current schema) is observed again around every source read.
+const recheck=(authority,signal,deadline)=>bounded(()=>reobserveRecoveryAuthority(authority),signal,deadline);
 async function fileCheck(file){
  await pathCheck(file,{external:true,parent:true});await readPrivate(file,limit.bytes);
  const stat=await lstat(file);if(!file.endsWith('.whumpo-restore-inventory'))throw denied();return {dev:stat.dev,ino:stat.ino};
@@ -82,29 +87,32 @@ export async function createRestoreInventory({inventoryFile,streamId}){
  }catch{throw denied();}finally{db?.close();}
 }
 
-/** sourceDb is a trusted operator-selected CURRENT database capability. It is
- * never taken from a restore request. Omit it for read-only status only.
- * Local file custody does not prove offsite storage or provider freshness. */
-export async function openRestoreInventory({inventoryFile,expectedStreamId,sourceDb}){
+/** authority is the recovery source authority (tools/recovery-authority.mjs): the
+ * platform-bound CURRENT database, observed through the release provider. It is
+ * never taken from a restore request, and a raw database adapter is refused. Omit
+ * it for read-only status only. The inventory stream is not itself bound to one
+ * database: use a distinct stream per authority database. Local file custody does
+ * not prove offsite storage or provider freshness. */
+export async function openRestoreInventory({inventoryFile,expectedStreamId,authority,...unknown}){
  let db;
  try{
-  if(!id(expectedStreamId))throw denied();const identity=await fileCheck(inventoryFile);
-  db=new DatabaseSync(inventoryFile,{readOnly:!sourceDb});
-  if(sourceDb)configure(db);else db.exec('PRAGMA foreign_keys=ON; PRAGMA trusted_schema=OFF; PRAGMA query_only=ON; PRAGMA busy_timeout=1000;');
+  if(!id(expectedStreamId)||Object.keys(unknown).length||authority!==undefined&&!isRecoveryAuthority(authority))throw denied();const identity=await fileCheck(inventoryFile);
+  db=new DatabaseSync(inventoryFile,{readOnly:!authority});
+  if(authority)configure(db);else db.exec('PRAGMA foreign_keys=ON; PRAGMA trusted_schema=OFF; PRAGMA query_only=ON; PRAGMA busy_timeout=1000;');
   metadata(db,expectedStreamId);let closed=false,queue=Promise.resolve();
   const check=async()=>{if(closed||!same(identity,await fileCheck(inventoryFile)))throw denied();return metadata(db,expectedStreamId);};
   // Keep a handle's async observations ordered. Across processes, BEGIN IMMEDIATE
   // plus revision readback rejects an observation captured across a changed head.
   const serial=operation=>{const result=queue.then(operation).catch(()=>{throw denied();});queue=result.catch(()=>{});return result;};
   const transact=(before,write)=>{
-   if(!sourceDb)throw denied();db.exec('BEGIN IMMEDIATE');
+   if(!authority)throw denied();db.exec('BEGIN IMMEDIATE');
    try{const current=metadata(db,expectedStreamId);if(!same(before.revision,current.revision))throw denied();const result=write(current);db.exec('COMMIT');return result;}
    catch(error){db.exec('ROLLBACK');throw error;}
   };
   const api={
    inspect:()=>serial(async()=>status(await check(),expectedStreamId)),
    registerArchive:({archiveDb,snapshotId,keyBackup})=>serial(async()=>{
-    if(!sourceDb||archiveDb===sourceDb||!archiveDb||!id(snapshotId))throw denied();
+    if(!authority||archiveDb===recoveryAuthorityDatabase(authority)||!archiveDb||!id(snapshotId))throw denied();
     const before=await check();if(before.withdrawn.has(snapshotId))throw denied();
     const existing=before.archives.find(r=>r.snapshot_id===snapshotId);
     const {manifest,records}=await captureRestoreArchive(archiveDb,{snapshotId,streamId:expectedStreamId,sequence:existing?.sequence??before.events.length});
@@ -129,10 +137,11 @@ export async function openRestoreInventory({inventoryFile,expectedStreamId,sourc
     // Copy before joining the async queue; no later caller mutation of selectors.
     let selected;try{selected=structuredClone(selection);}catch{return Promise.reject(denied());}
     return serial(async()=>{
-     if(!sourceDb||!id(operationId))throw denied();const before=await check();
+     if(!authority||!id(operationId))throw denied();const before=await check();
      const prior=before.events.find(e=>e.operation_id===operationId);
      if(prior){if(!same(prior.selection,selected))throw denied();return {operationId,sequence:prior.sequence,kind:prior.kind,recorded:true};}
-     const observed=await captureRestoreConstraint(sourceDb,selected);
+     await reobserveRecoveryAuthority(authority);
+     const observed=await captureRestoreConstraint(recoveryAuthorityDatabase(authority),selected);await reobserveRecoveryAuthority(authority);
      // Epoch observations advance. Replays use the original operation ID;
      // another same-epoch observation must not append an invalid duplicate.
      if(observed.kind==='identity-epoch'){
@@ -167,9 +176,15 @@ export async function openRestoreInventory({inventoryFile,expectedStreamId,sourc
     // A fresh challenge is not fresh source evidence. Derive ALL changed or
     // absent registered record identities from the configured current source.
     // Offline inventory handles can inspect metadata but cannot certify it.
-    if(!sourceDb)throw denied();
+    if(!authority)throw denied();
     const issuedAt=Date.now(),deadline=issuedAt+10000;
-    const source=await observeSource(sourceDb,request.signal,deadline);
+    // Every evidence request re-proves the source authority inside the same ten
+    // second deadline, before the first read and before anything is committed. A
+    // permanent absence is never derived from a database that is no longer the one
+    // bound to the platform.
+    await recheck(authority,request.signal,deadline);
+    const source=await observeSource(authority,request.signal,deadline);
+    await recheck(authority,request.signal,deadline);
     if(!same(source.schema,archive.manifest.schema)||request.signal.aborted)throw denied();
     const current=new Map(source.records.map(r=>[restoreRecordIdentity(r),r]));
     const watched=new Map(archive.records.map(r=>[restoreRecordIdentity(r),r]));
@@ -194,7 +209,8 @@ export async function openRestoreInventory({inventoryFile,expectedStreamId,sourc
     if(additions.length)transact(state,()=>{for(const e of additions)db.prepare('INSERT INTO event VALUES(?,?,?,?,?)').run(e.sequence,e.operation_id,text(e.selection),e.kind,text(e.data));});
     const refreshed=await check();
     if(!same(refreshed.revision,[state.revision[0],state.revision[1],events.length]))throw denied();
-    const verified=await observeSource(sourceDb,request.signal,deadline);
+    const verified=await observeSource(authority,request.signal,deadline);
+    await recheck(authority,request.signal,deadline);
     if(!same(source,verified)||request.signal.aborted||Date.now()-issuedAt>=10000)throw denied();
     const final=await check();if(!same(refreshed.revision,final.revision))throw denied();state=final;
     const body={version:2,streamId:expectedStreamId,snapshotId:input.snapshotId,manifestDigest:archive.manifest_digest,challenge:input.challenge,archiveState:'permitted',capturedSequence:archive.sequence,baseSequence:0,currentSequence:state.events.length,issuedAt,expiresAt:issuedAt+10000,events:state.events.map(({sequence,kind,data})=>({sequence,kind,data})),keyBackup:archive.key_backup};
