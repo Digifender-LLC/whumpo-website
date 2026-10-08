@@ -10,6 +10,7 @@ import {describeConnections} from './connection-chat';
 import {githubGrantChatControl,githubGrantChatActions} from './github-grant-chat';
 import {guestPreviewChatCommand} from './guest-previews/bindings';
 import {GuestPreviewError} from './guest-previews/policy';
+import {guestPreviewTurnFailure} from './guest-previews/owner';
 import {appMaintenanceRequest,listAppMaintenance,describeAppMaintenance} from './app-maintenance-list';
 import {appMaintenanceChatActions} from './app-maintenance-chat-actions';
 import {appRecoveryChatActions} from './app-recovery-chat-actions';
@@ -201,7 +202,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const backend=backendChatCommand(db,userId,input.id,content,dnsOptions?.backendRuntime);
   const cms=dnsOptions?.cmsPublication?.(input.id,content)??cmsContentCommand(content,input.id,dnsOptions?.cmsContent)??cmsChatCommand(db,userId,input.id,content,dnsOptions?.cms);
   let guestPreview:Awaited<ReturnType<typeof guestPreviewChatCommand>>;
-  if(control?.action.type==='guestPreview'){try{guestPreview=await guestPreviewChatCommand(db,userId,content);}catch(e){if(e instanceof GuestPreviewError)return {status:e.status,error:e.message};throw e;}}
+  if(control?.action.type==='guestPreview'){try{guestPreview=await guestPreviewChatCommand(db,userId,input.id,content);}catch(e){if(e instanceof GuestPreviewError)return {status:e.status,error:e.message};throw e;}}
   const githubGrant=control?.action.type==='githubGrant'?githubGrantChatControl(db,userId,command,dnsOptions):undefined;
   const external=githubGrant??cms??backend??hosting??dns??backup??health;
   const comparison=await diffCommand(db,userId,input.id,command);
@@ -324,6 +325,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   ];
   if(usageReviewReply)statements.push(...usageReviewReply.statements);
   if(comparison)statements.push(...comparison.statements);
+  if(guestPreview)statements.push(...guestPreview.statements);
   if(directory)statements.push(...directory.statements);
   if(contact)statements.push(...contact.statements);
   if(versionRemoval)statements.push(...versionRemoval.statements);
@@ -353,6 +355,12 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
       const recovered=await db.prepare('SELECT user_text,action_json,revision FROM chat_turns WHERE id=? AND user_id=?').bind(input.id,userId).first<{user_text:string;action_json:string|null;revision:number}>();
       if(matches(recovered))return {status:200};
       return {status:String(cause).includes('specification_held')?423:409,error:String(cause).includes('version_removal_specification')?'This version is retained by the current website configuration or a pending review.':String(cause).includes('specification_quota')?'Website review history has reached its test capacity.':'The website or its review changed, expired or is held for safety checks. Ask for a fresh review.'};
+    }
+    if(control?.action.type==='guestPreview'){
+      const recovered=await db.prepare('SELECT user_text,action_json,revision FROM chat_turns WHERE id=? AND user_id=?').bind(input.id,userId).first<{user_text:string;action_json:string|null;revision:number}>();
+      if(matches(recovered))return {status:200};
+      const refused=guestPreviewTurnFailure(cause);
+      if(refused)return {status:refused.status,error:refused.message};
     }
     const moduleFailure=moduleActivationFailure(cause)??accessRoleFailure(cause);
     if(moduleFailure){

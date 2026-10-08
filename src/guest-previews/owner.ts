@@ -101,6 +101,19 @@ export async function deleteGuestPreview(db:D1Database,userId:string,linkId:stri
  catch(error){throw failure(error)??error;}
  return {version:1 as const,deleted:true};
 }
+/** Chat-control form of revoke and delete (WH-004 B3). It validates exact ownership with a read, then returns the
+ * effect as a statement guarded by the saved Chat turn, so Chat appends it to the revision-checked turn batch. A
+ * request refused for a stale revision therefore changes nothing, and a replayed request ID never reaches here
+ * (Chat answers it from the saved turn). A held-feedback refusal aborts the whole batch, turn included. */
+export async function guestPreviewTurnStatements(db:D1Database,userId:string,turnId:string,operation:'revoke'|'delete',linkId:string){
+ await ownedLink(db,userId,linkId);
+ const saved='EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)';
+ return operation==='revoke'
+  ?[db.prepare(`UPDATE guest_preview_links SET revoked_at=unixepoch() WHERE id=? AND owner_user_id=? AND revoked_at IS NULL AND ${saved}`).bind(linkId,userId,turnId,userId)]
+  :[db.prepare(`DELETE FROM guest_preview_links WHERE id=? AND owner_user_id=? AND ${saved}`).bind(linkId,userId,turnId,userId)];
+}
+/** Maps a batch failure of the delete statement above to the owner message HTTP gives, or null. */
+export const guestPreviewTurnFailure=(error:unknown)=>failure(error);
 export async function listGuestFeedback(db:D1Database,userId:string,linkId:string){
  const link=await ownedLink(db,userId,linkId);
  const {results}=await db.prepare(`SELECT f.id,f.link_id,f.display_name,f.body,f.created_at,f.resolved_at FROM guest_preview_feedback f JOIN guest_preview_links l ON l.id=f.link_id
