@@ -1,6 +1,7 @@
 import {publicClientKey,reservePublicClient,PublicClientLimitError} from './public-admission';
 import {activeContact,saveContact,ContactError} from './contacts';
 import {verifyTurnstile} from './turnstile';
+import {servingStopped} from './operator-serving';
 const esc=(s:string)=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
 const headers={'content-type':'text/html; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer','x-frame-options':'DENY','content-security-policy':"default-src 'none'; script-src https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; connect-src https://challenges.cloudflare.com; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"};
 function page(title:string,html:string,status=200){return new Response(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} · Whumpo</title><style>*{box-sizing:border-box}body{margin:0;background:#f8fafc;color:#0f2d5b;font:17px/1.6 Arial,sans-serif}main{max-width:650px;margin:5vh auto;padding:32px}h1{font:44px/1.15 Georgia,serif;overflow-wrap:anywhere}label{display:block;margin:22px 0 6px}input,textarea{width:100%;padding:12px;border:1px solid #86a4a8;border-radius:8px;font:inherit}textarea{min-height:180px}button{padding:12px 24px;background:#0f2d5b;color:white;border:0;border-radius:8px;font:inherit;margin:22px 0}a{color:inherit}.note{font-size:14px}small{letter-spacing:.1em}</style></head><body><main><small>WHUMPO CONTACT</small><h1>${esc(title)}</h1>${html}</main></body></html>`,{status,headers});}
@@ -24,7 +25,7 @@ export async function contactPage(request:Request,env:Env,projectId:string,fetch
   if(!(await env.API_LIMITER.limit({key:'contact:'+ip})).success)throw new ContactError(429,'Too many requests. Please try again later.');
   const local=String(env.ENVIRONMENT)==='local';
   if(!local&&(!env.TURNSTILE_SECRET||!env.TURNSTILE_SITE_KEY))throw new ContactError(503,'Contact forms are temporarily unavailable.');
-  const target=await activeContact(env.DB,projectId);if(!target)throw new ContactError(404,'This contact form is unavailable.');
+  const target=await activeContact(env.DB,projectId);if(!target||await servingStopped(env.DB,projectId))throw new ContactError(404,'This contact form is unavailable.');
   if(request.method==='POST'){
    stage='form-read';
    const form=await readForm(request),revision=Number(form.get('revision'));

@@ -677,26 +677,66 @@ CREATE TABLE storage_project_usage (
 -- Operator containment (WH-050 F7, runbook G3; tools/operator-containment.mjs). One row per action and public scope:
 -- a freeze (allowance NULL) or a temporary per-project allowance (project subjects only), enforced inside the public
 -- admission triggers. The `build` scope (WH-074) is freeze-only: it refuses new build jobs and cancels running or
--- succeeded-but-unpublished ones in the frozen scope. Rows are the audit: append-only except one lift, always expiring within 30 days, and they never
--- delete or change customer data. No foreign key, so closure is neither blocked nor erases the record.
+-- succeeded-but-unpublished ones in the frozen scope. The `serving` scope (owner decision October 8, 2026) is a separate,
+-- project-only serving stop: its own action, never combined with another scope. Rows are the audit: append-only except
+-- one explicit resolution, always expiring within 30 days, and they never delete or change customer data. Resolution is
+-- 'lifted' (ended while still active) or 'closed' (recorded after expiry); expiry alone is not resolution. Resolved rows
+-- may be deleted 90 days after resolution (owner decision October 8, 2026), never while unresolved or inside a safety hold.
+-- No foreign key, so closure is neither blocked nor erases the record.
 CREATE TABLE operator_containments (
  id TEXT NOT NULL CHECK(length(id)=36),
- scope TEXT NOT NULL CHECK(scope IN ('backend','transition','contact','photo','build')),
+ scope TEXT NOT NULL CHECK(scope IN ('backend','transition','contact','photo','build','serving')),
  subject_kind TEXT NOT NULL CHECK(subject_kind IN ('account','project')),
  subject_id TEXT NOT NULL CHECK(length(subject_id)=36),
- allowance INTEGER CHECK(allowance IS NULL OR (scope<>'build' AND allowance>=0 AND allowance<=CASE scope WHEN 'backend' THEN 500 WHEN 'transition' THEN 500 WHEN 'contact' THEN 100 ELSE 50000 END)),
+ allowance INTEGER CHECK(allowance IS NULL OR (scope NOT IN ('build','serving') AND allowance>=0 AND allowance<=CASE scope WHEN 'backend' THEN 500 WHEN 'transition' THEN 500 WHEN 'contact' THEN 100 ELSE 50000 END)),
  operator_ref TEXT NOT NULL CHECK(length(operator_ref) BETWEEN 1 AND 128 AND operator_ref NOT GLOB '*[^A-Za-z0-9_.:@-]*'),
  reason TEXT NOT NULL CHECK(length(reason) BETWEEN 1 AND 500),
  request_digest TEXT NOT NULL CHECK(length(request_digest)=64),
  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
  expires_at TEXT NOT NULL,
- lifted_at TEXT,
- lift_operator_ref TEXT CHECK(lift_operator_ref IS NULL OR (length(lift_operator_ref) BETWEEN 1 AND 128 AND lift_operator_ref NOT GLOB '*[^A-Za-z0-9_.:@-]*')),
- lift_reason TEXT CHECK(lift_reason IS NULL OR length(lift_reason) BETWEEN 1 AND 500),
- lift_digest TEXT CHECK(lift_digest IS NULL OR length(lift_digest)=64),
+ resolution TEXT CHECK(resolution IS NULL OR resolution IN ('lifted','closed')),
+ resolved_at TEXT,
+ resolved_by TEXT CHECK(resolved_by IS NULL OR (length(resolved_by) BETWEEN 1 AND 128 AND resolved_by NOT GLOB '*[^A-Za-z0-9_.:@-]*')),
+ resolution_reason TEXT CHECK(resolution_reason IS NULL OR length(resolution_reason) BETWEEN 1 AND 500),
+ resolution_digest TEXT CHECK(resolution_digest IS NULL OR length(resolution_digest)=64),
  PRIMARY KEY(id,scope),
  CHECK(allowance IS NULL OR subject_kind='project'),
- CHECK((lifted_at IS NULL)=(lift_operator_ref IS NULL) AND (lifted_at IS NULL)=(lift_reason IS NULL) AND (lifted_at IS NULL)=(lift_digest IS NULL))
+ CHECK(scope<>'serving' OR subject_kind='project'),
+ CHECK((resolved_at IS NULL)=(resolution IS NULL) AND (resolved_at IS NULL)=(resolved_by IS NULL) AND (resolved_at IS NULL)=(resolution_reason IS NULL) AND (resolved_at IS NULL)=(resolution_digest IS NULL))
+);
+
+-- Operator workspace session revocation for one account (owner decision October 8, 2026; tools/operator-containment.mjs).
+-- One immutable receipt per reviewed action, bound to the exact reviewed identity state (epoch, credential revision and
+-- the complete set of the account's workspace session rows). Inserting it deletes exactly those sessions in the same
+-- statement, like server-side sign-out. Passkeys, recovery kit, epoch, enrollment/recovery grants, challenges and every
+-- customer or visitor record are unchanged, so the owner can sign in again or recover. Completed on insert; deletable 90
+-- days later unless the account is inside a safety hold. No foreign key, so closure neither is blocked by nor erases it.
+CREATE TABLE operator_session_revocations (
+ id TEXT PRIMARY KEY CHECK(length(id)=36),
+ account_id TEXT NOT NULL CHECK(length(account_id)=36),
+ auth_epoch INTEGER NOT NULL CHECK(auth_epoch>=1),
+ credential_revision INTEGER NOT NULL CHECK(credential_revision>=0),
+ sessions TEXT NOT NULL CHECK(json_valid(sessions) AND json_type(sessions)='array' AND json_array_length(sessions) BETWEEN 1 AND 10),
+ operator_ref TEXT NOT NULL CHECK(length(operator_ref) BETWEEN 1 AND 128 AND operator_ref NOT GLOB '*[^A-Za-z0-9_.:@-]*'),
+ reason TEXT NOT NULL CHECK(length(reason) BETWEEN 1 AND 500),
+ request_digest TEXT NOT NULL CHECK(length(request_digest)=64),
+ review_digest TEXT NOT NULL CHECK(length(review_digest)=64),
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+-- Reviewed operator retention cleanup of resolved containment rows, revocation receipts and older cleanup receipts.
+-- Inserting the receipt deletes exactly the listed records in the same statement; every delete trigger still applies.
+CREATE TABLE operator_retention_receipts (
+ id TEXT PRIMARY KEY CHECK(length(id)=36),
+ cutoff TEXT NOT NULL,
+ containments TEXT NOT NULL CHECK(json_valid(containments) AND json_type(containments)='array' AND json_array_length(containments)<=500),
+ revocations TEXT NOT NULL CHECK(json_valid(revocations) AND json_type(revocations)='array' AND json_array_length(revocations)<=500),
+ receipts TEXT NOT NULL CHECK(json_valid(receipts) AND json_type(receipts)='array' AND json_array_length(receipts)<=500),
+ operator_ref TEXT NOT NULL CHECK(length(operator_ref) BETWEEN 1 AND 128 AND operator_ref NOT GLOB '*[^A-Za-z0-9_.:@-]*'),
+ request_digest TEXT NOT NULL CHECK(length(request_digest)=64),
+ review_digest TEXT NOT NULL CHECK(length(review_digest)=64),
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ CHECK(json_array_length(containments)+json_array_length(revocations)+json_array_length(receipts)>=1)
 );
 
 CREATE TABLE backend_form_settings (
@@ -1919,7 +1959,9 @@ CREATE INDEX backend_publication_reviews_project ON backend_publication_reviews(
 CREATE INDEX backend_public_usage_day ON backend_public_usage(day);
 CREATE INDEX public_client_usage_day ON public_client_usage(day);
 CREATE INDEX storage_project_usage_period ON storage_project_usage(period);
-CREATE INDEX operator_containments_subject ON operator_containments(subject_id) WHERE lifted_at IS NULL;
+CREATE INDEX operator_containments_subject ON operator_containments(subject_id) WHERE resolved_at IS NULL;
+CREATE INDEX operator_containments_resolved ON operator_containments(resolved_at) WHERE resolved_at IS NOT NULL;
+CREATE INDEX operator_session_revocations_account ON operator_session_revocations(account_id,created_at);
 
 CREATE INDEX backend_form_reviews_project ON backend_form_reviews(project_id);
 
@@ -2158,12 +2200,20 @@ CREATE VIEW backend_live_forms AS
  AND NOT EXISTS(SELECT 1 FROM service_client_activation_held WHERE id=r.id);
 
 -- Active operator containment per project and public scope (account subjects cover every project they own).
+-- An active serving stop also reads as a freeze of the four public admission scopes, so the existing admission
+-- triggers refuse public backend calls, visitor transitions, contact submissions and photo reads for that project.
 CREATE VIEW operator_contained_projects AS
  SELECT c.subject_id AS project_id,c.scope,c.allowance,c.created_at,c.id FROM operator_containments c
- WHERE c.subject_kind='project' AND c.lifted_at IS NULL AND c.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')
+ WHERE c.subject_kind='project' AND c.resolved_at IS NULL AND c.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')
  UNION ALL
  SELECT p.id AS project_id,c.scope,c.allowance,c.created_at,c.id FROM operator_containments c JOIN projects p ON p.owner_user_id=c.subject_id
- WHERE c.subject_kind='account' AND c.lifted_at IS NULL AND c.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now');
+ WHERE c.subject_kind='account' AND c.resolved_at IS NULL AND c.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')
+ UNION ALL
+ SELECT c.subject_id AS project_id,s.scope,NULL AS allowance,c.created_at,c.id FROM operator_containments c
+ JOIN (SELECT 'backend' AS scope UNION ALL SELECT 'transition' UNION ALL SELECT 'contact' UNION ALL SELECT 'photo') s
+ WHERE c.scope='serving' AND c.subject_kind='project' AND c.resolved_at IS NULL AND c.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now');
+-- The one serving-stop predicate read by every public serving path (site host, visitor host, contact page, guest preview).
+CREATE VIEW operator_serving_stopped AS SELECT DISTINCT project_id FROM operator_contained_projects WHERE scope='serving';
 
 CREATE VIEW plan_entitlements AS SELECT user_id,plan_id,starts_at,ends_at FROM stripe_paid_invoices;
 
@@ -2752,31 +2802,78 @@ CREATE TRIGGER storage_project_usage_update BEFORE UPDATE ON storage_project_usa
  SELECT RAISE(ABORT,'storage_project_counter') WHERE NEW.project_id<>OLD.project_id OR NEW.period<>OLD.period OR NEW.read_ops<>OLD.read_ops+1;
 END;
 
+-- A serving stop is its own action (never mixed with other scopes), and a project has at most one active serving stop.
 CREATE TRIGGER operator_containment_admit BEFORE INSERT ON operator_containments BEGIN
- SELECT RAISE(ABORT,'operator_containment_invalid') WHERE NEW.lifted_at IS NOT NULL
+ SELECT RAISE(ABORT,'operator_containment_invalid') WHERE NEW.resolved_at IS NOT NULL
   OR NEW.created_at IS NOT strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at) OR abs(julianday(NEW.created_at)-julianday('now'))>1.0/1440
   OR NEW.expires_at IS NOT strftime('%Y-%m-%dT%H:%M:%fZ',NEW.expires_at)
   OR NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') OR NEW.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now','+30 days')
   OR (NEW.subject_kind='account' AND NOT EXISTS(SELECT 1 FROM users WHERE id=NEW.subject_id))
   OR (NEW.subject_kind='project' AND NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.subject_id))
-  OR EXISTS(SELECT 1 FROM operator_containments WHERE id=NEW.id AND (subject_kind<>NEW.subject_kind OR subject_id<>NEW.subject_id OR request_digest<>NEW.request_digest OR expires_at<>NEW.expires_at));
+  OR EXISTS(SELECT 1 FROM operator_containments WHERE id=NEW.id AND (subject_kind<>NEW.subject_kind OR subject_id<>NEW.subject_id OR request_digest<>NEW.request_digest OR expires_at<>NEW.expires_at
+   OR (scope='serving')<>(NEW.scope='serving')))
+  OR (NEW.scope='serving' AND EXISTS(SELECT 1 FROM operator_containments WHERE scope='serving' AND subject_id=NEW.subject_id AND id<>NEW.id AND resolved_at IS NULL AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')));
  SELECT RAISE(ABORT,'operator_containment_capacity') WHERE (SELECT count(*) FROM operator_containments)>=10000;
 END;
 
--- Only a single lift: everything else is immutable, and nothing is ever deleted.
-CREATE TRIGGER operator_containment_lift BEFORE UPDATE ON operator_containments
-WHEN OLD.lifted_at IS NOT NULL OR NEW.lifted_at IS NULL OR NEW.id<>OLD.id OR NEW.scope<>OLD.scope OR NEW.subject_kind<>OLD.subject_kind OR NEW.subject_id<>OLD.subject_id
+-- Only a single explicit resolution: 'lifted' while still active, 'closed' after expiry. Everything else is immutable.
+CREATE TRIGGER operator_containment_resolve BEFORE UPDATE ON operator_containments
+WHEN OLD.resolved_at IS NOT NULL OR NEW.resolved_at IS NULL OR NEW.id<>OLD.id OR NEW.scope<>OLD.scope OR NEW.subject_kind<>OLD.subject_kind OR NEW.subject_id<>OLD.subject_id
  OR NEW.allowance IS NOT OLD.allowance OR NEW.operator_ref<>OLD.operator_ref OR NEW.reason<>OLD.reason OR NEW.request_digest<>OLD.request_digest
- OR NEW.created_at<>OLD.created_at OR NEW.expires_at<>OLD.expires_at OR NEW.lifted_at IS NOT strftime('%Y-%m-%dT%H:%M:%fZ',NEW.lifted_at) OR abs(julianday(NEW.lifted_at)-julianday('now'))>1.0/1440
+ OR NEW.created_at<>OLD.created_at OR NEW.expires_at<>OLD.expires_at OR NEW.resolved_at IS NOT strftime('%Y-%m-%dT%H:%M:%fZ',NEW.resolved_at) OR abs(julianday(NEW.resolved_at)-julianday('now'))>1.0/1440
+ OR (NEW.resolution='lifted' AND NEW.resolved_at>=OLD.expires_at) OR (NEW.resolution='closed' AND NEW.resolved_at<OLD.expires_at)
 BEGIN SELECT RAISE(ABORT,'operator_containment_immutable'); END;
 
-CREATE TRIGGER operator_containment_retained BEFORE DELETE ON operator_containments BEGIN SELECT RAISE(ABORT,'operator_containment_immutable'); END;
+-- Retention (owner decision October 8, 2026): only a resolved row, at least 90 days after its resolution, outside any
+-- unreleased safety hold on its subject, its owner or its projects. Active, expired-but-unresolved and held rows stay.
+CREATE TRIGGER operator_containment_retained BEFORE DELETE ON operator_containments
+WHEN OLD.resolved_at IS NULL OR OLD.resolved_at>strftime('%Y-%m-%dT%H:%M:%fZ','now','-90 days')
+ OR EXISTS(SELECT 1 FROM safety_preservation_holds h WHERE h.released_at IS NULL AND (h.subject_user_id=OLD.subject_id OR h.project_id=OLD.subject_id
+  OR h.subject_user_id=(SELECT owner_user_id FROM projects WHERE id=OLD.subject_id)))
+BEGIN SELECT RAISE(ABORT,'operator_containment_immutable'); END;
 
 -- WH-074 build freeze: cancel the frozen scope's running and succeeded-but-unpublished jobs in the same write, exactly as
 -- owner cancellation does. A test already sent is not recalled; cleanup is recorded by the deterministic reconciler.
 CREATE TRIGGER operator_containment_build_cancel AFTER INSERT ON operator_containments WHEN NEW.scope='build'
 BEGIN UPDATE build_jobs SET state='cancelled',finished_at=coalesce(finished_at,strftime('%Y-%m-%dT%H:%M:%fZ','now'))
  WHERE state IN ('running','succeeded') AND project_id IN (SELECT project_id FROM operator_contained_projects WHERE id=NEW.id AND scope='build'); END;
+
+-- Session revocation applies only to the exact reviewed identity state: same epoch and credential revision, and the same
+-- complete set of the account's session rows. Any sign-in, sign-out, passkey or recovery change in between is stale.
+CREATE TRIGGER operator_session_revocation_admit BEFORE INSERT ON operator_session_revocations BEGIN
+ SELECT RAISE(ABORT,'operator_revocation_invalid') WHERE NEW.created_at IS NOT strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at) OR abs(julianday(NEW.created_at)-julianday('now'))>1.0/1440;
+ SELECT RAISE(ABORT,'operator_revocation_stale') WHERE NOT EXISTS(SELECT 1 FROM identity_accounts WHERE account_id=NEW.account_id AND auth_epoch=NEW.auth_epoch AND credential_revision=NEW.credential_revision)
+  OR NEW.sessions IS NOT (SELECT json_group_array(id) FROM (SELECT id FROM identity_sessions WHERE account_id=NEW.account_id ORDER BY id));
+ SELECT RAISE(ABORT,'operator_revocation_capacity') WHERE (SELECT count(*) FROM operator_session_revocations)>=10000;
+END;
+CREATE TRIGGER operator_session_revocation_apply AFTER INSERT ON operator_session_revocations
+BEGIN DELETE FROM identity_sessions WHERE account_id=NEW.account_id AND id IN (SELECT value FROM json_each(NEW.sessions)); END;
+CREATE TRIGGER operator_session_revocation_immutable BEFORE UPDATE ON operator_session_revocations BEGIN SELECT RAISE(ABORT,'operator_revocation_immutable'); END;
+CREATE TRIGGER operator_session_revocation_retained BEFORE DELETE ON operator_session_revocations
+WHEN OLD.created_at>strftime('%Y-%m-%dT%H:%M:%fZ','now','-90 days')
+ OR EXISTS(SELECT 1 FROM safety_preservation_holds WHERE released_at IS NULL AND subject_user_id=OLD.account_id)
+BEGIN SELECT RAISE(ABORT,'operator_revocation_immutable'); END;
+
+-- A cleanup receipt names only records that still exist and were resolved (or completed) at or before a cutoff at least
+-- 90 days old; it then deletes exactly those records in the same statement. Each record's own delete trigger still applies.
+CREATE TRIGGER operator_retention_admit BEFORE INSERT ON operator_retention_receipts BEGIN
+ SELECT RAISE(ABORT,'operator_retention_invalid') WHERE NEW.created_at IS NOT strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at) OR abs(julianday(NEW.created_at)-julianday('now'))>1.0/1440
+  OR NEW.cutoff IS NOT strftime('%Y-%m-%dT%H:%M:%fZ',NEW.cutoff) OR NEW.cutoff>strftime('%Y-%m-%dT%H:%M:%fZ','now','-90 days');
+ SELECT RAISE(ABORT,'operator_retention_stale') WHERE
+  (SELECT count(*) FROM operator_containments WHERE id||':'||scope IN (SELECT value FROM json_each(NEW.containments)) AND resolved_at<=NEW.cutoff)<>json_array_length(NEW.containments)
+  OR (SELECT count(*) FROM operator_session_revocations WHERE id IN (SELECT value FROM json_each(NEW.revocations)) AND created_at<=NEW.cutoff)<>json_array_length(NEW.revocations)
+  OR (SELECT count(*) FROM operator_retention_receipts WHERE id IN (SELECT value FROM json_each(NEW.receipts)) AND created_at<=NEW.cutoff)<>json_array_length(NEW.receipts);
+ SELECT RAISE(ABORT,'operator_retention_capacity') WHERE (SELECT count(*) FROM operator_retention_receipts)>=10000;
+END;
+CREATE TRIGGER operator_retention_apply AFTER INSERT ON operator_retention_receipts BEGIN
+ DELETE FROM operator_containments WHERE id||':'||scope IN (SELECT value FROM json_each(NEW.containments));
+ DELETE FROM operator_session_revocations WHERE id IN (SELECT value FROM json_each(NEW.revocations));
+ DELETE FROM operator_retention_receipts WHERE id IN (SELECT value FROM json_each(NEW.receipts));
+END;
+CREATE TRIGGER operator_retention_immutable BEFORE UPDATE ON operator_retention_receipts BEGIN SELECT RAISE(ABORT,'operator_retention_immutable'); END;
+CREATE TRIGGER operator_retention_retained BEFORE DELETE ON operator_retention_receipts
+WHEN OLD.created_at>strftime('%Y-%m-%dT%H:%M:%fZ','now','-90 days')
+BEGIN SELECT RAISE(ABORT,'operator_retention_immutable'); END;
 
 CREATE TRIGGER backend_form_admit BEFORE INSERT ON backend_form_reviews BEGIN
  SELECT RAISE(ABORT,'backend_form_owner') WHERE NOT EXISTS(SELECT 1 FROM projects p JOIN backend_form_settings s ON s.project_id=p.id WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.user_id AND s.revision=NEW.base_revision);

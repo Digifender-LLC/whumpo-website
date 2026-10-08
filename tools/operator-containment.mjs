@@ -1,7 +1,7 @@
 import {readFile,stat} from 'node:fs/promises';
 import {cloudflareClient,remoteD1} from './cms-cloudflare.mjs';
 import {containmentInput,runContainment} from './operator-containment-input.mjs';
-// WH-050 F7 / runbook G3. Local operator CLI only: the existing operator Cloudflare/D1 authorization must
+// WH-050 F7 / runbook G3 (containment, project serving stop, account session revocation, lift/close, 90-day cleanup). Local operator CLI only: the existing operator Cloudflare/D1 authorization must
 // authorize the configured control D1. Never mount this on a customer, visitor or inference endpoint.
 // Usage: node tools/operator-containment.mjs --input PRIVATE.json [--apply DIGEST]
 try{

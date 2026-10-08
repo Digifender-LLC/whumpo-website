@@ -15,6 +15,7 @@ import {requireSpecificationAvailable} from './specification-safety';
 import { previewHeaders } from './components';
 import {reservePublicPhotoRead,StorageLimitError} from './storage-budget';
 import {PublicClientLimitError} from './public-admission';
+import {servingStopped} from './operator-serving';
 /** Public serving boundary: only current published HTML and its exact photo dependencies. */
 const serving = {
  async fetch(request:Request,env:Pick<Env,'DB'|'FILES'> & Partial<Pick<Env,'BACKEND_RUNTIME'>>&{APP_HOST?:Fetcher}):Promise<Response>{
@@ -33,6 +34,9 @@ const serving = {
     if(!mapping||!/^\/(?:assets\/[0-9a-f-]{36}\.jpg)?$/.test(url.pathname))return new Response('Site not found',{status:404,headers});
     url.pathname='/s/'+mapping.project_id+url.pathname;
    }
+   // Operator serving stop: every page, article, directory and photo of the project, same generic response as an outage.
+   const served=url.pathname.match(/^\/s\/([0-9a-f-]{36})(?:\/|$)/);
+   if(served&&await servingStopped(env.DB,served[1]))return new Response('Site temporarily unavailable',{status:503,headers});
    const cmsImage=url.pathname.match(/^\/s\/([0-9a-f-]{36})\/cms\/media\/([0-9a-f-]{36})\/([0-9a-f]{64})\.jpg$/);
    if(cmsImage)return publicCMSPublicationImage(request,env.DB,env.FILES,cmsImage[1],cmsImage[2],cmsImage[3]);
    const cmsListing=url.pathname.match(/^\/s\/([0-9a-f-]{36})\/cms\/?$/);

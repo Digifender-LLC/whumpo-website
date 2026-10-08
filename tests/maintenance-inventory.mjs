@@ -59,7 +59,7 @@ try{
  assert.equal(report.operations.length,4);assert.ok(report.operations.every(o=>o.state==='available'));
  // WH-050 F8: every shared counter's ceiling matches the trigger/table that enforces it; 50%/80% flags; read-only.
  for(const [name,{enforcedBy,evidence}] of Object.entries(platformCounterInventory)){const source=sql.prepare('SELECT sql FROM sqlite_master WHERE name=?').get(enforcedBy)?.sql??'';assert.ok(source.replace(/\s+/g,' ').includes(evidence),name);}
- assert.equal(report.counters.length,13);assert.ok(report.counters.every(c=>c.state!=='unavailable'),JSON.stringify(report.counters));
+ assert.equal(report.counters.length,14);assert.ok(report.counters.every(c=>c.state!=='unavailable'),JSON.stringify(report.counters));
  assert.equal(report.counters.find(c=>c.counter==='contact_receipts').used,2);assert.equal(report.counters.find(c=>c.counter==='contact_receipts').state,'normal');
  sql.exec('PRAGMA query_only=OFF');
  const period=new Date(now).toISOString().slice(0,7);
@@ -74,5 +74,5 @@ try{
  const broken=await counterReport({prepare:()=>{throw Error('PRIVATE_SECRET_CANARY');}},now);assert.ok(broken.counters.every(c=>c.state==='unavailable'));assert.equal(broken.attention,true);assert.ok(!JSON.stringify(broken).includes('PRIVATE_'));
  assert.ok(!JSON.stringify(counters).includes(project)&&!JSON.stringify(counters).includes(owner));
  const encoded=JSON.stringify(report);for(const marker of ['PRIVATE_',owner,newGH,newCF,project])assert.ok(!encoded.includes(marker),marker);
- console.log('Maintenance inventory passed: complete current schema, missing telemetry attention, precise new revocation clocks, retry stability/cascade, 41 read-only queues, four receipt families, 13 shared platform counters checked against their schema ceilings with 50%/80% flags, retention eligibility and private data exclusion.');
+ console.log('Maintenance inventory passed: complete current schema, missing telemetry attention, precise new revocation clocks, retry stability/cascade, 41 read-only queues, four receipt families, 14 shared platform counters checked against their schema ceilings with 50%/80% flags, retention eligibility and private data exclusion.');
 }finally{sql.close();}

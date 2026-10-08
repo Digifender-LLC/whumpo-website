@@ -94,6 +94,8 @@ A recent passkey-authenticated user can explicitly remove a compromised credenti
 
 An old ordinary session is not sufficient to remove keys after its fresh-passkey window expires. Reauthenticate with a current key or use the recovery-kit flow. Neither support nor Chat can waive proof. Valid ordinary sessions otherwise continue without routine authentication prompts; security help, sign-out, recovery and essential direct controls remain outside model authority.
 
+**Operator session revocation (WH-050, owner decision October 8, 2026; local source only, not deployed).** An operator may revoke every current workspace session of one account through the reviewed local CLI ([capacity and fairness](capacity-and-fairness.md#wh-050-owner-decisions-retention-serving-stop-and-session-revocation--october-8-2026-utc)). The receipt is bound to the account's exact epoch, credential revision and session set, and deletes only those `identity_sessions` rows, like server-side sign-out. It never advances the epoch or changes passkeys, the recovery kit, kit offers, enrollment/recovery grants or challenges, and it grants no authority: the owner signs in again or recovers through the ordinary ceremonies above. Neither support nor Chat can trigger it.
+
 ## Versioned operation contract
 
 Implement one `/api/auth/identity/v1/` browser adapter over shared domain operations. These routes are **implemented in the isolated adapter, not installed in the active platform today**. Native transport reuses their semantics, not browser cookies or a generic proxy. POST mutations require exact Origin for browser requests, bounded JSON, current authority and idempotent effect IDs. Client-supplied `userId`, step counts or `complete` flags never grant authority.
