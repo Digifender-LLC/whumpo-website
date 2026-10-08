@@ -93,7 +93,7 @@ export function alignmentProblems(data){
   return (tasks.get(from)?.dependsOn??[]).some(next=>next===to||reaches(next,to,seen));
  }
  const required={
-  18:[52,117],22:[71],52:[71,113],54:[122,105,115,116],56:[52,122,105,116],
+  18:[52,117],22:[71,168,172],52:[71,113],54:[122,105,115,116],56:[52,122,105,116],
   67:[65,66,71,122,105,116],75:[52,122,113,116],77:[67,71,76],
   81:[105,113],83:[115],90:[89,113,122,54,56,...Array.from({length:13},(_,i)=>91+i)],92:[105,116],
   104:[31,32,80,90,112],106:[122,105,116],
@@ -105,7 +105,7 @@ export function alignmentProblems(data){
  // WH-077 portable export children (WH-186 contract): the parent waits for its contract, clean room and acceptance.
  required[77].push(186,189,191);
  const forbidden={
-  22:[23,41,47,49,104],42:[23,47,49,104],43:[23,47,49,104],
+  22:[23,41,44,47,49,104],42:[23,47,49,104],43:[23,47,49,104],
   48:[49,87,104,112,118],52:[12,18,36,68,69,74,86],
   56:[31,32,36,49,96,97,98,99,100,104],
   67:[70,72,77,80,104],71:[22,50,55,67,72],77:[72],
@@ -121,6 +121,8 @@ export function alignmentProblems(data){
  // contract (WH-186) also stays upstream of the account export and module implementations it supports.
  for(let child=186;child<=191;child++)forbidden[child]=[49,72,104];
  forbidden[186].push(18,67);
+ // Cost-event children (WH-168 contract) feed WH-023's cost periods and never wait on them, premium funding or the paid-launch gate.
+ for(let child=168;child<=172;child++)forbidden[child]=[23,41,44,47,49,104];
  for(const [from,targets] of Object.entries(required))for(const to of targets){
   if(!tasks.has(id(from))||!tasks.has(id(to)))problems.push(`Missing alignment task ${id(from)} or ${id(to)}`);
   else if(!reaches(id(from),id(to)))problems.push(`${id(from)} must follow shared prerequisite ${id(to)}`);

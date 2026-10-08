@@ -70,6 +70,7 @@ The owner authorized Workers Paid ($5/month) resources, with GitHub restricted t
 - [Workload placement contract](docs/workload-placement.md) — logical resources, scoped adapters and lifecycle/export requirements; broader hosting remains conditional
 - [Pooled build jobs](docs/build-jobs.md) — owner-requested bounded builds with per-job lease, expiry, cleanup records and deterministic diagnostics; no always-on per-customer capacity (source implementation; Containers owner-gated)
 - [Project specification decision](docs/project-specification.md) — versioned configuration, supported change operations and the offline composition contract
+- [Shadow cost-event contract](docs/cost-events.md) — planned WH-022 immutable usage/provider-cost envelope, dimension registry, reconciliation rules, existing-producer gap map and WH-168–172 slices; no table, producer change, provider call or charge
 - [Shared module contract](docs/shared-modules.md) — planned WH-067 content, records/forms, files and access module APIs, authorization model and delivery slices
 - [Notification contract](docs/notifications.md) — planned WH-068 templates, verified senders, server-derived recipients, receipt states and delivery slices; no provider or sender added
 - [Portable project exports](docs/portable-exports.md) — planned WH-077 bundle format, permission filter, static/data/application tiers and unavailable-feature report; offline reference only, no export route added

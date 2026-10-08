@@ -11,6 +11,7 @@ Whumpo should first become a dependable way for an invited customer to create, i
 - [Shared modules](../shared-modules.md): WH-067 contract, existing-service mapping and WH-123–130 slices (planned).
 - [Notifications](../notifications.md): WH-068 template/sender/recipient/receipt contract, WH-036 contact-notice gap map and WH-154–160 slices (planned).
 - [Portable exports](../portable-exports.md): WH-077 bundle format, permission filter, portability tiers, unavailable-feature report and WH-186–191 slices (planned).
+- [Shadow cost events](../cost-events.md): WH-022 envelope, dimension registry, reconciliation rules, existing-producer gap map and WH-168–172 slices (planned).
 - [Architecture and sequencing alignment](alignment.md): shared contracts, corrected dependency paths, current build order and persistent graph checks.
 - [Full backlog](backlog.md): every task, dependency, acceptance criterion and verification boundary.
 - [Chat as the primary workspace](chat-first-experience.md): interactive forms, agent-managed dashboards/views, continuity and WH-105–112 delivery packets.

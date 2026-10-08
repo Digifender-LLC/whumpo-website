@@ -2,7 +2,7 @@
 
 > Generated from `backlog.json` by `node tools/roadmap.mjs render`. Edit the JSON source, then render again.
 
-Reviewed 2026-10-01 against source `db8b740ab2346f55f2985593b1ec531a99027630`. 157 planned tasks.
+Reviewed 2026-10-01 against source `db8b740ab2346f55f2985593b1ec531a99027630`. 162 planned tasks.
 
 Planning readiness and dependencies describe the plan. Current execution, claims, blockers, and completion evidence live in GitHub Issues. A ready task is only a candidate: verify live dependency completion and authorization before work.
 
@@ -4324,7 +4324,7 @@ Real usage and provider costs can be reconciled without prematurely charging cus
 
 ### Dependencies and blockers
 
-Planning dependencies: WH-020, WH-006, WH-071. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+Planning dependencies: WH-020, WH-006, WH-071, WH-168, WH-169, WH-170, WH-171, WH-172. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
 No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
 
@@ -4338,6 +4338,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/pricing-and-model-policy.md](../../docs/pricing-and-model-policy.md)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
 - [docs/workload-placement.md](../../docs/workload-placement.md)
+- [docs/cost-events.md](../../docs/cost-events.md)
 
 ### Execution coordination
 
@@ -4345,7 +4346,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-08 UTC: decomposed into WH-168 to WH-172 with the planned contract in docs/cost-events.md (WH-168). Planning and offline reference only: no table, schema input, binding, producer change, provider call, deployment or customer charge, and no src/ behavior change. The parent acceptance is unchanged and closes only after every child. No child depends on WH-023, WH-044 or WH-104: live shadow collection and closed-period data remain WH-023 inputs. Live dependency refresh: WH-006 (#6) and WH-071 (#47) are closed as completed; WH-020 (#9) is still open (offline/privacy part extracted as WH-121; real-provider cohort outstanding), so real task-cost percentiles and a premium price are not claimed. No execution issue exists for WH-022. Existing producers are mapped with exact gaps G-C1 to G-C11.
 
 ## WH-023 — Reconcile company finance and validate two complete cost periods
 
@@ -4679,6 +4680,280 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/roadmap/README.md](../../docs/roadmap/README.md)
 - [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
 - [docs/roadmap/chat-first-experience.md](../../docs/roadmap/chat-first-experience.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-168 — Freeze the shadow cost-event contract and decompose WH-022
+
+Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **ready**. Kind: decision. Size: S.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Every WH-022 slice builds against one frozen, immutable cost-event envelope, dimension registry and reconciliation model instead of inventing its own.
+
+### Scope
+
+- Freeze the versioned event envelope: source and provider event IDs, idempotency key and revision, WH-071 logical attribution, dimension and workload, quantity and unit, pinned tariff version, occurred/observed/received times, known versus unknown cost, control/retry overhead and uncertain-operation exposure
+- Freeze duplicate, late, out-of-order, tenant-mismatch, unknown-rate, account-wide-allowance and zero-customer-unit rules, and aggregate reconciliation against invoices, account floors, provider minimums, licenses, renewals, support and retained staging liabilities
+- Register the dimensions and workloads that later feature packets will use, and map the existing producers (inference receipts, gateway spend, storage budget, task-cost and fair-use reports) onto the envelope with exact gaps
+- Record dated official Cloudflare billing and usage data sources with entitlement flagged for verification; add an offline reference and mutation-checked conformance harness without Worker imports
+
+### Acceptance criteria
+
+- [ ] docs/cost-events.md states the frozen envelope, rules, registries, existing-source gap map, privacy and retention boundary and child slices, marked planned
+- [ ] Offline checks prove duplicates and late events cannot double-count, missing dimensions and costs stay unknown, tenant mismatch is refused, tariff versions stay pinned across placement changes, account-wide allowances are never reused per tenant, no event grants billing authority, overhead is separate, and aggregate versus invoice reconciliation reports an explicit residual
+- [ ] Existing economic scenarios and the task-cost report agree with the reference, and every deliberate mutant is caught by its named check
+- [ ] WH-022 keeps its acceptance and depends on every child; no child reaches WH-023, WH-041, WH-044, WH-047, WH-049 or WH-104
+- [ ] Open owner decisions are listed rather than assumed
+
+### Verification
+
+- node tests/cost-events-contract.mjs
+- node tools/verify.mjs fast
+- node tools/roadmap.mjs validate, alignment and render --check
+- git diff --check
+
+### Dependencies and blockers
+
+Planning dependencies: WH-071, WH-006. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/cost-events.md](../../docs/cost-events.md)
+- [tools/prototypes/cost-events.mjs](../../tools/prototypes/cost-events.mjs)
+- [tests/cost-events-contract.mjs](../../tests/cost-events-contract.mjs)
+- [docs/resource-pool-economics.md](../../docs/resource-pool-economics.md)
+- [docs/workload-placement.md](../../docs/workload-placement.md)
+- [docs/standard-ai-accounting.md](../../docs/standard-ai-accounting.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-08 UTC: contract and offline reference only, local commit on branch claude/wh-022-cost-event-contract (not pushed or merged; issue not created or claimed from this session). Added docs/cost-events.md (planned), tools/prototypes/cost-events.mjs (imports only node:crypto) and tests/cost-events-contract.mjs, registered as pnpm test:cost-events-contract and in the fast verification profile. The suite passed 19 reference checks and 6 source-agreement/static checks against src/resource-economics.ts, src/task-cost-report.ts, schema/platform.sql and src/fair-use-finance.ts, and caught 42 of 42 deliberate mutants of the reference, each by its intended check. Synthetic identifiers and rates only; proves the frozen contract and reference, not D1 storage, producer emission, provider usage import, any real period's cost or WH-020's real-provider task cost. Cloudflare sources read from official pages on October 8, 2026; entitlement and pricing require verification. No table, schema input, binding, provider or deployment change.
+
+## WH-169 — Implement the cost-event envelope, registries and existing producer adapters
+
+Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Existing inference, gateway and storage receipts can be turned into validated cost events in source without any schema or behavior change.
+
+### Scope
+
+- Implement envelope validation, the closed dimension/workload/source/tariff registries and the canonical idempotency key in src/ exactly as frozen in docs/cost-events.md
+- Implement pure adapters from the current inference_calls, gateway_spend_attempts and storage_project_usage rows, including revision order, explicit unknown exposure for pending and uncertain calls, and zero customer units
+- Keep adapters read-only: no D1 write, no change to model-costs, gateway-spend or storage-budget behavior
+
+### Acceptance criteria
+
+- [ ] Adapter output equals the reference for the same rows and is rejected by the validator when any frozen rule is broken
+- [ ] Replaying receipts in any order yields identical aggregates; pending, uncertain and unpriced calls stay explicit unknowns
+- [ ] Standard AI and premium gateway events carry zero customer units and never include a customer debit
+
+### Verification
+
+- pnpm check
+- node tests/cost-events-contract.mjs
+- pnpm test:model-costs
+- pnpm test:gateway-spend
+- node tests/task-cost-report.mjs
+
+### Dependencies and blockers
+
+Planning dependencies: WH-168. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/cost-events.md](../../docs/cost-events.md)
+- [tools/prototypes/cost-events.mjs](../../tools/prototypes/cost-events.mjs)
+- [src/model-costs.ts](../../src/model-costs.ts)
+- [src/gateway-spend.ts](../../src/gateway-spend.ts)
+- [src/storage-budget.ts](../../src/storage-budget.ts)
+- [src/task-cost-report.ts](../../src/task-cost-report.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-170 — Store cost events append-only and emit them at existing receipt transitions
+
+Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Shadow cost events are recorded durably and atomically with the existing receipts without affecting any customer-facing behavior.
+
+### Scope
+
+- Add the append-only event table to the canonical current schema inputs with the frozen idempotency and revision rules, tenant-ownership check and no customer-facing route
+- Emit events from the existing inference, gateway and storage transitions; an emission failure must never block or roll back the customer operation or invent a zero cost
+- Register the cost-events lifecycle, protection and account-closure handling (owner link removed, company totals kept) in the existing catalogues
+- Prepare the exact empty-D1 cutover plan; the cutover itself needs the owner's explicit authorization in the current conversation
+
+### Acceptance criteria
+
+- [ ] Duplicate, delayed, out-of-order and stale-revision appends cannot double-count against actual D1
+- [ ] A tenant mismatch or closed project is refused without a write; two accounts never see each other's events
+- [ ] Emission failure leaves the receipt and customer result intact
+- [ ] The lifecycle catalogue, data-protection profile and closure inventory classify the new table
+
+### Verification
+
+- pnpm check
+- node tools/lifecycle-catalog.mjs
+- pnpm test:model-costs
+- pnpm test:gateway-spend
+- Disposable-D1 append and tenant tests for the new table
+
+### Dependencies and blockers
+
+Planning dependencies: WH-169. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/cost-events.md](../../docs/cost-events.md)
+- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
+- [docs/data-protection.md](../../docs/data-protection.md)
+- [docs/releases.md](../../docs/releases.md)
+- [tools/current-schema.mjs](../../tools/current-schema.mjs)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-171 — Import provider usage and invoices and report aggregate cost reconciliation
+
+Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Operators can reconcile aggregate event totals with provider statements, account floors and other liabilities, with every residual and unknown shown.
+
+### Scope
+
+- Operator-only import of provider usage and invoice statements from private exported files, validated and deduplicated by the frozen envelope; no live provider call unless separately authorized
+- Liability register for account minimums, provider minimums, licenses, verification and security-assessment renewals, support, retained staging and feedback, and uncertain operations, with unknown amounts kept explicit
+- Aggregate reconciliation report with explicit residual, unknown and unfinished counts and late-after-close restatements; shadow estimates never compared with invoices
+
+### Acceptance criteria
+
+- [ ] A report is reconciled only when nothing is unknown or unfinished and the residual is within the stated tolerance
+- [ ] Account-wide allowances and floors are never allocated to individual tenants
+- [ ] Imports are idempotent and reject tenant-mismatched or content-bearing rows
+- [ ] Output contains no account identifiers, prompts, credentials or customer content
+
+### Verification
+
+- pnpm check
+- node tests/cost-events-contract.mjs
+- Fixture statement import and reconciliation tests against disposable D1
+
+### Dependencies and blockers
+
+Planning dependencies: WH-170. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/cost-events.md](../../docs/cost-events.md)
+- [docs/company-finance-review.md](../../docs/company-finance-review.md)
+- [docs/resource-pool-economics.md](../../docs/resource-pool-economics.md)
+- [docs/integrations/cloudflare-connection.md](../../docs/integrations/cloudflare-connection.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-172 — Accept shadow cost events end to end locally
+
+Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **planned**. Kind: verification. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+The WH-022 acceptance list is demonstrated on a disposable database across the real producers, import and reconciliation, without live data or customer charges.
+
+### Scope
+
+- Run synthetic Chat AI turns, a gateway attempt and public photo reads through the real code paths and compare event aggregates with the task-cost, fair-use and economic-scenario outputs
+- Exercise duplicate, delayed, late-after-close, tenant-mismatch, unknown-rate, account-allowance, overhead and uncertain-operation cases end to end
+- State exactly what remains for WH-023 live period data and which provider entitlements are unverified
+
+### Acceptance criteria
+
+- [ ] Every WH-022 acceptance criterion is demonstrated on actual local data and recorded with exact commands
+- [ ] No event, report or import grants billing authority, changes admission or reaches a customer-facing surface
+- [ ] Live provider data, two complete cost periods and entitlement checks are explicitly left to WH-023 and the owner
+
+### Verification
+
+- pnpm check
+- pnpm test:model-costs
+- pnpm test:gateway-spend
+- node tests/task-cost-report.mjs
+- node tests/cost-events-contract.mjs
+- Connected disposable-D1 acceptance script
+
+### Dependencies and blockers
+
+Planning dependencies: WH-170, WH-171. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/cost-events.md](../../docs/cost-events.md)
+- [docs/resource-pool-economics.md](../../docs/resource-pool-economics.md)
+- [docs/economics/resource-pool-scenarios.json](../../docs/economics/resource-pool-scenarios.json)
+- [docs/verification.md](../../docs/verification.md)
 
 ### Execution coordination
 
