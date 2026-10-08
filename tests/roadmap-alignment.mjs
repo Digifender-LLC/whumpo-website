@@ -15,7 +15,8 @@ function missing(id,prerequisite){
 }
 for(const id of ['WH-054','WH-056','WH-067','WH-075','WH-091','WH-106'])missing(id,'WH-122');
 missing('WH-116','WH-121');missing('WH-090','WH-054');missing('WH-090','WH-099');missing('WH-104','WH-090');
-for(const [from,to] of [['WH-121','WH-020'],['WH-122','WH-090'],['WH-116','WH-020']]){
+missing('WH-022','WH-168');missing('WH-022','WH-172');
+for(const [from,to] of [['WH-121','WH-020'],['WH-122','WH-090'],['WH-116','WH-020'],['WH-168','WH-023'],['WH-169','WH-044'],['WH-170','WH-104'],['WH-171','WH-041'],['WH-172','WH-049'],['WH-022','WH-044']]){
  const data=structuredClone(current);task(data,from).dependsOn.push(to);
  assert.ok(alignmentProblems(data).includes(`${from} must remain independent of downstream/optional gate ${to}`));refused++;
 }

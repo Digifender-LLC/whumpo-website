@@ -1133,7 +1133,12 @@
       "dependsOn": [
         "WH-020",
         "WH-006",
-        "WH-071"
+        "WH-071",
+        "WH-168",
+        "WH-169",
+        "WH-170",
+        "WH-171",
+        "WH-172"
       ],
       "blockers": [],
       "outcome": "Real usage and provider costs can be reconciled without prematurely charging customers.",
@@ -1165,7 +1170,223 @@
         "src/standard-ai-usage.ts",
         "docs/pricing-and-model-policy.md",
         "docs/roadmap/alignment.md",
-        "docs/workload-placement.md"
+        "docs/workload-placement.md",
+        "docs/cost-events.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": [
+        "2026-10-08 UTC: decomposed into WH-168 to WH-172 with the planned contract in docs/cost-events.md (WH-168). Planning and offline reference only: no table, schema input, binding, producer change, provider call, deployment or customer charge, and no src/ behavior change. The parent acceptance is unchanged and closes only after every child. No child depends on WH-023, WH-044 or WH-104: live shadow collection and closed-period data remain WH-023 inputs. Live dependency refresh: WH-006 (#6) and WH-071 (#47) are closed as completed; WH-020 (#9) is still open (offline/privacy part extracted as WH-121; real-provider cohort outstanding), so real task-cost percentiles and a premium price are not claimed. No execution issue exists for WH-022. Existing producers are mapped with exact gaps G-C1 to G-C11."
+      ]
+    },
+    {
+      "id": "WH-168",
+      "title": "Freeze the shadow cost-event contract and decompose WH-022",
+      "phase": "F3",
+      "priority": "P0",
+      "readiness": "ready",
+      "kind": "decision",
+      "size": "S",
+      "dependsOn": [
+        "WH-071",
+        "WH-006"
+      ],
+      "blockers": [],
+      "outcome": "Every WH-022 slice builds against one frozen, immutable cost-event envelope, dimension registry and reconciliation model instead of inventing its own.",
+      "scope": [
+        "Freeze the versioned event envelope: source and provider event IDs, idempotency key and revision, WH-071 logical attribution, dimension and workload, quantity and unit, pinned tariff version, occurred/observed/received times, known versus unknown cost, control/retry overhead and uncertain-operation exposure",
+        "Freeze duplicate, late, out-of-order, tenant-mismatch, unknown-rate, account-wide-allowance and zero-customer-unit rules, and aggregate reconciliation against invoices, account floors, provider minimums, licenses, renewals, support and retained staging liabilities",
+        "Register the dimensions and workloads that later feature packets will use, and map the existing producers (inference receipts, gateway spend, storage budget, task-cost and fair-use reports) onto the envelope with exact gaps",
+        "Record dated official Cloudflare billing and usage data sources with entitlement flagged for verification; add an offline reference and mutation-checked conformance harness without Worker imports"
+      ],
+      "acceptance": [
+        "docs/cost-events.md states the frozen envelope, rules, registries, existing-source gap map, privacy and retention boundary and child slices, marked planned",
+        "Offline checks prove duplicates and late events cannot double-count, missing dimensions and costs stay unknown, tenant mismatch is refused, tariff versions stay pinned across placement changes, account-wide allowances are never reused per tenant, no event grants billing authority, overhead is separate, and aggregate versus invoice reconciliation reports an explicit residual",
+        "Existing economic scenarios and the task-cost report agree with the reference, and every deliberate mutant is caught by its named check",
+        "WH-022 keeps its acceptance and depends on every child; no child reaches WH-023, WH-041, WH-044, WH-047, WH-049 or WH-104",
+        "Open owner decisions are listed rather than assumed"
+      ],
+      "verification": [
+        "node tests/cost-events-contract.mjs",
+        "node tools/verify.mjs fast",
+        "node tools/roadmap.mjs validate, alignment and render --check",
+        "git diff --check"
+      ],
+      "references": [
+        "docs/cost-events.md",
+        "tools/prototypes/cost-events.mjs",
+        "tests/cost-events-contract.mjs",
+        "docs/resource-pool-economics.md",
+        "docs/workload-placement.md",
+        "docs/standard-ai-accounting.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": [
+        "2026-10-08 UTC: contract and offline reference only, local commit on branch claude/wh-022-cost-event-contract (not pushed or merged; issue not created or claimed from this session). Added docs/cost-events.md (planned), tools/prototypes/cost-events.mjs (imports only node:crypto) and tests/cost-events-contract.mjs, registered as pnpm test:cost-events-contract and in the fast verification profile. The suite passed 19 reference checks and 6 source-agreement/static checks against src/resource-economics.ts, src/task-cost-report.ts, schema/platform.sql and src/fair-use-finance.ts, and caught 42 of 42 deliberate mutants of the reference, each by its intended check. Synthetic identifiers and rates only; proves the frozen contract and reference, not D1 storage, producer emission, provider usage import, any real period's cost or WH-020's real-provider task cost. Cloudflare sources read from official pages on October 8, 2026; entitlement and pricing require verification. No table, schema input, binding, provider or deployment change."
+      ]
+    },
+    {
+      "id": "WH-169",
+      "title": "Implement the cost-event envelope, registries and existing producer adapters",
+      "phase": "F3",
+      "priority": "P0",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-168"
+      ],
+      "blockers": [],
+      "outcome": "Existing inference, gateway and storage receipts can be turned into validated cost events in source without any schema or behavior change.",
+      "scope": [
+        "Implement envelope validation, the closed dimension/workload/source/tariff registries and the canonical idempotency key in src/ exactly as frozen in docs/cost-events.md",
+        "Implement pure adapters from the current inference_calls, gateway_spend_attempts and storage_project_usage rows, including revision order, explicit unknown exposure for pending and uncertain calls, and zero customer units",
+        "Keep adapters read-only: no D1 write, no change to model-costs, gateway-spend or storage-budget behavior"
+      ],
+      "acceptance": [
+        "Adapter output equals the reference for the same rows and is rejected by the validator when any frozen rule is broken",
+        "Replaying receipts in any order yields identical aggregates; pending, uncertain and unpriced calls stay explicit unknowns",
+        "Standard AI and premium gateway events carry zero customer units and never include a customer debit"
+      ],
+      "verification": [
+        "pnpm check",
+        "node tests/cost-events-contract.mjs",
+        "pnpm test:model-costs",
+        "pnpm test:gateway-spend",
+        "node tests/task-cost-report.mjs"
+      ],
+      "references": [
+        "docs/cost-events.md",
+        "tools/prototypes/cost-events.mjs",
+        "src/model-costs.ts",
+        "src/gateway-spend.ts",
+        "src/storage-budget.ts",
+        "src/task-cost-report.ts"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-170",
+      "title": "Store cost events append-only and emit them at existing receipt transitions",
+      "phase": "F3",
+      "priority": "P0",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-169"
+      ],
+      "blockers": [],
+      "outcome": "Shadow cost events are recorded durably and atomically with the existing receipts without affecting any customer-facing behavior.",
+      "scope": [
+        "Add the append-only event table to the canonical current schema inputs with the frozen idempotency and revision rules, tenant-ownership check and no customer-facing route",
+        "Emit events from the existing inference, gateway and storage transitions; an emission failure must never block or roll back the customer operation or invent a zero cost",
+        "Register the cost-events lifecycle, protection and account-closure handling (owner link removed, company totals kept) in the existing catalogues",
+        "Prepare the exact empty-D1 cutover plan; the cutover itself needs the owner's explicit authorization in the current conversation"
+      ],
+      "acceptance": [
+        "Duplicate, delayed, out-of-order and stale-revision appends cannot double-count against actual D1",
+        "A tenant mismatch or closed project is refused without a write; two accounts never see each other's events",
+        "Emission failure leaves the receipt and customer result intact",
+        "The lifecycle catalogue, data-protection profile and closure inventory classify the new table"
+      ],
+      "verification": [
+        "pnpm check",
+        "node tools/lifecycle-catalog.mjs",
+        "pnpm test:model-costs",
+        "pnpm test:gateway-spend",
+        "Disposable-D1 append and tenant tests for the new table"
+      ],
+      "references": [
+        "docs/cost-events.md",
+        "docs/data-lifecycle.md",
+        "docs/data-protection.md",
+        "docs/releases.md",
+        "tools/current-schema.mjs"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-171",
+      "title": "Import provider usage and invoices and report aggregate cost reconciliation",
+      "phase": "F3",
+      "priority": "P0",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-170"
+      ],
+      "blockers": [],
+      "outcome": "Operators can reconcile aggregate event totals with provider statements, account floors and other liabilities, with every residual and unknown shown.",
+      "scope": [
+        "Operator-only import of provider usage and invoice statements from private exported files, validated and deduplicated by the frozen envelope; no live provider call unless separately authorized",
+        "Liability register for account minimums, provider minimums, licenses, verification and security-assessment renewals, support, retained staging and feedback, and uncertain operations, with unknown amounts kept explicit",
+        "Aggregate reconciliation report with explicit residual, unknown and unfinished counts and late-after-close restatements; shadow estimates never compared with invoices"
+      ],
+      "acceptance": [
+        "A report is reconciled only when nothing is unknown or unfinished and the residual is within the stated tolerance",
+        "Account-wide allowances and floors are never allocated to individual tenants",
+        "Imports are idempotent and reject tenant-mismatched or content-bearing rows",
+        "Output contains no account identifiers, prompts, credentials or customer content"
+      ],
+      "verification": [
+        "pnpm check",
+        "node tests/cost-events-contract.mjs",
+        "Fixture statement import and reconciliation tests against disposable D1"
+      ],
+      "references": [
+        "docs/cost-events.md",
+        "docs/company-finance-review.md",
+        "docs/resource-pool-economics.md",
+        "docs/integrations/cloudflare-connection.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-172",
+      "title": "Accept shadow cost events end to end locally",
+      "phase": "F3",
+      "priority": "P0",
+      "readiness": "planned",
+      "kind": "verification",
+      "size": "M",
+      "dependsOn": [
+        "WH-170",
+        "WH-171"
+      ],
+      "blockers": [],
+      "outcome": "The WH-022 acceptance list is demonstrated on a disposable database across the real producers, import and reconciliation, without live data or customer charges.",
+      "scope": [
+        "Run synthetic Chat AI turns, a gateway attempt and public photo reads through the real code paths and compare event aggregates with the task-cost, fair-use and economic-scenario outputs",
+        "Exercise duplicate, delayed, late-after-close, tenant-mismatch, unknown-rate, account-allowance, overhead and uncertain-operation cases end to end",
+        "State exactly what remains for WH-023 live period data and which provider entitlements are unverified"
+      ],
+      "acceptance": [
+        "Every WH-022 acceptance criterion is demonstrated on actual local data and recorded with exact commands",
+        "No event, report or import grants billing authority, changes admission or reaches a customer-facing surface",
+        "Live provider data, two complete cost periods and entitlement checks are explicitly left to WH-023 and the owner"
+      ],
+      "verification": [
+        "pnpm check",
+        "pnpm test:model-costs",
+        "pnpm test:gateway-spend",
+        "node tests/task-cost-report.mjs",
+        "node tests/cost-events-contract.mjs",
+        "Connected disposable-D1 acceptance script"
+      ],
+      "references": [
+        "docs/cost-events.md",
+        "docs/resource-pool-economics.md",
+        "docs/economics/resource-pool-scenarios.json",
+        "docs/verification.md"
       ],
       "issue": null,
       "owner": null,
