@@ -1,8 +1,9 @@
-// WH-004 finding B2 reproduction: docs/incident-runbooks.md (C10) says owner withdrawal controls such as unpublishing
-// a site need recent authentication, but the reviewed `confirm` control is accepted from a session whose passkey proof
-// is an hour old. EXPECTED TO FAIL (exit 1) until the code or the runbook is corrected. Deliberately not in
-// package.json scripts or any tools/verify.mjs profile. Offline: disposable SQLite fixture, synthetic owner, no
-// network. See docs/boundary-audit.md#b2.
+// WH-004 finding B2 characterization: owner withdrawal controls such as unpublishing a site do NOT require recent
+// authentication; the reviewed `confirm` control is accepted from a session whose passkey proof is an hour old. The
+// owner decided on October 8, 2026 to correct docs/incident-runbooks.md (C10) to say so rather than add freshness.
+// This test pins the documented behavior; if freshness is later added, change this test and the runbook together.
+// Not in any tools/verify.mjs profile. Offline: disposable SQLite fixture, synthetic owner, no network.
+// See docs/boundary-audit.md#b2.
 import assert from 'node:assert/strict';
 import {currentSiteFixtureHandlers,createFixtureProject} from './current-site-fixture.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
@@ -25,7 +26,8 @@ try{
  assert.equal((await db.prepare('SELECT kind FROM publication_actions WHERE id=?').bind(review).first())?.kind,'unpublish');
  const result=await control(aged,user,{type:'confirm',kind:'site',reviewId:review});
  const live=(await db.prepare('SELECT version_id FROM publications WHERE project_id=?').bind(site.project).first())?.version_id??null;
- assert.ok(result.status===401&&live,`B2 reproduced: a session with a one-hour-old passkey proof unpublished the site (status ${result.status}, live version ${live}); docs/incident-runbooks.md C10 says recent authentication is required.`);
- console.log('B2 not reproduced: the withdrawal required recent authentication.');
+ assert.equal(result.status,200,'An aged-proof session is accepted for the unpublish confirm; docs/incident-runbooks.md C10 documents that.');
+ assert.equal(live,null,'The site went offline');
+ console.log('B2 characterized: unpublish confirm needs a current session, not a recent passkey sign-in (documented in incident-runbooks.md C10).');
 }catch(error){console.error(error.message);process.exitCode=1;}
 finally{await fixture.close?.();}

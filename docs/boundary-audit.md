@@ -104,13 +104,13 @@ Each owner review table has a per-project cap of 100 **and a platform-wide cap o
 - **Consequence traced in source (not executed):** safety withdrawal prepares a new `backend_publication_reviews` or `app_page_reviews` row ([`src/service-safety.ts`](../src/service-safety.ts)), so a full table blocks every owner's withdrawal and unpublish of those services. The per-project 100 is also a lifetime limit.
 - **Remediation ownership:** platform schema/capacity maintainers, with an owner decision. Options: count only pending, unexpired reviews toward capacity or expire/prune terminal reviews; per-account caps; exempt withdrawal reviews; add these tables to the counters report. Any trigger change is a schema change requiring a coordinated cutover (`docs/releases.md`). Related: the open "public resource exhaustion" scale gate in [security-risk-actions.md](security-risk-actions.md).
 
-### B2 Runbook says withdrawal/disconnect controls need recent authentication; the code does not (low; documentation/contract mismatch)
+### B2 Runbook says withdrawal/disconnect controls need recent authentication; the code does not (low; documentation/contract mismatch) — resolved October 8, 2026 by correcting the runbook
 
 [`docs/incident-runbooks.md`](incident-runbooks.md) C10 states that unpublishing a site, disabling the application, disabling a contact form, revoking a visitor, removing a passkey, replacing the recovery kit and disconnecting GitHub/Cloudflare each need "the existing review, recent authentication and rate limits". In code, visitor revocation, passkey and kit changes do; the others do not: `confirm:site`, `confirm:application`, `confirm:contact` and the safety-withdrawal confirm routes accept any current session, and `POST /api/connections/{cloudflare,github}/disconnect` have neither freshness nor a rate limit.
 
 - **Reproduction (executed for site unpublish):** `node tests/boundary-recent-auth.mjs`. A session whose passkey proof is one hour old prepares and confirms an unpublish review; the site goes offline (status 200). The other actions are evidenced structurally by the registry (`recentAuth:false` controls; no `freshnessCall` on those routes).
 - **Impact:** these are protective actions; Origin and ownership are enforced. The risk is operational: an incident responder relying on C10 would overestimate the protection, and a stolen-but-valid session can take a site, application or connection offline without a passkey.
-- **Remediation ownership:** owner decision. Either add `recentAuth` to the affected controls/routes (source change in `src/chat-controls.ts`, `src/index.ts`, safety routes) or correct C10 to match the feature contracts, which do not require recent authentication for these. Not changed here.
+- **Resolution:** owner decision, October 8, 2026: correct C10 to match the feature contracts rather than add freshness to protective actions. `docs/incident-runbooks.md` C10 now states which controls need a recent passkey sign-in and that disconnects have no rate limit. `tests/boundary-recent-auth.mjs` is now a passing characterization of the documented behavior (still outside verify profiles). The cell stays `gap (control B2)` in the matrix because the code is unchanged; a future freshness policy (see R4) would change the test and runbook together.
 
 ### B3 Guest-preview revoke/delete control applies its effect outside the Chat turn's revision check (low; atomicity/receipt)
 
@@ -148,7 +148,7 @@ node tools/verify.mjs fast
 node tools/verify.mjs protection
 node tests/boundary-review-capacity.mjs        # B1, expected exit 1
 node tests/boundary-review-capacity.mjs --d1   # B1 on local D1, expected exit 1
-node tests/boundary-recent-auth.mjs            # B2, expected exit 1
+node tests/boundary-recent-auth.mjs            # B2, characterization (exit 0)
 node tests/boundary-guest-preview-race.mjs     # B3, expected exit 1
 node tools/roadmap.mjs validate && node tools/roadmap.mjs render --check
 git diff --check
