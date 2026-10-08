@@ -216,13 +216,26 @@ const publicationTables=new Set(['publications','backend_publications','app_page
 const credentialTables=new Set(['github_token_vault','cloudflare_token_vault','github_refresh_custody','github_oauth_states','cloudflare_oauth_states','connection_key_registry','connection_key_policy','connection_key_rotations','connection_rotation_batches','connection_rotation_guards','connection_oauth_exchanges','connection_oauth_outcomes','github_grant_revocations','github_token_staging','github_revocation_claims']);
 const classify=table=>identityTables.has(table)?'identity':publicationTables.has(table)?'publication':credentialTables.has(table)?'credential':table.startsWith('app_')?'application-data':'other';
 
+// Why the current source gave no comparable record set. The observer reports a fixed hold code (no identifiers,
+// no row content): a source that was never read is absent/inaccessible, while a source that was read but holds
+// unsettled effects, rotations or an unexpected shape is present and its comparison stays held (fail closed).
+const sourceUnreadable=new Set(['source-unreadable','candidate-read']);
+const sourceUnsettled=new Set(['uncertain-effect','key-rotation-unsettled','preservation-hold','cms-recovery-unavailable','stale-identity']);
+const sourceInvalid=new Set(['current-schema','candidate-integrity','candidate-bound','record-identity']);
+const sourceOutcome=code=>sourceUnreadable.has(code)?{sourceAvailable:false,reconciliation:'unavailable-without-current-source'}
+ :sourceUnsettled.has(code)?{sourceAvailable:true,reconciliation:'held-current-source-unsettled',sourceHold:code}
+ :sourceInvalid.has(code)?{sourceAvailable:true,reconciliation:'held-current-source-invalid',sourceHold:code}
+ :{sourceAvailable:null,reconciliation:'unavailable-reconciliation-tooling'};
+
 /** Compare an isolated candidate with the operator-selected current source.
  * Returns per-class counts for WH-019 reconciliation and RPO loss. It does not
- * repair, scrub or admit anything, and is unavailable when the source is lost. */
+ * repair, scrub or admit anything. With no readable current source it reports
+ * unavailable; with a readable but unsettled or invalid source it reports the
+ * fixed hold instead of claiming the source is gone. Neither case yields counts. */
 export async function restoreDiscrepancies(candidateDb,sourceDb){
  const candidate=(await captureRestoreArchive(candidateDb,{snapshotId:'drill-comparison',streamId:'drill-comparison',sequence:0})).records;
  let source;
- try{source=(await captureRestoreRecordSnapshot(sourceDb)).records;}catch{return {...fenced,sourceAvailable:false,reconciliation:'unavailable-without-current-source'};}
+ try{source=(await captureRestoreRecordSnapshot(sourceDb)).records;}catch(error){return {...fenced,...sourceOutcome(error?.code)};}
  const current=new Map(source.map(r=>[restoreRecordIdentity(r),r])),restored=new Map(candidate.map(r=>[restoreRecordIdentity(r),r]));
  const counts={resurrected:{},rolledBack:{},lostSinceSnapshot:{}},tables={resurrected:{},rolledBack:{},lostSinceSnapshot:{}};
  const add=(kind,table)=>{const c=classify(table);counts[kind][c]=(counts[kind][c]??0)+1;tables[kind][table]=(tables[kind][table]??0)+1;};

@@ -104,11 +104,16 @@ export async function captureRestoreArchive(db,identity){
 }
 /** Live-source observation, not a disaster-recovery authority or provider check. */
 export async function captureRestoreRecordSnapshot(db){
+ // The failure keeps the same message; `code` is a fixed hold code (never an identifier or row content) for a
+ // source that was read but is unsettled or invalid, or 'source-unreadable' when no read completed. Callers that
+ // only need to refuse may ignore it. Nothing here admits or repairs anything.
+ let contract;
+ try{contract=await currentContract();}catch{throw Object.assign(new Error('Current recovery source could not be observed.'),{code:'contract-unavailable'});}
  try{
-  const contract=await currentContract(),state=await snapshot(db,contract);
+  const state=await snapshot(db,contract);
   checkUnsettled(state);checkCredentialObligations(state);
   return {schema:contract.schema,records:recordInventory(contract,state),sha256:digest(canonical(state.inventory))};
- }catch{throw new Error('Current recovery source could not be observed.');}
+ }catch(error){throw Object.assign(new Error('Current recovery source could not be observed.'),{code:error instanceof Hold?error.code:'source-unreadable'});}
 }
 
 /** Read a recovery constraint from the operator-selected CURRENT source, never
