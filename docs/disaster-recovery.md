@@ -17,7 +17,7 @@ These are **proposals for owner review**. They are not approved policy, customer
 
 ## What the drill does
 
-The tool is `tools/recovery-drill.mjs`. It is operator/local only, with no listener, route, publisher or provider adapter. Admission and reconciliation outputs carry `servingAllowed`, `providerDispatchAllowed` and `retirementAllowed` set to `false`; capture, verify and restore operations expose counts and digests only. It reuses existing components and does not create a second authority:
+The tool is `tools/recovery-drill.mjs`. It is operator/local only, with no listener, route, publisher or provider adapter. Admission and reconciliation outputs carry `servingAllowed`, `providerDispatchAllowed` and `retirementAllowed` set to `false`. The capture, verification and restore helpers do not authorize serving, provider dispatch or key retirement. It reuses existing components and does not create a second authority:
 
 - **Capture.** `captureRecoveryPoint` reads the control database twice with the existing logical snapshot (`stableCMSDatabase`) and checks an isolated SQLite round trip. It then copies every referenced private object body and copies Worker build outputs with the WH-002 `copyTree`/`fileInventory` helpers. All files are written through `writePrivate`, so they must sit in owner-only directories outside every checkout. The manifest is written last, and its SHA-256 (`pointDigest`) must be recorded outside the archive. Every later step requires that digest.
 - **Register.** `openArchivedControl` opens the archived copy read-only. The existing operator inventory (`registerArchive`) pins it together with the encrypted key backup (`tools/connection-key-backup.mjs`), which is stored separately from the data archive.
@@ -37,7 +37,7 @@ Recovery point A held:
 - One published site version, one enabled visitor application with an applied page review, and 2 visitor documents written through actual QuickJS transitions.
 - 2 private object bodies (91 bytes) and 4 runtime build files (worker plus Wasm).
 
-No native CMS resources were included; admission holds those as `cms-recovery-unavailable`. Published-site photos, GitHub backups, domains, Stripe state and interrupted key-rotation/cutover scenarios were not exercised. Worker recovery was exercised with the runtime bundle only; the full feature scope remains unapproved for other targets.
+No native CMS resources were included; admission holds those as `cms-recovery-unavailable`. Published-site photos, GitHub backups, domains, Stripe state and interrupted key-rotation/cutover scenarios were not exercised. Worker recovery was exercised with the runtime bundle only; other Worker artifacts remain untested in this drill.
 
 ## Measured results — October 8, 2026 UTC
 
@@ -104,7 +104,7 @@ Open PR #170 (WH-018/019, not merged and not evaluated here) proposes an append-
 Checked October 8, 2026 against official documentation:
 
 - [D1 Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/) restores to any minute within 30 days (Workers Paid) or 7 days (Free), at no extra cost. It restores **in place** and "does not yet allow you to clone or fork an existing database to a new copy". It therefore cannot produce the isolated candidate this drill requires; an in-place restore would overwrite the live database before any admission check. The isolated path is the logical export/import used here, and it is untested against remote D1.
-- [R2 durability](https://developers.cloudflare.com/r2/reference/durability/) is designed for eleven nines, but "durability does not prevent intentional or accidental deletion of data". The page describes no restore of deleted objects, so private bodies are recoverable only from Whumpo's own recovery point.
+- [R2 durability](https://developers.cloudflare.com/r2/reference/durability/) is designed for eleven nines, but "durability does not prevent intentional or accidental deletion of data". No deleted-object recovery path was configured or exercised in this drill; its private-body recovery source was the archived point copy.
 - [Worker rollbacks](https://developers.cloudflare.com/workers/configuration/versions-and-deployments/rollbacks/) cover the 100 most recent versions, and "resources connected to your Worker will not be changed". Rollback does not restore data, and secret values are outside every archive here.
 
 Untested: remote D1 batch, statement and size limits for a one-batch restore; export/import duration at real data volume; R2 object listing at volume; separate Cloudflare account/bucket custody; secret re-provisioning; and DNS/traffic switching. Paid isolated cloud resources and any traffic switch remain separately reviewed owner actions.
@@ -113,7 +113,7 @@ Untested: remote D1 batch, statement and size limits for a one-batch restore; ex
 
 - **One-batch restore exceeds the CMS bound.** The control schema alone is 1,051 non-table-row objects. `restoreCapturedCMSD1` refuses more than 1,000 statements, so the drill uses its own bounded (20,000 statements / 64 MiB) one-batch restore with the same empty-target and round-trip rules.
 - **`quick_check` fails in local D1.** `PRAGMA quick_check` on the complete control schema fails with `SQLITE_NOMEM`, so the full logical round-trip digest replaces it.
-- **Evidence deadline under load.** The inventory's fixed ten-second evidence deadline covers two full source observations. With a local-D1 source on this contended host it expired, which is why the source uses the SQLite adapter. The test retries independent-evidence holds (missing/unavailable/malformed evidence, non-200 responses, timeouts) up to three attempts, and reports the count as `independentEvidenceRetries` (0 in the recorded run). Real data volume may need a reviewed deadline or a faster observation path before operational use.
+- **Evidence deadline under load.** The inventory's fixed ten-second evidence deadline covers two full source observations. With a local-D1 source on this contended host, observed independent-evidence holds were consistent with the fixed ten-second deadline; the source uses the SQLite adapter instead. The test retries independent-evidence holds (missing/unavailable/malformed evidence, non-200 responses, timeouts) up to three attempts, and reports the count as `independentEvidenceRetries` (0 in the recorded run). Real data volume may need a reviewed deadline or a faster observation path before operational use.
 - **In-flight work blocks a point.** A recovery point captured while provider work is in flight can never be admitted. Take a new point after settlement.
 
 ## Acceptance status
