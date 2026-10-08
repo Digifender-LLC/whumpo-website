@@ -29,14 +29,14 @@ export async function idempotencyKey(identity: { source: string; sourceEventId: 
  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// ---------- Registries (closed; a later feature packet registers its dimension, workload, tariff and adapter together) ----------
-export const unknownReasons = ['rate-missing', 'usage-not-reported', 'usage-pending', 'outcome-unknown', 'provider-lag', 'unpriced', 'not-measured', 'invoice-pending', 'entitlement-unknown'] as const;
-export const placementClasses = ['static', 'shared-api', 'isolated-function', 'persistent-process', 'platform'] as const;
-export const workClasses = ['task', 'retry', 'control', 'standing'] as const;
-export const outcomes = ['settled', 'pending', 'uncertain', 'released'] as const;
-export const costBases = ['tariff', 'receipt', 'provider-reported', 'shadow', 'unknown'] as const;
-export const platformPools = ['shared-account', 'control-plane', 'closed-account'] as const;
-export const aiTiers = ['standard', 'premium'] as const;
+// ---------- Registries (closed and frozen at runtime, arrays included; a later feature packet registers its dimension, workload, tariff and adapter together) ----------
+export const unknownReasons = deepFreeze(['rate-missing', 'usage-not-reported', 'usage-pending', 'outcome-unknown', 'provider-lag', 'unpriced', 'not-measured', 'invoice-pending', 'entitlement-unknown'] as const);
+export const placementClasses = deepFreeze(['static', 'shared-api', 'isolated-function', 'persistent-process', 'platform'] as const);
+export const workClasses = deepFreeze(['task', 'retry', 'control', 'standing'] as const);
+export const outcomes = deepFreeze(['settled', 'pending', 'uncertain', 'released'] as const);
+export const costBases = deepFreeze(['tariff', 'receipt', 'provider-reported', 'shadow', 'unknown'] as const);
+export const platformPools = deepFreeze(['shared-account', 'control-plane', 'closed-account'] as const);
+export const aiTiers = deepFreeze(['standard', 'premium'] as const);
 export type UnknownReason = typeof unknownReasons[number];
 export type PlacementClass = typeof placementClasses[number];
 export type WorkClass = typeof workClasses[number];
@@ -123,10 +123,10 @@ export type CostEvent = {
  workload: CostWorkload; workClass: WorkClass; taskRef: string | null; attempt: number; attribution: Attribution; placementClass: PlacementClass; quantity: Quantity; cost: Cost;
  outcome: Outcome; customerUnits: 0; aiTier: AITier | null; detail: Record<string, number>; occurredAt: string; observedAt: string;
 };
-const eventKeys = ['contractVersion', 'source', 'sourceEventId', 'providerEventId', 'revision', 'idempotencyKey', 'kind', 'dimension', 'workload', 'workClass', 'taskRef', 'attempt', 'attribution', 'placementClass', 'quantity', 'cost', 'outcome', 'customerUnits', 'aiTier', 'detail', 'occurredAt', 'observedAt'];
+const eventKeys = deepFreeze(['contractVersion', 'source', 'sourceEventId', 'providerEventId', 'revision', 'idempotencyKey', 'kind', 'dimension', 'workload', 'workClass', 'taskRef', 'attempt', 'attribution', 'placementClass', 'quantity', 'cost', 'outcome', 'customerUnits', 'aiTier', 'detail', 'occurredAt', 'observedAt']);
 
 type Loose = Record<string, any>;
-function shape(value: unknown, keys: string[], where: string): asserts value is Loose {
+function shape(value: unknown, keys: readonly string[], where: string): asserts value is Loose {
  check(plain(value), 'INVALID_EVENT', where);
  for (const k of Object.keys(value)) {
   check(!['receivedAt', 'receivedSeq', 'late'].includes(k), 'CLIENT_ASSIGNED', `${where}.${k}`);
@@ -165,13 +165,33 @@ function checkCost(c: unknown) {
  } else { shape(c, ['basis', 'micros', 'ref'], 'cost'); check(isInt(c.micros), 'INVALID_COST', 'micros'); check(typeof c.ref === 'string' && SAFE.test(c.ref), 'INVALID_COST', 'ref'); }
 }
 
+// The caller's object is read exactly once, synchronously, before the first await; everything after validates this private copy, so
+// a caller mutating its original while the digest is pending can change neither the verdict nor the returned event. Only plain data
+// is copied: an accessor property is refused (no caller code runs while validating), and a non-plain object (class instance, Date,
+// Map, function ...) becomes an inert prototype-less marker that fails the same plain-object rules it always failed.
+const opaque = Object.freeze(Object.create(null));
+function snapshot(value: unknown, depth = 0): unknown {
+ if (typeof value === 'function') return opaque;
+ if (value === null || typeof value !== 'object') return value;
+ check(depth <= 8, 'INVALID_EVENT', 'nesting too deep or cyclic');
+ if (Array.isArray(value)) return Array.from({ length: value.length }, (_, i) => snapshot(value[i], depth + 1));
+ if (!plain(value)) return opaque;
+ const out: Record<string, unknown> = {};
+ for (const k of Object.keys(value)) {
+  const d = Object.getOwnPropertyDescriptor(value, k);
+  check(d && 'value' in d, 'INVALID_EVENT', `${k} is an accessor`);
+  Object.defineProperty(out, k, { value: snapshot(d.value, depth + 1), enumerable: true, writable: true, configurable: true });
+ }
+ return out;
+}
+
 /**
- * Validates a candidate event against every frozen rule of contract version 1 and returns an isolated copy. Throws `CostEventError`
+ * Validates a candidate event against every frozen rule of contract version 1 and returns a private snapshot taken before any await (later edits of the input change nothing). Throws `CostEventError`
  * with a specific code at the first broken rule. The registries are the closed module-level ones: there is no runtime registration.
  */
 export async function validateCostEvent(input: unknown): Promise<CostEvent> {
- shape(input, eventKeys, 'event');
- const e = input;
+ const e = snapshot(input);
+ shape(e, eventKeys, 'event');
  check(e.contractVersion === contractVersion, 'UNSUPPORTED_VERSION', String(e.contractVersion));
  check(Object.hasOwn(sources, e.source), 'UNKNOWN_SOURCE', String(e.source));
  check(Object.hasOwn(dimensions, e.dimension), 'UNKNOWN_DIMENSION', String(e.dimension));
@@ -214,5 +234,5 @@ export async function validateCostEvent(input: unknown): Promise<CostEvent> {
   check(e.occurredAt >= t.effectiveFrom && (t.effectiveTo === null || e.occurredAt < t.effectiveTo), 'TARIFF_NOT_EFFECTIVE', `${e.cost.tariff.id}@${e.cost.tariff.version}`);
  }
  if (e.cost.basis === 'shadow') check(dim.provider === 'inference-provider', 'SHADOW_BASIS', 'only hypothetical inference estimates are shadow');
- return structuredClone(e) as CostEvent;
+ return e as CostEvent;
 }

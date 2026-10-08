@@ -139,6 +139,20 @@ async function suite(m,label){
   for(const registry of [ct.dimensions,ct.workloads,ct.sources,ct.tariffs,ct.tariffs['pool-proposal'][1].rates])assert.ok(Object.isFrozen(registry));
   assert.throws(()=>{'use strict';ct.dimensions['worker.requests'].unit='gigabyte';},TypeError);assert.throws(()=>{ct.workloads.invented={};},TypeError);
   assert.ok(Object.values(ct.workloads).every(w=>/^WH-\d{3}$/.test(w.packet)));
+  // Every exported closed registry is frozen at runtime, at every depth and including the arrays (TypeScript readonly is not enough), and a
+  // failed modification attempt leaves the future admission decision untouched.
+  const deepFrozen=(v,where)=>{if(v&&typeof v==='object'){assert.ok(Object.isFrozen(v),where);for(const [k,x] of Object.entries(v))deepFrozen(x,`${where}.${k}`);}};
+  const exported=Object.entries(ct).filter(([,v])=>v&&typeof v==='object');
+  assert.deepEqual(exported.map(([k])=>k).sort(),['aiTiers','costBases','dimensions','outcomes','placementClasses','platformPools','sources','tariffs','unknownReasons','workClasses','workloads']);
+  for(const [name,value] of exported)deepFrozen(value,name);
+  const attempts={unknownReasons:'x-reason',placementClasses:'x-placement',workClasses:'x-work-class',outcomes:'x-outcome',costBases:'x-basis',platformPools:'x-pool',aiTiers:'x-tier'};
+  for(const [name,added] of Object.entries(attempts)){
+   const before=[...ct[name]];
+   for(const attempt of [()=>ct[name].push(added),()=>ct[name].unshift(added),()=>{ct[name][0]=added;},()=>{ct[name].length=0;},()=>ct[name].splice(0,1),()=>ct[name].sort(),()=>ct[name].reverse(),()=>ct[name].pop()])assert.throws(attempt,TypeError,name);
+   assert.deepEqual([...ct[name]],before,name);
+  }
+  for(const attempt of [()=>{ct.dimensions['ai.inference.call'].sources.push('liability-register');},()=>{ct.dimensions['ai.inference.call'].detailKeys.push('cachedTokens');},()=>{ct.dimensions['liability.support'].scopes.pop();},
+   ()=>{ct.dimensions.invented={};},()=>{delete ct.workloads['chat-ai'];},()=>{ct.sources['connector-call'].readiness='source-adapter';},()=>{ct.tariffs['pool-proposal'][1].rates['worker.requests'].micros=0;},()=>{ct.tariffs['pool-proposal'][2]={};}])assert.throws(attempt,TypeError);
  });
  await check('canonical key: the idempotency key is the SHA-256 of the sorted canonical identity and equals the independent reference',async()=>{
   const sha=(source,sourceEventId,dimension)=>createHash('sha256').update(`{"dimension":${JSON.stringify(dimension)},"source":${JSON.stringify(source)},"sourceEventId":${JSON.stringify(sourceEventId)}}`).digest('hex');
@@ -199,6 +213,12 @@ async function suite(m,label){
   ['an unknown detail key',ai({detail:{inputTokens:1,outputTokens:2,cachedTokens:3}}),'UNKNOWN_FIELD'],['a negative token count',ai({detail:{inputTokens:-1,outputTokens:2}}),'UNKNOWN_FIELD'],
   ['an array instead of an event',[],'INVALID_EVENT'],['null instead of an event',null,'INVALID_EVENT'],['a class instance instead of an event',new (class Impostor{})(),'INVALID_EVENT'],['a platform pool that is not registered',usage({attribution:{scope:'platform',pool:'elsewhere'}}),'INVALID_ATTRIBUTION']
  ];
+ await check('registries: after every modification attempt the closed registries still refuse unregistered values and still admit the registered ones',async()=>{
+  const attempted=[usage({placementClass:'x-placement'}),usage({workClass:'x-work-class'}),usage({outcome:'x-outcome'}),usage({cost:{basis:'x-basis',micros:1,ref:'r'}}),usage({attribution:{scope:'platform',pool:'x-pool'}}),ai({aiTier:'x-tier'}),
+   usage({cost:{basis:'unknown',reason:'x-reason',exposureMicros:null}}),ai({detail:{cachedTokens:1}})];
+  for(const event of attempted)assert.notEqual(await tsCode(()=>ct.validateCostEvent(event)),'ACCEPTED',JSON.stringify(event));
+  assert.deepEqual(await ct.validateCostEvent(usage()),usage());
+ });
  await check('validator: accepts a valid event and refuses every broken frozen rule with its specific code, as the independent reference does',async()=>{
   for(const valid of [usage(),ai(),liability(),ai({outcome:'pending',quantity:{state:'unknown',reason:'usage-pending'},cost:{basis:'unknown',reason:'usage-pending',exposureMicros:500},detail:{}}),
    ai({outcome:'released',quantity:{state:'known',value:0,unit:'call'},cost:{basis:'receipt',micros:0,ref:'r'},detail:{}}),usage({quantity:{state:'unknown',reason:'usage-not-reported'},cost:{basis:'unknown',reason:'rate-missing',exposureMicros:null}})]){
@@ -216,6 +236,43 @@ async function suite(m,label){
   assert.deepEqual(event,frozen);assert.notEqual(out,event);assert.notEqual(out.attribution,event.attribution);assert.notEqual(out.detail,event.detail);
   out.detail.inputTokens=999999;out.attribution.ownerId='x';assert.deepEqual(event,frozen);
   assert.deepEqual(await ct.validateCostEvent(deepFreezeCopy(frozen)),frozen);
+ });
+  // The input is snapshotted synchronously, before the first await (the SHA-256 digest): edits made while the promise is pending change neither
+ // the verdict nor the returned event nor its identity key.
+ await check('validator: a private snapshot is taken before the first await, so editing the input while the digest is pending changes nothing',async()=>{
+  const identity=e=>ct.idempotencyKey(e);
+  const edits=[['top-level source',e=>{e.source='unregistered-source';}],['dimension',e=>{e.dimension='not.a.dimension';}],['sourceEventId (stale identity key)',e=>{e.sourceEventId='another-call';}],
+   ['deleted field',e=>{delete e.workload;}],['added billing field',e=>{e.debit=5;}],['customerUnits',e=>{e.customerUnits=7;}],['replaced nested attribution',e=>{e.attribution={scope:'platform',pool:'unregistered-pool'};}],
+   ['nested attribution field',e=>{e.attribution.ownerId='not-a-uuid';}],['nested quantity',e=>{e.quantity.value=-1;e.quantity.unit='gigabyte';}],['nested detail',e=>{e.detail.inputTokens=-1;e.detail.cachedTokens=1;}],
+   ['nested cost',e=>{e.cost.ref='Bearer secret';e.cost.micros=-1;}],['timestamps',e=>{e.occurredAt='not a time';}]];
+  for(const [name,edit] of edits){
+   const event=ai({cost:{basis:'receipt',micros:5,ref:'rate-1'}}),expected=structuredClone(event);
+   const pending=ct.validateCostEvent(event);edit(event);
+   const out=await pending;
+   assert.deepEqual(out,expected,name);assert.equal(out.idempotencyKey,await identity(expected),name);
+   // The result is also isolated from the edited input and from its own earlier callers.
+   out.detail.inputTokens=424242;assert.notEqual(out.detail,event.detail);
+  }
+  // The reverse: an event invalid when submitted stays rejected even if the caller repairs it while the promise is pending.
+  for(const [name,breakIt,fix,expected] of [['customerUnits',e=>{e.customerUnits=5;},e=>{e.customerUnits=0;},'BILLING_AUTHORITY'],['nested unit',e=>{e.quantity.unit='gigabyte';},e=>{e.quantity.unit='call';},'UNIT_MISMATCH'],
+   ['source',e=>{e.source='nope';},e=>{e.source='inference-receipt';},'UNKNOWN_SOURCE']]){
+   const event=ai();breakIt(event);const pending=ct.validateCostEvent(event);fix(event);await code(()=>pending,expected,name);
+  }
+  // Plain JSON data only: an accessor is refused without being invoked, a class instance or null-prototype object is not a plain event, and a cycle is refused.
+  let reads=0;
+  const getter=ai();Object.defineProperty(getter,'source',{get(){reads++;return 'inference-receipt';},enumerable:true,configurable:true});
+  const nested=ai();Object.defineProperty(nested.attribution,'ownerId',{get(){reads++;return O1;},enumerable:true,configurable:true});
+  const setter=ai();Object.defineProperty(setter.detail,'inputTokens',{set(){reads++;},get(){return 1;},enumerable:true,configurable:true});
+  for(const event of [getter,nested,setter])await code(()=>ct.validateCostEvent(event),'INVALID_EVENT','accessor');
+  assert.equal(reads,0);
+  class Same{constructor(o){Object.assign(this,o);}}
+  await code(()=>ct.validateCostEvent(new Same(ai())),'INVALID_EVENT','class instance');await code(()=>ct.validateCostEvent(Object.assign(Object.create(null),ai())),'INVALID_EVENT','null prototype');
+  await code(()=>ct.validateCostEvent(ai({attribution:new Same({scope:'tenant',ownerId:O1,projectId:null,resourceId:null})})),'INVALID_ATTRIBUTION','nested class instance');
+  await code(()=>ct.validateCostEvent(ai({detail:{inputTokens:new Number(1),outputTokens:2}})),'UNKNOWN_FIELD','boxed number');
+  const cyclic=ai();cyclic.detail.self=cyclic;await code(()=>ct.validateCostEvent(cyclic),'INVALID_EVENT','cycle');
+  // A JSON-parsed "__proto__" key is data, not a prototype assignment, and is refused as an unknown field.
+  await code(()=>ct.validateCostEvent(JSON.parse(JSON.stringify(ai()).replace('{"contractVersion"','{"__proto__":{"source":"x"},"contractVersion"'))),'UNKNOWN_FIELD','__proto__');
+  assert.equal(ct.validateCostEvent.length,1);
  });
  // ---------- Adapters over real receipt rows ----------
  await check('adapters: the output equals the reference for every captured real state of every producer and passes the validator',async()=>{
@@ -493,8 +550,14 @@ const mutants=[
  ['unsafe quantity accepted',C,"const isInt = (v: unknown, min = 0): v is number => Number.isSafeInteger(v)","const isInt = (v: unknown, min = 0): v is number => Number.isInteger(v)"],
  ['shadow allowed on infrastructure',C,"if (e.cost.basis === 'shadow') check(dim.provider === 'inference-provider'","if (false) check(dim.provider === 'inference-provider'"],
  ['workload registry not enforced',C,"check(Object.hasOwn(workloads, e.workload), 'UNKNOWN_WORKLOAD'","check(true, 'UNKNOWN_WORKLOAD'"],
- ['validated copy aliases the input',C,"return structuredClone(e) as CostEvent;","return e as CostEvent;"],
+ ['validated event aliases the input',C,"const e = snapshot(input);","const e = input as Loose;"],
+ ['validated event is a shallow copy',C,"const e = snapshot(input);","const e = plain(input) ? { ...input } : snapshot(input);"],
+ ['result re-read from the live input after the digest',C,"return e as CostEvent;","return snapshot(input) as CostEvent;"],
+ ['accessor properties are read',C,"check(d && 'value' in d, 'INVALID_EVENT', `${k} is an accessor`);","check(d, 'INVALID_EVENT', `${k} is an accessor`);"],
+ ['cycles are not bounded',C,"check(depth <= 8, 'INVALID_EVENT', 'nesting too deep or cyclic');","check(depth <= 1e9, 'INVALID_EVENT', 'nesting too deep or cyclic');"],
+ ['non-plain objects copied as plain',C,"if (!plain(value)) return opaque;","if (!plain(value)) return { ...value };"],
  ['registry not frozen',C,"export const workloads = deepFreeze({","export const workloads = ({"],
+ ...['unknownReasons','placementClasses','workClasses','outcomes','costBases','platformPools','aiTiers'].map(n=>[`${n} array not frozen`,C,`export const ${n} = deepFreeze(`,`export const ${n} = (`]),
  ['dispatched revision equals reserved',A,"dispatched: [2, 'pending']","dispatched: [1, 'pending']"],
  ['uncertain call reported as pending',A,"uncertain: [3, 'uncertain']","uncertain: [3, 'pending']"],
  ['released outranked by an earlier state',A,"released: [4, 'released']","released: [0, 'released']"],
@@ -520,7 +583,9 @@ const killedBy={
  'billing field accepted':'validator: accepts','content field accepted':'validator: accepts','physical locator accepted':'validator: accepts','secret accepted':'validator: accepts','released call may consume':'validator: accepts',
  'released cost not enforced':'validator: accepts','pending call may carry a known cost':'validator: accepts','tariff window ignored':'validator: accepts','unpriced dimension accepted':'validator: accepts','unit not checked':'validator: accepts',
  'source may emit any dimension':'validator: accepts','unsafe quantity accepted':'validator: accepts','shadow allowed on infrastructure':'validator: accepts','workload registry not enforced':'validator: accepts',
- 'validated copy aliases the input':'validator: the input is never mutated','registry not frozen':'registries:',
+ 'validated event aliases the input':'validator: the input is never mutated','validated event is a shallow copy':'validator: the input is never mutated','result re-read from the live input after the digest':'validator: a private snapshot',
+ 'accessor properties are read':'validator: a private snapshot','cycles are not bounded':'validator: a private snapshot','non-plain objects copied as plain':'validator: accepts','registry not frozen':'registries:',
+ 'unknownReasons array not frozen':'registries:','placementClasses array not frozen':'registries:','workClasses array not frozen':'registries:','outcomes array not frozen':'registries:','costBases array not frozen':'registries:','platformPools array not frozen':'registries:','aiTiers array not frozen':'registries:',
  'dispatched revision equals reserved':'adapters: the output equals','uncertain call reported as pending':'adapters: the output equals','released outranked by an earlier state':'adapters: the output equals',
  'acknowledgment counted as task cost':'adapters: the output equals','pending exposure dropped':'adapters: the output equals','unpriced call priced as zero':'adapters: the output equals','customer debit used as the provider cost':'adapters: the output equals',
  'premium tier dropped':'adapters: the output equals','storage revision is not the counter':'adapters: the output equals','storage reading not tariff priced':'adapters: the output equals',
