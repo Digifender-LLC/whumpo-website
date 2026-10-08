@@ -55,15 +55,44 @@ const overlay=typeOverlay(registry);
 assert.equal(overlay.get('projects.owner_user_id'),'workspace');assert.equal(overlay.get('user_profiles.user_id'),'account');assert.equal(overlay.get('content_risk_evidence.user_id'),'mixed');
 assert.equal(overlay.get('safety_preservation_holds.subject_user_id'),'account');
 
-// ---- freeze refusal ----
+// ---- owner answers: exactly the two recorded in the contract, by semantic ID; the other four stay open ----
+const answeredIds=registry.questions.filter(q=>q.ownerAnswerRecorded).map(q=>q.id);
+assert.deepEqual(answeredIds,['member-only-accounts','member-limit']);
+for(const q of registry.questions.filter(q=>q.ownerAnswerRecorded))assert.deepEqual([q.ownerAnswer.recordedOn,q.item],['2026-10-08',undefined]);
+assert.deepEqual(registry.questions.filter(q=>!q.ownerAnswerRecorded).map(q=>[q.item,q.id]),[[1,'payer-on-transfer'],[2,'retention-and-closure-window'],[3,'late-payment-continuity'],[4,'funded-workspace-bound']],'the contract numbers the remaining questions 1 to 4');
+// The answers moved no entry: the six undecided entries still wait on the open payer, late-payment and budget questions.
+assert.deepEqual(report.undecided.map(u=>u.column).sort(),['inference_budgets.user_id','inference_calls.user_id','stripe_customers.user_id','stripe_paid_invoices.user_id','stripe_subscription_orders.user_id','stripe_subscriptions.user_id']);
+for(const u of report.undecided)assert.ok(u.questions.every(id=>!answeredIds.includes(id)),u.column);
+assert.deepEqual(report.answeredQuestions.find(q=>q.id==='member-only-accounts').dependent,['welcome_onboarding.user_id']);
+assert.equal(entry(registry,'welcome_onboarding.user_id').status,'proposed');
+
+// ---- freeze refusal, and a coherent path to a freeze that check also accepts ----
 const refusal=freezeStatus(registry);
 assert.equal(refusal.refused,true);assert.match(refusal.reasons.join('\n'),/111 of 111 entries are not accepted \(105 proposed, 6 undecided\)/);
-assert.match(refusal.reasons.join('\n'),/6 owner questions have no recorded answer/);
-// The preflight is arithmetic, not a stub: it opens only when every entry is accepted and every question answered.
-const accepted=clone(registry);accepted.status='frozen';accepted.columns.forEach(c=>{c.status='accepted';});accepted.questions.forEach(q=>{q.ownerAnswerRecorded=true;});
-assert.equal(freezeStatus(accepted).refused,false);
-const partial=clone(accepted);partial.columns[0].status='proposed';assert.equal(freezeStatus(partial).refused,true);
-const unanswered=clone(accepted);unanswered.questions[0].ownerAnswerRecorded=false;assert.equal(freezeStatus(unanswered).refused,true);
+assert.match(refusal.reasons.join('\n'),/4 owner questions have no recorded answer \(payer-on-transfer, retention-and-closure-window, late-payment-continuity, funded-workspace-bound\)/);
+// Synthetic progression on a clone (the committed registry is never accepted here). An answer is recorded with its
+// date and contract anchor, the entries are accepted, then the registry is frozen; both gates must agree at each step.
+const answer=q=>{q.ownerAnswerRecorded=true;delete q.item;q.ownerAnswer??={recordedOn:'2026-10-09',answer:'Synthetic fixture answer for '+q.id,anchor:'docs/workspace-collaboration.md#owner-decisions-recorded'};};
+const step1=clone(registry);step1.questions.forEach(answer);
+mention((await checkRegistry(step1,observed)).problems,/undecided, but every question it names is answered; review it to proposed/);
+const step2=clone(step1);step2.columns.forEach(c=>{if(c.status==='undecided')c.status='proposed';});
+assert.deepEqual((await checkRegistry(step2,observed)).problems,[]);assert.equal(freezeStatus(step2).refused,true);
+const step3=clone(step2);step3.columns.forEach(c=>{c.status='accepted';});
+assert.deepEqual((await checkRegistry(step3,observed)).problems,[]);assert.deepEqual(freezeStatus(step3).reasons,['registry status is proposed-not-frozen']);
+const frozen=clone(step3);frozen.status='frozen';
+assert.deepEqual((await checkRegistry(frozen,observed)).problems,[],'a fully accepted, fully answered, frozen registry passes check');
+assert.deepEqual(freezeStatus(frozen),{frozen:true,refused:false,reasons:[]});
+// Incoherent states fail check and are refused by freeze.
+const partial=clone(frozen);partial.columns[0].status='proposed';assert.equal(freezeStatus(partial).refused,true);
+mention((await checkRegistry(partial,observed)).problems,/Registry is frozen but 1 entries are not accepted/);
+const reopened=clone(frozen);const q0=reopened.questions.find(q=>q.id==='payer-on-transfer');q0.ownerAnswerRecorded=false;delete q0.ownerAnswer;q0.item=1;
+assert.equal(freezeStatus(reopened).refused,true);
+mention((await checkRegistry(reopened,observed)).problems,/Registry is frozen but owner questions payer-on-transfer are open/);
+mention((await checkRegistry(reopened,observed)).problems,/stripe_customers\.user_id: accepted while owner question payer-on-transfer is open/);
+// An entry cannot be accepted while its question is open, even before a freeze.
+mention(await problemsOf(r=>{entry(r,'stripe_customers.user_id').status='accepted';}),/accepted while owner question payer-on-transfer is open/);
+// Only a schema review edit freezes: a frozen status on the current registry fails check.
+mention(await problemsOf(r=>{r.status='frozen';}),/Registry is frozen but 111 entries are not accepted/);
 
 // ---- negative controls: coverage and drift ----
 mention(await problemsOf(()=>{},{extraSql:'CREATE TABLE probe_new(id TEXT PRIMARY KEY, reviewer_id TEXT REFERENCES users(id));'}),/Unclassified users foreign key probe_new\.reviewer_id/);
@@ -89,12 +118,18 @@ mention(await problemsOf(r=>{entry(r,'content_risk_evidence.user_id').subjects.p
 mention(await problemsOf(r=>{entry(r,'photo_scan_tickets.user_id').split[1].table='photo_scan_tickets';}),/split table photo_scan_tickets already exists/);
 mention(await problemsOf(r=>{entry(r,'github_connections.user_id').status='undecided';}),/an undecided entry must name its owner question/);
 mention(await problemsOf(r=>{entry(r,'github_connections.user_id').questions=['made-up'];}),/unknown question made-up/);
-mention(await problemsOf(r=>{r.questions[0].ownerAnswerRecorded=true;}),/records no owner answer/);
+// A recorded answer is a dated fact with an anchor, never a bare flag; an open question carries no answer.
+mention(await problemsOf(r=>{r.questions[0].ownerAnswerRecorded=true;}),/payer-on-transfer: a recorded owner answer needs ownerAnswer\.recordedOn/);
+mention(await problemsOf(r=>{r.questions[0].ownerAnswer={recordedOn:'2026-10-08',answer:'x',anchor:'docs/workspace-collaboration.md#remaining-product-questions'};}),/ownerAnswer is present but ownerAnswerRecorded is false/);
+mention(await problemsOf(r=>{r.questions.find(q=>q.id==='member-limit').ownerAnswer.anchor='docs/workspace-collaboration.md#no-such-heading';}),/member-limit: answer anchor .*anchor does not exist/);
+mention(await problemsOf(r=>{r.questions.find(q=>q.id==='member-limit').item=5;}),/answered question is no longer numbered/);
+mention(await problemsOf(r=>{r.questions.find(q=>q.id==='funded-workspace-bound').item=6;}),/numbered 1 to 4/);
+mention(await problemsOf(r=>{r.questions.find(q=>q.id==='funded-workspace-bound').ownerAnswerRecorded='yes';}),/must be true or false/);
 mention(await problemsOf(r=>{entry(r,'github_connections.user_id').status='frozen';}),/unknown status frozen/);
 mention(await problemsOf(r=>{entry(r,'github_connections.user_id').evidence.push('docs/workspace-collaboration.md#no-such-heading');}),/anchor does not exist/);
 mention(await problemsOf(r=>{entry(r,'github_connections.user_id').evidence.push('src/not-a-file.ts');}),/file does not exist/);
 mention(await problemsOf(r=>{entry(r,'github_connections.user_id').evidence.push('../outside.md');}),/not a repository path/);
-mention(await problemsOf(r=>{r.status='frozen';}),/must be version 1 and remain proposed-not-frozen/);
+mention(await problemsOf(r=>{r.status='final';}),/must be version 1 with status proposed-not-frozen or frozen/);
 // A new column must not collide with, or double count, an existing one.
 mention(await problemsOf(()=>{},{extraSql:'ALTER TABLE activity_events ADD COLUMN workspace_id TEXT;'}),/intended tenant column workspace_id already exists in activity_events/);
 mention(await problemsOf(()=>{},{extraSql:'ALTER TABLE content_risk_evidence ADD COLUMN account_id TEXT;'}),/typed column account_id already exists in content_risk_evidence/);
@@ -114,10 +149,10 @@ const spike=['inference_delete_guard','cms_publication_media_retained','cms_impo
 const baselined=new Set(baseline.bodies.crossTypeFindings.map(f=>f.object));
 for(const name of spike)assert.ok(baselined.has(name),name);
 assert.ok(baselined.has('safety_held_projects')&&baselined.has('operator_contained_projects'),'the views the spike called uncounted are found too');
-assert.equal(baselined.size,46);
+assert.equal(baselined.size,44);
 const current=await runChecks();
 assert.deepEqual(current.problems,[]);
-assert.deepEqual([current.bodies.findings.total,current.bodies.findings.new,current.bodies.findings.stale],[50,0,0]);
+assert.deepEqual([current.bodies.findings.total,current.bodies.findings.new,current.bodies.findings.stale],[48,0,0]);
 
 // ---- the command line ----
 const cli=args=>spawnSync(process.execPath,['tools/tenant-classification.mjs',...args],{encoding:'utf8'});
