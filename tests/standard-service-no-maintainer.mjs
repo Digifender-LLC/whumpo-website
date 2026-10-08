@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {currentFixtureModules} from './helpers/current-modules.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
@@ -6,10 +7,14 @@ import {inferenceModules,inferenceReach} from './helpers/maintainer-inference.mj
 Error.stackTraceLimit=0;
 // WH-073 slice 1 (verification only): published content, visitor application, guest preview, contact and scheduled
 // maintenance routes dispatch zero owner-maintenance model inference, with the maintainer absent (no AI keys) or present
-// but failing (provider answers 503). The real handlers run against the complete current schema in disposable SQLite
+// but failing (provider answers 503), and with the owner's funding genuinely exhausted in the durable rows: the standard
+// usage allowance (inference_budgets spent to its ceiling) or the premium/operator gateway buckets (task, account,
+// platform, premium credit and its approval spent to their limits). Visitors never consult or move those balances. The real handlers run against the complete current schema in disposable SQLite
 // (or local D1 with --d1). fetch is replaced by a counting stub, so any provider, Turnstile or other network use fails
 // loudly. Local synthetic evidence only: no cache or delivery change, no request-path cost measurement, no live Worker.
-const modules=await currentFixtureModules(['src/index.ts','src/publications.ts','src/contacts.ts','src/ai-chat.ts','src/project-specification/store.ts','src/site-host.ts','src/app-host.ts']);
+const modules=await currentFixtureModules(['src/index.ts','src/publications.ts','src/contacts.ts','src/ai-chat.ts','src/project-specification/store.ts','src/site-host.ts','src/app-host.ts','src/model-costs.ts','src/gateway-spend.ts','src/inference-routing.ts']);
+// Owner-side admission, used only to seed funding and to prove the seeded balances really refuse owner maintenance.
+const [costs,gateway,routing]=await Promise.all(['src/model-costs.ts','src/gateway-spend.ts','src/inference-routing.ts'].map(path=>modules.module(path)));
 const [{default:platform},pub,contacts,{configuredAI},site,{default:siteHost},{default:appHost}]=await Promise.all(['src/index.ts','src/publications.ts','src/contacts.ts','src/ai-chat.ts','src/project-specification/store.ts','src/site-host.ts','src/app-host.ts'].map(async path=>{const m=await modules.module(path);return path==='src/ai-chat.ts'?{configuredAI:m.configuredAI}:m;}));
 const fixture=await databaseFixture(),{db}=fixture,id=()=>crypto.randomUUID(),run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
 const consoleMethods=['log','info','warn','error','debug'],originals=Object.fromEntries(consoleMethods.map(k=>[k,console[k]])),logs=[];
@@ -30,6 +35,47 @@ const base={DB:db,FILES:files,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({s
 const variants={
  'maintainer unavailable (no AI binding or key)':base,
  'maintainer configured but failing (provider 503)':{...base,AI_BASE_URL:'https://opencode.ai/zen/go/v1',AI_MODEL:'muse-spark-1.3-contributor',AI_API_KEY:'synthetic-not-a-secret',AI_PROTOCOL:'responses'}
+};
+// Funding fixtures. Standard allowance: the owner's monthly inference budget (explore ceiling) fully spent, the same row
+// tests/model-costs.mjs exhausts. Premium/operator funding: task, account and platform buckets plus the premium credit
+// bucket and an approved premium approval, each spent to its limit, inserted as tests/gateway-spend.mjs creates them.
+const period=new Date().toISOString().slice(0,7),scenario=JSON.parse(await readFile('tests/fixtures/inference-routing-scenario.json','utf8'));
+const muse={baseURL:'https://opencode.ai/zen/go/v1',model:'muse-spark-1.3-contributor',apiKey:'synthetic-not-a-secret',protocol:'responses'};
+async function account(){const auth=await workspaceFixture(db,modules.identity),o={user:auth.account,scope:await auth.scope(),task:id()};await run("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')",o.user);return o;}
+async function standardAllowance(o,exhausted){await costs.ensureInferenceBudget(db,o.user,period,'explore');if(exhausted)await run('UPDATE inference_budgets SET spent_micros=budget_micros WHERE user_id=? AND period=?',o.user,period);}
+// Terms for one owner/task: a standard decision and a premium decision with an approval, both valid at call time.
+function terms(o){
+ const now=Date.now(),expires=now+3600000,candidate={...scenario.candidates[0],rateValidFrom:now-1,rateValidUntil:expires,benchmark:{...scenario.candidates[0].benchmark,validUntil:expires}};
+ const request={...scenario.request,ownerId:o.user,taskId:o.task,now},approval={approvalId:o.gw.approval,ownerId:o.user,taskId:o.task,catalogVersion:request.catalogVersion,policy:routing.inferenceRoutingPolicy,expiresAt:expires,candidateIds:[candidate.id],tariffId:'synthetic-tariff',retailMultiplierBps:15000,maxCustomerMicros:4000,remainingCustomerMicros:10000};
+ return {candidate,request,approval};
+}
+// `spent` selects which scopes are exhausted (limit === spent, so nothing remains); the rest are funded.
+async function gatewayFunding(o,spent=['task','account','platform','premium','approval']){
+ o.gw={task:id(),account:id(),platform:id(),premium:id(),approval:id()};const {approval}=terms(o);
+ for(const [scope,limit] of [['task',3000],['account',3000],['platform',3000],['premium',10000],['approval',4000]])
+  await run('INSERT INTO gateway_spend_buckets(id,scope,user_id,task_id,limit_micros,spent_micros,terms_json) VALUES(?,?,?,?,?,?,?)',o.gw[scope],scope,scope==='platform'?null:o.user,scope==='task'||scope==='approval'?o.task:null,limit,spent.includes(scope)?limit:0,scope==='approval'?JSON.stringify(approval):'{}');
+}
+const reserveGateway=(o,tier)=>{const {candidate,request,approval}=terms(o),premium=tier==='premium',decision=routing.planInferenceRoute([{...candidate,premium}],premium?{...request,tier:'premium',premium:approval}:request);assert.ok(decision.selected,'The synthetic decision is valid');
+ return gateway.reserveGatewaySpend(db,o.user,id(),decision,premium?o.gw:{task:o.gw.task,account:o.gw.account,platform:o.gw.platform});};
+// Owner standard admission exactly as Chat does it: request receipt, pending turn and priced reservation in one batch.
+const reserveStandard=o=>{const turn=id(),now=new Date().toISOString();return o.scope.batch([
+ o.scope.prepare('INSERT INTO standard_ai_requests(id,user_id,request_hash,created_at,updated_at) VALUES(?,?,?,?,?)').bind(turn,o.user,'a'.repeat(64),now,now),
+ o.scope.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,?,'Test','Pending',?,'ai','pending')").bind(turn,o.user,Math.floor(Math.random()*1000000000),now),
+ costs.inferenceReservation(o.scope,o.user,turn,period,muse,100000,10000)]);};
+const tables=['inference_budgets','inference_calls','gateway_spend_buckets','gateway_spend_attempts','standard_ai_requests','gateway_inference_requests'];
+// Every funding row, in full: a visitor or scheduled route may not move a balance, start an attempt or dispatch anything.
+const funding=async()=>Object.fromEntries(await Promise.all(tables.map(async t=>[t,(await db.prepare(`SELECT * FROM ${t} ORDER BY 1,2`).all()).results])));
+const exhausted={
+ 'funded owner (no balance set)':{},
+ 'standard usage allowance exhausted':{
+  seed:o=>standardAllowance(o,true),
+  verify:async o=>{const b=await row('SELECT budget_micros,spent_micros,reserved_micros FROM inference_budgets WHERE user_id=? AND period=?',o.user,period);assert.ok(b.budget_micros>0&&b.spent_micros===b.budget_micros&&b.reserved_micros===0,'Nothing remains of the standard allowance');},
+  // Owner maintenance would be refused by the budget trigger, and the batch leaves no turn or receipt behind.
+  refused:async o=>{const turns=(await row('SELECT COUNT(*) n FROM chat_turns WHERE user_id=?',o.user)).n;await assert.rejects(()=>reserveStandard(o),/inference_budget/);assert.equal((await row('SELECT COUNT(*) n FROM chat_turns WHERE user_id=?',o.user)).n,turns);assert.equal((await row('SELECT COUNT(*) n FROM standard_ai_requests WHERE user_id=?',o.user)).n,0);}},
+ 'premium credit, approval and operator funding exhausted':{
+  seed:o=>gatewayFunding(o),
+  verify:async o=>{for(const scope of ['task','account','platform','premium','approval']){const b=await row('SELECT limit_micros,held_micros,spent_micros FROM gateway_spend_buckets WHERE id=?',o.gw[scope]);assert.ok(b.limit_micros>0&&b.spent_micros===b.limit_micros&&b.held_micros===0,scope+' bucket has nothing remaining');}},
+  refused:async o=>{for(const tier of ['standard','premium'])await assert.rejects(()=>reserveGateway(o,tier),e=>e.status===409,tier+' owner maintenance is unfundable');assert.equal((await row('SELECT COUNT(*) n FROM gateway_spend_attempts WHERE user_id=?',o.user)).n,0);}}
 };
 async function check(name,fn){try{await fn();cases++;}catch(error){originals.error(name);throw error;}}
 async function command(o,prepare){const turn=id(),revision=(await row('SELECT revision FROM workspace_state WHERE user_id=?',o.user)).revision+1,r=await prepare(turn);await o.scope.batch([o.scope.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,?,'Synthetic website fixture',?,datetime('now'),'ai','pending')").bind(turn,o.user,revision,r.reply),...r.statements,o.scope.prepare("UPDATE chat_turns SET status='completed' WHERE id=?").bind(turn),o.scope.prepare('UPDATE workspace_state SET revision=revision+1 WHERE user_id=?').bind(o.user)]);return turn;}
@@ -56,12 +102,14 @@ try{
   for(const path of ['src/site-host.ts','src/hosts.ts','src/contacts.ts','src/app-gateway.ts','src/runtime/worker.ts'])assert.ok(!inferenceModules.test(path),path+' is a standard-service module');
   for(const entry of ['src/site-host.ts','src/app-host.ts','src/app-gateway.ts','src/runtime/worker.ts','src/contact-page.ts'])assert.deepEqual(await inferenceReach(entry),[],entry+' reaches owner-maintenance inference');
  });
- for(const [label,env] of Object.entries(variants))await check(label,async()=>{
+ for(const [maintainer,env] of Object.entries(variants))for(const [balance,fund] of Object.entries(exhausted))await check(maintainer+' / '+balance,async()=>{
   const configured=!!env.AI_API_KEY;providerStatus=configured?503:null;
   assert.equal(!!configuredAI(env),configured,'The variant really has (or lacks) a usable maintainer');
   network=0;requests=0;probes=0;env_={siteHost,env};
   const a=await owner('Garden '+id().slice(0,8)),b=await owner('Revoked '+id().slice(0,8));await enableContact(a);
-  const start=await counters(),page=(project,path='/')=>get(siteHost,`https://${project}.whumpo.site${path}`,env);
+  // Both site owners' funding is exhausted in the durable rows before any visitor arrives; none of it may change.
+  a.task=id();b.task=id();for(const o of [a,b]){await fund.seed?.(o);await fund.verify?.(o);}
+  const seeded=await funding(),start=await counters(),page=(project,path='/')=>get(siteHost,`https://${project}.whumpo.site${path}`,env);
 
   // Published content: served by the sites Worker alone, never cacheable.
   const root=await page(a.project);assert.equal(root.status,200);uncacheable(root);const html=await root.text();assert.ok(html.includes(a.headline));assert.ok(html.includes('https://whumpo.com/contact/'+a.project),'The contact link is a standard action');
@@ -102,18 +150,30 @@ try{
   assert.deepEqual(jobs.filter(j=>j.status!=='completed'&&j.status!=='skipped'),[]);
 
   const end=await counters();
+  assert.deepEqual(await funding(),seeded,'No funding row moved: no new attempt, reservation, dispatch or balance change');
+  for(const o of [a,b])await fund.verify?.(o);
   assert.equal(network,0,'No visitor, service or scheduled route reached the network (so no maintainer provider): '+urls.splice(0).join(', '));
   assert.deepEqual({...end,turns:0},{...start,turns:0},'No inference call, gateway spend or standard-AI request was recorded');
   assert.equal(end.turns,before.turns,'Scheduled drains create no Chat turns');
   assert.ok(probes>=1,'Scheduled site health re-read a published site through the sites Worker');
   assert.equal(requests,23,'The journey exercised its whole route inventory');
+  // Contrast: with the same rows, owner maintenance is refused, so the exhaustion above was real and merely irrelevant to visitors.
+  for(const o of [a,b])await fund.refused?.(o);
+  assert.deepEqual(await funding(),seeded,'A refused owner admission leaves every funding row unchanged');
   providerStatus=null;
+ });
+ await check('control: the same owner admissions succeed when the balances are funded, so refusal means exhaustion',async()=>{
+  const funded=await account();await standardAllowance(funded);await reserveStandard(funded);
+  const call=await row('SELECT status,reserved_micros FROM inference_calls WHERE user_id=?',funded.user);assert.equal(call.status,'reserved');assert.ok(call.reserved_micros>0,'The reservation is priced');
+  // Premium alone exhausted: operator-funded standard work is admitted, premium is not.
+  const premiumSpent=await account();await gatewayFunding(premiumSpent,['premium','approval']);assert.equal((await reserveGateway(premiumSpent,'standard')).replayed,false);await assert.rejects(()=>reserveGateway(premiumSpent,'premium'),e=>e.status===409);
+  const fundedGateway=await account();await gatewayFunding(fundedGateway,[]);assert.equal((await reserveGateway(fundedGateway,'premium')).replayed,false);
  });
  await check('counting transport is armed: any dispatch would be visible',async()=>{
   network=0;await assert.rejects(()=>globalThis.fetch('https://opencode.ai/zen/go/v1/responses'),/No network/);assert.equal(network,1);network=0;
  });
  assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
  assert.ok(!logs.some(line=>/synthetic-not-a-secret/.test(line)),'No credential reached logs');
- process.stdout.write(`Standard service independence passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — import graphs of site-host, app-host, app-gateway, runtime worker and contact page reach no inference module (the platform entry is detected as a positive control); published site, directory, CMS, asset, method, host, guest-preview, visitor-app, contact form and submission, unpublish and safety-hold routes plus all three cron schedules ran with the maintainer absent and with it failing (503), with zero network calls, inference_calls, gateway_spend_attempts, standard-AI or gateway requests and Chat turns, and no cacheable response. Local synthetic verification only; no cache or delivery change, request-path cost measurement, premium-balance semantics or live Worker evidence.\n`);
+ process.stdout.write(`Standard service independence passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — import graphs of site-host, app-host, app-gateway, runtime worker and contact page reach no inference module (the platform entry is detected as a positive control); published site, directory, CMS, asset, method, host, guest-preview, visitor-app, contact form and submission, unpublish and safety-hold routes plus all three cron schedules ran with the maintainer absent and with it failing (503), each with the owners' funding unset, with the standard usage allowance spent to its ceiling, and with premium credit, premium approval and task, account and platform operator buckets all spent to their limits, with zero network calls, inference_calls, gateway_spend_attempts, standard-AI or gateway requests and Chat turns, every seeded budget and bucket row byte-for-byte unchanged (no new attempt, reservation, dispatch or balance movement), and no cacheable response; the same exhausted rows refuse owner maintenance admission (inference_budget trigger, gateway reservation 409) while funded controls are admitted. Local synthetic verification only; no cache or delivery change, request-path cost measurement, purchased credits, real provider outage or live Worker evidence.\n`);
 }catch(error){originals.error(String(error.stack||error));process.exitCode=1;}
 finally{for(const k of consoleMethods)console[k]=originals[k];globalThis.fetch=originalFetch;await fixture.close?.();}
