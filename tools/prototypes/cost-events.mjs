@@ -155,6 +155,7 @@ export function validateEvent(input,registry=defaultRegistry){
  check(Object.hasOwn(registry.dimensions,input.dimension),'UNKNOWN_DIMENSION',String(input.dimension));const dim=registry.dimensions[input.dimension];
  check(dim.sources.includes(input.source),'SOURCE_DIMENSION',`${input.source} may not emit ${input.dimension}`);
  check(typeof input.sourceEventId==='string'&&SAFE.test(input.sourceEventId),'INVALID_EVENT','sourceEventId');
+ check(!input.sourceEventId.startsWith('closed:'),'INVALID_EVENT','the closed: prefix is reserved for closure tombstones');
  check(input.providerEventId===null||(typeof input.providerEventId==='string'&&SAFE.test(input.providerEventId)),'INVALID_EVENT','providerEventId');
  check(isInt(input.revision,1),'INVALID_EVENT','revision');
  check(input.kind===dim.kind,'KIND_MISMATCH',`${input.dimension} is ${dim.kind}`);
@@ -237,17 +238,19 @@ function present(b){
 // Revisions of one identity (source, sourceEventId, dimension) may only ADVANCE. These fields name the event and where its
 // cost falls, so they never change after the first revision: a revision cannot move cost to another period (occurredAt), owner,
 // workload or attempt. Everything else is an observation that legitimately moves forward and is checked in advances().
-const identityFields=['workload','workClass','taskRef','attempt','placementClass','occurredAt','aiTier'];
+// The owner, project, resource, task and provider IDs are also fixed, but account closure erases them, so they are compared
+// through keyed digests (`cmp`, and the record's attribution digest) that exist from the first append and survive closure.
+const identityFields=['workload','workClass','attempt','placementClass','occurredAt','aiTier'];
 const outcomeRank={pending:0,uncertain:1,settled:2,released:2};
-// What an account closure leaves of one revision: no owner, task or provider ID, and an opaque keyed source/idempotency identity.
-const tombstoned=(e,tomb)=>({...e,sourceEventId:tomb.sourceEventId,idempotencyKey:tomb.idempotencyKey,providerEventId:null,taskRef:null,attribution:{scope:'platform',pool:'closed-account'}});
+const CLOSED_ACCOUNT=Object.freeze({scope:'platform',pool:'closed-account'});
+const isClosedAccount=a=>a.scope==='platform'&&a.pool==='closed-account';
 // `lower` has the lower revision. The pairwise rule is symmetric in arrival order, so any order of a valid set converges and an
-// invalid pair is refused whichever side arrives second.
+// invalid pair is refused whichever side arrives second. Attribution is fixed per identity and checked once in append().
 function advances(lower,higher){
  for(const f of identityFields)check(canonical(lower[f])===canonical(higher[f]),'IMMUTABLE_FIELD',`${f} is fixed by the first revision`);
- check(canonical(lower.attribution)===canonical(higher.attribution),'TENANT_MISMATCH','a later revision cannot change attribution');
+ check(lower.cmp.task===higher.cmp.task,'IMMUTABLE_FIELD','taskRef is fixed by the first revision');
  // The provider's own ID may be learned later (null -> value) but never replaced or dropped.
- check(lower.providerEventId===null||lower.providerEventId===higher.providerEventId,'IMMUTABLE_FIELD','providerEventId is preserved once known');
+ check(lower.cmp.provider===null||lower.cmp.provider===higher.cmp.provider,'IMMUTABLE_FIELD','providerEventId is preserved once known');
  // A tariff pin is the price basis: a revision cannot reprice the event under another tariff version.
  check(lower.cost.basis!=='tariff'||higher.cost.basis!=='tariff'||canonical(lower.cost.tariff)===canonical(higher.cost.tariff),'IMMUTABLE_FIELD','the pinned tariff is fixed once priced');
  check(higher.observedAt>=lower.observedAt,'REVISION_REGRESSION','observedAt does not move backwards');
@@ -259,14 +262,22 @@ function advances(lower,higher){
 export function createLedger({directory,registry:supplied=defaultRegistry,now=()=>new Date().toISOString(),closureKey=randomBytes(32)}){
  // The ledger prices from a private frozen snapshot: later edits to the caller's registry cannot reprice pinned history.
  const registry=deepFreeze(structuredClone(supplied));validateRegistry(registry);
- check((typeof closureKey==='string'||closureKey instanceof Uint8Array)&&closureKey.length>=16,'INVALID_REGISTRY','closureKey must be at least 16 bytes');
+ // The key is copied once: the ledger never holds the caller's buffer, so editing it afterwards cannot change any digest.
+ check(typeof closureKey==='string'||closureKey instanceof Uint8Array,'INVALID_CLOSURE_KEY','closureKey must be a string or a Uint8Array');
+ const keyBytes=Buffer.from(closureKey);check(keyBytes.length>=16,'INVALID_CLOSURE_KEY','closureKey must be at least 16 bytes');
  const identities=new Map(),closed=new Map(),closedOwners=new Set();let seq=0;
  const periodOf=e=>e.occurredAt.slice(0,7);
  const heads=()=>[...identities.values()].map(r=>r.revisions.get(Math.max(...r.revisions.keys())));
- // Keyed digests: after account closure the only retained linkage is HMAC(closureKey, original ID). It cannot be reversed or
+ // Keyed digests: after account closure the only retained linkage is HMAC(closureKey, original value). It cannot be reversed or
  // guessed from a project/owner UUID without the key, so it is pseudonymous evidence that lives exactly as long as the key.
- const mac=(domain,value)=>createHmac('sha256',closureKey).update(`${domain}:${value}`).digest('hex');
- const tombstoneOf=e=>{const sourceEventId=`closed:${mac('identity',e.idempotencyKey).slice(0,32)}`;return {sourceEventId,idempotencyKey:idempotencyKey({source:e.source,sourceEventId,dimension:e.dimension})};};
+ const mac=(domain,value)=>createHmac('sha256',keyBytes).update(`${domain}:${value}`).digest('hex');
+ const pseudonym=(domain,value)=>`closed:${mac(domain,value).slice(0,32)}`;
+ const tombstoneOf=e=>{const sourceEventId=pseudonym('identity',e.idempotencyKey);return {sourceEventId,idempotencyKey:idempotencyKey({source:e.source,sourceEventId,dimension:e.dimension})};};
+ // What account closure leaves of one revision: no owner, project, task, provider ID or cost reference, and an opaque keyed
+ // source/idempotency identity. Producers choose cost references freely, so every one is replaced, not only the ones seen to hold an ID.
+ const closedForm=(e,tomb)=>({...e,sourceEventId:tomb.sourceEventId,idempotencyKey:tomb.idempotencyKey,providerEventId:null,taskRef:null,attribution:CLOSED_ACCOUNT,
+  cost:Object.hasOwn(e.cost,'ref')?{...e.cost,ref:pseudonym('ref',e.cost.ref)}:e.cost});
+ const attributionMac=a=>mac('attribution',canonical(a));
  function ownership(e){
   const a=e.attribution;if(a.scope!=='tenant')return;
   const p=directory.lookup(a.projectId??'');
@@ -277,34 +288,39 @@ export function createLedger({directory,registry:supplied=defaultRegistry,now=()
   check(a.resourceId===null||p.resources.has(a.resourceId),'TENANT_MISMATCH','resource is not part of the project');
  }
  function append(input){
-  let e=validateEvent(input,registry);const callerKey=e.idempotencyKey;
+  const raw=validateEvent(input,registry);const callerKey=raw.idempotencyKey;
+  const closedAccount=isClosedAccount(raw.attribution),tomb=tombstoneOf(raw);
+  // An identity is found under the caller's key while open, or under its tombstone once closed (redacted, or first recorded at
+  // closed-account scope). Redelivery and later revisions of a closed identity converge on it without re-linking the owner.
   let rec=identities.get(callerKey),redirected=false;
-  if(!rec){const tomb=tombstoneOf(e);rec=identities.get(tomb.idempotencyKey);
-   if(rec){
-    // The identity was redacted at account closure. Its later revisions and redeliveries still converge on it, re-scoped to
-    // closed-account, so recovery and dedupe survive closure without re-linking the owner or counting the cost twice.
-    redirected=true;const a=e.attribution;
-    check(a.scope==='tenant'?mac('owner',a.ownerId)===rec.ownerMac:a.pool==='closed-account','TENANT_MISMATCH','cost of a closed account stays at closed-account scope and cannot move to another owner');
-    e=tombstoned(e,tomb);
-   }
+  if(!rec){rec=identities.get(tomb.idempotencyKey);redirected=rec!==undefined;}
+  const attrMac=attributionMac(raw.attribution);
+  // Attribution is fixed per identity. Closure turns a tenant identity into closed-account, so a closed-account emission is the
+  // same identity; a tenant emission of an identity first recorded at closed-account scope cannot prove its owner and is refused.
+  if(rec)check(attrMac===rec.attrMac||(rec.closed&&closedAccount),'TENANT_MISMATCH','a later revision cannot change attribution, and cost of a closed account cannot move to another owner, pool or back to a tenant');
+  if(!redirected&&!closedAccount){
+   ownership(raw);
+   if(raw.attribution.scope==='tenant')check(!closedOwners.has(mac('owner',raw.attribution.ownerId)),'OWNER_CLOSED','a closed account no longer receives tenant-scoped cost; record it at platform closed-account scope');
   }
-  if(!redirected){
-   ownership(e);
-   if(e.attribution.scope==='tenant')check(!closedOwners.has(mac('owner',e.attribution.ownerId)),'OWNER_CLOSED','a closed account no longer receives tenant-scoped cost; record it at platform closed-account scope');
-  }
-  const canon=canonical(e),same=rec?.revisions.get(e.revision);
+  const stored=redirected||closedAccount?closedForm(raw,tomb):raw;
+  // The digests of the delivered bytes and of the fields closure erases are computed at append, while the originals are visible,
+  // so same-revision conflicts and later revisions are judged the same way before and after closure.
+  const cmp={task:raw.taskRef===null?null:mac('task',raw.taskRef),provider:raw.providerEventId===null?null:mac('provider',raw.providerEventId)};
+  const fp=mac('revision',canonical({...raw,attribution:rec?.attrMac??attrMac}));
+  const same=rec?.revisions.get(raw.revision);
   if(same){
-   check(same.canon===canon,'IDEMPOTENCY_CONFLICT','same source event and revision with different content');
-   return {status:'duplicate',key:callerKey,revision:e.revision};
+   check(same.fp===fp,'IDEMPOTENCY_CONFLICT','same source event and revision with different content');
+   return {status:'duplicate',key:callerKey,revision:raw.revision};
   }
+  const candidate={...stored,cmp,fp};
   const prior=rec?[...rec.revisions.values()]:[];
-  for(const p of prior){if(p.revision<e.revision)advances(p,e);else advances(e,p);}
+  for(const p of prior){if(p.revision<candidate.revision)advances(p,candidate);else advances(candidate,p);}
   const topBefore=prior.length?Math.max(...rec.revisions.keys()):0;
-  if(!rec){rec={revisions:new Map(),ownerMac:null};identities.set(e.idempotencyKey,rec);}
+  if(!rec){rec={revisions:new Map(),attrMac,closed:closedAccount};identities.set(stored.idempotencyKey,rec);}
   seq++;
-  const lateAfterClose=closed.has(periodOf(e))&&seq>closed.get(periodOf(e)).closedSeq;
-  rec.revisions.set(e.revision,{...e,canon,receivedSeq:seq,receivedAt:now(),lateAfterClose});
-  return {status:e.revision>topBefore?'accepted':'stale-revision',key:callerKey,revision:e.revision};
+  const lateAfterClose=closed.has(periodOf(stored))&&seq>closed.get(periodOf(stored)).closedSeq;
+  rec.revisions.set(raw.revision,{...candidate,receivedSeq:seq,receivedAt:now(),lateAfterClose});
+  return {status:raw.revision>topBefore?'accepted':'stale-revision',key:callerKey,revision:raw.revision};
  }
  const select=({period,ownerId,pool,workClass,workload}={})=>heads().filter(e=>(period===undefined||periodOf(e)===period)&&(ownerId===undefined||e.attribution.ownerId===ownerId)
   &&(pool===undefined||e.attribution.pool===pool)&&(workClass===undefined||e.workClass===workClass)&&(workload===undefined||e.workload===workload));
@@ -355,25 +371,22 @@ export function createLedger({directory,registry:supplied=defaultRegistry,now=()
    allowanceTreatment:'account-wide allowances are never allocated to tenants; a negative residual is account upside, not tenant credit'};
  }
  // Account closure. Company totals are kept; the owner link and every identifier that could name the owner, project, resource,
- // task or provider record are replaced: attribution becomes platform/closed-account, task and provider IDs are cleared and the
- // source/idempotency identity becomes an opaque keyed tombstone. What remains is pseudonymous (see closureKey), not anonymous:
- // timestamps, workload, quantities and costs stay, and the keyed digests below can be re-derived by whoever holds the key.
+ // task, provider record or cost reference are replaced (see closedForm). What remains is pseudonymous (see closureKey), not
+ // anonymous: timestamps, workload, quantities and costs stay, and the keyed digests can be re-derived by whoever holds the key.
  function redactOwner(ownerId){
-  const ownerMac=mac('owner',ownerId);closedOwners.add(ownerMac);
+  closedOwners.add(mac('owner',ownerId));
   let changed=0;
   for(const [key,rec] of [...identities]){
+   if(rec.closed)continue;
    const first=rec.revisions.values().next().value;
    if(first.attribution.ownerId!==ownerId)continue;
    const tomb=tombstoneOf({...first,idempotencyKey:key});
-   for(const [rev,e] of rec.revisions){
-    const copy=tombstoned(e,tomb);
-    copy.canon=canonical((({canon,receivedSeq,receivedAt,lateAfterClose,...rest})=>rest)(copy));rec.revisions.set(rev,copy);changed++;
-   }
-   rec.ownerMac=ownerMac;identities.delete(key);identities.set(tomb.idempotencyKey,rec);
+   for(const [rev,e] of rec.revisions){rec.revisions.set(rev,closedForm(e,tomb));changed++;}
+   rec.closed=true;identities.delete(key);identities.set(tomb.idempotencyKey,rec);
   }
   return changed;
  }
- return {append,summary,closePeriod,restatement,reconcile,redactOwner,exportHeads:(filter)=>select(filter).map(({canon,...e})=>structuredClone(e))};
+ return {append,summary,closePeriod,restatement,reconcile,redactOwner,exportHeads:(filter)=>select(filter).map(({cmp,fp,...e})=>structuredClone(e))};
 }
 
 // ---------- Existing-producer mapping (pure; the product's source adapters are WH-169) ----------
