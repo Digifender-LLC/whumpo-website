@@ -152,16 +152,65 @@ try{
  try{await reobserveRecoveryAuthority(authority);assert.equal(recoveryAuthorityDatabase(authority)!==other.db,true);}finally{provider.observe=pinnedObserve;provider.openDatabase=pinnedOpen;}
 
  // ---- 5. Missing binding, account scope, unreadable and obsolete databases.
+ // The configured production id has hex letters; the exact contract accepts it on all three Workers.
+ assert.match(platform.configuredId,/[a-f]/);
  const wrapped=extra=>({...provider,observe:async()=>{const r=await provider.observe();return extra(r)??r;}});
  await holds(()=>observeRecoveryAuthority({provider:wrapped(r=>{r.workers.platform.databases=[];})}),'source-binding-missing');
  await holds(()=>observeRecoveryAuthority({provider:wrapped(r=>{r.workers.platform.databases=[{binding:'OTHER',id:baselineId}];})}),'source-binding-missing');
  await holds(()=>observeRecoveryAuthority({provider:wrapped(r=>{r.workers.apps.databases=[];})}),'source-binding-mixed');
  await holds(()=>observeRecoveryAuthority({provider:wrapped(r=>{r.workers.sites.databases=[{binding:'DB',id:otherId}];})}),'source-binding-mixed');
- await holds(()=>observeRecoveryAuthority({provider:wrapped(r=>{r.workers.sites.databases=[...r.workers.sites.databases,{binding:'EXTRA',id:otherId}];})}),'source-binding-mixed');
+ // Exact current contract: ONE database named DB with a lowercase UUID id, on each of apps, sites and platform. A list that
+ // merely contains the right entry does not pass, so identical malformed lists on all three Workers are refused too.
+ const configuredId=platform.configuredId,at=(roles,databases)=>wrapped(r=>{for(const role of roles)r.workers[role].databases=structuredClone(databases);});
+ const entry=(extra={})=>({binding:'DB',id:configuredId,...extra});
+ const invalidLists={
+  'duplicate identical DB bindings':[entry(),entry()],
+  'an extra database beside DB':[entry(),{binding:'EXTRA',id:otherId}],
+  'two DB bindings naming different databases':[entry(),{binding:'DB',id:otherId}],
+  'an extra database before DB':[{binding:'AAA',id:otherId},entry()],
+  'an extra field on the entry':[entry({name:'control'})],
+  'a missing id':[{binding:'DB'}],
+  'a non-string id':[{binding:'DB',id:1234}],
+  'an id with the wrong length':[{binding:'DB',id:configuredId.slice(1)}],
+  'an id of 36 hyphens':[{binding:'DB',id:'-'.repeat(36)}],
+  'an id of 36 hex digits without hyphens':[{binding:'DB',id:'a'.repeat(36)}],
+  'an id with hyphens in the wrong places':[{binding:'DB',id:'dba4c70-7a0c0-4084-a0c0-6c43f6afebde0'}],
+  'an uppercase UUID':[{binding:'DB',id:configuredId.toUpperCase()}],
+  'a braced UUID':[{binding:'DB',id:'{'+configuredId+'}'}],
+  'an id with a trailing space':[{binding:'DB',id:configuredId+' '}],
+  'a null entry':[null],
+  'a string entry':['DB'],
+  'an array entry':[['DB',configuredId]],
+  'a DB entry beside a null entry':[entry(),null],
+ };
+ assert.ok(configuredId!==configuredId.toUpperCase(),'The uppercase case needs letters in the id');
+ for(const [label,list] of Object.entries(invalidLists)){
+  for(const roles of [['platform'],['sites'],['apps'],['apps','sites','platform']]){
+   await holds(()=>observeRecoveryAuthority({provider:at(roles,list)}),'source-binding-invalid');
+   assert.ok(label&&roles.length);
+  }
+ }
+ // A role with no DB binding at all keeps its distinct code; a renamed lone binding is that too.
+ await holds(()=>observeRecoveryAuthority({provider:at(['apps','sites','platform'],[])}),'source-binding-missing');
+ await holds(()=>observeRecoveryAuthority({provider:at(['sites'],[{binding:'OTHER',id:configuredId}])}),'source-binding-mixed');
+ // Only the observed binding shape is interpreted: the Worker entry itself must be well formed.
+ await holds(()=>observeRecoveryAuthority({provider:wrapped(r=>{r.workers.apps.databases=undefined;})}),'source-observation');
+ await holds(()=>observeRecoveryAuthority({provider:wrapped(r=>{r.workers.sites={id:'v-sites'};})}),'source-observation');
+ await holds(()=>observeRecoveryAuthority({provider:wrapped(r=>{r.workers.platform.id=7;})}),'source-observation');
  await holds(()=>observeRecoveryAuthority({provider:wrapped(()=>{throw Error('PRIVATE_PROVIDER_DETAIL');})}),'source-observation');
  for(const role of ['platform','sites','apps','runtime']){
   const account=provider.configs[role].account_id;provider.configs[role].account_id='f'.repeat(32);
   try{await holds(()=>observeRecoveryAuthority({provider}),'source-account');}finally{provider.configs[role].account_id=account;}
+ }
+ // TRUST BOUNDARY, pinned on purpose. The provider is trusted code, not remote attestation: any object shaped like
+ // releaseProvider() is accepted, `apiOrigin` is read from it, and its observer and opener are believed. A duck-typed provider
+ // that claims 'account-client' and serves a fabricated binding for another database becomes an authority over that database.
+ // `provenance` therefore records which client the CALLER wired, never where it points; nothing here proves a remote target.
+ {
+  const fake=await observeRecoveryAuthority({provider:{configs:provider.configs,accountId:provider.accountId,apiOrigin:'account-client',openDatabase:()=>other.db,
+   observe:async()=>({workers:Object.fromEntries(['apps','sites','platform'].map(role=>[role,{id:'fabricated-'+role,databases:[{binding:'DB',id:otherId}]}]))})}});
+  assert.equal(fake.provenance,'account-client');assert.equal(fake.databaseId,otherId);assert.equal(recoveryAuthorityDatabase(fake),other.db);
+  const forged=await capture(fake);assert.equal((await verifyRecoveryPoint(join(points,'p'+pointNumber),forged.pointDigest)).point.source.provenance,'account-client','A forged provider label is recorded as given');
  }
  // The account scope is the provider's own: a bound database the account does not hold cannot be read.
  const holder=await syntheticPlatform({databases:{[syntheticDatabaseId(9)]:other.db},bound:syntheticDatabaseId(9)});
@@ -190,7 +239,7 @@ try{
   await drift.db.prepare('ALTER TABLE users ADD COLUMN drifted TEXT').run();
   await holds(()=>capture(driftAuthority),'source-binding-changed');
  }
- 
+
  // ---- 6. Changes between the bracketing observations refuse capture and write no point.
  const midRead=async(change,code)=>{
   const fresh=await syntheticPlatform({database:baseline.db,databases:{[otherId]:other.db},hook}),a=await fresh.authority();
@@ -204,6 +253,11 @@ try{
  await midRead(live=>{live.workers.platform.id='v-platform-2';},'source-binding-changed'); // SAME bindings, different platform version
  await midRead(live=>{live.workers.apps.id='v-apps-2';},'source-binding-changed');
  await midRead(live=>{live.workers.sites.id='v-sites-2';},'source-binding-changed');
+ // An identical EXTRA database on all three Workers appearing during the read is a change (the observer accepts it; the contract does not).
+ await midRead(live=>{for(const role of ['apps','sites','platform'])live.workers[role].databases=[{binding:'DB',id:platform.configuredId},{binding:'EXTRA',id:otherId}];},'source-binding-changed');
+ // Duplicate binding NAMES never reach the contract through the real provider: its observer already refuses them, which an unobservable
+ // read reports as such rather than as a change.
+ await midRead(live=>{for(const role of ['apps','sites','platform'])live.workers[role].databases=[{binding:'DB',id:platform.configuredId},{binding:'DB',id:platform.configuredId}];},'source-observation');
  // A change after the authority was proven but before capture starts is caught by the first observation.
  for(const change of [move,live=>{live.workers.platform.id='v-platform-3';}]){
   const fresh=await syntheticPlatform({database:baseline.db,databases:{[otherId]:other.db},hook}),a=await fresh.authority();
@@ -261,6 +315,7 @@ try{
   const keys=await keyBackupFixture();closers.push(()=>keys.close());const keyring=fixtureKeyring(),{proof:keyBackup}=await keys.create(keyring);
   await initializeFixtureKeys(baseline.db,keyring);
   await baseline.db.prepare("INSERT INTO users VALUES('inventory-owner','inventory-owner@example.invalid','2026-10-08') ON CONFLICT DO NOTHING").run();
+  for(const name of ['late-binding-b','late-binding-c'])await baseline.db.prepare('INSERT INTO users VALUES(?,?,?) ON CONFLICT DO NOTHING').bind(name,name+'@example.invalid','2026-10-08').run();
   const inventoryPlatform=await syntheticPlatform({database:baseline.db,databases:{[otherId]:other.db},hook});
   const inventoryAuthority=await inventoryPlatform.authority(),live=inventoryPlatform.live;
   await createRestoreInventory({inventoryFile,streamId});
@@ -298,6 +353,47 @@ try{
   try{await refused();}finally{onCall=null;live.workers.platform.id='v-platform';}
   assert.equal(await sequence(),registered,'A tainted read commits no tombstone');
   const derived=await evidence();assert.ok(derived.events.some(e=>e.kind==='record-suppressed'&&e.data.table==='users'),'The same read, once the binding holds, derives the absence');assert.ok(derived.currentSequence>registered);assert.equal(await sequence(),derived.currentSequence);
+  // Where a binding change lands relative to ONE evidence request. The request's authority calls run in this order:
+  // observation, source read, observation (before the commit), commit, verification read, observation. The injector counts
+  // the API calls after the source read of the users table to place the change deterministically.
+  const afterRead=(when,change)=>{
+   let read=false,observing=false,done=false;
+   return async event=>{
+    if(done)return;
+    if(!read){read=event.kind==='d1'&&[event.sql].flat().some(sql=>/FROM "users"/.test(sql));return;}
+    if(!observing){
+     // The first Worker call after the source read opens the observation that precedes the commit.
+     observing=event.kind==='worker';
+     if(observing&&when==='first-call'){done=true;change();}
+     return;
+    }
+    // The first database call inside that observation comes after its Worker bindings were already read.
+    if(when==='after-bindings'&&event.kind==='d1'){done=true;change();}
+   };
+  };
+  const mentions=(body,user)=>body.events.filter(e=>e.kind==='record-suppressed'&&e.data.table==='users'&&JSON.stringify(e.data.key).includes(user));
+  // (a) The binding changes right after the first source read: the observation before the commit catches it. The request is
+  // refused and NOTHING is appended, so a read the binding did not survive never persists an absence.
+  await baseline.db.prepare('DELETE FROM users WHERE id=?').bind('late-binding-b').run();
+  const beforeB=await sequence();
+  onCall=afterRead('first-call',()=>{live.workers.platform.id='v-platform-late';});
+  try{await refused();}finally{onCall=null;live.workers.platform.id='v-platform';}
+  assert.equal(await sequence(),beforeB,'A binding change before the commit appends no event');
+  assert.equal(mentions(await evidence(),'late-binding-b').length,1,'Once the binding holds, the same absence is derived exactly once');
+  assert.equal(await sequence(),beforeB+1);
+  // (b) RESIDUAL, pinned on purpose: a change that lands after that last observation has read the Worker bindings, but before the
+  // commit, is not detected by it. The commit happens; the observation that follows the verification read refuses the request.
+  // The event stays. It is a real observation: the user row is absent from the database that was bound throughout the read and
+  // the observation before the commit, and a recorded absence only ever ADDS holds. It is conservative history, not false
+  // authority, and it is not a solution to ABA: nothing here fences a write, and a stream must still be used for one database.
+  await baseline.db.prepare('DELETE FROM users WHERE id=?').bind('late-binding-c').run();
+  const beforeC=await sequence();
+  onCall=afterRead('after-bindings',()=>{live.workers.platform.id='v-platform-late';});
+  try{await refused();}finally{onCall=null;live.workers.platform.id='v-platform';}
+  assert.equal(await sequence(),beforeC+1,'The commit preceded the refusing observation, so exactly the derived absence remains');
+  assert.equal((await baseline.db.prepare('SELECT count(*) AS n FROM users WHERE id=?').bind('late-binding-c').first()).n,0,'The recorded absence is true of the database that was bound');
+  const settled=await evidence();
+  assert.equal(mentions(settled,'late-binding-c').length,1,'The retained event is the same absence, reported once');assert.equal(settled.currentSequence,beforeC+1,'A retry appends nothing further');
   // Deadline: an observation that never answers fails closed inside the evidence deadline.
   const stalled=once_(event=>event.kind==='worker',()=>new Promise(()=>{}));
   onCall=stalled;const start=Date.now();

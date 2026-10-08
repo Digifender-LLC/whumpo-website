@@ -18,10 +18,26 @@ import {workerOrder,same} from './release-manifest.mjs';
 export class DrillHold extends Error{constructor(code){super('Recovery drill step held: '+code);this.code=code;}}
 const hold=(value,code)=>{if(!value)throw new DrillHold(code);};
 const account=v=>typeof v==='string'&&/^[0-9a-f]{32}$/.test(v);
-const database=v=>typeof v==='string'&&/^[0-9a-f-]{36}$/.test(v);
+// The D1 database id format the release observer and the repository configuration use: a lowercase UUID.
+const database=v=>typeof v==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(v);
 const bound=['apps','sites','platform'];
 const states=new WeakMap();
 const unobservable=new Set(['source-observation','source-database']);
+
+// The exact current contract: each of apps, sites and platform binds exactly ONE D1
+// database, named `DB`, with a lowercase UUID id and no other field (the observer's
+// own summary shape). A duplicate, an extra database, a renamed binding or a
+// malformed id is not interpreted: it refuses, so a list that merely contains the
+// right entry cannot pass. `empty` is the hold for a role with no `DB` binding.
+function singleBinding(databases,empty){
+ hold(Array.isArray(databases),'source-observation');
+ hold(databases.every(d=>d&&typeof d==='object'&&!Array.isArray(d)),'source-binding-invalid');
+ hold(databases.some(d=>d.binding==='DB'),empty);
+ hold(databases.length===1,'source-binding-invalid');
+ const [only]=databases;
+ hold(Object.keys(only).length===2&&database(only.id),'source-binding-invalid');
+ return only.id;
+}
 
 // Observation of the Worker bindings. Throws the fixed hold code for every shape that
 // is not one platform-bound database shared by apps, sites and platform.
@@ -29,13 +45,12 @@ async function observeBinding(state){
  let observed;
  try{observed=await state.observe();}catch{throw new DrillHold('source-observation');}
  const workers=observed?.workers;hold(workers&&typeof workers==='object','source-observation');
- for(const role of bound)hold(workers[role]&&typeof workers[role].id==='string'&&Array.isArray(workers[role].databases),'source-observation');
- const selected=workers.platform.databases.find(d=>d.binding==='DB');
- hold(selected&&database(selected.id),'source-binding-missing');
+ for(const role of bound)hold(workers[role]&&typeof workers[role].id==='string','source-observation');
+ const selected=singleBinding(workers.platform.databases,'source-binding-missing');
  // Authority is split while a cutover is mid-flight: visitor writes follow the new
  // database, owner and authority reads follow the old one. Neither side is chosen.
- for(const role of ['apps','sites'])hold(same(workers[role].databases,workers.platform.databases),'source-binding-mixed');
- return {databaseId:selected.id,versions:Object.fromEntries(bound.map(role=>[role,workers[role].id]))};
+ for(const role of ['apps','sites'])hold(singleBinding(workers[role].databases,'source-binding-mixed')===selected,'source-binding-mixed');
+ return {databaseId:selected,versions:Object.fromEntries(bound.map(role=>[role,workers[role].id]))};
 }
 async function observeSchema(state,db){
  let actual;try{actual=await inspectSchema(db);}catch{throw new DrillHold('source-database');}

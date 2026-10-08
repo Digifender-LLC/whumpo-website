@@ -62,7 +62,7 @@ async function readObject(objects,entry){
 async function privateDirectory(path){await mkdir(path,{mode:0o700});await pathCheck(join(path,'x'),{external:true,parent:true});return path;}
 
 const accountId=v=>typeof v==='string'&&/^[0-9a-f]{32}$/.test(v);
-const sourceShape=source=>!!source&&typeof source==='object'&&['account-client','injected-client'].includes(source.provenance)&&accountId(source.accountId)&&/^[0-9a-f-]{36}$/.test(source.databaseId)
+const sourceShape=source=>!!source&&typeof source==='object'&&['account-client','injected-client'].includes(source.provenance)&&accountId(source.accountId)&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(source.databaseId)
  &&['apps','sites','platform'].every(role=>typeof source.versions?.[role]==='string')&&sha(source.schema?.sqlSha256)&&sha(source.schema?.objectsSha256)
  &&Number.isSafeInteger(source.observed?.before)&&Number.isSafeInteger(source.observed?.after)&&source.continuity==='bracketing-observations';
 
