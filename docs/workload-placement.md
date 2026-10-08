@@ -167,3 +167,24 @@ The WH-071 decision is complete when the contract/scenarios, dated provider revi
 WH-120 removes the descriptor's read/restore compatibility lists and the proposed legacy placement adapter. `schema` is now the only read/write/restore shape; retired compatibility fields and mismatched version/digest offers reject explicitly. The trusted module catalogue must still establish that a pin is the current supported artifact; the offline shape checker does not provide that authority. Physical placement can change behind an exact current contract, using reviewed fencing/readback and forward repair. Obsolete test encodings may be reset; no old schema decoder is retained.
 
 This changes only the offline decision reference, fixtures and implementation contract. No Worker imports the reference; no provider, database, customer site or runtime is changed. Historical acceptance above records the previous decision scope.
+
+## Standard-service independence evidence (WH-073, slice 1) — October 8, 2026
+
+**Verification only.** No Worker, schema, cache, delivery or placement behavior changed. WH-073 stays open; this slice records the first offline proof that standard visitor and service routes never reach owner-maintenance (Whumpo AI) model inference.
+
+**Route inventory covered.** Sites Worker (`src/site-host.ts`): published site root (GET/HEAD/POST/unknown host), `directory[.json]`, `cms`, `assets/<id>.jpg`, unknown paths and the guest-preview host's bearer refusal. Apps Worker (`src/app-host.ts` → `src/app-gateway.ts`): the visitor page and an unauthenticated module call, also reached through the sites Worker's visitor-host route. Platform Worker visitor paths: `/contact/<project>` form and submission, and the three scheduled crons (`* * * * *`, `47 * * * *`, `17 3 * * *`). Cache behavior: published, unpublished and safety-held responses are checked for `cache-control: no-store` and no `public`, `max-age`, `s-maxage`, `ETag` or `Last-Modified`.
+
+**What is proven.** `node tests/standard-service-no-maintainer.mjs` (SQLite) and `--d1` (local D1; `pnpm test:standard-service-no-maintainer` runs both, and `node tools/verify.mjs site` includes the SQLite run):
+
+- `src/site-host.ts`, `src/app-host.ts`, `src/app-gateway.ts`, `src/runtime/worker.ts` and `src/contact-page.ts` reach no module matched by the shared `inferenceModules` pattern (`tests/helpers/maintainer-inference.mjs`, an esbuild import-graph check). The platform entry `src/index.ts` is checked as a positive control: it does reach `src/ai.ts` and the Chat callers, so the detector fires. The scheduled handler lives in that entry, so its proof is the runtime count below, not the import graph.
+- A published site is created with the current specification transaction builders, not the model. With `fetch` replaced by a counting stub, the route inventory above plus unpublish, republish and a safety hold records zero network calls and zero `inference_calls`, `gateway_spend_attempts`, `gateway_spend_buckets`, `standard_ai_requests` and `gateway_inference_requests` rows. Visitor and scheduled requests create no Chat turns. No maintenance job fails.
+- Two environments: no AI key or binding at all, and a fully configured provider that answers 503 (confirmed with `configuredAI`). Visitors succeed in both, and the provider is never called. The only `fetch` the stub passes through is site health re-reading a published site at its own `whumpo.site` origin, served by the real sites Worker.
+- Unpublished and safety-held content stops serving with no cacheable response. Mutations (an inference import in `site-host.ts` and `contact-page.ts`, a provider `fetch` in the site root and the scheduled handler, a `public` cache header, a recorded spend bucket) each made the test fail.
+
+**Not proven, still required by WH-073.**
+
+- Any cache, pre-render or direct-static-asset delivery change, and publish/restore/unpublish, permission and scanner-revocation cache tests against such a change. Site-host still returns `no-store`, so this slice cannot show an optimization is safe.
+- Request-path cost: direct-asset versus Worker-routed counts, and cold/warm measurements.
+- Exhausted owner premium or standard balance semantics. Only an unavailable and a failing maintainer are exercised; no balance is set.
+- Customer-configured model extensions (WH-079) and the runtime Worker's execution path; only its import graph is checked.
+- Live behavior: no deployed Worker, Cloudflare binding, real provider outage or customer data is involved. Everything is local and synthetic.

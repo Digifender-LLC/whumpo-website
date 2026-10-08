@@ -6885,7 +6885,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-08 UTC: verification slice only; local synthetic evidence, not deployed, not live-accepted; no Worker, schema, cache or delivery change; WH-073 stays open. tests/standard-service-no-maintainer.mjs (SQLite and --d1 on local D1; in the site verify profile) proves that src/site-host.ts, app-host.ts, app-gateway.ts, runtime/worker.ts and contact-page.ts reach no owner-maintenance inference module (src/index.ts is the positive control), and that the published site, directory, CMS, asset, guest-preview, visitor-app, contact form/submission, unpublish and safety-hold routes plus all three cron schedules record zero network calls, inference_calls, gateway_spend_attempts, standard-AI and gateway requests and Chat turns, with no cacheable response, both with no AI configuration and with a provider answering 503. Six mutations (inference import, provider fetch, public cache header, spend row) each failed the test. Not proven: cache/pre-render/direct-asset delivery and revocation cache tests, request-path cost measurement, exhausted owner balance semantics, WH-079 extensions, runtime Worker execution and live behavior. See docs/workload-placement.md.
 
 ## WH-075 — Bound shared capacity and separate interactive from batch failures
 
