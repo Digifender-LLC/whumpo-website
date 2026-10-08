@@ -1,6 +1,6 @@
 # Isolated local disaster-recovery drill
 
-**WH-008, October 8, 2026 UTC. Synthetic local evidence only. This is not a cloud restore, live acceptance or an approved recovery promise.** `tests/recovery-drill.mjs` (`pnpm test:recovery-drill`) captures a recovery point from a synthetic platform, simulates losing it, restores into empty isolated local resources and runs the existing [restore admission](restore-admission.md) checks. It uses the [incident runbook](incident-runbooks.md#12-data-loss-and-restore-outline-only) as written and makes no remote Cloudflare call, deployment, provider dispatch, customer DNS change or purchase.
+**WH-008, October 8, 2026 UTC. Synthetic local evidence only. This is not a cloud restore, live acceptance or an approved recovery promise.** `tests/recovery-drill.mjs` (`pnpm test:recovery-drill`) captures a recovery point from a synthetic platform and restores it into empty isolated local resources, with a separate negative test where the control source is unreachable. The normal path holds the original control source reachable for successful restore admission. Both paths run the existing [restore admission](restore-admission.md) checks and use the [incident runbook](incident-runbooks.md#12-data-loss-and-restore-outline-only) as written, with no remote Cloudflare call, deployment, provider dispatch, customer DNS change or purchase.
 
 Dependency state when this drill ran: WH-002 ([#39](https://github.com/zemdregon/whumpo/issues/39)) and WH-009 ([#7](https://github.com/zemdregon/whumpo/issues/7)) are closed. WH-117 key and storage source is delivered (#83–#85 closed), but custody and live acceptance (#82, #86) are still open. WH-007 ([#105](https://github.com/zemdregon/whumpo/issues/105)) has delivered its runbooks, but alerting and the live exercise are unfinished. So this drill uses the delivered tools. It does not complete those parent tasks or close gap G10.
 
@@ -11,13 +11,13 @@ These are **proposals for owner review**. They are not approved policy, customer
 | Scope | Proposed RPO | Proposed RTO to a *verified, fenced* candidate | Basis |
 | --- | --- | --- | --- |
 | Control D1 (accounts, sites, programs, app documents) | 24 hours (daily recovery point) | 4 hours, owner-operated | Measured local restore below; remote export/import time is untested |
-| Private R2 bodies (`FILES`, restricted safety evidence) | 24 hours, with the same recovery point | 4 hours | R2 has no restore of deleted objects (see below), so the point archive is the only copy |
+| Private R2 bodies (`FILES`, restricted safety evidence) | 24 hours, with the same recovery point | 4 hours | This drill's recovery source is the archived point copy; no deleted-object recovery path was configured or exercised |
 | Worker build outputs | Per release (WH-002 archive) | 1 hour | Archive digests already exist; rebuild is deterministic only for pinned inputs |
 | Return to customer traffic | Not proposed | Separate owner review | Serving stays disabled until WH-019 reconciliation and a reviewed traffic switch |
 
 ## What the drill does
 
-The tool is `tools/recovery-drill.mjs`. It is operator/local only, with no listener, route, publisher or provider adapter. Its results always carry `servingAllowed`, `providerDispatchAllowed` and `retirementAllowed` set to `false`. It reuses existing components and does not create a second authority:
+The tool is `tools/recovery-drill.mjs`. It is operator/local only, with no listener, route, publisher or provider adapter. Admission and reconciliation outputs carry `servingAllowed`, `providerDispatchAllowed` and `retirementAllowed` set to `false`; capture, verify and restore operations expose counts and digests only. It reuses existing components and does not create a second authority:
 
 - **Capture.** `captureRecoveryPoint` reads the control database twice with the existing logical snapshot (`stableCMSDatabase`) and checks an isolated SQLite round trip. It then copies every referenced private object body and copies Worker build outputs with the WH-002 `copyTree`/`fileInventory` helpers. All files are written through `writePrivate`, so they must sit in owner-only directories outside every checkout. The manifest is written last, and its SHA-256 (`pointDigest`) must be recorded outside the archive. Every later step requires that digest.
 - **Register.** `openArchivedControl` opens the archived copy read-only. The existing operator inventory (`registerArchive`) pins it together with the encrypted key backup (`tools/connection-key-backup.mjs`), which is stored separately from the data archive.
@@ -37,7 +37,7 @@ Recovery point A held:
 - One published site version, one enabled visitor application with an applied page review, and 2 visitor documents written through actual QuickJS transitions.
 - 2 private object bodies (91 bytes) and 4 runtime build files (worker plus Wasm).
 
-No native CMS resources were included; admission holds those as `cms-recovery-unavailable`. Published-site photos were not exercised. No GitHub backups, domains or Stripe state were included.
+No native CMS resources were included; admission holds those as `cms-recovery-unavailable`. Published-site photos, GitHub backups, domains, Stripe state and interrupted key-rotation/cutover scenarios were not exercised. Worker recovery was exercised with the runtime bundle only; the full feature scope remains unapproved for other targets.
 
 ## Measured results — October 8, 2026 UTC
 
@@ -113,7 +113,7 @@ Untested: remote D1 batch, statement and size limits for a one-batch restore; ex
 
 - **One-batch restore exceeds the CMS bound.** The control schema alone is 1,051 non-table-row objects. `restoreCapturedCMSD1` refuses more than 1,000 statements, so the drill uses its own bounded (20,000 statements / 64 MiB) one-batch restore with the same empty-target and round-trip rules.
 - **`quick_check` fails in local D1.** `PRAGMA quick_check` on the complete control schema fails with `SQLITE_NOMEM`, so the full logical round-trip digest replaces it.
-- **Evidence deadline under load.** The inventory's fixed ten-second evidence deadline covers two full source observations. With a local-D1 source on this contended host it expired, which is why the source uses the SQLite adapter. The test retries only that transient hold, at most twice, and reports `evidenceDeadlineRetries` (0 in the recorded run). Real data volume may need a reviewed deadline or a faster observation path before operational use.
+- **Evidence deadline under load.** The inventory's fixed ten-second evidence deadline covers two full source observations. With a local-D1 source on this contended host it expired, which is why the source uses the SQLite adapter. The test retries independent-evidence holds (missing/unavailable/malformed evidence, non-200 responses, timeouts) up to three attempts, and reports the count as `independentEvidenceRetries` (0 in the recorded run). Real data volume may need a reviewed deadline or a faster observation path before operational use.
 - **In-flight work blocks a point.** A recovery point captured while provider work is in flight can never be admitted. Take a new point after settlement.
 
 ## Acceptance status

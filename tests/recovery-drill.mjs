@@ -31,8 +31,8 @@ const require=createRequire(import.meta.resolve('wrangler')),{Miniflare,convertV
 const workerd=async dir=>new Miniflare(convertV4MiniflareOptions({modulesRoot:dir,modules:[{type:'ESModule',path:dir+'/worker.js'},...(await readdir(dir)).filter(p=>p.endsWith('.wasm')).map(p=>({type:'CompiledWasm',path:dir+'/'+p}))],compatibilityDate:'2026-09-29'}));
 const lane=()=>hash(id());
 async function execute(runtime,source,input){const r=await runtime.dispatchFetch('http://runtime/execute',{method:'POST',headers:{'x-whumpo-lane':lane()},body:JSON.stringify({version:1,source,input})});assert.equal(r.status,200);return r.json();}
-const network=globalThis.fetch,deadlineRetries=[];
-async function withinDeadline(run){for(let attempt=1;;attempt++){const result=await run();if(result.holds[0]!=='independent-evidence'||attempt===3)return result;deadlineRetries.push(attempt);}}
+const network=globalThis.fetch,independentEvidenceRetries=[];
+async function retryIndependentEvidence(run){for(let attempt=1;;attempt++){const result=await run();if(result.holds[0]!=='independent-evidence'||attempt===3)return result;independentEvidenceRetries.push(attempt);}}
 try{
  // ---- Source platform: complete current schema in local D1 + private local R2.
  // The source platform uses the actual D1 query adapter over SQLite, like the
@@ -123,9 +123,9 @@ try{
  await assert.rejects(restoreObjects(interrupted,pointA,pointDigestA));
  const objects=isolatedObjects(target.OBJECTS_A),inspectOnce=(extra={})=>inspectIsolatedRestore({db:target.DRILL_A,manifest,keyBackup,evidenceSource:inventory.evidenceSource,expectedStreamId:streamId,objects,...extra});
  // The inventory's evidence reply has fixed ten-second deadlines covering two full
- // source observations. On a contended host it can expire; that transient hold is
- // retried at most twice and every retry is reported in the drill output.
- const inspect=(extra={})=>withinDeadline(()=>inspectOnce(extra));
+ // source observations. On a contended host independent-evidence holds can occur
+ // from missing/unavailable/malformed evidence. Retries up to three attempts.
+ const inspect=(extra={})=>retryIndependentEvidence(()=>inspectOnce(extra));
  const partial=await inspect();assert.deepEqual(partial.holds,['missing-objects']);holds.partialObjects=partial.holds;
  const resumed=await phase('restoreObjects',()=>restoreObjects(target.OBJECTS_A,pointA,pointDigestA));
  assert.deepEqual({written:resumed.written,skipped:resumed.skipped},{written:1,skipped:1});
@@ -228,7 +228,7 @@ try{
  holds.inFlightSource=(await inspectB()).holds;assert.deepEqual(holds.inFlightSource,['independent-evidence'],'Unresolved current effects refuse evidence');
  await db.prepare("UPDATE standard_ai_requests SET state='completed',input_tokens=1,output_tokens=1 WHERE id=?").bind(inflight).run();
  await inventory.observe({operationId:'drill-inflight-terminal',selection:{kind:'external-effect',store:'standard_ai_requests',effectId:inflight}});
- holds.inFlightCandidate=(await withinDeadline(inspectB)).holds;// The settled source row now differs from the archived in-flight row, so the derived
+ holds.inFlightCandidate=(await retryIndependentEvidence(inspectB)).holds;// The settled source row now differs from the archived in-flight row, so the derived
  // current-record constraint holds it first; the restore-admission suite covers the
  // separate uncertain-effect refusal for an unchanged in-flight candidate.
  assert.deepEqual(holds.inFlightCandidate,['stale-authority'],'The recovered in-flight row stays held after reconciliation');
@@ -237,7 +237,7 @@ try{
  const summary={suite:'WH-008 isolated local disaster-recovery drill',node:process.versions.node,
   inventory:{controlRows:capture.controlRows,controlBytes:capture.controlBytes,restoreStatements:control.statements,objects:capture.objects,objectBytes:capture.objectBytes,runtimeFiles:worker.files,credentials:admitted.keys.credentials,keyIds:admitted.keys.keyIds.length,tables:admitted.tables,artifacts:{publishedSites:artifacts.publishedSites,publishedBackends:artifacts.publishedBackends,applications:artifacts.applications,applicationDocuments:artifacts.applicationDocuments}},
   measured:{phasesMs:phases,restoreToVerifiedMs:rto,lossSinceSnapshot:{...loss.tables.lostSinceSnapshot,objects:1},pointAgeAtDisasterMs:disasterAt-capture.capturedAt},
-  holds,afterRevocationTables:gaps.tables,drillRefusals:refusals,evidenceDeadlineRetries:deadlineRetries.length,afterRevocationCounts:gaps.counts,servingAllowed:false,providerDispatchAllowed:false,retirementAllowed:false,remoteAccess:false};
+  holds,afterRevocationTables:gaps.tables,drillRefusals:refusals,independentEvidenceRetries:independentEvidenceRetries.length,afterRevocationCounts:gaps.counts,servingAllowed:false,providerDispatchAllowed:false,retirementAllowed:false,remoteAccess:false};
  console.log(JSON.stringify(summary,null,1));
 }finally{
  globalThis.fetch=network;
