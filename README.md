@@ -6,7 +6,7 @@ Whumpo is an invitation-only AI website and application platform in private test
 
 For future work, use the [product and delivery roadmap](docs/roadmap/README.md), the [architecture and sequencing alignment](docs/roadmap/alignment.md), its [prioritized task backlog](docs/roadmap/backlog.md), and [agent execution guide](docs/roadmap/execution.md). Run `node tools/roadmap.mjs next` for planning candidates, then check their linked GitHub issues for current ownership and completion evidence.
 
-Development follows the owner's [current-version-only policy](docs/current-version-policy.md): remove legacy routes/adapters and reset obsolete test data directly. All environments are testing; preservation migrations are unnecessary. The linked inventory records the removed paths and their test deployment. The test platform runs the complete current schema and shared workspace identity/admission contract; see [current deployment evidence](docs/chat-routine-release.md). CMS functional testing remains deferred.
+Development follows the owner's [current-version-only policy](docs/current-version-policy.md): remove legacy routes/adapters and reset obsolete test data directly. All environments are testing; preservation migrations are unnecessary. The linked inventory records the removed paths and their test deployment. The test platform runs the complete current schema and shared workspace identity/admission contract; see [current deployment evidence](docs/chat-routine-release.md) and the latest recorded cutover (October 4, 2026, PR #160) in the [release records](docs/releases.md#pr-160-shared-modules-and-contact-email-cutover--october-4-2026-utc). Those records are dated and were not re-read live in the October 8 documentation refresh. CMS functional testing remains deferred.
 
 ## Current product
 
@@ -40,7 +40,7 @@ pnpm dev
 
 The native Android shell (WH-082) is a separate Gradle project in `android/`; see [Android build and checks](docs/android-build.md).
 
-The local server sets `ENVIRONMENT=local`; do not expose it publicly. Use `http://localhost:8787` for passkey development. Deployment uses `ENVIRONMENT=test` and keeps invitation/security checks enabled. Run `pnpm check` for backend/frontend types, and the focused `test:*` scripts listed in `package.json` for the feature being changed. For credential-free local checks, use `pnpm verify` (fast), `pnpm verify site`, or `pnpm verify app`; see [verification profiles](docs/verification.md) for coverage and limitations. Some other HTTP tests require a running local server; inspect their documented setup.
+The local server sets `ENVIRONMENT=local`; do not expose it publicly. Use `http://localhost:8787` for passkey development. Deployment uses `ENVIRONMENT=test` and keeps invitation/security checks enabled. Run `pnpm check` for backend/frontend types, and the focused `test:*` scripts listed in `package.json` for the feature being changed. For credential-free local checks, use `pnpm verify` (fast), `pnpm verify site`, `pnpm verify app`, or `pnpm verify protection`; see [verification profiles](docs/verification.md) for coverage and limitations. Some other HTTP tests require a running local server; inspect their documented setup.
 
 | Area | Authoritative source |
 | --- | --- |
@@ -49,7 +49,7 @@ The local server sets `ENVIRONMENT=local`; do not expose it publicly. Use `http:
 | Public website host | `src/site-host.ts`, `wrangler.sites.jsonc` |
 | Controlled visitor frontend | `web/visitor.js` → `public-app/visitor.js` |
 | Separate visitor/runtime services | `wrangler.apps.jsonc`, `wrangler.runtime.jsonc` |
-| Database schema | `schema/platform.sql` and current identity SQL composed by `tools/current-schema.mjs` |
+| Database schema | Six current SQL files (`schema/platform.sql`, `src/workspace-identity/canonical-inputs.sql` and `schema.sql`, and the funnel-metrics, guest-previews and shared-modules `schema.sql`) composed by `tools/current-schema.mjs`: 219 tables, 51 current and 6 planned data classes on October 8, 2026 |
 
 Run `pnpm build` to generate assets. Never hand-edit bundles.
 
@@ -69,16 +69,16 @@ The owner authorized Workers Paid ($5/month) resources, with GitHub restricted t
 - [Workload placement contract](docs/workload-placement.md) — logical resources, scoped adapters and lifecycle/export requirements; broader hosting remains conditional
 - [Pooled build jobs](docs/build-jobs.md) — owner-requested bounded builds with per-job lease, expiry, cleanup records and deterministic diagnostics; no always-on per-customer capacity (source implementation; Containers owner-gated)
 - [Project specification decision](docs/project-specification.md) — versioned configuration, supported change operations and the offline composition contract
-- [Shared module contract](docs/shared-modules.md) — planned WH-067 content, records/forms, files and access module APIs, authorization model and delivery slices
+- [Shared module contract](docs/shared-modules.md) — WH-067 content, records/forms, files, collections and access modules: frozen contract plus WH-124 to WH-130 source and local tests; deployed in the October 4 cutover per the release record, with no customer or live acceptance claimed
 - [Capability catalog and planner](docs/capability-planner.md) — reuse existing configuration and helpers; record bounded missing behavior before generating source
-- [Guest preview links and feedback](docs/guest-previews.md) — WH-092 first slice: expiring, revocable, hash-stored links to one saved version on an isolated host, with bounded accountless comments; owner API only, source and local tests only
+- [Guest preview links and feedback](docs/guest-previews.md) — WH-092 first slice: expiring, revocable, hash-stored links to one saved version on an isolated host, with bounded accountless comments; owner Chat/view controls and HTTP API, source and local tests only
 - [Content-free funnel measurements](docs/funnel-metrics.md) — WH-025 opt-in milestones, aggregate operator report and draft feedback request; source and local tests only, targets proposed until the first cohort baseline
 - [Data lifecycle proposal](docs/data-lifecycle.md), [protection contract](docs/data-protection.md) and [background-job decision](docs/background-jobs.md) — storage access, key recovery, retention/export/closure and durable operations
 - [Customer benchmarks and inference privacy](docs/customer-benchmarks.md) — synthetic outcome checks, cost evidence and real-model evaluation gates
 - [Content safety and US customer eligibility](docs/content-safety.md) — CSAM scanning is planned and owner-deferred; existing holds are not detection. Wider safety acceptance remains open
 - [Chat tools and navigation](docs/workspace-agent.md)
 - [Natural-language Chat and agent knowledge](docs/natural-language-chat.md): messages, explicit approvals, scoped lookups and the retrieval decision.
-- [Chat interaction contract](docs/chat-interactions.md) — versioned forms, views and exact action handoffs; production interaction storage/rendering remain planned.
+- [Chat interaction contract](docs/chat-interactions.md) — versioned forms, views and exact action handoffs; storage, the shared renderer and routine adapters are implemented and were deployed in the October 3 test releases (per the dated release records), while whole-owner-experience, physical-device and customer acceptance remain open.
 - [Domain ownership](docs/domains.md) and [custom hosting](docs/integrations/domain-hosting.md)
 - [GitHub authorization](docs/integrations/github-connection.md) and [reviewed backups](docs/integrations/github-backups.md)
 - [Cloudflare authorization](docs/integrations/cloudflare-connection.md) and [reviewed DNS](docs/integrations/cloudflare-dns.md)
