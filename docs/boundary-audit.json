@@ -1,0 +1,5517 @@
+{
+ "version": 1,
+ "task": "WH-004",
+ "auditedCommit": "ca17c6ad3f009b961916be6f4c2053a8eaa531e4",
+ "auditedOn": "2026-10-08",
+ "scope": "Mounted platform Worker request surface (src/index.ts and its sub-dispatchers) and the typed Chat controls. Not the sites, apps or runtime Workers, scheduled jobs, operator CLI tools or provider behaviour.",
+ "cellStates": {
+  "evidenced": "Enforcing code located and an existing test line asserts the property (negative case for authority, replay and stale state).",
+  "gap": "gapKind \"test\": enforced in code but no test asserts it. gapKind \"control\": required by a contract or runbook but not enforced; names a finding.",
+  "n/a": "Not applicable, with the reason (read-only, or not required by the current contract).",
+  "unverified": "Could not be established from code and tests in this slice; \"needs\" states what is missing."
+ },
+ "gates": {
+  "order": [
+   "handleIdentityRequest",
+   "exact-origin-gate",
+   "handleSafetyCaseRequest",
+   "workspaceIdentity",
+   "handleWorkspace"
+  ]
+ },
+ "findings": [
+  {
+   "id": "B1",
+   "severity": "low",
+   "title": "One owner can exhaust platform-wide review tables and block every other owner, including safety withdrawals",
+   "status": "reproduced (executed)",
+   "owner": "Platform schema/capacity maintainers; owner decision (schema change needs a coordinated cutover)",
+   "reproduction": "node tests/boundary-review-capacity.mjs (expected to exit 1 until remediated)",
+   "evidence": [
+    {
+     "file": "schema/platform.sql",
+     "contains": "SELECT RAISE(ABORT,'backend_form_capacity') WHERE (SELECT count(*) FROM backend_form_reviews WHERE project_id=NEW.project_id)>=100 OR (SELECT count(*) FROM backend_form_reviews)>=1000;"
+    },
+    {
+     "file": "schema/platform.sql",
+     "contains": "SELECT RAISE(ABORT,'app_page_capacity') WHERE (SELECT count(*) FROM app_page_reviews WHERE project_id=NEW.project_id)>=100 OR (SELECT count(*) FROM app_page_reviews)>=1000;"
+    },
+    {
+     "file": "schema/platform.sql",
+     "contains": "CREATE TRIGGER app_activation_delete_guard BEFORE DELETE ON app_activation_reviews WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id)"
+    },
+    {
+     "file": "src/service-safety.ts",
+     "contains": "await prepareAppPage(db,user,value.projectId,value.id,null,{projectId:value.projectId,programRevision:value.programRevision,pageRevision:value.expectedRevision});"
+    },
+    {
+     "file": "tests/boundary-review-capacity.mjs",
+     "contains": "B1 reproduced"
+    }
+   ]
+  },
+  {
+   "id": "B2",
+   "severity": "low",
+   "title": "Incident runbook C10 says owner withdrawal/disconnect controls need recent authentication; the code accepts an old passkey proof",
+   "status": "reproduced (executed for site unpublish; structural for the rest)",
+   "owner": "Owner decision: require recent authentication in code (src change) or correct docs/incident-runbooks.md C10",
+   "reproduction": "node tests/boundary-recent-auth.mjs (expected to exit 1 until resolved)",
+   "evidence": [
+    {
+     "file": "docs/incident-runbooks.md",
+     "contains": "each needs the existing review, recent authentication and rate limits"
+    },
+    {
+     "file": "src/chat-controls.ts",
+     "contains": "return {action:{type:'confirm',kind,reviewId:a.reviewId},command:`/${c.verb} ${a.reviewId}`,label:c.label+'.',recentAuth:false};"
+    },
+    {
+     "file": "src/index.ts",
+     "contains": "if(method==='POST'&&pathname==='/api/connections/cloudflare/disconnect')return json(await disconnectCloudflare(env.DB,user.id,cloudflareConfig(env)));"
+    },
+    {
+     "file": "src/index.ts",
+     "contains": "if (method === \"POST\" && pathname === \"/api/connections/github/disconnect\") return json(await disconnectGitHub(env.DB,user.id,githubConfig(env)));"
+    },
+    {
+     "file": "tests/boundary-recent-auth.mjs",
+     "contains": "B2 reproduced"
+    }
+   ]
+  },
+  {
+   "id": "B3",
+   "severity": "low",
+   "title": "Typed guest-preview revoke/delete applies its effect before the Chat turn batch; a request that returns 409 has already deleted the link",
+   "status": "reproduced (executed)",
+   "owner": "Chat/guest-preview maintainers (src/chat.ts, src/guest-previews/bindings.ts); src fix needs owner sign-off",
+   "reproduction": "node tests/boundary-guest-preview-race.mjs (expected to exit 1 until remediated)",
+   "evidence": [
+    {
+     "file": "src/chat.ts",
+     "contains": "if(control?.action.type==='guestPreview'){try{guestPreview=await guestPreviewChatCommand(db,userId,content);}"
+    },
+    {
+     "file": "src/guest-previews/bindings.ts",
+     "contains": "if(remove){await deleteGuestPreview(db,userId,remove[1]);"
+    },
+    {
+     "file": "src/chat.ts",
+     "contains": "return { status: 409, error: 'Your conversation changed. Review the latest messages and try again.' };"
+    },
+    {
+     "file": "tests/boundary-guest-preview-race.mjs",
+     "contains": "B3 reproduced"
+    }
+   ]
+  }
+ ],
+ "families": [
+  {
+   "id": "public-entry",
+   "title": "Anonymous platform entry: health, plan catalogue, public contact form and /api dispatch",
+   "privileged": [],
+   "authorityClass": "anonymous (public contact form: visitor with Turnstile, per-client admission and form revision)",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/health",
+     "methods": [
+      "GET"
+     ],
+     "beforeOriginGate": true
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/plans",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/contact\\/([0-9a-f-]{36})$/",
+     "methods": [
+      "ANY"
+     ],
+     "beforeOriginGate": true
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "prefix",
+     "match": "/api/",
+     "methods": [
+      "ANY"
+     ],
+     "beforeOriginGate": true
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "n/a",
+     "detail": "Anonymous by design: /api/health and /api/plans return no account data; /contact/:id is a public visitor form with its own Turnstile, per-connection admission, rate limit and form-revision checks (docs/contact-forms.md; not re-reviewed here). The /api/ prefix only dispatches to handle()."
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "These matchers run before the platform Origin gate (beforeOriginGate machine-checked). /contact/:id enforces its own exact Origin on POST; health and plans are GET-only.",
+     "enforcedAt": [
+      {
+       "file": "src/contact-page.ts",
+       "contains": "if(request.method==='POST'&&request.headers.get('origin')!==new URL(request.url).origin)throw new ContactError(403,'Open the contact form before sending a message.');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/contacts.mjs",
+       "contains": "assert.equal((await contactPage(post(payload,'https://evil.example'),env,a.project,good)).status,403);assert.equal(calls,0);",
+       "asserts": "a cross-origin contact submission is refused before verification"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "some(p=>p.startsWith('platform dispatch order changed'))",
+       "asserts": "a router moved ahead of the exact-Origin gate is reported; every route is registered with beforeOriginGate"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "identity",
+   "title": "Workspace identity: sign-up, login, passkeys, recovery kit, recovery and logout",
+   "privileged": [
+    "credential"
+   ],
+   "authorityClass": "anonymous ceremony -> challenge cookie -> session or restricted grant; own exact-Origin check",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "prefix",
+     "match": "/api/auth/",
+     "methods": [
+      "ANY"
+     ]
+    },
+    {
+     "file": "src/workspace-identity/http.ts",
+     "kind": "exact",
+     "match": "logout",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/workspace-identity/http.ts",
+     "kind": "exact",
+     "match": "config",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/workspace-identity/http.ts",
+     "kind": "exact",
+     "match": "state",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/workspace-identity/http.ts",
+     "kind": "exact",
+     "match": "signup/options",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/workspace-identity/http.ts",
+     "kind": "exact",
+     "match": "signup/verify",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/workspace-identity/http.ts",
+     "kind": "exact",
+     "match": "login/options",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/workspace-identity/http.ts",
+     "kind": "exact",
+     "match": "login/verify",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/workspace-identity/http.ts",
+     "kind": "exact",
+     "match": "recovery/start",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/workspace-identity/http.ts",
+     "kind": "exact",
+     "match": "add/options",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/workspace-identity/http.ts",
+     "kind": "exact",
+     "match": "add/verify",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/workspace-identity/http.ts",
+     "kind": "exact",
+     "match": "reauth/options",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/workspace-identity/http.ts",
+     "kind": "exact",
+     "match": "reauth/verify",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/workspace-identity/http.ts",
+     "kind": "exact",
+     "match": "kit/prepare",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/workspace-identity/http.ts",
+     "kind": "exact",
+     "match": "kit/save",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/workspace-identity/http.ts",
+     "kind": "exact",
+     "match": "kit/rotate",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/workspace-identity/http.ts",
+     "kind": "exact",
+     "match": "enrollment/complete",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/workspace-identity/http.ts",
+     "kind": "exact",
+     "match": "enrollment/cancel",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/workspace-identity/http.ts",
+     "kind": "exact",
+     "match": "recovery/review",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/workspace-identity/http.ts",
+     "kind": "exact",
+     "match": "recovery/secure",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/workspace-identity/http.ts",
+     "kind": "exact",
+     "match": "recovery/complete/options",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/workspace-identity/http.ts",
+     "kind": "exact",
+     "match": "recovery/complete/verify",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/workspace-identity/http.ts",
+     "kind": "exact",
+     "match": "passkey/remove",
+     "methods": [
+      "POST"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Ceremonies resolve the session, restricted grant or challenge cookie; a revoked or expired proof is refused. Workspace callers only accept the ordinary session.",
+     "enforcedAt": [
+      {
+       "file": "src/workspace-identity/http.ts",
+       "contains": "const proof=selected(request);if(!proof)throw new IdentityError(401,'proof_required','Sign in to continue.');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "expiredGrant.cookies.set(identityCookies.grant,held);await expiredGrant.no('state',{version:1},401);",
+       "asserts": "an expired restricted grant is refused"
+      },
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "for(const path of ['/profile','/projects','/chat','/connections/github/grant-reviews']){assert.equal((await workspaceCall(stillOrdinary,path)).status,401);cases++;}",
+       "asserts": "recovery revokes earlier sessions"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "The identity router runs before the platform gate (dispatch order machine-checked) and enforces POST plus the exact configured Origin itself.",
+     "enforcedAt": [
+      {
+       "file": "src/workspace-identity/protocol.ts",
+       "contains": "if(request.method!=='POST'||request.headers.get('origin')!==origin||new URL(request.url).origin!==origin)throw invalidIdentityRequest();"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "await b.no('state',{version:1},400,{headers:{origin:'https://elsewhere.invalid','content-type':'application/json'}});",
+       "asserts": "a cross-origin identity request is refused"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "some(p=>p.startsWith('platform dispatch order changed'))",
+       "asserts": "a router moved ahead of the exact-Origin gate is reported; every route is registered with beforeOriginGate"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "evidenced",
+     "detail": "Kit, enrollment, recovery and passkey changes require a passkey proof under ten minutes old in the committing predicate.",
+     "enforcedAt": [
+      {
+       "file": "src/workspace-identity/kits.ts",
+       "contains": "const restricted=p.purpose==='recovery',policy:IdentityPolicy={purpose:p.purpose,freshPasskey:true,bindIdentityRevision:true};"
+      },
+      {
+       "file": "src/workspace-identity/recovery.ts",
+       "contains": "const restricted=p.purpose==='recovery',policy:IdentityPolicy={purpose:p.purpose,freshPasskey:true,bindIdentityRevision:true};"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-kits.mjs",
+       "contains": "await denies(()=>completeEnrollment(request(),env,after,offered(after,kit)),'proof_required');",
+       "asserts": "enrollment cannot complete without a fresh proof"
+      },
+      {
+       "file": "tests/identity-kits.mjs",
+       "contains": "const oldProof=await current(exp.access);await denies(()=>completeEnrollment(request(),env,oldProof,offered(oldProof,expKit)),'proof_required');",
+       "asserts": "an old proof is refused"
+      }
+     ]
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "Intents bind request ID, attempt, expected revision and epoch, reviewed offer/generation and literal confirmations; a changed generation or review conflicts.",
+     "enforcedAt": [
+      {
+       "file": "src/workspace-identity/protocol.ts",
+       "contains": "if(/identity_request_conflict/.test(String(error)))throw new IdentityError(409,'request_conflict','This request ID already belongs to a different change.');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-recovery.mjs",
+       "contains": "await denies(()=>secureRecovery(request(),env,resumed.principal,{...secureIntent,generation:99}),'request_conflict');",
+       "asserts": "a reused request ID with another generation conflicts"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "A lost reply is recovered: repeating the same intent returns the original receipt.",
+     "enforcedAt": [
+      {
+       "file": "src/workspace-identity/protocol.ts",
+       "contains": "identity_request_conflict"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "assert.equal((await b.ok('recovery/secure',intent)).receipt.operationId,intent.requestId);",
+       "asserts": "a repeated recovery/secure returns the same receipt"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "A changed review, key set, kit or epoch between reads and commit is refused (identity_changed); an in-flight request after revocation cannot commit.",
+     "enforcedAt": [
+      {
+       "file": "src/workspace-identity/kits.ts",
+       "contains": "expected(p,intent);const policy:IdentityPolicy={purpose:'enrollment',freshPasskey:true,bindIdentityRevision:true};"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-recovery.mjs",
+       "contains": "await denies(()=>secureRecovery(request(),env,sp,staleIntent),'identity_changed');",
+       "asserts": "a stale recovery intent is refused"
+      },
+      {
+       "file": "tests/workspace-admission.mjs",
+       "contains": "const racing=interceptDatabase(db,/INSERT INTO activity_events/,async()=>{paused++;await two.revoke()});",
+       "asserts": "a session revoked while a request is in flight cannot commit (admission is rechecked in the committing batch)"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "operator-safety-cases",
+   "title": "Restricted operator safety cases, preservation holds, evidence and disclosures (WH-132)",
+   "privileged": [
+    "safety-operator"
+   ],
+   "authorityClass": "operator: workspace session + named case role + fresh passkey, enforced in committing SQL",
+   "entries": [
+    {
+     "file": "src/safety-case-http.ts",
+     "kind": "exact",
+     "match": "roles/grant",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/safety-case-http.ts",
+     "kind": "exact",
+     "match": "roles/revoke",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/safety-case-http.ts",
+     "kind": "exact",
+     "match": "cases/open",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/safety-case-http.ts",
+     "kind": "exact",
+     "match": "cases/link-evidence",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/safety-case-http.ts",
+     "kind": "exact",
+     "match": "cases/record-finding",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/safety-case-http.ts",
+     "kind": "exact",
+     "match": "cases/close",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/safety-case-http.ts",
+     "kind": "exact",
+     "match": "cases/read",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/safety-case-http.ts",
+     "kind": "exact",
+     "match": "cases/audit",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/safety-case-http.ts",
+     "kind": "exact",
+     "match": "holds/place",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/safety-case-http.ts",
+     "kind": "exact",
+     "match": "holds/release",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/safety-case-http.ts",
+     "kind": "exact",
+     "match": "holds/list",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/safety-case-http.ts",
+     "kind": "exact",
+     "match": "evidence/capture",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/safety-case-http.ts",
+     "kind": "exact",
+     "match": "evidence/dispose",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/safety-case-http.ts",
+     "kind": "exact",
+     "match": "disclosures/request",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/safety-case-http.ts",
+     "kind": "exact",
+     "match": "disclosures/approve",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/safety-case-http.ts",
+     "kind": "exact",
+     "match": "disclosures/record",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/safety-case-http.ts",
+     "kind": "exact",
+     "match": "disclosures/cancel",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/safety-case-http.ts",
+     "kind": "exact",
+     "match": "retention/list",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/safety-case-http.ts",
+     "kind": "exact",
+     "match": "retention/preview",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/safety-case-http.ts",
+     "kind": "exact",
+     "match": "retention/apply",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/safety-case-http.ts",
+     "kind": "exact",
+     "match": "disclosures/read",
+     "methods": [
+      "POST"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Operator role, current identity and an independence rule form one SQL gate inside every committing statement.",
+     "enforcedAt": [
+      {
+       "file": "src/safety-cases.ts",
+       "contains": "const gate=q`(${identity} AND ${role} AND ${independent})`;"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/safety-case-operations.mjs",
+       "contains": "assert.equal(r.status,403);assert.equal(r.body.code,'missing_role');",
+       "asserts": "a customer session without a role gets 403"
+      },
+      {
+       "file": "tests/safety-cases.mjs",
+       "contains": "await refused(()=>c.readSafetyCase(db,reviewer,{caseId:'case-1'}),'missing_role');",
+       "asserts": "a revoked role is refused immediately"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "The operator router runs after the exact-Origin gate (dispatch order machine-checked), POST and JSON only.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(method) && !sameOrigin(request)) return error(403, \"Origin check failed\");"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "assert.equal(crossOriginGrant.status,403)",
+       "asserts": "worker.fetch rejects a cross-origin workspace POST with 403 before any handler runs"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "some(p=>p.startsWith('platform dispatch order changed'))",
+       "asserts": "a router moved ahead of the exact-Origin gate is reported; every route is registered with beforeOriginGate"
+      },
+      {
+       "file": "tests/safety-case-operations.mjs",
+       "contains": "{token:reviewer.fixture.token,origin:'https://evil.example'}),workerEnv,{waitUntil:()=>{}});assert.equal(response.status,403);",
+       "asserts": "a cross-origin operator POST is refused"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "evidenced",
+     "detail": "Passkey proof under ten minutes, checked before the action and again in the committing SQL (the in-SQL recheck path itself is untested).",
+     "enforcedAt": [
+      {
+       "file": "src/safety-cases.ts",
+       "contains": "const operatorPolicy:IdentityPolicy=Object.freeze({purpose:'workspace',freshPasskey:true,bindIdentityRevision:false});"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/safety-case-operations.mjs",
+       "contains": "assert.equal(r.status,401);assert.equal(r.body.code,'proof_required');checks++; // fresh passkey proof required",
+       "asserts": "an old passkey proof is refused"
+      }
+     ]
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "Disclosure approval binds the exact manifest and a different approver.",
+     "enforcedAt": [
+      {
+       "file": "src/safety-cases.ts",
+       "contains": "WHERE id=${disclosureId} AND case_id=${caseId} AND state='requested' AND manifest_sha256=${manifestSha256} AND requested_by<>${actor}"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/safety-case-operations.mjs",
+       "contains": "manifestSha256:'0'.repeat(64)}),'conflict');",
+       "asserts": "approval must name the exact manifest"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "Each action is an idempotent effect check; the same ID with different input conflicts.",
+     "enforcedAt": [
+      {
+       "file": "src/safety-cases.ts",
+       "contains": "WHEN ${a.effect(actor)} THEN 'ok' WHEN ${a.missing??q`0`} THEN 'not_found' ELSE 'conflict' END RETURNING reason"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/safety-cases.mjs",
+       "contains": "legalBasisRef:'basis-other',reviewDays:30}),'conflict');",
+       "asserts": "the same hold ID with different input is refused"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "State transitions require the expected state. Recording a finding is append-only without an expected-current-finding check (R6; may be intended).",
+     "enforcedAt": [
+      {
+       "file": "src/safety-cases.ts",
+       "contains": "WHERE id=${disclosureId} AND case_id=${caseId} AND state='approved' AND ${gate}"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/safety-cases.mjs",
+       "contains": "decisionRef:'decision-4'}),'case_closed');",
+       "asserts": "no finding after a case is closed"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "stripe-webhook",
+   "title": "Stripe sandbox webhook",
+   "privileged": [
+    "billing"
+   ],
+   "authorityClass": "signed webhook (no session; dispatched before the Origin gate)",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/stripe/webhook",
+     "methods": [
+      "POST"
+     ],
+     "beforeOriginGate": true
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "HMAC signature over timestamp and raw body with the sandbox webhook secret; only test-mode events are accepted; orders are joined to the provider customer.",
+     "enforcedAt": [
+      {
+       "file": "src/stripe-common.ts",
+       "contains": "crypto.subtle.verify('HMAC',key,bytes,new TextEncoder().encode(timestamp+'.'+raw))"
+      },
+      {
+       "file": "src/stripe-common.ts",
+       "contains": "if(!event || event.livemode!==false)throw new BillingError(400,'Only Stripe test events are accepted');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/subscriptions.mjs",
+       "contains": "for(const opts of [{bad:true},{t:1},{live:true}])await assert.rejects(stripeBillingWebhook(await event('invoice.paid',invoice.id,opts),db,env,transport),{status:400});",
+       "asserts": "a bad signature, old timestamp or live event is refused"
+      }
+     ]
+    },
+    "origin": {
+     "state": "n/a",
+     "detail": "Exempt by design: provider-to-server call dispatched before the Origin gate (beforeOriginGate machine-checked); the HMAC signature is the authority."
+    },
+    "freshness": {
+     "state": "n/a",
+     "detail": "No session is involved."
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "The payload supplies identifiers only; session, subscription and invoice are re-read from Stripe and must match the stored order price, amount and currency.",
+     "enforcedAt": [
+      {
+       "file": "src/stripe-billing.ts",
+       "contains": "s.metadata.order===order.id&&s.client_reference_id===order.id"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/subscriptions.mjs",
+       "contains": "invoice.amount_paid=1;await assert.rejects(stripeBillingWebhook(await event('invoice.paid',invoice.id),db,env,transport),{status:409});",
+       "asserts": "a mismatched invoice grants nothing"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "300-second timestamp tolerance; no event-ID ledger, but grants are ON CONFLICT DO NOTHING into an immutable paid-invoice table, so a replay adds nothing.",
+     "enforcedAt": [
+      {
+       "file": "src/stripe-common.ts",
+       "contains": "Math.abs(Date.now()/1000-Number(timestamp))>300"
+      },
+      {
+       "file": "schema/platform.sql",
+       "contains": "CREATE TRIGGER stripe_invoice_immutable BEFORE UPDATE ON stripe_paid_invoices"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/subscriptions.mjs",
+       "contains": "assert.equal((await db.prepare('SELECT COUNT(*) n FROM stripe_paid_invoices').first()).n,2);",
+       "asserts": "a replayed invoice.paid adds no grant"
+      },
+      {
+       "file": "tests/subscriptions.mjs",
+       "contains": "await assert.rejects(db.prepare('UPDATE stripe_paid_invoices SET ends_at=ends_at+1 WHERE id=?').bind(invoice.id).run(),/immutable/);",
+       "asserts": "grants are immutable"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Order transitions require the pending state.",
+     "enforcedAt": [
+      {
+       "file": "src/stripe-billing.ts",
+       "contains": "UPDATE stripe_subscription_orders SET subscription_id=?,state='complete' WHERE id=? AND state='pending'"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/subscriptions.mjs",
+       "contains": "invoice.customer='cus_foreign';await assert.rejects(refreshSubscriptions(scope(owner),env,owner,transport),{status:409});",
+       "asserts": "an invoice for another customer is refused on reconciliation"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "billing-owner",
+   "title": "Owner billing: status, subscription checkout, refresh and portal",
+   "privileged": [
+    "billing"
+   ],
+   "authorityClass": "session owner",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/billing/subscription",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/billing/subscription/refresh",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/billing/subscription/checkout",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/billing/portal",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/billing",
+     "methods": [
+      "GET"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Checkout, refresh and portal key on the owner's order and stripe_customers row. No test calls the portal for an owner without a customer (code returns 409).",
+     "enforcedAt": [
+      {
+       "file": "src/stripe-billing.ts",
+       "contains": "SELECT * FROM stripe_subscription_orders WHERE id=? AND user_id=?"
+      },
+      {
+       "file": "src/stripe-billing.ts",
+       "contains": "customer=await db.prepare('SELECT customer_id FROM stripe_customers WHERE user_id=?').bind(user).first<Customer>()"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/subscriptions.mjs",
+       "contains": "await assert.rejects(startSubscription(scope(other),env,other,{id,plan:'personal',interval:'month'},transport),{status:409});",
+       "asserts": "another owner cannot reuse an order ID"
+      },
+      {
+       "file": "tests/subscriptions.mjs",
+       "contains": "assert.equal((await getBilling(scope(other),other)).plan.id,'explore');",
+       "asserts": "an entitlement does not leak to another owner"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Mutating methods pass the global exact-Origin gate in handle() before session admission and dispatch (position machine-checked); GET routes are read-only.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(method) && !sameOrigin(request)) return error(403, \"Origin check failed\");"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "assert.equal(crossOriginGrant.status,403)",
+       "asserts": "worker.fetch rejects a cross-origin workspace POST with 403 before any handler runs"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "some(p=>p.startsWith('platform dispatch order changed'))",
+       "asserts": "a router moved ahead of the exact-Origin gate is reported; every route is registered with beforeOriginGate"
+      },
+      {
+       "file": "tests/subscriptions.mjs",
+       "contains": "assert.equal((await worker.fetch(new Request('https://whumpo.com'+path,{method:'POST'}),local)).status,403);",
+       "asserts": "checkout, portal and refresh without Origin get 403"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "n/a",
+     "detail": "Not required by the payments contract for the sandbox; checkout and portal accept any current session. Recorded as a policy question (R4) before real-money activation."
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "The order binds plan, interval, price and amount; the price is re-read and must match exactly in test mode.",
+     "enforcedAt": [
+      {
+       "file": "src/stripe-billing.ts",
+       "contains": "requireMatch(price?.id===order.price_id&&price.livemode===false&&price.currency==='usd'&&price.unit_amount===order.amount_cents"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/subscriptions.mjs",
+       "contains": "invoice.amount_paid=1;await assert.rejects(stripeBillingWebhook(await event('invoice.paid',invoice.id),db,env,transport),{status:409});",
+       "asserts": "a mismatched amount grants nothing"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "Checkout creation carries a provider idempotency key derived from the order ID; a lost response creates no second session.",
+     "enforcedAt": [
+      {
+       "file": "src/stripe-billing.ts",
+       "contains": "'whumpo-subscription-'+id"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/subscriptions.mjs",
+       "contains": "assert.equal(sessions.size,size);",
+       "asserts": "a lost response does not create a second checkout session"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "A per-owner lease serializes billing work.",
+     "enforcedAt": [
+      {
+       "file": "src/stripe-billing.ts",
+       "contains": "UPDATE stripe_customers SET lease=?,lease_until=unixepoch()+180 WHERE user_id=? AND lease_until<unixepoch()"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/subscriptions.mjs",
+       "contains": "for(const a of attempts.filter(x=>x.status==='rejected'))assert.equal(a.reason.status,409);",
+       "asserts": "concurrent checkouts yield one session"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "support",
+   "title": "Owner support requests",
+   "privileged": [],
+   "authorityClass": "session owner (identity-only; before the onboarding gate)",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/support/v1",
+     "methods": [
+      "ANY"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "prefix",
+     "match": "/api/support/v1/",
+     "methods": [
+      "ANY"
+     ]
+    },
+    {
+     "file": "src/support.ts",
+     "kind": "exact",
+     "match": "",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/support.ts",
+     "kind": "exact",
+     "match": "/requests",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/support.ts",
+     "kind": "regex",
+     "match": "/^\\/requests\\/([^/]+)(\\/read)?$/",
+     "methods": [
+      "GET",
+      "POST"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Requests are read and marked by ID and owner; references to another tenant's operation are refused.",
+     "enforcedAt": [
+      {
+       "file": "src/support.ts",
+       "contains": "LEFT JOIN support_deliveries d ON d.request_id=r.id WHERE r.id=? AND r.user_id=?"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/support-access.mjs",
+       "contains": "await api(b,'/requests/'+a.help.id,'GET',undefined,404);await api(b,'/requests/'+a.help.id+'/read','POST',{version:1},404);",
+       "asserts": "another owner cannot read or mark a request"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Mutating methods pass the global exact-Origin gate in handle() before session admission and dispatch (position machine-checked); GET routes are read-only.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(method) && !sameOrigin(request)) return error(403, \"Origin check failed\");"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "assert.equal(crossOriginGrant.status,403)",
+       "asserts": "worker.fetch rejects a cross-origin workspace POST with 403 before any handler runs"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "some(p=>p.startsWith('platform dispatch order changed'))",
+       "asserts": "a router moved ahead of the exact-Origin gate is reported; every route is registered with beforeOriginGate"
+      },
+      {
+       "file": "tests/support-access.mjs",
+       "contains": "await api(a,'/requests','POST',input,403,{origin:'https://foreign.invalid'});",
+       "asserts": "a cross-origin create is refused"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "chat-transport",
+   "title": "Chat transport, typed controls and Chat interactions",
+   "privileged": [],
+   "authorityClass": "session owner, welcome-complete; typed controls are the only path to confirmation verbs",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/chat",
+     "methods": [
+      "ANY"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "prefix",
+     "match": "/api/chat/",
+     "methods": [
+      "ANY"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/chat\\/([0-9a-f-]{36})\\/ack$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/chat/export",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/chat/history",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "prefix",
+     "match": "/api/chat/turns/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/chat",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/chat",
+     "methods": [
+      "POST"
+     ],
+     "freshnessCall": true
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/chat/actions",
+     "methods": [
+      "POST"
+     ],
+     "freshnessCall": true
+    },
+    {
+     "file": "src/chat-interactions/http.ts",
+     "kind": "exact",
+     "match": "list",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/chat-interactions/http.ts",
+     "kind": "exact",
+     "match": "view-component",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/chat-interactions/http.ts",
+     "kind": "exact",
+     "match": "card",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/chat-interactions/http.ts",
+     "kind": "exact",
+     "match": "resources",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/chat-interactions/http.ts",
+     "kind": "exact",
+     "match": "read",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/chat-interactions/http.ts",
+     "kind": "exact",
+     "match": "receipt",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/chat-interactions/http.ts",
+     "kind": "exact",
+     "match": "mutate",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/chat-interactions/http.ts",
+     "kind": "exact",
+     "match": "continue",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/chat-interactions/http.ts",
+     "kind": "exact",
+     "match": "stop",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/chat-interactions/http.ts",
+     "kind": "exact",
+     "match": "reconcile",
+     "methods": [
+      "POST"
+     ]
+    }
+   ],
+   "controls": [
+    {
+     "id": "reviewDetail",
+     "recentAuth": false
+    },
+    {
+     "id": "shortcut",
+     "recentAuth": false
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Chat routes run under the admitted session; every statement is batched with an identity assertion; workspace Chat requires completed onboarding.",
+     "enforcedAt": [
+      {
+       "file": "src/workspace-identity/admission.ts",
+       "contains": "INSERT INTO identity_admission_checks(denied) SELECT 1 WHERE NOT (${gate.sql})"
+      },
+      {
+       "file": "src/index.ts",
+       "contains": "if((pathname==='/api/chat'||pathname.startsWith('/api/chat/')||pathname.startsWith('/api/workspace/'))&&!await onboardingComplete(env.DB,user.id))"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "for(const path of ['/profile','/projects','/chat','/connections/github/grant-reviews']){assert.equal((await workspaceCall(stillOrdinary,path)).status,401);cases++;}",
+       "asserts": "a session revoked by recovery gets 401 on /chat"
+      },
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "assert.equal((await workspaceCall(b,'/chat')).status,409);",
+       "asserts": "Chat is refused before onboarding completes"
+      },
+      {
+       "file": "tests/workspace-admission.mjs",
+       "contains": "const racing=interceptDatabase(db,/INSERT INTO activity_events/,async()=>{paused++;await two.revoke()});",
+       "asserts": "a session revoked while a request is in flight cannot commit (admission is rechecked in the committing batch)"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "POST /api/chat, /api/chat/actions and /api/chat/interactions/v1/* pass the global exact-Origin gate (position machine-checked).",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(method) && !sameOrigin(request)) return error(403, \"Origin check failed\");"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "assert.equal(crossOriginGrant.status,403)",
+       "asserts": "worker.fetch rejects a cross-origin workspace POST with 403 before any handler runs"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "some(p=>p.startsWith('platform dispatch order changed'))",
+       "asserts": "a router moved ahead of the exact-Origin gate is reported; every route is registered with beforeOriginGate"
+      },
+      {
+       "file": "tests/customer-site-journey.mjs",
+       "contains": "assert.equal((await call(owner,'/api/chat/actions','POST',input,'https://foreign.test')).status,403);",
+       "asserts": "a cross-origin typed control is refused"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "evidenced",
+     "detail": "Controls marked recentAuth require a fresh passkey and a per-owner rate limit; plain conversation never does. Control flags are machine-checked.",
+     "enforcedAt": [
+      {
+       "file": "src/chat.ts",
+       "contains": "if(control.recentAuth)await requireFreshWorkspace(db,userId);"
+      },
+      {
+       "file": "src/index.ts",
+       "contains": "if(!(await env.AUTH_LIMITER.limit({key:'app-recovery:'+user.id})).success)"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/specification-journey.mjs",
+       "contains": "const aged=await workspaceSession(db,m,owner,-3600);",
+       "asserts": "an hour-old proof cannot use a recentAuth control"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "'Chat control specificationApply: registry says recentAuth true, source says false'",
+       "asserts": "relaxing a control's recentAuth flag is reported"
+      }
+     ]
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "Model-confirmation boundary: only the closed typed-control schema reaches confirmation verbs. Plain /api/chat sends every slash command to the model; the only non-model conversation path (transcript/usage-review phrases) cannot match a /verb parser; model JSON cannot carry a control; injected control shapes are rejected. Defence in depth: five confirm triggers (site, version, photo, contact, contact notification) accept any same-user turn, so this routing is the only guard for them (unverified risk R2).",
+     "enforcedAt": [
+      {
+       "file": "src/chat.ts",
+       "contains": "const privateRequest=!content.startsWith('/')&&(isTranscriptRequest(content)||usageReviewCommand(content));"
+      },
+      {
+       "file": "src/chat.ts",
+       "contains": "if(Object.keys(input).some(k=>!['id','revision','content'].includes(k)))return Promise.resolve({status:400,error:'Send a plain chat message.'});"
+      },
+      {
+       "file": "src/chat-controls.ts",
+       "contains": "/** Explicit UI intents. These are never accepted as agent proposals or parsed from chat text."
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/natural-chat.mjs",
+       "contains": "const literal=await input('/confirm '+review.id);assert.equal((await sendConversation(db,user,literal,config)).status,200);",
+       "asserts": "a literal /confirm in conversation goes to the model"
+      },
+      {
+       "file": "tests/natural-chat.mjs",
+       "contains": "assert.equal((await db.prepare('SELECT version_id FROM publications WHERE project_id=?').bind(project).first())?.version_id??null,null);",
+       "asserts": "and publishes nothing"
+      },
+      {
+       "file": "tests/natural-chat.mjs",
+       "contains": "await assert.rejects(()=>prepareSiteAction(db,user,crypto.randomUUID(),JSON.stringify({reply:'Approved',action:approval.action}),context));",
+       "asserts": "a model reply carrying a confirm control is rejected"
+      },
+      {
+       "file": "tests/natural-chat.mjs",
+       "contains": "for(const action of [{type:'command',command:'/confirm '+review.id}",
+       "asserts": "injected command/confirm shapes are not controls"
+      },
+      {
+       "file": "tests/natural-chat.mjs",
+       "contains": "assert.equal((await sendConversation(db,user,{...await input('hello'),action:approval.action},config)).status,400);",
+       "asserts": "a conversation message cannot carry an action"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "A request ID is bound to the exact saved text and action; a repeat returns the saved result without a second model call or effect; saved actions are immutable.",
+     "enforcedAt": [
+      {
+       "file": "src/chat.ts",
+       "contains": "if (previous) return matches(previous) ? { status: 200 } : { status: 409, error: 'This request ID was already used for another message.' };"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/natural-chat.mjs",
+       "contains": "const before=calls;assert.equal((await sendChatControl(db,user,approval)).status,200);assert.equal((await sendChatControl(db,user,approval)).status,200);assert.equal(calls,before);",
+       "asserts": "a repeated control succeeds once without inference"
+      },
+      {
+       "file": "tests/natural-chat.mjs",
+       "contains": "await assert.rejects(()=>db.prepare('UPDATE chat_turns SET action_json=NULL WHERE id=?').bind(approval.id).run(),/chat_action_immutable/);",
+       "asserts": "a saved control cannot be rewritten"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Turns carry the expected conversation revision; a changed revision is refused and effects ride in the same batch as the turn (exception: guest-preview controls, finding B3).",
+     "enforcedAt": [
+      {
+       "file": "src/chat.ts",
+       "contains": "if (state.revision !== input.revision) {"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/natural-chat.mjs",
+       "contains": "assert.equal((await sendChatControl(db,user,{...approval,revision:approval.revision+1})).status,409);",
+       "asserts": "a control with a stale revision is refused"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "workspace-owner",
+   "title": "Owner workspace: onboarding, profile, dashboard, layout, projects and activity",
+   "privileged": [],
+   "authorityClass": "session owner (workspace routes after onboarding)",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "prefix",
+     "match": "/api/workspace/",
+     "methods": [
+      "ANY"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/onboarding",
+     "methods": [
+      "GET",
+      "PUT"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/onboarding/complete",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/profile",
+     "methods": [
+      "GET",
+      "PATCH"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/profile/photo",
+     "methods": [
+      "DELETE",
+      "GET",
+      "PUT"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/workspace/dashboard",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/workspace/saved-work",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "prefix",
+     "match": "/api/workspace/saved-work/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/workspace\\/saved-work\\/([^/]+)\\/([^/]+)$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/workspace/views/v1/component",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/workspace/views/v1/layout",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/workspace/views/v1/history",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/workspace/views/v1/mutate",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/workspace/views/v1/receipt",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/workspace/capacity",
+     "methods": [
+      "GET",
+      "PUT"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/components",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/connections",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/me",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/projects",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/projects",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/projects\\/([0-9a-f-]{36})\\/details$/",
+     "methods": [
+      "GET",
+      "PATCH"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/projects\\/([0-9a-f-]{36})$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/activity",
+     "methods": [
+      "GET"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Every route runs under the admitted session; project rows are filtered by owner_user_id; workspace routes require completed onboarding.",
+     "enforcedAt": [
+      {
+       "file": "src/workspace-identity/admission.ts",
+       "contains": "INSERT INTO identity_admission_checks(denied) SELECT 1 WHERE NOT (${gate.sql})"
+      },
+      {
+       "file": "src/index.ts",
+       "contains": "FROM project_service_status WHERE id = ? AND owner_user_id = ?"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/project-details.mjs",
+       "contains": "await assert.rejects(readProjectDetails(otherDB,other,project),e=>e.status===404);",
+       "asserts": "another owner cannot read project details"
+      },
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "for(const path of ['/profile','/projects','/chat','/connections/github/grant-reviews']){assert.equal((await workspaceCall(stillOrdinary,path)).status,401);cases++;}",
+       "asserts": "a revoked session cannot read profile or projects"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Mutating methods pass the global exact-Origin gate in handle() before session admission and dispatch (position machine-checked); GET routes are read-only.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(method) && !sameOrigin(request)) return error(403, \"Origin check failed\");"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "assert.equal(crossOriginGrant.status,403)",
+       "asserts": "worker.fetch rejects a cross-origin workspace POST with 403 before any handler runs"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "some(p=>p.startsWith('platform dispatch order changed'))",
+       "asserts": "a router moved ahead of the exact-Origin gate is reported; every route is registered with beforeOriginGate"
+      },
+      {
+       "file": "tests/profile.mjs",
+       "contains": "assert.equal((await api('/profile','PATCH',{revision:6,name:'No'},token,'https://evil.example')).status,403);",
+       "asserts": "a cross-origin profile change is refused"
+      },
+      {
+       "file": "tests/workspace-dashboard-http.mjs",
+       "contains": "await json(o,api+'/mutate',input,db,403,'https://untrusted.example');",
+       "asserts": "a cross-origin layout mutation is refused"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "service-site-safety",
+   "title": "Owner safety withdrawal reviews for websites, backends and applications",
+   "privileged": [
+    "publish"
+   ],
+   "authorityClass": "session owner; withdrawal only (no publish payload accepted)",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "prefix",
+     "match": "/api/workspace/service-safety/",
+     "methods": [
+      "GET",
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/workspace/service-safety/reviews",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/workspace/service-safety/reviews",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/workspace\\/service-safety\\/reviews\\/(backend|application)\\/([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})(\\/confirm)?$/",
+     "methods": [
+      "GET",
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "prefix",
+     "match": "/api/workspace/site-safety",
+     "methods": [
+      "GET",
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/workspace/site-safety",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/workspace/site-safety/reviews",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/workspace/site-safety/reviews",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/workspace\\/site-safety\\/reviews\\/([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})(\\/confirm)?$/",
+     "methods": [
+      "GET",
+      "POST"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Withdrawal reviews are read by owner and kind; site withdrawals are unpublish-only.",
+     "enforcedAt": [
+      {
+       "file": "src/service-safety.ts",
+       "contains": "db.prepare(query(kind)+' AND r.id=?').bind(user,id).first<Candidate>()"
+      },
+      {
+       "file": "src/site-safety.ts",
+       "contains": "WHERE a.id=? AND a.user_id=? AND a.kind='unpublish'"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/service-safety.mjs",
+       "contains": "await http(b,saved('backend',r.input.id)+'/confirm','POST',confirm,404);",
+       "asserts": "another owner cannot confirm a service withdrawal"
+      },
+      {
+       "file": "tests/site-safety.mjs",
+       "contains": "await http(b,'/reviews/'+r.input.id+'/confirm','POST',confirmation,404);",
+       "asserts": "another owner cannot confirm a site withdrawal"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Mutating methods pass the global exact-Origin gate in handle() before session admission and dispatch (position machine-checked); GET routes are read-only.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(method) && !sameOrigin(request)) return error(403, \"Origin check failed\");"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "assert.equal(crossOriginGrant.status,403)",
+       "asserts": "worker.fetch rejects a cross-origin workspace POST with 403 before any handler runs"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "some(p=>p.startsWith('platform dispatch order changed'))",
+       "asserts": "a router moved ahead of the exact-Origin gate is reported; every route is registered with beforeOriginGate"
+      },
+      {
+       "file": "tests/service-safety.mjs",
+       "contains": "await http(a,saved('backend',r.input.id)+'/confirm','POST',confirm,403,'https://foreign.invalid');",
+       "asserts": "cross-origin service withdrawal is refused"
+      },
+      {
+       "file": "tests/site-safety.mjs",
+       "contains": "await http(a,'/reviews/'+r.input.id+'/confirm','POST',confirmation,403,'https://foreign.invalid');",
+       "asserts": "cross-origin site withdrawal is refused"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "gap",
+     "detail": "Neither confirm route calls requireFreshWorkspace, but docs/incident-runbooks.md C10 says these withdrawals need recent authentication.",
+     "gapKind": "control",
+     "finding": "B2"
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "Confirm requires the literal TAKE_OFFLINE / UNPUBLISH_WEBSITE word and an existing withdrawal review; a publish review cannot be confirmed here.",
+     "enforcedAt": [
+      {
+       "file": "src/service-safety.ts",
+       "contains": "value.confirmation!=='TAKE_OFFLINE'"
+      },
+      {
+       "file": "src/site-safety.ts",
+       "contains": "value.confirmation!=='UNPUBLISH_WEBSITE'"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/site-safety.mjs",
+       "contains": "await http(a,'/reviews/'+publishReview+'/confirm','POST',confirmation,404);",
+       "asserts": "a publish review cannot be confirmed as a withdrawal"
+      },
+      {
+       "file": "tests/service-safety.mjs",
+       "contains": "for(const kind of ['backend','application']){const publicationId=await republish(a,kind);await http(a,saved(kind,publicationId)+'/confirm','POST',confirm,404);}",
+       "asserts": "a publication review cannot be confirmed as a withdrawal"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "Applied withdrawals return the saved review; concurrent confirms converge.",
+     "enforcedAt": [
+      {
+       "file": "src/service-safety.ts",
+       "contains": "if(review.state==='applied')return {version:1 as const,review};"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/service-safety.mjs",
+       "contains": "assert(result.every(r=>r.review.state==='applied'));",
+       "asserts": "concurrent withdrawals both report the one applied state"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Expired withdrawal reviews are refused.",
+     "enforcedAt": [
+      {
+       "file": "src/service-safety.ts",
+       "contains": "if(review.state!=='pending')throw new BackendError(409,'This review changed or expired."
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/service-safety.mjs",
+       "contains": "await http(o,saved(kind,fresh.input.id)+'/confirm','POST',confirm,409);}finally{globalThis.Date=Clock;}",
+       "asserts": "an expired service withdrawal is refused"
+      },
+      {
+       "file": "tests/site-safety.mjs",
+       "contains": "await http(a,'/reviews/'+expired+'/confirm','POST',confirmation,409);",
+       "asserts": "an expired site withdrawal is refused"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "cms",
+   "title": "CMS setup, content, media, WordPress import and publication (functional testing owner-deferred)",
+   "privileged": [
+    "cms",
+    "publish"
+   ],
+   "authorityClass": "session owner; project-derived signed service bridge",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/cms\\/([0-9a-f-]{36})\\/wordpress\\/sources(?:\\/([0-9a-f-]{36})(?:\\/(download|import-reviews))?)?$/",
+     "methods": [
+      "GET",
+      "POST",
+      "PUT"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/cms\\/([0-9a-f-]{36})\\/wordpress\\/import-reviews$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/cms-import-reviews\\/([0-9a-f-]{36})(?:\\/(preview|confirm))?$/",
+     "methods": [
+      "GET",
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/cms-publication-reviews\\/([0-9a-f-]{36})\\/preview$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/cms\\/([0-9a-f-]{36})\\/content\\/([0-9a-f-]{36})\\/export$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/cms\\/([0-9a-f-]{36})\\/content\\/([0-9a-f-]{36})\\/preview$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/cms\\/([0-9a-f-]{36})\\/content(?:\\/([0-9a-f-]{36}))?$/",
+     "methods": [
+      "GET",
+      "PATCH",
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/cms\\/([0-9a-f-]{36})\\/media\\/uploads(?:\\/([0-9a-f-]{36}))?$/",
+     "methods": [
+      "GET",
+      "PUT"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/cms\\/([0-9a-f-]{36})\\/media\\/([0-9A-HJKMNP-TV-Z]{26})\\/preview$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/cms\\/([0-9a-f-]{36})\\/media$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/cms\\/([0-9a-f-]{36})\\/capabilities$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/cms\\/([0-9a-f-]{36})\\/status$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/cms",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/cms/setup-reviews",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/cms\\/setup-reviews\\/([0-9a-f-]{36})(\\/confirm)?$/",
+     "methods": [
+      "GET",
+      "POST"
+     ]
+    }
+   ],
+   "controls": [
+    {
+     "id": "confirm:cmsDiscard",
+     "recentAuth": false
+    },
+    {
+     "id": "confirm:cmsImport",
+     "recentAuth": false
+    },
+    {
+     "id": "confirm:cmsPublish",
+     "recentAuth": false
+    },
+    {
+     "id": "confirm:cmsSetup",
+     "recentAuth": false
+    },
+    {
+     "id": "confirm:cmsUnpublish",
+     "recentAuth": false
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Source review only (CMS functional testing is owner-deferred; no CMS test was run in this slice). Every review and draft read joins owner, user and project; the CMS bridge signs with a secret derived per project, owner and origin and binds method, path, body and expiry.",
+     "enforcedAt": [
+      {
+       "file": "src/cms-publication.ts",
+       "contains": "FROM cms_publication_reviews r JOIN projects p ON p.id=r.project_id WHERE r.id=? AND r.user_id=?"
+      },
+      {
+       "file": "src/cms-status.ts",
+       "contains": "const secret=await deriveCMSSecret(master,project,user,row.origin)"
+      },
+      {
+       "file": "src/cms-bridge.ts",
+       "contains": "JSON.stringify(['whumpo-cms-v1',config.projectId,config.ownerId,config.origin,method,path,id,expires,bodyHash])"
+      },
+      {
+       "file": "src/index.ts",
+       "contains": "if(owned.project_id!==project)return error(404,'Source file not found')"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/cms-projects-http.mjs",
+       "contains": "assert.equal((await post('/api/cms/setup-reviews/'+id+'/confirm',{},other)).status,404);",
+       "asserts": "another owner cannot confirm CMS setup"
+      },
+      {
+       "file": "tests/cms-deploy.mjs",
+       "contains": "await assert.rejects(confirmCMSPublication(scope(fixtureStranger),fixtureStranger,pubTurn,env),e=>e.status===404);",
+       "asserts": "another owner cannot confirm a publication"
+      },
+      {
+       "file": "tests/cms-imports.mjs",
+       "contains": "await assert.rejects(confirmCMSImport(scope(fixtureStranger),fixtureStranger,review,env),e=>e.status===404);",
+       "asserts": "another owner cannot confirm an import"
+      },
+      {
+       "file": "tests/cms-deploy.mjs",
+       "contains": "assert.notEqual(a.config.secret,b.config.secret);",
+       "asserts": "bridge secrets differ per tenant"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Mutating methods pass the global exact-Origin gate in handle() before session admission and dispatch (position machine-checked); GET routes are read-only.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(method) && !sameOrigin(request)) return error(403, \"Origin check failed\");"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "assert.equal(crossOriginGrant.status,403)",
+       "asserts": "worker.fetch rejects a cross-origin workspace POST with 403 before any handler runs"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "some(p=>p.startsWith('platform dispatch order changed'))",
+       "asserts": "a router moved ahead of the exact-Origin gate is reported; every route is registered with beforeOriginGate"
+      },
+      {
+       "file": "tests/cms-projects-http.mjs",
+       "contains": "assert.equal((await post('/api/cms/setup-reviews',body,cookie,'https://evil.example')).status,403);",
+       "asserts": "a cross-origin setup review is refused"
+      },
+      {
+       "file": "tests/cms-wordpress-api.mjs",
+       "contains": "assert.equal((await call(reviewPath+'/confirm',{method:'POST',body:{},origin:'https://foreign.test'})).status,403);",
+       "asserts": "a cross-origin import confirm is refused"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "n/a",
+     "detail": "Not required by the CMS contract: confirm:cms* controls are not recentAuth (machine-checked) and the setup/import confirm routes do not call requireFreshWorkspace. Policy question recorded as R4."
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "Reviews are immutable; publication confirm re-reads the native draft and requires the exact revision and data; setup and import review IDs cannot be retargeted.",
+     "enforcedAt": [
+      {
+       "file": "src/cms-publication.ts",
+       "contains": "current.revision!==row.revision||JSON.stringify(current.item.data)!==JSON.stringify(JSON.parse(row.snapshot).item.data)"
+      },
+      {
+       "file": "schema/platform.sql",
+       "contains": "CREATE TRIGGER cms_publication_immutable BEFORE UPDATE ON cms_publication_reviews"
+      },
+      {
+       "file": "src/cms-projects.ts",
+       "contains": "if(row.user_id!==user||row.project_id!==project||row.title!==title||row.tagline!==tagline)"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/cms-projects.mjs",
+       "contains": "await assert.rejects(prepareCMS(scope(a.user),a.user,r,a.project,'Changed',''),e=>e.status===409);",
+       "asserts": "a reused setup review ID with other content is refused"
+      },
+      {
+       "file": "tests/cms-projects.mjs",
+       "contains": "await assert.rejects(db.prepare('UPDATE cms_setup_reviews SET title=? WHERE id=?').bind('Forged',r).run(),/immutable/);",
+       "asserts": "setup reviews are immutable"
+      },
+      {
+       "file": "tests/cms-imports.mjs",
+       "contains": "await assert.rejects(prepareCMSImport(scope(a.user),a.user,a.project,id(),{...candidate,title:'Changed'},env),e=>e.status===409);",
+       "asserts": "an import review is source-bound"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "Confirm returns the terminal row; the CMS gateway reserves a receipt per request ID and body hash.",
+     "enforcedAt": [
+      {
+       "file": "src/cms-publication.ts",
+       "contains": "let row=await readCMSPublication(db,user,id);if(row.status==='published')return row;"
+      },
+      {
+       "file": "src/cms-gateway.ts",
+       "contains": "row.request_hash!==verified.requestHash?reply(409,'CMS request ID already used')"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/cms-deploy.mjs",
+       "contains": "await confirmCMSPublication(scope(a.user),a.user,pubTurn,env);await confirmCMSPublication(scope(a.user),a.user,pubTurn,env);assert.equal(publishes,1);",
+       "asserts": "publish happens once"
+      },
+      {
+       "file": "tests/cms-imports.mjs",
+       "contains": "assert.equal((await confirmCMSImport(scope(a.user),a.user,review,env)).status,'imported');assert.equal(writes,1);",
+       "asserts": "import happens once"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Expiry, current base and competing operations are enforced; confirm compares the native revision.",
+     "enforcedAt": [
+      {
+       "file": "src/cms-discard.ts",
+       "contains": "if(snap.revision!==row.revision||snap.item.status!=='published'||!snap.item.draftRevisionId)"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/cms-deploy.mjs",
+       "contains": "await assert.rejects(confirmCMSPublication(scope(a.user),a.user,staleReview.id,env),e=>e.status===409);",
+       "asserts": "a stale publication is refused"
+      },
+      {
+       "file": "tests/cms-deploy.mjs",
+       "contains": "await assert.rejects(confirmCMSPublication(scope(a.user),a.user,expired,env),e=>e.status===409);",
+       "asserts": "an expired publication is refused"
+      },
+      {
+       "file": "tests/cms-imports.mjs",
+       "contains": "await assert.rejects(confirmCMSImport(scope(a.user),a.user,expired,env),e=>e.status===409);",
+       "asserts": "an expired import is refused"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "backend",
+   "title": "Backend source tests, imports, private state, publication and forms",
+   "privileged": [
+    "publish",
+    "data-change"
+   ],
+   "authorityClass": "session owner + project/resource joins",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/projects\\/([0-9a-f-]{36})\\/backend-state\\/history$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/backend-state-snapshots\\/([0-9a-f-]{36})\\/(export|restore)$/",
+     "methods": [
+      "GET",
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/projects\\/([0-9a-f-]{36})\\/backend-state$/",
+     "methods": [
+      "GET",
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/backend-state-reviews\\/([0-9a-f-]{36})(\\/confirm)?$/",
+     "methods": [
+      "GET",
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/projects\\/([0-9a-f-]{36})\\/backend-form$/",
+     "methods": [
+      "GET",
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/backend-form-reviews\\/([0-9a-f-]{36})(\\/confirm)?$/",
+     "methods": [
+      "GET",
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/projects\\/([0-9a-f-]{36})\\/backend-publication$/",
+     "methods": [
+      "GET",
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/backend-publication-reviews\\/([0-9a-f-]{36})(\\/confirm)?$/",
+     "methods": [
+      "GET",
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/backend-versions\\/([0-9a-f-]{36})\\/compare\\/([0-9a-f-]{36})$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/projects\\/([0-9a-f-]{36})\\/backends(?:\\/([0-9a-f-]{36})\\/test)?$/",
+     "methods": [
+      "GET",
+      "POST"
+     ]
+    }
+   ],
+   "controls": [
+    {
+     "id": "confirm:backendForm",
+     "recentAuth": false
+    },
+    {
+     "id": "confirm:backendPublication",
+     "recentAuth": false
+    },
+    {
+     "id": "confirm:backendState",
+     "recentAuth": false
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "State, publication, form and test routes join the owned project and resource.",
+     "enforcedAt": [
+      {
+       "file": "src/backend-state.ts",
+       "contains": "WHERE id=? AND user_id=? AND EXISTS(SELECT 1 FROM projects WHERE id=project_id AND owner_user_id=?)"
+      },
+      {
+       "file": "src/backend-versions.ts",
+       "contains": "SELECT source,digest FROM backend_versions WHERE id=? AND project_id=?"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/backend-http.mjs",
+       "contains": "assert.equal((await post(publicationConfirm,{},other)).status,404);",
+       "asserts": "another owner cannot confirm a backend publication"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Mutating methods pass the global exact-Origin gate in handle() before session admission and dispatch (position machine-checked); GET routes are read-only.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(method) && !sameOrigin(request)) return error(403, \"Origin check failed\");"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "assert.equal(crossOriginGrant.status,403)",
+       "asserts": "worker.fetch rejects a cross-origin workspace POST with 403 before any handler runs"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "some(p=>p.startsWith('platform dispatch order changed'))",
+       "asserts": "a router moved ahead of the exact-Origin gate is reported; every route is registered with beforeOriginGate"
+      },
+      {
+       "file": "tests/backend-http.mjs",
+       "contains": "assert.equal((await post(confirm,{},cookie,'https://evil.example')).status,403);",
+       "asserts": "cross-origin state confirm is refused"
+      },
+      {
+       "file": "tests/backend-http.mjs",
+       "contains": "assert.equal((await post(publicationConfirm,{},cookie,'https://evil.example')).status,403);",
+       "asserts": "cross-origin publication confirm is refused"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "n/a",
+     "detail": "Not required by the backend contract. Note: backend-state snapshot restore replaces the private data document without a fresh passkey, while the application restore control requires one (policy inconsistency recorded as an unverified risk)."
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "Reviews are immutable and a review ID cannot be retargeted to another operation, version or test run.",
+     "enforcedAt": [
+      {
+       "file": "src/backend-publication.ts",
+       "contains": "if(row.project_id!==project||row.operation!==operation||row.version_id!==version||row.run_id!==run"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/backend-state.mjs",
+       "contains": "await assert.rejects(prepare(a,review.id,{add:9}),e=>e.status===409);",
+       "asserts": "a state review ID cannot be reused for other input"
+      },
+      {
+       "file": "tests/backend-forms.mjs",
+       "contains": "bind('{}',first).run(),/backend_form_immutable/)",
+       "asserts": "a form review row cannot be rewritten"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "Applied reviews return their receipt without a second change.",
+     "enforcedAt": [
+      {
+       "file": "src/backend-state.ts",
+       "contains": "if(before.status==='applied')return before;"
+      },
+      {
+       "file": "src/backend-publication.ts",
+       "contains": "if(row.status==='applied')return row;"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/backend-http.mjs",
+       "contains": "assert.equal((await post(confirm,{})).status,200);assert.equal((await readState()).revision,1);",
+       "asserts": "a repeated confirm does not change state twice"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "State and publication reviews are revision- and expiry-checked; form review expiry is enforced but untested.",
+     "enforcedAt": [
+      {
+       "file": "schema/platform.sql",
+       "contains": "BEGIN SELECT RAISE(ABORT,'backend_state_review_stale'); END;"
+      },
+      {
+       "file": "schema/platform.sql",
+       "contains": "SELECT RAISE(ABORT,'backend_publication_stale') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') OR NOT EXISTS("
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/backend-state.mjs",
+       "contains": "assert.equal(competing.filter(x=>x.status==='fulfilled').length,1);assert.equal(competing.filter(x=>x.status==='rejected').length,1);",
+       "asserts": "competing state confirms admit one"
+      },
+      {
+       "file": "tests/backend-state.mjs",
+       "contains": "await assert.rejects(confirmBackendState(scope(a.user),a.user,expired),e=>e.status===409);",
+       "asserts": "an expired state review is refused"
+      },
+      {
+       "file": "tests/backend-publication.mjs",
+       "contains": "await assert.rejects(confirm(scope(a.user),a.user,competing),e=>e.status===409);",
+       "asserts": "a competing publication review is refused"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "application-page",
+   "title": "Visitor application page reviews",
+   "privileged": [
+    "publish"
+   ],
+   "authorityClass": "session owner + owned review",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/projects\\/([0-9a-f-]{36})\\/application-page$/",
+     "methods": [
+      "GET",
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/application-page-reviews\\/([0-9a-f-]{36})(\\/confirm)?$/",
+     "methods": [
+      "GET",
+      "POST"
+     ]
+    }
+   ],
+   "controls": [
+    {
+     "id": "confirm:appPage",
+     "recentAuth": false
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Review reads join project owner and user; insert trigger rechecks.",
+     "enforcedAt": [
+      {
+       "file": "src/app-pages.ts",
+       "contains": "JOIN projects p ON p.id=r.project_id AND p.owner_user_id=r.user_id WHERE r.id=? AND r.user_id=?"
+      },
+      {
+       "file": "schema/platform.sql",
+       "contains": "SELECT RAISE(ABORT,'app_page_owner') WHERE NOT EXISTS(SELECT 1 FROM app_spaces a JOIN projects p"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/app-auth.mjs",
+       "contains": "await denied(pages.confirmAppPage(scope(a.user),a.user,reviewOne),404);",
+       "asserts": "another owner cannot confirm the page review"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Mutating methods pass the global exact-Origin gate in handle() before session admission and dispatch (position machine-checked); GET routes are read-only.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(method) && !sameOrigin(request)) return error(403, \"Origin check failed\");"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "assert.equal(crossOriginGrant.status,403)",
+       "asserts": "worker.fetch rejects a cross-origin workspace POST with 403 before any handler runs"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "some(p=>p.startsWith('platform dispatch order changed'))",
+       "asserts": "a router moved ahead of the exact-Origin gate is reported; every route is registered with beforeOriginGate"
+      },
+      {
+       "file": "tests/customer-app-journey.mjs",
+       "contains": "'/application-page-reviews/'+page+'/confirm',{},'POST','https://foreign.test')).status,403",
+       "asserts": "cross-origin page confirm is refused"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "n/a",
+     "detail": "The feature contract does not require a recent passkey proof here: ordinary exact reviews rely on ownership, expiry and revision predicates (docs/tenant-authority-audit.md, shared entry boundaries). Recorded so a policy change is visible; see B2 where a runbook claims otherwise."
+    },
+    "target": {
+     "state": "gap",
+     "detail": "The review row is immutable and a reused ID with a different form is refused, but no test rewrites a page review or reuses its ID.",
+     "gapKind": "test",
+     "enforcedAt": [
+      {
+       "file": "schema/platform.sql",
+       "contains": "CREATE TRIGGER app_page_immutable BEFORE UPDATE ON app_page_reviews"
+      },
+      {
+       "file": "src/app-pages.ts",
+       "contains": "if(row.project_id!==project||row.config_json!==config"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "An applied review returns its receipt; historical approval cannot republish.",
+     "enforcedAt": [
+      {
+       "file": "src/app-pages.ts",
+       "contains": "const row=await readAppPageReview(db,user,id);if(row.status==='applied')return row;"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/customer-app-journey.mjs",
+       "contains": "'Historical approval cannot republish'",
+       "asserts": "an applied review cannot republish after a later change"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "A competing review on the same base revision is refused; expiry is enforced by trigger (expiry itself is untested).",
+     "enforcedAt": [
+      {
+       "file": "schema/platform.sql",
+       "contains": "SELECT RAISE(ABORT,'app_page_stale') WHERE NEW.expires_at<=strftime"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/app-auth.mjs",
+       "contains": "await denied(pages.confirmAppPage(scope(d.user),d.user,reviewTwo),409);",
+       "asserts": "a competing review on a stale base is refused"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "visitor-access",
+   "title": "Owner visitor access: invitations, revocation and erasure",
+   "privileged": [
+    "access",
+    "deletion"
+   ],
+   "authorityClass": "session owner with fresh passkey and per-owner rate limit",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/projects\\/([0-9a-f-]{36})\\/application-access(?:\\/(invitations|visitors)(?:\\/([0-9a-f-]{36}|[0-9a-f]{64})\\/(cancel|revoke|erase))?)?$/",
+     "methods": [
+      "GET",
+      "POST"
+     ],
+     "freshnessCall": true
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Every access change requires the exact project owner; erasure re-checks owner and revoked visitor in SQL.",
+     "enforcedAt": [
+      {
+       "file": "src/app-access.ts",
+       "contains": "AND EXISTS(SELECT 1 FROM projects p WHERE p.id=? AND p.owner_user_id=?)"
+      },
+      {
+       "file": "src/app-owner-erasure.ts",
+       "contains": "SELECT id FROM projects WHERE id=? AND owner_user_id=?"
+      },
+      {
+       "file": "schema/platform.sql",
+       "contains": "WHERE v.id=NEW.visitor_id AND v.project_id=NEW.project_id AND v.revoked=1 AND p.owner_user_id=NEW.user_id"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/app-auth.mjs",
+       "contains": "assert.equal((await ownerRequest(revoke,'POST',foreignToken)).status,404);",
+       "asserts": "another owner cannot revoke a visitor"
+      },
+      {
+       "file": "tests/customer-app-journey.mjs",
+       "contains": "assert.equal((await call(foreign,erasePath,eraseBody)).status,404);",
+       "asserts": "another owner cannot erase a visitor"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Mutating methods pass the global exact-Origin gate in handle() before session admission and dispatch (position machine-checked); GET routes are read-only.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(method) && !sameOrigin(request)) return error(403, \"Origin check failed\");"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "assert.equal(crossOriginGrant.status,403)",
+       "asserts": "worker.fetch rejects a cross-origin workspace POST with 403 before any handler runs"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "some(p=>p.startsWith('platform dispatch order changed'))",
+       "asserts": "a router moved ahead of the exact-Origin gate is reported; every route is registered with beforeOriginGate"
+      },
+      {
+       "file": "tests/app-auth.mjs",
+       "contains": "assert.equal((await ownerRequest(revoke,'POST',ownerToken,'https://foreign.example')).status,403);",
+       "asserts": "cross-origin revoke is refused"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "evidenced",
+     "detail": "Every POST under this route calls requireFreshWorkspace before the per-owner rate limit (route flag machine-checked).",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if(!(await env.AUTH_LIMITER.limit({key:'app-access:'+user.id})).success)return error(429,'Too many access changes. Try again in a minute.');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/app-auth.mjs",
+       "contains": "assert.equal((await ownerRequest('/invitations','POST',staleToken)).status,401);",
+       "asserts": "a stale session cannot create invitations"
+      },
+      {
+       "file": "tests/customer-app-journey.mjs",
+       "contains": "assert.equal((await call({...owner,token:agedSession.token},erasePath,eraseBody)).status,401);",
+       "asserts": "an aged session cannot erase a visitor"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "registry says freshnessCall true, source says false",
+       "asserts": "removing a route's requireFreshWorkspace call is reported (route-level freshnessCall is machine-checked)"
+      }
+     ]
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "Erasure binds request ID to owner, project and visitor and requires the literal ERASE confirmation; revoke/cancel act on the exact ID in the path without a review step.",
+     "enforcedAt": [
+      {
+       "file": "src/app-owner-erasure.ts",
+       "contains": "if(row.user_id!==user||row.project_id!==project||row.visitor_id!==visitor)throw new BackendError(409,'Erasure request ID already used');"
+      },
+      {
+       "file": "src/app-owner-erasure.ts",
+       "contains": "input.confirmation!=='ERASE'"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/customer-app-journey.mjs",
+       "contains": "await json(erasePath,{...eraseBody,confirmation:'erase'},400);",
+       "asserts": "a wrong confirmation word is refused"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "Erasure returns the committed receipt on retry; concurrent and lost-reply retries converge on one receipt. Invitation creation has no idempotency key (a retry mints another short-lived code).",
+     "enforcedAt": [
+      {
+       "file": "src/app-owner-erasure.ts",
+       "contains": "const old=reply(await receipt());if(old)return old;"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/customer-app-journey.mjs",
+       "contains": "assert.ok(results.every(r=>r.erased&&r.receiptId===eraseId));assert.equal(lostReplies,1);",
+       "asserts": "concurrent and lost-reply erasures return one receipt"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Erasure commits only for a visitor that is already revoked.",
+     "enforcedAt": [
+      {
+       "file": "src/app-owner-erasure.ts",
+       "contains": "if(target.revoked!==1)throw new BackendError(409,'Revoke access before erasing this visitor');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/customer-app-journey.mjs",
+       "contains": "await json(erasePath,eraseBody,409);",
+       "asserts": "erasing an unrevoked visitor is refused"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "application-activation",
+   "title": "Application activation and disable reviews",
+   "privileged": [
+    "activation"
+   ],
+   "authorityClass": "session owner + owned review",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/projects\\/([0-9a-f-]{36})\\/application$/",
+     "methods": [
+      "GET",
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/application-reviews\\/([0-9a-f-]{36})(\\/confirm)?$/",
+     "methods": [
+      "GET",
+      "POST"
+     ]
+    }
+   ],
+   "controls": [
+    {
+     "id": "confirm:application",
+     "recentAuth": false
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Review reads join the project owner and requesting user; an insert trigger rechecks ownership at commit.",
+     "enforcedAt": [
+      {
+       "file": "src/app-activation.ts",
+       "contains": "JOIN projects p ON p.id=r.project_id AND p.owner_user_id=r.user_id JOIN backend_versions v"
+      },
+      {
+       "file": "schema/platform.sql",
+       "contains": "SELECT RAISE(ABORT,'app_activation_owner') WHERE NOT EXISTS(SELECT 1 FROM app_spaces a JOIN projects p"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/app-activation-http.mjs",
+       "contains": "assert.equal((await post(review+'/confirm',{},base,other)).status,404);",
+       "asserts": "another owner confirming the review gets 404"
+      },
+      {
+       "file": "tests/app-activation.mjs",
+       "contains": "await assert.rejects(()=>prepare(scope(b.user),b.user,a.project,id(),'enable',av.v,av.test));",
+       "asserts": "another owner cannot prepare against a foreign project"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Mutating methods pass the global exact-Origin gate in handle() before session admission and dispatch (position machine-checked); GET routes are read-only.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(method) && !sameOrigin(request)) return error(403, \"Origin check failed\");"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "assert.equal(crossOriginGrant.status,403)",
+       "asserts": "worker.fetch rejects a cross-origin workspace POST with 403 before any handler runs"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "some(p=>p.startsWith('platform dispatch order changed'))",
+       "asserts": "a router moved ahead of the exact-Origin gate is reported; every route is registered with beforeOriginGate"
+      },
+      {
+       "file": "tests/app-activation-http.mjs",
+       "contains": "assert.equal((await post(review+'/confirm',{},'https://evil.test')).status,403);",
+       "asserts": "cross-origin confirm is refused"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "gap",
+     "detail": "Confirm (HTTP and confirm:application control) accepts any current session. The contract treats this as an ordinary exact review, but the incident runbook (C10) says disabling the application needs recent authentication.",
+     "gapKind": "control",
+     "finding": "B2"
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "The review row is immutable and a reused review ID with different parameters is refused.",
+     "enforcedAt": [
+      {
+       "file": "schema/platform.sql",
+       "contains": "CREATE TRIGGER app_activation_immutable BEFORE UPDATE ON app_activation_reviews WHEN NEW.id<>OLD.id"
+      },
+      {
+       "file": "src/app-activation.ts",
+       "contains": "row.run_id!==run)throw new BackendError(409,'Review ID already used')"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/app-activation.mjs",
+       "contains": "UPDATE app_activation_reviews SET enabled=0 WHERE id=?",
+       "asserts": "the review row cannot be rewritten"
+      },
+      {
+       "file": "tests/app-activation.mjs",
+       "contains": "await assert.rejects(()=>prepare(scope(a.user),a.user,a.project,r,'disable',null,null));",
+       "asserts": "a review ID cannot be retargeted"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "An applied review returns its receipt; a lost acknowledgement recovers without a second transition.",
+     "enforcedAt": [
+      {
+       "file": "src/app-activation.ts",
+       "contains": "const row=await readApplicationReview(db,user,id);if(row.status==='applied')return row;"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/app-activation.mjs",
+       "contains": "confirm(await lossy(a,'UPDATE app_activation_reviews'),a.user,r)",
+       "asserts": "a lost acknowledgement is recovered"
+      },
+      {
+       "file": "tests/app-activation-http.mjs",
+       "contains": "assert.equal((await post(review+'/confirm',{})).status,200);assert.equal((await(await get(path+'/application')).json()).configuration.enabled,0);",
+       "asserts": "a historical confirm does not re-enable"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Expiry and ownership are rechecked at commit; concurrent confirms admit one.",
+     "enforcedAt": [
+      {
+       "file": "schema/platform.sql",
+       "contains": "SELECT RAISE(ABORT,'app_activation_stale') WHERE NEW.expires_at<=strftime"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/app-activation.mjs",
+       "contains": "assert.equal(confirmations.filter(x=>x.status==='fulfilled').length,1);",
+       "asserts": "concurrent confirms admit exactly one"
+      },
+      {
+       "file": "tests/app-activation.mjs",
+       "contains": "UPDATE projects SET owner_user_id=? WHERE id=?').bind(b.user,a.project).run();await assert.rejects(()=>confirm(scope(a.user),a.user,pending));",
+       "asserts": "a review fails after project ownership changes"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "application-recovery",
+   "title": "Application data restore, upgrade, rollback and cancel (typed controls only)",
+   "privileged": [
+    "data-change",
+    "activation"
+   ],
+   "authorityClass": "session owner with fresh passkey (recentAuth controls) and per-owner rate limit",
+   "controls": [
+    {
+     "id": "appMaintenance",
+     "recentAuth": true
+    },
+    {
+     "id": "appRestore",
+     "recentAuth": true
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Restore, upgrade, rollback and cancel reviews are read by review, user and project.",
+     "enforcedAt": [
+      {
+       "file": "src/app-document-recovery.ts",
+       "contains": "WHERE r.id=? AND r.user_id=? AND r.project_id=? AND r.restore_program=0"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/app-recovery.mjs",
+       "contains": "await assert.rejects(recovery.confirmAppRestore(scope(other),other,project,review,'RESTORE'),e=>e.status===404);",
+       "asserts": "another owner cannot restore"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Mutating methods pass the global exact-Origin gate in handle() before session admission and dispatch (position machine-checked); GET routes are read-only.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(method) && !sameOrigin(request)) return error(403, \"Origin check failed\");"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "assert.equal(crossOriginGrant.status,403)",
+       "asserts": "worker.fetch rejects a cross-origin workspace POST with 403 before any handler runs"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "some(p=>p.startsWith('platform dispatch order changed'))",
+       "asserts": "a router moved ahead of the exact-Origin gate is reported; every route is registered with beforeOriginGate"
+      },
+      {
+       "file": "tests/app-recovery.mjs",
+       "contains": "assert.equal((await call(request,token,'https://foreign.test')).status,403);",
+       "asserts": "cross-origin restore control is refused"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "evidenced",
+     "detail": "Both controls are recentAuth (machine-checked); /api/chat/actions also applies a per-owner rate limit.",
+     "enforcedAt": [
+      {
+       "file": "src/chat.ts",
+       "contains": "if(control.recentAuth)await requireFreshWorkspace(db,userId);"
+      },
+      {
+       "file": "src/index.ts",
+       "contains": "if(!(await env.AUTH_LIMITER.limit({key:'app-recovery:'+user.id})).success)"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/app-recovery.mjs",
+       "contains": "assert.equal((await call(request,staleToken)).status,401);",
+       "asserts": "a stale session cannot restore"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "'Chat control specificationApply: registry says recentAuth true, source says false'",
+       "asserts": "relaxing a typed control's recentAuth flag is reported (control-level recentAuth is machine-checked)"
+      }
+     ]
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "Restore point, base revision and roster are immutable; a rollback review cannot be used as a restore.",
+     "enforcedAt": [
+      {
+       "file": "schema/platform.sql",
+       "contains": "NEW.point_id!=OLD.point_id OR NEW.base_revision!=OLD.base_revision OR NEW.roster_json!=OLD.roster_json"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/app-migration-checks.mjs",
+       "contains": "confirmAppRestore(scope(user),user,up,rollbackID,'RESTORE'),e=>e.status===404)",
+       "asserts": "a rollback review ID is not a restore target"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "Applied reviews return their receipt; an old receipt cannot roll back again.",
+     "enforcedAt": [
+      {
+       "file": "src/app-document-recovery.ts",
+       "contains": "if(row.status==='applied')return summary(row);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/app-recovery.mjs",
+       "contains": "assert.equal((await recovery.confirmAppRestore(lossy,user,project,review,'RESTORE')).status,'applied');",
+       "asserts": "a lost acknowledgement recovers"
+      },
+      {
+       "file": "tests/app-migration-checks.mjs",
+       "contains": "'Old receipt must not roll back again'",
+       "asserts": "an old rollback receipt does not repeat"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Restore rechecks roster/revision and expiry. Upgrade/rollback revision guards exist in SQL but no test changes the revision or expires them (test gap).",
+     "enforcedAt": [
+      {
+       "file": "schema/platform.sql",
+       "contains": "SELECT RAISE(ABORT,'restore_stale') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now')"
+      },
+      {
+       "file": "src/app-program-rollback.ts",
+       "contains": "a.enabled=0 AND a.revision=r.base_revision AND a.version_id=r.from_version"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/app-recovery.mjs",
+       "contains": "await assert.rejects(recovery.confirmAppRestore(scope(user),user,project,stale,'RESTORE'),e=>e.status===409);",
+       "asserts": "a stale restore is refused"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "shared-modules",
+   "title": "Shared modules: owner operations, collections, records, activation and staff roles",
+   "privileged": [
+    "activation",
+    "access",
+    "deletion"
+   ],
+   "authorityClass": "session owner (module principal kind set by the server); apply controls need fresh passkey",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/projects\\/([0-9a-f-]{36})\\/modules$/",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/projects\\/([0-9a-f-]{36})\\/module-files$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/projects\\/([0-9a-f-]{36})\\/module-files\\/remove$/",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/projects\\/([0-9a-f-]{36})\\/module-records$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/projects\\/([0-9a-f-]{36})\\/module-records\\/([0-9a-f-]{36})\\/([a-z][a-z0-9-]{0,39})$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/shared-modules/policy.ts",
+     "kind": "exact",
+     "match": "records.view",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/shared-modules/policy.ts",
+     "kind": "exact",
+     "match": "records.get",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/shared-modules/policy.ts",
+     "kind": "exact",
+     "match": "forms.submit",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/shared-modules/policy.ts",
+     "kind": "exact",
+     "match": "records.update",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/shared-modules/policy.ts",
+     "kind": "exact",
+     "match": "records.remove",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/shared-modules/policy.ts",
+     "kind": "exact",
+     "match": "files.prepareUpload",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/shared-modules/policy.ts",
+     "kind": "exact",
+     "match": "files.putBytes",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/shared-modules/policy.ts",
+     "kind": "exact",
+     "match": "files.read",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/shared-modules/policy.ts",
+     "kind": "exact",
+     "match": "files.gallery",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/shared-modules/policy.ts",
+     "kind": "exact",
+     "match": "files.requestRemoval",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/shared-modules/policy.ts",
+     "kind": "exact",
+     "match": "access.me",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/shared-modules/policy.ts",
+     "kind": "exact",
+     "match": "access.list",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/shared-modules/policy.ts",
+     "kind": "exact",
+     "match": "access.prepareRole",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/shared-modules/policy.ts",
+     "kind": "exact",
+     "match": "access.confirmRole",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/shared-modules/policy.ts",
+     "kind": "exact",
+     "match": "collections.readPublic",
+     "methods": [
+      "POST"
+     ]
+    }
+   ],
+   "controls": [
+    {
+     "id": "accessModuleReview",
+     "recentAuth": false
+    },
+    {
+     "id": "accessRoleApply",
+     "recentAuth": true
+    },
+    {
+     "id": "accessRoleReview",
+     "recentAuth": false
+    },
+    {
+     "id": "filesModuleReview",
+     "recentAuth": false
+    },
+    {
+     "id": "galleryPageReview",
+     "recentAuth": false
+    },
+    {
+     "id": "moduleActivationApply",
+     "recentAuth": true
+    },
+    {
+     "id": "moduleActivationReview",
+     "recentAuth": false
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Activation and role reviews join owner and project; apply requires the owner's own typed Chat turn in SQL; owner REST operations use the admitted owner principal set by the server.",
+     "enforcedAt": [
+      {
+       "file": "src/shared-modules/activation.ts",
+       "contains": "JOIN projects p ON p.id=r.project_id AND p.owner_user_id=r.user_id WHERE r.id=? AND r.user_id=?"
+      },
+      {
+       "file": "src/shared-modules/schema.sql",
+       "contains": "json_extract(t.action_json,'$.type')='moduleActivationApply'"
+      },
+      {
+       "file": "src/index.ts",
+       "contains": "return json(await handleModuleRequest(env.DB,{kind:'owner',userId:user.id,projectId:moduleMatch[1]},await body(request)));"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/shared-modules-registry.mjs",
+       "contains": "const foreignApply=await control(b,applyAction(pending));assert.equal(foreignApply.status,404);",
+       "asserts": "another owner cannot apply a module review"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Mutating methods pass the global exact-Origin gate in handle() before session admission and dispatch (position machine-checked); GET routes are read-only.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(method) && !sameOrigin(request)) return error(403, \"Origin check failed\");"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "assert.equal(crossOriginGrant.status,403)",
+       "asserts": "worker.fetch rejects a cross-origin workspace POST with 403 before any handler runs"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "some(p=>p.startsWith('platform dispatch order changed'))",
+       "asserts": "a router moved ahead of the exact-Origin gate is reported; every route is registered with beforeOriginGate"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "evidenced",
+     "detail": "moduleActivationApply and accessRoleApply are recentAuth controls (machine-checked); the owner REST /modules route has no handler for role or activation writes. records.remove via /modules needs no fresh proof or review (design note).",
+     "enforcedAt": [
+      {
+       "file": "src/chat.ts",
+       "contains": "if(control.recentAuth)await requireFreshWorkspace(db,userId);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/shared-modules-registry.mjs",
+       "contains": "await assert.rejects(()=>m.sendChatControl(staleScope,a.user,{id:id(),revision:0,action:applyAction(r)}),e=>e.status===401);",
+       "asserts": "a stale session cannot apply a module activation"
+      },
+      {
+       "file": "tests/shared-modules-access.mjs",
+       "contains": "await assert.rejects(()=>m.sendChatControl(staleScope,a.user,{id:id(),revision:0,action:applyAction(r)}),e=>e.status===401);",
+       "asserts": "a stale session cannot apply a staff role"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "'Chat control specificationApply: registry says recentAuth true, source says false'",
+       "asserts": "relaxing a typed control's recentAuth flag is reported (control-level recentAuth is machine-checked)"
+      }
+     ]
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "Apply binds the exact review digest and expected revision.",
+     "enforcedAt": [
+      {
+       "file": "src/shared-modules/activation.ts",
+       "contains": "if(r.review_digest!==digest||r.expected_activation_revision!==expectedRevision)throw changed();"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/shared-modules-registry.mjs",
+       "contains": "const tampered=await control(a,{...applyAction(r),reviewDigest:'f'.repeat(64)});assert.equal(tampered.status,409);",
+       "asserts": "a tampered digest is refused"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "Module writes store a request-hash receipt; a reused request ID with other content conflicts; concurrent applies admit one.",
+     "enforcedAt": [
+      {
+       "file": "src/shared-modules/api.ts",
+       "contains": "if(row.request_hash!==requestHash)throw new ModuleError('request_conflict');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/shared-modules-registry.mjs",
+       "contains": "assert.deepEqual(results.map(r=>r.status).sort(),[200,409]);",
+       "asserts": "concurrent applies admit one"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Apply rechecks the expected activation/access revision; review expiry is enforced but untested.",
+     "enforcedAt": [
+      {
+       "file": "src/shared-modules/activation.ts",
+       "contains": "r.expected_activation_revision!==expectedRevision"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/shared-modules-access.mjs",
+       "contains": "assert.equal((await control(a,{...applyAction(r),expectedRevision:2})).status,409);",
+       "asserts": "a stale expected revision is refused"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "contacts-directory",
+   "title": "Contact inbox, contact form, directory and notification address",
+   "privileged": [
+    "publish",
+    "deletion"
+   ],
+   "authorityClass": "session owner",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/projects\\/([0-9a-f-]{36})\\/inbox$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/contact-messages\\/([0-9a-f-]{36})$/",
+     "methods": [
+      "DELETE"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/projects\\/([0-9a-f-]{36})\\/contact-notifications(?:\\/(verification|confirm))?$/",
+     "methods": [
+      "DELETE",
+      "GET",
+      "POST",
+      "PUT"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/projects\\/([0-9a-f-]{36})\\/directory\\/history$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/projects\\/([0-9a-f-]{36})\\/directory\\/snapshots\\/([0-9a-f-]{36})\\/export$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/projects\\/([0-9a-f-]{36})\\/directory$/",
+     "methods": [
+      "GET"
+     ]
+    }
+   ],
+   "controls": [
+    {
+     "id": "confirm:contact",
+     "recentAuth": false
+    },
+    {
+     "id": "confirm:contactNotification",
+     "recentAuth": false
+    },
+    {
+     "id": "confirm:directory",
+     "recentAuth": false
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Contact, directory and notification reviews join review owner and project owner; message deletion is owner-filtered in SQL.",
+     "enforcedAt": [
+      {
+       "file": "src/contacts.ts",
+       "contains": "FROM contact_reviews r JOIN projects p ON p.id=r.project_id WHERE r.id=? AND r.user_id=? AND p.owner_user_id=?"
+      },
+      {
+       "file": "src/contacts.ts",
+       "contains": "DELETE FROM contact_submissions WHERE id=? AND project_id IN(SELECT id FROM projects WHERE owner_user_id=?)"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/contacts.mjs",
+       "contains": "await chat(b,'/confirm-contact '+review.id);assert.equal(await activeContact(db,a.project),null);",
+       "asserts": "another owner cannot enable a contact form"
+      },
+      {
+       "file": "tests/directories.mjs",
+       "contains": "await confirm(b.user,review);assert.equal((await current(a)).draft.length,0);",
+       "asserts": "another owner cannot confirm a directory change"
+      },
+      {
+       "file": "tests/contacts.mjs",
+       "contains": "await deleteContact(scope(b.id),b.id,m.id);",
+       "asserts": "another owner's delete leaves the message"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Mutating methods pass the global exact-Origin gate (position machine-checked). The typed-control path has a cross-origin test; the contact-notification PUT/DELETE/POST and message DELETE routes rely on the gate without a route-specific test.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(method) && !sameOrigin(request)) return error(403, \"Origin check failed\");"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "assert.equal(crossOriginGrant.status,403)",
+       "asserts": "worker.fetch rejects a cross-origin workspace POST with 403 before any handler runs"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "some(p=>p.startsWith('platform dispatch order changed'))",
+       "asserts": "a router moved ahead of the exact-Origin gate is reported; every route is registered with beforeOriginGate"
+      },
+      {
+       "file": "tests/customer-site-journey.mjs",
+       "contains": "assert.equal((await call(owner,'/api/chat/actions','POST',input,'https://foreign.test')).status,403);",
+       "asserts": "a cross-origin typed confirm control is refused"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "gap",
+     "detail": "confirm:contact is not recentAuth (machine-checked), but docs/incident-runbooks.md C10 says disabling a contact form needs recent authentication.",
+     "gapKind": "control",
+     "finding": "B2"
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "Reviews bind expected and publication revisions; directory confirmation requires the owner's typed control turn; the notification address review is immutable.",
+     "enforcedAt": [
+      {
+       "file": "schema/platform.sql",
+       "contains": "NEW.expected_revision!=OLD.expected_revision OR NEW.publication_revision!=OLD.publication_revision"
+      },
+      {
+       "file": "schema/platform.sql",
+       "contains": "json_extract(action_json,'$.kind')='directory' AND json_extract(action_json,'$.reviewId')=NEW.id"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/directories.mjs",
+       "contains": "VALUES(?,?,999,'/confirm-directory '||?,'forged',?,'ai','completed')",
+       "asserts": "a forged AI turn cannot confirm a directory change"
+      },
+      {
+       "file": "tests/contact-notifications.mjs",
+       "contains": "SET address='other@example.com' WHERE id=?\",review.id),/contact_destination_review_changed/",
+       "asserts": "the reviewed address cannot be rewritten"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "Replayed confirmations return the saved result without a second change.",
+     "enforcedAt": [
+      {
+       "file": "src/chat.ts",
+       "contains": "if (previous) return matches(previous) ? { status: 200 }"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/contacts.mjs",
+       "contains": "assert.equal((await sendChat(scope(a.id),a.id,confirmation.input)).status,200);",
+       "asserts": "a replayed contact confirmation succeeds once"
+      },
+      {
+       "file": "tests/directories.mjs",
+       "contains": "assert.equal((await current(a)).revision,rev);",
+       "asserts": "a replayed directory confirm does not advance the revision"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Contact and directory reviews recheck the live publication revision and expiry. The contact-notification review checks expiry and suppression only (no revision; informational).",
+     "enforcedAt": [
+      {
+       "file": "schema/platform.sql",
+       "contains": "AND version_id IS NOT NULL AND revision=NEW.publication_revision)"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/contacts.mjs",
+       "contains": "assert.equal((await chat(a,'/confirm-contact '+staleReview.id)).result.status,409);",
+       "asserts": "a stale contact review is refused"
+      },
+      {
+       "file": "tests/contacts.mjs",
+       "contains": "assert.equal((await chat(a,'/confirm-contact '+expiryReview.id,expiryDB)).result.status,409);",
+       "asserts": "an expired contact review is refused"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "domain-hosting",
+   "title": "Custom-domain hosting review, confirm, refresh and disconnect",
+   "privileged": [
+    "dns-hosting"
+   ],
+   "authorityClass": "session owner + owned proof/claim; operator-configured provider capability",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/domain-hosting",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/domain-hosting/review",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/domain-hosting\\/([0-9a-f-]{36})\\/(confirm|refresh|disconnect)$/",
+     "methods": [
+      "POST"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "gap",
+     "detail": "Every operation is owner-joined and the insert trigger rechecks the claim owner. Foreign review and confirm are tested at the domain level; foreign refresh/disconnect and every /api/domain-hosting HTTP route have no test.",
+     "gapKind": "test",
+     "enforcedAt": [
+      {
+       "file": "src/domain-hosting.ts",
+       "contains": "SELECT c.* FROM domain_connections c JOIN projects p ON p.id=c.project_id WHERE c.id=? AND c.user_id=? AND p.owner_user_id=?"
+      },
+      {
+       "file": "schema/platform.sql",
+       "contains": "SELECT RAISE(ABORT,'domain_connection_owner') WHERE NOT EXISTS(SELECT 1 FROM domain_claims d JOIN projects p ON p.id=d.project_id WHERE d.id=NEW.claim_id"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/domain-hosting.mjs",
+       "contains": "await assert.rejects(()=>confirmHosting(scope(other),other,r.id,config,transport));",
+       "asserts": "another owner cannot confirm hosting"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Mutating methods pass the global exact-Origin gate in handle() before session admission and dispatch (position machine-checked); GET routes are read-only.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(method) && !sameOrigin(request)) return error(403, \"Origin check failed\");"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "assert.equal(crossOriginGrant.status,403)",
+       "asserts": "worker.fetch rejects a cross-origin workspace POST with 403 before any handler runs"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "some(p=>p.startsWith('platform dispatch order changed'))",
+       "asserts": "a router moved ahead of the exact-Origin gate is reported; every route is registered with beforeOriginGate"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "n/a",
+     "detail": "Not required by the hosting contract (docs/domains.md). Disconnect is protective."
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "The review binds hostname, zone, target and proof hash (immutable); confirm proves the hostname is absent; deletion re-reads the exact provider ID.",
+     "enforcedAt": [
+      {
+       "file": "schema/platform.sql",
+       "contains": "NEW.hostname!=OLD.hostname OR NEW.zone_id!=OLD.zone_id OR NEW.target!=OLD.target OR NEW.proof_hash!=OLD.proof_hash"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/domain-hosting.mjs",
+       "contains": "existing=1;await assert.rejects(()=>confirmHosting(scope(user),user,r.id,config,transport));",
+       "asserts": "an existing provider hostname is never adopted"
+      },
+      {
+       "file": "tests/domain-hosting.mjs",
+       "contains": "await assert.rejects(()=>db.prepare(\"UPDATE domain_connections SET hostname='foreign.example.com' WHERE id=?\").bind(r.id).run());",
+       "asserts": "the bound hostname is immutable"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "Creation is claimed once; an uncertain create is never retried.",
+     "enforcedAt": [
+      {
+       "file": "src/domain-hosting.ts",
+       "contains": "UPDATE domain_connections SET state='creating',detail='Provisioning hostname' WHERE id=? AND user_id=? AND state='review' AND expires_at>? RETURNING id"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/domain-hosting.mjs",
+       "contains": "assert.equal(writes,1);assert.ok(confirmed.some(x=>x.state==='provisioning'));",
+       "asserts": "concurrent confirms create one hostname"
+      },
+      {
+       "file": "tests/domain-hosting.mjs",
+       "contains": "assert.equal((await confirmHosting(scope(user),user,uncertain.id,config,transport)).state,'uncertain');assert.equal(writes,3);",
+       "asserts": "an uncertain create is not retried"
+      }
+     ]
+    },
+    "stale": {
+     "state": "gap",
+     "detail": "Review expiry and the proof-hash check are enforced in code, but no test confirms an expired hosting review or a proof hash changed before confirm; the proof hash is checked in JavaScript, not in the claim SQL (prior hardening note).",
+     "gapKind": "test",
+     "enforcedAt": [
+      {
+       "file": "src/domain-hosting.ts",
+       "contains": "if(await hashToken(claim.token)!==c.proof_hash)throw new DomainError(409,'Domain proof changed. Prepare a new review.');"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "domains",
+   "title": "Domain ownership proofs: prepare, verify and removal review",
+   "privileged": [
+    "dns-hosting",
+    "deletion"
+   ],
+   "authorityClass": "session owner + owned project/claim",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/domains",
+     "methods": [
+      "GET"
+     ]
+    }
+   ],
+   "controls": [
+    {
+     "id": "checkDomainProof",
+     "recentAuth": false
+    },
+    {
+     "id": "confirm:domainProof",
+     "recentAuth": false
+    },
+    {
+     "id": "domainProof",
+     "recentAuth": false
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Proof prepare/verify and removal join the owned project/claim; removal requires the owner's typed domainProof control turn in SQL.",
+     "enforcedAt": [
+      {
+       "file": "src/domains.ts",
+       "contains": "SELECT d.* FROM domain_claims d JOIN projects p ON p.id=d.project_id WHERE d.id=? AND p.owner_user_id=?"
+      },
+      {
+       "file": "schema/platform.sql",
+       "contains": "json_extract(t.action_json,'$.kind')='domainProof' AND json_extract(t.action_json,'$.reviewId')=NEW.id"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/domains.mjs",
+       "contains": "await assert.rejects(chat(other,'/verify-domain '+claim.id),{status:404});await assert.rejects(chat(other,'/domain www.other.com '+p),{status:404});",
+       "asserts": "another owner cannot verify or prepare a proof"
+      },
+      {
+       "file": "tests/domain-proof-removal.mjs",
+       "contains": "await confirm(other,r.id);assert.ok(await present(c.id));",
+       "asserts": "another owner cannot remove a proof"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Mutating methods pass the global exact-Origin gate in handle() before session admission and dispatch (position machine-checked); GET routes are read-only.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(method) && !sameOrigin(request)) return error(403, \"Origin check failed\");"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "assert.equal(crossOriginGrant.status,403)",
+       "asserts": "worker.fetch rejects a cross-origin workspace POST with 403 before any handler runs"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "some(p=>p.startsWith('platform dispatch order changed'))",
+       "asserts": "a router moved ahead of the exact-Origin gate is reported; every route is registered with beforeOriginGate"
+      },
+      {
+       "file": "tests/customer-site-journey.mjs",
+       "contains": "assert.equal((await call(owner,'/api/chat/actions','POST',input,'https://foreign.test')).status,403);",
+       "asserts": "a cross-origin typed confirm control is refused"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "n/a",
+     "detail": "Not required: proof preparation, verification and removal are owned exact reviews (docs/tenant-authority-audit.md, domain proof row)."
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "Removal binds the exact proof token and expiry for the owned claim.",
+     "enforcedAt": [
+      {
+       "file": "schema/platform.sql",
+       "contains": "d.token=NEW.proof_token AND d.expires_at=NEW.proof_expires_at AND p.owner_user_id=NEW.user_id"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/domain-proof-removal.mjs",
+       "contains": "assert.equal((await confirm(owner,renewal.id)).result.status,409);",
+       "asserts": "a renewed proof cannot be removed by the older review"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "Verification is bound to a Chat turn; a replayed check makes no new DNS lookup; removal retries converge.",
+     "enforcedAt": [
+      {
+       "file": "src/domains.ts",
+       "contains": "UPDATE domain_claims SET verified_at=? WHERE id=? AND token=? AND expires_at>? AND EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/domains.mjs",
+       "contains": "await chat(owner,'/verify-domain '+claim.id,checked.id);assert.equal(dnsCalls,1);",
+       "asserts": "a replayed check makes no new DNS call"
+      },
+      {
+       "file": "tests/domain-proof-removal.mjs",
+       "contains": "assert.equal(results.filter(r=>r.status===200).length,1);",
+       "asserts": "concurrent removals admit one"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Expired proofs are refused; proof renewal invalidates older removal reviews. Removal-review expiry is enforced by trigger but untested.",
+     "enforcedAt": [
+      {
+       "file": "schema/platform.sql",
+       "contains": "SELECT RAISE(ABORT,'domain_proof_removal_expired')"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/domains.mjs",
+       "contains": "await assert.rejects(chat(owner,'/verify-domain '+claim.id),{status:409});",
+       "asserts": "an expired proof is refused"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "photos-files",
+   "title": "Owner photo uploads, reads and photo removal review",
+   "privileged": [
+    "deletion"
+   ],
+   "authorityClass": "session owner + project/file joins",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/projects\\/([0-9a-f-]{36})\\/files(?:\\/([0-9a-f-]{36}))?$/",
+     "methods": [
+      "GET",
+      "PUT"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/files\\/([0-9a-f-]{36})$/",
+     "methods": [
+      "GET"
+     ]
+    }
+   ],
+   "controls": [
+    {
+     "id": "confirm:photo",
+     "recentAuth": false
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Upload, list, status and read require the project owner; photo removal joins review owner and project owner and the trigger rechecks the file's project.",
+     "enforcedAt": [
+      {
+       "file": "src/files.ts",
+       "contains": "if(!(await env.DB.prepare('SELECT id FROM projects WHERE id=? AND owner_user_id=?').bind(projectId,userId).first()))throw new FileError(404,'Project not found');"
+      },
+      {
+       "file": "src/photo-removal.ts",
+       "contains": "JOIN projects p ON p.id=r.project_id WHERE r.id=? AND r.user_id=? AND p.owner_user_id=?"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/files.mjs",
+       "contains": "await assert.rejects(readPhoto(other.env,other.id,id),{status:404});await assert.rejects(listPhotos(other.env.DB,other.id,owner.project),{status:404});",
+       "asserts": "another owner cannot read or list photos"
+      },
+      {
+       "file": "tests/photo-removal.mjs",
+       "contains": "assert.equal((await listPhotos(scope(owner.id),owner.id,owner.project)).files.length,1);",
+       "asserts": "a foreign removal confirm leaves the photo"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Mutating methods pass the global exact-Origin gate in handle() before session admission and dispatch (position machine-checked); GET routes are read-only.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(method) && !sameOrigin(request)) return error(403, \"Origin check failed\");"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "assert.equal(crossOriginGrant.status,403)",
+       "asserts": "worker.fetch rejects a cross-origin workspace POST with 403 before any handler runs"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "some(p=>p.startsWith('platform dispatch order changed'))",
+       "asserts": "a router moved ahead of the exact-Origin gate is reported; every route is registered with beforeOriginGate"
+      },
+      {
+       "file": "tests/customer-site-journey.mjs",
+       "contains": "assert.equal((await call(owner,'/api/chat/actions','POST',input,'https://foreign.test')).status,403);",
+       "asserts": "a cross-origin typed confirm control is refused"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "n/a",
+     "detail": "Not required: photo removal is an explicit exact removal review (docs/tenant-authority-audit.md, photo/version/proof removal)."
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "The removal review binds file, name and expiry and cannot be rewritten.",
+     "enforcedAt": [
+      {
+       "file": "schema/platform.sql",
+       "contains": "NEW.file_id!=OLD.file_id OR NEW.name!=OLD.name OR NEW.expires_at!=OLD.expires_at"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/photo-removal.mjs",
+       "contains": "UPDATE photo_removals SET file_id=? WHERE id=?\").bind(retained,raceReview.id).run(),/photo_removal_immutable/);",
+       "asserts": "the reviewed file cannot be swapped"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "Concurrent removal confirms admit one.",
+     "enforcedAt": [
+      {
+       "file": "schema/platform.sql",
+       "contains": "photo_removal_immutable"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/photo-removal.mjs",
+       "contains": "assert.deepEqual(raced.map(r=>r.status).sort(),[200,409]);",
+       "asserts": "concurrent confirms admit one"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "A photo referenced by a saved version, live site, review or backup cannot be removed.",
+     "enforcedAt": [
+      {
+       "file": "schema/platform.sql",
+       "contains": "BEGIN SELECT RAISE(ABORT,'photo_removal_referenced'); END;"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/photo-removal.mjs",
+       "contains": "const blocked=await chat(owner,'/confirm-photo-delete '+beforeUse.id);assert.equal(blocked.result.status,409);",
+       "asserts": "a photo that became referenced cannot be removed"
+      },
+      {
+       "file": "tests/photo-removal.mjs",
+       "contains": "assert.equal((await chat(owner,'/confirm-photo-delete '+expiredReview.id,expireProxy)).result.status,409);assert.equal(expired,true);",
+       "asserts": "an expired removal review is refused"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "specification-service-clients",
+   "title": "Private website specification and service-client save, with review previews",
+   "privileged": [
+    "publish",
+    "activation"
+   ],
+   "authorityClass": "session owner; typed apply controls need fresh passkey",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/service-client-activations\\/([0-9a-f-]{36})\\/(preview|diff)$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/service-client-reviews\\/([0-9a-f-]{36})\\/(preview|diff)$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/service-client-versions\\/([0-9a-f-]{36})\\/preview$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/specification-reviews\\/([0-9a-f-]{36})\\/(preview|diff|details)$/",
+     "methods": [
+      "GET"
+     ]
+    }
+   ],
+   "controls": [
+    {
+     "id": "serviceClientApply",
+     "recentAuth": true
+    },
+    {
+     "id": "specificationApply",
+     "recentAuth": true
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "gap",
+     "detail": "Apply requires the review owner and the owner's own typed Chat turn in SQL, and foreign reads are tested, but no test has another owner apply someone else's review.",
+     "gapKind": "test",
+     "enforcedAt": [
+      {
+       "file": "src/project-specification/store.ts",
+       "contains": "JOIN projects p ON p.id=q.project_id AND p.owner_user_id=q.user_id WHERE q.id=? AND q.user_id=?"
+      },
+      {
+       "file": "schema/platform.sql",
+       "contains": "t.mode='guided' AND json_extract(t.action_json,'$.type')='specificationApply'"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/specification-journey.mjs",
+       "contains": "assert.equal((await call(foreign,path)).status,404);",
+       "asserts": "another owner cannot read the review preview/diff/details"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Mutating methods pass the global exact-Origin gate in handle() before session admission and dispatch (position machine-checked); GET routes are read-only.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(method) && !sameOrigin(request)) return error(403, \"Origin check failed\");"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "assert.equal(crossOriginGrant.status,403)",
+       "asserts": "worker.fetch rejects a cross-origin workspace POST with 403 before any handler runs"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "some(p=>p.startsWith('platform dispatch order changed'))",
+       "asserts": "a router moved ahead of the exact-Origin gate is reported; every route is registered with beforeOriginGate"
+      },
+      {
+       "file": "tests/specification-journey.mjs",
+       "contains": "assert.equal((await call(owner,'/api/chat/actions','POST',exact,'https://foreign.test')).status,403);",
+       "asserts": "a cross-origin apply control is refused"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "evidenced",
+     "detail": "specificationApply and serviceClientApply are recentAuth controls, as the storage contract requires.",
+     "enforcedAt": [
+      {
+       "file": "src/chat.ts",
+       "contains": "if(control.recentAuth)await requireFreshWorkspace(db,userId);"
+      },
+      {
+       "file": "docs/project-specification-storage.md",
+       "contains": "Same-origin, recent sign-in and rate checks apply."
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/specification-journey.mjs",
+       "contains": "const aged=await workspaceSession(db,m,owner,-3600);",
+       "asserts": "an hour-old proof cannot apply a specification"
+      },
+      {
+       "file": "tests/service-client-journey.mjs",
+       "contains": "const stale=await workspaceSession(db,m,owner,-3600);",
+       "asserts": "an hour-old proof cannot apply service settings"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "'Chat control specificationApply: registry says recentAuth true, source says false'",
+       "asserts": "relaxing a typed control's recentAuth flag is reported (control-level recentAuth is machine-checked)"
+      }
+     ]
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "Apply binds the proposal digest and expected revision.",
+     "enforcedAt": [
+      {
+       "file": "src/project-specification/store.ts",
+       "contains": "if(q.proposal_digest!==hash||q.expected_revision!==expectedRevision)throw changed();"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/specification-journey.mjs",
+       "contains": "bad.action.proposalDigest='0'.repeat(64);assert.equal((await call(owner,'/api/chat/actions','POST',bad)).status,409);",
+       "asserts": "a different digest is refused"
+      },
+      {
+       "file": "tests/service-client-journey.mjs",
+       "contains": "proposalDigest:'0'.repeat(64)});assert.equal((await call(owner,'/api/chat/actions','POST',bad)).status,409);",
+       "asserts": "a different service-settings digest is refused"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "Applies store a request hash; a lost response is recovered without a second version.",
+     "enforcedAt": [
+      {
+       "file": "src/project-specification/store.ts",
+       "contains": "if(applied){if(applied.request_hash!==requestHash)throw changed();"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/specification-journey.mjs",
+       "contains": "assert.equal(await count('project_spec_applies',owner.project),1);",
+       "asserts": "one apply is recorded"
+      },
+      {
+       "file": "tests/specification-journey.mjs",
+       "contains": "assert.equal((await m.sendChatControl(lostDB,owner.id,lostInput)).status,200);",
+       "asserts": "a lost acknowledgement is recovered"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "The current head revision and base version are rechecked; races admit one; expiry is enforced.",
+     "enforcedAt": [
+      {
+       "file": "schema/platform.sql",
+       "contains": "AND coalesce(h.revision,0)=q.expected_revision AND h.version_id IS q.base_version_id"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/specification-journey.mjs",
+       "contains": "assert.deepEqual(race.map(r=>r.status).sort(),[200,409]);",
+       "asserts": "concurrent applies admit one"
+      },
+      {
+       "file": "tests/specification-journey.mjs",
+       "contains": "await assert.rejects(expiry.db.batch(expiry.statements),/specification_expired/);",
+       "asserts": "an expired proposal is refused"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "guest-previews",
+   "title": "Guest preview links: issue, list, revoke, delete and feedback",
+   "privileged": [
+    "publish",
+    "deletion"
+   ],
+   "authorityClass": "session owner (issuance feature-gated)",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/projects\\/([0-9a-f-]{36})\\/guest-previews\\/prepare$/",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/projects\\/([0-9a-f-]{36})\\/guest-previews$/",
+     "methods": [
+      "GET",
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/guest-previews\\/([0-9a-f-]{36})(?:\\/(revoke|feedback)(?:\\/([0-9a-f-]{36}))?)?$/",
+     "methods": [
+      "DELETE",
+      "GET",
+      "PATCH",
+      "POST"
+     ]
+    }
+   ],
+   "controls": [
+    {
+     "id": "guestPreview/delete",
+     "recentAuth": false
+    },
+    {
+     "id": "guestPreview/revoke",
+     "recentAuth": false
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Every link operation is filtered by owner_user_id; foreign controls and HTTP calls leave links unchanged.",
+     "enforcedAt": [
+      {
+       "file": "src/guest-previews/owner.ts",
+       "contains": "FROM guest_preview_links l WHERE l.id=? AND l.owner_user_id=?"
+      },
+      {
+       "file": "src/guest-previews/owner.ts",
+       "contains": "DELETE FROM guest_preview_links WHERE id=? AND owner_user_id=?"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/guest-previews.mjs",
+       "contains": "assert.equal((await api(foreign,path,method)).status,404);",
+       "asserts": "another owner gets 404 on every link route"
+      },
+      {
+       "file": "tests/guest-preview-bindings.mjs",
+       "contains": "SELECT revoked_at FROM guest_preview_links WHERE id=?',foreignIssued.link.id)).revoked_at,null);",
+       "asserts": "a foreign revoke control changes nothing"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Mutating methods pass the global exact-Origin gate in handle() before session admission and dispatch (position machine-checked); GET routes are read-only.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(method) && !sameOrigin(request)) return error(403, \"Origin check failed\");"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "assert.equal(crossOriginGrant.status,403)",
+       "asserts": "worker.fetch rejects a cross-origin workspace POST with 403 before any handler runs"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "some(p=>p.startsWith('platform dispatch order changed'))",
+       "asserts": "a router moved ahead of the exact-Origin gate is reported; every route is registered with beforeOriginGate"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "n/a",
+     "detail": "Not required: docs/guest-previews.md states identity and ownership only; delete needs the literal DELETE confirmation."
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "Issuance confirmation is bound to the exact version digest and request fields; issuance is never a Chat control (its one-time token cannot enter history).",
+     "enforcedAt": [
+      {
+       "file": "src/guest-previews/bindings.ts",
+       "contains": "'guest-preview-confirm@1',userId,projectId,input.id,version.id,version.digest"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/guest-preview-bindings.mjs",
+       "contains": "for(const patch of [{expiresInHours:49},{feedback:true},{label:'Other'},{id:id()}])",
+       "asserts": "any changed issuance field is refused"
+      },
+      {
+       "file": "tests/guest-preview-bindings.mjs",
+       "contains": "assert.equal((await post({...body,versionId:other.version,confirmation:prepared.confirmation})).status,404);",
+       "asserts": "a confirmation cannot be moved to another version"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "Issuance stores a request hash and a replay never re-reveals the token; revoke is idempotent.",
+     "enforcedAt": [
+      {
+       "file": "src/guest-previews/owner.ts",
+       "contains": "if(row.request_hash!==requestHash||row.project_id!==projectId)throw new GuestPreviewError(409"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/guest-preview-bindings.mjs",
+       "contains": "assert.equal(replay.token,null);assert.equal(replay.replayed,true);",
+       "asserts": "a replayed issuance returns no token"
+      },
+      {
+       "file": "tests/guest-previews.mjs",
+       "contains": "assert.equal(again.link.revokedAt,revoked.link.revokedAt);",
+       "asserts": "a repeated revoke keeps the original time"
+      }
+     ]
+    },
+    "stale": {
+     "state": "gap",
+     "detail": "The typed revoke/delete control applies its effect before the Chat turn's revision-checked batch, so a request rejected as stale (409) has already changed the link.",
+     "gapKind": "control",
+     "finding": "B3"
+    }
+   }
+  },
+  {
+   "id": "site-publication",
+   "title": "Website publish, restore, unpublish and saved-version removal, with previews/exports",
+   "privileged": [
+    "publish",
+    "deletion"
+   ],
+   "authorityClass": "session owner + review owner + project owner",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/site-versions\\/([0-9a-f-]{36})\\/diff$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/publication-reviews\\/([0-9a-f-]{36})\\/diff$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/site-versions\\/([0-9a-f-]{36})\\/export$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/site-versions\\/([0-9a-f-]{36})\\/preview$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/projects\\/([0-9a-f-]{36})\\/versions$/",
+     "methods": [
+      "GET"
+     ]
+    }
+   ],
+   "controls": [
+    {
+     "id": "confirm:site",
+     "recentAuth": false
+    },
+    {
+     "id": "confirm:version",
+     "recentAuth": false
+    },
+    {
+     "id": "unpublish",
+     "recentAuth": false
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Confirm requires review owner and project owner in the app and again in the commit trigger; preview/export/diff reads are owner-joined. GET /api/projects/:id/versions checks ownership but has no foreign-caller test.",
+     "enforcedAt": [
+      {
+       "file": "src/publications.ts",
+       "contains": "WHERE a.id=? AND a.user_id=? AND p.owner_user_id=?"
+      },
+      {
+       "file": "schema/platform.sql",
+       "contains": "s.project_id=NEW.project_id AND p.owner_user_id=NEW.user_id AND s.revision=NEW.expected_revision"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/publications.mjs",
+       "contains": "await chat(other,'/confirm '+review.id);assert.equal((await served(a.project)).status,404);",
+       "asserts": "another owner's confirm leaves the site unpublished"
+      },
+      {
+       "file": "tests/natural-chat.mjs",
+       "contains": "SELECT confirmed_by FROM publication_actions WHERE id=?').bind(review.id).first()).confirmed_by,approval.id);",
+       "asserts": "a foreign typed control does not change the receipt"
+      },
+      {
+       "file": "tests/customer-site-journey.mjs",
+       "contains": "assert.equal((await call(foreign,path)).status,404);",
+       "asserts": "another owner cannot read preview/export/diff"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Mutating methods pass the global exact-Origin gate in handle() before session admission and dispatch (position machine-checked); GET routes are read-only.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(method) && !sameOrigin(request)) return error(403, \"Origin check failed\");"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "assert.equal(crossOriginGrant.status,403)",
+       "asserts": "worker.fetch rejects a cross-origin workspace POST with 403 before any handler runs"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "some(p=>p.startsWith('platform dispatch order changed'))",
+       "asserts": "a router moved ahead of the exact-Origin gate is reported; every route is registered with beforeOriginGate"
+      },
+      {
+       "file": "tests/customer-site-journey.mjs",
+       "contains": "assert.equal((await call(owner,'/api/chat/actions','POST',input,'https://foreign.test')).status,403);",
+       "asserts": "a cross-origin typed confirm control is refused"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "gap",
+     "detail": "confirm:site and confirm:version are not recentAuth (machine-checked). The contract treats publication as an ordinary exact review, but docs/incident-runbooks.md C10 says unpublishing needs recent authentication; reproduced with an hour-old proof.",
+     "gapKind": "control",
+     "finding": "B2"
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "Review rows are immutable; the version must belong to the review's project; version removal binds digest, component and creation time.",
+     "enforcedAt": [
+      {
+       "file": "schema/platform.sql",
+       "contains": "NEW.version_id IS NOT OLD.version_id OR NEW.expected_revision != OLD.expected_revision"
+      },
+      {
+       "file": "schema/platform.sql",
+       "contains": "v.digest=NEW.digest AND v.component_id=NEW.component_id AND v.created_at=NEW.version_created_at"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/publications.mjs",
+       "contains": "assert.equal(await db.prepare('SELECT id FROM publication_actions WHERE id=?').bind(foreign.id).first(),null);",
+       "asserts": "another owner's version cannot be targeted"
+      },
+      {
+       "file": "tests/version-removal.mjs",
+       "contains": "assert.deepEqual(await present(child.id),childBefore);",
+       "asserts": "removal affects only the reviewed version"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "A same-ID retry returns the saved turn; concurrent confirms apply once; version removal races admit one.",
+     "enforcedAt": [
+      {
+       "file": "src/chat.ts",
+       "contains": "if (previous) return matches(previous) ? { status: 200 }"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/publications.mjs",
+       "contains": "assert.ok(confirms.every(x=>x.result.status===200),JSON.stringify(confirms));",
+       "asserts": "concurrent same-ID confirms both succeed with one publication"
+      },
+      {
+       "file": "tests/version-removal.mjs",
+       "contains": "assert.deepEqual(results.map(r=>r.status).sort(),[200,409]);assert.equal(await present(racing.id),null);",
+       "asserts": "concurrent removals admit one"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Expiry and expected publication revision are checked at commit; a live version cannot be removed.",
+     "enforcedAt": [
+      {
+       "file": "schema/platform.sql",
+       "contains": "SELECT RAISE(ABORT,'publication_expired') WHERE NEW.expires_at <= strftime"
+      },
+      {
+       "file": "schema/platform.sql",
+       "contains": "SELECT RAISE(ABORT,'version_removal_live') WHERE EXISTS(SELECT 1 FROM publications WHERE version_id=OLD.id);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/publications.mjs",
+       "contains": "assert.equal((await chat(user,'/confirm '+stale.id)).result.status,409);",
+       "asserts": "a review made before a later publication is refused"
+      },
+      {
+       "file": "tests/version-removal.mjs",
+       "contains": "assert.equal((await chat(owner,'/confirm-version-delete '+lr.id)).result.status,409);",
+       "asserts": "a live version cannot be removed"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "site-health",
+   "title": "Website health reports and checks",
+   "privileged": [],
+   "authorityClass": "session owner",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/site-health",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/projects\\/([0-9a-f-]{36})\\/health$/",
+     "methods": [
+      "POST"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Health listing and checks are scoped to the owner's projects.",
+     "enforcedAt": [
+      {
+       "file": "src/site-health.ts",
+       "contains": "const row=await db.prepare(currentSQL).bind(project,user).first<Snapshot>();if(!row)throw new HealthError(404,'Published project not found.');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/site-health.mjs",
+       "contains": "await assert.rejects(checkHealth(scope(other.user),other.user,a.project,transport),{status:404});assert.equal(reads,0);",
+       "asserts": "another owner cannot check a project and no outbound read happens"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "POST /api/projects/:id/health passes the global exact-Origin gate (position machine-checked); GET /api/site-health is read-only.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(method) && !sameOrigin(request)) return error(403, \"Origin check failed\");"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "assert.equal(crossOriginGrant.status,403)",
+       "asserts": "worker.fetch rejects a cross-origin workspace POST with 403 before any handler runs"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "some(p=>p.startsWith('platform dispatch order changed'))",
+       "asserts": "a router moved ahead of the exact-Origin gate is reported; every route is registered with beforeOriginGate"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "cloudflare-dns",
+   "title": "Cloudflare DNS TXT/CNAME review and confirmation",
+   "privileged": [
+    "dns-hosting"
+   ],
+   "authorityClass": "session owner + owned claim/connection + customer-authorized token",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/cloudflare/dns",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/cloudflare/dns/review",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/cloudflare/dns/routing-review",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/cloudflare\\/dns\\/([0-9a-f-]{36})\\/confirm$/",
+     "methods": [
+      "POST"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "DNS reviews are read by review, user and project owner; review creation checks claim/connection ownership.",
+     "enforcedAt": [
+      {
+       "file": "src/cloudflare-dns.ts",
+       "contains": "FROM cloudflare_dns_actions a JOIN projects p ON p.id=a.project_id WHERE a.id=? AND a.user_id=? AND p.owner_user_id=?"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/cloudflare-dns.mjs",
+       "contains": "await assert.rejects(confirm(other,p,r.id),{status:404})",
+       "asserts": "another owner's TXT confirm gets 404"
+      },
+      {
+       "file": "tests/cloudflare-routing.mjs",
+       "contains": "await assert.rejects(confirm(other,p,r.id),{status:404});",
+       "asserts": "another owner's CNAME confirm gets 404"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Mutating methods pass the global exact-Origin gate in handle() before session admission and dispatch (position machine-checked); GET routes are read-only.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(method) && !sameOrigin(request)) return error(403, \"Origin check failed\");"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "assert.equal(crossOriginGrant.status,403)",
+       "asserts": "worker.fetch rejects a cross-origin workspace POST with 403 before any handler runs"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "some(p=>p.startsWith('platform dispatch order changed'))",
+       "asserts": "a router moved ahead of the exact-Origin gate is reported; every route is registered with beforeOriginGate"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "n/a",
+     "detail": "Not required by docs/integrations/cloudflare-dns.md; confirmation relies on the exact review, current token and inventory."
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "The review binds token, zone identity, proof and inventory; a trigger rechecks them when dispatch is claimed.",
+     "enforcedAt": [
+      {
+       "file": "src/cloudflare-dns.ts",
+       "contains": "if(name!==a.zone_name)throw new DomainError(409,'Cloudflare zone identity changed.');"
+      },
+      {
+       "file": "schema/platform.sql",
+       "contains": "SELECT RAISE(ABORT,'cloudflare_dns_stale') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') OR NOT EXISTS("
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/cloudflare-dns.mjs",
+       "contains": "await assert.rejects(confirm(disconnected,off,offReview.id),{status:401});assert.equal(off.posts,0);",
+       "asserts": "a revoked token sends no write"
+      },
+      {
+       "file": "tests/cloudflare-routing.mjs",
+       "contains": "await assert.rejects(confirm(c,cp,cr.id,gate),{status:409});assert.equal(cp.posts,0);",
+       "asserts": "proof, connection or credential races send no write"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "The review->sending claim is a compare-and-swap; later retries only observe and never POST again.",
+     "enforcedAt": [
+      {
+       "file": "src/cloudflare-dns.ts",
+       "contains": "// Once sending is persisted, retries can only observe; they never POST again."
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/cloudflare-dns.mjs",
+       "contains": "assert.equal((await confirm(owner,p,r.id)).state,'applied');assert.equal(p.posts,1);",
+       "asserts": "a double confirm sends one POST"
+      },
+      {
+       "file": "tests/cloudflare-dns.mjs",
+       "contains": "assert.equal((await confirm(unknown,n,nr.id)).state,'uncertain');assert.equal(n.posts,1);",
+       "asserts": "a lost provider response is never resent"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "A changed record inventory is refused; two reviews from one inventory write once. Review expiry is enforced but untested.",
+     "enforcedAt": [
+      {
+       "file": "src/cloudflare-dns.ts",
+       "contains": "if(found.hash!==a.inventory_hash)throw new DomainError(409"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/cloudflare-dns.mjs",
+       "contains": "content:'changed',ttl:1});await assert.rejects(confirm(stale,s,sr.id),{status:409})",
+       "asserts": "a changed record set is refused"
+      },
+      {
+       "file": "tests/cloudflare-dns.mjs",
+       "contains": "await assert.rejects(delayed,{status:409});assert.equal(race.posts,1);",
+       "asserts": "of two reviews from one inventory only one writes"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "cloudflare-connection",
+   "title": "Cloudflare OAuth connection, zones and connection handoff",
+   "privileged": [
+    "connection"
+   ],
+   "authorityClass": "session owner; OAuth state bound to owner and session authority",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/connections\\/(github|cloudflare)\\/handoff$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/connections/cloudflare/start",
+     "methods": [
+      "POST"
+     ],
+     "freshnessCall": true
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/connections/cloudflare/callback",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/connections/cloudflare/disconnect",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/connections/cloudflare/zones",
+     "methods": [
+      "GET"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "OAuth state is bound to the owner and the initiating session authority and claimed once; zone reads use only the owner's token.",
+     "enforcedAt": [
+      {
+       "file": "src/cloudflare-connection.ts",
+       "contains": "UPDATE cloudflare_oauth_states SET claimed=1 WHERE user_id=? AND state_hash=? AND authority_id=? AND claimed=0 AND cancelled=0 AND expires_at>?"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/cloudflare-connection.mjs",
+       "contains": "await assert.rejects(finishCloudflare(scope(other),other,flow.state,'code',config,provider),{status:400});",
+       "asserts": "another owner's callback fails"
+      },
+      {
+       "file": "tests/cloudflare-connection.mjs",
+       "contains": "await assert.rejects(cloudflareZones(scope(other),other,config,1,provider),{status:401});",
+       "asserts": "zones cannot be read with another owner's token"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Start and disconnect pass the global exact-Origin gate (position machine-checked). The GET callback is exempt by design; the owner/session-bound one-use state covers it.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(method) && !sameOrigin(request)) return error(403, \"Origin check failed\");"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "assert.equal(crossOriginGrant.status,403)",
+       "asserts": "worker.fetch rejects a cross-origin workspace POST with 403 before any handler runs"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "some(p=>p.startsWith('platform dispatch order changed'))",
+       "asserts": "a router moved ahead of the exact-Origin gate is reported; every route is registered with beforeOriginGate"
+      },
+      {
+       "file": "tests/cloudflare-connection.mjs",
+       "contains": "origin:'https://evil.test'}}),env)).status,403)",
+       "asserts": "a cross-origin start is refused"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "gap",
+     "detail": "Start requires a fresh passkey (route flag machine-checked, tested). Disconnect does not, while docs/incident-runbooks.md C10 says it needs recent authentication and rate limits.",
+     "gapKind": "control",
+     "finding": "B2",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if(method==='POST'&&pathname==='/api/connections/cloudflare/start'){"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/cloudflare-connection.mjs",
+       "contains": "headers:{'content-type':'application/json',cookie,origin:base}}),env)).status,401);",
+       "asserts": "a stale session cannot start"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "registry says freshnessCall true, source says false",
+       "asserts": "removing a route's requireFreshWorkspace call is reported (route-level freshnessCall is machine-checked)"
+      }
+     ]
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "Fixed callback, PKCE S256, exact granted scopes and an allowlisted provider path; the return path is built from a fixed base.",
+     "enforcedAt": [
+      {
+       "file": "src/cloudflare-connection.ts",
+       "contains": "const callback='https://whumpo.com/api/connections/cloudflare/callback';"
+      },
+      {
+       "file": "src/cloudflare-connection.ts",
+       "contains": "scopes.some(s=>!granted.includes(s))||granted.some(s=>!scopes.includes(s))"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/cloudflare-connection.mjs",
+       "contains": "assert.equal(digest,flow.challenge);",
+       "asserts": "the PKCE verifier matches"
+      },
+      {
+       "file": "tests/cloudflare-connection.mjs",
+       "contains": "assert.equal(callback.headers.get('location'),'/workspace/?connection=cloudflare&connection_error=authorization');",
+       "asserts": "the redirect location is fixed"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "The state is one-use; a lost acknowledgement is recovered.",
+     "enforcedAt": [
+      {
+       "file": "src/cloudflare-connection.ts",
+       "contains": "AND claimed=0 AND cancelled=0 AND expires_at>?"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/cloudflare-connection.mjs",
+       "contains": "await assert.rejects(finishCloudflare(scope(owner),owner,flow.state,'code',config,provider),{status:400});assert.equal(exchanges,1);",
+       "asserts": "a replayed callback makes no second exchange"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Replaced and expired flows fail.",
+     "enforcedAt": [
+      {
+       "file": "src/cloudflare-connection.ts",
+       "contains": "WHERE (cloudflare_oauth_states.claimed=0 OR cloudflare_oauth_states.expires_at<=?)"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/cloudflare-connection.mjs",
+       "contains": "await assert.rejects(finishCloudflare(scope(replacement),replacement,old.state,'code',config,provider),{status:400});",
+       "asserts": "a replaced flow fails"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "github-connection",
+   "title": "GitHub OAuth connection, installations, repositories and app grant revocation",
+   "privileged": [
+    "connection",
+    "deletion"
+   ],
+   "authorityClass": "session owner; OAuth state bound to owner and session authority",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/connections/github/start",
+     "methods": [
+      "POST"
+     ],
+     "freshnessCall": true
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/connections/github/callback",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/connections/github/disconnect",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/connections/github/grant-reviews",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/connections/github/grant-reviews",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/connections\\/github\\/grant-reviews\\/([0-9a-f-]{36})\\/(confirm|cancel)$/",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/connections/github/installations",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/connections/github/repositories",
+     "methods": [
+      "GET"
+     ]
+    }
+   ],
+   "controls": [
+    {
+     "id": "githubGrant/cancel",
+     "recentAuth": false
+    },
+    {
+     "id": "githubGrant/confirm",
+     "recentAuth": true
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "OAuth state is bound to owner and session authority; grant reviews are owner-filtered; repository listing requires an installation the owner holds.",
+     "enforcedAt": [
+      {
+       "file": "src/github-connection.ts",
+       "contains": "UPDATE github_oauth_states SET claimed=1 WHERE user_id=? AND state_hash=? AND authority_id=? AND claimed=0 AND expires_at>?"
+      },
+      {
+       "file": "src/github-grant-revocation.ts",
+       "contains": "SELECT * FROM github_grant_revocations WHERE id=? AND user_id=?"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/github-connection.mjs",
+       "contains": "await assert.rejects(()=>finish(other,s,denied));",
+       "asserts": "another owner's callback fails"
+      },
+      {
+       "file": "tests/github-grant-revocation.mjs",
+       "contains": "await deny(a.confirmGitHubGrant(await other.scope(),other.account,s.reviewId,'REVOKE_APP_ACCESS',s.config,noFetch));",
+       "asserts": "another owner cannot confirm a grant revocation"
+      },
+      {
+       "file": "tests/github-backups.mjs",
+       "contains": "await assert.rejects(()=>githubRepositories(scope(user),user,config,2,1,transport));",
+       "asserts": "an installation the owner does not hold is refused"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Start, disconnect and grant routes pass the global exact-Origin gate (position machine-checked); identity-http.mjs exercises it on the grant-review route. The GET callback is exempt by design (owner/session-bound one-use state).",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(method) && !sameOrigin(request)) return error(403, \"Origin check failed\");"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "assert.equal(crossOriginGrant.status,403)",
+       "asserts": "worker.fetch rejects a cross-origin workspace POST with 403 before any handler runs"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "some(p=>p.startsWith('platform dispatch order changed'))",
+       "asserts": "a router moved ahead of the exact-Origin gate is reported; every route is registered with beforeOriginGate"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "gap",
+     "detail": "Start and app-wide grant revocation require a fresh passkey (tested). Disconnect does not, while docs/incident-runbooks.md C10 says it needs recent authentication and rate limits.",
+     "gapKind": "control",
+     "finding": "B2",
+     "enforcedAt": [
+      {
+       "file": "src/github-grant-revocation.ts",
+       "contains": "await requireFreshWorkspace(db,user);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/github-grant-revocation.mjs",
+       "contains": "await deny(a.confirmGitHubGrant(staleScope,staleActor.account,staleId,'REVOKE_APP_ACCESS',stale.config,noFetch));",
+       "asserts": "a stale session cannot revoke app access"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "registry says freshnessCall true, source says false",
+       "asserts": "removing a route's requireFreshWorkspace call is reported (route-level freshnessCall is machine-checked)"
+      }
+     ]
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "Fixed callback and PKCE; the grant review binds client, GitHub user and exact token set (trigger) and needs the literal REVOKE_APP_ACCESS confirmation.",
+     "enforcedAt": [
+      {
+       "file": "src/github-connection.ts",
+       "contains": "url.searchParams.set('code_challenge_method','S256');"
+      },
+      {
+       "file": "src/index.ts",
+       "contains": "data.confirmation!=='REVOKE_APP_ACCESS')return error(400"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/github-grant-revocation.mjs",
+       "contains": "const replaced=await setup();await connect(replaced.o,replaced.config);await deny(confirm(replaced));",
+       "asserts": "a changed credential set is refused"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "No second code exchange; a lost provider reply or claim reply is not resent.",
+     "enforcedAt": [
+      {
+       "file": "src/github-grant-revocation.ts",
+       "contains": "UPDATE github_grant_revocations SET state='dispatching',dispatched_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND user_id=? AND state='review'"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/github-grant-revocation.mjs",
+       "contains": "assert.equal((await confirm(lost)).state,'uncertain');assert.equal(lostSends,1);",
+       "asserts": "a lost provider reply is not resent"
+      },
+      {
+       "file": "tests/github-connection.mjs",
+       "contains": "const priorExchanges=exchanges;await assert.rejects(()=>finish(user,s,denied));assert.equal(exchanges,priorExchanges);",
+       "asserts": "no second code exchange"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Expired grant reviews cannot dispatch; replaced and expired OAuth flows fail.",
+     "enforcedAt": [
+      {
+       "file": "schema/platform.sql",
+       "contains": "CREATE TRIGGER github_grant_dispatch BEFORE UPDATE OF state ON github_grant_revocations"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/github-grant-revocation.mjs",
+       "contains": "await deny(confirm(expired));assert.equal(await count(expired.o),1);",
+       "asserts": "an expired review cannot dispatch"
+      },
+      {
+       "file": "tests/github-connection.mjs",
+       "contains": "const old=await start(user);const fresh=await start(user);await assert.rejects(()=>finish(user,old,denied));",
+       "asserts": "a replaced flow fails"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "github-backups",
+   "title": "GitHub source backup review and confirmation",
+   "privileged": [
+    "backup"
+   ],
+   "authorityClass": "session owner + customer-authorized repository access",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/github/backups",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/github/backups/review",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/github\\/backups\\/([0-9a-f-]{36})\\/confirm$/",
+     "methods": [
+      "POST"
+     ]
+    }
+   ],
+   "controls": [
+    {
+     "id": "confirm:backup",
+     "recentAuth": false
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Backup reviews join review owner and project owner; the source version must belong to an owned project.",
+     "enforcedAt": [
+      {
+       "file": "src/github-backups.ts",
+       "contains": "SELECT b.* FROM github_backups b JOIN projects p ON p.id=b.project_id WHERE b.id=? AND b.user_id=? AND p.owner_user_id=?"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/github-backups.mjs",
+       "contains": "await assert.rejects(()=>confirmBackup(scope(other),fixture.env.FILES,other,r.id,config,denied));",
+       "asserts": "another owner cannot confirm a backup"
+      },
+      {
+       "file": "tests/github-backups.mjs",
+       "contains": "assert.equal((await request('/github/backups/'+r.id+'/confirm','POST')).status,404);",
+       "asserts": "a foreign HTTP confirm gets 404"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Mutating methods pass the global exact-Origin gate in handle() before session admission and dispatch (position machine-checked); GET routes are read-only.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(method) && !sameOrigin(request)) return error(403, \"Origin check failed\");"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "assert.equal(crossOriginGrant.status,403)",
+       "asserts": "worker.fetch rejects a cross-origin workspace POST with 403 before any handler runs"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "some(p=>p.startsWith('platform dispatch order changed'))",
+       "asserts": "a router moved ahead of the exact-Origin gate is reported; every route is registered with beforeOriginGate"
+      },
+      {
+       "file": "tests/github-backups.mjs",
+       "contains": "assert.equal((await request('/github/backups/review','POST',true,'https://evil.test')).status,403);",
+       "asserts": "a cross-origin review request is refused"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "n/a",
+     "detail": "Not required by docs/integrations/github-backups.md; confirm:backup is not recentAuth (machine-checked). Policy question recorded as an unverified risk: a backup may write to a public repository."
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "Repository ID, visibility, branch, archive SHA-256, token and GitHub user are bound to the review.",
+     "enforcedAt": [
+      {
+       "file": "src/github-backups.ts",
+       "contains": "if(repo.id!==b.repo_id||repo.private!==!!b.repo_private||repo.branch!==b.branch)"
+      },
+      {
+       "file": "src/github-backups.ts",
+       "contains": "await digest(archive)!==b.sha256)throw new ConnectionError(409"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/github-backups.mjs",
+       "contains": "repoPrivate=true;await assert.rejects(()=>confirm(publicReview.id),/visibility/);",
+       "asserts": "a visibility change is refused"
+      },
+      {
+       "file": "tests/github-backups.mjs",
+       "contains": "await assert.rejects(()=>confirm(changedToken.id),/connection changed/);",
+       "asserts": "a changed token is refused"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "Dispatch is claimed once; rechecks are read-only after dispatch; an uncertain write is not repeated.",
+     "enforcedAt": [
+      {
+       "file": "src/github-backups.ts",
+       "contains": "UPDATE github_backups SET state='dispatching',dispatched_at=? WHERE id=? AND user_id=? AND state='pending' AND expires_at>?"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/github-backups.mjs",
+       "contains": "const results=await Promise.all([confirm(r.id),confirm(r.id)]);assert.ok(results.some(x=>x.state==='complete'));assert.equal(writes,1);",
+       "asserts": "concurrent confirms make one write"
+      },
+      {
+       "file": "tests/github-backups.mjs",
+       "contains": "assert.equal((await confirm(before.id)).state,'uncertain');assert.equal(writes,3);",
+       "asserts": "an uncertain write is not repeated"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "The branch head is compared and passed as expectedHeadOid. Review expiry is enforced but untested.",
+     "enforcedAt": [
+      {
+       "file": "src/github-backups.ts",
+       "contains": "if(!existing&&head!==b.base_head)throw new ConnectionError(409"
+      },
+      {
+       "file": "src/github-backups.ts",
+       "contains": "expectedHeadOid:b.base_head,clientMutationId:b.id"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/github-backups.mjs",
+       "contains": "for(const change of [()=>repoId=18,()=>branch='other',()=>head='d'.repeat(40),()=>parentFile=true,()=>remote='wrong',()=>malformed=true])",
+       "asserts": "a changed repository, branch or head is refused"
+      }
+     ]
+    }
+   }
+  }
+ ]
+}
