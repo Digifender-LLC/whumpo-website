@@ -185,6 +185,7 @@
     "test:identity-ceremonies": "node tests/identity-ceremonies.mjs",
     "test:identity-kits": "node tests/identity-kits.mjs",
     "test:identity-recovery": "node tests/identity-recovery.mjs",
+    "test:passkey-key-wrapping-contract": "node tests/passkey-key-wrapping-contract.mjs",
     "test:identity-http": "node tests/identity-http.mjs",
     "test:identity-browser": "node tests/identity-browser.mjs --d1",
     "test:workspace-admission": "node tests/workspace-admission.mjs",
