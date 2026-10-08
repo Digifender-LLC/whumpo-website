@@ -25,10 +25,10 @@ export const workerConfigs=['wrangler.jsonc','wrangler.sites.jsonc','wrangler.ap
 export const tenantHelpers=['assertWorkspace','workspacePredicate','requireFreshWorkspace','workspaceTransport','workspaceBindings','workspacePrincipal','admitWorkspace','assertFeature','featurePredicate','requireFeature','connectionInclusion','inclusionPredicate','requireFeatureScope','featureRequest'];
 export const surfaceLimitations=Object.freeze([
  'Only calls named prepare on a property (`x.prepare(...)` or `x[\'prepare\'](...)`) in src/**/*.ts are SQL sites; a destructured or aliased prepare is not seen. SQL passed to exec, batch strings, or built by another function and passed on is not seen.',
- 'Interpolated and non-literal statements are listed, not resolved. Table-name interpolations (and templates the SQL tokenizer cannot read), concatenations and non-literal arguments are allowlist entries with a reviewed reason and a new one fails the gate. Other interpolated templates (placeholder lists, predicate or column fragments) are counted but not gated, and a table interpolation is recognised only directly after FROM, JOIN, INTO, UPDATE or TABLE.',
+ 'Interpolated and non-literal statements are listed, not resolved. Table-name interpolations (and templates the SQL tokenizer cannot read), concatenations and non-literal arguments are allowlist entries with a reviewed reason and a new one fails the gate. Other interpolated templates (placeholder lists, predicate or column fragments) are counted but not gated, and a table interpolation is recognised only at a table position: directly after FROM, JOIN, INTO, UPDATE (past `OR <action>`) or TABLE, or after a comma of a FROM list at that FROM\'s own parenthesis depth. A table name reached any other way (`PRAGMA table_info(${t})`, `CREATE INDEX ... ON ${t}`, `ALTER TABLE ... RENAME TO ${t}`, or a name assembled outside the template) is not recognised.',
  'Trigger-side writes (a statement can fire triggers that touch other tables) are invisible here; the validator and the SQLite authorizer probe cover trigger text and executed paths.',
  'Helper calls are matched by callee name from the syntax tree, without type resolution, so a same-named local function would be counted.',
- 'Table names are read from the SQL text of literal and static-template statements after FROM, JOIN, INTO, UPDATE and TABLE. A table reached only through an interpolation, a view or a trigger is not named.',
+ 'Table names are read from the SQL text of literal and static-template statements at the same table positions, including each table of a comma-separated FROM list. A table reached only through an interpolation, a view or a trigger is not named.',
  'Nothing here proves that a statement is scoped to the acting tenant, or that all tenant access has been found; two-workspace fixtures with unique markers are the value-level check.',
 ]);
 
@@ -56,19 +56,48 @@ function symbolOf(node){
 }
 
 const SQL_TABLE_KEYWORDS=new Set(['FROM','JOIN','INTO','UPDATE','TABLE']);
-/** Table names read after FROM/JOIN/INTO/UPDATE/TABLE; interpolation markers are reported as dynamic. */
-function sqlTables(sql){
+// A FROM clause's table list ends at the first of these at the clause's own paren depth (`ON CONFLICT` is checked separately).
+const SQL_FROM_LIST_END=new Set(['WHERE','GROUP','HAVING','ORDER','LIMIT','WINDOW','UNION','EXCEPT','INTERSECT','RETURNING']);
+/**
+ * Table names read at table positions: directly after FROM/JOIN/INTO/UPDATE/TABLE (past `UPDATE OR <action>`), and after
+ * each comma of a FROM list at that FROM's own paren depth (`FROM a x, b y, c`). Commas inside parentheses (function
+ * arguments, IN lists, subqueries), in the SELECT list, after ORDER BY/GROUP BY/LIMIT, and inside strings or comments
+ * are never table positions. Interpolation markers are reported as dynamic.
+ */
+export function sqlTables(sql){
  const names=new Set();let dynamicTable=0;
  let tokens;try{tokens=tokenize(sql);}catch{return {names:[],dynamicTable:0,unreadable:true};}
+ const word=t=>t?.type==='id'&&!t.quoted?t.value.toUpperCase():null;
+ const readTable=start=>{
+  let j=start;
+  if(['IF','ONLY'].includes(word(tokens[j]))){while(['IF','NOT','EXISTS','ONLY'].includes(word(tokens[j])))j++;}
+  let n=tokens[j];if(n?.type!=='id')return;
+  if(['SET','SELECT','VALUES','DEFAULT','WHERE'].includes(word(n)))return;
+  let schema=null;
+  if(tokens[j+1]?.type==='punct'&&tokens[j+1].value==='.'&&tokens[j+2]?.type==='id'){schema=n;n=tokens[j+2];}
+  if(n.value.includes('__INTERP_')||schema?.value.includes('__INTERP_'))dynamicTable++;else names.add(n.value);
+ };
+ // inFrom[depth]: the token stream is inside a FROM table list at that paren depth.
+ const inFrom=[false];let depth=0;
  for(let i=0;i<tokens.length-1;i++){
-  const t=tokens[i];
-  if(t.type!=='id'||t.quoted||!SQL_TABLE_KEYWORDS.has(t.value.toUpperCase()))continue;
-  let j=i+1;
-  if(tokens[j]?.type==='id'&&!tokens[j].quoted&&['IF','ONLY'].includes(tokens[j].value.toUpperCase())){while(tokens[j]?.type==='id'&&['IF','NOT','EXISTS','ONLY'].includes(tokens[j].value.toUpperCase()))j++;}
-  let n=tokens[j];if(n?.type!=='id')continue;
-  if(!n.quoted&&['SET','SELECT','VALUES','DEFAULT','WHERE'].includes(n.value.toUpperCase()))continue;
-  if(tokens[j+1]?.type==='punct'&&tokens[j+1].value==='.'&&tokens[j+2]?.type==='id'){n=tokens[j+2];}
-  if(n.value.includes('__INTERP_'))dynamicTable++;else names.add(n.value);
+  const t=tokens[i],w=word(t);
+  if(t.type==='punct'){
+   if(t.value==='('){inFrom[++depth]=false;}
+   else if(t.value===')'){inFrom[depth]=false;depth=Math.max(0,depth-1);}
+   else if(t.value===';'){inFrom.fill(false);}
+   else if(t.value===','&&inFrom[depth])readTable(i+1);
+   continue;
+  }
+  if(w===null)continue;
+  if(inFrom[depth]&&(SQL_FROM_LIST_END.has(w)||(w==='ON'&&word(tokens[i+1])==='CONFLICT'))){inFrom[depth]=false;continue;}
+  if(!SQL_TABLE_KEYWORDS.has(w))continue;
+  // `a IS [NOT] DISTINCT FROM b` compares values; it is not a table list.
+  if(w==='FROM'&&word(tokens[i-1])==='DISTINCT')continue;
+  let start=i+1;
+  // `UPDATE OR ROLLBACK|ABORT|REPLACE|FAIL|IGNORE <table>`: the conflict action is not a table.
+  if(w==='UPDATE'&&word(tokens[start])==='OR'&&word(tokens[start+1])!==null)start+=2;
+  if(w==='FROM')inFrom[depth]=true;
+  readTable(start);
  }
  return {names:[...names],dynamicTable,unreadable:false};
 }
