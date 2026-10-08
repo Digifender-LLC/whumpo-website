@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
-import {extractSurface,checkAllowlist,loadBaseline,surfaceReport,isDynamic,isTableInterpolation,surfaceLimitations,tenantHelpers} from '../tools/tenant-sql-surface.mjs';
+import {extractSurface,sqlTables,checkAllowlist,loadBaseline,surfaceReport,isDynamic,isTableInterpolation,surfaceLimitations,tenantHelpers} from '../tools/tenant-sql-surface.mjs';
 
 // WH-054 packet 1a: the AST report of the SQL surface and its dynamic allowlist. Negative controls replace the
 // source text of a path in memory (the compiler parses a temporary copy); no repository file is touched.
@@ -57,6 +57,73 @@ const hiddenDrift=checkAllowlist(hidden,baseline);
 assert.ok(hiddenDrift.some(p=>/New non-literal SQL site in src\/support\.ts \(probeElementAccess\)/.test(p)),hiddenDrift.join('\n'));
 assert.ok(hiddenDrift.some(p=>/New table-interpolation SQL site in src\/support\.ts \(probeUnreadable\)/.test(p)),hiddenDrift.join('\n'));
 assert.equal(hiddenDrift.length,2,hiddenDrift.join('\n'));
+// Table interpolation after a comma in a FROM list (the old reader only looked directly after FROM/JOIN/INTO/UPDATE/TABLE).
+// `$` marks an interpolated table; each case is read from the SQL token stream by paren depth, so the gate sees it.
+const table='__INTERP_0__';
+const dynamicTables=[
+ ['comma after a table',`SELECT 1 FROM support_requests, ${table} WHERE 1=1`],
+ ['aliased initial table',`SELECT 1 FROM support_requests AS s, ${table} t WHERE s.id=t.id`],
+ ['bare-aliased initial table',`SELECT 1 FROM support_requests s, projects p, ${table} t`],
+ ['after a join condition',`SELECT 1 FROM a JOIN b ON a.id=b.id, ${table}`],
+ ['after a subquery table',`SELECT 1 FROM (SELECT 1 FROM a) q, ${table}`],
+ ['in a nested subquery',`SELECT 1 FROM a WHERE EXISTS (SELECT 1 FROM b x, ${table} y WHERE x.id=y.id)`],
+ ['in a CTE',`WITH c AS (SELECT 1 FROM a, ${table}) SELECT * FROM c`],
+ ['in UPDATE ... FROM',`UPDATE a SET n=1 FROM b, ${table} WHERE a.id=b.id`],
+ ['in DELETE ... IN (SELECT)',`DELETE FROM a WHERE id IN (SELECT id FROM b, ${table})`],
+ ['in INSERT ... SELECT',`INSERT INTO a(x, y) SELECT x, y FROM b, ${table}`],
+ ['quoted',`SELECT 1 FROM a, "${table}"`],
+ ['suffix of a name',`SELECT 1 FROM a, ${table}_events`],
+ ['schema-qualified',`SELECT 1 FROM a, main.${table}`],
+ // Positions that were already read: kept as controls that the new reader did not lose them.
+ ['directly after FROM',`SELECT 1 FROM ${table}`],['after JOIN',`SELECT 1 FROM a JOIN ${table} ON 1`],['after INTO',`INSERT INTO ${table}(x) VALUES (?)`],['after UPDATE',`UPDATE ${table} SET x=1`],['after TABLE',`DROP TABLE IF EXISTS ${table}`],
+ // The same class in the DML table position that used to be missed (the conflict action was read as the table).
+ ['after UPDATE OR REPLACE',`UPDATE OR REPLACE ${table} SET x=1`],
+];
+for(const [name,sql] of dynamicTables){const r=sqlTables(sql);assert.equal(r.dynamicTable,1,`${name}: ${sql}`);assert.equal(r.unreadable,false,name);}
+// Commas that are not table positions: function arguments, SELECT list, IN lists, ORDER/GROUP BY, LIMIT, strings, comments.
+const notTables=[
+ `SELECT coalesce(a, ${table}), ${table} FROM t`,
+ `SELECT ${table}, x FROM t`,
+ `SELECT 1 FROM t WHERE id IN (?, ${table}) AND x=?`,
+ `SELECT 1 FROM t WHERE id IN (${table}, ?) ORDER BY a, ${table}`,
+ `SELECT 1 FROM t GROUP BY a, ${table} HAVING count(*)>0`,
+ `SELECT 1 FROM t ORDER BY a LIMIT ${table}, ?`,
+ `SELECT 1 FROM t WHERE name='x, ${table}'`,
+ `SELECT 1 FROM t /* a, ${table} */ WHERE 1`,
+ `SELECT 1 FROM t -- a, ${table}\nWHERE 1`,
+ `SELECT 1 FROM json_each(?, ${table})`,
+ `SELECT 1 FROM t, json_each(x, ${table})`,
+ `SELECT 1 FROM t WHERE f(a, ${table}) AND g(b, c)`,
+ `SELECT a IS NOT DISTINCT FROM b, ${table} FROM t`,
+ `INSERT INTO t(a, ${table}) VALUES (?, ?)`,
+ `INSERT INTO t(a, b) SELECT a, ${table} FROM s`,
+ `SELECT 1 FROM t UNION SELECT a, ${table}`,
+ `UPDATE t SET a=1, b=${table}`,
+ `UPDATE t SET a=1, b=(SELECT x FROM u WHERE id=?), c=${table}`,
+ `INSERT INTO t SELECT * FROM s WHERE 1 ON CONFLICT(a) DO UPDATE SET a=1, b=${table}`,
+ `DELETE FROM t WHERE id=? RETURNING a, ${table}`,
+ `SELECT 1 FROM a; SELECT x, ${table}`,
+];
+for(const sql of notTables)assert.equal(sqlTables(sql).dynamicTable,0,sql);
+// Names after commas are read once, through aliases, subqueries and CTEs; commas elsewhere do not name tables.
+assert.deepEqual(sqlTables('SELECT a, b FROM t1 x, t2 AS y, (SELECT 1 FROM t3) z, t4 WHERE 1 ORDER BY a, b').names.sort(),['t1','t2','t3','t4']);
+assert.deepEqual(sqlTables('WITH c AS (SELECT 1 FROM t1, t2) SELECT f(a, b), c FROM c, t3').names.sort(),['c','t1','t2','t3']);
+assert.deepEqual(sqlTables('SELECT a, b, c FROM t1 LIMIT 1, 2').names,['t1']);
+assert.deepEqual(sqlTables('UPDATE OR IGNORE t1 SET a=1').names,['t1']);
+// End to end through the gate: only a table interpolation is gated, and the other interpolations stay counted-not-gated.
+const commaProbe=extractSurface({overrides:append('src/support.ts',[
+ 'export function probeCommaTable(db:D1Database,table:string){return db.prepare(`SELECT 1 FROM support_requests s, ${table} t WHERE s.id=t.id`);}',
+ 'export function probeCommaAliased(db:D1Database,table:string){return db.prepare(`SELECT 1 FROM support_requests AS s, ${table} AS t, projects p`);}',
+ 'export function probeCommaNested(db:D1Database,table:string){return db.prepare(`WITH c AS (SELECT 1 FROM support_requests, ${table}) SELECT * FROM c`);}',
+ 'export function probeCommaUpdate(db:D1Database,table:string){return db.prepare(`UPDATE OR REPLACE ${table} SET x=1`);}',
+ // Controls: placeholder lists, column lists, order fragments, function arguments and strings are not table interpolations.
+ 'export function probeListControl(db:D1Database,ids:string[],cols:string,order:string){return db.prepare(`SELECT ${cols}, x FROM support_requests WHERE id IN (${ids.map(()=>"?").join(",")}) ORDER BY ${order}, id LIMIT ?, ?`);}',
+ 'export function probeFunctionControl(db:D1Database,x:string){return db.prepare(`SELECT coalesce(a, ${x}), \'y, ${x}\' FROM support_requests, json_each(?, ${x})`);}',
+].join('\n'))});
+const commaDrift=checkAllowlist(commaProbe,baseline);
+for(const name of ['probeCommaTable','probeCommaAliased','probeCommaNested','probeCommaUpdate'])assert.ok(commaDrift.some(p=>new RegExp(`New table-interpolation SQL site in src/support\\.ts \\(${name}\\)`).test(p)),`${name}:\n${commaDrift.join('\n')}`);
+assert.equal(commaDrift.length,4,commaDrift.join('\n'));
+for(const name of ['probeListControl','probeFunctionControl']){const site=commaProbe.sites.find(s=>s.symbol===name);assert.ok(site&&site.kind==='interpolated-template'&&!isTableInterpolation(site),name);}
 // An entry whose kind no longer matches, and an entry without a reviewed reason, are both rejected.
 const wrongKind=structuredClone(baseline);wrongKind.allowlist.find(a=>a.kind==='non-literal').kind='table-interpolation';
 assert.ok(checkAllowlist(clean,wrongKind).some(p=>/is table-interpolation, the site is now a non-literal/.test(p)));
