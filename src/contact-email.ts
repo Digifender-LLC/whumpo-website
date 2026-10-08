@@ -33,9 +33,11 @@ export function cloudflareEmailOutcome(cause:unknown):ContactProviderOutcome{
 /** Rendered from the catalog templates `contact.new-message@1` and `owner.destination-verification@1`; the text is byte-identical to the WH-036 notices. */
 export function contactEmailMessage(notice:ContactNotice){
  if(notice.kind!=='verification')return renderNotification('contact.new-message@1');
- // A missing or malformed code is refused exactly as before; nothing else is swallowed.
- try{return renderNotification('owner.destination-verification@1',notice.verificationCode===undefined?{}:{code:notice.verificationCode});}
- catch(cause){if(cause instanceof NotificationCatalogError&&cause.code==='INVALID_VARIABLE')throw Error('Invalid verification notice');throw cause;}
+ // A missing, non-string, malformed or oversized code is refused with the one WH-036 error; nothing else is swallowed.
+ const code:unknown=notice.verificationCode;
+ if(typeof code!=='string')throw Error('Invalid verification notice');
+ try{return renderNotification('owner.destination-verification@1',{code});}
+ catch(cause){if(cause instanceof NotificationCatalogError&&(cause.code==='INVALID_VARIABLE'||cause.code==='INPUT_TOO_LARGE'))throw Error('Invalid verification notice');throw cause;}
 }
 export function cloudflareEmailSender(binding:ContactEmailBinding):ContactSender{
  return async(notice)=>{

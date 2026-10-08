@@ -26,6 +26,13 @@ function snapshot(value:unknown,path:string,maxBytes=32768):Json {
  try{return copyJSON(value,maxBytes);}
  catch(cause){if(cause instanceof SpecificationError)throw new NotificationCatalogError(cause.code,path);throw cause;}
 }
+/**
+ * Catalogs a caller may use for rendering, classification or configuration admission: the shipped constant and the frozen private
+ * copies returned by `validateNotificationCatalog`. Membership is the only proof of validation, so a cast, a spread, a clone or a
+ * caller's own JSON is never in it. Opaque: nothing exports or iterates it.
+ */
+const validatedCatalogs=new WeakSet<object>();
+const isValidatedCatalog=(value:unknown):value is NotificationCatalog=>typeof value==='object'&&value!==null&&validatedCatalogs.has(value);
 function deepFreeze<T>(value:T):T {
  if(value&&typeof value==='object'&&!Object.isFrozen(value)){Object.freeze(value);for(const member of Object.values(value))deepFreeze(member);}
  return value;
@@ -126,6 +133,8 @@ export const notificationCatalog:NotificationCatalog=deepFreeze({
    body:[{text:''},{var:'businessName'},{text:' received your appointment request.\n\nReference: '},{var:'reference'},{text:'\nService: '},{var:'service'},{text:'\nPreferred day: '},{var:'day'},{text:'\n\nThis is a request, not a confirmed booking. The business will contact you to confirm.'},...stopSubmitter]})},
  },
 });
+// The shipped constant is the maintained catalog and is trusted by construction; the suite runs `validateNotificationCatalog` over it.
+validatedCatalogs.add(notificationCatalog);
 
 /** Validates one template and returns a private, frozen copy. Nothing is parsed as a template language: text is literal. */
 export function validateNotificationTemplate(input:unknown,path='template'):NotificationTemplate {
@@ -146,7 +155,8 @@ export function validateNotificationTemplate(input:unknown,path='template'):Noti
  for(const [name,variable] of Object.entries<Json>(t.variables)){
   check(/^[a-z][A-Za-z0-9]{0,30}$/.test(name),'INVALID_ID',`${path}.variables.${name}`);
   shape(variable,['source','type'],`${path}.variables.${name}`);
-  check(Object.hasOwn(variableSources,variable.source)&&variableSources[variable.source].includes(variable.type),'INVALID_VARIABLE',`${path}.variables.${name}`);
+  // Source and type are closed string vocabularies: a non-string must not coerce into a property key and skip the checks below.
+  check(typeof variable.source==='string'&&typeof variable.type==='string'&&Object.hasOwn(variableSources,variable.source)&&variableSources[variable.source].includes(variable.type),'INVALID_VARIABLE',`${path}.variables.${name}`);
   // Owner and staff notices are content-free: no visitor-submitted value leaves the private panel by email.
   if(variable.source==='record')check(t.audiences.length===1&&t.audiences[0]==='submitter','CONTENT_IN_NOTICE',`${path}.variables.${name}`);
   if(variable.type==='code')check(t.trigger==='destination.verification','INVALID_VARIABLE',`${path}.variables.${name}`);
@@ -173,14 +183,19 @@ export function validateNotificationTemplate(input:unknown,path='template'):Noti
 }
 
 /** SHA-256 (hex) of the canonical JSON. The canonical text is computed before the first await, so later caller edits cannot change it. */
-export async function templateDigest(templateValue:unknown):Promise<string> {return jsonDigest(templateValue);}
+export async function templateDigest(templateValue:unknown):Promise<string> {
+ try{return await jsonDigest(templateValue);}
+ catch(cause){if(cause instanceof SpecificationError)throw new NotificationCatalogError(cause.code,'template');throw cause;}
+}
 const isoDate=/^\d{4}-\d{2}-\d{2}$/;
 const mailbox=/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
 const catalogBytes=65536;
 
 /**
- * Validates a whole catalog (providers, senders, templates and every pinned template digest) and returns a frozen private copy.
- * Async only because Web Crypto digests are; the input is copied before the first await.
+ * Validates a whole catalog (providers, senders, templates and every pinned template digest) and returns a frozen private copy,
+ * which is registered as validated. Async only because Web Crypto digests are; the input is copied before the first await.
+ * Validation proves shape, closed vocabularies and digest coherence, not approval: only the shipped `notificationCatalog` is the
+ * maintained catalog, and later admission (WH-158/159) decides what a validated catalog may activate.
  */
 export async function validateNotificationCatalog(input:unknown):Promise<NotificationCatalog> {
  const c=snapshot(input,'catalog',catalogBytes);
@@ -235,13 +250,15 @@ export async function validateNotificationCatalog(input:unknown):Promise<Notific
  // Digests are checked after every synchronous rule, so a structural error always wins and no rejected promise is left behind.
  const actual=await Promise.all(pinned.map(([,,templateValue])=>templateDigest(templateValue)));
  pinned.forEach(([path,digest],i)=>check(actual[i]===digest,'DIGEST_MISMATCH',`${path}.digest`));
- return deepFreeze(c);
+ const validated=deepFreeze(c);validatedCatalogs.add(validated);
+ return validated;
 }
 
-/** Classifies a provider error code from the reviewed catalog. Unknown codes, internal errors, throws and timeouts are uncertain. */
-export function classifyProviderError(catalog:Pick<NotificationCatalog,'providers'>,providerId:string,code:string):ProviderErrorClass {
- const e=Object.hasOwn(catalog.providers,providerId)?catalog.providers[providerId].errorClasses:null;
- if(!e)return 'uncertain';
+/** Classifies a provider error code from a validated catalog. Unknown codes, internal errors, throws and timeouts are uncertain. */
+export function classifyProviderError(catalog:NotificationCatalog,providerId:string,code:string):ProviderErrorClass {
+ // Fail closed: a catalog that was not validated, or a non-string provider or code, is uncertain (never resent), not an error.
+ if(!isValidatedCatalog(catalog)||typeof providerId!=='string'||typeof code!=='string'||!Object.hasOwn(catalog.providers,providerId))return 'uncertain';
+ const e=catalog.providers[providerId].errorClasses;
  if(e.suppressed.includes(code))return 'suppressed';
  if(e.notTaken.includes(code))return 'not-taken';
  if(e.rejected.includes(code))return 'rejected';
@@ -252,11 +269,16 @@ export type ValidatedConfiguration={template:NotificationTemplate;readiness:Noti
 /**
  * Customer notification configuration v1: one pinned template, one trigger, one recipient scope, one verified sender, closed
  * text slots and bounded limits. Never an address, header, URL, provider or credential. The configuration and a non-default
- * catalog are copied before the first await, and the result is built only from those copies. Validity does not activate a
- * template: `readiness` is returned so the later admission step (WH-158) can refuse `planned` entries.
+ * catalog are copied before the first await, and the result is built only from those copies. A non-default catalog is first run
+ * through `validateNotificationCatalog` (or must already be its output), so a malformed catalog fails as a
+ * `NotificationCatalogError` before any of it is used. The pinned entry digest, the pinned configuration digest and the canonical
+ * template digest must all agree. Validity does not activate a template: `readiness` is returned so the later admission step
+ * (WH-158) can refuse `planned` entries.
  */
 export async function validateNotificationConfiguration(input:unknown,catalogInput:unknown=notificationCatalog):Promise<ValidatedConfiguration> {
- const cfg=snapshot(input,'configuration'),catalog:NotificationCatalog=catalogInput===notificationCatalog?notificationCatalog:snapshot(catalogInput,'catalog',catalogBytes);
+ const cfg=snapshot(input,'configuration');
+ // The call below copies the catalog synchronously, before its first await.
+ const catalog:NotificationCatalog=isValidatedCatalog(catalogInput)?catalogInput:await validateNotificationCatalog(catalogInput);
  noRelayOrSecret(cfg,'configuration');
  shape(cfg,['contractVersion','id','template','trigger','recipientScope','sender','values','fields','limits'],'configuration');
  check(cfg.contractVersion===notificationContractVersion,'UNSUPPORTED_VERSION','configuration.contractVersion');
@@ -269,6 +291,7 @@ export async function validateNotificationConfiguration(input:unknown,catalogInp
  check(entry.state==='available','TEMPLATE_WITHDRAWN','configuration.template');
  const t=entry.template;
  const [pinned,configurationDigest]=await Promise.all([templateDigest(t),jsonDigest(cfg)]);
+ check(entry.digest===pinned,'DIGEST_MISMATCH','configuration.template');
  check(cfg.template.digest===pinned,'STALE_TEMPLATE','configuration.template.digest');
  check(t.authority==='approved-configuration','PLATFORM_TEMPLATE','configuration.template');
  shape(cfg.trigger,['event','resourceId','formId'],'configuration.trigger');
@@ -322,10 +345,14 @@ export function renderNotificationTemplate(templateValue:unknown,valuesValue:unk
  return {subject,text};
 }
 
-/** Renders a maintained catalog template by key. Withdrawn entries and entries that are not yet source are refused: no fallback to another version. */
-export function renderNotification(key:string,values:unknown={},fields:unknown={},catalogInput:unknown=notificationCatalog):{subject:string;text:string} {
- const catalog:NotificationCatalog=catalogInput===notificationCatalog?notificationCatalog:snapshot(catalogInput,'catalog',catalogBytes);
- check(typeof key==='string'&&plain(catalog.templates)&&Object.hasOwn(catalog.templates,key),'UNKNOWN_TEMPLATE','render.template');
+/**
+ * Renders a catalog template by key. Synchronous, so the catalog must already be validated: the shipped constant or the output of
+ * `validateNotificationCatalog` (anything else, including a cast or a copy, is `UNVALIDATED_CATALOG`). Withdrawn entries and
+ * entries that are not yet source are refused: no fallback to another version. The only production caller passes no catalog.
+ */
+export function renderNotification(key:string,values:unknown={},fields:unknown={},catalog:NotificationCatalog=notificationCatalog):{subject:string;text:string} {
+ check(isValidatedCatalog(catalog),'UNVALIDATED_CATALOG','render.catalog');
+ check(typeof key==='string'&&Object.hasOwn(catalog.templates,key),'UNKNOWN_TEMPLATE','render.template');
  const entry=catalog.templates[key];
  check(entry.state==='available','TEMPLATE_WITHDRAWN','render.template');
  check(renderableReadiness.includes(entry.readiness),'TEMPLATE_NOT_IMPLEMENTED','render.template');

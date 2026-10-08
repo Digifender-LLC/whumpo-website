@@ -30,9 +30,46 @@ const HISTORICAL={
 };
 
 const code=async fn=>{try{await fn();return 'OK';}catch(e){return e.code??`THROWN:${e.message}`;}};
+// Outcome class of a call: its error code, 'OK', or THROWN:<constructor> for anything that is not a NotificationCatalogError (a raw TypeError is a bug).
+const outcome=m=>async fn=>{try{await fn();return 'OK';}catch(e){return e instanceof m.NotificationCatalogError?e.code:`THROWN:${e?.constructor?.name}`;}};
 const walk=(value,seen=new Set())=>{
  if(value===null||typeof value!=='object'||seen.has(value))return [];
  seen.add(value);return [value,...Object.values(value).flatMap(v=>walk(v,seen))];
+};
+
+// Bounded structural sweep, run once against the real module (it is the slowest check and is not a mutation target).
+const sweepMalformed=async m=>{
+ const src=()=>structuredClone(m.notificationCatalog);
+ const kind=outcome(m);
+ const DELETE=Symbol('delete');
+ const junk=[DELETE,null,-1,'',true,[],['record'],{}];
+ const paths=(value,prefix=[])=>value!==null&&typeof value==='object'?[prefix,...Object.entries(value).flatMap(([k,v])=>paths(v,[...prefix,k]))]:[prefix];
+ const edit=(root,path,v)=>{
+  if(path.length===0)return v===DELETE?undefined:v;
+  const copy=structuredClone(root);let node=copy;
+  for(const k of path.slice(0,-1))node=node[k];
+  if(v===DELETE){if(Array.isArray(node))node.splice(Number(path.at(-1)),1);else delete node[path.at(-1)];}else node[path.at(-1)]=v;
+  return copy;
+ };
+ const sweep=async(label,root,run)=>{
+  let calls=0;
+  for(const path of paths(root))for(const v of junk){
+   const mutated=edit(root,path,v);if(mutated===undefined)continue;
+   const result=await kind(()=>run(mutated));calls++;
+   assert.ok(!result.startsWith('THROWN:'),`${label} at ${path.join('.')||'(root)'} = ${v===DELETE?'(deleted)':JSON.stringify(v)} -> ${result}`);
+  }
+  assert.ok(calls>=30,`${label} swept ${calls} mutations`);
+ };
+ await sweep('template',structuredClone(m.notificationCatalog.templates['appointment.request-receipt@1'].template),t=>m.validateNotificationTemplate(t));
+ await sweep('owner template',structuredClone(m.notificationCatalog.templates['owner.destination-verification@1'].template),t=>m.validateNotificationTemplate(t));
+ await sweep('catalog',src(),c=>m.validateNotificationCatalog(c));
+ await sweep('catalog in a configuration',src(),c=>m.validateNotificationConfiguration(structuredClone(standard()[2]),c));
+ await sweep('configuration',structuredClone(standard()[2]),c=>m.validateNotificationConfiguration(c));
+ const receipt=m.notificationCatalog.templates['appointment.request-receipt@1'].template,values={businessName:'Shine',reference:'0A1B2C3D',service:'Full detail',day:'Tuesday'},fields={service:{options:['Full detail']},day:{options:['Tuesday']}};
+ await sweep('render values',values,v=>m.renderNotificationTemplate(receipt,v,fields));
+ await sweep('render fields',fields,f=>m.renderNotificationTemplate(receipt,values,f));
+ for(const bad of [null,5,'x',[],undefined,{}])assert.ok(!(await kind(()=>m.renderNotificationTemplate(bad,values,fields))).startsWith('THROWN:'),`template ${JSON.stringify(bad)}`);
+ for(const key of [null,5,[],{},['contact.new-message@1']])assert.equal(await kind(()=>m.renderNotification(key)),'UNKNOWN_TEMPLATE',`key ${JSON.stringify(key)}`);
 };
 
 async function suite(m){
@@ -70,6 +107,14 @@ async function suite(m){
   assert.throws(()=>Object.setPrototypeOf(c.templates,{}),TypeError);
   // None of the attempts changed what is rendered.
   assert.deepEqual(m.renderNotification('contact.new-message@1'),GOLDEN_NEW_MESSAGE);
+ });
+
+ await test('configuration admission is bound to the pinned entry digest of the shipped catalog',async()=>{
+  for(const cfg of standard()){
+   const key=`${cfg.template.id}@${cfg.template.version}`,entry=m.notificationCatalog.templates[key];
+   assert.equal(cfg.template.digest,entry.digest,`${key}: the pin is the entry digest`);
+   assert.equal(await code(()=>m.validateNotificationConfiguration(structuredClone(cfg))),'OK',cfg.id);
+  }
  });
 
  await test('templates, senders, providers and classification agree with the reference catalog',async()=>{
@@ -122,6 +167,43 @@ async function suite(m){
   await code(()=>m.templateDigest(hooked));assert.equal(hooks,0,'toJSON hooks are never invoked');
  });
 
+ await test('owner and staff notices stay content-free: a non-string source or type cannot bypass the closed vocabulary',async()=>{
+  // Independent of the reference: every case is built from a shipped template and must be refused by the source alone.
+  const staff='appointment.staff-notice@1',owner='contact.new-message@1';
+  const withVariable=(key,variable)=>{const t=structuredClone(m.notificationCatalog.templates[key].template);t.variables.vehicle=variable;t.body.push({text:'\nVehicle: '},{var:'vehicle'});return t;};
+  for(const key of [staff,owner]){
+   assert.equal(await code(()=>m.validateNotificationTemplate(withVariable(key,{source:'record',type:'choice'}))),'CONTENT_IN_NOTICE',`${key}: a record value is refused in an owner or staff notice`);
+   for(const source of [['record'],{},{record:1},['record','config'],[],5,true,null,'Record',' record','record '])
+    for(const type of ['choice',['choice']]){
+     const t=withVariable(key,{source,type});
+     assert.equal(await code(()=>m.validateNotificationTemplate(t)),'INVALID_VARIABLE',`${key} source=${JSON.stringify(source)} type=${JSON.stringify(type)}`);
+     // The same template can neither be rendered nor enter a catalog or a configuration.
+     assert.equal(await code(()=>m.renderNotificationTemplate(t,{vehicle:'Truck'},{vehicle:{options:['Truck']}})),'INVALID_VARIABLE','render');
+     const s=src();s.templates[key].template=t;s.templates[key].digest=await m.templateDigest(t);
+     assert.equal(await code(()=>m.validateNotificationCatalog(s)),'INVALID_VARIABLE','catalog');
+    }
+   for(const type of [['choice'],['number'],{},5,null])assert.equal(await code(()=>m.validateNotificationTemplate(withVariable(key,{source:'record',type}))),'INVALID_VARIABLE',`${key} record type ${JSON.stringify(type)}`);
+  }
+  // Non-string config/platform sources are refused too, including the verification code variable.
+  const verify=structuredClone(m.notificationCatalog.templates['owner.destination-verification@1'].template);
+  for(const source of [['platform'],{},5,null]){verify.variables.code={source,type:'code'};assert.equal(await code(()=>m.validateNotificationTemplate(verify)),'INVALID_VARIABLE',JSON.stringify(source));}
+  verify.variables.code={source:'platform',type:['code']};assert.equal(await code(()=>m.validateNotificationTemplate(verify)),'INVALID_VARIABLE','array type');
+  // Segment, sender and configuration lookups do not coerce arrays or objects into property keys either.
+  const staffT=()=>structuredClone(m.notificationCatalog.templates[staff].template);
+  for(const [name,mutate,expected] of [
+   ['array link',t=>{t.body.push({link:['workspace-records']});},'UNKNOWN_LINK'],
+   ['array variable name',t=>{t.body.push({var:['businessName']});},'UNDECLARED_VARIABLE'],
+   ['object link',t=>{t.body.push({link:{}});},'UNKNOWN_LINK'],
+  ]){const t=staffT();mutate(t);assert.equal(await code(()=>m.validateNotificationTemplate(t)),expected,name);}
+  const cfg=standard()[0];
+  for(const [name,mutate,expected] of [
+   ['array sender',c=>{c.sender=['whumpo-notify'];},'UNKNOWN_SENDER'],['object sender',c=>{c.sender={};},'UNKNOWN_SENDER'],
+   ['array template id',c=>{c.template.id=['appointment.staff-notice'];},'UNKNOWN_TEMPLATE'],['string template version',c=>{c.template.version='1';},'UNKNOWN_TEMPLATE'],
+  ]){const c=structuredClone(cfg);mutate(c);assert.equal(await code(()=>m.validateNotificationConfiguration(c)),expected,name);}
+  for(const providerId of [['cloudflare-email'],{},5,null,undefined])assert.equal(m.classifyProviderError(m.notificationCatalog,providerId,'E_RATE_LIMIT_EXCEEDED'),'uncertain',`provider ${JSON.stringify(providerId)}`);
+  for(const errorCode of [['E_RATE_LIMIT_EXCEEDED'],{},5,null,undefined])assert.equal(m.classifyProviderError(m.notificationCatalog,'cloudflare-email',errorCode),'uncertain',`code ${JSON.stringify(errorCode)}`);
+ });
+
  await test('template and catalog validators agree with the reference on every rejected shape',async()=>{
   const tpl=(key,mutate)=>s=>mutate(s.templates[key].template);
   const staff='appointment.staff-notice@1',receipt='appointment.request-receipt@1',contact='contact.new-message@1',verify='owner.destination-verification@1';
@@ -151,6 +233,13 @@ async function suite(m){
    ['unused variable',tpl(staff,t=>{t.variables.extra={source:'config',type:'text-line'};}),'UNUSED_VARIABLE'],
    ['free-text record variable',tpl(receipt,t=>{t.variables.service.type='text';}),'INVALID_VARIABLE'],
    ['url variable',tpl(staff,t=>{t.variables.businessName={source:'request',type:'url'};}),'INVALID_VARIABLE'],
+   ['array record source in a staff notice',tpl(staff,t=>{t.variables.vehicle={source:['record'],type:'choice'};t.body.push({var:'vehicle'});}),'INVALID_VARIABLE'],
+   ['array record source in a platform owner notice',tpl(contact,t=>{t.variables.msg={source:['record'],type:'choice'};t.body.push({var:'msg'});}),'INVALID_VARIABLE'],
+   ['array variable type',tpl(staff,t=>{t.variables.businessName={source:'config',type:['text-line']};}),'INVALID_VARIABLE'],
+   ['object source',tpl(staff,t=>{t.variables.businessName={source:{},type:'text-line'};}),'INVALID_VARIABLE'],
+   ['array link',tpl(staff,t=>{t.body.push({link:['workspace-records']});}),'UNKNOWN_LINK'],
+   ['array variable reference',tpl(staff,t=>{t.body.push({var:['businessName']});}),'UNDECLARED_VARIABLE'],
+   ['sender on an array provider',s=>{s.senders['whumpo-notify'].provider=['cloudflare-email'];},'UNKNOWN_PROVIDER'],
    ['record value in a staff notice',tpl(staff,t=>{t.variables.vehicle={source:'record',type:'choice'};t.body.push({var:'vehicle'});}),'CONTENT_IN_NOTICE'],
    ['verification code in a non-verification notice',tpl(contact,t=>{t.variables.code={source:'platform',type:'code'};t.body.push({var:'code'});}),'INVALID_VARIABLE'],
    ['over-long body',tpl(staff,t=>{t.body.push({text:'x'.repeat(4001)});}),'TOO_LONG'],
@@ -195,6 +284,68 @@ async function suite(m){
   await expect('accessor in a catalog',s=>{Object.defineProperty(s.senders['whumpo-notify'],'address',{get(){return 'notify@whumpo.com';},enumerable:true});},'INVALID_SHAPE');
  });
 
+ await test('custom catalogs are validated before use: malformed input fails closed and the digest pin cannot be bypassed',async()=>{
+  const staffKey='appointment.staff-notice@1',[staffCfg]=standard();
+  const kind=outcome(m);
+  const repin=async s=>{s.templates[staffKey].digest=await m.templateDigest(s.templates[staffKey].template);return s;};
+  const configFor=async s=>{const cfg=structuredClone(staffCfg);try{cfg.template.digest=await m.templateDigest(s.templates[staffKey].template);}catch{/* a template that cannot be pinned keeps the shipped pin */}return cfg;};
+  const cases=[
+   ['CRLF subject with a matching entry digest and configuration pin',async s=>{s.templates[staffKey].template.subject=[{text:'x\r\nBcc: a@example.test'}];return repin(s);},'HEADER_INJECTION'],
+   ['template without audiences, correctly pinned',async s=>{delete s.templates[staffKey].template.audiences;return repin(s);},'MISSING_FIELD'],
+   ['template without variables, correctly pinned',async s=>{delete s.templates[staffKey].template.variables;return repin(s);},'MISSING_FIELD'],
+   ['record variable in a staff notice, correctly pinned',async s=>{const t=s.templates[staffKey].template;t.variables.vehicle={source:['record'],type:'choice'};t.body.push({var:'vehicle'});return repin(s);},'INVALID_VARIABLE'],
+   ['template over the size bound',async s=>{s.templates[staffKey].template.body.push({text:'x'.repeat(40000)});return s;},'INPUT_TOO_LARGE'],
+   ['negative provider ceiling',s=>{s.providers['cloudflare-email'].ceiling.callsPer32Days=-5;},'INVALID_CEILING'],
+   ['zero provider ceiling',s=>{s.providers['cloudflare-email'].ceiling.callsPer32Days=0;},'INVALID_CEILING'],
+   ['fractional provider ceiling',s=>{s.providers['cloudflare-email'].ceiling.callsPer32Days=1.5;},'INVALID_CEILING'],
+   ['provider ceiling that is not an object',s=>{s.providers['cloudflare-email'].ceiling=5;},'INVALID_SHAPE'],
+   ['providers that are not an object',s=>{s.providers=5;},'INVALID_SHAPE'],
+   ['senders that are null',s=>{s.senders=null;},'INVALID_SHAPE'],
+   ['templates that are an array',s=>{s.templates=[];},'INVALID_SHAPE'],
+   ['entry that is not an object',s=>{s.templates[staffKey]=5;},'INVALID_SHAPE'],
+   ['entry without a template',s=>{delete s.templates[staffKey].template;},'MISSING_FIELD'],
+   ['planned entry relabelled as source with a garbage digest',s=>{s.templates[staffKey].readiness='source';s.templates[staffKey].digest='0'.repeat(64);},'DIGEST_MISMATCH'],
+   ['wrong entry digest (the configuration pin still matches the template)',s=>{s.templates[staffKey].digest='0'.repeat(64);},'DIGEST_MISMATCH'],
+   ['entry digest of another template',s=>{s.templates[staffKey].digest=s.templates['contact.new-message@1'].digest;},'DIGEST_MISMATCH'],
+  ];
+  for(const [name,mutate,expected] of cases){
+   const s=src();await mutate(s);
+   const cfg=await configFor(s);
+   assert.equal(await kind(()=>m.validateNotificationConfiguration(structuredClone(cfg),s)),expected,`configuration: ${name}`);
+   assert.equal(await kind(()=>m.validateNotificationCatalog(s)),expected,`catalog: ${name}`);
+   // Never usable for rendering either: a raw catalog is not accepted by the synchronous renderer.
+   assert.equal(await kind(()=>m.renderNotification('contact.new-message@1',{},{},s)),'UNVALIDATED_CATALOG',`render: ${name}`);
+  }
+  assert.equal(await kind(()=>m.templateDigest({a:'x'.repeat(40000)})),'INPUT_TOO_LARGE','an oversized template digest is a catalog error, not a SpecificationError');
+  // Anything that is not a catalog fails as a catalog error, never as a TypeError.
+  for(const bad of [null,5,'x',true,[],{},{contractVersion:1},{contractVersion:1,providers:{},senders:{},templates:{}},{...src(),extra:1}])
+   assert.notEqual(await kind(()=>m.validateNotificationConfiguration(structuredClone(staffCfg),bad)),'OK',`catalog ${JSON.stringify(bad)?.slice(0,40)}`);
+  for(const bad of [null,5,'x',true,[],{},undefined,{contractVersion:1}]){
+   const result=await kind(()=>m.validateNotificationConfiguration(structuredClone(staffCfg),bad));
+   assert.ok(!result.startsWith('THROWN:'),`${JSON.stringify(bad)} -> ${result}`);
+  }
+  // Only a validated catalog renders. The shipped constant and the validator's output do; casts, spreads, clones and JSON copies do not.
+  const good=src(),validated=await m.validateNotificationCatalog(good);
+  assert.ok(Object.isFrozen(validated)&&walk(validated).every(Object.isFrozen),'the validator returns a deeply frozen copy');
+  assert.notEqual(validated,good);assert.notEqual(validated,m.notificationCatalog);
+  assert.deepEqual(m.renderNotification('contact.new-message@1',{},{},validated),GOLDEN_NEW_MESSAGE);
+  assert.deepEqual(m.renderNotification('contact.new-message@1',{},{},m.notificationCatalog),GOLDEN_NEW_MESSAGE);
+  assert.deepEqual(m.renderNotification('contact.new-message@1'),GOLDEN_NEW_MESSAGE);
+  for(const [name,raw] of [['the unvalidated input',good],['a structured clone of the output',structuredClone(validated)],['a spread of the output',{...validated}],['a JSON copy of the shipped catalog',JSON.parse(JSON.stringify(m.notificationCatalog))],['a frozen JSON copy',Object.freeze(JSON.parse(JSON.stringify(m.notificationCatalog)))],['null',null],['a string',''],['a number',5],['an array',[]],['a promise of the output',Promise.resolve(validated)]])
+   assert.equal(await kind(()=>m.renderNotification('contact.new-message@1',{},{},raw)),'UNVALIDATED_CATALOG',name);
+  assert.equal(m.classifyProviderError(validated,'cloudflare-email','E_RATE_LIMIT_EXCEEDED'),'not-taken');
+  assert.equal(m.classifyProviderError(good,'cloudflare-email','E_RATE_LIMIT_EXCEEDED'),'uncertain','an unvalidated catalog classifies as uncertain');
+  assert.equal(m.classifyProviderError(structuredClone(validated),'cloudflare-email','E_RATE_LIMIT_EXCEEDED'),'uncertain');
+  assert.equal(m.classifyProviderError(null,'cloudflare-email','E_RATE_LIMIT_EXCEEDED'),'uncertain');
+  // A validated catalog is accepted by configuration admission as is; the same data as a plain copy is validated again.
+  assert.equal(await kind(()=>m.validateNotificationConfiguration(structuredClone(staffCfg),validated)),'OK');
+  assert.equal(await kind(()=>m.validateNotificationConfiguration(structuredClone(staffCfg),structuredClone(validated))),'OK');
+  // A planned entry relabelled as source with the right digest is a valid custom catalog; the maintained catalog stays planned.
+  const relabelled=src();relabelled.templates[staffKey].readiness='source';
+  assert.equal((await m.validateNotificationConfiguration(structuredClone(staffCfg),relabelled)).readiness,'source');
+  assert.equal((await m.validateNotificationConfiguration(structuredClone(staffCfg))).readiness,'planned');
+ });
+
  await test('configuration validator agrees with the reference and returns the same digest',async()=>{
   const cfgs=standard();
   for(const cfg of cfgs){
@@ -216,6 +367,8 @@ async function suite(m){
   await bad('scope not offered by the template',c=>{c.recipientScope='submitter';},'SCOPE_NOT_ALLOWED');
   await bad('unknown scope',c=>{c.recipientScope='everyone';},'SCOPE_NOT_ALLOWED');
   await bad('unknown sender',c=>{c.sender='attacker';},'UNKNOWN_SENDER');
+  await bad('array sender',c=>{c.sender=['whumpo-notify'];},'UNKNOWN_SENDER');
+  await bad('array template id',c=>{c.template.id=['appointment.staff-notice'];},'UNKNOWN_TEMPLATE');
   await bad('unverified sender',()=>{},'SENDER_NOT_VERIFIED',s=>{s.senders['whumpo-notify'].state='unverified';});
   await bad('planned sender',()=>{},'SENDER_NOT_VERIFIED',s=>{s.senders['whumpo-notify'].state='planned';});
   await bad('unreviewed provider',()=>{},'UNREVIEWED_PROVIDER',s=>{s.providers['cloudflare-email'].review=null;});
@@ -318,19 +471,23 @@ async function suite(m){
    assert.equal(await code(()=>m.renderNotification(key,{businessName:'Shine',reference:'0A1B2C3D',service:'Full detail',day:'Tuesday'},{service:{options:['Full detail']},day:{options:['Tuesday']}})),'TEMPLATE_NOT_IMPLEMENTED',key);
   for(const key of ['nope@1','contact.new-message@2','constructor','__proto__','toString',''])assert.equal(await code(()=>m.renderNotification(key)),'UNKNOWN_TEMPLATE',key);
   // A synthetic catalog cannot raise readiness by adding or editing an entry either: the readiness is data, and only source/live-accepted render.
+  // (The synchronous renderer accepts only validated catalogs, so each variant goes through the validator first.)
   const s=src(),entry=structuredClone(s.templates['contact.new-message@1']);
-  for(const readiness of ['planned','synthetic-conformant'])assert.equal(await code(()=>m.renderNotification('contact.new-message@1',{},{},{...s,templates:{...s.templates,'contact.new-message@1':{...entry,readiness}}})),'TEMPLATE_NOT_IMPLEMENTED',readiness);
-  assert.equal(await code(()=>m.renderNotification('contact.new-message@1',{},{},{...s,templates:{...s.templates,'contact.new-message@1':{...entry,state:'withdrawn'}}})),'TEMPLATE_WITHDRAWN');
-  assert.equal(await code(()=>m.renderNotification('contact.new-message@1',{},{},s)),'OK');
+  const variant=patch=>m.validateNotificationCatalog({...s,templates:{...s.templates,'contact.new-message@1':{...entry,...patch}}});
+  for(const readiness of ['planned','synthetic-conformant'])assert.equal(await code(async()=>m.renderNotification('contact.new-message@1',{},{},await variant({readiness}))),'TEMPLATE_NOT_IMPLEMENTED',readiness);
+  assert.equal(await code(async()=>m.renderNotification('contact.new-message@1',{},{},await variant({state:'withdrawn'}))),'TEMPLATE_WITHDRAWN');
+  assert.equal(await code(async()=>m.renderNotification('contact.new-message@1',{},{},await m.validateNotificationCatalog(s))),'OK');
   // A configuration over a withdrawn entry is refused; a stale pin is refused; there is no fallback to another version.
   const [cfg]=standard();
   const w=src();w.templates['appointment.staff-notice@1'].state='withdrawn';
   assert.equal(await code(()=>m.validateNotificationConfiguration(structuredClone(cfg),w)),'TEMPLATE_WITHDRAWN');
   const v2=src();v2.templates['appointment.staff-notice@2']=structuredClone(v2.templates['appointment.staff-notice@1']);v2.templates['appointment.staff-notice@2'].template.version=2;
+  v2.templates['appointment.staff-notice@2'].digest=await m.templateDigest(v2.templates['appointment.staff-notice@2'].template);
   const stale={...structuredClone(cfg),template:{...cfg.template,version:2}};
   assert.equal(await code(()=>m.validateNotificationConfiguration(stale,v2)),'STALE_TEMPLATE','a different version has a different digest');
   const same=src();same.templates['appointment.staff-notice@1'].template.subject[0]={text:'Edited '};
-  assert.equal(await code(()=>m.validateNotificationConfiguration(structuredClone(cfg),same)),'STALE_TEMPLATE','a template edit makes every old pin stale');
+  same.templates['appointment.staff-notice@1'].digest=await m.templateDigest(same.templates['appointment.staff-notice@1'].template);
+  assert.equal(await code(()=>m.validateNotificationConfiguration(structuredClone(cfg),same)),'STALE_TEMPLATE','a template edit (re-pinned in the catalog) makes every old configuration pin stale');
   // A valid configuration over a planned template reports it as planned so the later admission step can refuse it.
   assert.equal((await m.validateNotificationConfiguration(structuredClone(cfg))).readiness,'planned');
   // The catalog validator accepts planned entries and does not change them.
@@ -383,6 +540,7 @@ let total=0;
 const checkOnce=async(name,fn)=>{try{await fn();total++;}catch(error){throw new Error(name,{cause:error});}};
 const real=await load(catalogEntry);
 total+=await suite(real);
+await checkOnce('malformed templates, catalogs, configurations and values fail only as NotificationCatalogError',()=>sweepMalformed(real));
 
 // ---------- Contact notices through the catalog (read-only agreement with the WH-036 runtime) ----------
 let rt;
@@ -402,8 +560,15 @@ await checkOnce('contact new-message and verification notices are byte-identical
  // The same text comes from the reference.
  assert.deepEqual(message,ref.render(ref.notificationCatalog.templates['contact.new-message@1'].template,{}));
  assert.deepEqual(verification,ref.render(ref.notificationCatalog.templates['owner.destination-verification@1'].template,{code:'ABCD2345'}));
- for(const bad of [undefined,'','bad code','abcd2345','ABCD234','ABCD23456',null,5,['ABCD2345'],{}])
-  assert.throws(()=>rt.contactEmailMessage({...base,kind:'verification',verificationCode:bad}),e=>e.message==='Invalid verification notice'&&e.code===undefined,String(bad));
+ // Typed invalid codes (string or undefined) are refused with the same plain Error as WH-036 (six cases; the old function threw for each).
+ const refused=e=>e.constructor===Error&&e.message==='Invalid verification notice'&&e.code===undefined;
+ for(const bad of [undefined,'','bad code','abcd2345','ABCD234','ABCD23456'])
+  assert.throws(()=>rt.contactEmailMessage({...base,kind:'verification',verificationCode:bad}),refused,String(bad));
+ // Values that violate the ContactNotice type (it is string | undefined) are refused with the same error. WH-036 coerced some of them to a string
+ // and sent them (['ABCD2345'], 12345678, an object whose toString() was valid): that accident is deliberately not preserved. The code is a
+ // server-generated [A-Z0-9]{8} from D1, so no such value is reachable. An oversized code is refused with the same error, not a catalog error.
+ for(const bad of [null,5,12345678,['ABCD2345'],{},{toString:()=>'ABCD2345'},1n,Symbol('x'),()=>1,'A'.repeat(5000)])
+  assert.throws(()=>rt.contactEmailMessage({...base,kind:'verification',verificationCode:bad}),refused,typeof bad);
  // The caller contract is unchanged: synchronous, and both notice kinds render without any await.
  assert.ok(!(rt.contactEmailMessage({...base,kind:'new_message'}) instanceof Promise));
 });
@@ -460,10 +625,20 @@ const mutants=[
  ['registries are no longer deeply frozen',"if(value&&typeof value==='object'&&!Object.isFrozen(value)){","if(false){",'registries and the catalog are deeply frozen'],
  ['only a shallow freeze',"Object.freeze(value);for(const member of Object.values(value))deepFreeze(member);","Object.freeze(value);",'registries and the catalog are deeply frozen'],
  ['pinned digest not enforced in the catalog',"check(actual[i]===digest,'DIGEST_MISMATCH'","check(true,'DIGEST_MISMATCH'",'source validators are stricter'],
- ['digest is not of the canonical text',"{return jsonDigest(templateValue);}","{return jsonDigest(JSON.stringify(templateValue).length);}",'templates, senders, providers'],
+ ['digest is not of the canonical text',"try{return await jsonDigest(templateValue);}","try{return await jsonDigest(JSON.stringify(templateValue).length);}",'configuration admission is bound'],
  ['relay keys allowed',"check(!relayKeys.includes(key.toLowerCase()),'OPEN_RELAY'","check(true,'OPEN_RELAY'",'template and catalog validators'],
  ['template language allowed',"check(!/\\{\\{|\\}\\}|\\$\\{/.test(s.text),'TEMPLATE_SYNTAX',at);","",'template and catalog validators'],
- ['record values allowed in owner/staff notices',"if(variable.source==='record')check(","if(false)check(",'template and catalog validators'],
+ ['record values allowed in owner/staff notices',"if(variable.source==='record')check(","if(false)check(",'owner and staff notices stay content-free'],
+ ['non-string source or type coerced into a property key',"check(typeof variable.source==='string'&&typeof variable.type==='string'&&Object.hasOwn(","check(Object.hasOwn(",'owner and staff notices stay content-free'],
+ ['non-string link coerced into a property key',"check(multiline&&typeof s.link==='string'&&Object.hasOwn(platformLinks,s.link)","check(multiline&&Object.hasOwn(platformLinks,s.link)",'owner and staff notices stay content-free'],
+ ['non-string variable name coerced into a property key',"check(typeof s.var==='string'&&Object.hasOwn(t.variables,s.var)","check(Object.hasOwn(t.variables,s.var)",'owner and staff notices stay content-free'],
+ ['shipped pinned digest disagrees with its template',"digest:'16c4a9053f54c1257774ac5a5d7f3620b74bcc6cf9d6f5eab6020dedf8d47f70'","digest:'0000000000000000000000000000000000000000000000000000000000000000'",'configuration admission is bound'],
+ ['custom catalog used without validation',"await validateNotificationCatalog(catalogInput)","snapshot(catalogInput,'catalog',catalogBytes)",'custom catalogs are validated'],
+ ['renderer accepts an unvalidated catalog',"check(isValidatedCatalog(catalog),'UNVALIDATED_CATALOG','render.catalog');","",'custom catalogs are validated'],
+ ['validated catalogs are not registered',"validatedCatalogs.add(validated);","",'custom catalogs are validated'],
+ ['any object counts as a validated catalog',"typeof value==='object'&&value!==null&&validatedCatalogs.has(value)","typeof value==='object'&&value!==null",'custom catalogs are validated'],
+ ['classifier trusts an unvalidated catalog',"if(!isValidatedCatalog(catalog)||typeof providerId","if(typeof providerId",'custom catalogs are validated'],
+ ['oversized digest escapes as a specification error',"if(cause instanceof SpecificationError)throw new NotificationCatalogError(cause.code,'template');throw cause;","throw cause;",'custom catalogs are validated'],
  ['links allowed in the subject',"check(multiline&&typeof s.link==='string'","check(typeof s.link==='string'",'template and catalog validators'],
  ['stale pin accepted',"check(cfg.template.digest===pinned,'STALE_TEMPLATE'","check(true,'STALE_TEMPLATE'",'configuration validator agrees'],
  ['withdrawn template configurable',"check(entry.state==='available','TEMPLATE_WITHDRAWN','configuration.template');","",'configuration validator agrees'],
@@ -475,7 +650,7 @@ const mutants=[
  ['markup allowed in text-line values',"&&!/[<>]/.test(v)&&!urlOrAddress(v)","&&!urlOrAddress(v)",'configuration validator agrees'],
  ['planned templates renderable',"check(renderableReadiness.includes(entry.readiness),'TEMPLATE_NOT_IMPLEMENTED','render.template');","",'planned, withdrawn and unknown'],
  ['withdrawn templates renderable',"check(entry.state==='available','TEMPLATE_WITHDRAWN','render.template');","",'planned, withdrawn and unknown'],
- ['configuration not copied before the first await',"const cfg=snapshot(input,'configuration'),catalog","const cfg=input,catalog",'async validators copy'],
+ ['configuration not copied before the first await',"const cfg=snapshot(input,'configuration');","const cfg=input;",'async validators copy'],
  ['accessors read instead of refused',"try{return copyJSON(value,maxBytes);}","try{return value;}",'source validators are stricter'],
  ['suppression no longer classified',"if(e.suppressed.includes(code))return 'suppressed';","",'templates, senders, providers'],
 ];

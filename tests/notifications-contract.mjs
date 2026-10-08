@@ -107,6 +107,10 @@ async function suite(m){
  });
  await test('owner and staff notices are content-free; free-text record values never become variables',()=>{
   const t=clone().templates['appointment.staff-notice@1'].template;t.variables.vehicle={source:'record',type:'choice'};t.body.push({var:'vehicle'});throws(()=>m.validateTemplate(t),'CONTENT_IN_NOTICE');
+  // A non-string source must not coerce into a property key and skip the rule (staff template and platform owner template).
+  for(const [key,source] of [['appointment.staff-notice@1',['record']],['contact.new-message@1',['record']],['appointment.staff-notice@1',{}]]){
+   const u=clone().templates[key].template;u.variables.vehicle={source,type:'choice'};u.body.push({var:'vehicle'});throws(()=>m.validateTemplate(u),'INVALID_VARIABLE');
+  }
   const {rt}=setup({configure:false});const c={...receiptCfg(),fields:{service:'vehicle',day:'day'}};
   throws(()=>rt.configure(ownerA,P,c,m.prepareReview(c)),'FREE_TEXT_VARIABLE');
  });
@@ -311,7 +315,7 @@ await checkOnce('the catalog re-expresses the existing contact notices byte for 
  assert.deepEqual(real.render(t['owner.destination-verification@1'].template,{code:'ABCD2345'}),src.contactEmailMessage({outboxId:'o',idempotencyKey:'k',kind:'verification',projectId:'p',recipient:'owner@example.test',verificationCode:'ABCD2345'}));
 });
 await checkOnce('the source catalog (src/notification-catalog.ts) and renderer agree with the reference catalog',async()=>{
- // WH-155: the agreement is checked against the maintained TypeScript catalog; the reference validators are not changed to match it.
+ // WH-155: the agreement is checked against the maintained TypeScript catalog. The reference changed only to close the key-coercion flaw (non-string source/var/link/sender/template/provider); it is not otherwise changed to match.
  const bundled=await build({stdin:{contents:"export * from './src/notification-catalog';",resolveDir:process.cwd(),loader:'ts'},bundle:true,format:'esm',platform:'neutral',write:false,logLevel:'silent'});
  const cat=await import('data:text/javascript;base64,'+Buffer.from(bundled.outputFiles[0].text).toString('base64'));
  const rc=real.notificationCatalog,sc=cat.notificationCatalog;
@@ -373,6 +377,7 @@ const mutants=[
  ['review price not bound',"check(canonical(review.price)===canonical(v.price),'PRICE_MISMATCH','review.price');",''],
  ['render does not validate values',"check(variableTypes[spec.type](v,fields[name]),'INVALID_VARIABLE'","check(true,'INVALID_VARIABLE'"],
  ['content allowed in owner/staff notices',"if(v.source==='record')check(","if(false)check("],
+ ['non-string source coerced into a property key',"check(typeof v.source==='string'&&typeof v.type==='string'&&Object.hasOwn(","check(Object.hasOwn("],
  ['lost response retried',"else{move(n,'unknown-outcome','uncertain');n.uncertainAt=now;result.uncertain++;}","else{move(n,'deferred','uncertain');n.dueAt=now;result.deferred++;}"],
  ['interrupted dispatch requeued',"move(n,'unknown-outcome','interrupted');n.uncertainAt=now;","n.state='queued';n.history.push('queued');"],
  ['unknown outcome may be cancelled',"check(['queued','deferred'].includes(n.state),'CANNOT_RECALL',n.state);move(n,'cancelled','owner-cancelled');","check(n.state!=='cancelled','CANNOT_RECALL',n.state);n.state='cancelled';"],
@@ -391,7 +396,7 @@ const mutants=[
 const killedBy={
  'open relay keys accepted':'caller-supplied recipients','unknown configuration version accepted':'unknown contract versions',
  'unverified sender accepted':'an unverified or unknown sender','unpriced provider accepted':'an unpriced, unreviewed','review price not bound':'an unpriced, unreviewed',
- 'render does not validate values':'template and value injection','content allowed in owner/staff notices':'owner and staff notices are content-free',
+ 'render does not validate values':'template and value injection','content allowed in owner/staff notices':'owner and staff notices are content-free','non-string source coerced into a property key':'owner and staff notices are content-free',
  'lost response retried':'a lost provider response','interrupted dispatch requeued':'an interrupted worker','unknown outcome may be cancelled':'a lost provider response',
  'owner retry of an uncertain notice':'a lost provider response','revoked staff not rechecked':'a recipient revoked',
  'bounce does not suppress':'authenticated bounce events','unauthenticated events applied':'authenticated bounce events','duplicate events re-applied':'authenticated bounce events',
