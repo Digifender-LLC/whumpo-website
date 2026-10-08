@@ -10,6 +10,7 @@ import {visitorPrincipal} from './shared-modules/access';
 import {ModuleError,moduleRequest} from './shared-modules/policy';
 import {publicClientKey,reservePublicClient,PublicClientLimitError} from './public-admission';
 import {verifyTurnstile} from './turnstile';
+import {servingStopped} from './operator-serving';
 import type {AuthenticationResponseJSON,RegistrationResponseJSON} from '@simplewebauthn/server';
 
 type AppEnv = Pick<Env,'DB'|'ENVIRONMENT'|'AUTH_LIMITER'|'API_LIMITER'|'BACKEND_RUNTIME'|'TURNSTILE_SECRET'> & {FILES?:R2Bucket};
@@ -73,6 +74,12 @@ export async function applicationGateway(request:Request,env:AppEnv,fetcher:type
   }
   const deletionStatus=path.match(new RegExp(`^account/deletions/(${uuid})/(0|[1-9][0-9]{0,15})$`));
   if(method==='GET'&&deletionStatus)return json(await readAppDeletion(env.DB,session,project,deletionStatus[1],Number(deletionStatus[2])));
+  // Operator serving stop: only a visitor's own sign-in, recovery, passkey replacement, sign-out, saved-data and
+  // request-receipt reads, export and deletion stay available, so existing visitors keep access to their stored data.
+  // New signups, modules, configuration and execution are refused with the same response as an application without a
+  // live page; the visitor page treats that configuration answer as its account-only view.
+  if(await servingStopped(env.DB,project)&&!(method==='GET'&&(path==='export'||path==='data'||new RegExp(`^receipts/${uuid}$`).test(path)))&&!(method==='POST'&&(path==='account/deletion-review'||path==='auth/recover'||path==='auth/logout'||/^auth\/(login|add)\/(options|verify)$/.test(path))))
+   return json({error:'Application page unavailable'},404);
   // WH-126 shared module requests (whumpo-modules v1), same-origin POST only. The principal is derived solely from this
   // project's visitor session cookie (never a workspace cookie); module serving checks the instance's own activation.
   // WH-128 module uploads: one cleaned-JPEG body (at most 1 MiB, streamed with a hard bound) with the whumpo-modules v1

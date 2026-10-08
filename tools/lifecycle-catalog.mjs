@@ -49,7 +49,9 @@ const unlinkedOwnership={
  safety_disclosures:'Two-person lawful-disclosure manifest owned through safety_cases, deliberately outside the account cascade (WH-132).',
  safety_disclosure_items:'Manifest items owned through safety_disclosures and safety_evidence_objects, deliberately outside the account cascade (WH-132).',
  safety_retention_decisions:'Append-only operator retention decisions (extend or release at the one-year review) owned through safety_cases, deliberately outside the account cascade (WH-132).',
- operator_containments:'Operator containment audit keyed by subject account or project id without a foreign key, so closure is neither blocked nor erases the record; expires within 30 days and is never deleted (WH-050 F7).',
+ operator_containments:'Operator containment and serving-stop audit keyed by subject account or project id without a foreign key, so closure is neither blocked nor erases the record; expires within 30 days, stays until an explicit lift or close, then is deleted only by reviewed cleanup 90 days after resolution outside safety holds (WH-050 F7, owner decision October 8, 2026).',
+ operator_session_revocations:'Operator workspace session revocation receipt keyed by account id without a foreign key, so closure is neither blocked nor erases it; deleted only by reviewed cleanup 90 days after revocation outside safety holds (WH-050, owner decision October 8, 2026).',
+ operator_retention_receipts:'Platform operator cleanup receipts listing the opaque ids of deleted operator records; no account, project or reason content; deleted only by a later reviewed cleanup 90 days after creation (WH-050).',
  file_cleanup:'Physical object deletion queue keyed by object_key, with project/owner identifiers copied without foreign keys so preservation holds can retain queued objects. Never expose keys in customer reports.'
 };
 export async function currentLifecycleSchema(directory=root){

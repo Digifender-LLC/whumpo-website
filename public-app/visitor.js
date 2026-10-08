@@ -45,7 +45,7 @@
     root.replaceChildren(render(value));
   }
 
-  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/bufferToBase64URLString.js
+  // ../../../node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/bufferToBase64URLString.js
   function bufferToBase64URLString(buffer) {
     const bytes = new Uint8Array(buffer);
     let str = "";
@@ -56,7 +56,7 @@
     return base64String.replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
   }
 
-  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/base64URLStringToBuffer.js
+  // ../../../node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/base64URLStringToBuffer.js
   function base64URLStringToBuffer(base64URLString) {
     const base64 = base64URLString.replace(/-/g, "+").replace(/_/g, "/");
     const padLength = (4 - base64.length % 4) % 4;
@@ -70,7 +70,7 @@
     return buffer;
   }
 
-  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/browserSupportsWebAuthn.js
+  // ../../../node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/browserSupportsWebAuthn.js
   function browserSupportsWebAuthn() {
     return _browserSupportsWebAuthnInternals.stubThis(globalThis?.PublicKeyCredential !== void 0 && typeof globalThis.PublicKeyCredential === "function");
   }
@@ -78,7 +78,7 @@
     stubThis: (value) => value
   };
 
-  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/toPublicKeyCredentialDescriptor.js
+  // ../../../node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/toPublicKeyCredentialDescriptor.js
   function toPublicKeyCredentialDescriptor(descriptor) {
     const { id } = descriptor;
     return {
@@ -89,7 +89,7 @@
     };
   }
 
-  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/isValidDomain.js
+  // ../../../node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/isValidDomain.js
   function isValidDomain(hostname) {
     return (
       // Consider localhost valid as well since it's okay wrt Secure Contexts
@@ -98,7 +98,7 @@
     );
   }
 
-  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/webAuthnError.js
+  // ../../../node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/webAuthnError.js
   var WebAuthnError = class extends Error {
     constructor({ message: message2, code, cause, name }) {
       super(message2, { cause });
@@ -113,7 +113,7 @@
     }
   };
 
-  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/identifyRegistrationError.js
+  // ../../../node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/identifyRegistrationError.js
   function identifyRegistrationError({ error, options }) {
     const { publicKey } = options;
     if (!publicKey) {
@@ -209,7 +209,7 @@
     return error;
   }
 
-  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/webAuthnAbortService.js
+  // ../../../node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/webAuthnAbortService.js
   var BaseWebAuthnAbortService = class {
     constructor() {
       Object.defineProperty(this, "controller", {
@@ -240,7 +240,7 @@
   };
   var WebAuthnAbortService = new BaseWebAuthnAbortService();
 
-  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/toAuthenticatorAttachment.js
+  // ../../../node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/toAuthenticatorAttachment.js
   var attachments = ["cross-platform", "platform"];
   function toAuthenticatorAttachment(attachment) {
     if (!attachment) {
@@ -252,7 +252,7 @@
     return attachment;
   }
 
-  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/methods/startRegistration.js
+  // ../../../node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/methods/startRegistration.js
   async function startRegistration(options) {
     if (!options.optionsJSON && options.challenge) {
       console.warn("startRegistration() was not called correctly. It will try to continue with the provided options, but this call should be refactored to use the expected call structure instead. See https://simplewebauthn.dev/docs/packages/browser#typeerror-cannot-read-properties-of-undefined-reading-challenge for more information.");
@@ -342,7 +342,7 @@
 `, cause);
   }
 
-  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/browserSupportsWebAuthnAutofill.js
+  // ../../../node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/browserSupportsWebAuthnAutofill.js
   function browserSupportsWebAuthnAutofill() {
     if (!browserSupportsWebAuthn()) {
       return _browserSupportsWebAuthnAutofillInternals.stubThis(new Promise((resolve) => resolve(false)));
@@ -357,7 +357,7 @@
     stubThis: (value) => value
   };
 
-  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/identifyAuthenticationError.js
+  // ../../../node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/identifyAuthenticationError.js
   function identifyAuthenticationError({ error, options }) {
     const { publicKey } = options;
     if (!publicKey) {
@@ -402,7 +402,7 @@
     return error;
   }
 
-  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/methods/startAuthentication.js
+  // ../../../node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/methods/startAuthentication.js
   async function startAuthentication(options) {
     if (!options.optionsJSON && options.challenge) {
       console.warn("startAuthentication() was not called correctly. It will try to continue with the provided options, but this call should be refactored to use the expected call structure instead. See https://simplewebauthn.dev/docs/packages/browser#typeerror-cannot-read-properties-of-undefined-reading-challenge for more information.");
@@ -495,6 +495,7 @@
   } catch {
   }
   var config;
+  var accountOnly = false;
   var revision = 0;
   var busy = false;
   var recovered = false;
@@ -568,8 +569,26 @@
     revision = data.revision;
     showData(data.state);
   }
+  function accountView() {
+    accountOnly = true;
+    config = void 0;
+    $("#title").textContent = "Your application account";
+    document.title = "Your application account \u2014 Whumpo";
+    $("#description").textContent = "This application isn\u2019t available right now. You can still sign in to see, download or delete your saved information, recover your account and manage your passkeys.";
+    $("#join").closest("details").hidden = true;
+    $("#application-form").hidden = true;
+    $("#fields").replaceChildren();
+  }
   async function loadConfig() {
-    config = await api("config");
+    try {
+      config = await api("config");
+    } catch (error) {
+      if (error.status !== 404) throw error;
+      accountView();
+      return;
+    }
+    accountOnly = false;
+    $("#join").closest("details").hidden = false;
     $("#title").textContent = config.form.title;
     document.title = config.form.title + " \u2014 Whumpo";
     $("#description").textContent = config.form.description;
@@ -620,7 +639,7 @@
         await refresh();
       }
       $("#check-request").hidden = !pending;
-      $("#application-form").hidden = !!pending;
+      $("#application-form").hidden = !!pending || accountOnly;
     } catch (error) {
       if (error.status !== 404) throw error;
       await refresh();
@@ -628,8 +647,8 @@
         remember(null);
         idConflict = false;
       }
-      $("#result").textContent = "We haven\u2019t found a saved result yet. Review your latest information below, then you can submit again safely.";
-      $("#application-form").hidden = false;
+      $("#result").textContent = accountOnly ? "We haven\u2019t found a saved result for your last request. Review your latest information below." : "We haven\u2019t found a saved result yet. Review your latest information below, then you can submit again safely.";
+      $("#application-form").hidden = accountOnly;
       $("#check-request").hidden = false;
       $("#saved-data").closest("details").open = true;
     }
@@ -639,7 +658,8 @@
     await refresh();
     $("#signin").hidden = true;
     $("#workspace").hidden = false;
-    $("#application-form").hidden = false;
+    $("#application-form").hidden = accountOnly;
+    if (accountOnly) $("#saved-data").closest("details").open = true;
     $("#passkey-hint").textContent = recovered ? "Add a replacement passkey now. Recovery removed your old passkeys." : "Keep a backup passkey so you can sign in from another device.";
     if (pending) await receipt();
   }
@@ -785,6 +805,7 @@
   $("#check-request").onclick = () => act(receipt);
   $("#application-form").onsubmit = (event) => {
     event.preventDefault();
+    if (accountOnly) return;
     act(async () => {
       const input = /* @__PURE__ */ Object.create(null);
       for (const field of config.form.fields) {
