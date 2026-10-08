@@ -23,6 +23,7 @@ import {workerOrder,configFiles,fileInventory,copyTree} from '../tools/release-m
 import {runWrangler} from '../tools/cms-release.mjs';
 import {fixtureEnvironment} from '../tools/verify.mjs';
 import {createRestoreInventory,openRestoreInventory} from '../tools/restore-inventory.mjs';
+import {syntheticPlatform} from './helpers/synthetic-platform.mjs';
 import {inspectIsolatedRestore} from '../tools/restore-admission.mjs';
 import {restoreCapturedCMSDatabase,captureCMSDatabase} from '../tools/cms-database-snapshot.mjs';
 import {captureRecoveryPoint,verifyRecoveryPoint,openArchivedControl,restoreControlD1,restoreObjects,restoreWorkerArtifact,isolatedObjects,reconcileArtifacts,restoreDiscrepancies,DrillHold} from '../tools/recovery-drill.mjs';
@@ -121,11 +122,13 @@ try{
  // ---- Independent authority and encrypted key custody, outside the data archive.
  const inventoryFile=join(directory,'operator.whumpo-restore-inventory'),streamId='recovery-drill-stream';
  await createRestoreInventory({inventoryFile,streamId});
- const inventory=await openRestoreInventory({inventoryFile,expectedStreamId:streamId,sourceDb:db});closers.push(()=>inventory.close());
+ // The recovery source is the platform-bound database of a synthetic account (real release observer, real D1 REST adapter).
+ const platform=await syntheticPlatform({database:db}),authority=await platform.authority();
+ const inventory=await openRestoreInventory({inventoryFile,expectedStreamId:streamId,authority});closers.push(()=>inventory.close());
  const keys=await keyBackupFixture();closers.push(()=>keys.close());const stored=await keys.create(keyring),keyBackup=stored.proof;
  await mkdir(join(directory,'points'),{mode:0o700});
  const pointA=join(directory,'points','A'),snapshotA='drill-point-a';
- const capture=await phase('captureRecoveryPoint',()=>captureRecoveryPoint({sourceDb:db,objects:files,directory:pointA,snapshotId:snapshotA,workers:{...builds,...assetTrees}}));
+ const capture=await phase('captureRecoveryPoint',()=>captureRecoveryPoint({authority,objects:files,directory:pointA,snapshotId:snapshotA,workers:{...builds,...assetTrees}}));
  assert.equal(capture.objects,5);assert.deepEqual(capture.workers,Object.keys(buildInventories));
  const pointDigestA=capture.pointDigest,archived=await openArchivedControl(pointA,pointDigestA);
  const manifest=await phase('registerArchive',async()=>{try{return await inventory.registerArchive({archiveDb:archived.db,snapshotId:snapshotA,keyBackup});}finally{archived.close();}});
@@ -245,7 +248,7 @@ try{
  await target.OBJECTS_A.put('unexpected/object','x');await drillHold(()=>restoreObjects(target.OBJECTS_A,pointA,pointDigestA),'restore-target-not-isolated');await target.OBJECTS_A.delete('unexpected/object');
  assert.equal((await inspect()).status,'verified','Retried object restore returns to the verified state');
  // Unknown custom metadata cannot be preserved by the point, so capture refuses it instead of dropping it.
- await drillHold(async()=>captureRecoveryPoint({sourceDb:db,directory:join(directory,'points','metadata'),snapshotId:'drill-metadata',objects:{get:async key=>{const o=await target.OBJECTS_A.get(key);return o&&{size:o.size,arrayBuffer:()=>o.arrayBuffer(),httpMetadata:o.httpMetadata,customMetadata:{...o.customMetadata,note:'unpreserved'}};}}}),'object-metadata');
+ await drillHold(async()=>captureRecoveryPoint({authority,directory:join(directory,'points','metadata'),snapshotId:'drill-metadata',objects:{get:async key=>{const o=await target.OBJECTS_A.get(key);return o&&{size:o.size,arrayBuffer:()=>o.arrayBuffer(),httpMetadata:o.httpMetadata,customMetadata:{...o.customMetadata,note:'unpreserved'}};}}}),'object-metadata');
  // A changed published artifact in a candidate copy (immutability triggers are
  // created after rows, so edit the archived cells): pointers and manifest refuse it.
  const {snapshot}=await verifyRecoveryPoint(pointA,pointDigestA);
@@ -329,7 +332,9 @@ try{
 
  // ---- Total control-database loss: no independent current authority on main.
  const lost={prepare(){throw Error('source lost');},batch(){throw Error('source lost');}};
- const orphan=await openRestoreInventory({inventoryFile,expectedStreamId:streamId,sourceDb:lost});closers.push(()=>orphan.close());
+ // Total loss: the authority was proven while the database existed; every later evidence request must re-prove it and cannot.
+ const lostPlatform=await syntheticPlatform({database:db}),lostAuthority=await lostPlatform.authority();lostPlatform.replace(lost);
+ const orphan=await openRestoreInventory({inventoryFile,expectedStreamId:streamId,authority:lostAuthority});closers.push(()=>orphan.close());
  holds.sourceLost=(await inspectOnce({evidenceSource:orphan.evidenceSource})).holds;assert.deepEqual(holds.sourceLost,['independent-evidence']);
  const lostReport=await restoreDiscrepancies(target.DRILL_A,lost);assert.deepEqual([lostReport.sourceAvailable,lostReport.reconciliation,'sourceHold' in lostReport],[false,'unavailable-without-current-source',false]);
 
@@ -339,7 +344,7 @@ try{
  await db.prepare("UPDATE standard_ai_requests SET state='dispatched' WHERE id=?").bind(inflight).run();
  await files.put(objectKeys[1],'Synthetic private planting notes');
  const pointB=join(directory,'points','B'),snapshotB='drill-point-b';
- const captureB=await captureRecoveryPoint({sourceDb:db,objects:{get:async key=>(await files.get(key))??(await target.OBJECTS_A.get(key))},directory:pointB,snapshotId:snapshotB});
+ const captureB=await captureRecoveryPoint({authority,objects:{get:async key=>(await files.get(key))??(await target.OBJECTS_A.get(key))},directory:pointB,snapshotId:snapshotB});
  const archivedB=await openArchivedControl(pointB,captureB.pointDigest);let manifestB;try{manifestB=await inventory.registerArchive({archiveDb:archivedB.db,snapshotId:snapshotB,keyBackup});}finally{archivedB.close();}
  await restoreControlD1(target.DRILL_B,pointB,captureB.pointDigest);await restoreObjects(target.OBJECTS_B,pointB,captureB.pointDigest);
  const inspectB=()=>inspectIsolatedRestore({db:target.DRILL_B,manifest:manifestB,keyBackup,evidenceSource:inventory.evidenceSource,expectedStreamId:streamId,objects:isolatedObjects(target.OBJECTS_B)});

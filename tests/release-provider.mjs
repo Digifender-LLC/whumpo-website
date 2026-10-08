@@ -41,4 +41,10 @@ missingBinding=true;await assert.rejects(()=>driver.observe(manifest),/Active pl
 active=old;await assert.rejects(()=>driver.observe(manifest),/Retired database unavailable/);
 await assert.rejects(()=>driver.observe({...manifest,accountId:'f'.repeat(32)}),/another account/);
 await assert.rejects(()=>driver.observe({...manifest,controlDatabaseId:old}),/differs from current/);
-console.log('Release provider passed: active database authority before/after cutover, retired database independence, registry drift and missing/cross-target refusals.');
+// Initialization never adopts a populated (for example restored) database, and fails before any command runs.
+targetInitialized=true;await assert.rejects(()=>driver.initialize(manifest,'/nonexistent'),/empty database/);
+// Recovery source authority (tools/recovery-authority.mjs) uses this provider's own account scope and client.
+assert.deepEqual([driver.accountId,driver.apiOrigin],[configs.platform.account_id,'injected-client']);
+reads.length=0;await driver.openDatabase(current).prepare(schemaInventorySQL).all();assert.deepEqual(reads.map(r=>r.id),[current]);
+assert.throws(()=>driver.openDatabase('not-a-database'),/Invalid control database/);
+console.log('Release provider passed: active database authority before/after cutover, retired database independence, registry drift, missing/cross-target refusals, populated-target initialization refusal and account-scoped database access.');
