@@ -1,8 +1,8 @@
 # WH-054 feasibility review: evidence, method and limits
 
-**October 8, 2026 (UTC). Evidence level: repository source plus in-memory SQLite and a small in-memory simulation. Nothing here is live acceptance, a deployment, a Stripe or Cloudflare observation, or an implementation.** This supports the [workspace collaboration contract](workspace-collaboration.md); the contract states what the platform will do, and this page records what was measured, how, and what the measurements cannot show. Two evidence kinds are kept apart throughout: the **feasibility review's measurements and counts** (in-memory SQLite, AST and simulation, taken at `b319f33`) and a later **source-classified dispositions** follow-up (repository source reading only; [below](#source-classified-dispositions-follow-up-source-reading-only)). The follow-up does not recompute or replace the review's counts.
+**October 8, 2026 (UTC). Evidence level: repository source plus in-memory SQLite and a small in-memory simulation. Nothing here is live acceptance, a deployment, a Stripe or Cloudflare observation, or an implementation.** This supports the [workspace collaboration contract](workspace-collaboration.md); the contract states what the platform will do, and this page records what was measured, how, and what the measurements cannot show. Two evidence kinds are kept apart throughout: the **feasibility review's measurements and counts** (in-memory SQLite, AST and simulation, taken at `b319f33`) and a later **source-classified dispositions** follow-up (repository source reading only; [below](#source-classified-dispositions-follow-up-source-reading-only)). The follow-up does not recompute or replace the review's counts. A third kind, the **packet 1a local checks** (implemented source run against the current tree), is recorded [below](#packet-1a-local-checks-implemented-source-run-on-the-current-schema); it too leaves the review's counts as the historical record.
 
-The reviewed tree was the contract commit `b319f33` on the WH-054 branch, whose source and schema are identical to baseline `ca17c6a` (the branch differs only in documentation). The review only read the repository and wrote nothing into it. The exploratory scripts and their raw output were kept outside the repository and are deliberately not part of this record: the figures below are what remains useful, and the child-1a registry tool (see [child packets](workspace-collaboration.md#child-packets)) is the supported way to regenerate them.
+The reviewed tree was the contract commit `b319f33` on the WH-054 branch, whose source and schema are identical to baseline `ca17c6a` (the branch differs only in documentation). The review only read the repository and wrote nothing into it. The exploratory scripts and their raw output were kept outside the repository and are deliberately not part of this record: the figures below are what remains useful, and the packet 1a tooling ([tenant classification](tenant-classification.md)) is the supported way to regenerate and check them.
 
 ## Method
 
@@ -101,7 +101,7 @@ SQLite accepted `CREATE TRIGGER` bodies naming unknown columns and failed only a
 4. Transfer revokes the sender-authorized GitHub slot at token level, does not invoke the app-wide grant revocation, and leaves other workspaces' connections untouched; recovery for an unknown outcome stays accurate.
 5. Two members of one workspace keep independent Chat heads and layouts (no collision, no cross-reading), and a transfer does not move either.
 
-These are required test designs, not results. None has been written or run, and no gate described here exists in the repository yet.
+These are required test designs, not results. None of these regression tests has been written or run. The packet 1a registry and local checks exist ([below](#packet-1a-local-checks-implemented-source-run-on-the-current-schema)); the gates these regressions need do not.
 
 ## SQL surface and what static analysis cannot see
 
@@ -132,6 +132,21 @@ Source facts that make the lease problem real: `stripe_paid_invoices.created_at`
 - [Invoice object](https://docs.stripe.com/api/invoices/object): `hosted_invoice_url` is the page that lets customers view and pay an invoice (null before finalization); `status_transitions.paid_at` is present on the object.
 
 **Not verified:** period contiguity for payments recovered by retries; actual renewal webhook latency; `paid_at` semantics for retried or out-of-band payments; anything about disputes or refunds. Pricing and product availability pages were not consulted and no figure here is a price.
+
+## Packet 1a local checks (implemented source, run on the current schema)
+
+**Evidence level: local source and in-memory SQLite plus the TypeScript syntax tree, run on the tree that contains this text. No behavior, schema, deployment, provider or owner decision.** Tool usage, limits and the exact gates are in [tenant classification](tenant-classification.md); this section records what they measured and where it differs from the review.
+
+| Check | Result on the current tree | Caveat |
+| --- | --- | --- |
+| Registry coverage | 111 users foreign-key columns, 111 tables, each classified once; delete actions 86 `CASCADE`, 17 `NO ACTION`, 7 `RESTRICT`, 1 `SET NULL`; schema fingerprint recorded | Classifications are proposals: 105 `proposed`, 6 `undecided` (named owner questions), 0 `accepted`; 102 from the review, 9 from source reading (not fixture-proven) |
+| Indirect tenants | 78 tables without a `users` key reach `projects` or a `users`-keyed table (38 through a `project_id` foreign key, 40 through a longer chain); 29 have no tenant path; 6 carry a textual `project_id` | Reproduces the review's 78/38/29 by the recorded method |
+| Reparse validator | All 640 triggers and 27 views compile; 640 INSERT/UPDATE/DELETE statements prepared in a disposable database, none executed; no `UPDATE OF` names a missing column; nothing unsupported | Proves resolution, not correctness; triggers compiled in isolation. Canaries prove it fires on SQLite-accepted stale columns, aliases, views, nested views and `UPDATE OF` a missing column |
+| Cross-type lint | 5,512 comparisons resolved to base columns, 0 unresolved operands, 0 unsupported bodies; **50 findings in 46 objects**, all baselined | The 19 retention guards and 3 hold triggers the spike found by renaming are all found structurally, plus 24 further objects the spike called uncounted. Function, `CASE`, `CAST`, literal and parameter operands are untyped and never reported; assignments are not compared |
+| Authorizer probe | One `DELETE FROM projects` reaches 137 tables through triggers and views, each tagged with the trigger or view name; restored per fixture; reports unavailable under `--d1` | Reports references only. A scoped query, a tautology and a wrong bound value give identical reports; only the unique-marker check separates them |
+| SQL surface | 1,307 `.prepare` calls in `src`: 983 literal, 65 static template, 235 interpolated (**17 table-name interpolations**, one of them inside a nested template), 11 concatenations and 13 other non-literals (24 non-literal); 41 dynamic sites, each a fingerprinted allowlist entry with a reviewed reason | The review's text inventory counted 984 literal and 23 non-literal; the syntax tree classifies one `'…'+x` concatenation as non-literal, so **the tree is authoritative at 983/24**. Helper counts match the review exactly. Four tenant-bearing tables are never named in static SQL |
+
+Every unresolved `unknown` or `polymorphic` entry of the review now has a registry entry with the status and evidence level above. That is a recording, not an acceptance: the child-1 schema review has not run, no owner answer to any of the six [remaining product questions](workspace-collaboration.md#remaining-product-questions) is recorded, and the 1b freeze command refuses.
 
 ## Not done, and unknown
 

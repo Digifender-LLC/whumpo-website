@@ -1,0 +1,89 @@
+# Tenant classification registry and gates (WH-054 packet 1a)
+
+**Status: implemented as local, report-and-gate tooling; no schema, runtime or customer behavior changed.** This is packet 1a of the [workspace collaboration contract](workspace-collaboration.md#child-packets). It is an inventory and a set of drift guards for the current single-tenant-per-login schema, built so the coordinated C2 schema (packet 1b) can be reviewed against measured facts. It is **not** C2, does not enforce workspace isolation, and records **no owner decision**: every classification is an engineering proposal, no owner answer is recorded, and the 1b schema freeze is refused until the schema review accepts the registry ([freeze](#schema-freeze-preflight)). Evidence: [feasibility review](workspace-collaboration-evidence.md) plus the local checks below. Nothing here is live acceptance or a deployment.
+
+## What exists, and what does not
+
+| Implemented now (local, runs in `node tools/verify.mjs protection`) | Not implemented (future, 1b/1c) |
+| --- | --- |
+| [`docs/tenant-classification.json`](tenant-classification.json): one entry per current `users` foreign-key column (111), with class, subject type, separate account/tenant/actor/custody/payer roles, intended key, status and evidence | `workspaces`, `workspace_actors`, `workspace_memberships`, `workspace_id` columns, actor columns, any C2 trigger or view |
+| `tools/tenant-classification.mjs`: coverage, staleness and schema-fingerprint gate; derived-tenant and textual-identity inventories; status report; freeze preflight | Handler conversion; removal of `assertWorkspace` and the feature-admission family |
+| `tools/schema-body-validator.mjs` + `tools/sql-structure.mjs`: trigger/view reparse validator and structural cross-type lint, with an explicit baseline | The behavior test per rewritten trigger and the hold/no-op regressions |
+| `tests/sqlite-d1.mjs`: optional report-only SQLite authorizer probe | The authorizer oracle in enforcing mode (it stays report-only) |
+| `tools/tenant-sql-surface.mjs`: AST report of `.prepare` sites, tenant-helper calls and worker reachability, with the dynamic-SQL allowlist | The enforcing AST entry registry over routes, Chat actions, bindings and jobs; two-workspace canary fixtures for real handlers |
+
+Proposed, undecided and accepted entries are different from coverage failures. Coverage and drift fail the gate; `proposed` and `undecided` are **reported** and block only the freeze command.
+
+## Commands
+
+```
+node tools/tenant-classification.mjs [check]        # coverage + drift + body validators; exit 1 on any problem
+node tools/tenant-classification.mjs report [--json] # counts, statuses, open owner questions, derived inventories
+node tools/tenant-classification.mjs bodies [--json] # reparse validator + cross-type lint only
+node tools/tenant-classification.mjs freeze          # 1b freeze preflight; exits 3 (REFUSED) while anything is unaccepted
+node tools/tenant-sql-surface.mjs [check]            # dynamic-SQL allowlist gate; exit 1 on drift
+node tools/tenant-sql-surface.mjs report [--json]    # full AST surface report
+```
+
+`tests/tenant-classification.mjs`, `tests/tenant-schema-bodies.mjs`, `tests/sqlite-authorizer.mjs` and `tests/tenant-sql-surface.mjs` are in the `protection` profile ([verification](verification.md)). They contain the negative controls.
+
+## The registry
+
+Each entry is keyed by the **current** column (`table.column`) so a mixed table is counted once and never double counted. Fields: `sourceFile` (the schema file that defines the table, verified against the composed inputs), `onDelete`, `class`, `subject` (`account`, `workspace` or `mixed`), `retarget`, `roles`, `status`, `evidenceLevel`, `key` (intended key/disposition), `basis`, `evidence` (repository files and contract anchors, resolved by the gate) and, where an owner answer matters, `questions`.
+
+- **Classes**: `account`, `workspace`, `workspace+actor`, `workspace+custody`, `workspace+payer`, plus `typed-subject` (`content_risk_evidence`, `content_risk_reversals`: one current column, two intended typed columns `account_id`/`workspace_id`) and `split` (`photo_scan_tickets`: one current column, two intended tables). The two mixed shapes list their intended outputs beside the current column; the gate refuses an intended column or table that already exists. `retarget` is `keep`, `hand-written`, `typed-subject` or `split`; **no entry claims a mechanical `RENAME COLUMN`**, which is invalid (three renames failed and at least 22 bodies stayed silently wrong in the feasibility spike).
+- **Roles stay separate.** `account` keeps `REFERENCES users`; `tenant`, `actor`, `custody` and `payer` are distinct intended columns (`workspace_id`, `actor_ref`, `authorizing_actor_ref`, `payer_actor_ref`); none stands in for another, and the gate rejects entries that share a column or give a tenant class an account role.
+- **Statuses**: `proposed` (engineering classification awaiting the child-1 schema review), `undecided` (the class or key cannot be accepted until a named owner question is answered; the class shown is the working proposal) and `accepted` (reserved for the schema review; no entry is accepted). Six entries are `undecided`: the four Stripe tables (payer on transfer; the invoice table also late-payment continuity) and `inference_budgets`/`inference_calls` (the funded-workspace bound). `evidenceLevel` is `review-spike` for the 102 entries classified by the October 8 feasibility review (an in-memory key rename, not an implementation) and `source-reading` for the nine from the source-only follow-up (seven formerly undecided entries plus the two refinements), **not fixture-proven**.
+- **Questions**: the six [remaining product questions](workspace-collaboration.md#remaining-product-questions), each with `ownerAnswerRecorded: false`. The gate fails if that is set to `true`: this registry never records or infers an answer.
+- **Indirect tenants and exclusions**: `derived` lists the 107 tables without a `users` key by the method recorded in the file (78 reach `projects` or a `users`-keyed table: 38 through a `project_id` foreign key and 40 through a longer chain; 29 have no tenant path; 6 carry a textual `project_id`). `textualIdentity` lists the non-foreign-key identity columns and the four custody-context files that a mechanical rename must not touch. The gate fails when the schema derives a different list.
+
+### Counts at this baseline
+
+111 columns: `account` 7, `workspace` 17, `workspace+actor` 68, `workspace+custody` 12, `workspace+payer` 4, `typed-subject` 2, `split` 1; 105 `proposed`, 6 `undecided`, 0 `accepted`. These are **not** the review's historical counts (7/16/65/12/4/1 polymorphic/6 unknown); the nine source-classified entries moved, and the historical figures in the contract and evidence page stay as the record of what the review found.
+
+## Gates and what makes them fail
+
+`check` fails (exit 1) on: an unclassified or stale `users` foreign key; a changed defining schema file or delete action; a class/role/subject mismatch; an intended column or table that collides with an existing one; an undecided entry without a named question; an unknown question; an unresolved evidence file or contract anchor; drift in the derived or textual inventories; a changed schema fingerprint (`baseline.reviewedSchemaSha256`, from the same inventory SQL `tools/current-schema.mjs` uses) until the change is reviewed against the registry; and any body-validator problem below. A change to the composed schema therefore always requires touching the registry in the same change.
+
+### Schema freeze preflight
+
+`freeze` is plain arithmetic over the registry: it passes only when every entry is `accepted`, every question has a recorded owner answer and the registry status is `frozen`. It currently refuses, and the refusal is itself tested. Passing it would not authorize a cutover; that needs the owner ([releases](releases.md)).
+
+## Trigger and view validator
+
+SQLite accepts `CREATE TRIGGER`/`CREATE VIEW` bodies naming unknown columns and fails only when a statement that fires or reads them is prepared, so the artifact check (execute plus `foreign_key_check`) is blind to stale bodies. `tools/schema-body-validator.mjs`:
+
+1. **Reparse.** Rebuilds the tables, indexes and views in a disposable in-memory database, installs each trigger **alone**, **prepares** the INSERT/UPDATE/DELETE that fires it (never steps it), and drops it; prepares `SELECT *` for each view in dependency order so a view broken only through another is attributed to the right one. No row is written and no trigger body runs; the validated database is not modified. `UPDATE OF <missing column>` is silently inert in SQLite, so the OF list is checked against the table and the body is still compiled through a variant without the missing names.
+2. **Cross-type lint.** `tools/sql-structure.mjs` tokenizes and parses each body, resolves every column reference (aliases, `OLD`/`NEW`, correlated and nested subqueries, derived tables, views, `excluded`) to its base column and reports comparisons (`=`, `IS`, `IN`, `BETWEEN`, `NULLIF`, `CASE` operands) whose operands are `account`-typed on one side and `workspace`-typed on the other. Types come from the foreign-key graph (`users` → account, `workspaces` → workspace), plus on the **current** schema an overlay from the registry saying which `users` references are really tenants. This is a resolver over a parsed tree, not a text match, but it is not a proof: see limits.
+
+### Baseline on the current schema
+
+Reparse: all triggers and views compile; no `UPDATE OF` names a missing column; no body is unsupported. Lint: **50 cross-type findings in 46 objects**, recorded by stable fingerprint in [`docs/tenant-checks-baseline.json`](tenant-checks-baseline.json). They are **not defects today** (every tenant is also an account, so they behave correctly) and are **not fixed here**: they are the exact worklist packet 1b must rewrite by hand, and 1b's exit requires the baseline to be empty. Twenty-two of the 46 objects are the 19 retention guards (`EXISTS (SELECT 1 FROM users WHERE id = OLD.…)`) and the three hold triggers the feasibility spike found by renaming (the test asserts all 22 by name); the other 24 are objects the spike called uncounted, for example the `safety_held_projects` and `operator_contained_projects` views. A fingerprint is `sha256(object | sorted resolved sides | operator | occurrence)`; line moves, aliases, formatting and message text do not change it, a changed comparison does. A new finding fails; a baseline exception that no longer matches fails.
+
+## SQLite authorizer probe (report only)
+
+`sqliteD1({probe:true})` (or `databaseFixture({probe:true})`) installs Node 24's `DatabaseSync.setAuthorizer` on the in-memory fixture. Inside `fixture.authorizer.scope(name, body)` it records the tables and columns each prepared statement reads, inserts, updates or deletes, tagged **direct**, **trigger** (trigger name) or **view** (view name). It always allows the action and never changes a result; unused, the fixture is unchanged (same shape, same code path). `close()` restores the hook (Node cannot read a previous authorizer, so restoring means clearing, and a second probe on a database that already has one is refused). In `--d1` (miniflare) fixtures it reports **unavailable** (`authorizer.available === false` with the reason), because D1 prepared statements are opaque.
+
+It **reports references; it does not prove isolation.** It cannot see predicates or bound values, covers only paths a test executes, and statement labels have string literals masked. `tests/sqlite-authorizer.mjs` demonstrates the gap with two workspaces and unique markers: a correctly scoped query, a tautology (`owner_user_id = owner_user_id`) and a correct query with the wrong bound value produce **identical** authorizer reports, but only the scoped one keeps workspace B's marker out of workspace A's result. The probe does catch a statement that never references the tenant column, which is its useful signal.
+
+## SQL surface report (AST)
+
+`tools/tenant-sql-surface.mjs` parses `src/**/*.ts` with the TypeScript 7 syntax tree (`typescript/unstable/sync`, the method the open boundary-audit work uses; it parses and never runs the source). It classifies every `.prepare(...)` argument as literal, static template, interpolated template (flagging table-name interpolation, including a template nested inside an interpolation), concatenation or non-literal; counts the tenant-taking helper calls by name; names the tables in literal SQL; and shows per-worker reachability by import.
+
+At this baseline: 1,307 `.prepare` calls (983 literal, 65 static templates, 235 interpolated), of which **17 interpolate a table name and 24 pass a non-literal** (41 dynamic sites). The contract's earlier text inventory said 984 literal and 23 non-literal: one `'SELECT '+fields+' FROM …'` concatenation starts with a quote and was counted as a literal by that text method; the syntax tree is authoritative. Helper counts match the contract (`assertWorkspace` 81 calls in 32 files, 77 in 31 outside `admission.ts`; `assertFeature` 50/21; `featurePredicate` 33/20; `requireFeature` 9/4; `connectionInclusion` 2).
+
+**Allowlist.** Each of the 41 dynamic sites is an entry in the baseline file with a stable fingerprint (file, enclosing symbol, kind, argument text; not line numbers) and a reviewed reason that records what the source shows. A new dynamic site fails the gate, a reviewed statement edited in place fails (new site plus stale entry), and an entry that no longer matches fails. Counts of ordinary literal sites are reported, not gated, so adding a normal statement does not fail the gate.
+
+**Cannot prove all tenant access.** SQL passed to anything but `.prepare`, composed in another function, written by triggers (four tenant-bearing tables are never named in static SQL, for example `gateway_spend_buckets`) or run from `tools/` is invisible or only listed; helpers are matched by name without type resolution; bound parameters are not followed. Treat the report as a map, never as evidence that every tenant access is scoped.
+
+## Limits (all of the above)
+
+- Evidence is local: source, in-memory SQLite and the syntax tree. No D1 `--d1` probing, no deployment, no Stripe, GitHub or Cloudflare observation.
+- The validator proves bodies resolve against the schema, not that they are correct; each trigger is compiled in isolation, so nested chains are checked per trigger.
+- The lint compares column operands it can resolve; function results, `CASE` branches, `CAST` results, literals and parameters are untyped and never reported; assignments (`SET`, `INSERT … SELECT`) are not compared; same-type columns can still join the wrong rows.
+- Unsupported SQL (`WITH`, window functions, `RETURNING`, `NATURAL`/`USING` joins) is reported and fails the gate; it is never skipped. None occurs in the current schema.
+- The seven formerly undecided entries and two refinements are source readings. No fixture has exercised them and the required no-op regressions are not written.
+
+## Verification
+
+`node tests/tenant-classification.mjs`, `tests/tenant-schema-bodies.mjs`, `tests/sqlite-authorizer.mjs` (add `--d1-fixture` to open a real miniflare fixture and confirm it reports the probe unavailable; slow) and `tests/tenant-sql-surface.mjs`, then `node tools/verify.mjs protection`. Mutation canaries (a new unclassified foreign key, a stale trigger column, a cross-type comparison, a new dynamic SQL site, allowlist drift) are in the tests and were also applied to the repository files by hand and reverted.
