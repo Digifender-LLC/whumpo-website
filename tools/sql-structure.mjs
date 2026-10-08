@@ -356,6 +356,7 @@ export function parseObject(sql){
 
 // ---- scope resolution and comparison extraction ----
 const lower=s=>s.toLowerCase();
+const unparen=e=>e?.k==='paren'?unparen(e.e):e;
 
 /**
  * Resolves column references to base columns and extracts typed comparisons.
@@ -377,7 +378,8 @@ export class Analyzer{
  viewOutputs(key){
   if(this.viewCache.has(key))return this.viewCache.get(key);
   const view=this.views.get(key);this.viewCache.set(key,new Map());// recursion guard
-  const outputs=this.selectOutputs(view.select,[]);
+  // The view's own comparisons belong to the view (analyzeView), never to the object that first reads it.
+  const outputs=this.subOutputs(view.select,[]);
   const columns=new Map();
   outputs.forEach((o,index)=>{const name=view.columns?.[index]??o.name;if(name)columns.set(lower(name),o.refs);});
   this.viewCache.set(key,columns);return columns;
@@ -453,34 +455,42 @@ export class Analyzer{
   switch(e.k){
    case 'col':return this.resolve(e,scopes)??[];
    case 'paren':return this.exprRefs(e.e,scopes);
-   case 'sub':{const mark=this.comparisons.length;const out=this.subOutputs(e.select,scopes);void mark;return out[0]?.refs??[];}
+   case 'sub':return this.subOutputs(e.select,scopes)[0]?.refs??[];
    case 'fn':if(['COALESCE','IFNULL','NULLIF'].includes(e.name))return e.args.flatMap(a=>this.exprRefs(a,scopes));return [];
    default:return [];
   }
  }
  subOutputs(select,scopes){
   // Re-analysing a nested select would double-count comparisons; resolve outputs against a throwaway analyzer state.
-  const saved=[this.comparisons,this.unresolved];this.comparisons=[];this.unresolved=[];
-  try{return this.selectOutputs(select,scopes);}finally{[this.comparisons,this.unresolved]=saved;}
+  const saved=[this.comparisons,this.unresolved,this.expressions];this.comparisons=[];this.unresolved=[];
+  try{return this.selectOutputs(select,scopes);}finally{[this.comparisons,this.unresolved,this.expressions]=saved;}
  }
  typeOfRefs(refs){
-  if(!refs.length)return {type:'untyped',refs};
-  const types=new Set(refs.map(r=>this.typeOf(r.table,r.column)??'untyped'));
-  if(types.size===1)return {type:[...types][0],refs};
-  return {type:'mixed',refs};
+  if(!refs.length)return {type:'untyped',types:['untyped'],refs};
+  const types=[...new Set(refs.map(r=>this.typeOf(r.table,r.column)??'untyped'))].sort();
+  return {type:types.length===1?types[0]:'mixed',types,refs};
  }
  operand(e,scopes){
   if(e.k==='paren')return this.operand(e.e,scopes);
   if(e.k==='col'){
    const refs=this.resolve(e,scopes);
-   if(!refs){this.unresolved.push(e.table?`${e.table}.${e.name}`:e.name);return {type:'unresolved',refs:[],text:e.table?`${e.table}.${e.name}`:e.name};}
+   if(!refs){this.unresolved.push(e.table?`${e.table}.${e.name}`:e.name);return {type:'unresolved',types:['unresolved'],refs:[],text:e.table?`${e.table}.${e.name}`:e.name};}
    return {...this.typeOfRefs(refs),text:e.table?`${e.table}.${e.name}`:e.name};
   }
   if(e.k==='sub'){return {...this.typeOfRefs(this.exprRefs(e,scopes)),text:'(subquery)'};}
   if(e.k==='fn'&&['COALESCE','IFNULL','NULLIF'].includes(e.name)){return {...this.typeOfRefs(this.exprRefs(e,scopes)),text:e.name.toLowerCase()+'(...)'};}
-  return {type:'untyped',refs:[],text:'(expression)'};
+  if(e.k==='list')throw new UnsupportedSQL('Row value outside a comparison of equal-length rows');
+  return {type:'untyped',types:['untyped'],refs:[],text:'(expression)'};
  }
+ // Row values compare element by element; anything else that the resolver cannot pair fails closed.
  compare(op,l,r,scopes){
+  l=unparen(l);r=unparen(r);
+  if(l.k==='list'||r.k==='list'){
+   if(l.k==='list'&&r.k==='list'&&l.items.length===r.items.length){l.items.forEach((x,i)=>this.compare(op,x,r.items[i],scopes));return;}
+   if(l.k==='list'&&r.k==='sub'){const out=this.subOutputs(r.select,scopes);if(out.length===l.items.length){l.items.forEach((x,i)=>this.comparePair(op,x,{outputs:out[i]},scopes));return;}}
+   if(r.k==='list'&&l.k==='sub'){const out=this.subOutputs(l.select,scopes);if(out.length===r.items.length){r.items.forEach((x,i)=>this.comparePair(op,x,{outputs:out[i]},scopes));return;}}
+   throw new UnsupportedSQL(`Row value ${op} comparison the resolver cannot pair`);
+  }
   this.comparisons.push({op,left:this.operand(l,scopes),right:this.operand(r,scopes)});
  }
  walk(e,scopes){
@@ -508,9 +518,12 @@ export class Analyzer{
    case 'in':{
     this.walk(e.e,scopes);
     if(e.select){
-     const out=this.selectOutputs(e.select,scopes);
-     if(out.length===1)this.comparePair('IN',e.e,{type:'derived',outputs:out[0]},scopes);
+     const out=this.selectOutputs(e.select,scopes),left=unparen(e.e);
+     if(left.k==='list'&&left.items.length===out.length)left.items.forEach((x,i)=>this.comparePair('IN',x,{outputs:out[i]},scopes));
+     else if(left.k!=='list'&&out.length===1)this.comparePair('IN',left,{outputs:out[0]},scopes);
+     else throw new UnsupportedSQL('IN (SELECT ...) whose row width the resolver cannot pair');
     }else if(e.list){for(const i of e.list){this.walk(i,scopes);this.compare('IN',e.e,i,scopes);}}
+    else throw new UnsupportedSQL(`IN ${e.table} (a table operand) is not resolved`);
     return;
    }
    default:return;

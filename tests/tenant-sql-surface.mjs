@@ -50,6 +50,13 @@ mention(/Stale allowlist entry [0-9a-f]{16} \(src\/cms-media-uploads\.ts uploadC
 mention(/Stale allowlist entry [0-9a-f]{16} \(src\/domain-recovery\.ts connection\)/);
 assert.equal(drift.length,6,drift.join('\n'));
 assert.equal(mutated.sites.length,clean.sites.length+3);
+// Review regressions: an element-access prepare is a SQL site, and a template the SQL tokenizer cannot read is gated
+// rather than assumed free of a table interpolation (both used to be invisible to the gate).
+const hidden=extractSurface({overrides:append('src/support.ts','export function probeElementAccess(db:D1Database,q:string){return db["prepare"](q);}\nexport function probeUnreadable(db:D1Database,x:string){return db.prepare(`SELECT 1 FROM support_requests WHERE id=? # ${x}`);}')});
+const hiddenDrift=checkAllowlist(hidden,baseline);
+assert.ok(hiddenDrift.some(p=>/New non-literal SQL site in src\/support\.ts \(probeElementAccess\)/.test(p)),hiddenDrift.join('\n'));
+assert.ok(hiddenDrift.some(p=>/New table-interpolation SQL site in src\/support\.ts \(probeUnreadable\)/.test(p)),hiddenDrift.join('\n'));
+assert.equal(hiddenDrift.length,2,hiddenDrift.join('\n'));
 // An entry whose kind no longer matches, and an entry without a reviewed reason, are both rejected.
 const wrongKind=structuredClone(baseline);wrongKind.allowlist.find(a=>a.kind==='non-literal').kind='table-interpolation';
 assert.ok(checkAllowlist(clean,wrongKind).some(p=>/is table-interpolation, the site is now a non-literal/.test(p)));

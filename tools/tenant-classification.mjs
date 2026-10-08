@@ -9,6 +9,12 @@
 // gates fail on drift between the registry and the composed current schema (an unclassified or stale users
 // foreign key, a changed defining file or delete action, a changed schema fingerprint). Proposed and undecided
 // entries are reported but are not coverage failures; the freeze command is where they block.
+//
+// Progression (each step is a reviewed edit of the registry, never inferred): an owner answer is recorded on its
+// question (ownerAnswerRecorded true plus the dated answer and its contract anchor); an entry leaves `undecided`
+// only once none of its questions is open; the schema review sets entries `accepted` (never with an open question);
+// the registry becomes `frozen` only when every entry is accepted and every question answered. `check` enforces
+// the same rules, so a coherent frozen registry passes both `check` and `freeze`.
 import {readFile,stat} from 'node:fs/promises';
 import {resolve,dirname,isAbsolute,relative} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -24,6 +30,8 @@ export const baselinePath='docs/tenant-checks-baseline.json';
 
 const classes=['account','workspace','workspace+actor','workspace+custody','workspace+payer','typed-subject','split'];
 const statuses=['proposed','undecided','accepted'];
+const registryStatuses=['proposed-not-frozen','frozen'];
+const day=/^\d{4}-\d{2}-\d{2}$/;
 const evidenceLevels=['review-spike','source-reading'];
 const retargets=['keep','hand-written','typed-subject','split'];
 const subjects=['account','workspace','mixed'];
@@ -110,12 +118,25 @@ async function resolveEvidence(directory,reference,cache){
 export async function checkRegistry(registry,observed,{directory=root}={}){
  const problems=[];
  const fail=m=>problems.push(m);
- if(registry.version!==1||registry.status!=='proposed-not-frozen')fail('Registry must be version 1 and remain proposed-not-frozen until the schema review accepts it');
- const questionIds=new Set();
+ if(registry.version!==1||!registryStatuses.includes(registry.status))fail(`Registry must be version 1 with status ${registryStatuses.join(' or ')}`);
+ const cache=new Map();
+ const questionIds=new Set(),openQuestions=new Set(),items=new Set();
  for(const q of registry.questions??[]){
   if(questionIds.has(q.id))fail('Duplicate question '+q.id);questionIds.add(q.id);
-  if(q.ownerAnswerRecorded!==false)fail(`Question ${q.id}: this registry records no owner answer (ownerAnswerRecorded must be false)`);
+  if(typeof q.ownerAnswerRecorded!=='boolean')fail(`Question ${q.id}: ownerAnswerRecorded must be true or false`);
+  else if(q.ownerAnswerRecorded){
+   // An answer is a recorded fact with a date and the contract section that records it, never a bare flag.
+   const a=q.ownerAnswer;
+   if(!a||!day.test(a.recordedOn??'')||!a.answer||!a.anchor)fail(`Question ${q.id}: a recorded owner answer needs ownerAnswer.recordedOn (YYYY-MM-DD), answer and anchor`);
+   else{const problem=await resolveEvidence(directory,a.anchor,cache);if(problem)fail(`Question ${q.id}: answer anchor ${a.anchor}: ${problem}`);}
+   if(q.item!==undefined)fail(`Question ${q.id}: an answered question is no longer numbered among the remaining product questions`);
+  }else{
+   openQuestions.add(q.id);
+   if(q.ownerAnswer!==undefined)fail(`Question ${q.id}: ownerAnswer is present but ownerAnswerRecorded is false`);
+   if(!Number.isInteger(q.item)||items.has(q.item))fail(`Question ${q.id}: an open question needs a unique remaining-question number`);items.add(q.item);
+  }
  }
+ if(items.size&&[...items].sort((a,b)=>a-b).some((n,i)=>n!==i+1))fail(`Open questions must be numbered 1 to ${items.size} as in the contract`);
  const entries=new Map(),duplicates=[];
  for(const e of registry.columns??[]){if(entries.has(e.column))duplicates.push(e.column);entries.set(e.column,e);}
  for(const d of duplicates)fail('Duplicate registry entry '+d);
@@ -123,7 +144,6 @@ export async function checkRegistry(registry,observed,{directory=root}={}){
  const coverage=diff([...entries.keys()],observedIds);
  for(const id of coverage.missing)fail(`Unclassified users foreign key ${id}: add a registry entry`);
  for(const id of coverage.stale)fail(`Stale registry entry ${id}: no such users foreign key in the current schema`);
- const cache=new Map();
  for(const c of observed.usersColumns){
   const e=entries.get(c.id);if(!e)continue;
   if(e.sourceFile!==c.sourceFile)fail(`${c.id}: defining schema file is ${c.sourceFile}, registry says ${e.sourceFile}`);
@@ -173,6 +193,9 @@ export async function checkRegistry(registry,observed,{directory=root}={}){
   }
   if(e.status==='undecided'&&!(e.questions?.length))fail(`${where}: an undecided entry must name its owner question`);
   for(const id of e.questions??[])if(!questionIds.has(id))fail(`${where}: unknown question ${id}`);
+  const open=(e.questions??[]).filter(id=>openQuestions.has(id));
+  if(e.status==='undecided'&&e.questions?.length&&!open.length)fail(`${where}: undecided, but every question it names is answered; review it to proposed`);
+  if(e.status==='accepted'&&open.length)fail(`${where}: accepted while owner question ${open.join(', ')} is open`);
   if(!e.basis||!e.evidence?.length)fail(`${where}: basis and evidence are required`);
   for(const ref of e.evidence??[]){const problem=await resolveEvidence(directory,ref,cache);if(problem)fail(`${where}: evidence ${ref}: ${problem}`);}
  }
@@ -189,6 +212,11 @@ export async function checkRegistry(registry,observed,{directory=root}={}){
    if(!(observed.columns.get(t)??[]).includes(c))fail(`Textual identity ${item.column} does not exist`);
    if(observed.usersColumns.some(u=>u.id===item.column))fail(`Textual identity ${item.column} is a users foreign key and belongs in columns`);
   }else{const problem=await resolveEvidence(directory,item.path,cache);if(problem)fail(`Textual identity ${item.path}: ${problem}`);}
+ }
+ if(registry.status==='frozen'){
+  const notAccepted=[...entries.values()].filter(e=>e.status!=='accepted').length;
+  if(notAccepted)fail(`Registry is frozen but ${notAccepted} entries are not accepted`);
+  if(openQuestions.size)fail(`Registry is frozen but owner questions ${[...openQuestions].join(', ')} are open`);
  }
  if(registry.baseline?.reviewedSchemaSha256!==observed.fingerprint.sha256)fail(`Schema fingerprint changed (${observed.fingerprint.sha256.slice(0,12)}, reviewed ${String(registry.baseline?.reviewedSchemaSha256).slice(0,12)}): review the schema change against the registry, then update baseline.reviewedSchemaSha256`);
  if(registry.baseline?.usersForeignKeyColumns!==observed.usersColumns.length)fail(`baseline.usersForeignKeyColumns is ${registry.baseline?.usersForeignKeyColumns}, schema has ${observed.usersColumns.length}`);
@@ -209,7 +237,9 @@ function tally(list,key){const out={};for(const x of list){const k=typeof key===
 /** Counts and statuses. Proposed and undecided entries are reported here and are never a coverage failure. */
 export function registryReport(registry,observed){
  const e=registry.columns;
- const open=registry.questions.map(q=>({id:q.id,item:q.item,summary:q.summary,undecided:e.filter(x=>x.status==='undecided'&&x.questions?.includes(q.id)).map(x=>x.column),dependent:e.filter(x=>x.status!=='undecided'&&x.questions?.includes(q.id)).map(x=>x.column)}));
+ const question=q=>({id:q.id,item:q.item,summary:q.summary,undecided:e.filter(x=>x.status==='undecided'&&x.questions?.includes(q.id)).map(x=>x.column),dependent:e.filter(x=>x.status!=='undecided'&&x.questions?.includes(q.id)).map(x=>x.column)});
+ const open=registry.questions.filter(q=>q.ownerAnswerRecorded!==true).map(question);
+ const answered=registry.questions.filter(q=>q.ownerAnswerRecorded===true).map(q=>({...question(q),ownerAnswer:q.ownerAnswer}));
  return {
   status:registry.status,
   currentColumns:e.length,
@@ -220,7 +250,7 @@ export function registryReport(registry,observed){
    note:'Intended outputs are listed beside, not instead of, the current column they replace. Only uniform tenant retargets follow the user_id to workspace_id pattern, and even those are hand-written because a mechanical rename is invalid.'},
   undecided:e.filter(x=>x.status==='undecided').map(x=>({column:x.column,questions:x.questions})),
   proposed:e.filter(x=>x.status==='proposed').length,
-  openQuestions:open,
+  openQuestions:open,answeredQuestions:answered,
   derived:{reachesTenant:observed.derived.direct.length+observed.derived.chained.length,direct:observed.derived.direct.length,chained:observed.derived.chained.length,noTenantPath:observed.derived.none.length,textualProjectIdWithoutForeignKey:observed.derived.textualProjectId.length,
    method:registry.derived.method},
   textualIdentity:{columns:registry.textualIdentity.filter(x=>x.column).length,custodyContextFiles:registry.textualIdentity.filter(x=>x.path).length},
@@ -228,7 +258,7 @@ export function registryReport(registry,observed){
  };
 }
 
-/** The 1b freeze preflight. Pure registry arithmetic: it never reads or infers an owner answer. */
+/** The 1b freeze preflight. Pure registry arithmetic over recorded answers: it never infers one. */
 export function freezeStatus(registry){
  const notAccepted=registry.columns.filter(x=>x.status!=='accepted');
  const undecided=registry.columns.filter(x=>x.status==='undecided');
@@ -276,6 +306,7 @@ async function main(argv){
   console.log(`Intended outputs beside current columns: typed columns ${report.intended.typedSubjectColumns.join(', ')}; split tables ${report.intended.splitTables.join(', ')}.`);
   console.log(`Indirect tenants: ${report.derived.reachesTenant} tables reach a tenant (${report.derived.direct} through a project_id foreign key, ${report.derived.chained} through a longer chain), ${report.derived.noTenantPath} have no tenant path; ${report.derived.textualProjectIdWithoutForeignKey} carry a textual project_id.`);
   console.log(`Textual identity follow-up: ${report.textualIdentity.columns} columns and ${report.textualIdentity.custodyContextFiles} custody-context files, excluded from any mechanical rename.`);
+  for(const q of report.answeredQuestions)console.log(`Question ${q.id}: owner answer recorded ${q.ownerAnswer.recordedOn} (${q.ownerAnswer.anchor}); dependent entries ${q.dependent.length}`);
   for(const q of report.openQuestions)console.log(`Question ${q.item} ${q.id}: no owner answer recorded; undecided ${q.undecided.length}, dependent ${q.dependent.length}`);
   return;
  }
