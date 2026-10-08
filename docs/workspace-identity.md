@@ -29,7 +29,7 @@ Use one domain resolver with distinct results, not a Boolean `signedIn`. Restric
 | Recovery grant | Own reviewed credential inventory, current recovery attempt, replacement enrollment, kit save and completion | All workspace data/actions; normal session issuance from recovery-key proof alone |
 | Ordinary session | Existing owned routes and role/feature checks; welcome gate still applies | Other accounts; restricted-flow bypass; consequential effects without their existing reviews |
 
-All authenticated transport adapters produce a common principal containing account ID, session/grant ID, purpose, identity-policy version, account authority epoch, proof method/time and credential/attempt binding. A role, subscription, browser cookie, recovery receipt, interaction answer or model statement cannot substitute for that principal. Future membership adds current workspace role/revision checks; it does not create different authentication. Removing a membership revokes that workspace's authority independently of the member's personal identity.
+All authenticated transport adapters produce a common principal containing account ID, session/grant ID, purpose, identity-policy version, account authority epoch, proof method/time and credential/attempt binding. A role, subscription, browser cookie, recovery receipt, interaction answer or model statement cannot substitute for that principal. Future membership adds current workspace role/revision checks; it does not create different authentication (proposed contract: [workspace collaboration](workspace-collaboration.md)). Removing a membership revokes that workspace's authority independently of the member's personal identity.
 
 Current schema requirements (names may follow repository conventions at implementation):
 
