@@ -20,7 +20,7 @@ async function project(owner){const p=id();await db.prepare("INSERT INTO project
 async function backendProject(owner){const a=await project(owner),v=id(),r=id(),rid=id();await saveBackend(scope(owner),owner,a.project,v,'export default x=>x');await testBackend(scope(owner),service,owner,a.project,v,r,1);await prepare(scope(owner),owner,a.project,rid,'publish',v,r);await confirm(scope(owner),owner,rid);return a;}
 async function appProject(owner){const a=await project(owner),version=id(),test=id(),review=id();await saveBackend(scope(owner),owner,a.project,version,'export default ({state,input})=>({state:input,result:"saved"})');await testBackend(scope(owner),service,owner,a.project,version,test,{state:{},input:{}});await enableFixtureVisitorAccess(scope(owner),owner,a.project);await prepareApplication(scope(owner),owner,a.project,review,'enable',version,test);await confirmApplication(scope(owner),owner,review);
  const invite=await auth.createAppInvitation(scope(owner),owner,a.project),opt=await auth.appPasskeyOptions(db,a.project,'signup',false,invite.code),key=authenticator(),result=await auth.appPasskeyVerify(db,a.project,'signup',opt.challengeToken,key.registration(opt.options),false);
- a.visitor={session:result.session,revision:0};return a;}
+ a.visitor={session:result.session,revision:0,recovery:result.recoveryCode};return a;}
 async function chat(owner,content){const state=await readChat(scope(owner),owner),input={id:id(),revision:state.state.revision,content};return {id:input.id,result:await sendChat(scope(owner),owner,input)};}
 async function siteProject(owner){const a=await project(owner),v=await createFixtureWebsite(scope(owner),owner,a.project,{name:'Garden',headline:'Garden',description:'Testing',theme:'ocean',aboutTitle:'About',aboutText:'Testing',sections:[],photos:[]});
  const pub=await chat(owner,'/publish '+v);assert.equal((await chat(owner,'/confirm '+pub.id)).result.status,200);
@@ -161,7 +161,7 @@ try{
  await assert.rejects(db.prepare("UPDATE operator_containments SET resolution='closed',resolved_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),resolved_by='human:x',resolution_reason='x',resolution_digest=? WHERE id=?").bind('e'.repeat(64),lower.id).run(),/operator_containment_immutable/);
 
  // ---- Owner decision October 8, 2026: separate project serving stop with exact review and audit receipt.
- const assets={fetch:async()=>new Response('<!doctype html><title>visitor</title>',{headers:{'content-type':'text/html'}})};
+ const visitorClient='<!doctype html><title>visitor</title>',assets={fetch:async()=>new Response(visitorClient,{headers:{'content-type':'text/html'}})};
  const appEnv={DB:db,ENVIRONMENT:'local',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})},BACKEND_RUNTIME:service,ASSETS:assets};
  const sitePage=(a,path='/')=>m.host.fetch(new Request(`https://${a.project}.whumpo.site${path}`),{DB:db});
  const contactForm=a=>contactPage(new Request('https://whumpo.com/contact/'+a.project),contactEnv,a.project);
@@ -170,6 +170,8 @@ try{
  const publishBackend=async a=>{const v=id(),r=id(),rid=id();await saveBackend(scope(a.user),a.user,a.project,v,'export default x=>x');await testBackend(scope(a.user),service,a.user,a.project,v,r,1);await prepare(scope(a.user),a.user,a.project,rid,'publish',v,r);await confirm(scope(a.user),a.user,rid);};
  const stop=a=>({action:'stop-serving',id:id(),project:a.project,expiresAt:hours(2),operator:OPERATOR,reason:REASON});
  for(const a of [xa,ya]){const pageId=id();await m.appPages.prepareAppPage(scope(a.user),a.user,a.project,pageId,{title:'Journal',description:'Test',buttonLabel:'Save',fields:[{key:'note',label:'Note',type:'text'}]});await m.appPages.confirmAppPage(scope(a.user),a.user,pageId);}
+ // A visitor request sent before the stop keeps its readable receipt.
+ const lastRun=id();assert.equal((await data.transitionAppData(db,service,xa.visitor.session,xa.project,lastRun,xa.visitor.revision,{note:'before stop'})).state,'complete');xa.visitor.revision++;
  // Everything serves before the stop.
  assert.equal((await sitePage(xs)).status,200);assert.equal((await contactForm(xs)).status,200);assert.equal((await appPage(xa)).status,200);
  assert.equal((await app(xa,'config')).status,200);assert.equal((await callBackend(xb)).status,200);
@@ -206,13 +208,29 @@ try{
  assert.deepEqual(await photo(xs),{ok:false,status:503,message:'This site’s monthly photo allowance has been reached. Please try again after the monthly reset.'});
  // Public backend: refused by the admission trigger with the generic body.
  const stoppedBackend=await callBackend(xb);assert.equal(stoppedBackend.status,429);assert.equal(await stoppedBackend.text(),frozenBody);
- // Visitor application: page, configuration, execution, modules and new signups are refused like an application without a live page.
- assert.equal((await appPage(xa)).status,404);
- for(const [path,init] of [['config'],['data'],['data',{method:'POST',body:'{}'}],['modules',{method:'POST',body:'{}'}],['auth/signup/options',{method:'POST',body:'{}'}]]){const r=await app(xa,path,init);assert.equal(r.status,404,path);assert.deepEqual(await r.json(),{error:'Application page unavailable'});}
+ // Visitor application: configuration, execution, modules, uploads and new signups are refused like an application
+ // without a live page. The page itself is the same static visitor client, which then offers only the account view.
+ const stoppedPage=await appPage(xa);assert.equal(stoppedPage.status,200);assert.equal(await stoppedPage.text(),visitorClient);
+ for(const [path,init] of [['config'],['data',{method:'POST',body:'{}'}],['modules',{method:'POST',body:'{}'}],['modules/upload',{method:'POST',body:'x',headers:{'content-type':'image/jpeg'}}],['auth/signup/options',{method:'POST',body:'{}'}],['auth/signup/verify',{method:'POST',body:'{}'}],['receipts/not-an-id']]){const r=await app(xa,path,init);assert.equal(r.status,404,path);assert.deepEqual(await r.json(),{error:'Application page unavailable'});}
  assert.equal((await transition(xa)).status,409);
- // Existing visitors keep their own data: export and the deletion review still work; data is untouched.
- const exported=await app(xa,'export');assert.equal(exported.status,200,await exported.clone().text());
- assert.equal((await app(xa,'account/deletion-review',{method:'POST',body:'{}'})).status,200);
+ // Existing visitors keep their own account: saved data, the last request's receipt, export and the deletion review
+ // still work, and none of these answers discloses the stop, the operator or the reason.
+ const seen=[];const keep=async r=>{const text=await r.clone().text();seen.push(text);return r;};
+ const saved=await keep(await app(xa,'data'));assert.equal(saved.status,200);assert.equal((await saved.json()).revision,xa.visitor.revision);
+ const lastReceipt=await keep(await app(xa,'receipts/'+lastRun));assert.equal(lastReceipt.status,200);assert.equal((await lastReceipt.json()).state,'complete');
+ assert.equal((await keep(await app(xa,'receipts/'+id()))).status,404,'An unknown receipt is still the ordinary not-found answer');
+ const exported=await keep(await app(xa,'export'));assert.equal(exported.status,200,await exported.clone().text());
+ assert.equal((await keep(await app(xa,'account/deletion-review',{method:'POST',body:'{}'}))).status,200);
+ // Sign-in and passkey replacement start normally; recovery succeeds, and its lost-response retry (same code and
+ // nonce) returns the same replacement code instead of failing.
+ assert.equal((await keep(await app(xa,'auth/login/options',{method:'POST',body:'{}'}))).status,200);
+ assert.equal((await keep(await app(xa,'auth/add/options',{method:'POST',body:'{}'}))).status,200);
+ const nonce='a'.repeat(64),recover=()=>app(xa,'auth/recover',{method:'POST',body:JSON.stringify({code:xa.visitor.recovery,nonce})});
+ const recovered=await keep(await recover());assert.equal(recovered.status,200);const replacement=(await recovered.json()).recoveryCode;
+ const retried=await keep(await recover());assert.equal(retried.status,200);assert.equal((await retried.json()).recoveryCode,replacement);
+ xa.visitor.session=retried.headers.get('set-cookie').match(new RegExp(`local-whumpo-app-session-${xa.project}=([0-9a-f]{64})`))[1];
+ assert.equal((await keep(await app(xa,'data'))).status,200,'The recovered session reads the same saved data');
+ assert.deepEqual(seen.flatMap(disclosed),[]);
  // Other tenants keep serving; the owner workspace is unchanged (owner backend test, owner contact inbox).
  assert.equal((await sitePage(ys)).status,200);assert.equal((await contactForm(ys)).status,200);assert.equal((await appPage(ya)).status,200);assert.equal((await app(ya,'config')).status,200);
  assert.equal((await runContainment(db,{action:'status',subject:{kind:'account',id:y}})).usage.projects.some(p=>p.serving.stopped),false,'No other tenant project is stopped');
@@ -280,5 +298,40 @@ try{
  // A closed expired serving stop becomes eligible only 90 days after its close.
  const closeE={action:'close',id:e.id,operator:OPERATOR,reason:'Expired serving stop reviewed'};await runContainment(db,closeE,(await runContainment(db,closeE)).applyDigest);
  assert.equal((await runContainment(db,{action:'cleanup',id:id(),before:cutoff,operator:OPERATOR},undefined,N)).delete.containments,0);
- console.log(`Operator containment passed on ${process.argv.includes('--d1')?'actual local D1':'SQLite'}: input validation, preview/apply digest mismatch, idempotent replay, project and account freeze at backend/transition/contact/photo admission triggers, lowered/raised/superseding allowances, generic customer responses with no disclosure, trigger-level bypass refusal, immutable audit with operator and reason, lift, expiry, explicit close, separate serving stop (site/asset/CMS/directory/contact/photo/backend/app/module/signup refused, visitor export and deletion kept, exact state review with stale and racing refusal, one active stop, lift and expiry), 90-day retention cleanup (exact cutoff boundary, unresolved/held/within-retention kept, racing hold atomicity, replay and no revival), cross-project isolation and unchanged customer data and publications.`);
+ // ---- Receipt capacity is checked after the cleanup's own deletions: a full store reclaims old cleanup receipts.
+ const receiptCount=async()=>(await db.prepare('SELECT count(*) n FROM operator_retention_receipts').first()).n;
+ const receiptExists=async rid=>(await db.prepare('SELECT count(*) n FROM operator_retention_receipts WHERE id=?').bind(rid).first()).n===1;
+ const containmentExists=async cid=>(await db.prepare('SELECT count(*) n FROM operator_containments WHERE id=?').bind(cid).first()).n>0;
+ // Fixture-only bulk fill: synthetic receipts written without the admit/apply triggers, `old` of them 100 days old.
+ let batch=0;const fill=async(total,old)=>{batch++;const names=['operator_retention_admit','operator_retention_apply'],saved=[];
+  for(const name of names){saved.push((await db.prepare('SELECT sql FROM sqlite_master WHERE name=?').bind(name).first()).sql);await db.prepare('DROP TRIGGER '+name).run();}
+  try{await db.prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<?1) INSERT INTO operator_retention_receipts(id,cutoff,containments,revocations,receipts,operator_ref,request_digest,review_digest,created_at)
+   SELECT printf('%08x-0000-4000-8000-%012x',?3,i),strftime('%Y-%m-%dT%H:%M:%fZ','now','-190 days'),'["fixture:photo"]','[]','[]','human:fixture',printf('%064d',0),printf('%064d',0),
+   CASE WHEN i<=?2 THEN strftime('%Y-%m-%dT%H:%M:%fZ','now','-100 days') ELSE strftime('%Y-%m-%dT%H:%M:%fZ','now') END FROM n`).bind(total,old,batch).run();}
+  finally{for(const sql of saved)await db.prepare(sql).run();}};
+ // The earlier cleanup's own receipt is also aged past retention, so this run purges it.
+ await rewrite('operator_retention_immutable',"UPDATE operator_retention_receipts SET created_at=strftime('%Y-%m-%dT%H:%M:%fZ','now','-100 days') WHERE id=?",cleanup.id);
+ await fill(10000-await receiptCount(),2);assert.equal(await receiptCount(),10000);
+ const w=await user(),pC=await project(w),c1=await oldAction(pC,Date.now()-retentionMs-86400000);
+ const N3=Date.now(),full={action:'cleanup',id:id(),before:at(N3-retentionMs),operator:OPERATOR},fp=await runContainment(db,full,undefined,N3);
+ assert.deepEqual(fp.delete,{containments:1,revocations:0,receipts:3});assert.deepEqual(fp.receiptCapacity,{stored:10000,limit:10000,afterCleanup:9998});assert.ok(fp.applyDigest);
+ // Rollback: a hold racing the apply aborts the whole statement at the full store; no receipt, nothing deleted.
+ await assert.rejects(runContainment(interceptDatabase(db,/INSERT INTO operator_retention_receipts/,()=>hold(w,pC.project,'hold-wh050-full')),full,fp.applyDigest,N3),/Cleanup refused/);
+ assert.equal(await receiptCount(),10000);assert.equal(await receiptExists(cleanup.id),true);assert.equal(await containmentExists(c1.id),true);assert.equal(await receiptExists(full.id),false);
+ await release('hold-wh050-full');
+ const fullApplied=await runContainment(db,full,fp.applyDigest,N3);assert.deepEqual(fullApplied.receipt.deleted,{containments:1,revocations:0,receipts:3});
+ assert.equal(await receiptCount(),9998);assert.equal(await receiptExists(cleanup.id),false);assert.equal(await containmentExists(c1.id),false);
+ for(const r of [b2,held,e,inside])assert.equal(await containmentExists(r.id),true,'Young, held and unresolved records survive the full-store cleanup');
+ // Replay after the receipt was purged cannot repeat the cleanup on records that are eligible now.
+ const pD=await project(w),d1=await oldAction(pD,Date.now()-retentionMs-86400000);
+ await assert.rejects(runContainment(db,cleanup,cp.applyDigest,N),/Review is stale or differs/);
+ assert.equal(await containmentExists(d1.id),true);assert.equal(await receiptExists(cleanup.id),false);
+ // Full again with no receipt old enough: the tool refuses and the schema aborts the same statement.
+ await fill(10000-await receiptCount(),0);assert.equal(await receiptCount(),10000);
+ const none={action:'cleanup',id:id(),before:at(Date.now()-retentionMs),operator:OPERATOR},np=await runContainment(db,none);
+ assert.deepEqual(np.delete,{containments:1,revocations:0,receipts:0});assert.equal(np.receiptCapacity.afterCleanup,10001);assert.equal(np.applyDigest,null);
+ await assert.rejects(runContainment(db,none,'f'.repeat(64)),/receipt storage is full/);
+ await assert.rejects(db.prepare("INSERT INTO operator_retention_receipts(id,cutoff,containments,revocations,receipts,operator_ref,request_digest,review_digest) VALUES(?,?,?,'[]','[]','human:x',?,?)").bind(id(),none.before,JSON.stringify([d1.id+':photo']),'a'.repeat(64),'b'.repeat(64)).run(),/operator_retention_capacity/);
+ assert.equal(await receiptCount(),10000);assert.equal(await containmentExists(d1.id),true,'The refused cleanup deleted nothing');
+ console.log(`Operator containment passed on ${process.argv.includes('--d1')?'actual local D1':'SQLite'}: input validation, preview/apply digest mismatch, idempotent replay, project and account freeze at backend/transition/contact/photo admission triggers, lowered/raised/superseding allowances, generic customer responses with no disclosure, trigger-level bypass refusal, immutable audit with operator and reason, lift, expiry, explicit close, separate serving stop (site/asset/CMS/directory/contact/photo/backend/app/module/signup refused, stopped visitor page kept as the account-only client with saved data, last-request receipt, export, deletion review, sign-in and passkey-replacement options and recovery with lost-response retry kept, exact state review with stale and racing refusal, one active stop, lift and expiry), 90-day retention cleanup (exact cutoff boundary, unresolved/held/within-retention kept, racing hold atomicity, replay and no revival, full 10000-receipt store reclaiming old receipts with racing-hold rollback, replay after receipt purge refused, full store with no old receipt refused by tool and schema), cross-project isolation and unchanged customer data and publications.`);
 }finally{await store.close();}

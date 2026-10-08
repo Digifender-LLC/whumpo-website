@@ -2863,12 +2863,15 @@ CREATE TRIGGER operator_retention_admit BEFORE INSERT ON operator_retention_rece
   (SELECT count(*) FROM operator_containments WHERE id||':'||scope IN (SELECT value FROM json_each(NEW.containments)) AND resolved_at<=NEW.cutoff)<>json_array_length(NEW.containments)
   OR (SELECT count(*) FROM operator_session_revocations WHERE id IN (SELECT value FROM json_each(NEW.revocations)) AND created_at<=NEW.cutoff)<>json_array_length(NEW.revocations)
   OR (SELECT count(*) FROM operator_retention_receipts WHERE id IN (SELECT value FROM json_each(NEW.receipts)) AND created_at<=NEW.cutoff)<>json_array_length(NEW.receipts);
- SELECT RAISE(ABORT,'operator_retention_capacity') WHERE (SELECT count(*) FROM operator_retention_receipts)>=10000;
 END;
+-- Capacity is checked after the listed deletions, in the same statement: a full table can still record a cleanup that
+-- removes at least as many old receipts as it adds, and a cleanup that would leave more than 10000 receipts aborts
+-- whole (no receipt, nothing deleted).
 CREATE TRIGGER operator_retention_apply AFTER INSERT ON operator_retention_receipts BEGIN
  DELETE FROM operator_containments WHERE id||':'||scope IN (SELECT value FROM json_each(NEW.containments));
  DELETE FROM operator_session_revocations WHERE id IN (SELECT value FROM json_each(NEW.revocations));
  DELETE FROM operator_retention_receipts WHERE id IN (SELECT value FROM json_each(NEW.receipts));
+ SELECT RAISE(ABORT,'operator_retention_capacity') WHERE (SELECT count(*) FROM operator_retention_receipts)>10000;
 END;
 CREATE TRIGGER operator_retention_immutable BEFORE UPDATE ON operator_retention_receipts BEGIN SELECT RAISE(ABORT,'operator_retention_immutable'); END;
 CREATE TRIGGER operator_retention_retained BEFORE DELETE ON operator_retention_receipts

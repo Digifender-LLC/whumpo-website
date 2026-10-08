@@ -23,6 +23,8 @@ export const maximumContainmentMs=30*86400000;
 /** Resolved records (lifted or closed containment, completed revocations and cleanup receipts) are kept this long. */
 export const retentionMs=90*86400000;
 const cleanupLimit=500;
+/** Stored cleanup receipts, checked after each cleanup's own deletions (schema operator_retention_apply). */
+export const retentionReceiptLimit=10000;
 const fail=()=>{throw Error('Invalid operator containment request');};
 function keys(value,allowed,required=allowed){if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).some(k=>!allowed.includes(k))||required.some(k=>!Object.hasOwn(value,k)))fail();}
 function id(value){if(typeof value!=='string'||!uuid.test(value))fail();return value;}
@@ -146,8 +148,11 @@ async function cleanupState(db,cutoff,now){
   (SELECT count(*) FROM operator_containments WHERE resolved_at IS NULL AND expires_at<=?1) AS expiredAwaitingClose,
   (SELECT count(*) FROM operator_containments WHERE resolved_at IS NOT NULL AND resolved_at>?2) AS resolvedWithinRetention,
   (SELECT count(*) FROM operator_containments WHERE resolved_at IS NOT NULL AND resolved_at<=?2 AND ${held('subject_id')}) AS heldBySafety,
-  (SELECT count(*) FROM operator_session_revocations WHERE created_at>?2 OR EXISTS(SELECT 1 FROM safety_preservation_holds WHERE released_at IS NULL AND subject_user_id=account_id)) AS revocationsRetained`).bind(nowIso,cutoff).first();
- return {candidates,retained};
+  (SELECT count(*) FROM operator_session_revocations WHERE created_at>?2 OR EXISTS(SELECT 1 FROM safety_preservation_holds WHERE released_at IS NULL AND subject_user_id=account_id)) AS revocationsRetained,
+  (SELECT count(*) FROM operator_retention_receipts) AS receiptsStored`).bind(nowIso,cutoff).first();
+ // A cleanup adds one receipt and removes its listed old receipts; the schema refuses a result above the limit.
+ const {receiptsStored,...kept}=retained;
+ return {candidates,retained:kept,receiptCapacity:{stored:receiptsStored,limit:retentionReceiptLimit,afterCleanup:receiptsStored+1-candidates.receipts.length}};
 }
 
 export async function runContainment(db,input,apply,now=Date.now()){
@@ -246,9 +251,11 @@ export async function runContainment(db,input,apply,now=Date.now()){
   if(Date.parse(input.before)>now-retentionMs)throw Error('Cleanup cutoff must be at least 90 days in the past');
   const current=await cleanupState(db,input.before,now),c=current.candidates;
   const review=reviewDigest(input,c),total=c.containments.length+c.revocations.length+c.receipts.length;
-  if(apply===undefined)return {preview:true,request:input,delete:{containments:c.containments.length,revocations:c.revocations.length,receipts:c.receipts.length},retained:current.retained,
-   applyDigest:total?review:null,notice:'Deletes only records resolved (lifted or closed), completed or receipted at or before the cutoff, which must be at least 90 days ago, outside any safety hold. Active, expired-but-unclosed and held records are kept; close an expired action first. At most 500 of each kind per run.'};
+  const full=current.receiptCapacity.afterCleanup>retentionReceiptLimit;
+  if(apply===undefined)return {preview:true,request:input,delete:{containments:c.containments.length,revocations:c.revocations.length,receipts:c.receipts.length},retained:current.retained,receiptCapacity:current.receiptCapacity,
+   applyDigest:total&&!full?review:null,notice:'Deletes only records resolved (lifted or closed), completed or receipted at or before the cutoff, which must be at least 90 days ago, outside any safety hold. Active, expired-but-unclosed and held records are kept; close an expired action first. At most 500 of each kind per run. Each cleanup adds one receipt; at most 10000 receipts may remain after its deletions, so a full store needs at least one listed cleanup receipt over 90 days old.'};
   if(!total)throw Error('Nothing is eligible for cleanup');
+  if(full)throw Error('Cleanup receipt storage is full and no cleanup receipt is old enough to remove; nothing was deleted');
   if(apply!==review)throw Error('Review is stale or differs; preview this exact request again');
   try{
    await db.prepare('INSERT INTO operator_retention_receipts(id,cutoff,containments,revocations,receipts,operator_ref,request_digest,review_digest) VALUES(?,?,?,?,?,?,?,?)')
@@ -256,6 +263,7 @@ export async function runContainment(db,input,apply,now=Date.now()){
   }catch(error){
    const saved=await db.prepare('SELECT id,cutoff,containments,revocations,receipts,operator_ref,request_digest,review_digest,created_at FROM operator_retention_receipts WHERE id=?').bind(input.id).first();
    if(saved&&saved.review_digest===review)return {applied:true,replayed:true,receipt:receipt(saved)};
+   if(/operator_retention_capacity/.test(String(error?.message)))throw Error('Cleanup receipt storage is full and no cleanup receipt is old enough to remove; nothing was deleted');
    throw Error('Cleanup refused: a listed record changed, was removed or entered a safety hold. Preview again');
   }
   const saved=await db.prepare('SELECT id,cutoff,containments,revocations,receipts,operator_ref,request_digest,review_digest,created_at FROM operator_retention_receipts WHERE id=?').bind(input.id).first();
