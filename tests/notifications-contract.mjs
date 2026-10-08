@@ -310,6 +310,21 @@ await checkOnce('the catalog re-expresses the existing contact notices byte for 
  assert.deepEqual(real.render(t['contact.new-message@1'].template,{}),src.contactEmailMessage({outboxId:'o',idempotencyKey:'k',kind:'new_message',projectId:'p',recipient:'owner@example.test'}));
  assert.deepEqual(real.render(t['owner.destination-verification@1'].template,{code:'ABCD2345'}),src.contactEmailMessage({outboxId:'o',idempotencyKey:'k',kind:'verification',projectId:'p',recipient:'owner@example.test',verificationCode:'ABCD2345'}));
 });
+await checkOnce('the source catalog (src/notification-catalog.ts) and renderer agree with the reference catalog',async()=>{
+ // WH-155: the agreement is checked against the maintained TypeScript catalog; the reference validators are not changed to match it.
+ const bundled=await build({stdin:{contents:"export * from './src/notification-catalog';",resolveDir:process.cwd(),loader:'ts'},bundle:true,format:'esm',platform:'neutral',write:false,logLevel:'silent'});
+ const cat=await import('data:text/javascript;base64,'+Buffer.from(bundled.outputFiles[0].text).toString('base64'));
+ const rc=real.notificationCatalog,sc=cat.notificationCatalog;
+ assert.deepEqual(Object.keys(sc.templates),Object.keys(rc.templates));
+ for(const [key,e] of Object.entries(sc.templates)){
+  assert.deepEqual(e.template,rc.templates[key].template,key);assert.equal(e.state,rc.templates[key].state,key);assert.equal(e.readiness,rc.templates[key].readiness,key);
+  assert.equal(e.digest,real.templateDigest(rc.templates[key].template),`${key} pinned digest`);
+ }
+ assert.deepEqual(sc.providers,rc.providers);assert.deepEqual(sc.senders,rc.senders);
+ assert.equal((await cat.validateNotificationCatalog(sc)).contractVersion,real.contractVersion);
+ for(const [key,values] of [['contact.new-message@1',{}],['owner.destination-verification@1',{code:'ABCD2345'}]])assert.deepEqual(cat.renderNotification(key,values),real.render(rc.templates[key].template,values),key);
+ assert.throws(()=>cat.renderNotification('appointment.staff-notice@1',{businessName:'Shine'}),e=>e.code==='TEMPLATE_NOT_IMPLEMENTED','planned templates stay planned in the source catalog');
+});
 await checkOnce('sender, provider ceiling, attempt bound and error classes agree with the WH-036 adapter',()=>{
  const p=real.notificationCatalog.providers[src.cloudflareEmailProvider];assert.ok(p);
  assert.equal(real.notificationCatalog.senders['whumpo-notify'].address,src.contactNotificationSender);

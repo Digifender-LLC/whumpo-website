@@ -58,7 +58,7 @@ These answers authorize the decisions only, not activation, DNS changes, spendin
 
 ### What exists
 
-Source: `src/contact-notifications.ts` (outbox, runner, reviews), `src/contact-email.ts` (Cloudflare adapter and the only activation path), `tools/contact-suppression-reset*.mjs` (operator reset). Tables are in `schema/platform.sql` and classified in `docs/data-lifecycle.json` as `contact-notifications`.
+Source: `src/contact-notifications.ts` (outbox, runner, reviews), `src/contact-email.ts` (Cloudflare adapter and the only activation path), `src/notification-catalog.ts` (WH-155: the notice text, platform sender, provider ceiling and error classes the adapter uses, rendered byte for byte as before; implemented in source, not deployed — see [notifications](notifications.md#source-catalog-and-renderer-wh-155)), `tools/contact-suppression-reset*.mjs` (operator reset). Tables are in `schema/platform.sql` and classified in `docs/data-lifecycle.json` as `contact-notifications`.
 
 - **Destination setup.** `contact_notification_destinations` holds at most one owner-named address per project, starting `unverified`. It can be set in two ways:
   - **Exact Chat review.** The agent can prepare `contactNotificationReview` only with the exact address the owner gave. The reply pins that normalized address for ten minutes, and the separate confirmation button applies it in the chat-turn transaction (`contact_destination_reviews`, trigger `contact_destination_review_apply`). Replays, other owners, expired reviews and suppressed addresses are refused by the database. The model cannot confirm.

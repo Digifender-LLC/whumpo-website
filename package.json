@@ -69,6 +69,7 @@
     "test:contacts": "node tests/contacts.mjs && node tests/contact-notifications.mjs",
     "test:notifications-contract": "node tests/notifications-contract.mjs",
     "test:connector-provider-readiness": "node tests/connector-provider-readiness.mjs",
+    "test:notifications-source": "node tests/notifications-source.mjs",
     "test:version-diff": "node tests/version-diff.mjs",
     "test:first-ai-journey": "node tests/first-ai-journey.mjs",
     "test:backend-runtime": "node tests/backend-runtime.mjs",
