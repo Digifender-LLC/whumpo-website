@@ -84,17 +84,25 @@
    "id": "B3",
    "severity": "low",
    "title": "Typed guest-preview revoke/delete applies its effect before the Chat turn batch; a request that returns 409 has already deleted the link",
-   "status": "reproduced (executed)",
-   "owner": "Chat/guest-preview maintainers (src/chat.ts, src/guest-previews/bindings.ts); src fix needs owner sign-off",
-   "reproduction": "node tests/boundary-guest-preview-race.mjs (expected to exit 1 until remediated)",
+   "status": "resolved October 9, 2026 (UTC) by #178: the revoke/delete effect is a statement guarded by the saved turn and appended to the revision-checked turn batch (regression test passes)",
+   "owner": "Chat/guest-preview maintainers (src/chat.ts, src/guest-previews/bindings.ts, src/guest-previews/owner.ts)",
+   "reproduction": "node tests/boundary-guest-preview-race.mjs (regression, exit 0); maintained regression node tests/guest-preview-chat-atomic.mjs and --d1",
    "evidence": [
     {
      "file": "src/chat.ts",
-     "contains": "if(control?.action.type==='guestPreview'){try{guestPreview=await guestPreviewChatCommand(db,userId,content);}"
+     "contains": "if(control?.action.type==='guestPreview'){try{guestPreview=await guestPreviewChatCommand(db,userId,input.id,content);}"
+    },
+    {
+     "file": "src/chat.ts",
+     "contains": "if(guestPreview)statements.push(...guestPreview.statements);"
     },
     {
      "file": "src/guest-previews/bindings.ts",
-     "contains": "if(remove){await deleteGuestPreview(db,userId,remove[1]);"
+     "contains": "statements:await guestPreviewTurnStatements(db,userId,turnId,'delete',remove[1])"
+    },
+    {
+     "file": "src/guest-previews/owner.ts",
+     "contains": ":[db.prepare(`DELETE FROM guest_preview_links WHERE id=? AND owner_user_id=? AND ${saved}`).bind(linkId,userId,turnId,userId)];"
     },
     {
      "file": "src/chat.ts",
@@ -102,7 +110,7 @@
     },
     {
      "file": "tests/boundary-guest-preview-race.mjs",
-     "contains": "B3 reproduced"
+     "contains": "B3 resolved: a guest-preview delete refused with 409 left the link unchanged."
     }
    ]
   }
@@ -1488,7 +1496,7 @@
     },
     "stale": {
      "state": "evidenced",
-     "detail": "Turns carry the expected conversation revision; a changed revision is refused and effects ride in the same batch as the turn (exception: guest-preview controls, finding B3).",
+     "detail": "Turns carry the expected conversation revision; a changed revision is refused and effects ride in the same batch as the turn (guest-preview controls included since finding B3 was resolved by #178).",
      "enforcedAt": [
       {
        "file": "src/chat.ts",
@@ -4494,10 +4502,35 @@
      ]
     },
     "stale": {
-     "state": "gap",
-     "detail": "The typed revoke/delete control applies its effect before the Chat turn's revision-checked batch, so a request rejected as stale (409) has already changed the link.",
-     "gapKind": "control",
-     "finding": "B3"
+     "state": "evidenced",
+     "detail": "The typed revoke/delete control returns its effect as a statement guarded by the saved Chat turn and appended to the turn's revision-checked batch, so a request rejected as stale (409) changes nothing. It used to apply the effect first (B3, resolved by #178).",
+     "enforcedAt": [
+      {
+       "file": "src/guest-previews/owner.ts",
+       "contains": "const saved='EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)';"
+      },
+      {
+       "file": "src/chat.ts",
+       "contains": "if(guestPreview)statements.push(...guestPreview.statements);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/guest-preview-chat-atomic.mjs",
+       "contains": "assert.ok(await linkRow(linkId),'the refused delete removed the link');",
+       "asserts": "a delete control refused with 409 for a stale revision leaves the link, its comments and no turn"
+      },
+      {
+       "file": "tests/guest-preview-chat-atomic.mjs",
+       "contains": "assert.equal((await linkRow(linkId)).revoked_at,null,'the refused revoke ended the link');",
+       "asserts": "a revoke control refused with 409 for a stale revision leaves the link active"
+      },
+      {
+       "file": "tests/boundary-guest-preview-race.mjs",
+       "contains": "assert.equal(result.status,409,'the delete request should report a conversation conflict');",
+       "asserts": "the B3 race returns 409 and the link remains"
+      }
+     ]
     }
    }
   },

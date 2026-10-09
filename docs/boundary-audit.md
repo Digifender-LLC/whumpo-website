@@ -18,7 +18,7 @@ Files: [`docs/boundary-audit.json`](boundary-audit.json) (registry), [`tools/bou
    - `gap`: `gapKind: "test"` means enforced but no test asserts it; `gapKind: "control"` means required by a contract or runbook but not enforced, and must name a finding;
    - `n/a`: with the reason (read-only, or not required by the current contract);
    - `unverified`: not established in this slice, with what is needed.
-3. **Anchors instead of line numbers.** Every enforcement and test citation is `{file, contains}`. The test checks that the file exists and still contains that exact text, so a deleted assertion or rewritten guard fails loudly, while unrelated edits do not. 457 anchors are checked.
+3. **Anchors instead of line numbers.** Every enforcement and test citation is `{file, contains}`. The test checks that the file exists and still contains that exact text, so a deleted assertion or rewritten guard fails loudly, while unrelated edits do not. 464 anchors are checked.
 4. **Review.** Four read-only reviews traced the privileged families end to end (cross-owner/project/visitor access, model-confirmation bypass, Origin, stale/replay, GET side effects). Every candidate finding was then re-checked in source by the auditor; the three reported below were **executed** against disposable fixtures. Candidates that could not be reproduced are listed as unverified risks.
 
 ### What the test enforces
@@ -45,7 +45,7 @@ Families: 28 (23 privileged). Registered route matchers: 206. Typed Chat control
 | freshness | 7 | 6 | 11 | 0 |
 | target | 23 | 1 | 0 | 0 |
 | replay | 24 | 0 | 0 | 0 |
-| stale | 22 | 2 | 0 | 0 |
+| stale | 23 | 1 | 0 | 0 |
 
 Cells not recorded (allowed only for non-privileged families): 16.
 
@@ -72,7 +72,7 @@ Cells not recorded (allowed only for non-privileged families): 16.
 | domains | dns-hosting, deletion | 1 / 3 | evidenced | evidenced | n/a | evidenced | evidenced | evidenced |
 | photos-files | deletion | 2 / 1 | evidenced | evidenced | n/a | evidenced | evidenced | evidenced |
 | specification-service-clients | publish, activation | 4 / 2 | gap (test) | evidenced | evidenced | evidenced | evidenced | evidenced |
-| guest-previews | publish, deletion | 3 / 2 | evidenced | evidenced | n/a | evidenced | evidenced | gap (control B3) |
+| guest-previews | publish, deletion | 3 / 2 | evidenced | evidenced | n/a | evidenced | evidenced | evidenced |
 | site-publication | publish, deletion | 5 / 3 | evidenced | evidenced | gap (control B2) | evidenced | evidenced | evidenced |
 | site-health | no | 2 / 0 | evidenced | evidenced | — | — | — | — |
 | cloudflare-dns | dns-hosting | 4 / 0 | evidenced | evidenced | n/a | evidenced | evidenced | evidenced |
@@ -94,7 +94,7 @@ No path was found from model output or plain Chat text to a confirmation. Plain 
 
 ## Findings (reproduced)
 
-Severity reflects the current private, invitation-only test with a sole tester. None crosses tenant data confidentiality or integrity. Remediation needs owner sign-off; no `src/` or schema was changed in this slice. The reproductions are expected to exit 1 while the defect exists and are deliberately **not** in `package.json` scripts or any `tools/verify.mjs` profile.
+Severity reflects the current private, invitation-only test with a sole tester. None crosses tenant data confidentiality or integrity. Remediation needs owner sign-off; no `src/` or schema was changed in this slice. The reproductions are expected to exit 1 while the defect exists and are deliberately **not** in `package.json` scripts or any `tools/verify.mjs` profile. B3 has since been fixed on `main` by #178, so its reproduction now passes as a regression.
 
 ### B1 Platform-wide review capacity can be exhausted by one owner (low; availability, cross-tenant)
 
@@ -112,13 +112,14 @@ Each owner review table has a per-project cap of 100 **and a platform-wide cap o
 - **Impact:** these are protective actions; Origin and ownership are enforced. The risk is operational: an incident responder relying on C10 would overestimate the protection, and a stolen-but-valid session can take a site, application or connection offline without a passkey.
 - **Resolution:** owner decision, October 8, 2026: correct C10 to match the feature contracts rather than add freshness to protective actions. `docs/incident-runbooks.md` C10 now states which controls need a recent passkey sign-in and that disconnects have no rate limit. `tests/boundary-recent-auth.mjs` is now a passing characterization of the documented behavior (still outside verify profiles). The cell stays `gap (control B2)` in the matrix because the code is unchanged; a future freshness policy (see R4) would change the test and runbook together.
 
-### B3 Guest-preview revoke/delete control applies its effect outside the Chat turn's revision check (low; atomicity/receipt)
+### B3 Guest-preview revoke/delete control applies its effect outside the Chat turn's revision check (low; atomicity/receipt) — resolved October 9, 2026 by #178
 
-Every other typed control appends its effect to the batch that inserts the Chat turn under the expected conversation revision ([`src/chat.ts`](../src/chat.ts)). `guestPreview` controls call `guestPreviewChatCommand` ([`src/guest-previews/bindings.ts`](../src/guest-previews/bindings.ts)), which revokes or deletes immediately, before that batch.
+Every other typed control appends its effect to the batch that inserts the Chat turn under the expected conversation revision ([`src/chat.ts`](../src/chat.ts)). `guestPreview` controls called `guestPreviewChatCommand` ([`src/guest-previews/bindings.ts`](../src/guest-previews/bindings.ts)), which revoked or deleted immediately, before that batch.
 
-- **Reproduction (executed):** `node tests/boundary-guest-preview-race.mjs`. A delete control is paused before its turn batch while another control from the same owner commits; the delete request returns `409 Your conversation changed`, saves no turn, but the link and its comments are already deleted. Expected: a refused request has no effect (as for all other controls).
-- **Impact:** same owner only, on an action they requested; the reported outcome is wrong and the retry path then returns 404. No cross-tenant effect.
-- **Remediation ownership:** Chat and guest-preview maintainers: return the revoke/delete statements to the turn batch like other controls. Source change needs owner sign-off.
+- **Reproduction (executed):** `node tests/boundary-guest-preview-race.mjs`. A delete control is paused before its turn batch while another control from the same owner commits. Before the fix, the delete request returned `409 Your conversation changed` and saved no turn, but the link and its comments were already deleted (exit 1). Expected: a refused request has no effect (as for all other controls).
+- **Impact (before the fix):** same owner only, on an action they requested; the reported outcome was wrong and the retry path then returned 404. No cross-tenant effect.
+- **Resolution (#178, merged October 9, 2026 UTC):** `guestPreviewChatCommand` now only checks ownership and returns the revoke/delete as a statement guarded by the saved Chat turn (`guestPreviewTurnStatements` in [`src/guest-previews/owner.ts`](../src/guest-previews/owner.ts)); [`src/chat.ts`](../src/chat.ts) appends it to the revision-checked turn batch. `node tests/boundary-guest-preview-race.mjs` now passes as a regression (still outside verify profiles); the maintained regression is `tests/guest-preview-chat-atomic.mjs` (SQLite and `--d1`: stale-revision delete and revoke, fresh, replay, foreign-owner and held-comment cases). The `guest-previews` stale cell is now `evidenced`. Not deployed or live-accepted by this audit.
+- **Original remediation note:** Chat and guest-preview maintainers: return the revoke/delete statements to the turn batch like other controls. Source change needs owner sign-off.
 
 ## Unverified risks and hardening notes
 
@@ -138,7 +139,7 @@ Recorded per cell in the registry. Notable: foreign-owner apply of a specificati
 
 ## Verification
 
-Commands run on Node 24.21.0 at `ca17c6a` plus this change (see the WH-004 handoff for exact results):
+Commands run on Node 24.21.0 at `ca17c6a` plus this change (see the WH-004 handoff for exact results). After rebasing onto `main` with #178, the B3 reproduction was re-run and now exits 0:
 
 ```sh
 node tests/boundary-audit.mjs
@@ -149,7 +150,7 @@ node tools/verify.mjs protection
 node tests/boundary-review-capacity.mjs        # B1, expected exit 1
 node tests/boundary-review-capacity.mjs --d1   # B1 on local D1, expected exit 1
 node tests/boundary-recent-auth.mjs            # B2, characterization (exit 0)
-node tests/boundary-guest-preview-race.mjs     # B3, expected exit 1
+node tests/boundary-guest-preview-race.mjs     # B3, regression (exit 0; fixed by #178)
 node tools/roadmap.mjs validate && node tools/roadmap.mjs render --check
 git diff --check
 ```
@@ -158,7 +159,7 @@ No remote, Cloudflare, provider or deployment operation was performed; fixtures 
 
 ## Remaining WH-004 work
 
-- Owner decisions and remediation for B1–B3 (and R2/R4 policy).
+- Owner decision and remediation for B1 (and R2/R4 policy). B2 was resolved by correcting the runbook; B3 was fixed by #178.
 - Close the evidence gaps above with focused regressions where the owner wants them.
 - Extend the same structural registry to the sites, apps and runtime Workers and scheduled jobs.
 - Run the security scan workflow named in the packet against the current commit and reconcile with this registry.

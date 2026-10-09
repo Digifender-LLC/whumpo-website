@@ -1,7 +1,8 @@
-// WH-004 finding B3 reproduction: a typed guest-preview delete control applies its effect before the Chat turn's
-// revision-checked batch, so a request that returns 409 has already deleted the link. EXPECTED TO FAIL (exit 1)
-// until remediated. Deliberately not in package.json scripts or any tools/verify.mjs profile. Offline: disposable
-// SQLite fixture, synthetic owner, no network. See docs/boundary-audit.md#b3.
+// WH-004 finding B3 regression: a typed guest-preview delete control used to apply its effect before the Chat
+// turn's revision-checked batch, so a request that returned 409 had already deleted the link. Since #178 the effect
+// rides in the turn batch, so a refused request leaves the link and its comments unchanged (exit 0). Not in
+// package.json scripts or any tools/verify.mjs profile; tests/guest-preview-chat-atomic.mjs is the maintained
+// regression. Offline: disposable SQLite fixture, synthetic owner, no network. See docs/boundary-audit.md#b3.
 import assert from 'node:assert/strict';
 import {currentSiteFixtureHandlers,createFixtureProject} from './current-site-fixture.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
@@ -34,7 +35,7 @@ try{
  assert.ok(raced,'the competing control did not run');
  assert.equal(result.status,409,'the delete request should report a conversation conflict');
  const remaining=await db.prepare('SELECT id FROM guest_preview_links WHERE id=?').bind(link.id).first();
- assert.ok(remaining,'B3 reproduced: the request returned 409 and saved no Chat turn, but the guest preview link and its comments were already deleted.');
- console.log('B3 not reproduced: a rejected guest-preview control left the link unchanged.');
+ assert.ok(remaining,'B3 regressed: the request returned 409 and saved no Chat turn, but the guest preview link and its comments were already deleted.');
+ console.log('B3 resolved: a guest-preview delete refused with 409 left the link unchanged.');
 }catch(error){console.error(error.message);process.exitCode=1;}
 finally{globalThis.fetch=originalFetch;await fixture.close?.();}
