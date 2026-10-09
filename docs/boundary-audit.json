@@ -3,7 +3,7 @@
  "task": "WH-004",
  "auditedCommit": "ca17c6ad3f009b961916be6f4c2053a8eaa531e4",
  "auditedOn": "2026-10-08",
- "scope": "Mounted platform Worker request surface (src/index.ts and its sub-dispatchers) and the typed Chat controls. Not the sites, apps or runtime Workers, scheduled jobs, operator CLI tools or provider behaviour.",
+ "scope": "Slice 1: the mounted platform Worker request surface (src/index.ts and its sub-dispatchers) and the typed Chat controls. Slice 2: the whumpo-sites, whumpo-apps and whumpo-runtime Worker dispatchers, Worker reachability from wrangler*.jsonc, the platform public contact form and scheduled jobs, and operator tools under tools/ that can reach remote state. Not provider behaviour, live configuration or deployment state.",
  "cellStates": {
   "evidenced": "Enforcing code located and an existing test line asserts the property (negative case for authority, replay and stale state).",
   "gap": "gapKind \"test\": enforced in code but no test asserts it. gapKind \"control\": required by a contract or runbook but not enforced; names a finding.",
@@ -113,15 +113,112 @@
      "contains": "B3 resolved: a guest-preview delete refused with 409 left the link unchanged."
     }
    ]
+  },
+  {
+   "id": "B4",
+   "severity": "low",
+   "title": "Hosting recovery tool targets a retired control database",
+   "status": "reproduced (executed, static)",
+   "owner": "Operator tooling maintainers; owner decision before any remote use of the tool",
+   "reproduction": "node tests/boundary-operator-target.mjs (expected to exit 1 until remediated)",
+   "evidence": [
+    {
+     "file": "tools/reconcile-domain-hosting.mjs",
+     "contains": "/d1/database/680f98b9-a769-467f-8b6f-06c10195c263/query"
+    },
+    {
+     "file": "wrangler.jsonc",
+     "contains": "\"database_id\": \"dba4c707-a0c0-4084-969b-6c43f6afebde\""
+    },
+    {
+     "file": "tests/boundary-operator-target.mjs",
+     "contains": "B4 reproduced"
+    }
+   ]
+  },
+  {
+   "id": "B5",
+   "severity": "low",
+   "title": "Anonymous visitor login starts can exhaust app challenge capacity for one project and for every tenant",
+   "status": "reproduced (executed, local SQLite)",
+   "owner": "Visitor identity maintainers; schema change needs a coordinated cutover",
+   "reproduction": "node tests/boundary-app-challenge-capacity.mjs (expected to exit 1 until remediated)",
+   "evidence": [
+    {
+     "file": "schema/platform.sql",
+     "contains": "SELECT RAISE(ABORT,'app_challenge_capacity') WHERE (SELECT count(*) FROM app_auth_challenges WHERE project_id=NEW.project_id)>=50 OR (SELECT count(*) FROM app_auth_challenges)>=1000;"
+    },
+    {
+     "file": "src/app-gateway.ts",
+     "contains": "if(path.startsWith('auth/')&&!(await env.AUTH_LIMITER.limit({key:'app:'+ip})).success)"
+    },
+    {
+     "file": "tests/boundary-app-challenge-capacity.mjs",
+     "contains": "B5 reproduced"
+    }
+   ]
+  },
+  {
+   "id": "B6",
+   "severity": "low",
+   "title": "Guest-preview views draw only the platform-wide photo read pool, bypassing the per-project fair share",
+   "status": "reproduced (executed, local D1/R2; pool pre-seeded to stand in for prior views)",
+   "owner": "Guest-preview and storage-budget maintainers; owner decision",
+   "reproduction": "node tests/boundary-guest-preview-read-pool.mjs (needs python3 with Pillow; expected to exit 1 until remediated)",
+   "evidence": [
+    {
+     "file": "src/photo-versions.ts",
+     "contains": "if(results.length)await reserveStorage(env.DB,'read',results.length);"
+    },
+    {
+     "file": "src/storage-budget.ts",
+     "contains": "One project or client exhausting its budget therefore no longer refuses every tenant's photos."
+    },
+    {
+     "file": "src/guest-previews/policy.ts",
+     "contains": "windowSeconds:600,viewsPerWindow:60"
+    },
+    {
+     "file": "tests/boundary-guest-preview-read-pool.mjs",
+     "contains": "B6 reproduced"
+    }
+   ]
+  },
+  {
+   "id": "B7",
+   "severity": "informational",
+   "title": "create-invite writes to the remote control database by default with no preview, apply flag or run record",
+   "status": "characterized (executed against a recording Wrangler stub; behavior as designed, guard-rail policy question)",
+   "owner": "Owner decision on operator guard rails; operator tooling maintainers",
+   "reproduction": "node tests/boundary-create-invite-default.mjs (characterization, exit 0)",
+   "evidence": [
+    {
+     "file": "tools/create-invite.mjs",
+     "contains": "local ? \"--local\" : \"--remote\""
+    },
+    {
+     "file": "tests/boundary-create-invite-default.mjs",
+     "contains": "no flag means a remote write"
+    }
+   ]
   }
  ],
  "families": [
   {
    "id": "public-entry",
-   "title": "Anonymous platform entry: health, plan catalogue, public contact form and /api dispatch",
+   "title": "Anonymous platform entry: exact-host check, health, plan catalogue and /api dispatch",
    "privileged": [],
-   "authorityClass": "anonymous (public contact form: visitor with Turnstile, per-client admission and form revision)",
+   "authorityClass": "anonymous (no account data)",
    "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "host",
+     "match": "new URL(request.url).origin!=='https://whumpo.com'",
+     "methods": [
+      "ANY"
+     ],
+     "beforeOriginGate": true
+    },
     {
      "file": "src/index.ts",
      "kind": "exact",
@@ -141,15 +238,6 @@
     },
     {
      "file": "src/index.ts",
-     "kind": "regex",
-     "match": "/^\\/contact\\/([0-9a-f-]{36})$/",
-     "methods": [
-      "ANY"
-     ],
-     "beforeOriginGate": true
-    },
-    {
-     "file": "src/index.ts",
      "kind": "prefix",
      "match": "/api/",
      "methods": [
@@ -161,7 +249,7 @@
    "cells": {
     "authority": {
      "state": "n/a",
-     "detail": "Anonymous by design: /api/health and /api/plans return no account data; /contact/:id is a public visitor form with its own Turnstile, per-connection admission, rate limit and form-revision checks (docs/contact-forms.md; not re-reviewed here). The /api/ prefix only dispatches to handle()."
+     "detail": "Anonymous by design: /api/health and /api/plans return no account data; the /api/ prefix only dispatches to handle(); fetch() serves only https://whumpo.com outside ENVIRONMENT=local. The public contact form moved to public-contact-form in slice 2."
     },
     "origin": {
      "state": "evidenced",
@@ -5545,6 +5633,3145 @@
      ]
     }
    }
+  },
+  {
+   "id": "public-contact-form",
+   "title": "Platform public contact form /contact/:id (moved from public-entry in slice 2)",
+   "surface": "visitor",
+   "privileged": [
+    "visitor-data"
+   ],
+   "authorityClass": "anonymous visitor: Turnstile + exact Origin on POST + per-client daily admission + form revision; no session",
+   "reach": "Public internet on whumpo.com (fetch() before /api dispatch; any other host is 404 outside ENVIRONMENT=local).",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/contact\\/([0-9a-f-]{36})$/",
+     "methods": [
+      "ANY"
+     ],
+     "beforeOriginGate": true
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "n/a",
+     "detail": "Anonymous by design: any visitor may submit to a published, enabled form; the visitor gains no inbox or read authority. Abuse controls are in admission."
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "POST requires the exact page Origin (a missing header also fails); GET/HEAD render the form only.",
+     "enforcedAt": [
+      {
+       "file": "src/contact-page.ts",
+       "contains": "if(request.method==='POST'&&request.headers.get('origin')!==new URL(request.url).origin)throw new ContactError(403,"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/contacts.mjs",
+       "contains": "assert.equal((await contactPage(post(payload,'https://evil.example'),env,a.project,good)).status,403);assert.equal(calls,0);",
+       "asserts": "a cross-origin POST is refused before Turnstile"
+      }
+     ]
+    },
+    "admission": {
+     "state": "evidenced",
+     "detail": "Per-IP API_LIMITER, fail-closed Turnstile (secret and site key required outside local; hostname/action/cdata bound), per-client daily allowance (10, counted before verification), hourly and retained caps in the commit trigger. The per-IP 429 and missing-token branches are untested.",
+     "enforcedAt": [
+      {
+       "file": "src/contact-page.ts",
+       "contains": "try{await reservePublicClient(env.DB,'contact',projectId,await publicClientKey(request,'contact',projectId));}"
+      },
+      {
+       "file": "src/contact-page.ts",
+       "contains": "{hostname:new URL(request.url).hostname,action:'contact',cdata:projectId}"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/contacts.mjs",
+       "contains": "const flooded=await contactPage(from('203.0.113.50'),env,a.project,good);assert.equal(flooded.status,429);",
+       "asserts": "one client is limited per day"
+      },
+      {
+       "file": "tests/contacts.mjs",
+       "contains": "for(const invalid of [{success:false},{success:true,hostname:'evil.example',action:'contact',cdata:a.project}",
+       "asserts": "failed or mis-bound Turnstile results are refused"
+      }
+     ]
+    },
+    "tenant": {
+     "state": "evidenced",
+     "detail": "The form id is the project; only a published, enabled form whose settings match the live publication revision and is not service-client blocked accepts input. Submissions land only in that project's inbox.",
+     "enforcedAt": [
+      {
+       "file": "src/contacts.ts",
+       "contains": "AND c.enabled=1 AND s.version_id IS NOT NULL AND s.revision=c.publication_revision"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/service-client-activation.mjs",
+       "contains": "assert.equal(response.status,404);assert.doesNotMatch(await response.text(),/<form|Example Garden/);",
+       "asserts": "a blocked form is not served or accepted"
+      }
+     ]
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "The submission binds the form revision; a changed revision is refused.",
+     "enforcedAt": [
+      {
+       "file": "src/contact-page.ts",
+       "contains": "if(!Number.isSafeInteger(revision)||revision!==target.revision)throw new ContactError(409,"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/contacts.mjs",
+       "contains": "assert.equal((await contactPage(inflight,env,a.project,stopDuringVerification)).status,409);",
+       "asserts": "a form disabled during verification is refused"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "Submission id + request hash receipt; same id with a different body conflicts.",
+     "enforcedAt": [
+      {
+       "file": "src/contacts.ts",
+       "contains": "if(existing){if(existing.request_hash!==hash||existing.expires_at<=now.toISOString())throw new ContactError(409,"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/contacts.mjs",
+       "contains": "await assert.rejects(saveContact(db,a.project,revision,{...m,message:'other'}),e=>e.status===409);",
+       "asserts": "a reused submission id with other content is refused"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Disabled, unpublished or stale-revision forms are refused at commit.",
+     "enforcedAt": [
+      {
+       "file": "src/contacts.ts",
+       "contains": "AND c.enabled=1 AND s.version_id IS NOT NULL AND s.revision=c.publication_revision"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/contacts.mjs",
+       "contains": "await assert.rejects(saveContact(db,a.project,revision,stale),e=>e.status===409);assert.equal((await contactPage(new Request(url),env,a.project)).status,404);",
+       "asserts": "a stale revision is refused and a disabled form is gone"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "site-host-dispatch",
+   "title": "whumpo-sites host dispatch: project, visitor-app and local hosts",
+   "surface": "visitor",
+   "privileged": [],
+   "authorityClass": "anonymous (host name selects the project; no credentials are read)",
+   "reach": "Public internet via the *.whumpo.site/* route (wrangler.sites.jsonc); workers.dev and preview URLs disabled. app-<uuid> hosts are forwarded to whumpo-apps over the APP_HOST service binding.",
+   "entries": [
+    {
+     "file": "src/site-host.ts",
+     "kind": "host",
+     "match": "['localhost','127.0.0.1'].includes(url.hostname)",
+     "methods": [
+      "ANY"
+     ]
+    },
+    {
+     "file": "src/site-host.ts",
+     "kind": "host",
+     "match": "customerProject(url.hostname)",
+     "methods": [
+      "ANY"
+     ]
+    },
+    {
+     "file": "src/site-host.ts",
+     "kind": "host",
+     "match": "visitorProject(url.hostname)",
+     "methods": [
+      "ANY"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "n/a",
+     "detail": "Public read-only serving; the host name only selects which published project is read."
+    },
+    "origin": {
+     "state": "n/a",
+     "detail": "Dispatch only; mutating routes enforce their own rules (public backend: no ambient credentials; guest preview: exact Origin)."
+    },
+    "admission": {
+     "state": "n/a",
+     "detail": "Dispatch only; admission is per route family."
+    },
+    "tenant": {
+     "state": "evidenced",
+     "detail": "On a project host the path is rewritten under /s/<that project>, so another project's /s/<id> path never matches a route. The `local` alias is derived from the request host name (localhost/127.0.0.1), which the *.whumpo.site route cannot deliver; not verified live (R10).",
+     "enforcedAt": [
+      {
+       "file": "src/site-host.ts",
+       "contains": "if(project)url.pathname='/s/'+project+url.pathname;"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/boundary-site-isolation.mjs",
+       "contains": "assert.equal((await fetchHost(`https://${a.project}.whumpo.site${path}`)).status,404,path);",
+       "asserts": "another project's published site is not served by path on a project host (slice-2 regression, standalone)"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "site-root",
+   "title": "Published site root /s/:id/ and project host root",
+   "surface": "visitor",
+   "privileged": [],
+   "authorityClass": "anonymous public read of the current publication",
+   "reach": "Public internet (project host, custom domain root, local alias).",
+   "entries": [
+    {
+     "file": "src/site-host.ts",
+     "kind": "regex",
+     "match": "/^\\/s\\/([0-9a-f-]{36})\\/?$/",
+     "methods": [
+      "GET",
+      "HEAD"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "n/a",
+     "detail": "Public read of the current publication only."
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "GET/HEAD only; every other method is refused before routing.",
+     "enforcedAt": [
+      {
+       "file": "src/site-host.ts",
+       "contains": "if(request.method!=='GET'&&request.method!=='HEAD')return new Response('Method not allowed',{status:405"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/directories.mjs",
+       "contains": "'/directory.json',{method:'POST',body:'{}'}),store.env)).status,405);",
+       "asserts": "a POST to a public serving path is refused by the shared GET/HEAD gate"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "assert.ok(ungated.includes('registered route no longer mounted: src/site-host.ts regex",
+       "asserts": "removing the GET/HEAD refusal is reported by the registry check"
+      }
+     ]
+    },
+    "admission": {
+     "state": "n/a",
+     "detail": "No per-client limit on HTML; relies on the Cloudflare edge (R11). Traffic counting is measurement only."
+    },
+    "tenant": {
+     "state": "evidenced",
+     "detail": "Served project is the host project; another project's path is unreachable on a project host.",
+     "enforcedAt": [
+      {
+       "file": "src/site-host.ts",
+       "contains": "if(project)url.pathname='/s/'+project+url.pathname;"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/boundary-site-isolation.mjs",
+       "contains": "assert.equal((await fetchHost(`https://${a.project}.whumpo.site${path}`)).status,404,path);",
+       "asserts": "another project's published site is not served by path on a project host (slice-2 regression, standalone)"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Only the current publication is served; unpublish and safety withdrawal give 404; a held specification gives 503; contact link only while the form matches the publication revision.",
+     "enforcedAt": [
+      {
+       "file": "src/site-host.ts",
+       "contains": "await requireSpecificationAvailable(env.DB,site.id);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/customer-site-journey.mjs",
+       "contains": "await confirm(owner,off.input.id);assert.equal((await served(project)).status,404);",
+       "asserts": "unpublished site is gone (site profile)"
+      },
+      {
+       "file": "tests/specification-journey.mjs",
+       "contains": "const blocked=await m.host.fetch(new Request(url,{method}),{DB:db,FILES:fixture.env.FILES});assert.equal(blocked.status,503);",
+       "asserts": "a held specification is not served"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "site-assets",
+   "title": "Published photo /s/:id/assets/:id.jpg",
+   "surface": "visitor",
+   "privileged": [],
+   "authorityClass": "anonymous public read of an approved photo in the current publication",
+   "reach": "Public internet (project host, custom domain /assets/<id>.jpg, local alias).",
+   "entries": [
+    {
+     "file": "src/site-host.ts",
+     "kind": "regex",
+     "match": "/^\\/s\\/([0-9a-f-]{36})\\/assets\\/([0-9a-f-]{36})\\.jpg$/",
+     "methods": [
+      "GET",
+      "HEAD"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "n/a",
+     "detail": "Public read; the photo must be in the current published version, ready and approved."
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "GET/HEAD only.",
+     "enforcedAt": [
+      {
+       "file": "src/site-host.ts",
+       "contains": "if(request.method!=='GET'&&request.method!=='HEAD')return new Response('Method not allowed',{status:405"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/directories.mjs",
+       "contains": "'/directory.json',{method:'POST',body:'{}'}),store.env)).status,405);",
+       "asserts": "a POST to a public serving path is refused by the shared GET/HEAD gate"
+      }
+     ]
+    },
+    "admission": {
+     "state": "evidenced",
+     "detail": "Per-client daily photo allowance (400), per-project monthly budget (10,000) with account fair share, platform ceiling (100,000). The host-level 429 mapping is untested (function-level only). Guest-preview views bypass this budget (B6).",
+     "enforcedAt": [
+      {
+       "file": "src/site-host.ts",
+       "contains": "await reservePublicPhotoRead(env.DB,request,asset[1]);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/public-fairness.mjs",
+       "contains": "await assert.rejects(read(ph,'203.0.113.77'),e=>e instanceof fair.PublicClientLimitError&&e.status===429);",
+       "asserts": "one client is limited per day"
+      }
+     ]
+    },
+    "tenant": {
+     "state": "evidenced",
+     "detail": "The photo must belong to the requested project and its current publication.",
+     "enforcedAt": [
+      {
+       "file": "src/site-host.ts",
+       "contains": "JOIN project_files f ON f.id=v.file_id AND f.project_id=s.project_id WHERE s.project_id=? AND f.id=? AND f.status='ready' AND ${approvedPhotoSQL}"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/photo-versions.mjs",
+       "contains": "assert.equal((await get('/s/'+b.project+'/assets/'+first+'.jpg')).status,404);",
+       "asserts": "another project's photo id is refused"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Unpublished, superseded or blocked photos are refused; bytes are digest-verified before serving. A held specification on the photo route is untested.",
+     "enforcedAt": [
+      {
+       "file": "src/site-host.ts",
+       "contains": "if(!await photoBytesMatch(bytes,photo.digest))return new Response('Photo unavailable'"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/photo-versions.mjs",
+       "contains": "await chat(owner,'/confirm '+removed.id);assert.equal((await get('/s/'+a.project+'/assets/'+first+'.jpg')).status,404);",
+       "asserts": "after unpublish the photo is gone"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "site-directory",
+   "title": "Public directory /s/:id/directory[.json]",
+   "surface": "visitor",
+   "privileged": [],
+   "authorityClass": "anonymous public read (JSON with Access-Control-Allow-Origin * and no credentials)",
+   "reach": "Public internet (project host and local alias; not custom domains).",
+   "entries": [
+    {
+     "file": "src/site-host.ts",
+     "kind": "regex",
+     "match": "/^\\/s\\/([0-9a-f-]{36})\\/directory(\\.json)?$/",
+     "methods": [
+      "GET",
+      "HEAD"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "n/a",
+     "detail": "Public by design; contains only the published directory snapshot."
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "GET/HEAD only; CORS * is safe because no credential is read.",
+     "enforcedAt": [
+      {
+       "file": "src/site-host.ts",
+       "contains": "if(request.method!=='GET'&&request.method!=='HEAD')return new Response('Method not allowed',{status:405"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/directories.mjs",
+       "contains": "'/directory.json',{method:'POST',body:'{}'}),store.env)).status,405);",
+       "asserts": "a POST to a public serving path is refused by the shared GET/HEAD gate"
+      }
+     ]
+    },
+    "admission": {
+     "state": "n/a",
+     "detail": "No per-client limit; relies on the Cloudflare edge (R11)."
+    },
+    "tenant": {
+     "state": "evidenced",
+     "detail": "Only the live directory snapshot of the requested project, bound to the current publication revision.",
+     "enforcedAt": [
+      {
+       "file": "src/directory.ts",
+       "contains": "WHERE d.project_id=? AND d.live_json IS NOT NULL AND s.version_id IS NOT NULL AND d.publication_revision=s.revision"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/directories.mjs",
+       "contains": "assert.equal(json.user_id,undefined);",
+       "asserts": "no owner identifier is exported"
+      },
+      {
+       "file": "tests/boundary-site-isolation.mjs",
+       "contains": "assert.equal((await fetchHost(`https://${a.project}.whumpo.site${path}`)).status,404,path);",
+       "asserts": "another project's published site is not served by path on a project host (slice-2 regression, standalone)"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "A restored or switched-off directory is gone. Not gated by specification safety holds (documented safety-coverage S09).",
+     "enforcedAt": [
+      {
+       "file": "src/directory.ts",
+       "contains": "d.publication_revision=s.revision"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/directories.mjs",
+       "contains": "const off=await chat(a.user,'/directory-off '+a.project);await confirm(a.user,off);assert.equal((await get(a.project)).status,404);",
+       "asserts": "switching the directory off removes it"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "site-cms",
+   "title": "Public CMS listing, articles and frozen media (/s/:id/cms/...)",
+   "surface": "visitor",
+   "privileged": [],
+   "authorityClass": "anonymous public read of published CMS state",
+   "reach": "Public internet (project host and local alias; custom domains refused).",
+   "entries": [
+    {
+     "file": "src/site-host.ts",
+     "kind": "regex",
+     "match": "/^\\/s\\/([0-9a-f-]{36})\\/cms\\/media\\/([0-9a-f-]{36})\\/([0-9a-f]{64})\\.jpg$/",
+     "methods": [
+      "GET",
+      "HEAD"
+     ]
+    },
+    {
+     "file": "src/site-host.ts",
+     "kind": "regex",
+     "match": "/^\\/s\\/([0-9a-f-]{36})\\/cms\\/?$/",
+     "methods": [
+      "GET",
+      "HEAD"
+     ]
+    },
+    {
+     "file": "src/site-host.ts",
+     "kind": "regex",
+     "match": "/^\\/s\\/([0-9a-f-]{36})\\/cms\\/(posts|pages)\\/([0-9A-HJKMNP-TV-Z]{26})$/",
+     "methods": [
+      "GET",
+      "HEAD"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "n/a",
+     "detail": "Public read of published, unwithdrawn articles and approved frozen media."
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "GET/HEAD only.",
+     "enforcedAt": [
+      {
+       "file": "src/site-host.ts",
+       "contains": "if(request.method!=='GET'&&request.method!=='HEAD')return new Response('Method not allowed',{status:405"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/directories.mjs",
+       "contains": "'/directory.json',{method:'POST',body:'{}'}),store.env)).status,405);",
+       "asserts": "a POST to a public serving path is refused by the shared GET/HEAD gate"
+      }
+     ]
+    },
+    "admission": {
+     "state": "unverified",
+     "detail": "Media reads use the per-client/per-project photo budget; articles and the listing have no per-client limit. CMS functional testing is owner-deferred, so the cited CMS suites were not run in this slice.",
+     "needs": "Run the owner-deferred CMS suites when CMS testing resumes."
+    },
+    "tenant": {
+     "state": "unverified",
+     "detail": "Queries are scoped to the project id from the path; a project host cannot address another project (site-host-dispatch). Source-reviewed only.",
+     "needs": "CMS functional testing (owner-deferred)."
+    },
+    "stale": {
+     "state": "unverified",
+     "detail": "Live articles are digest-checked at serve time and withdrawn articles/blocked media are refused (source; tests/cms-media-safety.mjs and tests/cms-deploy.mjs assert this but were not run).",
+     "needs": "CMS functional testing (owner-deferred)."
+    }
+   }
+  },
+  {
+   "id": "site-backend",
+   "title": "Public stateless backend /s/:id/backend[/:publication]",
+   "surface": "visitor",
+   "privileged": [
+    "execution"
+   ],
+   "authorityClass": "anonymous public execution of the applied published backend (no ambient credentials forwarded)",
+   "reach": "Public internet on a project host or the local alias only; custom and unmapped hosts get 405. Execution goes to whumpo-runtime over BACKEND_RUNTIME.",
+   "entries": [
+    {
+     "file": "src/site-host.ts",
+     "kind": "regex",
+     "match": "/^\\/s\\/([0-9a-f-]{36})\\/backend(?:\\/([0-9a-f-]{36}))?$/",
+     "methods": [
+      "ANY"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "n/a",
+     "detail": "Unauthenticated by contract (\"Accept for test: stateless public backends\", security-risk-actions.md); no cookie or Authorization header reaches the runtime."
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "CORS without credentials; the runtime receives only content-type and the lane header.",
+     "enforcedAt": [
+      {
+       "file": "src/backend-publication.ts",
+       "contains": "if(request.method!=='POST')return new Response(JSON.stringify({ok:false,error:'method_not_allowed'})"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/backend-publication.mjs",
+       "contains": "assert.equal(preflight.status,204);assert.equal(preflight.headers.get('access-control-allow-credentials'),null);",
+       "asserts": "preflight never allows credentials"
+      },
+      {
+       "file": "tests/backend-publication.mjs",
+       "contains": "assert.ok(headerNames.every(n=>['content-type','x-whumpo-lane'].includes(n)));",
+       "asserts": "cookies/authorization are not forwarded"
+      }
+     ]
+    },
+    "admission": {
+     "state": "evidenced",
+     "detail": "Per-client daily allowance (20), per-project daily quota with account fair share, runtime fairness lane; uncertain reservations dispatch nothing; busy calls are refunded.",
+     "enforcedAt": [
+      {
+       "file": "src/backend-publication.ts",
+       "contains": "try{await reservePublicClient(db,'backend',project,await publicClientKey(request,'backend',project));}"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/public-fairness.mjs",
+       "contains": "assert.deepEqual(await refused[0].json(),{ok:false,error:'client_allowance_exhausted'});",
+       "asserts": "one client is limited through the host"
+      },
+      {
+       "file": "tests/backend-publication.mjs",
+       "contains": "assert.equal(batch.filter(r=>r.status===200).length,97);assert.equal(batch.filter(r=>r.status===429).length,8);",
+       "asserts": "project quota"
+      }
+     ]
+    },
+    "tenant": {
+     "state": "evidenced",
+     "detail": "Only the host project's applied publication by its current owner runs; another project's backend or pinned publication is refused on a project host and custom hosts never reach a backend.",
+     "enforcedAt": [
+      {
+       "file": "src/backend-publication.ts",
+       "contains": "if(!row||publication&&row.review_id!==publication)return reply({ok:false,error:'not_found'},404);"
+      },
+      {
+       "file": "src/site-host.ts",
+       "contains": "if(backend&&(local||!!project))return publicBackend("
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/boundary-site-isolation.mjs",
+       "contains": "assert.equal((await post(`https://${a.project}.whumpo.site/backend/${rb}`)).status,404,'B publication pinned on A host');",
+       "asserts": "B's pinned publication is refused on A's host"
+      },
+      {
+       "file": "tests/boundary-site-isolation.mjs",
+       "contains": "assert.equal(calls,2,'no refused request reached the runtime');",
+       "asserts": "refused requests never reach the runtime"
+      }
+     ]
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "Immutable source digest-checked at serve time (the 503 branch is untested); prepared-but-unconfirmed publications do not run.",
+     "enforcedAt": [
+      {
+       "file": "src/backend-publication.ts",
+       "contains": "if(!service||await hashToken(row.source)!==row.digest)return reply({ok:false,error:'unavailable'},503);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/backend-versions.mjs",
+       "contains": "await assert.rejects(db.prepare('UPDATE backend_versions SET source=? WHERE id=?').bind('new',v).run(),/backend_immutable/);",
+       "asserts": "published source cannot change"
+      }
+     ]
+    },
+    "replay": {
+     "state": "n/a",
+     "detail": "Stateless execution; every attempt is charged and no durable state changes."
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Unpublished, withdrawn or ownership-changed publications do not run; a stale pinned id is refused.",
+     "enforcedAt": [
+      {
+       "file": "src/backend-publication.ts",
+       "contains": "JOIN projects p ON p.id=b.project_id AND p.owner_user_id=r.user_id WHERE b.project_id=?"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/backend-publication.mjs",
+       "contains": "await confirm(scope(a.user),a.user,off);assert.equal((await call(a,{})).status,404);",
+       "asserts": "unpublished backend is gone"
+      },
+      {
+       "file": "tests/service-safety.mjs",
+       "contains": "assert.equal((await publicBackend(o)).status,404);assert.equal((await publicApp(o)).status,200);assert.equal(calls,callsBefore);",
+       "asserts": "safety withdrawal stops execution"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "site-custom-domain",
+   "title": "Custom-domain mapping (root and /assets only)",
+   "surface": "visitor",
+   "privileged": [],
+   "authorityClass": "anonymous; host name mapped to a project only through an active, provider-attached, owner-matching domain connection",
+   "reach": "Public internet for hostnames attached to the zone; whether Cloudflare for SaaS traffic reaches the *.whumpo.site/* route is unverified, and hosting is inactive behind DOMAIN_HOSTING_READY (R12).",
+   "entries": [
+    {
+     "file": "src/site-host.ts",
+     "kind": "host",
+     "match": "env.DB.prepare(\"SELECT c.project_id FROM domain_connections c JOIN projects p ON p.id=c.project_id AND p.owner_user_id=c.user_id WHERE c.hostname=? AND c.state='active' AND c.serve_until>? AND c.provider_id IS NOT NULL\").bind(url.hostname,new Date().toISOString())",
+     "methods": [
+      "ANY"
+     ]
+    },
+    {
+     "file": "src/site-host.ts",
+     "kind": "regex",
+     "match": "/^\\/(?:assets\\/[0-9a-f-]{36}\\.jpg)?$/",
+     "methods": [
+      "GET",
+      "HEAD"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "n/a",
+     "detail": "Public read of the mapped project's root and photos only."
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "GET/HEAD only; any other path on a custom host is 404.",
+     "enforcedAt": [
+      {
+       "file": "src/site-host.ts",
+       "contains": "if(!mapping||!/^\\/(?:assets\\/[0-9a-f-]{36}\\.jpg)?$/.test(url.pathname))return new Response('Site not found',{status:404,headers});"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/domain-hosting.mjs",
+       "contains": "assert.equal((await get('/api/chat')).status,404);assert.equal((await get('/s/'+project)).status,404);",
+       "asserts": "other paths, including another project path, are refused"
+      }
+     ]
+    },
+    "admission": {
+     "state": "n/a",
+     "detail": "As site-root/site-assets."
+    },
+    "tenant": {
+     "state": "evidenced",
+     "detail": "Mapping requires state active, unexpired serving window, provider id and the connection owner still owning the project (owner-join refusal itself is untested; only an operator can change ownership).",
+     "enforcedAt": [
+      {
+       "file": "src/site-host.ts",
+       "contains": "JOIN projects p ON p.id=c.project_id AND p.owner_user_id=c.user_id WHERE c.hostname=? AND c.state='active' AND c.serve_until>? AND c.provider_id IS NOT NULL"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/domain-hosting.mjs",
+       "contains": "await db.prepare(\"UPDATE domain_connections SET serve_until='2000-01-01' WHERE id=?\").bind(r.id).run();assert.equal((await get('/')).status,404);",
+       "asserts": "an expired serving window stops serving"
+      },
+      {
+       "file": "tests/domains.mjs",
+       "contains": "for(const invalid of ['whumpo.com','a.whumpo.com','whumpo.site','a.whumpo.site','https://foo.com'",
+       "asserts": "platform names cannot be claimed"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Disconnecting or a failed refresh stops serving immediately.",
+     "enforcedAt": [
+      {
+       "file": "src/site-host.ts",
+       "contains": "c.state='active' AND c.serve_until>?"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/domain-hosting.mjs",
+       "contains": "assert.equal((await disconnectHosting(scope(user),user,r.id,config,transport)).state,'disconnecting');assert.equal((await get('/')).status,404);",
+       "asserts": "disconnecting stops serving"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "site-traffic",
+   "title": "Traffic measurement after a 200 HTML response (default export)",
+   "surface": "visitor",
+   "privileged": [],
+   "authorityClass": "none (post-response measurement; no input changes the response)",
+   "reach": "Every public GET that returned 200 HTML on a project host, custom domain or local alias.",
+   "entries": [
+    {
+     "file": "src/site-host.ts",
+     "kind": "host",
+     "match": "url.hostname!==guestPreviewHost",
+     "methods": [
+      "ANY"
+     ]
+    },
+    {
+     "file": "src/site-host.ts",
+     "kind": "prefix",
+     "match": "/guest-preview",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/site-host.ts",
+     "kind": "regex",
+     "match": "/^\\/s\\/([0-9a-f-]{36})(?:\\/|$)/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/site-host.ts",
+     "kind": "host",
+     "match": "env.DB.prepare(\"SELECT project_id FROM domain_connections WHERE hostname=? AND state='active' AND serve_until>? AND provider_id IS NOT NULL\").bind(url.hostname,new Date().toISOString())",
+     "methods": [
+      "ANY"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "n/a",
+     "detail": "Measurement only; runs after the response is decided."
+    },
+    "origin": {
+     "state": "n/a",
+     "detail": "GET only, after serving."
+    },
+    "admission": {
+     "state": "n/a",
+     "detail": "Counts only; anyone can inflate their own target's counter (R11)."
+    },
+    "tenant": {
+     "state": "evidenced",
+     "detail": "Counts the host's project; the custom-domain lookup lacks the owner join but runs only after the owner-joined serving mapping already returned 200 (informational).",
+     "enforcedAt": [
+      {
+       "file": "src/site-host.ts",
+       "contains": "if(project)await measureTraffic(env.DB,project,kind);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/site-traffic.mjs",
+       "contains": "['s/'+a.project,'GET']])await host.fetch(new Request(url(a.project)+path,{method}),{DB:db});",
+       "asserts": "non-HTML, failed and aliased requests are not counted"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "operator-serving-stop",
+   "title": "WH-050 operator serving stop: guard on the public site host and the visitor application gateway",
+   "surface": "visitor",
+   "privileged": [],
+   "authorityClass": "none for visitors (the guard only narrows existing routes); the stop itself is set by the reviewed tools/operator-containment.mjs stop-serving action (operator-tool surface)",
+   "reach": "Every public request on a project host, custom domain or local alias (site host) and every visitor application request after the gateway's own Origin refusal. These entries are the guard's own path comparisons (added by #186), not newly mounted routes; each route they let through stays registered in its own family.",
+   "entries": [
+    {
+     "file": "src/site-host.ts",
+     "kind": "regex",
+     "match": "/^\\/s\\/([0-9a-f-]{36})(?:\\/|$)/",
+     "methods": [
+      "GET",
+      "HEAD"
+     ]
+    },
+    {
+     "file": "src/app-gateway.ts",
+     "kind": "exact",
+     "match": "export",
+     "methods": [
+      "GET",
+      "POST"
+     ]
+    },
+    {
+     "file": "src/app-gateway.ts",
+     "kind": "exact",
+     "match": "data",
+     "methods": [
+      "GET",
+      "POST"
+     ]
+    },
+    {
+     "file": "src/app-gateway.ts",
+     "kind": "exact",
+     "match": "account/deletion-review",
+     "methods": [
+      "GET",
+      "POST"
+     ]
+    },
+    {
+     "file": "src/app-gateway.ts",
+     "kind": "exact",
+     "match": "auth/recover",
+     "methods": [
+      "GET",
+      "POST"
+     ]
+    },
+    {
+     "file": "src/app-gateway.ts",
+     "kind": "exact",
+     "match": "auth/logout",
+     "methods": [
+      "GET",
+      "POST"
+     ]
+    },
+    {
+     "file": "src/app-gateway.ts",
+     "kind": "regex",
+     "match": "/^auth\\/(login|add)\\/(options|verify)$/",
+     "methods": [
+      "GET",
+      "POST"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "n/a",
+     "detail": "The guard only refuses; every request it lets through keeps the authority recorded for its own family (site serving, visitor data, visitor credentials, export and deletion)."
+    },
+    "origin": {
+     "state": "n/a",
+     "detail": "Site serving is GET/HEAD only; in the gateway the guard runs after the gateway's own Origin/Sec-Fetch-Site refusal (no beforeOriginGate flag on any entry)."
+    },
+    "admission": {
+     "state": "evidenced",
+     "detail": "A stopped project's site pages, assets, CMS and directory answer 503 'Site temporarily unavailable'; its visitor configuration, modules, uploads, execution and new signups answer the generic 404. Only the visitor's own sign-in, recovery, passkey replacement, sign-out, saved data, receipts, export and deletion review stay available, and no answer discloses the stop.",
+     "enforcedAt": [
+      {
+       "file": "src/site-host.ts",
+       "contains": "if(served&&await servingStopped(env.DB,served[1]))return new Response('Site temporarily unavailable',{status:503,headers});"
+      },
+      {
+       "file": "src/app-gateway.ts",
+       "contains": "if(await servingStopped(env.DB,project)&&!(method==='GET'&&(path==='export'||path==='data'||"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/operator-containment.mjs",
+       "contains": "for(const path of ['/','/assets/'+id()+'.jpg','/cms','/directory','/directory.json']){const r=await sitePage(xs,path);assert.equal(r.status,503,path);",
+       "asserts": "every site path of a stopped project answers the generic 503"
+      },
+      {
+       "file": "tests/operator-containment.mjs",
+       "contains": "['auth/signup/options',{method:'POST',body:'{}'}],['auth/signup/verify',{method:'POST',body:'{}'}],['receipts/not-an-id']]){const r=await app(xa,path,init);assert.equal(r.status,404,path);",
+       "asserts": "configuration, modules, uploads and new signups are refused with the generic 404"
+      },
+      {
+       "file": "tests/operator-containment.mjs",
+       "contains": "const exported=await keep(await app(xa,'export'));assert.equal(exported.status,200,await exported.clone().text());",
+       "asserts": "an existing visitor's export still works under the stop"
+      }
+     ]
+    },
+    "tenant": {
+     "state": "evidenced",
+     "detail": "Keyed only by the project id taken from the served path or the gateway's project; another tenant's site, contact form, application page and configuration keep serving.",
+     "enforcedAt": [
+      {
+       "file": "src/operator-serving.ts",
+       "contains": "SELECT 1 FROM operator_serving_stopped WHERE project_id=?"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/operator-containment.mjs",
+       "contains": "assert.equal((await sitePage(ys)).status,200);assert.equal((await contactForm(ys)).status,200);assert.equal((await appPage(ya)).status,200);assert.equal((await app(ya,'config')).status,200);",
+       "asserts": "another tenant's site, contact form and application keep serving"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "guest-preview-host",
+   "title": "Guest preview host preview.whumpo.site (view, link status, comments)",
+   "surface": "visitor",
+   "privileged": [
+    "visitor-data"
+   ],
+   "authorityClass": "bearer link token (256-bit, hash stored, carried in the URL fragment then a POST body)",
+   "reach": "Public internet on preview.whumpo.site (and /guest-preview on the local alias); project hosts do not serve the prefix.",
+   "entries": [
+    {
+     "file": "src/site-host.ts",
+     "kind": "host",
+     "match": "url.hostname===guestPreviewHost",
+     "methods": [
+      "ANY"
+     ]
+    },
+    {
+     "file": "src/site-host.ts",
+     "kind": "exact",
+     "match": "/guest-preview",
+     "methods": [
+      "ANY"
+     ]
+    },
+    {
+     "file": "src/site-host.ts",
+     "kind": "prefix",
+     "match": "/guest-preview/",
+     "methods": [
+      "ANY"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Only the token hash is stored; a forged or malformed token gives 404 everywhere; tokens never appear in query strings or logs.",
+     "enforcedAt": [
+      {
+       "file": "src/guest-previews/guest.ts",
+       "contains": "SELECT id,owner_user_id,project_id FROM guest_preview_links WHERE token_hash=?"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/guest-previews.mjs",
+       "contains": "assert.equal((await status(token)).status,404);assert.equal((await view(token)).status,404);assert.equal((await comment(token)).status,404);",
+       "asserts": "forged/malformed tokens are refused"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "POST requires the exact preview origin.",
+     "enforcedAt": [
+      {
+       "file": "src/guest-previews/guest.ts",
+       "contains": "if(request.headers.get('origin')!==(local?url.origin:guestPreviewOrigin))return json({error:'Origin check failed'},403);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/guest-previews.mjs",
+       "contains": "{method:'POST',headers:{origin:'https://'+a.project+'.whumpo.site','content-type':'application/x-www-form-urlencoded'},body:'token='+link.token}),hostEnv())).status,403);",
+       "asserts": "a project origin is refused"
+      }
+     ]
+    },
+    "admission": {
+     "state": "gap",
+     "gapKind": "control",
+     "finding": "B6",
+     "detail": "Per-link view window (60 per 10 minutes) and comment caps; no per-client or Turnstile by design. Views inline photos charged only to the platform-wide read pool, bypassing the WH-075 per-project fair share (B6).",
+     "enforcedAt": [
+      {
+       "file": "src/photo-versions.ts",
+       "contains": "if(results.length)await reserveStorage(env.DB,'read',results.length);"
+      }
+     ]
+    },
+    "tenant": {
+     "state": "evidenced",
+     "detail": "Serves exactly the bound saved version of the link's project; no site, asset or CMS aliases on the preview host.",
+     "enforcedAt": [
+      {
+       "file": "src/guest-previews/guest.ts",
+       "contains": "SELECT v.id,v.html,v.component_id,v.config_json FROM site_versions v WHERE v.id=? AND v.project_id=?"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/guest-previews.mjs",
+       "contains": "for(const path of ['/assets/'+a.version+'.jpg','/s/'+a.project+'/','/cms/','/directory.json'])assert.equal((await guest(path)).status,404,path);",
+       "asserts": "no project aliases on the preview host"
+      }
+     ]
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "Exactly the bound version, never the newer head; a version parameter is refused.",
+     "enforcedAt": [
+      {
+       "file": "src/guest-previews/guest.ts",
+       "contains": "if(url.search)return json({error:'Use the exact preview link.'},400);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/guest-previews.mjs",
+       "contains": "assert.equal(await preview.text(),v1HTML,'Exactly the bound saved version, never the newer head');",
+       "asserts": "the bound version is served"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "Comments are idempotent by (link, request id) with a request hash.",
+     "enforcedAt": [
+      {
+       "file": "src/guest-previews/guest.ts",
+       "contains": "ON CONFLICT(link_id,request_id) DO NOTHING"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/guest-previews.mjs",
+       "contains": "assert.equal((await comment(link.token,{requestId,text:'Different '+said})).status,409);",
+       "asserts": "a reused request id with other text conflicts"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Revocation, expiry, version removal, safety hold and lost feature inclusion are re-checked, including after rendering.",
+     "enforcedAt": [
+      {
+       "file": "src/guest-previews/guest.ts",
+       "contains": "if(!await stillCurrent(env.DB,link))return frameMessage(404,'This preview link is unavailable.');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/guest-previews.mjs",
+       "contains": "assert.equal(raced.status,404);assert.doesNotMatch(await raced.text(),/Garden studio/);",
+       "asserts": "a revoke during an in-flight view wins"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "visitor-app-shell",
+   "title": "whumpo-apps entry: host check, visitor.js/css and the live page shell",
+   "surface": "visitor",
+   "privileged": [],
+   "authorityClass": "anonymous static shell for a live application page",
+   "reach": "Service binding only: wrangler.apps.jsonc has no routes, workers.dev or preview URLs; reached through whumpo-sites APP_HOST for app-<uuid>.whumpo.site (the forwarding itself is untested).",
+   "entries": [
+    {
+     "file": "src/app-host.ts",
+     "kind": "host",
+     "match": "visitorProject(url.hostname)",
+     "methods": [
+      "ANY"
+     ]
+    },
+    {
+     "file": "src/app-host.ts",
+     "kind": "host",
+     "match": "url.origin!==origin",
+     "methods": [
+      "ANY"
+     ]
+    },
+    {
+     "file": "src/app-host.ts",
+     "kind": "exact",
+     "match": "/visitor.js",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/app-host.ts",
+     "kind": "exact",
+     "match": "/visitor.css",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/app-host.ts",
+     "kind": "regex",
+     "match": "/^\\/apps\\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\\/$/",
+     "methods": [
+      "GET"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "n/a",
+     "detail": "Static assets and the shell of a live page; no credential is read."
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Exact visitor origin required; GET without query only.",
+     "enforcedAt": [
+      {
+       "file": "src/app-host.ts",
+       "contains": "if(url.origin!==origin)return secure(new Response('Application host required',{status:404}));"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/app-auth.mjs",
+       "contains": "assert.equal((await appHost.fetch(new Request('https://whumpo.com/apps/'+d.project+'/'),{...env,ASSETS:assets})).status,404);",
+       "asserts": "the shell is not served on another host"
+      }
+     ]
+    },
+    "admission": {
+     "state": "gap",
+     "gapKind": "test",
+     "detail": "Per-IP API_LIMITER on the page shell; no test asserts its 429.",
+     "enforcedAt": [
+      {
+       "file": "src/app-host.ts",
+       "contains": "if(!(await env.API_LIMITER.limit({key:'page:'+(request.headers.get('cf-connecting-ip')??'unknown')})).success)"
+      }
+     ]
+    },
+    "tenant": {
+     "state": "evidenced",
+     "detail": "The project comes only from the app-<uuid> host; a withdrawn page is 404.",
+     "enforcedAt": [
+      {
+       "file": "src/app-host.ts",
+       "contains": "if(!await liveAppPage(env.DB,page[1]))return secure(new Response('This application page is unavailable.',{status:404}));"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/customer-app-journey.mjs",
+       "contains": "assert.equal((await visit(origin+'/')).status,404,'Historical approval cannot republish');",
+       "asserts": "a withdrawn page is not served (app profile)"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "visitor-gateway-dispatch",
+   "title": "Visitor gateway shared gates (host, route, query, method, Origin/Sec-Fetch-Site, limiter)",
+   "surface": "visitor",
+   "privileged": [],
+   "authorityClass": "project-scoped visitor session cookie (__Host-whumpo-app-session-<project>, HttpOnly, SameSite=Strict) where a handler needs one",
+   "reach": "Service binding only (via whumpo-sites APP_HOST); every gateway route is behind these gates (order machine-checked).",
+   "entries": [
+    {
+     "file": "src/app-gateway.ts",
+     "kind": "host",
+     "match": "visitorProject(url.hostname)",
+     "methods": [
+      "ANY"
+     ],
+     "beforeOriginGate": true
+    },
+    {
+     "file": "src/app-gateway.ts",
+     "kind": "host",
+     "match": "url.origin!==origin",
+     "methods": [
+      "ANY"
+     ],
+     "beforeOriginGate": true
+    },
+    {
+     "file": "src/app-gateway.ts",
+     "kind": "regex",
+     "match": "new RegExp(`^/apps/(${uuid})/(.+)$`)",
+     "methods": [
+      "ANY"
+     ],
+     "beforeOriginGate": true
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Only a single, well-formed cookie named for the host project is read; a workspace cookie or another project's cookie name yields no session.",
+     "enforcedAt": [
+      {
+       "file": "src/app-gateway.ts",
+       "contains": "if(matches.length!==1)return '';"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/app-auth.mjs",
+       "contains": "assert.equal((await request('data','GET',undefined,{cookie:'__Host-whumpo_session='+c.token})).response.status,401);",
+       "asserts": "a workspace cookie gets nothing"
+      },
+      {
+       "file": "tests/boundary-visitor-gateway-isolation.mjs",
+       "contains": "assert.equal((await request(b.project,'data',{session:v.session,cookieProject:a.project})).status,401);",
+       "asserts": "another project's cookie name gets nothing"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Cross-site Sec-Fetch-Site, a foreign Origin, or a POST without the exact Origin is refused before any handler.",
+     "enforcedAt": [
+      {
+       "file": "src/app-gateway.ts",
+       "contains": "if(request.headers.get('sec-fetch-site')==='cross-site'||(request.headers.has('origin')&&request.headers.get('origin')!==origin)||method==='POST'&&request.headers.get('origin')!==origin)return json({error:'Origin check failed'},403);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/app-auth.mjs",
+       "contains": "assert.equal((await request('auth/login/options','POST',{}, {noOrigin:true})).response.status,403);",
+       "asserts": "a POST without Origin is refused"
+      },
+      {
+       "file": "tests/app-auth.mjs",
+       "contains": "{origin:'https://foreign.example'})).response.status,403);",
+       "asserts": "a POST with a foreign Origin is refused"
+      },
+      {
+       "file": "tests/boundary-visitor-gateway-isolation.mjs",
+       "contains": "headers:{'sec-fetch-site':'cross-site'}})).status,403,'Sec-Fetch-Site cross-site');",
+       "asserts": "a cookie-bearing GET marked Sec-Fetch-Site cross-site is refused"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "noOrigin.every(p=>p.includes('beforeOriginGate'))",
+       "asserts": "deleting the gateway Origin refusal flags every gateway route (beforeOriginGate machine-checked)"
+      }
+     ]
+    },
+    "admission": {
+     "state": "evidenced",
+     "detail": "Per-IP API_LIMITER before every handler; AUTH_LIMITER additionally on auth/*.",
+     "enforcedAt": [
+      {
+       "file": "src/app-gateway.ts",
+       "contains": "if(!(await env.API_LIMITER.limit({key:'app:'+ip})).success)return json({error:'Too many requests. Try again in a minute.'},429);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/boundary-visitor-gateway-isolation.mjs",
+       "contains": "overrides:{API_LIMITER:{limit:async()=>({success:false})}}})).status,429,'API_LIMITER');",
+       "asserts": "the per-IP gateway limiter refuses"
+      }
+     ]
+    },
+    "tenant": {
+     "state": "evidenced",
+     "detail": "Exact visitor host required; the query string and other methods are refused.",
+     "enforcedAt": [
+      {
+       "file": "src/app-gateway.ts",
+       "contains": "if(url.origin!==origin)return json({error:'Application host required'},404);"
+      },
+      {
+       "file": "src/app-gateway.ts",
+       "contains": "if(url.search)return json({error:'Query parameters are not supported'},400);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/app-auth.mjs",
+       "contains": "assert.equal((await request('data','GET',undefined,{host:'https://whumpo.com'})).response.status,404);",
+       "asserts": "wrong host is refused"
+      },
+      {
+       "file": "tests/boundary-visitor-gateway-isolation.mjs",
+       "contains": "assert.equal((await request(a.project,'data?x=1',{session:v.session})).status,400,'query string');",
+       "asserts": "query strings are refused"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "visitor-auth",
+   "title": "Visitor passkey sign-up/login/add, recovery and sign-out",
+   "surface": "visitor",
+   "privileged": [
+    "credential"
+   ],
+   "authorityClass": "signup: invitation code; login: anonymous start + passkey; add: session with sign-in under 10 minutes; recover: recovery code + nonce; logout: session",
+   "reach": "Service binding only (via whumpo-sites APP_HOST); anonymous on the public app-<uuid> host.",
+   "entries": [
+    {
+     "file": "src/app-gateway.ts",
+     "kind": "prefix",
+     "match": "auth/",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/app-gateway.ts",
+     "kind": "regex",
+     "match": "/^auth\\/(signup|login|add)\\/(options|verify)$/",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/app-gateway.ts",
+     "kind": "exact",
+     "match": "auth/recover",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/app-gateway.ts",
+     "kind": "exact",
+     "match": "auth/logout",
+     "methods": [
+      "POST"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Invitation, passkey and recovery code are all joined to the project, its active access instance and an unrevoked visitor.",
+     "enforcedAt": [
+      {
+       "file": "src/app-auth.ts",
+       "contains": "SELECT k.* FROM app_passkeys k JOIN app_visitors v ON v.id=k.visitor_id WHERE k.id=? AND v.project_id=? AND v.access_id=? AND v.revoked=0"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/app-auth.mjs",
+       "contains": "opt=await begin(b);await denied(verify(b,'login',opt,key.assertion(opt.options)),401);",
+       "asserts": "A's passkey is refused on B"
+      },
+      {
+       "file": "tests/app-auth.mjs",
+       "contains": "await denied(begin(b,'signup',invite.code),403);",
+       "asserts": "A's invitation is refused on B"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Shared gateway Origin gate; WebAuthn also binds the expected origin.",
+     "enforcedAt": [
+      {
+       "file": "src/app-gateway.ts",
+       "contains": "if(request.headers.get('sec-fetch-site')==='cross-site'||(request.headers.has('origin')&&request.headers.get('origin')!==origin)||method==='POST'&&request.headers.get('origin')!==origin)return json({error:'Origin check failed'},403);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/app-auth.mjs",
+       "contains": "assert.equal((await request('auth/login/options','POST',{}, {noOrigin:true})).response.status,403);",
+       "asserts": "a POST without Origin is refused"
+      },
+      {
+       "file": "tests/app-auth.mjs",
+       "contains": "await denied(verify(a,'signup',opt,key.registration(opt.options,'https://whumpo.com')),400);",
+       "asserts": "a passkey response for another origin is refused"
+      }
+     ]
+    },
+    "admission": {
+     "state": "gap",
+     "gapKind": "control",
+     "finding": "B5",
+     "detail": "AUTH_LIMITER (10/min per IP) bounds attempts, but anonymous login starts each store a 5-minute challenge under a 50-per-project / 1,000-platform cap, so one client can block a project's sign-ins and twenty can block every tenant (B5).",
+     "enforcedAt": [
+      {
+       "file": "src/app-auth.ts",
+       "contains": "db.prepare('INSERT INTO app_auth_challenges(token_hash,project_id,access_id,activation_revision,challenge,kind,visitor_id,invite_hash,session_hash) VALUES(?,?,?,?,?,?,?,?,?)')"
+      }
+     ]
+    },
+    "tenant": {
+     "state": "evidenced",
+     "detail": "Cross-project invitation, passkey and recovery code are refused.",
+     "enforcedAt": [
+      {
+       "file": "src/app-auth.ts",
+       "contains": "WHERE r.code_hash IN (?,?) AND v.project_id=? AND v.access_id=? AND v.revoked=0"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/app-auth.mjs",
+       "contains": "await denied(auth.recoverAppVisitor(db,b.project,registered.recoveryCode),401);",
+       "asserts": "A's recovery code is refused on B"
+      }
+     ]
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "Challenges bind kind, project, access instance and revision; add binds the session.",
+     "enforcedAt": [
+      {
+       "file": "src/app-auth.ts",
+       "contains": "if (state.access_id!==challenge.access_id||state.revision!==challenge.activation_revision) throw new BackendError(409,'Visitor access changed; sign in again');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/app-auth.mjs",
+       "contains": "await denied(verify(a,'add',opt,replacement.registration(opt.options),db,other.session),401);",
+       "asserts": "another visitor's session cannot finish an add"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "Challenges are deleted on use; recovery codes rotate.",
+     "enforcedAt": [
+      {
+       "file": "src/app-auth.ts",
+       "contains": "DELETE FROM app_auth_challenges WHERE token_hash=? AND project_id=? AND kind=?"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/app-auth.mjs",
+       "contains": "await denied(verify(a,'login',opt,key.assertion(opt.options,2)),400);",
+       "asserts": "a reused challenge is refused"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Disabled access and revoked visitors cannot sign in or keep sessions.",
+     "enforcedAt": [
+      {
+       "file": "src/app-auth.ts",
+       "contains": "Visitor access changed; sign in again"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/app-auth.mjs",
+       "contains": "await denied(verify(b,'login',opt,disabled.key.assertion(opt.options,2)),400);await denied(data.readAppData(db,disabled.session,b.project),401);",
+       "asserts": "disabled access refuses sign-in and sessions"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "visitor-account-lifecycle",
+   "title": "Visitor export, deletion review, deletion and deletion status",
+   "surface": "visitor",
+   "privileged": [
+    "deletion",
+    "visitor-data"
+   ],
+   "authorityClass": "visitor session cookie (fresh sign-in for deletion); deletion status by token-derived proof",
+   "reach": "Service binding only (via whumpo-sites APP_HOST).",
+   "entries": [
+    {
+     "file": "src/app-gateway.ts",
+     "kind": "exact",
+     "match": "account/delete",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/app-gateway.ts",
+     "kind": "regex",
+     "match": "new RegExp(`^account/deletions/(${uuid})/(0|[1-9][0-9]{0,15})$`)",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/app-gateway.ts",
+     "kind": "exact",
+     "match": "export",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/app-gateway.ts",
+     "kind": "exact",
+     "match": "account/deletion-review",
+     "methods": [
+      "POST"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Every operation resolves the session for this project; deletion needs a sign-in under 10 minutes and an actor-bound review.",
+     "enforcedAt": [
+      {
+       "file": "src/app-data.ts",
+       "contains": "v.revoked=0 AND ac.state='active' AND v.project_id=?"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/app-lifecycle.mjs",
+       "contains": "await assert.rejects(life.exportAppAccount(db,x.session,b.project),e=>e.status===401);await assert.rejects(erase(b,x,1),e=>e.status===401);",
+       "asserts": "another project's session cannot export or erase"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Shared gateway gate.",
+     "enforcedAt": [
+      {
+       "file": "src/app-gateway.ts",
+       "contains": "if(request.headers.get('sec-fetch-site')==='cross-site'||(request.headers.has('origin')&&request.headers.get('origin')!==origin)||method==='POST'&&request.headers.get('origin')!==origin)return json({error:'Origin check failed'},403);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/visitor-deletion-review.mjs",
+       "contains": "assert.equal((await call(a,A,'account/deletion-review',{}, {origin:'https://foreign.test'})).status,403);",
+       "asserts": "a foreign Origin cannot prepare a deletion review"
+      }
+     ]
+    },
+    "admission": {
+     "state": "evidenced",
+     "detail": "Shared per-IP limiter.",
+     "enforcedAt": [
+      {
+       "file": "src/app-gateway.ts",
+       "contains": "if(!(await env.API_LIMITER.limit({key:'app:'+ip})).success)return json({error:'Too many requests. Try again in a minute.'},429);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/boundary-visitor-gateway-isolation.mjs",
+       "contains": "overrides:{API_LIMITER:{limit:async()=>({success:false})}}})).status,429,'API_LIMITER');",
+       "asserts": "the per-IP gateway limiter refuses"
+      }
+     ]
+    },
+    "tenant": {
+     "state": "evidenced",
+     "detail": "Cross-project and cross-visitor use of a review, receipt or status is refused; over HTTP another project's session gets nothing.",
+     "enforcedAt": [
+      {
+       "file": "src/app-lifecycle.ts",
+       "contains": "SELECT id FROM app_deletion_receipts WHERE id=? AND project_id=? AND proof_hash=?"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/visitor-deletion-review.mjs",
+       "contains": "assert.equal((await confirm(a,B,r)).status,409);assert.ok(await exists(A)&&await exists(B));",
+       "asserts": "visitor B cannot use A's review"
+      },
+      {
+       "file": "tests/boundary-visitor-gateway-isolation.mjs",
+       "contains": "assert.ok([401,404].includes(response.status),`${method} ${path} with A's session on B: ${response.status}`);",
+       "asserts": "a visitor session of project A gets no data, export, receipt or deletion review on project B's host (slice-2 regression, standalone)"
+      }
+     ]
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "The review binds actor, project, session and revision; a body naming another visitor is refused.",
+     "enforcedAt": [
+      {
+       "file": "src/app-gateway.ts",
+       "contains": "if(Object.keys(data).length)throw new BackendError(400,'Review your current application account');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/visitor-deletion-review.mjs",
+       "contains": "assert.equal((await call(a,A,'account/deletion-review',{visitorId:B.who})).status,400);",
+       "asserts": "a review cannot name another visitor"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "Deletion id receipts; a reused id after commit conflicts; concurrent confirms converge.",
+     "enforcedAt": [
+      {
+       "file": "src/app-lifecycle.ts",
+       "contains": "Deletion request ID already used. Review your account again"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/visitor-deletion-review.mjs",
+       "contains": "const concurrent=await Promise.all(Array.from({length:5},()=>confirm(a,repeat,r2)));assert.ok(concurrent.every(x=>x.status===200));",
+       "asserts": "concurrent confirms converge"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Stale, expired or changed-actor reviews are refused. A safety hold refusal surfaces as a generic 503 (untested through the gateway).",
+     "enforcedAt": [
+      {
+       "file": "src/app-lifecycle.ts",
+       "contains": "if(current.visitor_id!==actor.visitor_id)throw new BackendError(401,'Application account changed');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/visitor-deletion-review.mjs",
+       "contains": "assert.equal((await confirm(a,A,r,{db:future('+6 minutes')})).status,409);",
+       "asserts": "an expired review is refused"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "visitor-app-data",
+   "title": "Visitor application config, data, receipts and data transitions (runtime execution)",
+   "surface": "visitor",
+   "privileged": [
+    "visitor-data",
+    "execution"
+   ],
+   "authorityClass": "visitor session cookie + enabled application on the same access instance; config is public page configuration",
+   "reach": "Service binding only (via whumpo-sites APP_HOST); execution goes to whumpo-runtime over BACKEND_RUNTIME.",
+   "entries": [
+    {
+     "file": "src/app-gateway.ts",
+     "kind": "exact",
+     "match": "config",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/app-gateway.ts",
+     "kind": "exact",
+     "match": "data",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/app-gateway.ts",
+     "kind": "regex",
+     "match": "new RegExp(`^receipts/(${uuid})$`)",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/app-gateway.ts",
+     "kind": "exact",
+     "match": "data",
+     "methods": [
+      "POST"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Data and receipts need a valid, unrevoked session of this project.",
+     "enforcedAt": [
+      {
+       "file": "src/app-data.ts",
+       "contains": "v.revoked=0 AND ac.state='active' AND v.project_id=?"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/app-data.mjs",
+       "contains": "await assert.rejects(readAppData(db,x.token,b.project),e=>e.status===401);",
+       "asserts": "another project's session cannot read data"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Shared gateway gate.",
+     "enforcedAt": [
+      {
+       "file": "src/app-gateway.ts",
+       "contains": "if(request.headers.get('sec-fetch-site')==='cross-site'||(request.headers.has('origin')&&request.headers.get('origin')!==origin)||method==='POST'&&request.headers.get('origin')!==origin)return json({error:'Origin check failed'},403);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/customer-app-journey.mjs",
+       "contains": "assert.equal((await first.request('/data',op,{origin:'https://whumpo.com'})).status,403);",
+       "asserts": "a platform-origin POST is refused (app profile)"
+      }
+     ]
+    },
+    "admission": {
+     "state": "evidenced",
+     "detail": "Shared per-IP limiter; runtime fairness lane per project.",
+     "enforcedAt": [
+      {
+       "file": "src/app-gateway.ts",
+       "contains": "if(!(await env.API_LIMITER.limit({key:'app:'+ip})).success)return json({error:'Too many requests. Try again in a minute.'},429);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/boundary-visitor-gateway-isolation.mjs",
+       "contains": "overrides:{API_LIMITER:{limit:async()=>({success:false})}}})).status,429,'API_LIMITER');",
+       "asserts": "the per-IP gateway limiter refuses"
+      }
+     ]
+    },
+    "tenant": {
+     "state": "evidenced",
+     "detail": "Receipts are scoped to project and visitor; over HTTP another visitor or project gets 404/401.",
+     "enforcedAt": [
+      {
+       "file": "src/app-data.ts",
+       "contains": "SELECT id,state,result_json FROM app_runs WHERE id=? AND project_id=? AND visitor_id=?"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/app-auth.mjs",
+       "contains": "assert.equal((await request('receipts/'+operation,'GET',undefined,{cookie:name+'='+foreign.session})).response.status,404);",
+       "asserts": "another visitor's receipt is 404"
+      },
+      {
+       "file": "tests/boundary-visitor-gateway-isolation.mjs",
+       "contains": "assert.equal((await request(b.project,'receipts/'+op,{session:c.session})).status,404);",
+       "asserts": "a visitor of B cannot read A's receipt on B's host"
+      },
+      {
+       "file": "tests/boundary-visitor-gateway-isolation.mjs",
+       "contains": "assert.ok([401,404].includes(response.status),`${method} ${path} with A's session on B: ${response.status}`);",
+       "asserts": "a visitor session of project A gets no data, export, receipt or deletion review on project B's host (slice-2 regression, standalone)"
+      }
+     ]
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "The submitted pageId must be the live page and input must match its form; a stale page id dispatches nothing.",
+     "enforcedAt": [
+      {
+       "file": "src/app-gateway.ts",
+       "contains": "if(data.pageId!==page.id)throw new BackendError(409,'Application page changed. Reload before sending another change');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/boundary-visitor-gateway-isolation.mjs",
+       "contains": "assert.equal(await runs(),before);",
+       "asserts": "a stale pageId admits no run"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "Operation ids are bound to visitor, project and request hash; a lost-response retry does not execute again.",
+     "enforcedAt": [
+      {
+       "file": "src/app-data.ts",
+       "contains": "Application operation ID already used"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/customer-app-journey.mjs",
+       "contains": "assert.equal(executions,2,'Lost-response retry must not execute again');",
+       "asserts": "retry recovers without re-execution (app profile)"
+      },
+      {
+       "file": "tests/app-data.mjs",
+       "contains": "await assert.rejects(run(db,service,y.token,a.project,op,0,{add:3}),e=>e.status===409);",
+       "asserts": "another visitor cannot reuse an operation id"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Document revision, withdrawn page, page change in flight and visitor revocation in flight all refuse.",
+     "enforcedAt": [
+      {
+       "file": "src/app-data.ts",
+       "contains": "Application data changed; read the current revision"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/task-list-app-journey.mjs",
+       "contains": "assert.equal(executions(),calls,'Stale revision must not dispatch');",
+       "asserts": "a stale revision dispatches nothing"
+      },
+      {
+       "file": "tests/customer-app-journey.mjs",
+       "contains": "await chat('/confirm-app-page '+off);assert.equal((await visit(origin+'/')).status,404);assert.equal((await first.request('/data')).status,404);",
+       "asserts": "a withdrawn page stops data access"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "visitor-modules",
+   "title": "Shared module requests POST modules and modules/upload (whumpo-modules v1)",
+   "surface": "visitor",
+   "privileged": [
+    "visitor-data"
+   ],
+   "authorityClass": "visitor principal derived only from this project's session cookie, else public; public form intake needs Turnstile",
+   "reach": "Service binding only (via whumpo-sites APP_HOST).",
+   "entries": [
+    {
+     "file": "src/app-gateway.ts",
+     "kind": "exact",
+     "match": "modules/upload",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/app-gateway.ts",
+     "kind": "exact",
+     "match": "modules",
+     "methods": [
+      "POST"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "The principal is server-derived; envelope authority keys are refused; role policy decides.",
+     "enforcedAt": [
+      {
+       "file": "src/app-gateway.ts",
+       "contains": "const principal=await visitorPrincipal(env.DB,session,project,envelope.resourceId)??{kind:'public' as const,projectId:project};"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/shared-modules-records.mjs",
+       "contains": "assert.equal((await gateway(a,submission(records),bv)).body.code,'forbidden');",
+       "asserts": "B's visitor on A's host is forbidden"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Shared gateway gate (route-specific upload test missing).",
+     "enforcedAt": [
+      {
+       "file": "src/app-gateway.ts",
+       "contains": "if(request.headers.get('sec-fetch-site')==='cross-site'||(request.headers.has('origin')&&request.headers.get('origin')!==origin)||method==='POST'&&request.headers.get('origin')!==origin)return json({error:'Origin check failed'},403);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/shared-modules-compositions.mjs",
+       "contains": "{cookie:staff.cookie,origin:'https://evil.example'})).status,403,'Foreign Origin refused');",
+       "asserts": "a foreign Origin is refused on /modules"
+      }
+     ]
+    },
+    "admission": {
+     "state": "evidenced",
+     "detail": "Public intake: fail-closed Turnstile bound to host/action/resource and the contact per-client allowance; uploads limited.",
+     "enforcedAt": [
+      {
+       "file": "src/app-gateway.ts",
+       "contains": "if(!local&&!env.TURNSTILE_SECRET)throw new ModuleError('unavailable','Public form submissions are temporarily unavailable.');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/shared-modules-records.mjs",
+       "contains": "{secret:undefined,verify:good(records)})).body.code,'unavailable');",
+       "asserts": "missing Turnstile secret fails closed"
+      },
+      {
+       "file": "tests/shared-modules-files.mjs",
+       "contains": "assert.equal(accepted,10);assert.equal(limited,1);",
+       "asserts": "uploads are rate limited"
+      }
+     ]
+    },
+    "tenant": {
+     "state": "evidenced",
+     "detail": "Resources resolve only within the host project; A's resources on B's host are not_found, including uploads.",
+     "enforcedAt": [
+      {
+       "file": "src/shared-modules/registry.ts",
+       "contains": "WHERE i.id=? AND i.project_id=?"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/shared-modules-records.mjs",
+       "contains": "assert.equal((await gateway(b,submission(records),bv)).body.code,'not_found');",
+       "asserts": "A's resource on B's host"
+      },
+      {
+       "file": "tests/shared-modules-files.mjs",
+       "contains": "assert.equal((await upload(b,await put(media,'intake'),bv)).body.code,'not_found');",
+       "asserts": "cross-project upload"
+      }
+     ]
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "files.putBytes only on the upload route and nowhere else; storage keys are server-chosen.",
+     "enforcedAt": [
+      {
+       "file": "src/app-gateway.ts",
+       "contains": "if(envelope.operation!=='files.putBytes')throw new ModuleError('invalid_request');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/shared-modules-files.mjs",
+       "contains": "'files.putBytes never on the JSON route');",
+       "asserts": "putBytes is refused on the JSON route"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "'unregistered route: src/app-gateway.ts exact modules/upload [GET,POST]'",
+       "asserts": "widening the upload route's methods is reported"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "Request receipts bind a request hash; another visitor never gets a readback.",
+     "enforcedAt": [
+      {
+       "file": "src/shared-modules/api.ts",
+       "contains": "if(row.request_hash!==requestHash)throw new ModuleError('request_conflict');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/shared-modules-records.mjs",
+       "contains": "assert.equal((await gateway(a,ok,v2)).body.code,'request_conflict');",
+       "asserts": "another visitor reusing a request id conflicts"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Configuration revision and instance/dependency activity are re-checked.",
+     "enforcedAt": [
+      {
+       "file": "src/shared-modules/collections.ts",
+       "contains": "if(row.config_revision!==configRevision)throw new ModuleError('stale_configuration');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/shared-modules-records.mjs",
+       "contains": "{...submission(records),configRevision:records.config_revision+1},v1)).body.code,'stale_configuration');",
+       "asserts": "a stale configuration revision is refused"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "runtime-execute",
+   "title": "whumpo-runtime POST /execute (bounded QuickJS)",
+   "surface": "service",
+   "privileged": [
+    "execution"
+   ],
+   "authorityClass": "service-binding-only (no auth header; possession of the binding is the authority)",
+   "reach": "No public route, workers.dev or preview URL (wrangler.runtime.jsonc); bound as BACKEND_RUNTIME by whumpo-platform, whumpo-sites and whumpo-apps (machine-checked).",
+   "entries": [
+    {
+     "file": "src/runtime/worker.ts",
+     "kind": "exact",
+     "match": "/execute",
+     "methods": [
+      "POST"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "No env parameter and no bindings; only callers holding the service binding can reach it.",
+     "enforcedAt": [
+      {
+       "file": "src/runtime/worker.ts",
+       "contains": "async fetch(request:Request):Promise<Response>{"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/workload-placement-prototype.mjs",
+       "contains": "assert.doesNotMatch(config,/\"(?:d1_databases|r2_buckets|vars|services|durable_objects)\"\\s*:/);",
+       "asserts": "the runtime config has no bindings"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "says publicInternet false, wrangler.runtime.jsonc says true'",
+       "asserts": "a workers.dev URL on the runtime is reported"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Only POST /execute; everything else is 404 (method machine-checked).",
+     "enforcedAt": [
+      {
+       "file": "src/runtime/worker.ts",
+       "contains": "if(request.method!=='POST'||new URL(request.url).pathname!=='/execute')return response({ok:false,error:'not_found'},404);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/backend-runtime.mjs",
+       "contains": "assert.equal((await mf.dispatchFetch('http://runtime/other',{method:'POST',body:'{}'})).status,404);",
+       "asserts": "other paths are 404"
+      }
+     ]
+    },
+    "admission": {
+     "state": "evidenced",
+     "detail": "Per-isolate gate: two concurrent executions, one per fairness lane (lane = per-project hash set by the caller; advisory across isolates, R13). The global active>=2 refusal is not deterministically tested.",
+     "enforcedAt": [
+      {
+       "file": "src/runtime/worker.ts",
+       "contains": "if(active>=2||lanes.has(lane))return response({ok:false,error:'busy'},503);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/backend-runtime.mjs",
+       "contains": "assert.deepEqual(r[3],{status:200,data:{ok:true,value:780}},'another lane always keeps a slot: '+JSON.stringify(r));",
+       "asserts": "another lane keeps a slot"
+      }
+     ]
+    },
+    "tenant": {
+     "state": "evidenced",
+     "detail": "Fresh Wasm memory per call and no host callbacks; concurrent tenants see only their own values.",
+     "enforcedAt": [
+      {
+       "file": "src/runtime/worker.ts",
+       "contains": "wasmMemory:new WebAssembly.Memory({initial:256,maximum:256})"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/backend-runtime.mjs",
+       "contains": "await works('export default ()=>({secret:typeof globalThis.secret,leak:typeof ({}).leak})',null,{secret:'undefined',leak:'undefined'});",
+       "asserts": "no state survives between calls"
+      }
+     ]
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "Exact body shape; source, input and output size limits; heap, stack, interrupt and job limits.",
+     "enforcedAt": [
+      {
+       "file": "src/runtime/worker.ts",
+       "contains": "if(Object.keys(data).some(k=>!['version','source','input'].includes(k))||data.version!==1"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/backend-runtime.mjs",
+       "contains": "const source=await request(' '.repeat(33000)+'export default ()=>1');assert.equal(source.status,422);",
+       "asserts": "oversized source is refused"
+      },
+      {
+       "file": "tests/backend-runtime.mjs",
+       "contains": "['export default ()=>{while(true){}}',['work_limit']],",
+       "asserts": "unbounded work is stopped"
+      }
+     ]
+    },
+    "replay": {
+     "state": "n/a",
+     "detail": "Stateless; callers own replay (receipts in app-data/backend publication)."
+    },
+    "stale": {
+     "state": "n/a",
+     "detail": "Stateless; callers check publication/page/revision state before dispatch."
+    }
+   }
+  },
+  {
+   "id": "scheduled-maintenance",
+   "title": "Platform scheduled maintenance (hourly 47 * * * * and daily default branch)",
+   "surface": "scheduled",
+   "privileged": [
+    "deletion"
+   ],
+   "authorityClass": "Worker cron trigger (platform authority; no request, session or model)",
+   "reach": "Cloudflare cron triggers only (wrangler.jsonc crons, machine-checked); \"17 3 * * *\" runs the default branch.",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "job",
+     "match": "47 * * * * imports",
+     "methods": [
+      "SCHEDULED"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "job",
+     "match": "47 * * * * chat_drafts",
+     "methods": [
+      "SCHEDULED"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "job",
+     "match": "47 * * * * identity",
+     "methods": [
+      "SCHEDULED"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "job",
+     "match": "47 * * * * health",
+     "methods": [
+      "SCHEDULED"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "job",
+     "match": "47 * * * * funnel",
+     "methods": [
+      "SCHEDULED"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "job",
+     "match": "default imports",
+     "methods": [
+      "SCHEDULED"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "job",
+     "match": "default chat_drafts",
+     "methods": [
+      "SCHEDULED"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "job",
+     "match": "default identity",
+     "methods": [
+      "SCHEDULED"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "job",
+     "match": "default fair_use",
+     "methods": [
+      "SCHEDULED"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "job",
+     "match": "default traffic",
+     "methods": [
+      "SCHEDULED"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "job",
+     "match": "default funnel",
+     "methods": [
+      "SCHEDULED"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "job",
+     "match": "default applications",
+     "methods": [
+      "SCHEDULED"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "job",
+     "match": "default contacts",
+     "methods": [
+      "SCHEDULED"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "job",
+     "match": "default guest_previews",
+     "methods": [
+      "SCHEDULED"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "job",
+     "match": "default photos",
+     "methods": [
+      "SCHEDULED"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Only the cron trigger runs these jobs; job names must be registered; one failing job does not stop others.",
+     "enforcedAt": [
+      {
+       "file": "src/maintenance.ts",
+       "contains": "if(job.enabled!==false)try{await job.run();}catch{status='failed';}"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/maintenance-scheduled.mjs",
+       "contains": "assert.equal(report.jobs.find(j=>j.job==='traffic').state,'failed');",
+       "asserts": "a failing job is recorded while others complete"
+      }
+     ]
+    },
+    "tenant": {
+     "state": "evidenced",
+     "detail": "Global expiry/retention by fixed predicates; held projects are skipped where retention would destroy evidence; no model or provider is called by these jobs.",
+     "enforcedAt": [
+      {
+       "file": "src/site-traffic.ts",
+       "contains": "AND project_id NOT IN (SELECT project_id FROM safety_held_projects)"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/shared-modules-records.mjs",
+       "contains": "Expiry skips the held project",
+       "asserts": "module record expiry skips a held project"
+      },
+      {
+       "file": "tests/maintenance-scheduled.mjs",
+       "contains": "globalThis.fetch=async()=>assert.fail('Unconfigured empty fixture must not access a provider');",
+       "asserts": "scheduled maintenance makes no provider call"
+      }
+     ]
+    },
+    "target": {
+     "state": "n/a",
+     "detail": "Fixed predicates on expiry columns; no caller-supplied target."
+    },
+    "replay": {
+     "state": "n/a",
+     "detail": "Idempotent deletes/expiries by predicate; rerunning removes nothing new."
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Imports use compare-and-set on state, digest and policy version.",
+     "enforcedAt": [
+      {
+       "file": "src/backend-imports.ts",
+       "contains": "WHERE id=? AND state='pending' AND digest=? AND policy_version=?"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/backend-imports.mjs",
+       "contains": "assert.equal((await scanBackendImports(db)).examined,10);",
+       "asserts": "bounded triage per run"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "scheduled-provider-cleanup",
+   "title": "Scheduled provider jobs: hosting refresh, GitHub and Cloudflare token cleanup",
+   "surface": "scheduled",
+   "privileged": [
+    "connection",
+    "dns-hosting"
+   ],
+   "authorityClass": "Worker cron trigger; runs only when the provider configuration is present (conditional flag machine-checked)",
+   "reach": "Cloudflare cron triggers only.",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "job",
+     "match": "47 * * * * hosting",
+     "methods": [
+      "SCHEDULED"
+     ],
+     "conditional": true
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "job",
+     "match": "default github",
+     "methods": [
+      "SCHEDULED"
+     ],
+     "conditional": true
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "job",
+     "match": "default cloudflare",
+     "methods": [
+      "SCHEDULED"
+     ],
+     "conditional": true
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Each job is gated on its provider configuration and skipped otherwise.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "{name:'hosting',enabled:!!hostingConfig(env),run:()=>maintainHosting(env.DB,hostingConfig(env))}"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "registry says conditional true, source says false",
+       "asserts": "removing a provider job's configuration gate is reported"
+      }
+     ]
+    },
+    "tenant": {
+     "state": "evidenced",
+     "detail": "Interactive cleanup is owner-scoped and scheduled cleanup uses expiring claim leases, so competing cleaners and other owners cannot revoke a staged token (A2 remediation).",
+     "enforcedAt": [
+      {
+       "file": "src/github-connection.ts",
+       "contains": "INSERT INTO github_revocation_claims(token_id,claim_id,expires_at)"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/github-token-lifecycle.mjs",
+       "contains": "assert.deepEqual(revoked,['ghu_other_queue']);",
+       "asserts": "cleanup scoped to one owner revokes only that owner's queue"
+      },
+      {
+       "file": "tests/github-token-lifecycle.mjs",
+       "contains": "reject(Error('Competing cleaner did not finish'))",
+       "asserts": "competing cleaners dispatch one revocation"
+      }
+     ]
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "Hosting deletes only an exact recorded provider id, never a name search result.",
+     "enforcedAt": [
+      {
+       "file": "src/domain-hosting.ts",
+       "contains": "Never delete a name-based search result"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/domain-hosting.mjs",
+       "contains": "refreshed=await refreshHosting(scope(user),user,r.id,config,transport);assert.equal(refreshed.connected,false);assert.equal((await get('/')).status,404);}",
+       "asserts": "a failed refresh stops serving"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "Claims with expiry fence late acknowledgments.",
+     "enforcedAt": [
+      {
+       "file": "src/github-connection.ts",
+       "contains": "JOIN github_revocation_claims r ON r.token_id=t.id"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/github-token-lifecycle.mjs",
+       "contains": "late cleaner acknowledgement cannot settle a replacement claim",
+       "asserts": "a late acknowledgment cannot settle a newer claim"
+      }
+     ]
+    },
+    "stale": {
+     "state": "gap",
+     "gapKind": "test",
+     "detail": "maintainHosting itself has no test; per-record refreshHosting is tested.",
+     "enforcedAt": [
+      {
+       "file": "src/domain-hosting.ts",
+       "contains": "export async function maintainHosting("
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "scheduled-contact-delivery",
+   "title": "Every-minute contact notice drain (outside runMaintenance)",
+   "surface": "scheduled",
+   "privileged": [
+    "notification"
+   ],
+   "authorityClass": "Worker cron \"* * * * *\" + reviewed provider variables + send_email binding (all three required)",
+   "reach": "Cloudflare cron trigger only; configured in wrangler.jsonc (the inline comment saying no cron is configured is stale, R8). Live activation state is unverified.",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "job",
+     "match": "* * * * * runContactDelivery",
+     "methods": [
+      "SCHEDULED"
+     ],
+     "conditional": true
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "No cron run sends without the binding and the reviewed provider settings.",
+     "enforcedAt": [
+      {
+       "file": "src/contact-email.ts",
+       "contains": "if(!settings||settings.provider!==cloudflareEmailProvider||!binding||typeof binding.send!=='function')return null;"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/contact-notifications.mjs",
+       "contains": "assert.equal(mine().length,0,'No cron run sends without the binding');",
+       "asserts": "no binding, no send"
+      }
+     ]
+    },
+    "tenant": {
+     "state": "evidenced",
+     "detail": "Notices go only to each project's verified destination and contain no visitor content; contained projects are cancelled.",
+     "enforcedAt": [
+      {
+       "file": "src/contact-notifications.ts",
+       "contains": "if(row.contained){await cancel(row,'contained');continue;}"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/contact-notifications.mjs",
+       "contains": "assert.equal(r.queued,10,'At most 10 notices an hour per destination');",
+       "asserts": "per-destination hourly cap"
+      }
+     ]
+    },
+    "target": {
+     "state": "n/a",
+     "detail": "Fixed notice text to a verified address; no caller-supplied target."
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "Claim + spend ledger before send; an uncertain send is never resent.",
+     "enforcedAt": [
+      {
+       "file": "src/contact-notifications.ts",
+       "contains": "catch{outcome={accepted:false,retryable:false,uncertain:true};}"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/contact-notifications.mjs",
+       "contains": "assert.equal(fake.calls.length,1,'The provider has no idempotency key, so an uncertain call is never resent');",
+       "asserts": "no resend after an uncertain outcome"
+      }
+     ]
+    },
+    "stale": {
+     "state": "unverified",
+     "detail": "The drain writes no maintenance_health row and a failure escapes scheduled() raw (characterized by tests/boundary-contact-delivery-health.mjs, outside profiles); a stuck queue is visible only through the outbox backlog in report-maintenance.",
+     "needs": "Owner decision whether delivery should report through maintenance health (R8)."
+    }
+   }
+  },
+  {
+   "id": "operator-release",
+   "title": "Release and deployment tools (deploy, prepare-release, release-provider, deploy-platform, provision-cms, configure-github-app and helpers)",
+   "surface": "operator-tool",
+   "privileged": [
+    "release"
+   ],
+   "authorityClass": "operator's local Wrangler login (or Workers Builds for deploy ci); per-operation owner authorization is a process rule the tools cannot enforce",
+   "reach": "Operator workstation or Cloudflare Workers Builds only; no HTTP route.",
+   "entries": [
+    {
+     "file": "tools/cms-release.mjs",
+     "kind": "tool",
+     "match": "wrangler-remote",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/configure-github-app.mjs",
+     "kind": "tool",
+     "match": "gh-cli+wrangler-secret",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/database.mjs",
+     "kind": "tool",
+     "match": "via-import",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/deploy-ci.mjs",
+     "kind": "tool",
+     "match": "via-import",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/deploy-platform.mjs",
+     "kind": "tool",
+     "match": "via-import",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/deploy.mjs",
+     "kind": "tool",
+     "match": "via-import",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/prepare-release.mjs",
+     "kind": "tool",
+     "match": "via-import",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/provision-cms.mjs",
+     "kind": "tool",
+     "match": "via-import",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/release-provider.mjs",
+     "kind": "tool",
+     "match": "wrangler-remote",
+     "methods": [
+      "CLI"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Explicit commands: deploy apply is separate from prepare; deploy ci only in Workers Builds; configure-github-app is dry-run unless --apply. deploy-platform and provision-cms act when invoked (R14).",
+     "enforcedAt": [
+      {
+       "file": "tools/deploy-ci.mjs",
+       "contains": "if(env.WORKERS_CI!=='1')throw Error('The ci release runs only in Cloudflare Workers Builds"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/deploy-ci.mjs",
+       "contains": "await assert.rejects(()=>ciRelease(process.cwd(),{observe:async()=>{touched=true;}},{env:{}}),/only in Cloudflare Workers Builds/);",
+       "asserts": "deploy ci refuses outside Workers Builds (protection profile)"
+      }
+     ]
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "Reviewed input pinned to build digest and complete schema; account and control database pinned in the manifest.",
+     "enforcedAt": [
+      {
+       "file": "tools/release-provider.mjs",
+       "contains": "throw Error('Release control database differs from current operator configuration');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/release-provider.mjs",
+       "contains": "await assert.rejects(()=>driver.observe({...manifest,controlDatabaseId:old}),/differs from current/);",
+       "asserts": "a release for another control database is refused (protection profile)"
+      },
+      {
+       "file": "tests/release-manifest.mjs",
+       "contains": "await assert.rejects(()=>prepareRelease(root,driver,{...review,buildInputs:'wrong'}),/current build inputs/);",
+       "asserts": "a review for other build inputs is refused"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "Intent is journaled before each side effect; an unresolved outcome is never repeated.",
+     "enforcedAt": [
+      {
+       "file": "tools/release-manifest.mjs",
+       "contains": "// Persist intent before the first possible external side effect."
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/release-manifest.mjs",
+       "contains": "await assert.rejects(()=>applyRelease(unknown.directory,driver),/command outcome is unresolved/);assert.equal(mutations,attempts);",
+       "asserts": "no repeat after an unknown outcome"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Live Workers, CMS registrations or schema changed since preparation refuse apply; deployment lease.",
+     "enforcedAt": [
+      {
+       "file": "tools/release-manifest.mjs",
+       "contains": "if(!same(live,manifest.before.workers[role]))throw Error('Worker changed outside this release');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/release-manifest.mjs",
+       "contains": "reset();const candidate=await prepare();modify();await assert.rejects(()=>applyRelease(candidate.directory,driver));assert.equal(mutations,0);",
+       "asserts": "drift after preparation mutates nothing"
+      }
+     ]
+    },
+    "tenant": {
+     "state": "evidenced",
+     "detail": "Initialization only into a new empty database not bound to an active Worker; no tool deletes databases, buckets, Workers, DNS records or secrets.",
+     "enforcedAt": [
+      {
+       "file": "tools/prepare-release.mjs",
+       "contains": "throw Error('Schema initialization requires a new database not bound to an active Worker');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/release-manifest.mjs",
+       "contains": "live.workers.sites.databases=[{binding:'DB',id:databaseId}];await assert.rejects(()=>prepare(),/not bound to an active Worker/);assert.equal(mutations,0);",
+       "asserts": "an active database is never initialized"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "operator-mutation",
+   "title": "Operator D1/provider mutation tools (containment, suppression reset, reviews, feature preview, safety bootstrap, invites, hosting recovery, Stripe sandbox)",
+   "surface": "operator-tool",
+   "privileged": [
+    "operator"
+   ],
+   "authorityClass": "operator's Wrangler login or explicit CLOUDFLARE_API_TOKEN (Stripe: sk_test_ key file); remote control D1 resolved from wrangler.jsonc except reconcile-domain-hosting (B4)",
+   "reach": "Operator workstation only; no HTTP route.",
+   "entries": [
+    {
+     "file": "tools/contact-suppression-reset.mjs",
+     "kind": "tool",
+     "match": "via-import",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/create-invite.mjs",
+     "kind": "tool",
+     "match": "wrangler-remote",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/feature-preview.mjs",
+     "kind": "tool",
+     "match": "via-import",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/operator-containment.mjs",
+     "kind": "tool",
+     "match": "via-import",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/reconcile-domain-hosting.mjs",
+     "kind": "tool",
+     "match": "cloudflare-api+wrangler-remote",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/respond-usage-review.mjs",
+     "kind": "tool",
+     "match": "via-import",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/review-backend-nominations.mjs",
+     "kind": "tool",
+     "match": "via-import",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/review-content-risk.mjs",
+     "kind": "tool",
+     "match": "via-import",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/review-fair-use.mjs",
+     "kind": "tool",
+     "match": "via-import",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/safety-case-bootstrap.mjs",
+     "kind": "tool",
+     "match": "via-import",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/stripe-sandbox.mjs",
+     "kind": "tool",
+     "match": "stripe-api",
+     "methods": [
+      "CLI"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "gap",
+     "gapKind": "control",
+     "finding": "B4",
+     "detail": "Most tools preview by default and apply only an exact digest (--apply DIGEST) or an explicit flag; create-invite writes remotely with no flag (B7, characterization) and reconcile-domain-hosting targets a retired database (B4).",
+     "enforcedAt": [
+      {
+       "file": "tools/operator-containment-input.mjs",
+       "contains": "if(apply!==undefined&&(!mutation||typeof apply!=='string'||!/^[0-9a-f]{64}$/.test(apply)))throw Error('Preview this exact request before applying it');"
+      },
+      {
+       "file": "tools/operator-containment-input.mjs",
+       "contains": "if(apply!==undefined&&apply!==digest)throw Error('Preview this exact request before applying it');"
+      }
+     ]
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "The apply digest binds the exact request; feature preview also binds the destination and refuses a non-test platform.",
+     "enforcedAt": [
+      {
+       "file": "tools/feature-preview.mjs",
+       "contains": "if(config.vars?.ENVIRONMENT!=='test')throw Error('Only the test platform is an operator destination');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/operator-containment.mjs",
+       "contains": "await assert.rejects(runContainment(db,{...base,reason:'Different reason'},preview.applyDigest),/Preview this exact request/);",
+       "asserts": "a changed request cannot reuse a preview digest"
+      },
+      {
+       "file": "tests/feature-inclusion.mjs",
+       "contains": "await assert.rejects(runFeaturePreviewOperator(service,db,parsed,{...realm,databaseId:id()},preview.digest,date(at)),/exact/);",
+       "asserts": "another destination cannot reuse a digest"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "Action ids with request digests; uncertain outcomes are retried only with the same request.",
+     "enforcedAt": [
+      {
+       "file": "tools/operator-containment-input.mjs",
+       "contains": "if(existing.some(r=>r.request_digest!==digest))throw Error('Containment ID already used for a different request');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/contact-notifications.mjs",
+       "contains": "assert.equal((await runSuppressionReset(db,request,preview.applyDigest)).replayed,true);",
+       "asserts": "an exact retry replays"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Suppression reset requires the exact current suppression timestamp; hosting recovery requires an unexpired review of unchanged connection and provider state.",
+     "enforcedAt": [
+      {
+       "file": "tools/contact-suppression-reset-input.mjs",
+       "contains": "if(!current.suppression||current.suppression.suppressedAt!==input.suppressedAt)throw Error('Suppression not found or changed; read status again');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/contact-notifications.mjs",
+       "contains": "await assert.rejects(runSuppressionReset(db,{...request,suppressedAt:'2001-01-01T00:00:00.000Z'}),/changed/);",
+       "asserts": "a changed suppression is refused"
+      }
+     ]
+    },
+    "tenant": {
+     "state": "gap",
+     "gapKind": "control",
+     "finding": "B4",
+     "detail": "Every tool except reconcile-domain-hosting resolves the control database from wrangler.jsonc; reconcile-domain-hosting hard-codes the retired database 680f98b9 (B4).",
+     "enforcedAt": [
+      {
+       "file": "tools/review-fair-use.mjs",
+       "contains": "const db=remoteD1(cloudflareClient(config.account_id),config.d1_databases.find(b=>b.binding==='DB').database_id);"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "operator-read",
+   "title": "Remote read-only operator reports and inventories (and the shared Cloudflare client)",
+   "surface": "operator-tool",
+   "privileged": [],
+   "authorityClass": "operator's Wrangler login or explicit CLOUDFLARE_API_TOKEN; read-only by convention (the same remote D1 client could run any SQL)",
+   "reach": "Operator workstation only; no HTTP route.",
+   "entries": [
+    {
+     "file": "tools/account-closure-inventory.mjs",
+     "kind": "tool",
+     "match": "via-import",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/cms-cloudflare.mjs",
+     "kind": "tool",
+     "match": "cloudflare-api",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/cms-media-snapshot.mjs",
+     "kind": "tool",
+     "match": "via-import",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/report-connections.mjs",
+     "kind": "tool",
+     "match": "via-import",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/report-fair-use.mjs",
+     "kind": "tool",
+     "match": "via-import",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/report-funnel.mjs",
+     "kind": "tool",
+     "match": "via-import",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/report-gateway.mjs",
+     "kind": "tool",
+     "match": "via-import",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/report-maintenance.mjs",
+     "kind": "tool",
+     "match": "via-import",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/report-task-costs.mjs",
+     "kind": "tool",
+     "match": "via-import",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/snapshot-cms-database.mjs",
+     "kind": "tool",
+     "match": "via-import",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/verify-cms-recovery.mjs",
+     "kind": "tool",
+     "match": "via-import",
+     "methods": [
+      "CLI"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "The shared client accepts only GET/POST to validated account paths, never retries a mutation after a lost response, and keeps secrets out of requests and errors. Read-only use is a convention, not enforced (R15).",
+     "enforcedAt": [
+      {
+       "file": "tools/cms-cloudflare.mjs",
+       "contains": "if(!path.startsWith('/')||path.includes('..'))throw Error('Invalid Cloudflare API path');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/remote-d1.mjs",
+       "contains": "for(const items of [[],[{}],[foreign],[{sql:'SELECT 1',params:[]}],null]){",
+       "asserts": "only registered statements reach the transport"
+      }
+     ]
+    }
+   }
   }
- ]
+ ],
+ "workers": [
+  {
+   "name": "whumpo-platform",
+   "config": "wrangler.jsonc",
+   "main": "src/index.ts",
+   "routes": [
+    "whumpo.com [custom domain]"
+   ],
+   "workersDev": false,
+   "previewUrls": false,
+   "publicInternet": true,
+   "services": [
+    "BACKEND_RUNTIME->whumpo-runtime"
+   ],
+   "crons": [
+    "17 3 * * *",
+    "47 * * * *",
+    "* * * * *"
+   ]
+  },
+  {
+   "name": "whumpo-sites",
+   "config": "wrangler.sites.jsonc",
+   "main": "src/site-host.ts",
+   "routes": [
+    "*.whumpo.site/*"
+   ],
+   "workersDev": false,
+   "previewUrls": false,
+   "publicInternet": true,
+   "services": [
+    "APP_HOST->whumpo-apps",
+    "BACKEND_RUNTIME->whumpo-runtime"
+   ],
+   "crons": []
+  },
+  {
+   "name": "whumpo-apps",
+   "config": "wrangler.apps.jsonc",
+   "main": "src/app-host.ts",
+   "routes": [],
+   "workersDev": false,
+   "previewUrls": false,
+   "publicInternet": false,
+   "services": [
+    "BACKEND_RUNTIME->whumpo-runtime"
+   ],
+   "crons": []
+  },
+  {
+   "name": "whumpo-runtime",
+   "config": "wrangler.runtime.jsonc",
+   "main": "src/runtime/worker.ts",
+   "routes": [],
+   "workersDev": false,
+   "previewUrls": false,
+   "publicInternet": false,
+   "services": [],
+   "crons": []
+  }
+ ],
+ "slice2": {
+  "task": "WH-004 slice 2",
+  "baseCommit": "21204da42f39ad2e57947361ffef71c91a48b127",
+  "auditedOn": "2026-10-08"
+ }
 }
