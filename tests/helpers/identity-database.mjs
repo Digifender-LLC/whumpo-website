@@ -29,7 +29,7 @@ export async function identityDatabase(){
   return {db,close:async()=>sql.close()};
  }
  if(process.argv.length!==3||process.argv[2]!=='--d1')throw Error('Choose SQLite or --d1');
- const directory=await mkdtemp('/tmp/whumpo-identity-'),config=directory+'/wrangler.json';
+ const directory=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-identity-'),config=directory+'/wrangler.json';
  try{
   await writeFile(directory+'/schema.sql',schema);
   await writeFile(config,JSON.stringify({name:'whumpo-identity-local',compatibility_date:'2026-09-29',d1_databases:[{binding:'DB',database_name:'identity-local',database_id:crypto.randomUUID()}]}));

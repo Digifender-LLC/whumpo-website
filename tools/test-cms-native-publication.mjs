@@ -14,7 +14,7 @@ const bundle=await build({stdin:{resolveDir:process.cwd(),contents:[
  'cms-bridge','cms-projects','cms-provision','cms-deploy','cms-media-uploads','cms-content','cms-edits','cms-publication','cms-unpublish','cms-imports','cms-wordpress-sources','cms-wordpress-import','cms-wordpress-chat',
 ].map(n=>`export * from './src/${n}';`).join('\n')+"\nexport {default as platform} from './src/index'; export {hashToken,newSessionToken} from './src/security'; export {resolveIdentity} from './src/workspace-identity/authority'; export {admitWorkspace} from './src/workspace-identity/admission'; export {sendChat} from './src/chat'; export {cleanPhoto} from './src/files'; export {default as siteHost} from './src/site-host';"},bundle:true,format:'esm',platform:'node',write:false});
 const api=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
-const dir=await mkdtemp('/tmp/whumpo-native-publication-'),id=()=>crypto.randomUUID();let control,server,logs='';
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-native-publication-'),id=()=>crypto.randomUUID();let control,server,logs='';
 try{
  control=await databaseFixture({d1:true,r2:true});
  const db=control.db,files=control.env.FILES,user=id(),project=id(),now=new Date().toISOString(),master='local-publication-master-'.repeat(4),account='a'.repeat(32);

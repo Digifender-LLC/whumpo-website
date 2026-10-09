@@ -6,7 +6,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {localDatabase} from '../tools/database.mjs';
 import {currentSchemaArtifact,inspectSchema,currentSchemaPlan,schemaSummary} from '../tools/current-schema.mjs';
 
-const directory=await mkdtemp('/tmp/whumpo-current-schema-');
+const directory=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-current-schema-');
 const artifact=await currentSchemaArtifact(),sqlite=new DatabaseSync(':memory:');
 try{
  sqlite.exec(artifact.sql);

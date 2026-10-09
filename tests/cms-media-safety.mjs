@@ -13,7 +13,7 @@ const {cmsGateway}=await module('src/cms-gateway.ts'),{uploadCMSMedia,readCMSUpl
 const {cmsPreview}=await module('src/cms-preview.ts'),{prepareCMSPublication,confirmCMSPublication,cmsPublicationPage}=await module('src/cms-publication.ts'),{default:siteHost}=await module('src/site-host.ts');
 const {reservePhotoScan,recordPhotoScan}=await module('src/photo-scan-results.ts'),{cleanPhoto}=await module('src/photo-format.ts'),{cmsDraftBody}=await module('src/cms-content-shape.ts');
 const {uploadCMSWordPressSource}=await module('src/cms-wordpress-sources.ts'),{prepareCMSWordPressMediaImport}=await module('src/cms-wordpress-import.ts'),{cmsImportPage}=await module('src/cms-imports.ts');
-const dir=await mkdtemp('/tmp/whumpo-cms-media-safety-'),store=await databaseFixture({d1:true,r2:true}),db=store.db,files=store.env.FILES,id=()=>crypto.randomUUID();
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-cms-media-safety-'),store=await databaseFixture({d1:true,r2:true}),db=store.db,files=store.env.FILES,id=()=>crypto.randomUUID();
 const account='a'.repeat(32),master='local-master-fixture-'.repeat(4),scopes=new Map(),scope=user=>scopes.get(user);
 let checks=0;const check=async(label,fn)=>{await fn();checks++;};
 const held=e=>e.status===423&&/held for a safety review/.test(e.message),blocked=e=>e.status===423&&/did not pass/.test(e.message);

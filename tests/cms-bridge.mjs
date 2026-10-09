@@ -7,7 +7,7 @@ import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
 const {module,identity}=await currentFixtureModules(["src/cms-bridge.ts", "src/cms-gateway.ts"]);
 const {signCMSRequest,verifyCMSRequest,cmsRequestAllowed}=await module('src/cms-bridge.ts'),{cmsGateway}=await module('src/cms-gateway.ts');
-const dir=await mkdtemp('/tmp/whumpo-cms-bridge-');
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-cms-bridge-');
 const store=await databaseFixture({d1:true,r2:true}),db=store.db,id=()=>crypto.randomUUID();
 const config={projectId:id(),ownerId:id(),secret:'local-fixture-key-'.repeat(4),origin:'https://cms.test'},env={DB:db,WHUMPO_CMS_PROJECT_ID:config.projectId,WHUMPO_CMS_OWNER_ID:config.ownerId,WHUMPO_CMS_BRIDGE_KEY:config.secret,WHUMPO_CMS_ORIGIN:config.origin};
 let dispatches=0;const dispatch=async()=>{dispatches++;return Response.json({ok:true},{headers:{'set-cookie':'must-not-leave-gateway=1'}});},setup={title:'Fixture',tagline:'CMS test',includeContent:false},path='/_emdash/api/setup';

@@ -10,7 +10,7 @@ import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
 import {currentFixtureModules} from './helpers/current-modules.mjs';
 const {chromium}=createRequire(import.meta.url)(process.env.WHUMPO_PLAYWRIGHT||'@playwright/test');
-const dir=await mkdtemp('/tmp/whumpo-views-browser-'),html=`frontend/views-fixture-${process.pid}.html`,id=()=>crypto.randomUUID();
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-views-browser-'),html=`frontend/views-fixture-${process.pid}.html`,id=()=>crypto.randomUUID();
 let browser,server,fixture,page,origin,fail=false,hold=false,releaseHeld,network=0,phase='build',loseDismiss=false,blockReceipt=false,holdDismiss=false,releaseDismiss;const originalFetch=globalThis.fetch,requests=[],errors=[];
 try{
  await writeFile(html,'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content"><title>Whumpo view acceptance</title></head><body><div id="root"></div><script type="module" src="/@fs/'+resolve('frontend/src/main.tsx')+'"></script><script type="module">import {queryClient} from "/@fs/'+resolve('frontend/src/lib/api.ts')+'";window.fixtureQueryKeys=()=>queryClient.getQueryCache().getAll().map(q=>q.queryKey);window.fixtureRefreshSession=()=>queryClient.invalidateQueries({queryKey:["session"]});window.fixtureRefreshChat=()=>queryClient.invalidateQueries({queryKey:["chat"]});</script></body></html>');

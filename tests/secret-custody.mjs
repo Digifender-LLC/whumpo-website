@@ -28,7 +28,7 @@ for(const path of ['src/secrets.d.ts','tools/secret-custody.mjs','dist/assets/ic
 // Undeclared readers: a Worker source file that reads a secret from env but is not a declared reader fails closed;
 // type-only pass-through mentions are not reads. (Regression: whumpo-apps' app-gateway read TURNSTILE_SECRET undeclared.)
 assert.ok(secretCustody.find(s=>s.name==='TURNSTILE_SECRET').readers.includes('src/app-gateway.ts'));
-const copy=await mkdtemp('/tmp/whumpo-custody-readers-');
+const copy=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-custody-readers-');
 try{
  for(const path of ['docs/data-lifecycle.json','src/secrets.d.ts',...new Set(secretCustody.flatMap(s=>s.readers))]){await mkdir(join(copy,path,'..'),{recursive:true});await writeFile(join(copy,path),await readFile(path,'utf8'));}
  await validateSecretCustody(copy);
@@ -40,7 +40,7 @@ try{
  }
 }finally{await rm(copy,{recursive:true,force:true});}
 
-const root=await mkdtemp('/tmp/whumpo-custody-');
+const root=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-custody-');
 try{
  await mkdir(join(root,'source'));await writeFile(join(root,'source/normal.ts'),'export const answer=42;');
  for(const name of ['provider.key','credentials.json','.env.test','state.sqlite','private.whumpo-key-backup','private.whumpo-restore-inventory','private.whumpo-restore-inventory-journal']){
