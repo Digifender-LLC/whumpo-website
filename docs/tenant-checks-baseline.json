@@ -23,6 +23,7 @@
    {"fingerprint":"a6a4c9e2ac9d0b72","object":"module_access_role_review_retained","kind":"trigger","comparison":"users.id = module_access_role_reviews.user_id","types":"account/workspace"},
    {"fingerprint":"4a48bba060ce42be","object":"module_activation_review_retained","kind":"trigger","comparison":"users.id = module_activation_reviews.user_id","types":"account/workspace"},
    {"fingerprint":"2820a54201446193","object":"operator_contained_projects","kind":"view","comparison":"projects.owner_user_id = operator_containments.subject_id","types":"workspace/account"},
+   {"fingerprint":"5edb69dcd89d77aa","object":"operator_containment_retained","kind":"trigger","comparison":"safety_preservation_holds.subject_user_id = projects.owner_user_id","types":"account/workspace"},
    {"fingerprint":"cc52c7a55b67d7aa","object":"project_spec_apply_retained","kind":"trigger","comparison":"users.id = project_spec_applies.user_id","types":"account/workspace"},
    {"fingerprint":"0a69bb78aaca0bbc","object":"project_spec_creation_retained","kind":"trigger","comparison":"users.id = project_spec_creations.user_id","types":"account/workspace"},
    {"fingerprint":"bb3defd5f9c5758d","object":"safety_held_projects","kind":"view","comparison":"safety_preservation_holds.subject_user_id = projects.owner_user_id","types":"account/workspace"},

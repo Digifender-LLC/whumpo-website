@@ -2728,7 +2728,8 @@
       "issue": null,
       "owner": null,
       "evidence": [
-        "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass."
+        "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.",
+        "2026-10-09 UTC: the proposed collaboration contract (docs/workspace-collaboration.md) and packet 1a local gates (docs/tenant-classification.md) from branch claude/wh-054-tenant-registry-review (PR #188, closed for conflicts) were cherry-picked onto main 4dea09c as local branch claude/wh-054-tenant-registry-review-main; not pushed, merged or deployed. The port adds no schema, route or src change. Main's WH-050 schema change (#186) had drifted the registry fingerprint; it was re-reviewed: operator_session_revocations and operator_retention_receipts added as no-tenant-path tables, operator_session_revocations.account_id recorded as an account-typed textual identity, one new cross-type finding (operator_containment_retained) baselined, baseline moved to 221 tables. The four gates follow boundary-audit in the protection profile. The contract stays proposed, not frozen; four owner questions remain open; no issue or claim exists."
       ]
     },
     {
