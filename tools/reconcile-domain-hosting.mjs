@@ -15,9 +15,12 @@ try{
  if(!args.includes('--remote')||!['inspect','apply'].includes(command))throw Error(usage);
  const providerToken=(await readFile('.secrets/cloudflare-domains.key','utf8')).trim();if(!providerToken)throw Error('The zone-scoped domain key file is empty.');
  const wrangler=await readFile(resolve(homedir(),'.config/.wrangler/config/default.toml'),'utf8'),oauth=wrangler.match(/oauth_token\s*=\s*"([^"]+)"/)?.[1];if(!oauth)throw Error('An authenticated local Wrangler login is required.');
+ // The control database comes from wrangler.jsonc like every other remote operator tool (WH-004 B4); never pin an ID here.
+ const bound=JSON.parse(await readFile('wrangler.jsonc','utf8')),account=bound.account_id,database=bound.d1_databases?.find(d=>d.binding==='DB')?.database_id;
+ if(!/^[0-9a-f]{32}$/.test(account??'')||!/^[0-9a-f-]{36}$/.test(database??''))throw Error('wrangler.jsonc must bind the control database as DB with an account id.');
  const config={token:providerToken,zone:'8d46ee4e394514402479acf16579f7b5',target:'hosting.whumpo.site'};
  const db={prepare(sql){let params=[];const statement={bind(...values){params=values;return statement;},async first(){
-  const response=await fetch('https://api.cloudflare.com/client/v4/accounts/f94d28e88a63fb6f34c3ecbc05aa3faf/d1/database/680f98b9-a769-467f-8b6f-06c10195c263/query',{method:'POST',headers:{authorization:'Bearer '+oauth,'content-type':'application/json'},body:JSON.stringify({sql,params}),redirect:'manual',signal:AbortSignal.timeout(30000)});
+  const response=await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/d1/database/${database}/query`,{method:'POST',headers:{authorization:'Bearer '+oauth,'content-type':'application/json'},body:JSON.stringify({sql,params}),redirect:'manual',signal:AbortSignal.timeout(30000)});
   if(!response.ok){await response.body?.cancel();throw Error('Database request failed.');}const data=await response.json();if(data.success!==true||data.result?.[0]?.success!==true)throw Error('Database statement failed. Inspect current state before retrying.');return data.result[0].results?.[0]??null;
  }};return statement;}};
  const compiled=await build({entryPoints:['src/domain-recovery.ts'],bundle:true,format:'esm',platform:'node',write:false});const {inspectRecovery,applyRecovery}=await import('data:text/javascript;base64,'+Buffer.from(compiled.outputFiles[0].text).toString('base64'));
