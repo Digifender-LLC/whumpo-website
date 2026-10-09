@@ -1,13 +1,13 @@
 # Passkey-backed encryption feasibility
 
-**WH-118 planned evaluation, October 8, 2026 UTC, against source `ca17c6a` (rebased October 9 onto `92a001f`; the intervening merges #175, #178 and #180 changed no identity, passkey or schema source). This is not an adopted design.** It records a dated capability review, a candidate design, a synthetic emulation and the adoption criteria still to be tested. No physical device, browser, passkey provider, security key or hybrid transport was tested. No source behavior, schema, lifecycle classification, encryption key, prompt or customer promise changes here. WH-118 remains open until the owner decides with real-device evidence.
+**WH-118 planned evaluation, October 8, 2026 UTC, against source `ca17c6a` (rebased October 9 onto `d3ebaf2`; the intervening merges changed only `src/chat.ts`, `src/guest-previews/` and `src/funnel-metrics/events.ts`, and no identity, passkey, schema or `@simplewebauthn` source). This is not an adopted design.** It records a dated capability review, a candidate design, a synthetic emulation and the adoption criteria still to be tested. No physical device, browser, passkey provider, security key or hybrid transport was tested. No source behavior, schema, lifecycle classification, encryption key, prompt or customer promise changes here. WH-118 remains open until the owner decides with real-device evidence.
 
 Read with the [identity and data protection contract](roadmap/identity-and-data-protection.md), [workspace identity](workspace-identity.md), [restricted recovery](identity-recovery.md), the [WH-116 protection decision](data-protection.md) and [inference privacy](inference-privacy.md).
 
 ## Result in brief
 
 - **Recommendation: no adoption for the beta, the commercial MVP or any default.** Keep the transparent WH-116/117 baseline. Passkey-backed encryption may become an *opt-in sealed class* only if the real-device matrix meets every criterion in [adoption criteria](#adoption-and-no-adoption-criteria) and the owner accepts the [open decisions](#open-owner-decisions).
-- Ordinary passkey sign-in yields no encryption key. A key exists only if the relying party asks for the WebAuthn `prf` extension, the browser and authenticator support it, and the user completes a user-verified ceremony. Whumpo's current ceremony options (`src/workspace-identity/ceremonies.ts`) request no extensions, so today's sign-ins produce no PRF output at all.
+- Ordinary passkey sign-in yields no encryption key. A key exists only if the relying party asks for the WebAuthn `prf` extension, the browser and authenticator support it, and the user completes a user-verified ceremony. Whumpo's current authentication options (sign-in and reauthentication in `src/workspace-identity/ceremonies.ts`, recovery completion in `src/workspace-identity/recovery.ts`) request no extensions, so today's sign-ins produce no PRF output at all. Registration options (signup and add-passkey) request no `prf` either; they carry only `credProps: true`, which `@simplewebauthn/server` 14.0.3 `generateRegistrationOptions` always adds and which reports whether the credential is discoverable, not key material.
 - Official support is real but uneven and partly contradictory, especially for Safari/iOS assertions, Windows Hello and Firefox for Android ([capability review](#capability-review--checked-october-8-2026-utc)).
 - The candidate design keeps PRF outputs and content keys on the client and works in the synthetic proof. It still needs a second saved secret for lost-all-keys content recovery, and rotation needs every remaining key present.
 - Sealed content cannot be read by AI maintenance, safety checks, search, publication, image processing or background jobs. Whumpo has no admitted data class that is useful without those features.
@@ -138,7 +138,7 @@ Real-device measurements were not possible here. The table states expected promp
 | Lost all keys | Kit plus 2 replacement passkeys plus fresh assertion | CRK entry; without it, permanent loss |
 | Unsupported provider or device | None | Sealed content unavailable on that device |
 
-Measurement plan for a later approved run on the [WH-024/025](roadmap/execution.md) measurement channel:
+Measurement plan for a later approved run on the [WH-024/025](roadmap/identity-and-data-protection.md#delivery-and-acceptance) measurement channel:
 
 - **Identities.** Disposable synthetic accounts only.
 - **Matrix.** The browser, OS, provider and transport matrix above, including hybrid and Android native.
