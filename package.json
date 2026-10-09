@@ -110,6 +110,8 @@
     "test:recovery-drill-keys": "node tests/recovery-drill-keys.mjs",
     "test:recovery-authority": "node tests/recovery-authority.mjs",
     "test:restore-inventory-containment": "node tests/restore-inventory-containment.mjs",
+    "test:restore-inventory-operator-actions": "node tests/restore-inventory-operator-actions.mjs",
+    "test:restore-inventory-retention": "node tests/restore-inventory-retention.mjs",
     "cms:verify-recovery": "node tools/verify-cms-recovery.mjs",
     "test:backend-publication": "node tests/backend-publication.mjs",
     "test:backend-forms": "node tests/backend-forms.mjs",
