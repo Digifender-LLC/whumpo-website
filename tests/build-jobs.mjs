@@ -48,7 +48,7 @@ async function draft(owner,p=undefined){
  await db.prepare('INSERT INTO application_builds(id,project_id,user_id,request_hash) VALUES(?,?,?,?)').bind(t,p,owner,'a'.repeat(64)).run();
  return {t,p,digest,admit:async()=>{const admitted=await J.admitBuildJob(db,{id:t,user:owner,project:p,inputDigest:'b'.repeat(64),sourceDigest:digest});await admitted.statement.run();return admitted.lease;}};
 }
-const dir=await mkdtemp('/tmp/whumpo-build-jobs-');let runtime;
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-build-jobs-');let runtime;
 try{
  execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','deploy','--config','wrangler.runtime.jsonc','--dry-run','--outdir',dir+'/runtime'],{stdio:'pipe',maxBuffer:16*1024*1024});
  const require=createRequire(import.meta.resolve('wrangler')),{Miniflare,convertV4MiniflareOptions}=require('miniflare');

@@ -13,7 +13,7 @@ import {captureRestoreConstraint,inspectIsolatedRestore,restoreManifestDigest} f
 import {assertArtifactPath} from '../tools/artifact-protection.mjs';
 
 Error.stackTraceLimit=0;
-const directory=await mkdtemp('/tmp/whumpo-inventory-'),inventoryFile=join(directory,'current.whumpo-restore-inventory');
+const directory=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-inventory-'),inventoryFile=join(directory,'current.whumpo-restore-inventory');
 const streamId='separate-operator-inventory',id=()=>crypto.randomUUID(),fixture=await sqliteD1(),{db,sql}=fixture;
 const keys=await keyBackupFixture(),keyring=fixtureKeyring(),stored=await keys.create(keyring),keyBackup=stored.proof;
 const {identity:m}=await currentFixtureModules([]);

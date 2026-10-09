@@ -8,7 +8,7 @@ import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.m
 const m=await currentSiteFixtureHandlers(),store=await databaseFixture({d1:true,r2:true}),db=store.db,env=store.env,owners=new Map(),scopes=new Map(),scope=user=>scopes.get(user),ownedEnv=user=>({...env,DB:scope(user)});
 async function accountAuthority(user){const authority=await workspaceFixture(db,m,user);owners.set(user,authority);scopes.set(user,await authority.scope());}
 const {uploadPhoto,readPhoto,listPhotos,cleanupPhotos,sendChat,readChat,getBilling}=m;
-const dir=await mkdtemp('/tmp/whumpo-photo-removal-');
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-photo-removal-');
 execFileSync('python3',['-c',"from PIL import Image; import sys; Image.new('RGB',(32,24),(80,120,60)).save(sys.argv[1]+'/fixture.jpg')",dir]);const jpeg=new Uint8Array(await readFile(dir+'/fixture.jpg'));
 async function account(){const id=crypto.randomUUID(),project=crypto.randomUUID();await accountAuthority(id);await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Photos','Synthetic test','draft',?,?)").bind(project,id,new Date().toISOString(),new Date().toISOString()).run();await readChat(scope(id),id);return {id,project};}
 function request(){return new Request('https://whumpo.com/api/test',{method:'PUT',headers:{'content-type':'image/jpeg','x-whumpo-photo-handoff':'null','x-photo-name':'Garden'},body:jpeg});}

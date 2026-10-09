@@ -8,7 +8,7 @@ import {currentFixtureModules} from './helpers/current-modules.mjs';
 import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.mjs';
 const modules=await currentFixtureModules(['src/files.ts','src/chat-interactions/store.ts','src/photo-upload-shape.ts']);
 const files=await modules.module('src/files.ts'),forms=await modules.module('src/chat-interactions/store.ts'),shape=await modules.module('src/photo-upload-shape.ts');
-const fixture=await databaseFixture({d1:true,r2:true}),{db,env}=fixture,dir=await mkdtemp('/tmp/whumpo-photo-handoff-');
+const fixture=await databaseFixture({d1:true,r2:true}),{db,env}=fixture,dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-photo-handoff-');
 execFileSync('python3',['-c',"from PIL import Image; import sys; Image.new('RGB',(32,24),(80,120,60)).save(sys.argv[1])",dir+'/photo.jpg']);
 const bytes=await readFile(dir+'/photo.jpg'),id=()=>crypto.randomUUID(),run=(q,...v)=>db.prepare(q).bind(...v).run(),row=(q,...v)=>db.prepare(q).bind(...v).first();let cases=0;
 async function test(name,fn){try{await fn();cases++;}catch(e){console.error(name);throw e;}}

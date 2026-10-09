@@ -11,7 +11,7 @@ import {workspaceFixture,workspaceSession,interceptDatabase} from './helpers/wor
 import {authenticator} from './app-authenticator.mjs';
 import {taskListAppJourney} from './task-list-app-journey.mjs';
 import {createFixtureWebsite,withFixtureEditingGrant} from './current-site-fixture.mjs';
-const id=()=>crypto.randomUUID(),dir=await mkdtemp('/tmp/whumpo-app-journey-');let fixture,runtime;
+const id=()=>crypto.randomUUID(),dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-app-journey-');let fixture,runtime;
 try{
  fixture=await databaseFixture({d1:true,r2:true});
  execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','deploy','--config','wrangler.runtime.jsonc','--dry-run','--outdir',dir+'/runtime'],{stdio:'pipe',maxBuffer:16*1024*1024});

@@ -7,7 +7,7 @@ import {build} from 'esbuild';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,workspaceSession,interceptDatabase} from './helpers/workspace-identity.mjs';
 Error.stackTraceLimit=2;
-const dir=await mkdtemp('/tmp/whumpo-service-journey-');let fixture,runtime;
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-service-journey-');let fixture,runtime;
 const originalFetch=globalThis.fetch,background=[],ctx={waitUntil:p=>background.push(p)};
 try{
  execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','deploy','--config','wrangler.runtime.jsonc','--dry-run','--outdir',dir+'/runtime'],{stdio:'pipe',maxBuffer:16*1024*1024});

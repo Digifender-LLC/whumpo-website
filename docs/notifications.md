@@ -1,0 +1,202 @@
+# Shared notification templates and delivery configuration
+
+**WH-068 contract slice (WH-154), October 8, 2026 UTC; source baseline `ca17c6a`.** This freezes one notification contract — versioned templates, verified senders, recipient scopes, consent and preferences, receipt states and delivery events — maps the existing [WH-036 contact notices](contact-forms.md#owner-notification-delivery-wh-036) onto it with exact gaps, and splits the remaining [WH-068](roadmap/backlog.md#wh-068--implement-shared-notification-templates-and-delivery-configuration) work into WH-155–160. It is a **planned contract**. It adds no table, route, binding, provider, sender, DNS record, schedule or deployment, and it changes no `src/` behavior. The [offline reference](../tools/prototypes/notifications.mjs) and [conformance harness](../tests/notifications-contract.mjs) exercise the frozen shapes and a synthetic in-memory runtime with a fake provider. No Worker imports them.
+
+This contract uses these existing contracts and does not replace them: the [contact form and WH-036 delivery](contact-forms.md), the [shared module contract](shared-modules.md) (records/forms events and the access module's visitor and staff principals), the [WH-052 job envelope](job-envelope.md) and [background-job decision](background-jobs.md), [WH-122 feature admission](feature-admission.md), [WH-116 data protection](data-protection.md) with the [lifecycle catalogue](data-lifecycle.json), the [composition architecture](roadmap/composition-architecture.md) and the [current-version policy](current-version-policy.md). Its style follows the [connector contract](connectors.md). Customer mailbox connectors (WH-056/096–100) are a separate lane: owner-request mailbox consent never authorizes an automatic notification.
+
+## Decision
+
+Whumpo maintains **one delivery implementation**: a platform-owned template catalog, a fixed sender catalog, provider adapters that alone hold provider credentials, and one durable outbox with exact receipts. Customers **configure** notifications; they never write them.
+
+1. A customer configuration chooses one catalog template version, one trigger, one recipient **scope**, one verified sender and bounded per-recipient limits, and fills the template's closed configuration slots with validated plain text. It can never name an address, header, URL, provider, credential or free-form message.
+2. Recipients are resolved on the server from current records (the owner's verified destination, current opted-in staff, or the verified submitting visitor). Eligibility is read again immediately before every provider call.
+3. Every notice is deterministic. Submission, enqueue, rendering, dispatch, events and reconciliation never import or invoke owner-maintenance inference, its context, credentials or funding, and they keep working while maintenance inference is unavailable.
+4. The accepted form record is the source of truth. A notice is a signal derived **after** the record commits; no notification failure can roll back, delete or block a record.
+5. A template, configuration or review never provisions anything. Senders, sending domains, DNS records, providers and their charges exist only through their own separately reviewed activation (as WH-036 did).
+
+## Template shape (contract version 1)
+
+The frozen catalog is `notificationCatalog` in the [reference](../tools/prototypes/notifications.mjs). `validateTemplate` and `validateCatalog` reject an unknown version, field, trigger, scope, variable source or link.
+
+| Element | Frozen v1 rule |
+| --- | --- |
+| Catalog key | `<id>@<version>`, for example `appointment.staff-notice@1`. Entries carry `state` (`available` / `withdrawn`) and `readiness` (`planned`, `synthetic-conformant`, `source`, `live-accepted`). Readiness is metadata only a recorded acceptance can raise. |
+| Template | Closed object `{contractVersion: 1, id, version, purpose: "transactional", authority, trigger, audiences[], variables{}, subject[], body[]}`. Marketing or campaign purposes do not exist in v1. A configuration pins `{id, version, digest}` (SHA-256 of canonical JSON). A different digest is `STALE_TEMPLATE`; a withdrawn entry is `TEMPLATE_WITHDRAWN`. There is no fallback to another version. |
+| `authority` | `platform-obligation` (owner/platform notices such as contact notices and destination verification; trigger is not `form.accepted`; audience is only `owner-destination`) or `approved-configuration` (customer-configured; trigger `form.accepted`). A customer configuration cannot use a platform template (`PLATFORM_TEMPLATE`). |
+| `trigger` | `contact.accepted`, `destination.verification` or `form.accepted`. `form.accepted` is the existing content-free WH-127 `module_record_events` row. |
+| `audiences` | Subset of `owner-destination`, `project-staff`, `submitter` that a configuration may choose from. |
+| Segments | `subject` and `body` are arrays of exactly one of `{text}`, `{var}` or `{link}`. There is no template language: nothing is parsed, so a value such as `{{owner.email}}` renders literally. Literal text containing `{{`, `}}` or `${` is refused (`TEMPLATE_SYNTAX`). Subject text is single-line (no CR, LF, other controls or U+2028/2029: `HEADER_INJECTION`), at most 120 characters with variables counted at their maximum. Body text may contain LF only, at most 4,000 characters. |
+| Links | `{link}` names a fixed platform link (`workspace-inbox`, `workspace-records`). Links are body-only. No variable, configuration or caller supplies a URL. |
+| Variables | `{source, type}` with closed sources: `config` → `text-line`; `record` → `choice`, `number`, `boolean`; `platform` → `reference` (opaque 8-character record reference) or `code` (verification only). Free-text record fields can never be variables (`FREE_TEXT_VARIABLE`). Every declared variable must be used. |
+| Content-free notices | A `record` variable is allowed only when the template's sole audience is `submitter` (`CONTENT_IN_NOTICE`). Owner and staff notices say that something arrived and link to the private panel; visitor-submitted values stay [dashboard-only](shared-modules.md#owner-decisions), as with the contact inbox. |
+| Rendering | Plain text only (no HTML in v1). Values are validated at render against their type (`INVALID_VARIABLE`): a `text-line` is 1–80 characters with no control characters, `<`, `>`, URL or address shapes; a `choice` must be one of the configured field options. A render refusal cancels that notice; it never alters the record. |
+
+The v1 catalog contains four templates. `contact.new-message@1` and `owner.destination-verification@1` re-express the existing WH-036 notices: the harness proves they render **byte for byte** the same subject and text as `contactEmailMessage` in [contact-email.ts](../src/contact-email.ts). `appointment.staff-notice@1` and `appointment.request-receipt@1` are planned declarations for the standard appointment rules below.
+
+## Verified sender model
+
+| Element | v1 rule |
+| --- | --- |
+| Sender entry | `{address, displayName, provider, domainOwner: platform | customer, state: verified | unverified | planned, dnsReview}`. A configuration names a sender by ID only. |
+| Admission | Only `state: verified` senders with a recorded DNS review are usable (`SENDER_NOT_VERIFIED`). The sender's provider must have a recorded review, a price and a spending ceiling (`UNREVIEWED_PROVIDER`, `UNPRICED_PROVIDER`, `UNBOUNDED_CHARGE`). |
+| v1 senders | `whumpo-notify`: `notify@whumpo.com`, display name `Whumpo`, provider `cloudflare-email`, `domainOwner: platform`, DNS review = the October 4, 2026 Email Sending onboarding recorded in [contact forms](contact-forms.md#owner-notification-delivery-wh-036). |
+| Display name | `[A-Za-z0-9 ]{1,40}` from the catalog, never from configuration, so no header bytes can enter `From`. Whether a business name may appear as "Business via Whumpo" is an [owner decision](#open-owner-decisions). |
+| Reply-To, Cc, Bcc, extra headers | None in v1. The only header the adapter adds is `X-Whumpo-Notice-Id` (the notice ID), as today. |
+| Customer-domain senders | Not in v1. They would need sending-domain verification at the customer's DNS (a customer DNS change), provider support and their own review; a configuration referencing a `planned`/`unverified` sender is refused. |
+
+## Recipient scope (no open relay)
+
+Recipients come only from server-side records. Configuration, templates, visitor input, job payloads and API callers cannot supply an address, list, header or URL: `validateConfiguration` refuses keys such as `to`, `cc`, `bcc`, `recipients`, `address`, `email`, `replyTo`, `from`, `headers`, `url`, `href` and `webhook` anywhere in the object (`OPEN_RELAY`), and refuses configuration text that looks like an address or URL (`CONFIG_URL`).
+
+| Scope | Resolved from | Eligible only while |
+| --- | --- | --- |
+| `owner-destination` | The project's owner-named destination (`contact_notification_destinations` today) | `verified` through the same provider and sender, not suppressed. |
+| `project-staff` | Current `staff` holders of the project's access instance ([WH-126](shared-modules.md#access-module-staff-roles-wh-126--october-4-2026-utc)) | Role unrevoked at the current access revision, staff member has a provider-verified notification address and has opted in, not suppressed. |
+| `submitter` | The submitting **visitor identity** of the accepted record | The record was submitted by a project visitor (not anonymously), the visitor has a provider-verified address, the record carries the visitor's per-submission receipt consent, and the address is not suppressed. |
+
+An **anonymous** public form never sends mail to an address typed into the form. A typed address is unverified input, and mailing it would let anyone use Whumpo to send to a victim. The on-page receipt reference remains the anonymous submitter's receipt. Allowing a double-opt-in confirmation for typed addresses is an [owner decision](#open-owner-decisions) and is not part of v1.
+
+Recipient and consent state is read at enqueue **and again immediately before every provider call**. Staff revocation, opt-out, an unverified or suppressed address, a removed record, a disabled or changed configuration or a withdrawn template cancels the unsent notice with a reason (`recipient-revoked`, `suppressed`, `record-removed`, `configuration-changed`, `template-withdrawn`). A call that has already begun cannot be recalled.
+
+## Consent and preferences
+
+- **Owner destination.** The existing verification code is the consent and reachability proof; removal in the Dashboard is unsubscribe ([existing flow](contact-forms.md#what-exists)).
+- **Staff.** Opt-in, address verification and opt-out happen on the visitor origin in the staff area, through the same code-verification pattern and provider. Granting the staff role does not opt anyone in.
+- **Submitter.** An explicit, unticked-by-default "email me a receipt" choice stored on the record, plus a verified visitor address. A receipt is one transactional message per submission; it adds no mailing list.
+- **Suppression.** Hard bounce, complaint, unsubscribe and provider-side suppression write the existing permanent per-account suppression (`contact_notification_suppressions` today), which applies across every scope and template for that account. Only the existing operator-reviewed reset clears it.
+- Every template ends with fixed stop instructions for its audience. Preferences are evaluated at dispatch, never frozen at enqueue.
+
+## Receipts, delivery events and reconciliation
+
+One notice row per `(configuration, configuration digest, event, recipient)` with a unique idempotency key, so duplicate events, replays and concurrent passes cannot create a second notice. Receipt states are frozen as:
+
+| State | Meaning | Allowed next states |
+| --- | --- | --- |
+| `queued` | Durable intent recorded after the record committed; no provider call yet. | `dispatching`, `cancelled` |
+| `dispatching` | One attempt claimed **and counted against the spending ceiling** in one transaction before the call. | `accepted`, `deferred`, `failed`, `unknown-outcome`, `cancelled` (only if the final pre-call recheck denies before the call begins) |
+| `deferred` | The provider answered with a documented refusal that certainly did not send (Cloudflare: rate/daily limit, sender not verified, sender domain unavailable). Backoff 5 minutes doubling to 6 hours. | `dispatching`, `cancelled`, `failed` (`exhausted` after the attempt bound) |
+| `accepted` | The provider accepted the message. This says nothing about delivery or reading. | `delivered`, `bounced`, `complained` |
+| `delivered` | Authenticated provider delivery event. | `complained` |
+| `unknown-outcome` | Timeout, throw, lost response, unknown error code, internal provider error, or a worker interrupted after the claim (`dispatching` older than the 60-second lease). The message may have been sent. | `accepted`, `delivered`, `bounced`, `complained` (from provider evidence), `unresolved` |
+| `bounced`, `complained` | Authenticated provider event or reconciliation evidence. Suppresses the address. | — |
+| `failed` | Definite rejection, provider suppression at send, or exhaustion. | — |
+| `cancelled` | Stopped before any call: owner cancellation, revocation, suppression, expiry (24 hours), ceiling, removed record, changed configuration, withdrawn template, render refusal. | — |
+| `unresolved` | Reconciliation bound reached without evidence. Retained for operator attention. | — |
+
+Rules:
+
+- **No redispatch on a lost response.** Nothing leaves `unknown-outcome` for `queued`, `deferred` or `dispatching`. The owner retry control works only on `deferred`; owner cancellation works only on `queued`/`deferred` (`CANNOT_RECALL` otherwise). Cloudflare Email Service documents no idempotency key, so a second call could duplicate the message. A future provider's idempotency key is defence in depth, not permission to resend.
+- **Bounded reconciliation.** An `unknown-outcome` notice allows at most three read-only lookups within 72 hours (provider lookup by notice marker or message ID, or an authenticated event). Evidence moves it to `accepted`/`delivered`/`bounced`/`complained`; "not found" is **not** proof of non-delivery. At the read or time bound the notice becomes `unresolved`. Reconciliation never calls send. Cloudflare Email Service documents no message lookup today, so for that provider reconciliation is events-only and usually ends `unresolved`.
+- **Delivery events** are accepted only from the provider adapter after its own authentication (signature, queue binding or credential); an unauthenticated event is refused (`EVENT_NOT_AUTHENTICATED`). Events are idempotent by provider event ID. An out-of-order event that is not an allowed transition is ignored. A provider-side deferral (Cloudflare `message.deferred`) is informational: Whumpo `deferred` means a Whumpo-side retry after definite non-acceptance.
+- **Spending.** Every provider call counts, including rejected and uncertain ones. A call past the provider ceiling is cancelled (`ceiling`) before reaching the provider.
+- **Caps.** Per recipient and configuration at most 10 an hour and 50 a day (WH-036's owner-decided caps are the upper bound). Excess notices are not created; records are unaffected.
+
+## Failure isolation
+
+The form record commits with its content-free `form.accepted` event in the existing records transaction. Notice derivation runs later in the scheduled pass and reads only that event. Therefore:
+
+- A notification storage fault, render refusal, provider rejection, timeout, interrupted worker, withdrawn template, disabled configuration or exhausted ceiling leaves the record readable and unchanged. The harness proves this in the synthetic runtime by injecting each failure and reading the record back.
+- Removing a record before dispatch cancels its notices; removing a record never removes another record.
+- Unresolved delivery evidence is retained beyond ordinary outbox expiry (as PR #174 proposes for contact notices) and blocks account purge until handled; it is never silently discarded.
+
+## Authority class and job envelope
+
+Notices are deterministic and use the [WH-052 envelope](job-envelope.md) purpose `platform-email`:
+
+| Notice | Envelope actor | Admission at dispatch |
+| --- | --- | --- |
+| Contact notice, destination verification | `platform-obligation` | Exact owner-destination review/verification, containment, suppression, account freeze. |
+| Customer-configured notice | `approved-rule` naming the notification configuration, its revision and the exact owner review receipt | Current configuration digest and review, current feature inclusion through [WH-122](feature-admission.md), recipient eligibility, suppression, ceiling. WH-158 implements this one resolver for the fixed `form.accepted → notify` trigger; WH-069 must reuse it, not build a second. |
+
+No step invokes owner-maintenance inference. Visitors, form submissions, events, schedules and reconciliation cannot start a maintenance session or reach the maintainer's context, credentials or inference funding. The harness checks that `src/contact-notifications.ts` and `src/contact-email.ts` cannot reach any owner-maintenance inference module (the same check the shared-module suites use) and that the reference imports only `node:crypto`.
+
+**Reconciliation item for WH-156:** the job envelope bounds `maxAttempts` to 1–3 per admitted handler, while WH-036 makes up to 6 provider attempts per notice. WH-156 must either fit definite-refusal retries inside the envelope bound (for example one envelope per attempt) or amend the envelope contract with a reviewed change. It must not do both silently.
+
+## Provider secret custody
+
+Provider credentials or bindings live only in the provider adapter in the platform Worker (today the `CONTACT_EMAIL` `send_email` binding in [contact-email.ts](../src/contact-email.ts)). Templates, configurations, reviews, outbox rows, receipts, events, logs, Chat and model context never contain them (`SECRET_FIELD` refuses credential-shaped keys in configuration). The runtime hands the adapter only `{noticeId, idempotencyKey, from, to, subject, text, headers: {X-Whumpo-Notice-Id}}`. Owner-visible receipts contain no address, value or provider error body. The QuickJS customer runtime, visitor/site Workers and generated source get no notification capability or binding.
+
+## Charge, DNS and sender review gates
+
+- A configuration is admitted only when its sender is verified and its provider has a recorded review, a dated price and a ceiling. The owner's exact review shows and binds the provider price; a changed price or configuration makes the review stale (`PRICE_MISMATCH`, `STALE_REVIEW`).
+- Configuring or enabling a notification provisions nothing: no sender, sending domain, DNS record, provider account, binding, queue, cron or paid service. The harness proves the catalog digest is unchanged by configuration.
+- New providers, senders, sending domains, Queues event subscriptions or a higher ceiling each need their own owner review and activation, recorded like WH-036's [activation steps](contact-forms.md#owner-activation-steps-none-done).
+
+## Standard appointment-request rules as configuration
+
+The standard rules are three configurations over two maintained templates (`standardAppointmentConfigurations` in the reference), bound to one records instance's `form.accepted` event for its appointment form:
+
+| Configuration | Template | Scope | Content | Limits |
+| --- | --- | --- | --- | --- |
+| `appointment-staff` | `appointment.staff-notice@1` | `project-staff` | Business name (owner-configured plain text) and a link to the private request list. No request details. | 10/hour, 50/day per recipient |
+| `appointment-owner` | `appointment.staff-notice@1` | `owner-destination` | Same | 10/hour, 50/day |
+| `appointment-receipt` | `appointment.request-receipt@1` | `submitter` | Business name, opaque reference, and the chosen `service` and `day` **choice** values only. States that it is a request, not a confirmed booking. | 3/hour, 10/day |
+
+An appointment request is a records form, not a scheduling or availability engine ([composition architecture](roadmap/composition-architecture.md#2-reuse-small-explicit-capabilities)). Confirmations after staff approval, reminders and follow-ups are WH-069/094 rule work.
+
+## Existing contact-notification machinery
+
+The WH-036 implementation already provides the hard parts for the owner-destination scope. The harness checks the pure parts against the contract: template text, sender, ceiling, attempt bound, error-code classes, outbox state mapping and the absence of an inference path.
+
+| Contract element | Current source ([contact-notifications.ts](../src/contact-notifications.ts), [contact-email.ts](../src/contact-email.ts), `schema/platform.sql`) | Gap |
+| --- | --- | --- |
+| Templates | Two fixed messages in `contactEmailMessage`; content-free; plain text. | **G-N1** No versioned catalog or digest; text is code. Re-expressed byte for byte by the v1 catalog (checked). |
+| Sender | `contactNotificationSender` constant; binding `allowed_sender_addresses` limited to it. | **G-N2** No sender record with DNS-review reference consulted at admission. |
+| Provider metadata | `implementedContactNotificationProviders` holds only `sendCeiling` (14,285 calls / 32 days). Price, review and idempotency facts live in comments and docs. | **G-N3** No catalog entry with dated price/review/idempotency/lookup facts. |
+| Error classification | `cloudflareEmailOutcome`: suppressed, not-taken (retry), rejected, otherwise uncertain. | Conforms (checked code by code). |
+| Recipient scope | One owner-named destination per project, code-verified through the same provider; no visitor text in any header/subject/body. | **G-N7** No staff or submitter scope, visitor address verification or per-submission consent. |
+| Idempotency / at most once | Unique `message:<submission>:<destination>` key; attempt claimed and counted before the call; uncertain never resent. | Conforms. |
+| Receipt states | `queued`, `accepted`, `failed`, `cancelled`, `bounced`, `complained`; uncertainty is `failed` + `last_error='uncertain'`; a retry waits as `queued` + `unavailable`. | **G-N4** No distinct `dispatching`, `unknown-outcome`, `deferred`, `delivered` or `unresolved`; no bounded reconciliation; a crash between call and result write is not recorded on `main`. Owner PR #174 (open) adds `dispatching`/`uncertain`, a lease pass and unresolved retention as a prerequisite; WH-156 builds on whichever is merged. `contactStateMap` maps every current schema state and both pending ones. |
+| Spending | `contact_notification_send_ledger`, a contact-specific 32-day ceiling. | **G-N5** Customer notifications need one ledger and ceiling per provider across all notice kinds. |
+| Delivery events | `applyContactDeliveryEvent` (bounce/complaint/unsubscribe → suppression) without an authenticated intake; Cloudflare events require Queues event subscriptions, not chosen. Send-time `E_RECIPIENT_SUPPRESSED` feeds suppression. | **G-N6** No authenticated event adapter, no `delivered` evidence. |
+| Configuration | None: contact notices are a platform obligation. | **G-N8** No customer configuration, review, trigger binding or Chat/dashboard control. |
+| Failure isolation | The inbox is the source of truth; notices derive from `contact_submissions` after commit. | Conforms. |
+| No inference | No inference import; no static check in `tests/contact-notifications.mjs`. | **G-N9** Closed for these two modules by the new harness check. |
+| Envelope | Runner predates the job envelope; up to 6 attempts. | **G-N10** Attempt bound versus envelope `maxAttempts ≤ 3` (see above). |
+
+None of these gaps is a known exploitable defect in the current owner-only scope. They are where the contract is only implicit or the scope is narrower than WH-068 needs.
+
+## Provider options — checked October 8, 2026 UTC
+
+These are public documentation facts read on October 8, 2026, not verified Whumpo account entitlements, quotes or permission to sign up, provision or send. Whumpo's plan, beta access and pricing **require verification** before any activation.
+
+| Option | What it does | Whumpo fit / status | Cost and limit flags (require verification) |
+| --- | --- | --- | --- |
+| [Cloudflare Email Service — Email Sending](https://developers.cloudflare.com/email-service/) | Outbound transactional email from Workers through a `send_email` binding; described as beta for outbound transactional email. | **Selected for WH-036** (owner decision October 4, 2026); adapter in source, sender `notify@whumpo.com`. The natural v1 provider for configured notifications if the owner extends that decision. | [Pricing](https://developers.cloudflare.com/email-service/platform/pricing/) (page last updated June 9, 2026): Workers Paid; 3,000 included per month per account, then $0.35 per 1,000; hard bounces count, API rejections (including suppressed recipients) do not; no minimum stated. [Limits](https://developers.cloudflare.com/email-service/platform/limits/) (September 25, 2026): conservative daily quota for new accounts, 50 recipients and 5 MiB per message. The [Workers API](https://developers.cloudflare.com/email-service/api/send-emails/workers-api/) (September 16, 2026) returns `messageId`, lists 20 error codes and documents **no idempotency key and no status lookup**. [Event subscriptions](https://developers.cloudflare.com/email-service/platform/event-subscriptions/) (July 15, 2026) publish delivered/deferred/bounced/failed/rejected/complained events **to a queue** per sending domain, which means Cloudflare Queues usage (not chosen; cost not stated on that page). |
+| [Cloudflare Email Routing](https://developers.cloudflare.com/email-service/) | Inbound mail handling (route to addresses or Workers). Free sending only to verified destination addresses. | **Not an outbound transactional provider** for customer notifications; it cannot mail arbitrary staff/submitters. | Free and Paid plans; verified-destination sends are free (overview, last updated October 8, 2026). |
+| [Amazon SES](https://docs.aws.amazon.com/ses/latest/dg/) | Proven outbound email API/SMTP with configuration sets, SNS/event publishing for bounces/complaints/deliveries and an account suppression list. | Candidate only if the owner wants a second provider or independence from the Email Sending beta. Adds an AWS account, data processor, separate DNS identity and an event adapter. No idempotency token was found in this read (**requires verification**). | [Pricing](https://aws.amazon.com/ses/pricing/) (read October 8, 2026): $0.10 per 1,000 à la carte with no minimum; plan tiers with monthly charges; attachments $0.12/GB; dedicated IPs extra. New accounts start in a [sandbox](https://docs.aws.amazon.com/ses/latest/dg/request-production-access.html): verified recipients only, 200 messages per 24 hours, 1 per second, until production access is granted. [Notifications](https://docs.aws.amazon.com/ses/latest/dg/monitor-sending-activity-using-notifications.html) by email, SNS or event publishing. |
+| [Postmark](https://postmarkapp.com/developer) | Transactional-focused API with message streams, bounce webhooks and address deactivation. | Candidate for strict transactional deliverability. Webhooks are [not signed](https://postmarkapp.com/developer/webhooks/bounce-webhook); the adapter would need Basic Auth plus IP allowlisting. | [Pricing](https://postmarkapp.com/pricing) (read October 8, 2026): free 100 emails/month with no overage; Basic $15/month for 10,000, extra $1.80 per 1,000; monthly billing. |
+| [Resend](https://resend.com/docs) | Developer email API. | Candidate; documents an [`Idempotency-Key`](https://resend.com/docs/dashboard/emails/idempotency-keys) kept 24 hours (same key with a different payload returns 409), which would strengthen, not relax, the no-redispatch rule. | Pricing not re-read in this session (**requires verification**). |
+
+No provider is changed or added by this contract. Earlier unverified comparisons remain in [contact forms](contact-forms.md#transactional-email-provider-research).
+
+## Delivery slices
+
+WH-068 stays the parent with its acceptance unchanged. It closes only when every child below is accepted. No child depends on or delivers WH-069 (general rule engine), WH-094 (Business workflows) or WH-080 (composed pilot) acceptance; those packets consume WH-068. Task scopes live in [backlog.json](roadmap/backlog.json).
+
+| ID | Slice | Depends on |
+| --- | --- | --- |
+| WH-154 | Freeze this contract, the offline reference/conformance harness and the decomposition | WH-052, WH-123 |
+| WH-155 | Source notification catalog (templates, senders, provider facts), closed validators and plain-text renderer; contact notices rendered through it unchanged (G-N1–N3) | WH-154 |
+| WH-156 | Shared outbox and receipt state machine with bounded reconciliation, one ledger/ceiling per provider and an authenticated event-intake interface (G-N4–N6, G-N10); current-schema cutover | WH-155, WH-052 |
+| WH-157 | Recipient scopes, consent and preferences: staff opt-in and address verification, verified visitor address and per-submission receipt consent, shared suppression (G-N7) | WH-155, WH-126, WH-116 |
+| WH-158 | Customer notification configuration, exact owner review with bound price, `form.accepted` trigger resolver, Chat/dashboard bindings and the standard appointment presets (G-N8) | WH-156, WH-157, WH-127, WH-105, WH-122 |
+| WH-159 | Connected synthetic acceptance on local D1: two tenants, maintainer transport disabled, duplicates, timeout/bounce, revoked recipient, cancellation, ceiling and failure isolation | WH-158 |
+| WH-160 | Approved provider canary for configured notifications to explicitly approved addresses, after sender/recipient and cost review | WH-159, WH-036 |
+
+## Open owner decisions
+
+1. **Provider for customer-configured notifications.** Recommended: extend the October 4 Cloudflare Email Service decision (one adapter, already reviewed). Alternatives: add Amazon SES, Postmark or Resend as a second reviewed provider.
+2. **Sender domain and display name.** Recommended: platform sender `notify@whumpo.com` only in v1, with the business name inside the message. Alternatives: a display name such as "Business via Whumpo" (sanitized), a dedicated platform sending subdomain, or customer-domain senders later (customer DNS changes; out of v1).
+3. **Retention.** Recommended: resolved outbox rows and receipts 30 days (matching contact notices); `unknown-outcome`/`unresolved` evidence retained until resolved; suppression permanent until operator reset. Alternative: 90 days to match general records.
+4. **Submitter receipts.** Recommended: only verified project-visitor identities with per-submission consent; anonymous submitters get the on-page reference only. Alternatives: double-opt-in confirmation for a typed address with strict caps, or no submitter receipts.
+5. **Plan gating and spending.** Which feature admits the standard appointment rules (recommended: `core.forms`, with `business.workflows` for WH-094 custom workflows), and the monthly ceiling for customer-configured notices (separate from, or shared with, the $5 WH-036 ceiling).
+6. **Delivery events.** Keep send-time suppression only (current), or approve Cloudflare Queues event subscriptions for `delivered`/`bounced`/`complained` evidence (adds Queues usage and an authenticated consumer).
+
+These decisions gate WH-155–160 activation only where named; the contract itself needs none of them.
+
+## Verification
+
+`node tests/notifications-contract.mjs` (also `pnpm test:notifications-contract`, and part of `node tools/verify.mjs fast`) runs 31 reference checks: the frozen catalog; rejection of unknown versions and fields; caller-supplied recipients, headers, URLs and credential fields (open relay); unverified/unknown senders; unpriced, unreviewed or unbounded provider charges and the review's price binding; header, template-syntax and markup injection; content-free owner/staff notices and free-text refusal; platform/stale/withdrawn template pins and limits; the transition table; the standard appointment journey; anonymous and unverified submitters; duplicate submissions and passes; lost responses (timeout before/after, throw) with no redispatch, retry or recall; interrupted workers; definite refusals with backoff and exhaustion; authenticated, duplicate, unauthenticated and out-of-order events and bounce suppression; provider suppression at send; cancellation; revoked/opted-out recipients; bounded read-only reconciliation; failure isolation of the accepted record under storage faults, rejections, interruption, template withdrawal and disable; record removal; tenant scope; the ceiling; caps; credential custody; and the absence of a model capability. Six further checks bundle and compare the catalog with the existing WH-036 source (byte-identical contact templates, sender, ceiling, attempt bound, error classes and every outbox state) and statically check the inference boundary and the reference's imports. Twenty deliberately broken copies of the reference (mutants) must each be caught by the check written for that property; `--explain` prints which check caught each.
+
+These checks prove the frozen contract and the synthetic reference only. They do not prove D1 atomicity, real provider behavior, deliverability, recipient consent flows or acceptance. No database, network, model, credential, Cloudflare resource, CMS test or deployment is involved. Roadmap validation, alignment and render checks and `git diff --check` cover the backlog change.

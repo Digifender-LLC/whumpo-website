@@ -6,7 +6,7 @@ import {unzipSync,strFromU8} from 'fflate';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
 const m=await currentSiteFixtureHandlers(),{sendChat,readChat,getBilling,hashToken,worker}=m;
-const dir=await mkdtemp('/tmp/whumpo-export-'),fixture=await databaseFixture({d1:true,r2:true}),db=fixture.db,scopes=new Map(),scope=user=>scopes.get(user);
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-export-'),fixture=await databaseFixture({d1:true,r2:true}),db=fixture.db,scopes=new Map(),scope=user=>scopes.get(user);
 const env={...fixture.env,ENVIRONMENT:'local',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})}};
 async function account(){const a=await workspaceFixture(db,m);scopes.set(a.account,await a.scope());return {...a,id:a.account,session:a.token};}
 async function send(user,content,id=crypto.randomUUID(),revision){const state=await readChat(scope(user.id),user.id);const result=await sendChat(scope(user.id),user.id,{id,revision:revision??state.state.revision,content},{baseURL:'https://never-called.test',apiKey:'never-export-this-key',model:'test'});return {result,id};}

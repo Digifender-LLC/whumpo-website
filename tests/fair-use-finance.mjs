@@ -24,7 +24,7 @@ assert.equal(run(v=>{v.current.start='2026-09-01';}).reason,'adjacent_periods_re
 assert.equal(run(v=>{v.current.endExclusive='2026-09-29';}).reason,'comparable_periods_required');
 assert.equal(companyFinanceReview(base,Date.parse('2026-10-08T00:00:00.001Z')).reason,'closed_period_stale');
 for(const change of [v=>{v.previous.start='2026-02-30';},v=>{v.current.endExclusive='2026-10-02';},v=>{v.current.review.reviewedAt='2026-09-20T00:00:00.000Z';},v=>{v.current.review.reviewedAt='2026-10-02T00:00:00.000Z';},v=>{v.current.review.evidenceDigest='fake';},v=>{delete v.current.costs.support;},v=>{v.current.costs.misc=0;},v=>{v.current.costs.inference=-1;},v=>{v.current.revenueMicros=1.5;},v=>{v.currency='EUR';},v=>{v.basis='cash';},v=>{v.privateEmail='canary@example.test';},v=>{v.current.costs.inference=Number.MAX_SAFE_INTEGER;}])assert.throws(()=>run(change));
-const dir=await mkdtemp('/tmp/whumpo-finance-');const originalFetch=globalThis.fetch;globalThis.fetch=()=>{throw Error('Finance review must stay offline');};
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-finance-');const originalFetch=globalThis.fetch;globalThis.fetch=()=>{throw Error('Finance review must stay offline');};
 try{
  const path=dir+'/input.json';await writeFile(path,JSON.stringify(base));const first=await readCompanyFinance(path,now);assert.match(first.inputDigest,/^[a-f0-9]{64}$/);assert.deepEqual(await readCompanyFinance(path,now),first);
  await writeFile(path,JSON.stringify(base,null,2));assert.notEqual((await readCompanyFinance(path,now)).inputDigest,first.inputDigest);

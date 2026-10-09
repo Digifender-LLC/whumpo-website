@@ -7,7 +7,7 @@ import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
 const {module,identity}=await currentFixtureModules(["src/chat.ts", "src/cms-article-images.ts", "src/cms-bridge.ts", "src/cms-capability-contract.ts", "src/cms-content-shape.ts", "src/cms-content.ts", "src/cms-deploy.ts", "src/cms-edits.ts", "src/cms-gateway.ts", "src/cms-imports.ts", "src/cms-media-uploads.ts", "src/cms-pending.ts", "src/cms-preview.ts", "src/cms-projects.ts", "src/cms-provision.ts", "src/cms-publication-media.ts", "src/cms-publication.ts", "src/cms-wordpress-chat.ts", "src/cms-wordpress-import.ts", "src/cms-wordpress-mapped-media.ts", "src/cms-wordpress-sources.ts", "src/files.ts", "src/index.ts", "src/security.ts", "src/site-host.ts"]);
 const {deployCMS,connectCMS}=await module('src/cms-deploy.ts'),{prepareCMS,confirmCMS}=await module('src/cms-projects.ts'),{allocateCMSResources}=await module('src/cms-provision.ts'),{deriveCMSSecret,verifyCMSRequest}=await module('src/cms-bridge.ts');
-const dir=await mkdtemp('/tmp/whumpo-cms-deploy-');
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-cms-deploy-');
 const store=await databaseFixture({d1:true,r2:true}),db=store.db,id=()=>crypto.randomUUID(),account='a'.repeat(32),master='local-master-fixture-'.repeat(4),digest='b'.repeat(64);
 const accounts=new Map(),scopes=new Map(),scope=user=>scopes.get(user);
 async function accountAuthority(user){if(!accounts.has(user)){const authority=await workspaceFixture(db,identity,user);accounts.set(user,authority);scopes.set(user,await authority.scope());}return accounts.get(user);}

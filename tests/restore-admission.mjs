@@ -156,7 +156,7 @@ try{
  clear();manifest=await current();await db.prepare('CREATE TABLE unclassified_restore_data(id TEXT)').run();await held(options(manifest),'current-schema');await db.prepare('DROP TABLE unclassified_restore_data').run();
  await passed(options(manifest));
  if(fixture.sql){
-  const directory=await mkdtemp('/tmp/whumpo-isolated-restore-');let restored;
+  const directory=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-isolated-restore-');let restored;
   try{
    const path=join(directory,'current-snapshot.sqlite');await backup(fixture.sql,path);
    const bytes=await readFile(path);assert.ok(!bytes.includes(canary));assert.ok(!bytes.includes(JSON.parse(keyring).keys[0].secret));

@@ -2,7 +2,7 @@
 
 > Generated from `backlog.json` by `node tools/roadmap.mjs render`. Edit the JSON source, then render again.
 
-Reviewed 2026-10-01 against source `db8b740ab2346f55f2985593b1ec531a99027630`. 144 planned tasks.
+Reviewed 2026-10-01 against source `db8b740ab2346f55f2985593b1ec531a99027630`. 157 planned tasks.
 
 Planning readiness and dependencies describe the plan. Current execution, claims, blockers, and completion evidence live in GitHub Issues. A ready task is only a candidate: verify live dependency completion and authorization before work.
 
@@ -244,7 +244,9 @@ Issue: https://github.com/zemdregon/whumpo/issues/5. Planning owner: Unassigned.
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-08 UTC slice 1 at ca17c6a (source/local fixtures only; not exhaustive; WH-004 remains open): docs/boundary-audit.md and docs/boundary-audit.json register all 206 mounted platform matchers and 38 typed Chat controls in 28 families with authority/Origin/freshness/target/replay/stale cells, checked by the offline tests/boundary-audit.mjs (protection profile) against a TypeScript syntax-tree extraction with source and registry mutation checks. Three low-severity findings reproduced by executed fixtures awaiting owner decisions: B1 cross-tenant platform-wide review capacity exhaustion, B2 runbook C10 recent-authentication claims not enforced, B3 guest-preview control effect outside the Chat revision check. No src, schema, remote or deployment change.
+- 2026-10-08 UTC: owner decision on boundary audit finding B2: correct docs/incident-runbooks.md C10 to the enforced behavior (visitor revocation, passkey removal and recovery-kit replacement need a passkey sign-in within 10 minutes; unpublish, application/contact disable and GitHub/Cloudflare disconnect do not, and disconnects have no rate limit) rather than add freshness. Documentation and a passing characterization test only; no src change. B1 (platform-wide review-table capacity, needs schema cutover) and B3 (guest-preview delete applied outside the Chat turn check) remain open owner decisions; WH-004 stays open.
+- 2026-10-09 UTC: finding B3 fixed on main by #178 (guest-preview revoke/delete effect now rides in the revision-checked Chat turn batch; maintained regression tests/guest-preview-chat-atomic.mjs). tests/boundary-guest-preview-race.mjs now passes as a standalone regression, and the registry marks the guest-previews stale cell evidenced with anchors in src/guest-previews/owner.ts, src/chat.ts and both tests. Local evidence only; not deployed by this audit. WH-004 stays open (B1 remains).
 
 ## WH-006 — Add privacy-safe operational health and maintenance diagnostics
 
@@ -910,7 +912,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/137. Planning owner: Unassigne
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-08 UTC: source and local verification only; the mapped issue #137 is open and owner questions on quarantine-before-native-import (S04), blocked-state ownership, blocked-object retention and permanent hold for native media remain open. PR #138 (728e068) added src/cms-media-safety.ts, wired exact-artifact coverage into CMS uploads, previews, WordPress comparison/import, publication and public CMS media delivery, and added tests/cms-media-safety.mjs. Re-run on 2026-10-08 UTC at origin/main ca17c6a (Node 24.21.0, aarch64 Linux, disposable local SQLite/local D1, no network, credential or remote Cloudflare/GitHub operation). node tests/cms-media-safety.mjs passed 15 checks (pending, missing, stale, incomplete, ambiguous and blocked coverage hold owner preview, draft preview, WordPress comparison, publication review/freeze/inline and GET/HEAD public CMS media; blocked media withdraw referencing articles; custom hosts never route CMS media; clearance grants no publication) and node tests/cms-media-preview.mjs passed; pnpm check passed. The first run failed only because the host python3 lacks Pillow (fixture JPEGs); it passed with a PATH shim to an existing virtualenv that has Pillow, with no repository change. Synthetic JPEGs on disposable local D1/R2 only: this is not CMS feature acceptance, live CMS testing or detector testing, and delivery aliases not named above (for example export) were not separately re-traced. Re-checked on 2026-10-09 UTC after rebasing onto origin/main 92a001f (plus the test-only TMPDIR fix 9847281, PR #202), with #175, #178 and #180 merged: the cited artifacts still exist, #137 is still open and node tests/cms-media-safety.mjs (15 checks) and tests/cms-media-preview.mjs passed again.
 
 ## WH-014 — Gate generated and imported code/content across execution and publication
 
@@ -1798,7 +1800,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-08 UTC: source and local verification only. PR #110 (21be249) added the six restricted safety-case tables with triggers that block ordinary account, project and contact deletion under an unreleased hold, src/safety-cases.ts, tests/safety-cases.mjs and the lifecycle/closure registrations; WH-132 (#133) later builds on it. Re-run on 2026-10-08 UTC at origin/main ca17c6a (Node 24.21.0, aarch64 Linux, disposable local SQLite/local D1, no network, credential or remote Cloudflare/GitHub operation). node tests/safety-cases.mjs passed 84 checks on SQLite and node tests/safety-cases.mjs --d1 passed 84 checks on local D1; tests/content-risk-evidence.mjs, tests/content-risk-review.mjs, tests/account-closure-inventory.mjs and tests/lifecycle-catalog.mjs (219 tables, 51 current/6 planned classes) passed. Synthetic benign placeholders only. This does not prove a scanner, provider, reporting duty, operator onboarding, qualified procedure review (WH-133, blocked) or any live activation; parent WH-015 (#109, open) keeps its full acceptance. Deployed state was not re-read from this session. Re-checked on 2026-10-09 UTC after rebasing onto origin/main 92a001f (plus the test-only TMPDIR fix 9847281, PR #202), with #175, #178 and #180 merged: the cited artifacts still exist, tests/safety-cases.mjs passed 84 checks on SQLite and on local D1 again, and the lifecycle catalog still reports 219 tables with 51 current/6 planned classes.
 
 ## WH-132 — Authenticated restricted case operations and remaining preservation paths
 
@@ -2848,7 +2850,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/139. Planning owner: Unassigne
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-08 UTC: source and local verification only; the mapped issue #139 is open and its owner questions were answered on 2026-10-04. PR #140 (5d75ba7) added src/site-diagnostics.ts and src/site-diagnostics-shape.ts, the site-health view bindings and card, telemetry states and budgeted non-blocking traffic measurement with bot/check exclusions. Re-run on 2026-10-08 UTC at origin/main ca17c6a (Node 24.21.0, aarch64 Linux, disposable local SQLite/local D1, no network, credential or remote Cloudflare/GitHub operation). node tests/site-diagnostics.mjs passed 12 groups on SQLite and with --d1 on local D1; node tests/site-health.mjs and node tests/site-traffic.mjs passed; pnpm check passed. Synthetic fixtures with fetch disabled: this does not show deployment, live provider/DNS/TLS behaviour or customer acceptance. Re-checked on 2026-10-09 UTC after rebasing onto origin/main 92a001f (plus the test-only TMPDIR fix 9847281, PR #202), with #175, #178 and #180 merged: the cited artifacts still exist, #139 is still open and tests/site-diagnostics.mjs (12 groups, SQLite and --d1), site-health.mjs and site-traffic.mjs passed again.
 
 ## WH-038 — Resume and accept the first real native CMS customer journey
 
@@ -4123,7 +4125,8 @@ Issue: https://github.com/zemdregon/whumpo/issues/130. Planning owner: Unassigne
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-08 UTC: the Chat guestPreview revoke/delete controls now save their effect in the same revision-checked batch as the Chat turn (WH-004 finding B3), so a request refused with 409 changes nothing. Verified only locally by node tests/guest-preview-chat-atomic.mjs on SQLite and --d1; not deployed. See docs/guest-previews.md.
+- 2026-10-08 UTC: source and local verification only; the mapped issue #130 is open and its owner questions were answered on 2026-10-04. PR #131 (f991b18) added src/guest-previews/bindings.ts, ids-only Chat controls and the guest-previews view/panel over the existing WH-150 handlers. Re-run on 2026-10-08 UTC at origin/main ca17c6a (Node 24.21.0, aarch64 Linux, disposable local SQLite/local D1, no network, credential or remote Cloudflare/GitHub operation). node tests/guest-preview-bindings.mjs passed 8 groups on SQLite and with --d1 on local D1 (exact prepared confirmation before issuance, token only in the issuing response and never in any table, Chat turn, transcript, view or model context, forged/foreign/null identifiers, inert comments out of model context, management after inclusion ends); pnpm check passed. Synthetic data with fetch disabled; no deployment or real-browser acceptance is implied (see WH-152). Re-checked on 2026-10-09 UTC after rebasing onto origin/main 92a001f (plus the test-only TMPDIR fix 9847281, PR #202), with #175, #178 and #180 merged: the cited artifacts still exist, #130 is still open and tests/guest-preview-bindings.mjs passed 8 groups on SQLite and local D1 again; the B3 entry above (#178) is separate evidence.
 
 ## WH-152 — Accept the accountless guest preview journey in real browsers
 
@@ -4171,7 +4174,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/141. Planning owner: Unassigne
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-08 UTC: local browser verification only; the mapped issue #141 is open. PR #142 (be5662a) added the Chromium owner and guest journey in tests/guest-preview-browser.mjs. Re-run on 2026-10-08 UTC at origin/main ca17c6a (Node 24.21.0, aarch64 Linux, disposable local SQLite/local D1, no network, credential or remote Cloudflare/GitHub operation). node tests/guest-preview-browser.mjs passed in headless Chromium at desktop 1280x800 keyboard and mobile 390x844 against the built owner panel, the platform Worker and the sites handler with local D1/R2 (owner prepare/confirm/revoke/resolve/delete, one-time link, accountless sandboxed preview with an approved private photo, keyboard comment, no cookie or stored/logged token, large text and reflow). The run used a Playwright module and Pillow borrowed from other existing local installs (WHUMPO_PLAYWRIGHT and a PATH shim) with no repository change. This is not a deployed, real-device, screen-reader or customer acceptance, and the release and live acceptance of guest previews remain WH-153. Re-checked on 2026-10-09 UTC after rebasing onto origin/main 92a001f (plus the test-only TMPDIR fix 9847281, PR #202), with #175, #178 and #180 merged: the cited artifacts still exist, #141 is still open and the journey passed again in headless Chromium; because the test hard-codes a /tmp prefix and /tmp was quota-limited on this host, it ran from a throwaway copy whose only change was that prefix (set to TMPDIR), deleted afterwards.
 
 ## WH-153 — Release and live-accept guest previews on the test platform
 
@@ -5220,7 +5223,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-09 UTC: planning-only provider readiness plan in docs/connector-provider-readiness.md (offline check tests/connector-provider-readiness.mjs) re-read official provider documentation for gmail.readonly (restricted) and gmail.send (sensitive). Blocking approvals: separate Google Cloud test/production projects, Search Console domain verification, brand plus sensitive- and restricted-scope verification with a demo video, an annual CASA security assessment by a developer-paid authorized assessor, and counsel review of Limited Use and the Workspace AI-training clause before any model-context use. No provider account, client, consent screen or submission was created and no approval, verification or assessment is claimed. Status unchanged: not delivered.
 
 ## WH-097 — Deliver requested Google Calendar reads and reviewed event changes
 
@@ -5282,7 +5285,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-09 UTC: planning-only provider readiness plan in docs/connector-provider-readiness.md (offline check tests/connector-provider-readiness.mjs) re-read official provider documentation for calendar.calendarlist.readonly and calendar.events.owned (sensitivity class requires verification). Blocking approvals: the shared Google projects and domain verification, brand and sensitive-scope verification with a demo video, and counsel review of Limited Use and the AI clause; client event IDs do not guarantee duplicate detection, so readback stays required. No provider account, client, consent screen or submission was created and no approval, verification or assessment is claimed. Status unchanged: not delivered.
 
 ## WH-098 — Deliver requested Outlook email reads and reviewed send or reply actions
 
@@ -5344,7 +5347,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-09 UTC: planning-only provider readiness plan in docs/connector-provider-readiness.md (offline check tests/connector-provider-readiness.mjs) re-read official provider documentation for delegated offline_access, Mail.Read and Mail.Send (admin consent not required by default). Blocking approvals: an Entra work/school tenant, a verified Microsoft AI Cloud Partner Program account and publisher verification with a matching verified domain, tenant consent/admin-approval handling, and counsel review of Microsoft APIs Terms of Use sections 3(c) and 5; Graph paging conflicts with the contract's token-extraction rule (first page only recommended). No provider account, client, consent screen or submission was created and no approval, verification or assessment is claimed. Status unchanged: not delivered.
 
 ## WH-099 — Deliver requested Microsoft Calendar reads and reviewed event changes
 
@@ -5406,7 +5409,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-09 UTC: planning-only provider readiness plan in docs/connector-provider-readiness.md (offline check tests/connector-provider-readiness.mjs) re-read official provider documentation for delegated offline_access and Calendars.ReadWrite. Blocking approvals: the same Microsoft tenant, partner account and publisher verification, and section 3(c) counsel review; attendee invitations cannot be suppressed and must be disclosed in the review. No provider account, client, consent screen or submission was created and no approval, verification or assessment is claimed. Status unchanged: not delivered.
 
 ## WH-100 — Deliver requested HubSpot contact lookup and reviewed lead mapping
 
@@ -5468,7 +5471,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-09 UTC: planning-only provider readiness plan in docs/connector-provider-readiness.md (offline check tests/connector-provider-readiness.mjs) re-read official provider documentation for oauth, crm.objects.contacts.read and crm.objects.contacts.write. Blocking approvals: HubSpot developer and test accounts, a Marketplace-distributed OAuth app and signed Acceptable Use Policy (25-install cap until listed; listing needs three unaffiliated active installs and HubSpot review), and counsel review of the Developer Terms AI-training and third-party-sharing clauses. The catalog's OAuth v1 token and refresh-token delete endpoints are deprecated on 2027-02-16 and must move to date-versioned endpoints before a client is registered. No provider account, client, consent screen or submission was created and no approval, verification or assessment is claimed. Status unchanged: not delivered.
 
 ## WH-101 — Deliver Business Pro staging and exact release promotion
 
@@ -5810,7 +5813,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-08 UTC: contract and offline reference only, no runtime implementation. PR #116 (8df22a9) added docs/connectors.md (frozen catalog, authority, consent, receipt, credential, gap-map, planned-provider and delivery-slice sections, marked planned), tools/prototypes/connectors.mjs and tests/connectors-contract.mjs and decomposed WH-056 into WH-140..146. Re-run at ca17c6a: node tests/connectors-contract.mjs passed 71 offline checks (synthetic providers; no database, network, credential or model); node tools/roadmap.mjs validate, alignment and render --check passed. This proves the frozen catalog and reference runtime and their agreement with the existing pure GitHub/Cloudflare recovery, vault and catalogue functions only. It does not prove the D1-backed adapters (WH-142), request-bound consent, refresh/revocation or rule authority implementations (WH-143..145), connected synthetic acceptance (WH-146), provider readiness or any live acceptance; WH-056 stays open and depends on every child. No mapped issue exists for WH-140 (parent WH-056 is #115, open; live issue state read-only on 2026-10-08). Re-checked on 2026-10-09 UTC after rebasing onto origin/main 92a001f (plus the test-only TMPDIR fix 9847281, PR #202), with #175, #178 and #180 merged: the cited artifacts still exist, #115 is still open and node tests/connectors-contract.mjs passed 71 checks again.
 
 ## WH-141 — Shared connector catalog, typed request builder and operation admission in source
 
@@ -6516,7 +6519,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-08 UTC (branch claude/wh-118-passkey-encryption-feasibility from ca17c6a; rebased on 2026-10-09 UTC and then ported as claude/wh-118-passkey-encryption-feasibility-main onto origin/main d3ebaf2, where the contract test again passed 20 checks with 16/16 mutants killed; not merged or deployed): docs/passkey-encryption-feasibility.md records the planned evaluation: dated official-source PRF capability review (W3C WebAuthn L3 Recommendation of 2026-08-25, MDN/browser-compat-data, WebKit, Firefox, Yubico, 1Password and Bitwarden; Safari/iOS assertion PRF, Windows Hello, Google Password Manager, hybrid and third-party provider behavior remain unverified or conflicting), a candidate per-passkey content-key wrapping design with a separate content recovery key, the readable-processing boundary, a friction measurement plan, adoption criteria A1-A8 and owner decisions D1-D7. Recommendation: no adoption for beta, MVP or any default. Fact-check on the port: current authentication options (login, reauthentication, recovery completion) request no extensions and registration options carry only the credProps: true that @simplewebauthn/server 14.0.3 always adds, so no ceremony requests prf today. Synthetic emulation only: tools/prototypes/passkey-key-wrapping.mjs with tests/passkey-key-wrapping-contract.mjs (pnpm test:passkey-key-wrapping-contract, added to verify fast) passed 20 named checks and killed 16/16 named mutants with emulated PRF outputs; this is not evidence of browser, device or provider PRF support. Physical-device/provider enrollment, sync and recovery evidence, real friction measurements and the owner adoption decision remain open, so WH-118 stays open. WH-048/049 and ordinary account access do not depend on PRF; no source behavior, schema, prompt or production encryption changed.
 
 # F5 — Configuration and shared capabilities
 
@@ -6887,7 +6890,9 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-08 UTC: verification slice only; local synthetic evidence, not deployed, not live-accepted; no Worker, schema, cache or delivery change; WH-073 stays open. tests/standard-service-no-maintainer.mjs (SQLite and --d1 on local D1; in the site verify profile) proves that src/site-host.ts, app-host.ts, app-gateway.ts, runtime/worker.ts and contact-page.ts reach no owner-maintenance inference module (src/index.ts is the positive control), and that the published site, directory, CMS, asset, guest-preview, visitor-app, contact form/submission, unpublish and safety-hold routes plus all three cron schedules record zero network calls, inference_calls, gateway_spend_attempts, standard-AI and gateway requests and Chat turns, with no cacheable response, both with no AI configuration and with a provider answering 503. The same route inventory and crons also run with the owners' funding exhausted in the durable rows (the standard usage allowance, inference_budgets, spent to its ceiling; and premium credit, premium approval and task, account and platform operator gateway buckets all spent to their limits), still with zero network calls and inference rows, every seeded budget/bucket/attempt row unchanged (no new attempt, reservation, dispatch or balance movement); the same rows refuse owner maintenance admission (inference_budget trigger, gateway reservation 409) while funded controls are admitted. Six mutations (inference import, provider fetch, public cache header, spend row) plus four funding mutations (a reservation import in the site root, a site-root check refusing on an exhausted allowance, a site-root write to a premium bucket, a site-root write to the usage allowance) each failed the test. Not proven: cache/pre-render/direct-asset delivery and revocation cache tests, request-path cost measurement, purchased credits or a real provider outage, WH-079 extensions, runtime Worker execution and live behavior. See docs/workload-placement.md.
+- 2026-10-08 UTC: measurement and design slice only; local synthetic evidence, not deployed, not live-accepted; no Worker source, wrangler configuration, schema, cache header or delivery change; WH-073 stays open. tools/request-path-inventory.mjs derives each visitor route class's entry Worker, run_worker_first behavior and service-binding targets from wrangler*.jsonc and measures the real sites, apps (via APP_HOST) and platform handlers on the current schema with counting D1, R2, service-binding, ASSETS, limiter, waitUntil and fetch stand-ins; docs/request-path-inventory.json and the generated docs/workload-placement.md table are checked by tests/request-path-inventory.mjs (SQLite and --d1 with identical counts; in the site verify profile). Findings: all 21 measured route classes invoke Worker code and none is a direct static-asset request (whumpo-sites has no assets; whumpo-platform and whumpo-apps are run_worker_first: true, so their bundled assets are Worker-first too, correcting two earlier doc rows); every response is no-store; a published root GET runs 4 D1 reads plus 1 traffic write, an approved photo GET 3 reads, 3 writes and 1 R2 get; repeat requests do identical work (no in-isolate cache; a true isolate cold start is not measurable locally); unpublish, safety hold, blocked photo approval and custom-domain disconnect each stop serving on the next request with no-store. Seven mutations (sites route pattern, public cache header on site-host, apps and platform run_worker_first narrowed, a Workers Caching block, a removed specification/safety check, an in-isolate form cache) plus a tampered committed count and a removed photo admission write each failed the test. Cloudflare Static Assets, Workers, Workers Caching, Cache API, purge, D1 and R2 billing facts were read on 2026-10-08 (entitlement and pricing require verification); four delivery designs are proposals only, recommending current no-store Worker delivery now and a revocation-gate plus version-keyed private body cache only after live volume justifies it, with Workers Caching and pre-rendered Static Assets rejected for customer content. Not proven: positive app/CMS/directory/backend-form paths, D1 rows read/written, CPU time, latency, live traffic volume, any cache implementation or its revocation cache tests, and owner decisions on latency bound, platform run_worker_first narrowing, photo counter writes and Workers Caching. See docs/workload-placement.md.
+- 2026-10-08 UTC: owner decision (AskUserQuestion in the roadmap session): keep the current no-store Worker delivery (design A) for customer content; schedule design B only if live volume shows material D1/R2/CPU cost. The decision authorizes no delivery change, cache, purge, configuration or deployment; the other four open decisions in docs/workload-placement.md remain open and the cache/revocation negative tests stay required before any caching.
 
 ## WH-075 — Bound shared capacity and separate interactive from batch failures
 
@@ -7166,7 +7171,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/157. Planning owner: Unassigne
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-08 UTC: source and local verification only; the mapped issue #157 is open. PR #158 (ff3d410) replaced specification schema 2 with schema 3 (module instances pinned to a trusted module catalog, planned module-records/module-files/project-roles lifecycle classes) and removed the schema 2 reader. Re-run on 2026-10-08 UTC at origin/main ca17c6a (Node 24.21.0, aarch64 Linux, disposable local SQLite/local D1, no network, credential or remote Cloudflare/GitHub operation). node tools/check-specification-compiler.mjs --check passed (the compiler identity has since advanced to project-content@5 through the WH-125 cutover in #160, so the project-content@3 identity named in the original change no longer applies), node tests/specification-compiler.mjs, node tests/current-website-specifications.mjs and node tests/specification-journey.mjs (local D1) passed, node tools/lifecycle-catalog.mjs reported 219 tables with 51 current/6 planned classes, and pnpm check (both tsc projects) passed. Individual schema 3 rejection cases (PNG, >1 MiB collections, public read audiences) were not separately traced in this re-run beyond those suites passing. Deployed state was not re-read. Re-checked on 2026-10-09 UTC after rebasing onto origin/main 92a001f (plus the test-only TMPDIR fix 9847281, PR #202), with #175, #178 and #180 merged: the cited artifacts still exist, #157 is still open, check-specification-compiler --check still reports project-content@5 and the same compiler, website-specification and journey suites passed again.
 
 ## WH-125 — Add the module instance registry, activation reviews and shared policy engine
 
@@ -7484,7 +7489,7 @@ Customers configure deterministic notifications while Whumpo maintains one deliv
 
 ### Dependencies and blockers
 
-Planning dependencies: WH-067, WH-036, WH-052. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+Planning dependencies: WH-067, WH-036, WH-052, WH-154, WH-155, WH-156, WH-157, WH-158, WH-159, WH-160. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
 No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
 
@@ -7494,6 +7499,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/contact-forms.md](../../docs/contact-forms.md)
 - [docs/background-jobs.md](../../docs/background-jobs.md)
 - [docs/integrations/cloudflare-dns.md](../../docs/integrations/cloudflare-dns.md)
+- [docs/notifications.md](../../docs/notifications.md)
 
 ### Execution coordination
 
@@ -7501,7 +7507,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-08 UTC: decomposed into WH-154 to WH-160 with the planned contract in docs/notifications.md (WH-154). Planning and offline reference only: no table, route, binding, provider, sender, DNS record, schedule or deployment, and no src/ behavior change. The parent acceptance is unchanged and closes only after every child; no child depends on WH-069, WH-080 or WH-094. WH-036 source (owner-destination contact notices) is mapped with exact gaps G-N1 to G-N10; its live canary stays a WH-036/WH-160 gate.
 
 ## WH-069 — Run stored automation rules on a shared deterministic engine
 
@@ -7825,7 +7831,7 @@ Customers can export what they own with an honest account of managed dependencie
 
 ### Dependencies and blockers
 
-Planning dependencies: WH-066, WH-067, WH-076, WH-009, WH-071. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+Planning dependencies: WH-066, WH-067, WH-076, WH-009, WH-071, WH-186, WH-187, WH-188, WH-189, WH-190, WH-191. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
 No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
 
@@ -7839,6 +7845,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/app-data.md](../../docs/app-data.md)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
 - [docs/workload-placement.md](../../docs/workload-placement.md)
+- [docs/portable-exports.md](../../docs/portable-exports.md)
 
 ### Execution coordination
 
@@ -7846,7 +7853,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-08 UTC: decomposed into WH-186 to WH-191 with the planned contract in docs/portable-exports.md (WH-186). Planning and offline reference only: no route, table, binding, provider, Cloudflare resource, schema change or deployment, and no src/ behavior change. The parent acceptance is unchanged and closes only after every child; no child depends on WH-049, WH-072 or WH-104. The existing whumpo-static-site v1 download and the WH-126 to WH-129 serializers are mapped as reused sources; the WH-018 account export (PR #170, unmerged at this point) supplies the review, allowance and serializer composition that WH-187 reuses.
 
 ## WH-091 — Deliver the Creator brand kit and reusable section library
 
@@ -8017,6 +8024,668 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 ### Evidence
 
 - 2026-10-04 UTC: source and local verification only; not deployed, not accepted, issue not created or claimed from this session; WH-129 stays open until accepted. Branch c/great-curie-8ryukc (PR #160) makes the project directory the content-collections instance (directory-listing@1) without a schema change: at most one content instance per project governs the existing directories/directory_reviews/directory_exports rows. src/shared-modules/collections.ts registers collections.readPublic (target {collectionId}, read) through the shared resolver, policy table and read fence, serving only the approved snapshot via the same publicDirectory reader as /directory.json (unpublished, offline or parent-restore-invalidated is unavailable; drafts, revisions and history never appear) on the visitor origin and the owner module route. Owner edits keep the existing directory Chat reviews; no write, staff path or collection type is added. The content descriptor marks directories eligible project data with exportHook collections-directory-export-v1 (deleteHook project-cascade, restoreHook unsupported); exportCollectionSnapshot returns exportDirectory's whumpo-directory v1 document (owner, current configRevision, every activation state, withdrawn or restaged pin) and validateDirectoryExport is its import validation. Compiler identity, schema inputs and module pins unchanged. Conservative default: the public site routes /directory and /directory.json keep serving without an instance (requiring activation would gate the free directory behind core.editing; owner decision). Verified: tests/shared-modules-collections.mjs (SQLite and --d1, 7 groups), tests/directories.mjs and tests/directory-history.mjs (local D1), shared-modules-registry/access/records/files (SQLite and --d1), shared-modules-contract, tools/safety-hold-inventory.mjs, pnpm check, verify fast/protection, pnpm build. Remaining: custom-domain directory paths, a lifecycle restore/import hook, the site-route decision; deploys only with the owner-run empty-database cutover that the module registry needs.
+
+## WH-154 — Freeze the shared notification contract and decompose WH-068
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **ready**. Kind: decision. Size: S.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Every WH-068 slice builds against one frozen template, sender, recipient-scope, consent, receipt-state and review model instead of inventing its own.
+
+### Scope
+
+- Freeze the versioned template shape (closed segments, typed variables, fixed platform links, plain text), the verified sender catalog and provider review/price/ceiling facts
+- Freeze recipient scopes derived from server-side records (owner destination, current opted-in staff, verified consenting submitter), consent/preferences, receipt states, delivery events and bounded unknown-outcome reconciliation
+- Map the existing WH-036 contact notification source onto the contract with exact gaps; express the standard appointment-request receipt and staff notice as configuration
+- Evaluate provider options with dated official sources; add an offline reference and mutation-checked conformance harness without Worker imports
+
+### Acceptance criteria
+
+- [ ] docs/notifications.md states the frozen shapes, authority class, secret custody, review gates, failure isolation, existing-source gap map and child slices, marked planned
+- [ ] Offline checks reject unknown versions/fields, caller-supplied recipients/URLs/headers, unverified senders, template injection, unpriced or unreviewed charges and redispatch after a lost response, and prove bounce, cancellation and accepted-record isolation
+- [ ] The catalog reproduces the existing contact notices byte for byte and agrees with the WH-036 sender, ceiling, error classes and outbox states
+- [ ] WH-068 keeps its acceptance and depends on every child; no child reaches WH-069, WH-080 or WH-094
+- [ ] Open owner decisions are listed rather than assumed
+
+### Verification
+
+- node tests/notifications-contract.mjs
+- node tools/verify.mjs fast
+- node tools/roadmap.mjs validate, alignment and render --check
+- git diff --check
+
+### Dependencies and blockers
+
+Planning dependencies: WH-052, WH-123. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/notifications.md](../../docs/notifications.md)
+- [tools/prototypes/notifications.mjs](../../tools/prototypes/notifications.mjs)
+- [tests/notifications-contract.mjs](../../tests/notifications-contract.mjs)
+- [docs/contact-forms.md](../../docs/contact-forms.md)
+- [docs/job-envelope.md](../../docs/job-envelope.md)
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-08 UTC: contract and offline reference only, local commit on branch claude/wh-068-notification-contract (not pushed or merged; issue not created or claimed from this session). Added docs/notifications.md (planned), tools/prototypes/notifications.mjs (imports only node:crypto) and tests/notifications-contract.mjs, registered as pnpm test:notifications-contract and in the fast verification profile. node tests/notifications-contract.mjs passed 31 reference checks and 6 source-agreement/static checks, and caught 20 of 20 deliberate mutants of the reference, each by its intended check. Synthetic identifiers, addresses and provider only; proves the frozen contract and reference, not D1 storage, provider delivery, consent flows or acceptance. Provider facts read from official pages on October 8, 2026; entitlement and pricing require verification. No table, route, binding, provider, DNS or deployment change.
+
+## WH-155 — Source notification catalog and renderer with contact notices expressed through it
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Templates, senders and provider facts come from one server catalog with closed validators and a plain-text renderer, and the existing contact notices render through it unchanged.
+
+### Scope
+
+- TypeScript catalog matching the frozen v1 shapes: template entries with digests, the verified platform sender with its DNS review reference, provider review/price/ceiling/idempotency/lookup facts and error classes (gaps G-N1 to G-N3)
+- Closed template/configuration validators and the segment renderer; replace the hard-coded contactEmailMessage text with catalog rendering
+- Point the conformance harness agreement checks at the source catalog; no schema change, provider, binding or customer-visible change
+
+### Acceptance criteria
+
+- [ ] Contact new-message and verification notices are byte-identical to the current text; existing contact suites pass unchanged
+- [ ] No configuration, template or caller value can supply an address, header, URL, provider or credential
+- [ ] No new provider, sender, binding, cron, DNS change or schema change
+
+### Verification
+
+- pnpm check
+- pnpm test:contacts
+- node tests/notifications-contract.mjs
+
+### Dependencies and blockers
+
+Planning dependencies: WH-154. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/notifications.md](../../docs/notifications.md)
+- [tools/prototypes/notifications.mjs](../../tools/prototypes/notifications.mjs)
+- [src/contact-email.ts](../../src/contact-email.ts)
+- [src/contact-notifications.ts](../../src/contact-notifications.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-156 — Shared notification outbox, receipt states and bounded reconciliation
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Every notice kind uses one durable outbox with the frozen receipt states, at-most-once provider calls, bounded read-only reconciliation and one spending ledger per provider.
+
+### Scope
+
+- Generalize the contact outbox to queued, dispatching, deferred, accepted, delivered, unknown-outcome, unresolved, bounced, complained, failed and cancelled with database-enforced transitions (gap G-N4); build on the durable-dispatch prerequisite if owner PR #174 is merged, never duplicate it
+- One ledger and ceiling per provider across all notice kinds (G-N5); an authenticated provider event-intake interface without activating Queues (G-N6)
+- Reconcile the attempt bound with the WH-052 envelope maxAttempts rule by a reviewed contract change or envelope-per-attempt design (G-N10)
+- Complete current schema with lifecycle/export/closure registration and an owner-run empty-database cutover; no compatibility reader
+
+### Acceptance criteria
+
+- [ ] A lost response, thrown call or interrupted worker becomes unknown-outcome and is never redispatched; reconciliation is read-only and ends unresolved at its bound
+- [ ] Duplicate and out-of-order events, replays and concurrent passes keep one notice per recipient and event
+- [ ] Notification failures never alter or remove the accepted record or inbox message; unresolved evidence outlives ordinary expiry
+- [ ] Every provider call counts against the ceiling before the call
+
+### Verification
+
+- pnpm check
+- pnpm test:contacts
+- node tests/notifications-contract.mjs
+- Focused outbox suite on SQLite and local D1 with a simulated provider
+
+### Dependencies and blockers
+
+Planning dependencies: WH-155, WH-052. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/notifications.md](../../docs/notifications.md)
+- [docs/contact-forms.md](../../docs/contact-forms.md)
+- [docs/job-envelope.md](../../docs/job-envelope.md)
+- [schema/platform.sql](../../schema/platform.sql)
+- [src/contact-notifications.ts](../../src/contact-notifications.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-157 — Notification recipient scopes, consent and preferences
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Staff and submitters can receive notices only through server-resolved, verified and consented addresses that are rechecked before every call.
+
+### Scope
+
+- Staff notification opt-in, address verification and opt-out on the visitor origin through the same provider and sender; role revocation stops unsent notices (gap G-N7)
+- Verified project-visitor address and an explicit per-submission receipt consent stored with the record; anonymous typed addresses are never recipients
+- Shared per-account suppression across scopes and templates; new data classes registered with lifecycle, export and closure
+
+### Acceptance criteria
+
+- [ ] Recipients derive only from current records; caller, configuration and visitor input cannot add an address
+- [ ] Revoked, opted-out, unverified or suppressed recipients are cancelled before any provider call
+- [ ] Two-tenant and cross-origin isolation for staff and visitor addresses
+
+### Verification
+
+- pnpm check
+- node tests/shared-modules-access.mjs
+- node tests/notifications-contract.mjs
+- node tests/lifecycle-catalog.mjs
+
+### Dependencies and blockers
+
+Planning dependencies: WH-155, WH-126, WH-116. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/notifications.md](../../docs/notifications.md)
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+- [docs/data-protection.md](../../docs/data-protection.md)
+- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-158 — Customer notification configuration and standard appointment presets
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+An owner configures the standard appointment-request receipt and staff notice through an exact review, and accepted form records trigger them deterministically.
+
+### Scope
+
+- Store notification configurations bound to a records instance form.accepted event; the exact owner review binds template digest, sender, recipient scope, limits and provider price (gap G-N8)
+- Implement the approved-configuration resolver for the fixed form.accepted trigger under the WH-052 envelope; WH-069 later reuses it rather than adding a second resolver
+- Register Chat/view bindings and an essential dashboard control through WH-105 with WH-122 feature admission; ship the standard appointment presets as configuration
+
+### Acceptance criteria
+
+- [ ] Submission and notification delivery never invoke the maintainer model, its context, credentials or funding
+- [ ] The model may prepare but cannot confirm a configuration; a changed price, template or configuration makes the review stale
+- [ ] Configuring provisions no sender, DNS record, provider or schedule
+- [ ] Owner and staff notices stay content-free; submitter receipts carry only choice/number/boolean values and the reference
+
+### Verification
+
+- pnpm check
+- node tests/shared-modules-records.mjs
+- node tests/notifications-contract.mjs
+
+### Dependencies and blockers
+
+Planning dependencies: WH-156, WH-157, WH-127, WH-105, WH-122. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/notifications.md](../../docs/notifications.md)
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+- [docs/chat-interactions.md](../../docs/chat-interactions.md)
+- [docs/feature-admission.md](../../docs/feature-admission.md)
+- [src/shared-modules/records.ts](../../src/shared-modules/records.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-159 — Connected synthetic acceptance of configured notifications
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: verification. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+A local two-tenant appointment journey proves configured notifications end to end on the actual handlers with the maintainer transport disabled.
+
+### Scope
+
+- Two synthetic tenants: appointment form to record to staff notice, owner notice and submitter receipt on SQLite and local D1 with a simulated provider
+- Duplicate events, timeout/bounce, lost response, revoked recipient, cancellation, ceiling, template withdrawal and accepted-record isolation against the D1 handlers
+- Run the contract conformance scenarios against the implementation, not only the reference
+
+### Acceptance criteria
+
+- [ ] Every WH-068 acceptance criterion has local synthetic evidence on the actual handlers
+- [ ] No real message, provider call, DNS change or deployment; local evidence is not live acceptance
+
+### Verification
+
+- Connected notification suite on SQLite and local D1
+- pnpm test:contacts
+- node tools/verify.mjs fast
+
+### Dependencies and blockers
+
+Planning dependencies: WH-158. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/notifications.md](../../docs/notifications.md)
+- [tests/notifications-contract.mjs](../../tests/notifications-contract.mjs)
+- [tests/contact-notifications.mjs](../../tests/contact-notifications.mjs)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-160 — Approved provider canary for configured notifications
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **blocked**. Kind: verification. Size: S.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Configured notifications are proven against the real reviewed provider using only explicitly approved addresses.
+
+### Scope
+
+- Exact sender/recipient and cost review before any send; canary only to owner-approved addresses
+- Record provider readback, receipt states and spend; raise template readiness only from this evidence
+
+### Acceptance criteria
+
+- [ ] Canary messages reach only approved addresses with correct receipts and no duplicate on lost responses
+- [ ] Provider charges stay within the reviewed ceiling; no service, DNS or plan change beyond the reviewed activation
+
+### Verification
+
+- Approved provider canary with readback recorded in the feature doc and issue
+
+### Dependencies and blockers
+
+Planning dependencies: WH-159, WH-036. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+- Owner decisions in docs/notifications.md: provider, sender domain/display name, retention, submitter receipts, plan gating and spending ceiling
+- WH-036 sender activation and its live canary to explicitly approved addresses
+
+### References
+
+- [docs/notifications.md](../../docs/notifications.md)
+- [docs/contact-forms.md](../../docs/contact-forms.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-186 — Freeze the portable export contract and decompose WH-077
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **ready**. Kind: decision. Size: S.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Every WH-077 slice builds against one frozen bundle format, permission filter, tier vocabulary, unavailable-feature report and clean-environment verification plan instead of inventing its own.
+
+### Scope
+
+- Freeze the versioned whumpo-portable-export bundle: deterministic stored ZIP, canonical manifest, file checksums, exact compiler/component/module/data-set versions, exclusions and report
+- Freeze portable-filter@1: owner-only authority, allowlisted lifecycle classes, separate visitor-data approval, generic not-cleared exclusion with hold non-disclosure, and secret exclusion with reconfiguration instructions
+- Name the three tiers (static source download, data portability, functioning standalone application) and the mechanical rule that a frontend needing private Whumpo APIs is never runnable
+- Evaluate self-hostable runtimes and migration paths per shared capability with dated official sources; add an offline reference, conformance harness and mutation check without Worker imports
+
+### Acceptance criteria
+
+- [ ] docs/portable-exports.md states the frozen format, filter, tiers, report, migration paths, verification plan and child slices, marked planned
+- [ ] Offline checks prove deterministic bytes and hashes, other-tenant/secret/credential/private/held exclusion, hold non-disclosure, tier labelling with forged-claim refusal, report completeness, unknown/stale version refusal without a legacy decoder, tamper detection and a permission-restricted static boot from the bundle alone
+- [ ] WH-077 keeps its acceptance and depends on every child; no child reaches WH-049, WH-072 or WH-104, and the contract does not depend on WH-018 or WH-067
+- [ ] Open owner decisions are listed rather than assumed
+
+### Verification
+
+- node tests/portable-export-contract.mjs
+- node tools/roadmap.mjs validate, alignment and render --check
+- node tests/roadmap-alignment.mjs
+- git diff --check
+
+### Dependencies and blockers
+
+Planning dependencies: WH-009, WH-071, WH-116, WH-123. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/portable-exports.md](../../docs/portable-exports.md)
+- [tools/prototypes/portable-export.mjs](../../tools/prototypes/portable-export.mjs)
+- [tests/portable-export-contract.mjs](../../tests/portable-export-contract.mjs)
+- [docs/workload-placement.md](../../docs/workload-placement.md)
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-09 UTC: contract and offline reference only, local commit on branch claude/wh-077-portable-export-contract (not pushed or merged; issue not created or claimed from this session). Added docs/portable-exports.md (planned), tools/prototypes/portable-export.mjs (builtins only) and tests/portable-export-contract.mjs, registered as pnpm test:portable-export-contract. node tests/portable-export-contract.mjs passed 12 reference checks, 2 clean-environment boot checks (permission-restricted child processes with an empty environment and in-process outbound refusal; not OS-level network isolation) and 1 static check, and caught 28 of 28 deliberate mutants, each by its intended check. Not added to pnpm verify fast: measured 2.1 to 3.7 seconds wall time under load, above its 2-second budget. Synthetic data only; proves the frozen contract and reference, not a D1/R2 builder, a standalone runtime or acceptance. Provider facts read from official pages on October 9, 2026; customer-side pricing and entitlement require verification.
+
+## WH-187 — Build the portable bundle and permission filter in source
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+An owner can review and download one deterministic, checksummed portable bundle per project that contains only what the frozen filter allows.
+
+### Scope
+
+- Owner-only prepare/download route reusing the WH-018 exact review, recent passkey proof, single-use download and per-account allowance; no Chat, agent or model path
+- One per-project section composer over the existing records, files, roles and directory serializers and the static site archive, shared with the account export rather than duplicated
+- Deterministic stored ZIP, canonical manifest, receipt digest, exclusion counts and the unavailable-feature report exactly as frozen; bounds fail closed
+- Two-tenant, held/pending/blocked media, staff page, visitor-scope, expired-record, uncleared-source and credential-table fixtures against actual handlers and the complete current schema
+
+### Acceptance criteria
+
+- [ ] Bundles from actual handlers pass the WH-186 reader and conformance checks byte for byte on synthetic projects
+- [ ] Other-tenant data, platform secrets, credentials, held or unapproved content and unrequested visitor data never appear; holds are indistinguishable from other uncleared items
+- [ ] Replay, stale review, foreign owner and stale proof are refused like the account export; no new provider, binding or paid service
+
+### Verification
+
+- pnpm check
+- node tests/portable-export-contract.mjs
+- Focused disposable SQLite and local D1/R2 suite for the route and composer
+
+### Dependencies and blockers
+
+Planning dependencies: WH-186, WH-018, WH-126, WH-127, WH-128, WH-129. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/portable-exports.md](../../docs/portable-exports.md)
+- [src/exports.ts](../../src/exports.ts)
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+- [docs/account-closure.md](../../docs/account-closure.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-188 — Provide a standalone runtime for the claimed portable subset
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+A customer can run the claimed portable subset from the bundle alone with a published loader, without Whumpo APIs, credentials or the maintainer.
+
+### Scope
+
+- Published static loader and host instructions for site/public, separate from Whumpo platform source and under an owner-selected license
+- Any additional subset only by owner decision (for example a static directory projection or a QuickJS runner for stateless custom functions), each with its own report status change
+- Keep the frontend tier rule: anything that still calls Whumpo routes stays source, never runnable
+
+### Acceptance criteria
+
+- [ ] The loader serves only checksum-verified files from a bundle and refuses tampered, unknown-version or non-runnable bundles
+- [ ] No Whumpo API, credential, model or network destination is needed to run the claimed subset
+- [ ] Internal platform source is not disclosed
+
+### Verification
+
+- node tests/portable-export-contract.mjs
+- Loader conformance against WH-187 bundles
+
+### Dependencies and blockers
+
+Planning dependencies: WH-187. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/portable-exports.md](../../docs/portable-exports.md)
+- [tools/prototypes/portable-export.mjs](../../tools/prototypes/portable-export.mjs)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-189 — Verify portable exports in a clean isolated environment
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: verification. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+The advertised portable subset is proven to boot and its data to import in an OS-isolated environment with Whumpo APIs and the maintainer model unavailable.
+
+### Scope
+
+- Container or VM with no network interface or deny-all egress, a fresh filesystem and no Whumpo credentials or model endpoint
+- Boot the WH-188 loader from WH-187 bundles, import every data set, and compare restored data, assets, module versions and documented exclusions with the source project
+- Record what the in-process reference guard could not prove
+
+### Acceptance criteria
+
+- [ ] The claimed subset serves byte-identical files with zero outbound connection attempts
+- [ ] Restored data, assets and versions match the source; every exclusion is documented
+- [ ] No capability is reclassified as runnable without this evidence
+
+### Verification
+
+- Clean-room boot and import run with recorded environment, tool versions and results
+- node tests/portable-export-contract.mjs
+
+### Dependencies and blockers
+
+Planning dependencies: WH-188. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/portable-exports.md](../../docs/portable-exports.md)
+- [docs/workload-placement.md](../../docs/workload-placement.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-190 — Document managed-service adapters and migration paths per shared capability
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: decision. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+For every shared capability a customer sees a supported replacement adapter, a documented migration path or an explicit unavailable status, with their own action and cost steps.
+
+### Scope
+
+- Per-capability migration guides for content, records/forms, files, access, notifications, connectors, custom functions, contact inbox, domains, automation and the maintainer, consistent with the frozen report
+- Dated official provider facts and customer-side cost flags, with unknown entitlement and pricing labelled as requiring verification
+- Align with the connector and notification contracts and the presentation contract as they merge
+
+### Acceptance criteria
+
+- [ ] Every report entry links to a current migration section; unsupported managed integrations and customer action/cost steps are explicit
+- [ ] No guide asks the customer to share a secret with Whumpo; no adapter claim exceeds WH-189 evidence
+
+### Verification
+
+- node tests/portable-export-contract.mjs (migration anchors)
+- Documentation link and dated-source review
+
+### Dependencies and blockers
+
+Planning dependencies: WH-186, WH-140. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/portable-exports.md](../../docs/portable-exports.md)
+- [docs/connectors.md](../../docs/connectors.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-191 — Accept portable exports on the test environment and with a customer
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **blocked**. Kind: verification. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+An owner exports a deployed test project through the real route and runs the claimed subset elsewhere, and a customer confirms the exit contract is understandable.
+
+### Scope
+
+- Live export of a synthetic project on the deployed test environment, verified in the WH-189 clean room
+- Customer walkthrough of tiers, exclusions, reconfiguration and cost steps
+- Record release identity, UTC times and readback; no customer DNS change or paid destination is set up by Whumpo
+
+### Acceptance criteria
+
+- [ ] A deployed bundle passes the reader and clean-room boot for the claimed subset
+- [ ] The customer can identify what runs, what is data only and what they must do and pay for
+- [ ] Live and customer evidence are recorded separately from local tests
+
+### Verification
+
+- Recorded live export, clean-room run and customer acceptance notes
+
+### Dependencies and blockers
+
+Planning dependencies: WH-189, WH-190. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+- Owner-run empty-database cutover and release of the WH-125 to WH-129 module schema and the WH-187 route, with separate owner authorization for each remote operation
+- A consenting test customer or owner-run synthetic project for customer acceptance
+
+### References
+
+- [docs/portable-exports.md](../../docs/portable-exports.md)
+- [docs/releases.md](../../docs/releases.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
 
 ## WH-079 — Design optional customer-configured runtime AI as a separate capability
 

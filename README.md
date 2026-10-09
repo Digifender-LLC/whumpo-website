@@ -65,11 +65,14 @@ The owner authorized Workers Paid ($5/month) resources, with GitHub restricted t
 
 - [Private maintenance diagnostics](docs/maintenance.md) — scheduled run status and read-only backlog inspection
 - [Incident, spend and provider-outage runbooks](docs/incident-runbooks.md) and [desk-check record](docs/incident-tabletop.md) — documented only: existing controls, gaps and drafts; no live drill or alerting
+- [Isolated disaster-recovery drill](docs/disaster-recovery.md) — synthetic local restore of control D1, private objects, Worker artifacts and QuickJS app data; proposed (unapproved) RPO/RTO; no cloud restore
 - [Capacity, abuse and tenant-fairness measurement](docs/capacity-and-fairness.md) — local-only synthetic-client harness results and fairness gaps (WH-050 first slice); not Cloudflare production limits
 - [Workload placement contract](docs/workload-placement.md) — logical resources, scoped adapters and lifecycle/export requirements; broader hosting remains conditional
 - [Pooled build jobs](docs/build-jobs.md) — owner-requested bounded builds with per-job lease, expiry, cleanup records and deterministic diagnostics; no always-on per-customer capacity (source implementation; Containers owner-gated)
 - [Project specification decision](docs/project-specification.md) — versioned configuration, supported change operations and the offline composition contract
 - [Shared module contract](docs/shared-modules.md) — planned WH-067 content, records/forms, files and access module APIs, authorization model and delivery slices
+- [Notification contract](docs/notifications.md) — planned WH-068 templates, verified senders, server-derived recipients, receipt states and delivery slices; no provider or sender added
+- [Portable project exports](docs/portable-exports.md) — planned WH-077 bundle format, permission filter, static/data/application tiers and unavailable-feature report; offline reference only, no export route added
 - [Capability catalog and planner](docs/capability-planner.md) — reuse existing configuration and helpers; record bounded missing behavior before generating source
 - [Guest preview links and feedback](docs/guest-previews.md) — WH-092 first slice: expiring, revocable, hash-stored links to one saved version on an isolated host, with bounded accountless comments; owner API only, source and local tests only
 - [Content-free funnel measurements](docs/funnel-metrics.md) — WH-025 opt-in milestones, aggregate operator report and draft feedback request; source and local tests only, targets proposed until the first cohort baseline

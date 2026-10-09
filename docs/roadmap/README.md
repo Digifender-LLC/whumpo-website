@@ -9,6 +9,8 @@ Whumpo should first become a dependable way for an invited customer to create, i
 - [GitHub execution hub](https://github.com/zemdregon/whumpo/issues/2): task issues, claims, progress and handoffs. The complete longer-term plan remains in the backlog below.
 - [Logical resources and workload placement](../workload-placement.md): WH-071 interface, lifecycle/export and conditional hosting decision.
 - [Shared modules](../shared-modules.md): WH-067 contract, existing-service mapping and WH-123–130 slices (planned).
+- [Notifications](../notifications.md): WH-068 template/sender/recipient/receipt contract, WH-036 contact-notice gap map and WH-154–160 slices (planned).
+- [Portable exports](../portable-exports.md): WH-077 bundle format, permission filter, portability tiers, unavailable-feature report and WH-186–191 slices (planned).
 - [Architecture and sequencing alignment](alignment.md): shared contracts, corrected dependency paths, current build order and persistent graph checks.
 - [Full backlog](backlog.md): every task, dependency, acceptance criterion and verification boundary.
 - [Chat as the primary workspace](chat-first-experience.md): interactive forms, agent-managed dashboards/views, continuity and WH-105–112 delivery packets.
@@ -16,6 +18,7 @@ Whumpo should first become a dependable way for an invited customer to create, i
 - [Accepted tier expansion](#accepted-tier-expansion--creator-business-and-business-pro): Creator naming, cumulative benefits, seven connections and the full-set paid-launch gate.
 - [Canonical task data](backlog.json): stable `WH-001` IDs for agents and automation; generated Markdown is never edited directly.
 - [Agent execution guide](execution.md): selection, coordination, implementation, evidence and handoff.
+- [Evidence reconciliation](evidence-reconciliation.md): dated comparison of empty backlog evidence against `main`, with warnings where only a foundation exists.
 - [Product/architecture review](review.md): strengths, current limits and source evidence.
 - [Tooling research and decision](tooling-decision.md): why Git plus GitHub Issues fits now, and when Projects or Linear would help.
 
