@@ -70,6 +70,7 @@ The owner authorized Workers Paid ($5/month) resources, with GitHub restricted t
 - [Pooled build jobs](docs/build-jobs.md) — owner-requested bounded builds with per-job lease, expiry, cleanup records and deterministic diagnostics; no always-on per-customer capacity (source implementation; Containers owner-gated)
 - [Project specification decision](docs/project-specification.md) — versioned configuration, supported change operations and the offline composition contract
 - [Shared module contract](docs/shared-modules.md) — planned WH-067 content, records/forms, files and access module APIs, authorization model and delivery slices
+- [Notification contract](docs/notifications.md) — planned WH-068 templates, verified senders, server-derived recipients, receipt states and delivery slices; no provider or sender added
 - [Capability catalog and planner](docs/capability-planner.md) — reuse existing configuration and helpers; record bounded missing behavior before generating source
 - [Guest preview links and feedback](docs/guest-previews.md) — WH-092 first slice: expiring, revocable, hash-stored links to one saved version on an isolated host, with bounded accountless comments; owner API only, source and local tests only
 - [Content-free funnel measurements](docs/funnel-metrics.md) — WH-025 opt-in milestones, aggregate operator report and draft feedback request; source and local tests only, targets proposed until the first cohort baseline
