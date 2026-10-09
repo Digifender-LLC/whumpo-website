@@ -7,7 +7,7 @@ import {resolve,sep} from 'node:path';
 import {build} from 'esbuild';
 import {databaseFixture} from '../tests/helpers/current-database.mjs';
 import {workspaceFixture} from '../tests/helpers/workspace-identity.mjs';
-const dir=await mkdtemp('/tmp/whumpo-owner-journey-'),origin='http://localhost:8175',root=resolve('dist');
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-owner-journey-'),origin='http://localhost:8175',root=resolve('dist');
 const originalFetch=globalThis.fetch,background=[],requests=[];let fixture,server,input,finish;
 const finished=new Promise(resolve=>{finish=resolve;});let lose='',providerCalls=0,ackCalls=0,earlyWorkspaceReads=0;
 try{

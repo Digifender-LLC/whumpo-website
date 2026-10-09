@@ -45,7 +45,7 @@ assert((await (await route('/workspace/settings',{mode:'navigate'})).text()).inc
 assert((await route('/pwa/offline.css')).headers.get('content-type').includes('css'));
 stores.get(cacheName).delete(origin+'/pwa/offline');assert.equal((await route('/workspace',{mode:'navigate'})).status,503);
 
-const temp=await mkdtemp('/tmp/whumpo-pwa-build-');
+const temp=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-pwa-build-');
 try{
  const paths=['workspace-sw.js','pwa/offline.html','pwa/offline.css','pwa/offline.js','brand/whumpo-mark-96.png'];
  for(const dir of ['pwa','brand'])await mkdir(temp+'/'+dir);

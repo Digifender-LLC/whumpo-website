@@ -148,7 +148,7 @@ None of these gaps is a known exploitable defect: hosts are fixed and all curren
 
 ## Planned provider declarations
 
-The table below records the frozen operation **set** and authority for each new provider. Hosts, scopes and paths are planning values taken from the [September 30 bounded connection contracts](pricing-and-model-policy.md#bounded-connection-contracts). They were **not re-verified** in this offline session. Each provider's contract child (WH-096–100) must verify them against current provider documentation, with dates, before registering a client.
+The table below records the frozen operation **set** and authority for each new provider. Hosts, scopes and paths are planning values taken from the [September 30 bounded connection contracts](pricing-and-model-policy.md#bounded-connection-contracts). They were **not re-verified** in this offline session. Each provider's contract child (WH-096–100) must verify them against current provider documentation, with dates, before registering a client. The planning-only [provider readiness plan](connector-provider-readiness.md) (October 9, 2026) re-reads them against official documentation and lists the differences, external approvals and counsel questions; it changes no declaration.
 
 | Provider (packet) | Reads (`request-bound` unless noted) | Actions (all owner-request unless noted) | Revocation / refresh | Notes requiring verification |
 | --- | --- | --- | --- | --- |

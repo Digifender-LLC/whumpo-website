@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';import {mkdtemp,readFile,rm} from 'node:
 export async function verifyNativeMediaUpload(env,vars){
  const b=await build({stdin:{contents:"export * from './src/cms-media-upload-bridge';export * from './src/cms-bridge';export {cleanPhoto} from './src/photo-format';export {cmsRichDraftBody,cmsRichEditBody} from './src/cms-content-shape';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
  const {signCMSMediaUpload,signCMSRequest,cleanPhoto,cmsRichDraftBody,cmsRichEditBody}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
- const config={projectId:vars.WHUMPO_CMS_PROJECT_ID,ownerId:vars.WHUMPO_CMS_OWNER_ID,origin:vars.WHUMPO_CMS_ORIGIN,secret:vars.WHUMPO_CMS_BRIDGE_KEY},id=crypto.randomUUID(),dir=await mkdtemp('/tmp/whumpo-native-upload-');let item,retain=false;
+ const config={projectId:vars.WHUMPO_CMS_PROJECT_ID,ownerId:vars.WHUMPO_CMS_OWNER_ID,origin:vars.WHUMPO_CMS_ORIGIN,secret:vars.WHUMPO_CMS_BRIDGE_KEY},id=crypto.randomUUID(),dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-native-upload-');let item,retain=false;
  try{
   execFileSync('python3',['-c',"from PIL import Image; import sys; Image.new('RGB',(32,24),(80,120,60)).save(sys.argv[1])",dir+'/photo.jpg']);const bytes=new Uint8Array(await readFile(dir+'/photo.jpg'));
   const send=async(name='studio.jpg')=>{const request=await signCMSMediaUpload(config,id,bytes,name);return fetch('http://localhost:8799/_emdash/api/media',{method:'POST',headers:request.headers,body:await request.arrayBuffer()});};

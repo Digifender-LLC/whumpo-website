@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';import {mkdtemp,readFile,rm} from 'node:fs/promises';import {execFileSync} from 'node:child_process';import {build} from 'esbuild';
 const buildResult=await build({stdin:{contents:"export * from './src/cms-media-upload-bridge';export * from './src/cms-bridge';export {cleanPhoto} from './src/photo-format';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
 const {signCMSMediaUpload:sign,verifyCMSMediaUpload:verify,signCMSRequest,cleanPhoto}=await import('data:text/javascript;base64,'+Buffer.from(buildResult.outputFiles[0].text).toString('base64'));
-const config={projectId:crypto.randomUUID(),ownerId:crypto.randomUUID(),secret:'synthetic-secret-for-media-uploads-'.repeat(2),origin:'https://cms.test'},id=crypto.randomUUID(),dir=await mkdtemp('/tmp/whumpo-cms-upload-');
+const config={projectId:crypto.randomUUID(),ownerId:crypto.randomUUID(),secret:'synthetic-secret-for-media-uploads-'.repeat(2),origin:'https://cms.test'},id=crypto.randomUUID(),dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-cms-upload-');
 try{
  execFileSync('python3',['-c',"from PIL import Image; import sys; Image.new('RGB',(32,24),(80,120,60)).save(sys.argv[1]); Image.new('RGB',(1601,1)).save(sys.argv[2])",dir+'/photo.jpg',dir+'/wide.jpg']);
  const bytes=new Uint8Array(await readFile(dir+'/photo.jpg')),now=Date.now(),first=await sign(config,id,bytes,'studio.jpg',now),second=await sign(config,id,bytes,'studio.jpg',now+1000);

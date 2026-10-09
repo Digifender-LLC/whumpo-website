@@ -6,7 +6,7 @@ import {currentSiteFixtureHandlers} from './current-site-fixture.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.mjs';
 const m=await currentSiteFixtureHandlers(),{cleanPhoto,uploadPhoto,readPhotoUpload,readPhoto,listPhotos,cleanupPhotos,getBilling,worker}=m;
-const dir=await mkdtemp('/tmp/whumpo-files-');
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-files-');
 execFileSync('python3',['-c',"from PIL import Image; import sys; im=Image.new('RGB',(32,24),(80,120,60)); im.save(sys.argv[1]+'/fixture.jpg'); im.save(sys.argv[1]+'/progressive.jpg',progressive=True); Image.new('RGB',(1601,1)).save(sys.argv[1]+'/oversized.jpg')",dir]);
 const jpeg=new Uint8Array(await readFile(dir+'/fixture.jpg'));
 const fixture=await databaseFixture({d1:true,r2:true}),db=fixture.db,env=fixture.env;

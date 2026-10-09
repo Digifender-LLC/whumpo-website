@@ -18,6 +18,7 @@ Whumpo should first become a dependable way for an invited customer to create, i
 - [Accepted tier expansion](#accepted-tier-expansion--creator-business-and-business-pro): Creator naming, cumulative benefits, seven connections and the full-set paid-launch gate.
 - [Canonical task data](backlog.json): stable `WH-001` IDs for agents and automation; generated Markdown is never edited directly.
 - [Agent execution guide](execution.md): selection, coordination, implementation, evidence and handoff.
+- [Evidence reconciliation](evidence-reconciliation.md): dated comparison of empty backlog evidence against `main`, with warnings where only a foundation exists.
 - [Product/architecture review](review.md): strengths, current limits and source evidence.
 - [Tooling research and decision](tooling-decision.md): why Git plus GitHub Issues fits now, and when Projects or Linear would help.
 

@@ -15,7 +15,7 @@ async function run(command,args,options={}){
  return new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',(code,signal)=>code===0?resolve():reject(Error(`${command} exited ${code??signal}`)));});
 }
 if(!process.argv.includes('--isolated-session')){
- const dir=await mkdtemp('/tmp/whumpo-orca-');
+ const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-orca-');
  for(const name of ['config','cache','data','runtime','speech','logs'])await mkdir(dir+'/'+name,{mode:0o700});
  // Only child processes receive these paths. The user's dconf, display,
  // accessibility bus and existing Orca process are never changed or replaced.
