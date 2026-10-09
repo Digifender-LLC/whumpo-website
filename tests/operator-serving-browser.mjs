@@ -12,7 +12,7 @@ import {createRequire} from 'node:module';
 import {currentSiteFixtureHandlers,enableFixtureVisitorAccess} from './current-site-fixture.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
-import {runContainment} from '../tools/operator-containment-input.mjs';
+import {runContainment,newActionId} from '../tools/operator-containment-input.mjs';
 const {chromium}=createRequire(import.meta.url)(process.env.WHUMPO_PLAYWRIGHT||'@playwright/test');
 const m=await currentSiteFixtureHandlers(),store=await databaseFixture({d1:process.argv.includes('--d1')}),db=store.db;
 const id=()=>crypto.randomUUID(),origin='http://localhost:8787';
@@ -72,7 +72,7 @@ try{
  const lost=seen.filter(r=>r.phase==='before'&&r.method==='POST'&&r.path==='/data');assert.equal(lost.length,2);assert.ok(lost.every(r=>r.status===200),'Both saves committed on the server');
 
  // ---- Operator serving stop with exact preview and apply.
- const stop={action:'stop-serving',id:id(),project,expiresAt:new Date(Date.now()+7200000).toISOString(),operator:OPERATOR,reason:REASON};
+ const stop={action:'stop-serving',id:newActionId(),project,expiresAt:new Date(Date.now()+7200000).toISOString(),operator:OPERATOR,reason:REASON};
  assert.equal((await runContainment(db,stop,(await runContainment(db,stop)).applyDigest)).containments[0].state,'active');
 
  // ---- Same browser, fresh navigation: the account view reads back the lost request and the saved data.

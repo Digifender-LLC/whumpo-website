@@ -1,18 +1,21 @@
 // WH-050 F7 / runbook G3: operator containment of one account or project's public allowances.
 // Runs on disposable SQLite by default and on actual local D1 with --d1. No network, provider or deployed resource.
 import assert from 'node:assert/strict';
+import {execFileSync} from 'node:child_process';
 import {build} from 'esbuild';
 import {currentSiteFixtureHandlers,createFixtureWebsite,enableFixtureVisitorAccess} from './current-site-fixture.mjs';
 import {authenticator} from './app-authenticator.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.mjs';
-import {runContainment,containmentInput,containmentDigest,retentionMs} from '../tools/operator-containment-input.mjs';
+import {runContainment,containmentInput,containmentDigest,retentionMs,actionIdTime,actionIdWindowMs} from '../tools/operator-containment-input.mjs';
+import {newActionId,actionIdAged,withoutTriggers,windowIds} from './helpers/operator-action-ids.mjs';
 const m=await currentSiteFixtureHandlers(),store=await databaseFixture(),db=store.db,scopes=new Map(),scope=user=>scopes.get(user);
 const bundle=await build({stdin:{contents:"export * from './src/storage-budget';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
 const storage=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
 const {saveBackend,testBackend}=m.backend,{prepareBackendPublication:prepare,confirmBackendPublication:confirm}=m.backendPublication,{appData:data,appAuth:auth}=m,{prepareApplication,confirmApplication}=m.appActivation;
 const {readChat,sendChat,contactPage}=m,{activeContact,saveContact}=m.contacts;
-const id=()=>crypto.randomUUID(),now=()=>new Date().toISOString(),hours=n=>new Date(Date.now()+n*3600000).toISOString();
+// `id` is for ordinary records (users, projects); every operator action id is a UUIDv7 minted for its moment (`aid`).
+const id=()=>crypto.randomUUID(),aid=()=>newActionId(),now=()=>new Date().toISOString(),hours=n=>new Date(Date.now()+n*3600000).toISOString();
 const service={fetch:async(_url,init)=>{const body=JSON.parse(init.body);if(body.input&&body.input.state)return Response.json({ok:true,value:{state:body.input.input,result:'saved'}});return Response.json({ok:true,value:1});}};
 const OPERATOR='human:PRIVATE-OPERATOR-CANARY',REASON='PRIVATE-REASON-CANARY abusive public traffic';
 async function user(){const u=id(),authority=await workspaceFixture(db,m,u);scopes.set(u,await authority.scope());await readChat(scopes.get(u),u);return u;}
@@ -35,6 +38,7 @@ const count=async table=>(await db.prepare(`SELECT count(*) n FROM ${table}`).fi
 const customerTables=['projects','backend_versions','backend_publications','app_spaces','app_visitors','app_documents','app_sessions','contact_submissions','contact_settings','publications','site_versions','project_files','identity_sessions'];
 const snapshot=async()=>Object.fromEntries(await Promise.all(customerTables.map(async t=>[t,await count(t)])));
 const containments=async()=>(await db.prepare('SELECT count(*) n FROM operator_containments').first()).n;
+const containmentExists=async cid=>(await db.prepare('SELECT count(*) n FROM operator_containments WHERE id=?').bind(cid).first()).n>0;
 const disclosed=text=>['PRIVATE-','human:','operator','contain'].filter(marker=>text.toLowerCase().includes(marker.toLowerCase()));
 // Fixture-only clock move: the resolution trigger forbids changing times, so drop and restore it around one write.
 async function rewrite(name,sql,...values){const trigger=(await db.prepare('SELECT sql FROM sqlite_master WHERE name=?').bind(name).first()).sql;await db.prepare('DROP TRIGGER '+name).run();try{await db.prepare(sql).bind(...values).run();}finally{await db.prepare(trigger).run();}}
@@ -48,8 +52,10 @@ try{
  for(const a of [xs,ys]){assert.equal((await postContact(a)).status,200);assert.equal((await photo(a)).ok,true);}
 
  // Input validation happens before any database access.
- const base={action:'contain',id:id(),subject:{kind:'project',id:xb.project},scopes:{backend:'freeze'},expiresAt:hours(2),operator:OPERATOR,reason:REASON};
- for(const bad of [{...base,scopes:{}},{...base,scopes:{backend:'stop'}},{...base,scopes:{ai:'freeze'}},{...base,scopes:{backend:100}},{...base,scopes:{backend:501}},{...base,scopes:{backend:-1}},{...base,subject:{kind:'account',id:x},scopes:{backend:5}},
+ const cutoff0=new Date(Date.now()-retentionMs).toISOString(),stop=a=>({action:'stop-serving',id:aid(),project:a.project,expiresAt:hours(2),operator:OPERATOR,reason:REASON});
+ const base={action:'contain',id:aid(),subject:{kind:'project',id:xb.project},scopes:{backend:'freeze'},expiresAt:hours(2),operator:OPERATOR,reason:REASON};
+ const ids=windowIds();
+ for(const bad of [{...base,id:ids.refused['random v4']},{...base,id:ids.refused['upper-case hex']},{...base,id:ids.refused['version 4 nibble on a v7 time']},{...base,id:ids.refused['wrong variant nibble']},{...base,id:ids.refused['no hyphens']},{...base,id:ids.refused.empty},{...stop(xs),id:ids.refused['random v4']},{action:'cleanup',id:ids.refused['random v4'],before:cutoff0,operator:OPERATOR},{action:'lift',id:ids.refused['random v4'],operator:OPERATOR,reason:REASON},{...base,scopes:{}},{...base,scopes:{backend:'stop'}},{...base,scopes:{ai:'freeze'}},{...base,scopes:{backend:100}},{...base,scopes:{backend:501}},{...base,scopes:{backend:-1}},{...base,subject:{kind:'account',id:x},scopes:{backend:5}},
   {...base,expiresAt:'tomorrow'},{...base,expiresAt:'2026-01-01T00:00:00Z'},{...base,operator:'has space'},{...base,reason:' '},{...base,reason:'x'.repeat(501)},{...base,extra:1},{...base,subject:{kind:'site',id:xb.project}},{action:'delete',id:id()}])
   assert.throws(()=>containmentInput(JSON.stringify(bad)),/Invalid operator containment request/,JSON.stringify(bad).slice(0,80));
  assert.equal(containmentDigest(containmentInput(JSON.stringify({...base,scopes:{photo:5,backend:'freeze'}}))),containmentDigest(containmentInput(JSON.stringify({...base,scopes:{backend:'freeze',photo:5}}))),'Digest is independent of key order');
@@ -74,7 +80,7 @@ try{
  assert.equal((await callBackend(yb)).status,200,'Another tenant keeps its allowance');
  const usedX=(await db.prepare('SELECT calls FROM backend_public_usage WHERE project_id=?').bind(xb.project).first()).calls;assert.equal(usedX,1,'Refusals are not charged');
  // Lowered allowance: y's backend may make one more call today, then gets the same response as the frozen project.
- const lower={action:'contain',id:id(),subject:{kind:'project',id:yb.project},scopes:{backend:2},expiresAt:hours(1),operator:OPERATOR,reason:REASON};
+ const lower={action:'contain',id:aid(),subject:{kind:'project',id:yb.project},scopes:{backend:2},expiresAt:hours(1),operator:OPERATOR,reason:REASON};
  await runContainment(db,lower,(await runContainment(db,lower)).applyDigest);
  assert.equal((await callBackend(yb)).status,429,'y already used 2 of a lowered allowance of 2');
  const exhaustedBody=await (await callBackend(yb)).text();assert.equal(exhaustedBody,frozenBody,'Frozen and exhausted projects are indistinguishable to customers');
@@ -82,7 +88,7 @@ try{
  await assert.rejects(db.prepare("INSERT INTO backend_public_usage(project_id,day,calls,publication_id) VALUES(?,strftime('%Y-%m-%d','now'),1,(SELECT review_id FROM backend_publications WHERE project_id=?)) ON CONFLICT(project_id) DO UPDATE SET calls=calls+1").bind(xb.project,xb.project).run(),/backend_public_quota/);
 
  // Account freeze covers every project the account owns, at each remaining admission trigger.
- const account={action:'contain',id:id(),subject:{kind:'account',id:x},scopes:{transition:'freeze',contact:'freeze',photo:'freeze'},expiresAt:hours(3),operator:OPERATOR,reason:REASON};
+ const account={action:'contain',id:aid(),subject:{kind:'account',id:x},scopes:{transition:'freeze',contact:'freeze',photo:'freeze'},expiresAt:hours(3),operator:OPERATOR,reason:REASON};
  const accountPreview=await runContainment(db,account);assert.deepEqual(accountPreview.subject.projects.sort(),[xb.project,xa.project,xs.project].sort());
  assert.equal((await runContainment(db,account,accountPreview.applyDigest)).containments.length,3);
  const t=await transition(xa);assert.equal(t.status,409);assert.equal(t.message,'Application changed or execution allowance reached');assert.deepEqual(disclosed(t.message),[]);
@@ -98,7 +104,7 @@ try{
  assert.equal((await testBackend(scope(x),service,x,xb.project,(await db.prepare('SELECT version_id FROM backend_publications WHERE project_id=?').bind(xb.project).first()).version_id,id(),1)).state,'complete');
 
  // Raised temporary allowance (project only): contact hourly 20 -> 25; platform/account/fair-share ceilings unchanged.
- const raise={action:'contain',id:id(),subject:{kind:'project',id:ys.project},scopes:{contact:25,photo:10002},expiresAt:hours(1),operator:OPERATOR,reason:REASON};
+ const raise={action:'contain',id:aid(),subject:{kind:'project',id:ys.project},scopes:{contact:25,photo:10002},expiresAt:hours(1),operator:OPERATOR,reason:REASON};
  await runContainment(db,raise,(await runContainment(db,raise)).applyDigest);
  const hourly=async()=>(await db.prepare("SELECT count(*) n FROM contact_receipts WHERE project_id=? AND created_at>strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')").bind(ys.project).first()).n;
  while(await hourly()<25)await saveContact(db,ys.project,ys.revision,{id:id(),name:'V',email:'v@example.com',message:'raised'});
@@ -108,12 +114,12 @@ try{
  await db.prepare('DROP TRIGGER storage_project_usage_update').run();await db.prepare('UPDATE storage_project_usage SET read_ops=10000 WHERE project_id=?').bind(ys.project).run();await db.prepare(trigger).run();
  assert.equal((await photo(ys)).ok,true);assert.equal((await photo(ys)).ok,true);assert.equal((await photo(ys)).ok,false,'Raised allowance is still a ceiling');
  // A later action supersedes an earlier allowance for the same project and scope (latest wins; any freeze wins over all).
- const later={action:'contain',id:id(),subject:{kind:'project',id:ys.project},scopes:{photo:50000},expiresAt:hours(1),operator:OPERATOR,reason:REASON};
+ const later={action:'contain',id:aid(),subject:{kind:'project',id:ys.project},scopes:{photo:50000},expiresAt:hours(1),operator:OPERATOR,reason:REASON};
  await runContainment(db,later,(await runContainment(db,later)).applyDigest);assert.equal((await photo(ys)).ok,true);
  const status=await runContainment(db,{action:'status',subject:{kind:'project',id:ys.project}});
  assert.equal(status.usage.projects[0].photo.allowance,50000);assert.equal(status.usage.projects[0].contact.allowance,25);assert.equal(status.containments.length,3);
  // Schema rejects allowances above the maximum, allowances on accounts, long or past expiry and missing subjects.
- const row=(o={})=>db.prepare("INSERT INTO operator_containments(id,scope,subject_kind,subject_id,allowance,operator_ref,reason,request_digest,expires_at) VALUES(?,?,?,?,?,?,?,?,?)").bind(o.id??id(),o.scope??'backend',o.kind??'project',o.subject??xb.project,o.allowance??null,'human:test','reason','f'.repeat(64),o.expires??hours(1)).run();
+ const row=(o={})=>db.prepare("INSERT INTO operator_containments(id,scope,subject_kind,subject_id,allowance,operator_ref,reason,request_digest,expires_at) VALUES(?,?,?,?,?,?,?,?,?)").bind(o.id??aid(),o.scope??'backend',o.kind??'project',o.subject??xb.project,o.allowance??null,'human:test','reason','f'.repeat(64),o.expires??hours(1)).run();
  await assert.rejects(row({allowance:501}),/CHECK/);await assert.rejects(row({kind:'account',subject:x,allowance:5}),/CHECK/);
  await assert.rejects(row({expires:hours(24*31)}),/operator_containment_invalid/);await assert.rejects(row({expires:hours(-1)}),/operator_containment_invalid/);await assert.rejects(row({subject:id()}),/operator_containment_invalid/);
  await assert.rejects(row({id:base.id,scope:'photo'}),/operator_containment_invalid/,'A second scope cannot be attached to an existing action with another digest');
@@ -168,7 +174,6 @@ try{
  const appPage=a=>m.appHost.fetch(new Request(`http://localhost:8787/apps/${a.project}/`),appEnv);
  const app=(a,path,init={})=>m.appGateway.applicationGateway(new Request(`http://localhost:8787/apps/${a.project}/${path}`,{...init,headers:{origin:'http://localhost:8787',cookie:`local-whumpo-app-session-${a.project}=${a.visitor?.session??''}`,...(init.body?{'content-type':'application/json'}:{}),...init.headers}}),appEnv);
  const publishBackend=async a=>{const v=id(),r=id(),rid=id();await saveBackend(scope(a.user),a.user,a.project,v,'export default x=>x');await testBackend(scope(a.user),service,a.user,a.project,v,r,1);await prepare(scope(a.user),a.user,a.project,rid,'publish',v,r);await confirm(scope(a.user),a.user,rid);};
- const stop=a=>({action:'stop-serving',id:id(),project:a.project,expiresAt:hours(2),operator:OPERATOR,reason:REASON});
  for(const a of [xa,ya]){const pageId=id();await m.appPages.prepareAppPage(scope(a.user),a.user,a.project,pageId,{title:'Journal',description:'Test',buttonLabel:'Save',fields:[{key:'note',label:'Note',type:'text'}]});await m.appPages.confirmAppPage(scope(a.user),a.user,pageId);}
  // A visitor request sent before the stop keeps its readable receipt.
  const lastRun=id();assert.equal((await data.transitionAppData(db,service,xa.visitor.session,xa.project,lastRun,xa.visitor.revision,{note:'before stop'})).state,'complete');xa.visitor.revision++;
@@ -176,10 +181,10 @@ try{
  assert.equal((await sitePage(xs)).status,200);assert.equal((await contactForm(xs)).status,200);assert.equal((await appPage(xa)).status,200);
  assert.equal((await app(xa,'config')).status,200);assert.equal((await callBackend(xb)).status,200);
  // Serving is its own action: never through `contain`, never for an account, never combined with another scope.
- for(const bad of [{...base,id:id(),scopes:{serving:'freeze'}},{...stop(xs),project:'not-a-uuid'},{...stop(xs),subject:{kind:'account',id:x}},{...stop(xs),scopes:{backend:'freeze'}}])
+ for(const bad of [{...base,id:aid(),scopes:{serving:'freeze'}},{...stop(xs),project:'not-a-uuid'},{...stop(xs),subject:{kind:'account',id:x}},{...stop(xs),scopes:{backend:'freeze'}}])
   assert.throws(()=>containmentInput(JSON.stringify(bad)),/Invalid operator containment request/);
  await assert.rejects(row({kind:'account',subject:x,scope:'serving'}),/CHECK/);await assert.rejects(row({scope:'serving',allowance:1}),/CHECK/);
- const mixed=id();await row({id:mixed,scope:'backend',subject:xs.project});await assert.rejects(row({id:mixed,scope:'serving',subject:xs.project}),/operator_containment_invalid/,'A serving stop cannot share an action with another scope');
+ const mixed=aid();await row({id:mixed,scope:'backend',subject:xs.project});await assert.rejects(row({id:mixed,scope:'serving',subject:xs.project}),/operator_containment_invalid/,'A serving stop cannot share an action with another scope');
  await rewrite('operator_containment_retained','DELETE FROM operator_containments WHERE id=?',mixed);
  // The review binds the exact project state: a publication change after preview makes the digest stale (JS recheck)...
  const staleStop=stop(xb),stalePreview=await runContainment(db,staleStop);assert.equal(await containments(),8);
@@ -251,13 +256,18 @@ try{
 
  // ---- Owner decision October 8, 2026: resolved records are retained 90 days after resolution; then reviewed cleanup.
  const N=Date.now(),cutoff=new Date(N-retentionMs).toISOString(),at=ms=>new Date(ms).toISOString();
- // Fixture-only backdating of one resolved action: creation, expiry and resolution stay consistent with real history.
- const oldAction=async(a,resolvedMs,resolution='lifted')=>{const c={action:'contain',id:id(),subject:{kind:'project',id:a.project},scopes:{photo:'freeze'},expiresAt:hours(1),operator:OPERATOR,reason:REASON};await runContainment(db,c,(await runContainment(db,c)).applyDigest);
-  await rewrite('operator_containment_resolve',"UPDATE operator_containments SET created_at=?,expires_at=?,resolution=?,resolved_at=?,resolved_by='human:old',resolution_reason='old',resolution_digest=? WHERE id=?",at(resolvedMs-3600000),at(resolution==='lifted'?resolvedMs+3600000:resolvedMs-60000),resolution,at(resolvedMs),'d'.repeat(64),c.id);return c;};
+ // Fixture-only history. Each row is inserted whole as it would have stood in the past: its id is minted for its creation
+ // time (never a young id with an aged created_at), and only the admission trigger, which compares with the clock now, is skipped.
+ const COLUMNS='id,scope,subject_kind,subject_id,allowance,operator_ref,reason,request_digest,created_at,expires_at,resolution,resolved_at,resolved_by,resolution_reason,resolution_digest';
+ const seed=(request,scope,createdMs,resolution,resolvedMs)=>withoutTriggers(db,['operator_containment_admit'],()=>db.prepare(`INSERT INTO operator_containments(${COLUMNS}) VALUES(?,?,'project',?,NULL,?,?,?,?,?,?,?,?,?,?)`)
+  .bind(request.id,scope,request.subject?.id??request.project,request.operator,request.reason??REASON,containmentDigest(request),at(createdMs),request.expiresAt,resolution??null,resolution?at(resolvedMs):null,resolution?'human:old':null,resolution?'old':null,resolution?'d'.repeat(64):null).run());
+ // A resolved action: created an hour before it was resolved, lifted before expiry or closed after it.
+ const oldAction=async(a,resolvedMs,resolution='lifted')=>{const createdMs=resolvedMs-3600000,c={action:'contain',id:newActionId(createdMs),subject:{kind:'project',id:a.project},scopes:{photo:'freeze'},expiresAt:at(resolution==='lifted'?resolvedMs+3600000:resolvedMs-60000),operator:OPERATOR,reason:REASON};
+  await seed(c,'photo',createdMs,resolution,resolvedMs);return c;};
  const z=await user(),pB1=await project(z),pB2=await project(z),pH=await project(y),pE=await project(z);
  const b1=await oldAction(pB1,Date.parse(cutoff)),b2=await oldAction(pB2,Date.parse(cutoff)+1),held=await oldAction(pH,N-200*86400000,'closed');
- const e=stop(pE);await runContainment(db,e,(await runContainment(db,e)).applyDigest);
- await rewrite('operator_containment_resolve','UPDATE operator_containments SET created_at=?,expires_at=? WHERE id=?',at(N-200*86400000),at(N-171*86400000),e.id);
+ // An unresolved serving stop from 200 days ago whose expiry passed 171 days ago: expired, never closed, so never deletable.
+ const e={...stop(pE),id:newActionId(N-200*86400000),expiresAt:at(N-171*86400000)};await seed(e,'serving',N-200*86400000);
  const hold=async(subjectUser,projectId,holdId)=>{await db.prepare("INSERT OR IGNORE INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES(?,?,'intake-1','human:reviewer',unixepoch(),unixepoch()+31536000)").bind('case-'+holdId,subjectUser).run();
   await db.prepare("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES(?,?,?,'project',?,'basis-1','human:approver',unixepoch(),unixepoch()+86400)").bind(holdId,'case-'+holdId,subjectUser,projectId).run();};
  const release=holdId=>db.prepare("UPDATE safety_preservation_holds SET released_at=unixepoch(),released_by='human:approver',release_ref='release-1' WHERE id=?").bind(holdId).run();
@@ -267,7 +277,7 @@ try{
  for(const r of [inside,held,e])await assert.rejects(db.prepare('DELETE FROM operator_containments WHERE id=?').bind(r.id).run(),/operator_containment_immutable/);
  assert.equal((await db.prepare('DELETE FROM operator_containments WHERE id=?').bind(outside.id).run()).meta.changes,1);
  // Precise tool boundary at an injected instant: resolved exactly at the cutoff is eligible; 1 ms later is not.
- const cleanup={action:'cleanup',id:id(),before:cutoff,operator:OPERATOR};
+ const cleanup={action:'cleanup',id:aid(),before:cutoff,operator:OPERATOR};
  await assert.rejects(runContainment(db,{...cleanup,before:at(Date.parse(cutoff)+1)},undefined,N),/at least 90 days/);
  const cp=await runContainment(db,cleanup,undefined,N);
  assert.deepEqual(cp.delete,{containments:1,revocations:0,receipts:0});assert.ok(cp.retained.expiredAwaitingClose>=2&&cp.retained.heldBySafety===1&&cp.retained.active>=1,JSON.stringify(cp.retained));
@@ -284,54 +294,115 @@ try{
  await assert.rejects(runContainment(db,{...cleanup,before:at(Date.parse(cutoff)-1)},undefined,N),/already used/);
  await assert.rejects(db.prepare("UPDATE operator_retention_receipts SET operator_ref='human:x' WHERE id=?").bind(cleanup.id).run(),/operator_retention_immutable/);
  await assert.rejects(db.prepare('DELETE FROM operator_retention_receipts WHERE id=?').bind(cleanup.id).run(),/operator_retention_immutable/);
- await assert.rejects(db.prepare("INSERT INTO operator_retention_receipts(id,cutoff,containments,revocations,receipts,operator_ref,request_digest,review_digest) VALUES(?,strftime('%Y-%m-%dT%H:%M:%fZ','now','-90 days','+60 seconds'),?,'[]','[]','human:x',?,?)").bind(id(),JSON.stringify([b2.id+':photo']),'a'.repeat(64),'b'.repeat(64)).run(),/operator_retention_invalid/,'A cutoff under 90 days is refused by the schema');
- await assert.rejects(db.prepare("INSERT INTO operator_retention_receipts(id,cutoff,containments,revocations,receipts,operator_ref,request_digest,review_digest) VALUES(?,?,?,'[]','[]','human:x',?,?)").bind(id(),cutoff,JSON.stringify([inside.id+':photo']),'a'.repeat(64),'b'.repeat(64)).run(),/operator_retention_stale/,'A record resolved after the cutoff cannot be listed');
- await assert.rejects(db.prepare("INSERT INTO operator_retention_receipts(id,cutoff,containments,revocations,receipts,operator_ref,request_digest,review_digest) VALUES(?,?,?,'[]','[]','human:x',?,?)").bind(id(),cutoff,JSON.stringify([held.id+':photo']),'a'.repeat(64),'b'.repeat(64)).run(),/operator_containment_immutable/,'A held record cannot be deleted even when listed');
- // Replay of the deleted action cannot revive it: its expiry is necessarily past (expiry <= creation + 30 days < resolution + 90 days).
- await assert.rejects(runContainment(db,{...b1,expiresAt:at(Date.parse(cutoff)+3600000)}),/Expiry must be in the future/);
- await assert.rejects(row({id:b1.id,scope:'photo',subject:pB1.project,expires:at(Date.parse(cutoff)+3600000)}),/operator_containment_invalid/);
+ await assert.rejects(db.prepare("INSERT INTO operator_retention_receipts(id,cutoff,containments,revocations,receipts,operator_ref,request_digest,review_digest) VALUES(?,strftime('%Y-%m-%dT%H:%M:%fZ','now','-90 days','+60 seconds'),?,'[]','[]','human:x',?,?)").bind(aid(),JSON.stringify([b2.id+':photo']),'a'.repeat(64),'b'.repeat(64)).run(),/operator_retention_invalid/,'A cutoff under 90 days is refused by the schema');
+ await assert.rejects(db.prepare("INSERT INTO operator_retention_receipts(id,cutoff,containments,revocations,receipts,operator_ref,request_digest,review_digest) VALUES(?,?,?,'[]','[]','human:x',?,?)").bind(aid(),cutoff,JSON.stringify([inside.id+':photo']),'a'.repeat(64),'b'.repeat(64)).run(),/operator_retention_stale/,'A record resolved after the cutoff cannot be listed');
+ await assert.rejects(db.prepare("INSERT INTO operator_retention_receipts(id,cutoff,containments,revocations,receipts,operator_ref,request_digest,review_digest) VALUES(?,?,?,'[]','[]','human:x',?,?)").bind(aid(),cutoff,JSON.stringify([held.id+':photo']),'a'.repeat(64),'b'.repeat(64)).run(),/operator_containment_immutable/,'A held record cannot be deleted even when listed');
+ // A cleaned id can never return. Its expiry is necessarily past, but a new preview and apply could name a future expiry:
+ // the id itself carries its creation time (older than the one-day window), so the tool and, whatever the request, the
+ // schema refuse it. A fresh id with the very same subject, scope and expiry is accepted, so the id is the only cause.
+ await assert.rejects(runContainment(db,{...b1,expiresAt:at(Date.parse(cutoff)+3600000)}),/new UUIDv7 minted within the last day/);
+ const reborn={...b1,expiresAt:hours(1)};
+ for(const apply of [undefined,containmentDigest(reborn)])await assert.rejects(runContainment(db,reborn,apply),/new UUIDv7 minted within the last day/);
+ await assert.rejects(row({id:b1.id,scope:'photo',subject:pB1.project}),/operator_containment_invalid/);
+ await row({scope:'photo',subject:pB1.project});assert.equal(await containmentExists(b1.id),false);
  // A later cleanup sees 1 ms more history; a hold placed after its preview removes the record from cleanup.
- const later2={action:'cleanup',id:id(),before:at(Date.parse(cutoff)+1),operator:OPERATOR},lp=await runContainment(db,later2,undefined,N+1000);
+ const later2={action:'cleanup',id:aid(),before:at(Date.parse(cutoff)+1),operator:OPERATOR},lp=await runContainment(db,later2,undefined,N+1000);
  assert.deepEqual(lp.delete,{containments:1,revocations:0,receipts:0});
  await hold(z,pB2.project,'hold-wh050-b2');await assert.rejects(runContainment(db,later2,lp.applyDigest,N+1000),/Nothing is eligible/);
  assert.equal((await db.prepare('SELECT count(*) n FROM operator_containments WHERE id=?').bind(b2.id).first()).n,1);
  // A closed expired serving stop becomes eligible only 90 days after its close.
  const closeE={action:'close',id:e.id,operator:OPERATOR,reason:'Expired serving stop reviewed'};await runContainment(db,closeE,(await runContainment(db,closeE)).applyDigest);
- assert.equal((await runContainment(db,{action:'cleanup',id:id(),before:cutoff,operator:OPERATOR},undefined,N)).delete.containments,0);
+ assert.equal((await runContainment(db,{action:'cleanup',id:aid(),before:cutoff,operator:OPERATOR},undefined,N)).delete.containments,0);
  // ---- Receipt capacity is checked after the cleanup's own deletions: a full store reclaims old cleanup receipts.
  const receiptCount=async()=>(await db.prepare('SELECT count(*) n FROM operator_retention_receipts').first()).n;
  const receiptExists=async rid=>(await db.prepare('SELECT count(*) n FROM operator_retention_receipts WHERE id=?').bind(rid).first()).n===1;
- const containmentExists=async cid=>(await db.prepare('SELECT count(*) n FROM operator_containments WHERE id=?').bind(cid).first()).n>0;
+ // ---- Action identity (containments, session revocations, cleanup receipts): a new action id is a lowercase canonical
+ // UUIDv7 stamped within [now - 1 day, now + 1 minute] by the database clock, so a cleaned id can never be reused.
+ // Candidates sit well inside or outside the window rather than at the millisecond edge, as the clock is the database's.
+ const edge=windowIds(),twoDays=2*86400000;
+ // Containments, at the schema boundary: each accepted id inserts the very row that each refused id aborts.
+ for(const [name,rid] of Object.entries(edge.accepted)){await row({id:rid,scope:'backend',subject:xb.project});assert.equal(await containmentExists(rid),true,name);}
+ for(const [name,rid] of Object.entries(edge.refused)){await assert.rejects(row({id:rid,scope:'backend',subject:xb.project}),/operator_containment_invalid/,name);assert.equal(await containmentExists(rid),false,name);}
+ // The window is the database clock's, never the row's own created_at: a created_at at its one-minute tolerance cannot carry a later or older id.
+ const stamped=(rid,seconds)=>db.prepare(`INSERT INTO operator_containments(id,scope,subject_kind,subject_id,allowance,operator_ref,reason,request_digest,created_at,expires_at) VALUES(?,'backend','project',?,NULL,'human:test','reason',?,strftime('%Y-%m-%dT%H:%M:%fZ','now','${seconds} seconds'),?)`).bind(rid,xb.project,'f'.repeat(64),hours(1)).run();
+ await stamped(aid(),55);await stamped(aid(),-55);
+ await assert.rejects(stamped(newActionId(Date.now()+120000),55),/operator_containment_invalid/);await assert.rejects(stamped(actionIdAged(actionIdWindowMs+3600000),-55),/operator_containment_invalid/);
+ // Cleanup receipts, same: each accepted id records the cleanup of one aged record, each refused id aborts the same valid listing.
+ const aged=[];for(let i=0;i<3;i++)aged.push(await oldAction(xs,Date.now()-100*86400000-i*1000));
+ const listed=(rid,record)=>db.prepare("INSERT INTO operator_retention_receipts(id,cutoff,containments,revocations,receipts,operator_ref,request_digest,review_digest) VALUES(?,?,?,'[]','[]','human:x',?,?)").bind(rid,at(Date.now()-retentionMs),JSON.stringify([record.id+':photo']),'a'.repeat(64),'b'.repeat(64)).run();
+ for(const [name,rid] of Object.entries(edge.refused)){await assert.rejects(listed(rid,aged[0]),/operator_retention_invalid/,name);assert.equal(await receiptExists(rid),false,name);}
+ assert.equal(await containmentExists(aged[0].id),true,'Refused receipts delete nothing');
+ for(const [[name,rid],record] of Object.entries(edge.accepted).map((entry,i)=>[entry,aged[i]])){await listed(rid,record);assert.equal(await receiptExists(rid),true,name);assert.equal(await containmentExists(record.id),false,name);}
+ // The tool agrees for every action that writes: a request matching no stored record needs a new id, whatever else it says.
+ for(const name of ['25 hours old','2 minutes ahead','epoch zero','far future']){const rid=edge.refused[name],fresh=/new UUIDv7 minted within the last day/;
+  for(const apply of [undefined,'f'.repeat(64)]){
+   await assert.rejects(runContainment(db,{...base,id:rid,expiresAt:hours(2)},apply&&containmentDigest({...base,id:rid,expiresAt:hours(2)})),fresh,name);
+   await assert.rejects(runContainment(db,{...stop(ya),id:rid},apply),fresh,name);
+   await assert.rejects(runContainment(db,{action:'cleanup',id:rid,before:cutoff,operator:OPERATOR},apply),fresh,name);}}
+ assert.equal((await runContainment(db,{...base,id:actionIdAged(23*3600000),expiresAt:hours(2)})).preview,true,'A 23-hour-old request ID is still new');
+ // Replay of an applied action is unaffected by the window: its stored row answers and nothing is inserted, however old the id.
+ const oldContain={action:'contain',id:newActionId(Date.now()-twoDays),subject:{kind:'project',id:xs.project},scopes:{photo:'freeze'},expiresAt:hours(1),operator:OPERATOR,reason:REASON};
+ await seed(oldContain,'photo',Date.now()-twoDays);const before3=await containments();
+ assert.equal((await runContainment(db,oldContain,containmentDigest(oldContain))).replayed,true);assert.equal((await runContainment(db,oldContain)).preview,true);
+ const oldStop={...stop(ya),id:newActionId(Date.now()-twoDays)};await seed(oldStop,'serving',Date.now()-twoDays);
+ assert.equal((await runContainment(db,oldStop,containmentDigest(oldStop))).replayed,true);assert.equal((await runContainment(db,oldStop)).alreadyApplied,true);
+ const oldCleanup={action:'cleanup',id:newActionId(Date.now()-twoDays),before:cutoff,operator:OPERATOR};
+ await withoutTriggers(db,['operator_retention_admit','operator_retention_apply'],()=>db.prepare("INSERT INTO operator_retention_receipts(id,cutoff,containments,revocations,receipts,operator_ref,request_digest,review_digest,created_at) VALUES(?,?,'[\"fixture:photo\"]','[]','[]',?,?,?,?)").bind(oldCleanup.id,cutoff,OPERATOR,containmentDigest(oldCleanup),'b'.repeat(64),at(Date.now()-twoDays)).run());
+ assert.equal((await runContainment(db,oldCleanup,'b'.repeat(64))).replayed,true);
+ assert.equal(await containments(),before3+1,'Replays insert nothing');
+ // An applied old action still resolves (lift) by its id; only a never-applied request older than a day needs a new id.
+ const liftOld={action:'lift',id:oldContain.id,operator:OPERATOR,reason:'Reviewed'};await runContainment(db,liftOld,(await runContainment(db,liftOld)).applyDigest);
+ assert.equal((await runContainment(db,{action:'status',subject:{kind:'project',id:xs.project}})).containments.find(r=>r.id===oldContain.id).state,'lifted');
+ await assert.rejects(runContainment(db,{...oldContain,id:newActionId(Date.now()-twoDays),reason:'Never applied'}),/new UUIDv7 minted within the last day/);
+ // --new-id: local random generation, current time, lowercase canonical v7 with the RFC variant; the schema stays the boundary.
+ const minted=Array.from({length:1000},()=>newActionId());assert.equal(new Set(minted).size,1000);
+ for(const rid of minted)assert.ok(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(rid)&&Math.abs(actionIdTime(rid)-Date.now())<5000,rid);
+ for(const ms of [0,1,1790000000000,2**48-1])assert.equal(actionIdTime(newActionId(ms)),ms);
+ for(const bad of [-1,1.5,2**48,Number.NaN,'1'])assert.throws(()=>newActionId(bad),RangeError);
+ for(const bad of [undefined,null,5,'',edge.refused['random v4'],edge.refused['upper-case hex'],edge.refused['wrong variant nibble'],edge.refused['version 4 nibble on a v7 time'],edge.refused['non-hex digit']])assert.equal(actionIdTime(bad),null);
+ const cli=execFileSync(process.execPath,['tools/operator-containment.mjs','--new-id'],{encoding:'utf8'}).trim();assert.ok(actionIdTime(cli)!==null&&Math.abs(actionIdTime(cli)-Date.now())<5000,cli);
+ assert.throws(()=>execFileSync(process.execPath,['tools/operator-containment.mjs','--new-id','extra'],{stdio:'pipe'}));
  // Fixture-only bulk fill: synthetic receipts written without the admit/apply triggers, `old` of them 100 days old.
+ // Fixture receipt ids are UUIDv7 stamped for the time the receipt claims (100 days ago for the old ones).
+ const stamp=ms=>{const h=newActionId(ms).replaceAll('-','');return h.slice(0,8)+'-'+h.slice(8,12);};
  let batch=0;const fill=async(total,old)=>{batch++;const names=['operator_retention_admit','operator_retention_apply'],saved=[];
   for(const name of names){saved.push((await db.prepare('SELECT sql FROM sqlite_master WHERE name=?').bind(name).first()).sql);await db.prepare('DROP TRIGGER '+name).run();}
   try{await db.prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<?1) INSERT INTO operator_retention_receipts(id,cutoff,containments,revocations,receipts,operator_ref,request_digest,review_digest,created_at)
-   SELECT printf('%08x-0000-4000-8000-%012x',?3,i),strftime('%Y-%m-%dT%H:%M:%fZ','now','-190 days'),'["fixture:photo"]','[]','[]','human:fixture',printf('%064d',0),printf('%064d',0),
-   CASE WHEN i<=?2 THEN strftime('%Y-%m-%dT%H:%M:%fZ','now','-100 days') ELSE strftime('%Y-%m-%dT%H:%M:%fZ','now') END FROM n`).bind(total,old,batch).run();}
+   SELECT CASE WHEN i<=?2 THEN ?4 ELSE ?5 END||printf('-7000-8000-%012x',?3*100000+i),strftime('%Y-%m-%dT%H:%M:%fZ','now','-190 days'),'["fixture:photo"]','[]','[]','human:fixture',printf('%064d',0),printf('%064d',0),
+   CASE WHEN i<=?2 THEN strftime('%Y-%m-%dT%H:%M:%fZ','now','-100 days') ELSE strftime('%Y-%m-%dT%H:%M:%fZ','now') END FROM n`).bind(total,old,batch,stamp(Date.now()-100*86400000),stamp(Date.now())).run();}
   finally{for(const sql of saved)await db.prepare(sql).run();}};
- // The earlier cleanup's own receipt is also aged past retention, so this run purges it.
- await rewrite('operator_retention_immutable',"UPDATE operator_retention_receipts SET created_at=strftime('%Y-%m-%dT%H:%M:%fZ','now','-100 days') WHERE id=?",cleanup.id);
+ // The earlier cleanup's own receipt is also moved 100 days into the past (a fixture clock move: its id moves with it, the
+ // way a receipt created then would carry an old id), so this run purges it. The two old fixture receipts are inserted aged.
+ const agedCleanupId=actionIdAged(100*86400000);
+ await rewrite('operator_retention_immutable',"UPDATE operator_retention_receipts SET id=?,created_at=strftime('%Y-%m-%dT%H:%M:%fZ','now','-100 days') WHERE id=?",agedCleanupId,cleanup.id);
  await fill(10000-await receiptCount(),2);assert.equal(await receiptCount(),10000);
+ const oldReceipts=(await db.prepare("SELECT id FROM operator_retention_receipts WHERE operator_ref='human:fixture' AND created_at<strftime('%Y-%m-%dT%H:%M:%fZ','now','-90 days') ORDER BY id").all()).results.map(r=>r.id);
+ assert.equal(oldReceipts.length,2);for(const rid of [agedCleanupId,...oldReceipts])assert.ok(Date.now()-actionIdTime(rid)>99*86400000);
  const w=await user(),pC=await project(w),c1=await oldAction(pC,Date.now()-retentionMs-86400000);
- const N3=Date.now(),full={action:'cleanup',id:id(),before:at(N3-retentionMs),operator:OPERATOR},fp=await runContainment(db,full,undefined,N3);
+ const N3=Date.now(),full={action:'cleanup',id:aid(),before:at(N3-retentionMs),operator:OPERATOR},fp=await runContainment(db,full,undefined,N3);
  assert.deepEqual(fp.delete,{containments:1,revocations:0,receipts:3});assert.deepEqual(fp.receiptCapacity,{stored:10000,limit:10000,afterCleanup:9998});assert.ok(fp.applyDigest);
  // Rollback: a hold racing the apply aborts the whole statement at the full store; no receipt, nothing deleted.
  await assert.rejects(runContainment(interceptDatabase(db,/INSERT INTO operator_retention_receipts/,()=>hold(w,pC.project,'hold-wh050-full')),full,fp.applyDigest,N3),/Cleanup refused/);
- assert.equal(await receiptCount(),10000);assert.equal(await receiptExists(cleanup.id),true);assert.equal(await containmentExists(c1.id),true);assert.equal(await receiptExists(full.id),false);
+ assert.equal(await receiptCount(),10000);assert.equal(await receiptExists(agedCleanupId),true);assert.equal(await containmentExists(c1.id),true);assert.equal(await receiptExists(full.id),false);
  await release('hold-wh050-full');
  const fullApplied=await runContainment(db,full,fp.applyDigest,N3);assert.deepEqual(fullApplied.receipt.deleted,{containments:1,revocations:0,receipts:3});
- assert.equal(await receiptCount(),9998);assert.equal(await receiptExists(cleanup.id),false);assert.equal(await containmentExists(c1.id),false);
+ assert.equal(await receiptCount(),9998);assert.equal(await receiptExists(agedCleanupId),false);for(const rid of oldReceipts)assert.equal(await receiptExists(rid),false);assert.equal(await containmentExists(c1.id),false);
  for(const r of [b2,held,e,inside])assert.equal(await containmentExists(r.id),true,'Young, held and unresolved records survive the full-store cleanup');
  // Replay after the receipt was purged cannot repeat the cleanup on records that are eligible now.
  const pD=await project(w),d1=await oldAction(pD,Date.now()-retentionMs-86400000);
- await assert.rejects(runContainment(db,cleanup,cp.applyDigest,N),/Review is stale or differs/);
- assert.equal(await containmentExists(d1.id),true);assert.equal(await receiptExists(cleanup.id),false);
+ // Neither the purged receipts' ids nor the original request ID (now 100 days old) can be used for a new cleanup: the tool
+ // refuses them, and the schema refuses a direct receipt listing a perfectly valid record under any of them.
+ const listing=rid=>db.prepare("INSERT INTO operator_retention_receipts(id,cutoff,containments,revocations,receipts,operator_ref,request_digest,review_digest) VALUES(?,?,?,'[]','[]','human:x',?,?)").bind(rid,at(Date.now()-retentionMs),JSON.stringify([d1.id+':photo']),'a'.repeat(64),'b'.repeat(64)).run();
+ for(const rid of [agedCleanupId,...oldReceipts]){
+  for(const apply of [undefined,'f'.repeat(64)])await assert.rejects(runContainment(db,{...cleanup,id:rid,before:at(Date.now()-retentionMs)},apply),/new UUIDv7 minted within the last day/);
+  await assert.rejects(listing(rid),/operator_retention_invalid/);}
+ assert.equal(await containmentExists(d1.id),true,'Reused receipt ids deleted nothing');for(const rid of [agedCleanupId,...oldReceipts])assert.equal(await receiptExists(rid),false);
  // Full again with no receipt old enough: the tool refuses and the schema aborts the same statement.
  await fill(10000-await receiptCount(),0);assert.equal(await receiptCount(),10000);
- const none={action:'cleanup',id:id(),before:at(Date.now()-retentionMs),operator:OPERATOR},np=await runContainment(db,none);
+ const none={action:'cleanup',id:aid(),before:at(Date.now()-retentionMs),operator:OPERATOR},np=await runContainment(db,none);
  assert.deepEqual(np.delete,{containments:1,revocations:0,receipts:0});assert.equal(np.receiptCapacity.afterCleanup,10001);assert.equal(np.applyDigest,null);
  await assert.rejects(runContainment(db,none,'f'.repeat(64)),/receipt storage is full/);
- await assert.rejects(db.prepare("INSERT INTO operator_retention_receipts(id,cutoff,containments,revocations,receipts,operator_ref,request_digest,review_digest) VALUES(?,?,?,'[]','[]','human:x',?,?)").bind(id(),none.before,JSON.stringify([d1.id+':photo']),'a'.repeat(64),'b'.repeat(64)).run(),/operator_retention_capacity/);
+ await assert.rejects(db.prepare("INSERT INTO operator_retention_receipts(id,cutoff,containments,revocations,receipts,operator_ref,request_digest,review_digest) VALUES(?,?,?,'[]','[]','human:x',?,?)").bind(aid(),none.before,JSON.stringify([d1.id+':photo']),'a'.repeat(64),'b'.repeat(64)).run(),/operator_retention_capacity/);
  assert.equal(await receiptCount(),10000);assert.equal(await containmentExists(d1.id),true,'The refused cleanup deleted nothing');
  console.log(`Operator containment passed on ${process.argv.includes('--d1')?'actual local D1':'SQLite'}: input validation, preview/apply digest mismatch, idempotent replay, project and account freeze at backend/transition/contact/photo admission triggers, lowered/raised/superseding allowances, generic customer responses with no disclosure, trigger-level bypass refusal, immutable audit with operator and reason, lift, expiry, explicit close, separate serving stop (site/asset/CMS/directory/contact/photo/backend/app/module/signup refused, stopped visitor page kept as the account-only client with saved data, last-request receipt, export, deletion review, sign-in and passkey-replacement options and recovery with lost-response retry kept, exact state review with stale and racing refusal, one active stop, lift and expiry), 90-day retention cleanup (exact cutoff boundary, unresolved/held/within-retention kept, racing hold atomicity, replay and no revival, full 10000-receipt store reclaiming old receipts with racing-hold rollback, replay after receipt purge refused, full store with no old receipt refused by tool and schema), cross-project isolation and unchanged customer data and publications.`);
 }finally{await store.close();}
