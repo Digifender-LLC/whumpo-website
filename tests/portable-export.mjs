@@ -27,8 +27,8 @@ for(const k of consoleMethods)console[k]=(...args)=>{logs.push(args.map(String).
 const say=text=>process.stdout.write(text+'\n');
 const m=await currentSiteFixtureHandlers(),fixture=await databaseFixture(),{db}=fixture,id=()=>crypto.randomUUID();
 const originalFetch=globalThis.fetch;let network=0;globalThis.fetch=async()=>{network++;throw Error('No network is allowed');};
-const objects=new Map(),FILES={
- get:async key=>{const bytes=objects.get(key);return bytes?{size:bytes.length,arrayBuffer:async()=>bytes.slice().buffer,body:{cancel:async()=>{}}}:null;},
+const objects=new Map();let objectReads=0;const FILES={
+ get:async key=>{objectReads++;const bytes=objects.get(key);return bytes?{size:bytes.length,arrayBuffer:async()=>bytes.slice().buffer,body:{cancel:async()=>{}}}:null;},
  head:async key=>objects.has(key)?{size:objects.get(key).length}:null,put:async()=>assert.fail('No upload in this suite'),delete:async key=>{objects.delete(key);},list:async()=>({objects:[],truncated:false}),
 };
 const runtime={fetch:async(_url,init)=>{const input=JSON.parse(init.body).input;return Response.json({ok:true,value:input&&typeof input==='object'&&'state'in input?{state:input.state,result:null}:input});}};
@@ -56,8 +56,10 @@ async function owner(proofOffset=-5,name='Shine Mobile Detailing',purpose='Mobil
   await run("INSERT INTO feature_preview_grants VALUES(?,1,?,?,?,?,'private-test-acceptance','synthetic WH-187 fixture',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",id(),actor.account,site.project,feature,operation);
  return {...actor,scope,user:actor.account,...site};
 }
-async function photo(o,label,state='pending'){
- const file=id(),bytes=new Uint8Array([0xff,0xd8,0xff,0xe0,...Buffer.from(label+'-'+file)]),key=`photos/${o.project}/${file}.jpg`;objects.set(key,bytes);
+async function photo(o,label,state='pending',size=0){
+ const file=id(),key=`photos/${o.project}/${file}.jpg`;let bytes=new Uint8Array([0xff,0xd8,0xff,0xe0,...Buffer.from(label+'-'+file)]);
+ if(size>bytes.length){const padded=new Uint8Array(size);padded.set(bytes);bytes=padded;}
+ objects.set(key,bytes);
  await run("INSERT INTO project_files(id,project_id,name,object_key,digest,size,width,height,status,created_at) VALUES(?,?,?,?,?,?,10,10,'ready',strftime('%Y-%m-%dT%H:%M:%fZ','now'))",file,o.project,'photo.jpg',key,sha(bytes),bytes.length);
  await setPhoto(file,state);
  return {file,bytes,key};
@@ -99,6 +101,14 @@ async function preservationHold(o,scope,file){
  await run("INSERT OR IGNORE INTO safety_case_roles(id,operator_ref,role,granted_by,granted_at) VALUES('grant-test-approver','human:approver','preservation_approver','human:test-administrator',unixepoch())");
  await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,file_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES(?,?,?,?,?,?,'HOLD-BASIS-MARKER','human:approver',unixepoch(),unixepoch()+86400)",hold,caseId,o.user,scope,scope==='account'?null:o.project,file??null);
  return ()=>run("UPDATE safety_preservation_holds SET released_at=unixepoch(),released_by='human:approver',release_ref='release-1' WHERE id=?",hold);
+}
+/** One directory listing added and applied through the actual Chat command and confirmation (WH-129 snapshot). */
+async function directoryListing(o,title,description,url){
+ const turn=id(),sent=await m.sendChat(o.scope,o.user,{id:turn,content:`/directory-add ${o.project} | ${title} | ${description} | ${url}`,revision:(await m.readChat(o.scope,o.user)).state.revision});
+ assert.equal(sent.status,200,JSON.stringify(sent));
+ const applied=await m.sendChatControl(o.scope,o.user,{id:id(),revision:(await m.readChat(o.scope,o.user)).state.revision,action:{type:'confirm',kind:'directory',reviewId:turn}});
+ assert.equal(applied.status,200,JSON.stringify(applied));
+ return turn;
 }
 const screeningHold=(user,digest)=>run("INSERT INTO content_screening_decisions(user_id,kind,digest,policy_version,first_required,required,first_reason,first_percent,first_risk_score) VALUES(?,'generated_artifact',?,'synthetic-retired-policy',1,1,'risk_or_missing_history',100,60)",user,digest);
 /** A first website saved through the same database admission as createWebsite, with an edited page (staff audience or a
@@ -270,6 +280,20 @@ try{
   await throwsCode(async()=>m.portableBundle.composePortableBundle(await m.portableExport.readPortableProject({DB:a.scope,FILES},a.user,a.project,false),{ownerId:b.user,projectId:a.project,visitorData:false,cutoff:'2026-10-09T00:00:00.000Z'}),'FORBIDDEN');
  });
 
+ await check('directory: data/directory.json passes the WH-129 import validator with the applied snapshot digest and serializer key order',async()=>{
+  const d=await owner(-5,'Community directory','Neighbourhood listings');
+  const garden=await directoryListing(d,'Garden club','Saturday mornings','https://example.com/garden'),books=await directoryListing(d,'Book swap','Second Sunday of the month','');
+  const bundle=await portable(d),text=bundle.text('data/directory.json'),doc=JSON.parse(text);
+  const valid=await m.directory.validateDirectoryExport(doc);
+  assert.deepEqual(valid.listings.map(l=>l.id),[garden,books],'Snapshot order is kept');
+  const history=await m.directory.directoryHistory(d.scope,d.user,d.project),serialized=await m.directory.exportDirectory(d.scope,d.user,d.project,history.snapshots[0].id);
+  assert.equal(doc.snapshot.listingsSha256,history.snapshots[0].digest,'The checksum is the applied snapshot digest');
+  assert.equal(JSON.stringify(doc.listings),JSON.stringify(serialized.listings),'Listings keep the serializer key order');
+  assert.deepEqual(doc,serialized);
+  assert.deepEqual(Object.keys(doc),Object.keys(doc).sort(),'The wrapper is canonical JSON');
+  assert.equal(bundle.manifest.unavailable.find(e=>e.capability==='content-collections').status,'data-only');
+ });
+
  await check('exact review: owner-only, single use, replay, wrong digest, stale binding, stale proof and cross-format refusals like the account export',async()=>{
   const review=await prepare(a);
   assert.equal(review.format,'whumpo-portable-export');assert.equal(review.projectId,a.project);assert.equal(review.visitorData,false);
@@ -308,6 +332,43 @@ try{
   await run('UPDATE account_export_usage SET downloads=0,photo_reads=5000 WHERE user_id=?',b.user);
   await refused(await account(b,'portable/download',{reviewId:capped.id,reviewDigest:capped.digest}),503,'unavailable');
   await run('UPDATE account_export_usage SET downloads=0,photo_reads=0 WHERE user_id=?',b.user);
+  // Every private object read is charged to the per-account photo allowance, module files (WH-128 serializer) included:
+  // the charge equals the JPEG entries in a visitor-data bundle (the owner-filed photo is read and charged twice).
+  const usageOf=async user=>(await row("SELECT photo_reads FROM account_export_usage WHERE user_id=? AND period=strftime('%Y-%m','now')",user))?.photo_reads??0;
+  const charged=await usageOf(a.user),reads=objectReads,withVisitors=await portable(a,{visitorData:true});
+  const jpegs=withVisitors.manifest.files.filter(f=>f.path.endsWith('.jpg')).length;
+  assert.ok(withVisitors.manifest.files.some(f=>f.path.startsWith('data/files/uploads/drop/')),'A visitor module file is in the bundle');
+  assert.equal(objectReads-reads,jpegs);assert.equal(await usageOf(a.user)-charged,jpegs,'Module file reads draw on the per-account photo allowance');
+  // With room for the library photos but not the module files, the download is refused by the per-account cap.
+  const library=withVisitors.manifest.files.filter(f=>f.path.endsWith('.jpg')&&!f.path.startsWith('data/files/')).length;
+  await run("UPDATE account_export_usage SET photo_reads=? WHERE user_id=? AND period=strftime('%Y-%m','now')",5000-library,a.user);
+  const capped2=await prepare(a,{visitorData:true});
+  await refused(await account(a,'portable/download',{reviewId:capped2.id,reviewDigest:capped2.digest}),503,'unavailable');
+  await run('UPDATE account_export_usage SET downloads=0,photo_reads=0 WHERE user_id=?',a.user);
+ });
+
+ await check('size bound: stored sizes over the bundle bound are refused before a review is consumed or any object read or charged',async()=>{
+  const big=await owner(-5,'Large library','Large photo library');
+  {const turn=await control(big,{type:'filesModuleReview',projectId:big.project});const q=await m.readSpecificationProposal(big.scope,big.user,turn);const applied=await applyFixtureWebsite(big.scope,big.user,q);assert.equal(applied.status,200,applied.error);}
+  await activate(big,'photos');
+  const media=await row("SELECT id FROM module_instances WHERE project_id=? AND local_id='photos'",big.project);
+  // A review prepared while the library is empty; then 20 approved 1 MiB owner photos filed into the owner collection:
+  // 20 MiB of owner data, and 40 MiB of entries with visitor datasets (each filed photo is also a module file).
+  const early=await prepare(big,{visitorData:true});
+  for(let n=0;n<20;n++){const f=await photo(big,'LARGE-'+n,'approved',1048576);await run("INSERT INTO module_files(file_id,instance_id,project_id,collection_id,uploader_kind,visitor_id,request_id,created_at) VALUES(?,?,?,'library','owner',NULL,?,unixepoch())",f.file,media.id,big.project,id());}
+  const usage=async()=>({...await row("SELECT downloads,photo_reads FROM account_export_usage WHERE user_id=? AND period=strftime('%Y-%m','now')",big.user)});
+  const before=await usage(),reads=objectReads;
+  await refused(await account(big,'portable/prepare',{requestId:id(),projectId:big.project,visitorData:true}),413,'bundle_too_large');
+  await refused(await account(big,'portable/download',{reviewId:early.id,reviewDigest:early.digest}),413,'bundle_too_large');
+  assert.ok(await row('SELECT 1 x FROM account_lifecycle_reviews WHERE id=?',early.id),'The doomed review is not consumed');
+  assert.deepEqual(await usage(),before,'No download or photo read was charged');assert.equal(objectReads,reads,'No object was read');
+  // Owner data alone fits and still exports.
+  assert.equal((await portable(big)).manifest.files.filter(f=>f.path.endsWith('.jpg')).length,20);
+  // The reader's running budget stops before the first object that would cross the bound (32 x 1 MiB fit exactly).
+  const start=objectReads;
+  await throwsCode(()=>m.portableExport.readPortableProject({DB:big.scope,FILES},big.user,big.project,true),'BUNDLE_TOO_LARGE');
+  assert.equal(objectReads-start,32);
+  await sizeMutants(a,big);
  });
 
  await check('deterministic bytes: the route bundle equals the composer over the same rows and cutoff; reordered rows change nothing',async()=>{
@@ -433,6 +494,55 @@ async function readerMutants(o,program){
   ['held published source exported','src/account-lifecycle/portable.ts','if(published&&published.held!==1)programs.push','if(published)programs.push','held source never exported'],
   ['library read ignores approval','src/account-lifecycle/project-sections.ts',"f.status='ready' AND ${ownerLibrarySQL} AND ${approvedPhotoSQL} ORDER BY","f.status='ready' AND ${ownerLibrarySQL} ORDER BY",'unapproved media never exported'],
  ];
+ await killReaderMutants(named,mutants);
+}
+/** Size and allowance mutants over the large-library project (`big`, 20 approved 1 MiB owner-filed photos) and `o`. */
+async function sizeMutants(o,big){
+ const admitted=async(impl,actor)=>impl.admitWorkspace(db,await impl.resolveIdentity(db,{version:1,client:'web',kind:'session',token:actor.token}));
+ const usage=async user=>({...await row("SELECT downloads,photo_reads FROM account_export_usage WHERE user_id=? AND period=strftime('%Y-%m','now')",user)});
+ const reset=async()=>{await run('DELETE FROM account_lifecycle_reviews WHERE user_id=?',big.user);await run('UPDATE account_export_usage SET downloads=0,photo_reads=0 WHERE user_id IN (?,?)',big.user,o.user);};
+ const code=async(fn,status)=>{try{await fn();}catch(error){return error?.status===status?error.code:String(error?.code??error);}return 'accepted';};
+ const named={
+  'prepare refuses stored sizes over the bound':async impl=>{
+   try{assert.equal(await code(async()=>impl.portableExport.preparePortableExport(await admitted(impl,big),big.user,{version:1,requestId:id(),projectId:big.project,visitorData:true}),413),'bundle_too_large');}finally{await reset();}
+  },
+  'doomed review is not consumed':async impl=>{
+   // A visitor-data review prepared while the 20 photos are not yet filed in the owner collection (20 MiB), then filed
+   // again (40 MiB). The binding is content-free, so the review is still current at download.
+   const media=await row("SELECT id FROM module_instances WHERE project_id=? AND local_id='photos'",big.project);
+   const filed=(await db.prepare('SELECT file_id FROM module_files WHERE instance_id=?').bind(media.id).all()).results.map(r=>r.file_id);
+   const refile=async()=>{for(const file of filed)if(!await row('SELECT 1 x FROM module_files WHERE file_id=?',file))await run("INSERT INTO module_files(file_id,instance_id,project_id,collection_id,uploader_kind,visitor_id,request_id,created_at) VALUES(?,?,?,'library','owner',NULL,?,unixepoch())",file,media.id,big.project,id());};
+   try{
+    assert.equal(filed.length,20);await run('DELETE FROM module_files WHERE instance_id=?',media.id);
+    const scope=await admitted(impl,big),review=(await impl.portableExport.preparePortableExport(scope,big.user,{version:1,requestId:id(),projectId:big.project,visitorData:true})).review;
+    await refile();
+    const before=await usage(big.user),reads=objectReads;
+    assert.equal(await code(async()=>impl.portableExport.downloadPortableExport({DB:scope,FILES},big.user,{version:1,reviewId:review.id,reviewDigest:review.digest}),413),'bundle_too_large');
+    assert.ok(await row('SELECT 1 x FROM account_lifecycle_reviews WHERE id=?',review.id));assert.deepEqual(await usage(big.user),before);assert.equal(objectReads,reads);
+   }finally{await refile();await reset();}
+  },
+  'reader stops at the size bound':async impl=>{
+   const start=objectReads;
+   try{await throwsCode(async()=>impl.portableExport.readPortableProject({DB:await admitted(impl,big),FILES},big.user,big.project,true),'BUNDLE_TOO_LARGE');assert.equal(objectReads-start,32);}finally{await reset();}
+  },
+  'module file reads are charged':async impl=>{
+   try{
+    const before=(await usage(o.user)).photo_reads??0,reads=objectReads;
+    const source=await impl.portableExport.readPortableProject({DB:await admitted(impl,o),FILES},o.user,o.project,true);
+    assert.ok(source.files.some(f=>f.files.length>0));assert.equal(((await usage(o.user)).photo_reads??0)-before,objectReads-reads);
+   }finally{await reset();}
+  },
+ };
+ const portableFile='src/account-lifecycle/portable.ts';
+ await killReaderMutants(named,[
+  ['stored size not checked at prepare',portableFile," await assertStoredSize(db,user,data.projectId,data.visitorData);\n",'','prepare refuses stored sizes over the bound'],
+  ['stored size not checked before consumption',portableFile," await assertStoredSize(db,user,stored.projectId,stored.visitorData);\n",'','doomed review is not consumed'],
+  ['visitor files left out of the stored size',portableFile,' if(visitorData)for(const m of await ownedInstances(db,user,project))',' if(false)for(const m of await ownedInstances(db,user,project))','prepare refuses stored sizes over the bound'],
+  ['running size budget disabled',portableFile,"if(budget<0)throw new PortableBundleError('BUNDLE_TOO_LARGE','bytes');",'','reader stops at the size bound'],
+  ['module file reads not charged',portableFile,'reserveRead:async size=>{take(size);await reserveExportPhotoRead(db,user);}','reserveRead:async size=>{take(size);}','module file reads are charged'],
+ ]);
+}
+async function killReaderMutants(named,mutants){
  for(const [name,file,find,replace,killer] of mutants){
   readerKills.total++;
   const impl=await mutantBundle(file,find,replace);
@@ -461,11 +571,13 @@ async function composerMutants(){
   const file=(n,label,projectId=A,cleared=true)=>({...photo(n,label,projectId,cleared),uploadedBy:'visitor',visitorId:U(30),width:10,height:10,createdAt:day(1)});
   const R=U(20),F=U(21),X=U(22),C=U(23);
   const record=(n,message,createdAt,expiresAt)=>({entryId:U(n),formId:'ask',fieldsRevision:1,submittedBy:'public',visitorId:null,revision:1,createdAt,updatedAt:createdAt,expiresAt,values:{message}});
+  // WH-129 serializer shape: snapshot order (not by ID) and the serializer's non-alphabetical key order.
+  const listings=[{id:U(12),title:'Main Street',description:'Open daily',url:'https://example.com/main'},{id:U(11),title:'Harbour',description:'',url:''}];
   return {ownerId:'owner-a',project:{id:A,ownerId:'owner-a',name:'Shine'},
    specification:{projectId:A,versionId:U(90),digest:await m.jsonDigest(spec),json:JSON.stringify(spec),schemaVersion:3,compiler:pinOf('project-content'),components:[{id:'site-page@1',digest:sha('s')},{id:'photo-page@1',digest:sha('p')}],held},
    site:{projectId:A,versionId:U(90),component:'photo-page@1',html:page,digest:sha(page),photos:[{fileId:U(1),projectId:A}]},
    photos:[photo(1,'PAGE-PHOTO'),photo(2,'APPROVED-UNUSED'),photo(3,'PENDING-BYTES-MARKER',A,false),photo(4,'HELD-BYTES-MARKER',A,false),photo(5,'FOREIGN-ROW-MARKER',B)],withheldPhotos:1,
-   directory:{projectId:A,document:{format:'whumpo-directory',schemaVersion:1,project:{id:A,name:'Shine'},snapshot:{id:U(10),appliedAt:day(2),kind:'publish',restoredFrom:null,listingsSha256:sha('l')},listings:[{id:U(11),title:'Main Street',description:'',url:''}]}},
+   directory:{projectId:A,document:{format:'whumpo-directory',schemaVersion:1,project:{id:A,name:'Shine'},snapshot:{id:U(10),appliedAt:day(2),kind:'publish',restoredFrom:null,listingsSha256:sha(JSON.stringify(listings))},listings}},
    instances:[{resourceId:R,projectId:A,localId:'enquiries',kind:'records',configRevision:1,module:pinOf('module-records'),schema:pinOf('records-data'),forms:true},
     {resourceId:F,projectId:A,localId:'media',kind:'files',configRevision:1,module:pinOf('module-files'),schema:pinOf('files-data'),forms:false},
     {resourceId:X,projectId:A,localId:'visitors',kind:'access',configRevision:1,module:pinOf('module-access'),schema:pinOf('access-data'),forms:false},
@@ -547,6 +659,22 @@ async function composerMutants(){
    assert.deepEqual(report.find(e=>e.capability==='custom-functions').resources,[U(60)]);
    assert.deepEqual(baseBundle.manifest.reconfigure.map(r=>r.capability),['access','connectors','content-pages','domains','forms','notifications']);
   });
+  await test('directory import format',async()=>{
+   const doc=JSON.parse(Buffer.from(new Map(reference.unpackEntries(baseBundle.bytes)).get('data/directory.json')).toString());
+   assert.deepEqual((await m.directory.validateDirectoryExport(doc)).listings.map(l=>l.id),[U(12),U(11)],'The WH-129 validator accepts it; snapshot order, not ID order');
+   assert.equal(JSON.stringify(doc.listings),JSON.stringify((await synthetic()).directory.document.listings),'Serializer key order (id, title, description, url)');
+   assert.deepEqual(Object.keys(doc),Object.keys(doc).sort(),'The wrapper is canonical');
+   const s=await synthetic();s.directory.document.snapshot.listingsSha256=sha('tampered');await throwsCode(()=>build({source:s}),'UNAVAILABLE');
+   const t=await synthetic();t.directory.document.listings[1].note='x';await throwsCode(()=>build({source:t}),'UNAVAILABLE');
+  });
+  await test('case-insensitive paths',async()=>{
+   for(const bundle of [baseBundle,visitors]){
+    const paths=bundle.manifest.files.map(f=>f.path);
+    assert.equal(new Set(paths.map(p=>p.toLowerCase())).size,paths.length);assert.deepEqual(paths.filter(p=>/[A-Z]/.test(p)),['README.txt','RECONFIGURE.txt']);
+   }
+   const s=await synthetic();s.frontends[1].files={'index.html':'<p>a</p>','Index.html':'<p>b</p>'};await throwsCode(()=>build({source:s}),'UNSAFE_PATH');
+   const t=await synthetic();t.frontends[1].files={'assets/Logo.svg':'<svg/>'};await throwsCode(()=>build({source:t}),'UNSAFE_PATH');
+  });
   await test('bounds fail closed',async()=>{
    const s=await synthetic();s.programs[0].source='x'.repeat(2*1024*1024+1);s.programs[0].digest=sha(s.programs[0].source);await throwsCode(()=>build({source:s}),'BUNDLE_TOO_LARGE');
    const t=await synthetic();t.records[0].document.next='more';await throwsCode(()=>build({source:t},{visitorData:true}),'BUNDLE_TOO_LARGE');
@@ -578,6 +706,10 @@ async function composerMutants(){
   ['object keys not canonicalised','for(const key of Object.keys(value).sort(byPath))out[key]','for(const key of Object.keys(value))out[key]','reader conformance'],
   ['file bound not enforced',"check(bytes.length<=portableBounds.fileBytes,'BUNDLE_TOO_LARGE',path);",'','bounds fail closed'],
   ['partial records accepted',"check(doc.next===null,'BUNDLE_TOO_LARGE',`records ${instance.localId}/${set.schemaId}`);",'','bounds fail closed'],
+  ['directory listings key-sorted','  if(serializerOrder.has(value))return value;\n','','directory import format'],
+  ['directory digest not verified',"check(await sha256(JSON.stringify(listings))===(doc.snapshot as Json|undefined)?.listingsSha256,'UNAVAILABLE','directory digest');",'','directory import format'],
+  ['directory listing shape not checked',"Object.keys(v).length===listingKeys.length&&",'','directory import format'],
+  ['capital paths allowed',"&&(!/[A-Z]/.test(path)||capitalNames.has(path))",'','case-insensitive paths'],
  ];
  let killed=0;
  for(const [name,find,replace,killer] of mutants){

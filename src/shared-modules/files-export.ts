@@ -21,7 +21,11 @@ const local=/^[a-z][a-z0-9-]{0,39}$/;
 const pageSize=8;
 type Row={id:string;object_key:string;digest:string;size:number;width:number;height:number;created_at:string;module_created_at:number;uploader_kind:'owner'|'staff'|'visitor';visitor_id:string|null};
 type ExportFile={fileId:string;uploadedBy:'owner'|'staff'|'visitor';visitorId:string|null;mediaType:'image/jpeg';width:number;height:number;size:number;sha256:string;createdAt:string;bytes:string};
-export type FilesExportOptions={collectionId:string;visitorId?:string|null;after?:string|null};
+export type FilesExportOptions={collectionId:string;visitorId?:string|null;after?:string|null;
+ /** Reserves one private object read of `size` stored bytes before it happens. Default: the platform-wide storage
+  * ceiling. The WH-018/WH-187 exports pass a reservation that charges the per-account export allowance first (and the
+  * portable bundle its size budget); a `StorageLimitError` from it is `limited`, any other error propagates. */
+ reserveRead?:(size:number)=>Promise<void>};
 const base64=(bytes:Uint8Array)=>{let s='';for(let i=0;i<bytes.length;i+=0x8000)s+=String.fromCharCode(...bytes.subarray(i,i+0x8000));return btoa(s);};
 const unbase64=(value:string)=>Uint8Array.from(atob(value),c=>c.charCodeAt(0));
 type Cursor={v:1;k:string;c:number;t:number;i:string};
@@ -60,10 +64,10 @@ export async function exportFiles(db:D1Database,files:R2Bucket,user:string,proje
   JOIN project_files f ON f.id=mf.file_id AND f.project_id=mf.project_id WHERE ${scope} AND ${approvedPhotoSQL}${cursor?' AND (mf.created_at<? OR mf.created_at=? AND mf.file_id<?)':''}
   ORDER BY mf.created_at DESC,mf.file_id DESC LIMIT ?`).bind(...params,...(cursor?[cursor.t,cursor.t,cursor.i]:[]),pageSize+1).all<Row>();
  const withheld=(await db.prepare(`SELECT count(*) n FROM module_files mf JOIN project_files f ON f.id=mf.file_id AND f.project_id=mf.project_id WHERE ${scope} AND NOT ${approvedPhotoSQL}`).bind(...params).first<{n:number}>())?.n??0;
- const out:ExportFile[]=[];
+ const out:ExportFile[]=[],reserve=options.reserveRead??(()=>reserveStorage(db,'read'));
  for(const r of results.slice(0,pageSize)){
   if(r.size>maxPhotoBytes)throw new ModuleError('unavailable','A file could not be verified.');
-  try{await reserveStorage(db,'read');}catch(error){if(error instanceof StorageLimitError)throw new ModuleError('limited');throw error;}
+  try{await reserve(r.size);}catch(error){if(error instanceof StorageLimitError)throw new ModuleError('limited');throw error;}
   const object=await files.get(r.object_key);
   if(!object)throw new ModuleError('unavailable','A file could not be verified.');
   if(object.size!==r.size){await object.body.cancel();throw new ModuleError('unavailable','A file could not be verified.');}

@@ -19,13 +19,30 @@ import {pin} from '../shared-modules/registry';
 import type {ModuleKind} from '../project-specification/v3/modules';
 import {AccountLifecycleError} from './errors';
 import {consumeExportReview,exactRequest,exportDownloadRequest,loadExportReview,saveAccountReview} from './review';
-import {approvedLibraryPhotos,accessRolesSection,datasetTargets,latestDirectory,ownedInstances,specificationHead,visitorDatasetPages,withheldLibraryPhotos,type FilesPage,type RecordsPage,type SectionEnv} from './project-sections';
-import {composePortableBundle,PortableBundleError,portableFilter,portableFormat,portableFormatVersion,type PortableRecord,type PortableSource} from './portable-bundle';
+import {approvedLibraryPhotos,accessRolesSection,datasetTargets,latestDirectory,ownedInstances,reserveExportPhotoRead,specificationHead,visitorDatasetPages,withheldLibraryPhotos,type FilesPage,type RecordsPage,type SectionEnv} from './project-sections';
+import {composePortableBundle,PortableBundleError,portableBounds,portableFilter,portableFormat,portableFormatVersion,type PortableRecord,type PortableSource} from './portable-bundle';
+import {approvedPhotoSQL,ownerLibrarySQL} from '../photo-safety';
 
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 /** One serializer page per records schema (200 records) and 64 pages per files collection (512 files) in this slice;
  * a larger data set fails closed with BUNDLE_TOO_LARGE rather than producing a partial bundle. */
 const filesPagesPerCollection=64;
+const tooLarge=()=>new AccountLifecycleError(413,'bundle_too_large','This project is larger than a portable export allows in this test release. Nothing partial was produced.');
+
+/** A lower bound of the bundle size from stored sizes alone (no object is read or charged): every approved owner library
+ * photo is at least one entry and, with visitor datasets, every approved module file of a configured collection is another
+ * (an owner-filed photo is both). Above the archive bound the bundle cannot be built, so prepare refuses it before a review
+ * exists and download refuses it before the review or any allowance is consumed. */
+async function storedBytesFloor(db:D1Database,user:string,project:string,visitorData:boolean){
+ let total=(await db.prepare(`SELECT coalesce(sum(f.size),0) n FROM project_files f WHERE f.project_id=? AND f.status='ready' AND ${ownerLibrarySQL} AND ${approvedPhotoSQL}`).bind(project).first<{n:number}>())?.n??0;
+ if(visitorData)for(const m of await ownedInstances(db,user,project))if(m.kind==='files')for(const target of datasetTargets(m))
+  total+=(await db.prepare(`SELECT coalesce(sum(f.size),0) n FROM module_files mf JOIN project_files f ON f.id=mf.file_id AND f.project_id=mf.project_id
+   WHERE mf.instance_id=? AND mf.project_id=? AND mf.collection_id=? AND f.status='ready' AND ${approvedPhotoSQL}`).bind(m.id,project,target).first<{n:number}>())?.n??0;
+ return total;
+}
+async function assertStoredSize(db:D1Database,user:string,project:string,visitorData:boolean){
+ if(await storedBytesFloor(db,user,project,visitorData)>portableBounds.archiveBytes)throw tooLarge();
+}
 
 type ProjectRow={id:string;name:string;spec_revision:number|null;spec_version:string|null;directory_revision:number|null;backend_revision:number|null;app_revision:number|null};
 async function ownedProject(db:D1Database,user:string,project:string){
@@ -51,6 +68,7 @@ export async function preparePortableExport(db:D1Database,user:string,input:unkn
  // Another owner's project and a missing project are one generic refusal.
  if(!binding)throw new AccountLifecycleError(404,'not_found','Project not found.');
  if(binding.specVersionId===null)throw new AccountLifecycleError(409,'action_required','Save a website for this project before preparing a portable export.');
+ await assertStoredSize(db,user,data.projectId,data.visitorData);
  const saved=await saveAccountReview(db,user,'export',data.requestId,await hashToken(JSON.stringify(['portable-export@1',user,data.projectId,data.visitorData])),binding);
  if(JSON.stringify(saved.binding)!==JSON.stringify(binding))throw new AccountLifecycleError(409,'stale_review','This project changed since this review. Prepare a new portable export review.');
  const visitorSets=binding.modules.filter(m=>m[1]==='records'||m[1]==='files').length;
@@ -84,8 +102,12 @@ export async function readPortableProject(env:SectionEnv,user:string,project:str
    }
   }
  }
+ // Running size budget over stored object sizes: the read stops before the first object that would take the photo and
+ // file entries past the archive bound, so a bundle that cannot be built never reads or charges further objects.
+ let budget:number=portableBounds.archiveBytes;
+ const take=(size:number)=>{budget-=size;if(budget<0)throw new PortableBundleError('BUNDLE_TOO_LARGE','bytes');};
  const photos:PortableSource['photos']=[];
- for await(const f of approvedLibraryPhotos(env,user,project))photos.push({id:f.id,projectId:f.project_id,digest:f.digest,bytes:f.bytes,cleared:true});
+ for await(const f of approvedLibraryPhotos(env,user,project,take))photos.push({id:f.id,projectId:f.project_id,digest:f.digest,bytes:f.bytes,cleared:true});
  const withheldPhotos=await withheldLibraryPhotos(db,project);
  const directoryDoc=await latestDirectory(db,user,project);
  const rows=await ownedInstances(db,user,project);
@@ -97,17 +119,22 @@ export async function readPortableProject(env:SectionEnv,user:string,project:str
   if(m.kind==='access'){
    const document=await accessRolesSection(db,user,project,m);
    if(document)roles.push({resourceId:m.id,projectId:m.project_id,document});
-  }else if(visitorData&&(m.kind==='records'||m.kind==='files')){
+  }else if(visitorData&&m.kind==='records'){
    for(const target of datasetTargets(m)){
-    const {pages,complete}=await visitorDatasetPages(env,user,project,m,target,m.kind==='records'?1:filesPagesPerCollection);
-    if(m.kind==='records'){
-     const page=pages[0] as RecordsPage;
-     records.push({resourceId:m.id,projectId:m.project_id,schemaId:target,retentionDays:config.retentionDays??0,document:page as unknown as PortableSource['records'][number]['document']});
-    }else{
-     const list=pages as FilesPage[];
-     files.push({resourceId:m.id,projectId:m.project_id,collectionId:target,withheld:list[0]?.withheld??0,complete,
-      files:list.flatMap(p=>p.files.map(f=>({id:f.fileId,projectId:p.project.id,digest:f.sha256,bytes:Uint8Array.from(atob(f.bytes),c=>c.charCodeAt(0)),cleared:true,uploadedBy:f.uploadedBy,visitorId:f.visitorId,width:f.width,height:f.height,createdAt:f.createdAt})))});
-    }
+    const page=(await visitorDatasetPages(env,user,project,m,target,1)).pages[0] as RecordsPage;
+    records.push({resourceId:m.id,projectId:m.project_id,schemaId:target,retentionDays:config.retentionDays??0,document:page as unknown as PortableSource['records'][number]['document']});
+   }
+  }else if(visitorData&&m.kind==='files'){
+   for(const target of datasetTargets(m)){
+    // Each serializer page is decoded as it arrives and its base64 text dropped, so one copy of each file is held.
+    const list:PortableSource['files'][number]['files']=[];let withheld:number|null=null;
+    const {complete}=await visitorDatasetPages(env,user,project,m,target,filesPagesPerCollection,{
+     reserveRead:async size=>{take(size);await reserveExportPhotoRead(db,user);},
+     each:page=>{
+      const p=page as FilesPage;withheld??=p.withheld;
+      for(const f of p.files)list.push({id:f.fileId,projectId:p.project.id,digest:f.sha256,bytes:Uint8Array.from(atob(f.bytes),c=>c.charCodeAt(0)),cleared:true,uploadedBy:f.uploadedBy,visitorId:f.visitorId,width:f.width,height:f.height,createdAt:f.createdAt});
+     }});
+    files.push({resourceId:m.id,projectId:m.project_id,collectionId:target,withheld:withheld??0,complete,files:list});
    }
   }
  }
@@ -139,8 +166,9 @@ export async function readPortableProject(env:SectionEnv,user:string,project:str
   resources:{customFunctions:application?[application.resource_id]:[]}};
 }
 
-/** Fresh passkey proof, the unexpired exact portable review and an unchanged binding; the single-use download and the
- * monthly allowance are consumed before any read, then the bundle is composed and returned with its SHA-256. */
+/** Fresh passkey proof, the unexpired exact portable review, an unchanged binding and stored sizes within the bound; the
+ * single-use download and the monthly allowance are consumed before any read, then the bundle is composed (object reads
+ * under the running size budget) and returned with its SHA-256. */
 export async function downloadPortableExport(env:SectionEnv,user:string,input:unknown){
  const db=env.DB,data=exportDownloadRequest(input);
  await requireFreshWorkspace(db,user);
@@ -150,6 +178,8 @@ export async function downloadPortableExport(env:SectionEnv,user:string,input:un
  if(stored.format!==portableFormat||typeof stored.projectId!=='string'||typeof stored.visitorData!=='boolean')throw new AccountLifecycleError(409,'stale_review','This export review is no longer current. Prepare a new review.');
  const binding=await portableBinding(db,user,stored.projectId,stored.visitorData);
  if(!binding||JSON.stringify(binding)!==review.binding_json)throw new AccountLifecycleError(409,'stale_review','This project changed since this review. Prepare a new portable export review.');
+ // The binding is content-free, so photos approved after the review are re-measured here, before anything is consumed.
+ await assertStoredSize(db,user,stored.projectId,stored.visitorData);
  await consumeExportReview(db,user,data.reviewId,data.reviewDigest);
  const cutoff=new Date(review.created_at*1000).toISOString();
  let bundle:Awaited<ReturnType<typeof composePortableBundle>>;
@@ -158,7 +188,7 @@ export async function downloadPortableExport(env:SectionEnv,user:string,input:un
   bundle=await composePortableBundle(source,{ownerId:user,projectId:stored.projectId,visitorData:stored.visitorData,cutoff});
  }catch(error){
   if(error instanceof PortableBundleError){
-   if(error.code==='BUNDLE_TOO_LARGE')throw new AccountLifecycleError(413,'bundle_too_large','This project is larger than a portable export allows in this test release. Nothing partial was produced.');
+   if(error.code==='BUNDLE_TOO_LARGE')throw tooLarge();
    if(error.code==='FORBIDDEN')throw new AccountLifecycleError(404,'not_found','Project not found.');
    throw new AccountLifecycleError(503,'closure_unavailable','A portable export section could not be verified. Prepare a fresh export.');
   }

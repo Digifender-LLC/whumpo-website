@@ -2,8 +2,9 @@
  * portable project bundle (`whumpo-portable-export` v1, portable.ts) both read a project's owner data through these
  * functions, so there is one implementation of each read: the saved specification head, the latest applied directory
  * snapshot (WH-129 serializer), the approved owner photo library (approved-only, size and digest re-checked after the
- * private read, each read charged to the per-account export allowance before the platform-wide ceiling), the staff role
- * list (WH-126 serializer) and the visitor-subject records/files pages (WH-127/WH-128 serializers).
+ * private read), the staff role list (WH-126 serializer) and the visitor-subject records/files pages (WH-127/WH-128
+ * serializers). Every private object read, library photo or module file, is charged to the per-account export
+ * allowance before the platform-wide ceiling.
  *
  * Every statement uses the caller's admitted workspace database and owner id; the serializers recheck the current
  * workspace identity and project ownership themselves. Nothing here reads credentials, sessions, recovery material,
@@ -15,6 +16,7 @@ import {reserveStorage,StorageLimitError} from '../storage-budget';
 import {exportAccessRoles} from '../shared-modules/access-export';
 import {exportRecords} from '../shared-modules/records-export';
 import {exportFiles} from '../shared-modules/files-export';
+import {ModuleError} from '../shared-modules/policy';
 import {AccountLifecycleError} from './errors';
 
 export type SectionEnv={DB:D1Database;FILES?:R2Bucket};
@@ -57,12 +59,14 @@ export async function withheldLibraryPhotos(db:D1Database,project:string){
 }
 export type LibraryPhoto={id:string;project_id:string;digest:string;size:number;width:number;height:number;created_at:string;bytes:Uint8Array};
 /** Owner photo library: only ready photos whose exact digest is currently approved, read one at a time from private
- * storage after a per-account read reservation, size-checked and re-hashed. A missing or changed object fails closed. */
-export async function* approvedLibraryPhotos(env:SectionEnv,user:string,project:string):AsyncGenerator<LibraryPhoto>{
+ * storage after a per-account read reservation, size-checked and re-hashed. A missing or changed object fails closed.
+ * `beforeRead` sees each stored size before anything is reserved or read (the portable bundle's size budget). */
+export async function* approvedLibraryPhotos(env:SectionEnv,user:string,project:string,beforeRead?:(size:number)=>void):AsyncGenerator<LibraryPhoto>{
  const photos=(await env.DB.prepare(`SELECT f.id,f.project_id,f.object_key,f.digest,f.size,f.width,f.height,f.created_at FROM project_files f WHERE f.project_id=? AND f.status='ready' AND ${ownerLibrarySQL} AND ${approvedPhotoSQL} ORDER BY f.created_at,f.id`).bind(project).all<Omit<LibraryPhoto,'bytes'>&{object_key:string}>()).results;
  for(const f of photos){
   if(!env.FILES)throw new AccountLifecycleError(503,'closure_unavailable','Photo storage is unavailable. Try the export again later.');
   if(f.size>maxPhotoBytes)throw new AccountLifecycleError(503,'closure_unavailable','A photo could not be verified.');
+  beforeRead?.(f.size);
   await reserveExportPhotoRead(env.DB,user);
   const object=await env.FILES.get(f.object_key);
   if(!object||object.size!==f.size){await object?.body.cancel();throw new AccountLifecycleError(503,'closure_unavailable','A photo could not be verified.');}
@@ -86,14 +90,25 @@ export function datasetTargets(instance:InstanceRow){
 export type RecordsPage=Awaited<ReturnType<typeof exportRecords>>;
 export type FilesPage=Awaited<ReturnType<typeof exportFiles>>;
 /** Serializer pages of one visitor-subject data set (WH-127 records, WH-128 files), following the opaque cursor up to
- * `maxPages`. `complete` is false when more pages remain; each caller decides how its own bound fails closed. */
-export async function visitorDatasetPages(env:SectionEnv,user:string,project:string,instance:InstanceRow,target:string,maxPages:number){
- const pages:(RecordsPage|FilesPage)[]=[];let after:string|null=null;
+ * `maxPages`. `complete` is false when more pages remain; each caller decides how its own bound fails closed. Every
+ * module file read is charged to the per-account photo allowance before the platform-wide ceiling, like a library photo
+ * (`reserveRead` replaces that reservation; the portable bundle adds its size budget). With `each`, pages are handed
+ * over one at a time and not retained. */
+export async function visitorDatasetPages(env:SectionEnv,user:string,project:string,instance:InstanceRow,target:string,maxPages:number,
+ {reserveRead=()=>reserveExportPhotoRead(env.DB,user),each}:{reserveRead?:(size:number)=>Promise<void>;each?:(page:RecordsPage|FilesPage)=>void}={}){
+ const pages:(RecordsPage|FilesPage)[]=[];let after:string|null=null,read=0;
  do{
-  const page:RecordsPage|FilesPage=instance.kind==='records'
-   ?await exportRecords(env.DB,user,project,instance.id,instance.config_revision,{recordId:target,after})
-   :await exportFiles(env.DB,env.FILES as R2Bucket,user,project,instance.id,instance.config_revision,{collectionId:target,after});
-  pages.push(page);after=page.next;
- }while(after&&pages.length<maxPages);
+  let page:RecordsPage|FilesPage;
+  try{
+   page=instance.kind==='records'
+    ?await exportRecords(env.DB,user,project,instance.id,instance.config_revision,{recordId:target,after})
+    :await exportFiles(env.DB,env.FILES as R2Bucket,user,project,instance.id,instance.config_revision,{collectionId:target,after,reserveRead});
+  }catch(error){
+   // An exhausted read allowance is the same refusal as for a library photo, not a stale export section.
+   if(error instanceof ModuleError&&error.code==='limited')throw new StorageLimitError(allowanceMessage);
+   throw error;
+  }
+  read++;if(each)each(page);else pages.push(page);after=page.next;
+ }while(after&&read<maxPages);
  return {pages,complete:!after};
 }

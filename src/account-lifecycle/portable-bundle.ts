@@ -73,16 +73,25 @@ export const sha256=async(value:Uint8Array|string)=>hex(await crypto.subtle.dige
 const byPath=(a:string,b:string)=>a<b?-1:a>b?1:0;
 const byId=<T extends {id:string}>(a:T,b:T)=>byPath(a.id,b.id);
 
-/** Canonical JSON: object keys sorted, two-space indentation, trailing newline. Arrays keep their defined order. */
+/** WH-129 directory listings are the one object shape written in its own key order: the import validator
+ * (`validateDirectoryExport`) re-serializes them as `{id,title,description,url}` and compares that text and its SHA-256
+ * (`listingsSha256`, the applied snapshot's own digest), so sorting their keys would make every directory fail import. */
+const serializerOrder=new WeakSet<object>();
+/** Canonical JSON: object keys sorted (except directory listings, above), two-space indentation, trailing newline.
+ * Arrays keep their defined order. */
 function canonical(value:unknown):unknown{
  if(Array.isArray(value))return value.map(canonical);
- if(value&&typeof value==='object'){const out:Record<string,unknown>={};for(const key of Object.keys(value).sort(byPath))out[key]=canonical((value as Record<string,unknown>)[key]);return out;}
+ if(value&&typeof value==='object'){
+  if(serializerOrder.has(value))return value;
+  const out:Record<string,unknown>={};for(const key of Object.keys(value).sort(byPath))out[key]=canonical((value as Record<string,unknown>)[key]);return out;
+ }
  return value;
 }
 export const canonicalJSON=(value:unknown)=>JSON.stringify(canonical(value),null,2)+'\n';
 /** Serializer digests (`recordsSha256`, `rolesSha256`) are SHA-256 over `JSON.stringify` of their list. In a bundle the
  * list is stored canonically (sorted keys), so the digest is recomputed over exactly that form: a reader that parses the
- * file and re-serializes the list (the WH-126/127 import validators) gets the same digest. */
+ * file and re-serializes the list (the WH-126/127 import validators) gets the same digest. The directory digest is the
+ * exception: it is verified and kept, with listings in serializer order (see `serializerOrder`). */
 const listDigest=(list:unknown[])=>sha256(JSON.stringify(canonical(list)));
 
 // Credential-shaped structural keys never enter a bundle. Customer-defined record field values live under `values` and are
@@ -152,6 +161,16 @@ const notCleared='not-cleared';
 const jpeg=(bytes:Uint8Array)=>bytes.length>=3&&bytes[0]===0xff&&bytes[1]===0xd8&&bytes[2]===0xff;
 const localId=/^[a-z][a-z0-9-]{0,39}$/,uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 const safePath=/^[A-Za-z0-9][A-Za-z0-9_.-]*(?:\/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$/;
+const capitalNames=new Set(['README.txt','RECONFIGURE.txt']);
+const listingKeys=['id','title','description','url'] as const;
+/** One WH-129 listing, exactly `{id,title,description,url}` strings, rebuilt in that order and kept out of key sorting. */
+function directoryListing(value:unknown){
+ const v=value as Record<string,unknown>;
+ check(!!value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(v).length===listingKeys.length&&listingKeys.every(k=>typeof v[k]==='string'),'UNAVAILABLE','directory listing');
+ const out={id:v.id as string,title:v.title as string,description:v.description as string,url:v.url as string};
+ serializerOrder.add(out);
+ return out;
+}
 
 /** Composes the bundle. `cutoff` comes from the export review (its creation time), never from the build clock. */
 export async function composePortableBundle(source:PortableSource,{ownerId,projectId,visitorData,cutoff}:{ownerId:string;projectId:string;visitorData:boolean;cutoff:string}){
@@ -164,7 +183,9 @@ export async function composePortableBundle(source:PortableSource,{ownerId,proje
  const files=new Map<string,{bytes:Uint8Array;tier:string;classId:string}>(),exclusions=new Map<string,number|null>();
  const exclude=(category:string,n:number|null=1)=>{if(n!==null&&n<=0)return;exclusions.set(category,n===null?null:((exclusions.get(category)??0)+n));};
  const put=(path:string,content:Uint8Array|string,tier:string,classId:string)=>{
-  check(safePath.test(path)&&!path.split('/').includes('..')&&encoder.encode(path).length<=portableBounds.pathBytes,'UNSAFE_PATH',path);
+  // Only the two fixed report files use capitals, so every other path is lowercase and no two entries can collide on a
+  // case-insensitive filesystem (`index.html` and `Index.html` in a customer frontend fail closed).
+  check(safePath.test(path)&&!path.split('/').includes('..')&&encoder.encode(path).length<=portableBounds.pathBytes&&(!/[A-Z]/.test(path)||capitalNames.has(path)),'UNSAFE_PATH',path);
   check(!files.has(path),'DUPLICATE_PATH',path);
   const bytes=typeof content==='string'?encoder.encode(content):content;
   check(bytes.length<=portableBounds.fileBytes,'BUNDLE_TOO_LARGE',path);
@@ -228,11 +249,18 @@ export async function composePortableBundle(source:PortableSource,{ownerId,proje
   for(const [rel,content] of Object.entries(frontend.files).sort(([a],[b])=>byPath(a,b)))put(`frontend/${frontend.id}/${rel}`,content,'source','project-configurations');
  }
 
- // Directory (owner content collection data).
+ // Directory (owner content collection data): the WH-129 document with its listings in snapshot order and serializer key
+ // order, so `listingsSha256` stays the applied snapshot's own digest (verified here, never recomputed) and the WH-129
+ // import validator accepts the file.
  const directory=source.directory;
  if(directory&&owned(directory)&&(directory.document.project as Json|undefined)?.id===projectId){
   used.add('content-collections');
-  putJSON('data/directory.json',directory.document,'data','directories');
+  const doc=directory.document;
+  assertNoCredentialKeys(doc);
+  check(Array.isArray(doc.listings),'UNAVAILABLE','directory listings');
+  const listings=(doc.listings as unknown[]).map(directoryListing);
+  check(await sha256(JSON.stringify(listings))===(doc.snapshot as Json|undefined)?.listingsSha256,'UNAVAILABLE','directory digest');
+  putJSON('data/directory.json',{...doc,listings},'data','directories');
  }
 
  // Module instances, exact pins and data sets.
