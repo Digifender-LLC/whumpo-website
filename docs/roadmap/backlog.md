@@ -2,7 +2,7 @@
 
 > Generated from `backlog.json` by `node tools/roadmap.mjs render`. Edit the JSON source, then render again.
 
-Reviewed 2026-10-01 against source `db8b740ab2346f55f2985593b1ec531a99027630`. 144 planned tasks.
+Reviewed 2026-10-01 against source `db8b740ab2346f55f2985593b1ec531a99027630`. 151 planned tasks.
 
 Planning readiness and dependencies describe the plan. Current execution, claims, blockers, and completion evidence live in GitHub Issues. A ready task is only a candidate: verify live dependency completion and authorization before work.
 
@@ -7482,7 +7482,7 @@ Customers configure deterministic notifications while Whumpo maintains one deliv
 
 ### Dependencies and blockers
 
-Planning dependencies: WH-067, WH-036, WH-052. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+Planning dependencies: WH-067, WH-036, WH-052, WH-154, WH-155, WH-156, WH-157, WH-158, WH-159, WH-160. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
 No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
 
@@ -7492,6 +7492,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/contact-forms.md](../../docs/contact-forms.md)
 - [docs/background-jobs.md](../../docs/background-jobs.md)
 - [docs/integrations/cloudflare-dns.md](../../docs/integrations/cloudflare-dns.md)
+- [docs/notifications.md](../../docs/notifications.md)
 
 ### Execution coordination
 
@@ -7499,7 +7500,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-08 UTC: decomposed into WH-154 to WH-160 with the planned contract in docs/notifications.md (WH-154). Planning and offline reference only: no table, route, binding, provider, sender, DNS record, schedule or deployment, and no src/ behavior change. The parent acceptance is unchanged and closes only after every child; no child depends on WH-069, WH-080 or WH-094. WH-036 source (owner-destination contact notices) is mapped with exact gaps G-N1 to G-N10; its live canary stays a WH-036/WH-160 gate.
 
 ## WH-069 — Run stored automation rules on a shared deterministic engine
 
@@ -8015,6 +8016,369 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 ### Evidence
 
 - 2026-10-04 UTC: source and local verification only; not deployed, not accepted, issue not created or claimed from this session; WH-129 stays open until accepted. Branch c/great-curie-8ryukc (PR #160) makes the project directory the content-collections instance (directory-listing@1) without a schema change: at most one content instance per project governs the existing directories/directory_reviews/directory_exports rows. src/shared-modules/collections.ts registers collections.readPublic (target {collectionId}, read) through the shared resolver, policy table and read fence, serving only the approved snapshot via the same publicDirectory reader as /directory.json (unpublished, offline or parent-restore-invalidated is unavailable; drafts, revisions and history never appear) on the visitor origin and the owner module route. Owner edits keep the existing directory Chat reviews; no write, staff path or collection type is added. The content descriptor marks directories eligible project data with exportHook collections-directory-export-v1 (deleteHook project-cascade, restoreHook unsupported); exportCollectionSnapshot returns exportDirectory's whumpo-directory v1 document (owner, current configRevision, every activation state, withdrawn or restaged pin) and validateDirectoryExport is its import validation. Compiler identity, schema inputs and module pins unchanged. Conservative default: the public site routes /directory and /directory.json keep serving without an instance (requiring activation would gate the free directory behind core.editing; owner decision). Verified: tests/shared-modules-collections.mjs (SQLite and --d1, 7 groups), tests/directories.mjs and tests/directory-history.mjs (local D1), shared-modules-registry/access/records/files (SQLite and --d1), shared-modules-contract, tools/safety-hold-inventory.mjs, pnpm check, verify fast/protection, pnpm build. Remaining: custom-domain directory paths, a lifecycle restore/import hook, the site-route decision; deploys only with the owner-run empty-database cutover that the module registry needs.
+
+## WH-154 — Freeze the shared notification contract and decompose WH-068
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **ready**. Kind: decision. Size: S.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Every WH-068 slice builds against one frozen template, sender, recipient-scope, consent, receipt-state and review model instead of inventing its own.
+
+### Scope
+
+- Freeze the versioned template shape (closed segments, typed variables, fixed platform links, plain text), the verified sender catalog and provider review/price/ceiling facts
+- Freeze recipient scopes derived from server-side records (owner destination, current opted-in staff, verified consenting submitter), consent/preferences, receipt states, delivery events and bounded unknown-outcome reconciliation
+- Map the existing WH-036 contact notification source onto the contract with exact gaps; express the standard appointment-request receipt and staff notice as configuration
+- Evaluate provider options with dated official sources; add an offline reference and mutation-checked conformance harness without Worker imports
+
+### Acceptance criteria
+
+- [ ] docs/notifications.md states the frozen shapes, authority class, secret custody, review gates, failure isolation, existing-source gap map and child slices, marked planned
+- [ ] Offline checks reject unknown versions/fields, caller-supplied recipients/URLs/headers, unverified senders, template injection, unpriced or unreviewed charges and redispatch after a lost response, and prove bounce, cancellation and accepted-record isolation
+- [ ] The catalog reproduces the existing contact notices byte for byte and agrees with the WH-036 sender, ceiling, error classes and outbox states
+- [ ] WH-068 keeps its acceptance and depends on every child; no child reaches WH-069, WH-080 or WH-094
+- [ ] Open owner decisions are listed rather than assumed
+
+### Verification
+
+- node tests/notifications-contract.mjs
+- node tools/verify.mjs fast
+- node tools/roadmap.mjs validate, alignment and render --check
+- git diff --check
+
+### Dependencies and blockers
+
+Planning dependencies: WH-052, WH-123. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/notifications.md](../../docs/notifications.md)
+- [tools/prototypes/notifications.mjs](../../tools/prototypes/notifications.mjs)
+- [tests/notifications-contract.mjs](../../tests/notifications-contract.mjs)
+- [docs/contact-forms.md](../../docs/contact-forms.md)
+- [docs/job-envelope.md](../../docs/job-envelope.md)
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-08 UTC: contract and offline reference only, local commit on branch claude/wh-068-notification-contract (not pushed or merged; issue not created or claimed from this session). Added docs/notifications.md (planned), tools/prototypes/notifications.mjs (imports only node:crypto) and tests/notifications-contract.mjs, registered as pnpm test:notifications-contract and in the fast verification profile. node tests/notifications-contract.mjs passed 31 reference checks and 6 source-agreement/static checks, and caught 20 of 20 deliberate mutants of the reference, each by its intended check. Synthetic identifiers, addresses and provider only; proves the frozen contract and reference, not D1 storage, provider delivery, consent flows or acceptance. Provider facts read from official pages on October 8, 2026; entitlement and pricing require verification. No table, route, binding, provider, DNS or deployment change.
+
+## WH-155 — Source notification catalog and renderer with contact notices expressed through it
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Templates, senders and provider facts come from one server catalog with closed validators and a plain-text renderer, and the existing contact notices render through it unchanged.
+
+### Scope
+
+- TypeScript catalog matching the frozen v1 shapes: template entries with digests, the verified platform sender with its DNS review reference, provider review/price/ceiling/idempotency/lookup facts and error classes (gaps G-N1 to G-N3)
+- Closed template/configuration validators and the segment renderer; replace the hard-coded contactEmailMessage text with catalog rendering
+- Point the conformance harness agreement checks at the source catalog; no schema change, provider, binding or customer-visible change
+
+### Acceptance criteria
+
+- [ ] Contact new-message and verification notices are byte-identical to the current text; existing contact suites pass unchanged
+- [ ] No configuration, template or caller value can supply an address, header, URL, provider or credential
+- [ ] No new provider, sender, binding, cron, DNS change or schema change
+
+### Verification
+
+- pnpm check
+- pnpm test:contacts
+- node tests/notifications-contract.mjs
+
+### Dependencies and blockers
+
+Planning dependencies: WH-154. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/notifications.md](../../docs/notifications.md)
+- [tools/prototypes/notifications.mjs](../../tools/prototypes/notifications.mjs)
+- [src/contact-email.ts](../../src/contact-email.ts)
+- [src/contact-notifications.ts](../../src/contact-notifications.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-156 — Shared notification outbox, receipt states and bounded reconciliation
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Every notice kind uses one durable outbox with the frozen receipt states, at-most-once provider calls, bounded read-only reconciliation and one spending ledger per provider.
+
+### Scope
+
+- Generalize the contact outbox to queued, dispatching, deferred, accepted, delivered, unknown-outcome, unresolved, bounced, complained, failed and cancelled with database-enforced transitions (gap G-N4); build on the durable-dispatch prerequisite if owner PR #174 is merged, never duplicate it
+- One ledger and ceiling per provider across all notice kinds (G-N5); an authenticated provider event-intake interface without activating Queues (G-N6)
+- Reconcile the attempt bound with the WH-052 envelope maxAttempts rule by a reviewed contract change or envelope-per-attempt design (G-N10)
+- Complete current schema with lifecycle/export/closure registration and an owner-run empty-database cutover; no compatibility reader
+
+### Acceptance criteria
+
+- [ ] A lost response, thrown call or interrupted worker becomes unknown-outcome and is never redispatched; reconciliation is read-only and ends unresolved at its bound
+- [ ] Duplicate and out-of-order events, replays and concurrent passes keep one notice per recipient and event
+- [ ] Notification failures never alter or remove the accepted record or inbox message; unresolved evidence outlives ordinary expiry
+- [ ] Every provider call counts against the ceiling before the call
+
+### Verification
+
+- pnpm check
+- pnpm test:contacts
+- node tests/notifications-contract.mjs
+- Focused outbox suite on SQLite and local D1 with a simulated provider
+
+### Dependencies and blockers
+
+Planning dependencies: WH-155, WH-052. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/notifications.md](../../docs/notifications.md)
+- [docs/contact-forms.md](../../docs/contact-forms.md)
+- [docs/job-envelope.md](../../docs/job-envelope.md)
+- [schema/platform.sql](../../schema/platform.sql)
+- [src/contact-notifications.ts](../../src/contact-notifications.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-157 — Notification recipient scopes, consent and preferences
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Staff and submitters can receive notices only through server-resolved, verified and consented addresses that are rechecked before every call.
+
+### Scope
+
+- Staff notification opt-in, address verification and opt-out on the visitor origin through the same provider and sender; role revocation stops unsent notices (gap G-N7)
+- Verified project-visitor address and an explicit per-submission receipt consent stored with the record; anonymous typed addresses are never recipients
+- Shared per-account suppression across scopes and templates; new data classes registered with lifecycle, export and closure
+
+### Acceptance criteria
+
+- [ ] Recipients derive only from current records; caller, configuration and visitor input cannot add an address
+- [ ] Revoked, opted-out, unverified or suppressed recipients are cancelled before any provider call
+- [ ] Two-tenant and cross-origin isolation for staff and visitor addresses
+
+### Verification
+
+- pnpm check
+- node tests/shared-modules-access.mjs
+- node tests/notifications-contract.mjs
+- node tests/lifecycle-catalog.mjs
+
+### Dependencies and blockers
+
+Planning dependencies: WH-155, WH-126, WH-116. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/notifications.md](../../docs/notifications.md)
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+- [docs/data-protection.md](../../docs/data-protection.md)
+- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-158 — Customer notification configuration and standard appointment presets
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+An owner configures the standard appointment-request receipt and staff notice through an exact review, and accepted form records trigger them deterministically.
+
+### Scope
+
+- Store notification configurations bound to a records instance form.accepted event; the exact owner review binds template digest, sender, recipient scope, limits and provider price (gap G-N8)
+- Implement the approved-configuration resolver for the fixed form.accepted trigger under the WH-052 envelope; WH-069 later reuses it rather than adding a second resolver
+- Register Chat/view bindings and an essential dashboard control through WH-105 with WH-122 feature admission; ship the standard appointment presets as configuration
+
+### Acceptance criteria
+
+- [ ] Submission and notification delivery never invoke the maintainer model, its context, credentials or funding
+- [ ] The model may prepare but cannot confirm a configuration; a changed price, template or configuration makes the review stale
+- [ ] Configuring provisions no sender, DNS record, provider or schedule
+- [ ] Owner and staff notices stay content-free; submitter receipts carry only choice/number/boolean values and the reference
+
+### Verification
+
+- pnpm check
+- node tests/shared-modules-records.mjs
+- node tests/notifications-contract.mjs
+
+### Dependencies and blockers
+
+Planning dependencies: WH-156, WH-157, WH-127, WH-105, WH-122. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/notifications.md](../../docs/notifications.md)
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+- [docs/chat-interactions.md](../../docs/chat-interactions.md)
+- [docs/feature-admission.md](../../docs/feature-admission.md)
+- [src/shared-modules/records.ts](../../src/shared-modules/records.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-159 — Connected synthetic acceptance of configured notifications
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: verification. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+A local two-tenant appointment journey proves configured notifications end to end on the actual handlers with the maintainer transport disabled.
+
+### Scope
+
+- Two synthetic tenants: appointment form to record to staff notice, owner notice and submitter receipt on SQLite and local D1 with a simulated provider
+- Duplicate events, timeout/bounce, lost response, revoked recipient, cancellation, ceiling, template withdrawal and accepted-record isolation against the D1 handlers
+- Run the contract conformance scenarios against the implementation, not only the reference
+
+### Acceptance criteria
+
+- [ ] Every WH-068 acceptance criterion has local synthetic evidence on the actual handlers
+- [ ] No real message, provider call, DNS change or deployment; local evidence is not live acceptance
+
+### Verification
+
+- Connected notification suite on SQLite and local D1
+- pnpm test:contacts
+- node tools/verify.mjs fast
+
+### Dependencies and blockers
+
+Planning dependencies: WH-158. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/notifications.md](../../docs/notifications.md)
+- [tests/notifications-contract.mjs](../../tests/notifications-contract.mjs)
+- [tests/contact-notifications.mjs](../../tests/contact-notifications.mjs)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-160 — Approved provider canary for configured notifications
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **blocked**. Kind: verification. Size: S.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Configured notifications are proven against the real reviewed provider using only explicitly approved addresses.
+
+### Scope
+
+- Exact sender/recipient and cost review before any send; canary only to owner-approved addresses
+- Record provider readback, receipt states and spend; raise template readiness only from this evidence
+
+### Acceptance criteria
+
+- [ ] Canary messages reach only approved addresses with correct receipts and no duplicate on lost responses
+- [ ] Provider charges stay within the reviewed ceiling; no service, DNS or plan change beyond the reviewed activation
+
+### Verification
+
+- Approved provider canary with readback recorded in the feature doc and issue
+
+### Dependencies and blockers
+
+Planning dependencies: WH-159, WH-036. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+- Owner decisions in docs/notifications.md: provider, sender domain/display name, retention, submitter receipts, plan gating and spending ceiling
+- WH-036 sender activation and its live canary to explicitly approved addresses
+
+### References
+
+- [docs/notifications.md](../../docs/notifications.md)
+- [docs/contact-forms.md](../../docs/contact-forms.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
 
 ## WH-079 — Design optional customer-configured runtime AI as a separate capability
 
