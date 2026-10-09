@@ -154,13 +154,17 @@
    "id": "B6",
    "severity": "low",
    "title": "Guest-preview views draw only the platform-wide photo read pool, bypassing the per-project fair share",
-   "status": "reproduced (executed, local D1/R2; pool pre-seeded to stand in for prior views)",
-   "owner": "Guest-preview and storage-budget maintainers; owner decision",
-   "reproduction": "node tests/boundary-guest-preview-read-pool.mjs (needs python3 with Pillow; expected to exit 1 until remediated)",
+   "status": "resolved October 9, 2026 in source: guest views charge the link's project photo budget, account fair share and per-client sub-limit (executed regression on local SQLite; the --d1 run is still to do; not deployed)",
+   "owner": "Guest-preview and storage-budget maintainers; owner decisions open on sharing the per-client sub-limit with public photos and on operator photo containment reaching guest previews",
+   "reproduction": "node tests/boundary-guest-preview-read-pool.mjs [--d1] (regression, needs python3 with Pillow; exit 0)",
    "evidence": [
     {
-     "file": "src/photo-versions.ts",
-     "contains": "if(results.length)await reserveStorage(env.DB,'read',results.length);"
+     "file": "src/guest-previews/guest.ts",
+     "contains": "try{html=await savedVersionHTML(env,row,count=>reserveGuestPreviewPhotoReads(env.DB,request,link.project_id,count));}"
+    },
+    {
+     "file": "src/storage-budget.ts",
+     "contains": "await reservePublicClient(db,'photo',project,await publicClientKey(request,'photo',project),count);"
     },
     {
      "file": "src/storage-budget.ts",
@@ -172,7 +176,7 @@
     },
     {
      "file": "tests/boundary-guest-preview-read-pool.mjs",
-     "contains": "B6 reproduced"
+     "contains": "the platform pool is not consumed beyond the project budget"
     }
    ]
   },
@@ -5936,7 +5940,7 @@
     },
     "admission": {
      "state": "evidenced",
-     "detail": "Per-client daily photo allowance (400), per-project monthly budget (10,000) with account fair share, platform ceiling (100,000). The host-level 429 mapping is untested (function-level only). Guest-preview views bypass this budget (B6).",
+     "detail": "Per-client daily photo allowance (400), per-project monthly budget (10,000) with account fair share, platform ceiling (100,000). The host-level 429 mapping is untested (function-level only). Guest-preview views charge the same budget since B6 was resolved.",
      "enforcedAt": [
       {
        "file": "src/site-host.ts",
@@ -6523,14 +6527,33 @@
      ]
     },
     "admission": {
-     "state": "gap",
-     "gapKind": "control",
-     "finding": "B6",
-     "detail": "Per-link view window (60 per 10 minutes) and comment caps; no per-client or Turnstile by design. Views inline photos charged only to the platform-wide read pool, bypassing the WH-075 per-project fair share (B6).",
+     "state": "evidenced",
+     "detail": "Per-link view window (60 per 10 minutes) and comment caps; no Turnstile by design. Inlined photos are charged like the project's public photos (B6, resolved): per-client 400/day photo sub-limit, then all-or-none the project budget (10,000/month, operator containment), account fair share and platform ceiling; refusals are 429 per connection or a generic 503.",
      "enforcedAt": [
       {
-       "file": "src/photo-versions.ts",
-       "contains": "if(results.length)await reserveStorage(env.DB,'read',results.length);"
+       "file": "src/guest-previews/guest.ts",
+       "contains": "try{html=await savedVersionHTML(env,row,count=>reserveGuestPreviewPhotoReads(env.DB,request,link.project_id,count));}"
+      },
+      {
+       "file": "src/storage-budget.ts",
+       "contains": "export async function reserveGuestPreviewPhotoReads(db:D1Database,request:Request,project:string,count:number){"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/boundary-guest-preview-read-pool.mjs",
+       "contains": "assert.equal(await pool(),before.pool,'the platform pool is not consumed beyond the project budget');",
+       "asserts": "a project at its photo budget refuses its guests with no platform read, and another tenant's public photo read still succeeds"
+      },
+      {
+       "file": "tests/boundary-guest-preview-read-pool.mjs",
+       "contains": "await refused(await view(),429,'Too many requests from this connection today. Please try again tomorrow.');",
+       "asserts": "a connection over its daily photo sub-limit gets a bounded 429 and nothing is charged"
+      },
+      {
+       "file": "tests/boundary-guest-preview-read-pool.mjs",
+       "contains": "const fairRefusal=await refused(await view('198.51.100.11'),503,'This preview is temporarily unavailable.');",
+       "asserts": "an account over its fair share is refused for guest views past half the platform pool"
       }
      ]
     },

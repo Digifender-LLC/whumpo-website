@@ -61,7 +61,7 @@ Families: 51 (36 privileged; platform-api 28, visitor 16, service 1, scheduled 3
 | target | 34 | 1 | 2 | 0 |
 | replay | 34 | 0 | 3 | 0 |
 | stale | 36 | 3 | 1 | 2 |
-| admission | 8 | 3 | 5 | 1 |
+| admission | 9 | 2 | 5 | 1 |
 | tenant | 20 | 1 | 0 | 1 |
 
 Cells not recorded (not required for that family's surface and privilege): 133.
@@ -105,7 +105,7 @@ Cells not recorded (not required for that family's surface and privilege): 133.
 | site-backend | visitor | execution | 1 / 0 | n/a | evidenced | — | evidenced | n/a | evidenced | evidenced | evidenced |
 | site-custom-domain | visitor | no | 2 / 0 | n/a | evidenced | — | — | — | evidenced | n/a | evidenced |
 | site-traffic | visitor | no | 4 / 0 | n/a | n/a | — | — | — | — | n/a | evidenced |
-| guest-preview-host | visitor | visitor-data | 3 / 0 | evidenced | evidenced | — | evidenced | evidenced | evidenced | gap (control B6) | evidenced |
+| guest-preview-host | visitor | visitor-data | 3 / 0 | evidenced | evidenced | — | evidenced | evidenced | evidenced | evidenced | evidenced |
 | visitor-app-shell | visitor | no | 5 / 0 | n/a | evidenced | — | — | — | — | gap (test) | evidenced |
 | visitor-gateway-dispatch | visitor | no | 3 / 0 | evidenced | evidenced | — | — | — | — | evidenced | evidenced |
 | visitor-auth | visitor | credential | 4 / 0 | evidenced | evidenced | — | evidenced | evidenced | evidenced | gap (control B5) | evidenced |
@@ -184,13 +184,15 @@ Every other typed control appends its effect to the batch that inserts the Chat 
 - **Impact:** visitor signup, login and passkey enrollment unavailable for a targeted project or for every tenant while the attack continues; the capacity error is not a `BackendError`, so visitors see a generic 503. No data exposure.
 - **Remediation ownership:** visitor identity maintainers with an owner decision: per-client or per-IP challenge caps, not persisting a login challenge until needed (or a stateless signed challenge), a typed 429. A trigger change is a schema change requiring a coordinated cutover. Related open item: "challenge exhaustion" in [security-risk-actions.md](security-risk-actions.md).
 
-### B6 Guest-preview views draw only the platform-wide photo read pool (low; availability, cross-tenant)
+### B6 Guest-preview views draw only the platform-wide photo read pool (low; availability, cross-tenant) — resolved October 9, 2026 in source
 
-A guest view inlines the saved version's photos through [`savedVersionHTML`](../src/photo-versions.ts), which calls `reserveStorage(…,'read',n)`: the platform-wide monthly pool (100,000). Public site photos instead charge a per-client allowance and a per-project budget with an account fair share first ([`src/storage-budget.ts`](../src/storage-budget.ts): "One project or client exhausting its budget therefore no longer refuses every tenant's photos"). Guest views charge neither, so the fair share never limits them. With 60 views per 10 minutes per link and 20 active links per project, one Creator owner (or anyone holding their links) can drain the pool in hours.
+As found: a guest view inlined the saved version's photos through [`savedVersionHTML`](../src/photo-versions.ts), which called `reserveStorage(…,'read',n)`: the platform-wide monthly pool (100,000). Public site photos instead charge a per-client allowance and a per-project budget with an account fair share first ([`src/storage-budget.ts`](../src/storage-budget.ts): "One project or client exhausting its budget therefore no longer refuses every tenant's photos"). Guest views charge neither, so the fair share never limits them. With 60 views per 10 minutes per link and 20 active links per project, one Creator owner (or anyone holding their links) can drain the pool in hours.
 
-- **Reproduction (executed, local D1/R2, synthetic photo clearance):** `node tests/boundary-guest-preview-read-pool.mjs` (needs `python3` with Pillow, like the other photo suites; this run used a local Pillow virtualenv on `PATH`). Step 1 measures that one view adds one platform read and nothing to the project budget or per-client usage. Step 2 pre-seeds the monthly counter to 99,999 to stand in for prior views; a guest view takes the last read and another tenant's first public photo read is then refused (`StorageLimitError`, which the site host serves as 503). Exits 1.
-- **Impact:** every tenant's public photos, owner photo previews and exports fail until the monthly reset. Extends R3 (owner GETs) to an anonymous bearer path.
-- **Remediation ownership:** guest-preview and storage-budget maintainers with an owner decision: charge guest views to the owner's project budget (with fair share) and/or a per-link photo allowance. May need a schema change (cutover).
+- **Reproduction (executed before the fix, local D1/R2, synthetic photo clearance):** the original `node tests/boundary-guest-preview-read-pool.mjs` (needs `python3` with Pillow, like the other photo suites; this run used a local Pillow virtualenv on `PATH`). Step 1 measured that one view adds one platform read and nothing to the project budget or per-client usage. Step 2 pre-seeded the monthly counter to 99,999 to stand in for prior views; a guest view took the last read and another tenant's first public photo read was then refused (`StorageLimitError`, which the site host serves as 503). Exited 1.
+- **Impact (before the fix):** every tenant's public photos, owner photo previews and exports fail until the monthly reset. Extends R3 (owner GETs) to an anonymous bearer path.
+- **Resolution (October 9, 2026, source only; not deployed; no schema change):** guest views now pass a read reservation to `savedVersionHTML` that calls `reserveGuestPreviewPhotoReads` ([`src/storage-budget.ts`](../src/storage-budget.ts)) for the link's project, with the WH-075 public-photo semantics once per photo: the per-client photo sub-limit (400 per connection per project per UTC day, the same key as that project's public photos), then in one all-or-none batch the project budget (10,000/month or the operator containment allowance), the account fair share and the platform ceiling. Refusals reuse existing guest-facing text: 429 with the public per-client message, otherwise the unchanged generic 503 "This preview is temporarily unavailable.", identical for project, fair-share and platform refusals. Owner previews and exports keep the platform-pool accounting (R3, out of scope); public site photo behavior is unchanged. Details: [guest-previews.md](guest-previews.md#limits).
+- **Regression:** `tests/boundary-guest-preview-read-pool.mjs` is now a regression on SQLite (in-memory R2 stand-in) or `--d1` (local D1 + local R2). It **passed on SQLite**; the `--d1` run was attempted but could not start (the shared `/tmp` user quota was exhausted by other sessions, so the local D1 fixture failed with `SQLITE_IOERR_WRITE`) and remains to be run. It asserts: exact owner-preview bytes; one two-photo view charges two reads to the project, platform and client; a client at 399 gets 429 with nothing charged; a project at 9,999 refuses its guests with no project or platform read taken while another tenant's public photo read succeeds; an account over its 10,000 fair share past half the pool is refused while an account under it reads; the platform ceiling stays all-or-none. Reverting the `src/` change makes it fail (exit 1).
+- **Owner decisions still open:** whether guest views should keep sharing the per-connection photo sub-limit with the public site or get their own; whether an operator `photo` containment should also refuse guest-preview photos (it now does).
 
 ### B7 `create-invite` writes remotely by default (informational; operator guard rail) — characterization
 
@@ -271,9 +273,24 @@ git diff --check
 
 No remote, Cloudflare, provider or deployment operation was performed; fixtures are synthetic and disposable. No operator tool was run against a real account; the create-invite characterization runs the tool against a recording stub in a temporary directory. No `src/` or schema file changed.
 
+B6 remediation, October 9, 2026 UTC, on Node 24.21.0 at base `362bbd8` plus this change (python3 with Pillow on `PATH`):
+
+```sh
+node tests/boundary-guest-preview-read-pool.mjs     # B6 regression, SQLite + in-memory R2: passed (exit 0)
+                                                     # with the src/ change reverted: failed (exit 1)
+node tests/guest-previews.mjs                       # SQLite: 11 groups passed
+node tests/boundary-audit.mjs                       # passed
+corepack pnpm check
+node tools/verify.mjs fast
+node tools/roadmap.mjs render --check && node tools/roadmap.mjs validate && node tools/roadmap.mjs alignment
+git diff --check
+```
+
+**Not run:** every local-D1 suite (`boundary-guest-preview-read-pool.mjs --d1`, `guest-previews.mjs --d1`, `guest-preview-photos.mjs` including its new project-budget assertion, `public-fairness.mjs`, `photo-versions.mjs`, `exports.mjs`). The shared `/tmp` user quota was exhausted by other sessions throughout (about 50 minutes of retries), so the D1 fixture failed with `SQLITE_IOERR_WRITE` before any assertion. Run them before merging.
+
 ## Remaining WH-004 work
 
-- Owner decisions and remediation for B1, B3, B4, B5 and B6, the B7 guard-rail question (and R2/R4/R8/R14 policy).
+- Owner decisions and remediation for B1, B3, B4 and B5, the two open B6 policy questions (remediated in source), the B7 guard-rail question (and R2/R4/R8/R14 policy).
 - Close the remaining evidence gaps above with focused regressions where the owner wants them, and decide whether the ungated evidence suites (R7) should join a verify profile.
 - Verify live routing/activation (custom hostnames, contact delivery, `DOMAIN_HOSTING_READY`) with an owner-authorized read-only inspection.
 - Run the security scan workflow named in the packet against the current commit and reconcile with this registry.
