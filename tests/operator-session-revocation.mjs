@@ -133,11 +133,25 @@ try{
  await assert.rejects(forge(null),/operator_revocation_invalid/,'A NULL id is refused although a TEXT primary key admits it');
  // The window is the database clock's, never the receipt's created_at: a created_at at its one-minute tolerance cannot carry a later or older id.
  await assert.rejects(forge(newActionId(Date.now()+120000),55),/operator_revocation_invalid/);await assert.rejects(forge(actionIdAged(day+3600000),-55),/operator_revocation_invalid/);
+ // ... and a created_at beyond that tolerance is refused even for a perfectly fresh id.
+ for(const seconds of [65,-65])await assert.rejects(forge(aid(),seconds),/operator_revocation_invalid/,'created_at '+seconds+' seconds from the database clock');
  assert.equal(await sessions(),1,'Refused receipts revoke nothing');
  for(const [name,rid] of Object.entries(edge.accepted)){if(!await sessions())await signIn();await forge(rid);assert.equal(await present(rid),true,name);assert.equal(await sessions(),0,name);}
  await signIn();const tolerant=aid();await forge(tolerant,55);assert.equal(await present(tolerant),true);cases++;
  // The tool agrees: a request matching no stored receipt needs a new id, whatever the account state.
  for(const name of ['25 hours old','2 minutes ahead','epoch zero','far future'])for(const apply of [undefined,'f'.repeat(64)])await assert.rejects(runContainment(db,{...revoke,id:edge.refused[name]},apply),staleId,name);
+ // Clock skew: this machine's clock can differ from the database's. An ID that this machine still accepts can be 30 seconds past
+ // the window by the database clock; the tool then says so (from the database clock, read-only), blames neither a stale review
+ // nor the operator's ID alone, and repeats no database error text.
+ if(!await sessions())await signIn();
+ const behind=Date.now()-120000,late={...revoke,id:newActionId(Date.now()-day-30000)},latePreview=await runContainment(db,late,undefined,behind);
+ assert.ok(latePreview.applyDigest);
+ await assert.rejects(runContainment(db,late,latePreview.applyDigest,behind),error=>{
+  assert.match(error.message,/^Request ID must be a new UUIDv7 minted within the last day .* This machine's clock differs from the database clock by about 1[12]\d seconds; correct it first\.$/);
+  assert.doesNotMatch(error.message,/operator_|SQLITE|trigger|stale/i);return true;});
+ assert.equal(await sessions(),1,'The skew-refused revocation revoked nothing');assert.equal(await present(late.id),false);
+ // The same request with this machine's clock right is refused by the tool's own check, without the skew sentence.
+ await assert.rejects(runContainment(db,late),error=>{assert.match(error.message,/^Request ID must be a new UUIDv7 minted within the last day /);assert.doesNotMatch(error.message,/differs from the database clock/);return true;});
  // Replay of an applied receipt is unaffected by the window: its stored row answers, however old the id; only a never-applied request needs a new id.
  const twoDays=2*day,appliedOld=await history(a.account,Date.now()-twoDays);
  assert.equal((await runContainment(db,appliedOld,'b'.repeat(64))).replayed,true);assert.equal((await runContainment(db,appliedOld)).alreadyApplied,true);
