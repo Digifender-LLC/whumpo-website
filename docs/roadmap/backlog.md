@@ -2,7 +2,7 @@
 
 > Generated from `backlog.json` by `node tools/roadmap.mjs render`. Edit the JSON source, then render again.
 
-Reviewed 2026-10-01 against source `db8b740ab2346f55f2985593b1ec531a99027630`. 157 planned tasks.
+Reviewed 2026-10-01 against source `db8b740ab2346f55f2985593b1ec531a99027630`. 164 planned tasks.
 
 Planning readiness and dependencies describe the plan. Current execution, claims, blockers, and completion evidence live in GitHub Issues. A ready task is only a candidate: verify live dependency completion and authorization before work.
 
@@ -4719,7 +4719,7 @@ The remaining MVP domain purchase contract has authoritative quotes and safe fin
 
 ### Dependencies and blockers
 
-Planning dependencies: WH-041, WH-042, WH-033. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+Planning dependencies: WH-041, WH-042, WH-033, WH-192, WH-193, WH-194, WH-195, WH-196, WH-197, WH-198. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
 No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
 
@@ -4728,6 +4728,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/domains.md](../../docs/domains.md)
 - [docs/payments.md](../../docs/payments.md)
 - [docs/plan-lifecycle.md](../../docs/plan-lifecycle.md)
+- [docs/domain-purchases.md](../../docs/domain-purchases.md)
 
 ### Execution coordination
 
@@ -4735,7 +4736,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-09 UTC: decomposed into WH-192 to WH-198 with the planned contract in docs/domain-purchases.md (WH-192). Planning and offline reference only: no table, route, binding, registrar account, payment flow, availability check, purchase or deployment, and no src/ behavior change. The parent acceptance is unchanged and closes only after every child. No child reaches WH-023, WH-044, WH-045, WH-047, WH-049 or WH-104; only the live acceptance WH-198 waits for WH-041. Existing quote, benefit and hosting source is mapped with exact gaps G-D1 to G-D12; registrar selection is an open owner decision.
 
 ## WH-045 — Fulfill annual domain benefits without unfunded purchases
 
@@ -6129,6 +6130,353 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [tests/connectors-contract.mjs](../../tests/connectors-contract.mjs)
 - [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
 - [docs/feature-admission.md](../../docs/feature-admission.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-192 — Freeze the domain purchase contract and decompose WH-034
+
+Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **ready**. Kind: decision. Size: S.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Every WH-034 slice builds against one frozen quote, consent, order-state, funding-hold and registrar-adapter model instead of inventing its own.
+
+### Scope
+
+- Freeze the versioned server-computed quote (availability, initial and renewal price, fees, tax, term, expiry, registrar adapter, premium flag, currency, payer, consent text digest), the exact human review binding and the order state machine with idempotency and bounded read-only reconciliation
+- Define WH-042/044/045 funding handoffs, renewal opt-in, transfer-out and closure rules and registrant data classification; map src/domain-purchase-quote.ts, src/plans.ts and the domain hosting source with exact gaps
+- Evaluate registrar APIs from dated official sources; add an offline reference and mutation-checked conformance harness without Worker imports
+
+### Acceptance criteria
+
+- [ ] docs/domain-purchases.md states the frozen shapes, states, authority, funding handoffs, lifecycle, data classes, liabilities, registrar evaluation, gap map and child slices, marked planned
+- [ ] Offline checks reject client/model price, funding and authority, expired or re-priced reviews, stale or foreign authority and unknown versions, and prove duplicate, reordered and timeout results never cause a second purchase
+- [ ] WH-034 keeps its acceptance and depends on every child; no child reaches WH-023, WH-044, WH-045, WH-047, WH-049 or WH-104, and only WH-198 waits for WH-041
+- [ ] Open owner decisions are listed with a recommendation rather than assumed
+
+### Verification
+
+- node tests/domain-purchase-contract.mjs
+- node tools/verify.mjs fast
+- node tools/roadmap.mjs validate, alignment and render --check
+- git diff --check
+
+### Dependencies and blockers
+
+Planning dependencies: WH-052, WH-116. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/domain-purchases.md](../../docs/domain-purchases.md)
+- [tools/prototypes/domain-purchase.mjs](../../tools/prototypes/domain-purchase.mjs)
+- [tests/domain-purchase-contract.mjs](../../tests/domain-purchase-contract.mjs)
+- [docs/domains.md](../../docs/domains.md)
+- [src/domain-purchase-quote.ts](../../src/domain-purchase-quote.ts)
+- [docs/job-envelope.md](../../docs/job-envelope.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-09 UTC: contract and offline reference only, first committed on branch claude/wh-034-registrar-purchase-contract and ported onto origin/main d3ebaf2 as the local branch claude/wh-034-registrar-purchase-contract-main (not pushed or merged; issue not created or claimed from this session). Added docs/domain-purchases.md (planned), tools/prototypes/domain-purchase.mjs (imports only node:crypto) and tests/domain-purchase-contract.mjs, registered as pnpm test:domain-purchase-contract and in the fast verification profile. node tests/domain-purchase-contract.mjs passed 20 reference checks and 3 source-agreement/static checks, and caught 26 of 26 deliberate mutants of the reference, each by its intended check. Synthetic registrar, names and prices only; proves the frozen contract and reference, not D1 storage, payment holds, a registrar adapter or any purchase. Registrar facts read from official pages on October 9, 2026 (the OpenSRS register command page returned 404 and is marked unverified); eligibility, pricing and reseller terms require verification. No src/, schema, binding, registrar, payment or deployment change.
+
+## WH-193 — Source domain quote engine and purchase state machine with a synthetic registrar
+
+Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+One server module computes v1 quotes and drives the order state machine against a registrar adapter interface, proven with a synthetic registrar before any schema or provider exists.
+
+### Scope
+
+- Replace the src/domain-purchase-quote.ts shape with the v1 quote, registrable-name check, consent text and digest (gaps G-D1 to G-D6); one adapter interface for check, register and read-only lookup
+- Pure state machine for consent, reserve, single dispatch, lease expiry, bounded reconciliation, authenticated registrar events and cancellation, matching the contract transition table
+- Point the conformance harness at the source module; no schema, route, Chat binding, provider or customer-visible change
+
+### Acceptance criteria
+
+- [ ] The conformance harness passes against the source module with every mutant caught
+- [ ] No client, tool argument or model can supply price, funding, premium, auto-renew or approval fields
+- [ ] A lost, duplicate or reordered registrar result never produces a second register call
+
+### Verification
+
+- node tests/domain-purchase-contract.mjs against the source module
+- pnpm test:domain-purchase-quote
+- pnpm check
+
+### Dependencies and blockers
+
+Planning dependencies: WH-192, WH-122. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/domain-purchases.md](../../docs/domain-purchases.md)
+- [src/domain-purchase-quote.ts](../../src/domain-purchase-quote.ts)
+- [src/plans.ts](../../src/plans.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-194 — Current-schema domain orders, reviews, funding holds and registrant data class
+
+Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Domain quotes, reviews, orders, holds, attempts, reconciliation reads and registrant contacts persist in the complete current schema with atomic transitions and lifecycle/protection registration.
+
+### Scope
+
+- Canonical schema inputs for quotes, reviews, orders (unique idempotency key and one active order per registrable name), funding holds, attempts and registrar events; D1 statements repeat every contract predicate (gap G-D10)
+- Register a planned-to-current domain-registrations lifecycle/protection class with registrant contact minimization and no model, log or export exposure of auth codes; funding holds join the billing class (gap G-D11)
+- Register the domain-registration job purpose and adapter under WH-052 and the exact Chat review binding under the WH-105 contract
+
+### Acceptance criteria
+
+- [ ] Concurrent consents, dispatches and sweeps on local D1 never produce two orders or two register calls
+- [ ] Unknown and unresolved orders retain their hold and block account purge until resolved
+- [ ] The schema change ships only through a reviewed empty-database cutover the owner authorizes
+
+### Verification
+
+- Disposable local D1 concurrency tests against the complete current schema
+- node tools/lifecycle-catalog.mjs
+- pnpm check
+
+### Dependencies and blockers
+
+Planning dependencies: WH-193, WH-116, WH-052. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/domain-purchases.md](../../docs/domain-purchases.md)
+- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
+- [docs/job-envelope.md](../../docs/job-envelope.md)
+- [docs/releases.md](../../docs/releases.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-195 — Sandbox registrar adapter for the owner-selected registrar
+
+Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **blocked**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+The selected registrar's test environment answers check, register and lookup through the one adapter interface with exact refusal-versus-uncertain classification.
+
+### Scope
+
+- Implement the adapter for the owner-selected registrar's sandbox or test environment; classify definite refusals versus uncertain outcomes; never retry a register call
+- Keep credentials in a Worker secret binding only; never in URLs, Chat, model context, logs, fixtures or GitHub
+- Record dated provider facts (premium acknowledgement, privacy and auto-renew defaults, async workflow, lookup capability) and calibrate the reconciliation bound
+
+### Acceptance criteria
+
+- [ ] Sandbox check, register, lookup and a scripted lost response behave as the contract requires with no second register call
+- [ ] No production registrar endpoint, real-money balance or live domain is used
+
+### Verification
+
+- Sandbox adapter contract tests with explicit owner approval for the test account
+- pnpm check
+
+### Dependencies and blockers
+
+Planning dependencies: WH-194. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+- Owner selection of the registrar and separate approval to open and use its sandbox or test account (no real-money balance or production endpoint)
+
+### References
+
+- [docs/domain-purchases.md](../../docs/domain-purchases.md)
+- [docs/connectors.md](../../docs/connectors.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-196 — Domain renewal opt-in, expiry reminders, disconnect and transfer-out lifecycle
+
+Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Owners control renewal, hosting disconnect and transfer-out of purchased domains with exact reviews, and nothing renews, lapses or leaves silently.
+
+### Scope
+
+- Auto-renew off by default; an exact opt-in review bound to the current renewal price; a renewal price rise stops auto-renew until a new review
+- Expiry reminders on the ICANN Expired Registration Recovery Policy schedule, delivered through the WH-068 notification contract once available
+- Transfer-out under ICANN Transfer Policy rules (60-day locks, auth code to the owner only) and hosting disconnect through the existing domain hosting source; decide how a purchased name enters hosting (gap G-D8); account closure never cancels or deletes a registration
+
+### Acceptance criteria
+
+- [ ] No renewal is charged without a current opt-in covering the renewal price
+- [ ] Transfer-out and disconnect are owner-only, recover from lost responses without repeating provider mutations and never expose the auth code to a model
+
+### Verification
+
+- Synthetic registrar lifecycle tests on local D1
+- pnpm test:domain-hosting
+- pnpm check
+
+### Dependencies and blockers
+
+Planning dependencies: WH-194. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/domain-purchases.md](../../docs/domain-purchases.md)
+- [docs/integrations/domain-hosting.md](../../docs/integrations/domain-hosting.md)
+- [docs/notifications.md](../../docs/notifications.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-197 — Connected domain purchase acceptance with a sandbox registrar and sandbox payment
+
+Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: verification. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+An owner journey quotes, reviews, consents, funds with a Stripe sandbox hold and registers a sandbox domain, and every failure path recovers without a second purchase.
+
+### Scope
+
+- Two tenants on local D1 with the sandbox registrar and a Stripe sandbox payment method; maintainer inference unavailable during dispatch and reconciliation
+- Duplicate consent, timeout before and after the registrar acts, interrupted worker, price change, expiry, foreign owner, cancellation and premium exclusion
+- Chat and Domains present the same server review; no browser success page grants a purchase; operator runbook for unresolved orders and charge mismatches (gap G-D12 consumed from WH-042)
+
+### Acceptance criteria
+
+- [ ] Exactly one sandbox registration and one captured sandbox charge per consented order; uncertain orders keep their hold
+- [ ] No real-money charge, production registrar call or live domain
+- [ ] Evidence distinguishes synthetic, sandbox and live levels
+
+### Verification
+
+- Connected local journey with owner-approved sandbox credentials
+- pnpm check
+
+### Dependencies and blockers
+
+Planning dependencies: WH-195, WH-196, WH-042, WH-105. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/domain-purchases.md](../../docs/domain-purchases.md)
+- [docs/stripe-sandbox.md](../../docs/stripe-sandbox.md)
+- [docs/chat-interactions.md](../../docs/chat-interactions.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-198 — Live domain purchase canary acceptance
+
+Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **blocked**. Kind: release. Size: S.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+One owner-approved real registration proves the live adapter, funding capture, reconciliation and transfer-out readiness.
+
+### Scope
+
+- Exact owner review naming the domain, price ceiling, registrant, funding source and registrar account before any live call
+- One canary purchase with readback, receipt and recorded evidence; auto-renew off
+
+### Acceptance criteria
+
+- [ ] No live purchase, deposit or auto-renewal happens without that separate exact authorization
+- [ ] The canary registration, charge and receipt reconcile exactly; any uncertain outcome is held and reported
+
+### Verification
+
+- Owner-approved live canary only
+- Readback recorded in docs/domain-purchases.md
+
+### Dependencies and blockers
+
+Planning dependencies: WH-197, WH-041. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+- Owner approval of real-money activation (WH-041), the production registrar account and its funding or deposit, legal review of registrant/refund/chargeback terms, and an exact domain, price ceiling, registrant and funding source for one canary purchase
+
+### References
+
+- [docs/domain-purchases.md](../../docs/domain-purchases.md)
+- [docs/payments.md](../../docs/payments.md)
 
 ### Execution coordination
 

@@ -18,7 +18,7 @@ Cloudflare documents 100 included custom hostnames on Free, Pro and Business pla
 
 Provisioning, checks, disconnect, maintenance, public hostname mapping and reviewed operator reconciliation are implemented in [hosting design](integrations/domain-hosting.md), with activation disabled. Local checks cover exact provider IDs, bounded hostname reservations, certificate/DNS requirements, published-only routing, disconnect and uncertain-outcome recovery. Provider enrollment, origin/Worker routing, actual certificate issuance, real scheduled execution and live recovery acceptance remain outstanding. Ownership verification alone must never display Connected.
 
-Domain purchases remain a separate unfinished integration. Stripe sandbox billing does not configure a registrar or authorize a purchase. Customer Cloudflare/GitHub connections retain their own configuration, consent and acceptance gates.
+Domain purchases remain a separate unfinished integration; the planned [domain purchase contract](domain-purchases.md) (WH-034/WH-192, October 9, 2026) defines quotes, consent, orders and registrar selection without enabling any of them. Stripe sandbox billing does not configure a registrar or authorize a purchase. Customer Cloudflare/GitHub connections retain their own configuration, consent and acceptance gates.
 
 References checked September 29, 2026:
 - https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/plans/
