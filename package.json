@@ -104,6 +104,7 @@
     "test:cms-database-snapshot": "node tests/cms-database-snapshot.mjs",
     "test:cms-media-snapshot": "node tests/cms-media-snapshot.mjs && node tests/cms-media-local.mjs",
     "test:cms-d1-restore": "node tests/cms-d1-restore.mjs",
+    "test:recovery-drill": "node tests/recovery-drill.mjs",
     "cms:verify-recovery": "node tools/verify-cms-recovery.mjs",
     "test:backend-publication": "node tests/backend-publication.mjs",
     "test:backend-forms": "node tests/backend-forms.mjs",
@@ -192,7 +193,8 @@
     "test:identity-current": "node tests/identity-authority.mjs && node tests/identity-ceremonies.mjs && node tests/identity-kits.mjs && node tests/identity-recovery.mjs && node tests/identity-http.mjs && node tests/workspace-admission.mjs",
     "db:status": "node tools/database.mjs status",
     "test:current-schema": "node tests/current-schema.mjs",
-    "test:photo-upload-recovery": "node tests/photo-upload-recovery.mjs"
+    "test:photo-upload-recovery": "node tests/photo-upload-recovery.mjs",
+    "test:boundary-audit": "node tests/boundary-audit.mjs"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

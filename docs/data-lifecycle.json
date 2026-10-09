@@ -2001,7 +2001,7 @@
       "scope": "owner",
       "purpose": "WH-025 opt-in, content-free funnel milestones derived from existing receipts: allowlisted event, enumerated dimension, same-account receipt key and UTC minute. Operator-only aggregate reading; not a customer view.",
       "currentRetention": "Recorded only while the profile measurement choice is on and only from receipts dated at or after that choice. Withdrawal deletes the account's rows atomically; rows older than 180 days are pruned by the hourly funnel job and are never re-derived; account deletion cascades. About 2,000 rows per account.",
-      "proposedRetention": "Keep 180 days, proposed until the owner approves the first cohort baseline. Account closure purges with the account; only suppressed aggregates (minimum five accounts per cell) may be retained in operator reports.",
+      "proposedRetention": "Keep 180 days (owner-approved October 8, 2026 UTC for the test stage; revisit after the first cohort baseline). Account closure purges with the account; only suppressed aggregates (minimum five accounts per cell) may be retained in operator reports.",
       "deletionAuthority": "Owner withdrawal (profile measurement choice), automatic retention, or reviewed account closure. Operators read aggregates only and cannot edit rows.",
       "exportPolicy": "Not part of customer export by default; if added, allowlist event, dimension and minute only. Never export receipt keys or another account's data.",
       "references": [
