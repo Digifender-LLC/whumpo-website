@@ -16,7 +16,9 @@ import {fileURLToPath} from 'node:url';
 // atomicity, real delivery or real provider revocation (WH-201/202/204). Every suite check also runs against
 // deliberately broken copies of the source (mutants below).
 const root=fileURLToPath(new URL('..',import.meta.url));
-const moduleFiles=['src/email-change/policy.ts','src/email-change/change.ts','src/email-change/token.ts','src/email-change/compromise.ts','src/email-change/revocation.ts'];
+// provider-revokers.ts and connection-holds.ts (the WH-203 adapters and state mapping) are listed so the purity and
+// Worker import-graph checks below cover them; their behaviour and mutants are in tests/email-change-revokers.mjs.
+const moduleFiles=['src/email-change/policy.ts','src/email-change/change.ts','src/email-change/token.ts','src/email-change/compromise.ts','src/email-change/revocation.ts','src/email-change/provider-revokers.ts','src/email-change/connection-holds.ts'];
 const read=file=>readFileSync(join(root,file),'utf8');
 const entry=moduleFiles.map(f=>`export * from './${f.replace(/\.ts$/,'')}';`).join('');
 /** Bundles the source (with optional mutated files) in esbuild's own process, so bundles can overlap the JS suites. */
