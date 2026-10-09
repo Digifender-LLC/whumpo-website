@@ -48,6 +48,7 @@
     "test:domain-proof-removal": "node tests/domain-proof-removal.mjs",
     "test:domains": "node tests/domains.mjs",
     "test:domain-purchase-quote": "node tests/domain-purchase-quote.mjs",
+    "test:domain-purchase-contract": "node tests/domain-purchase-contract.mjs",
     "test:workspace-agent": "node tests/workspace-agent.mjs",
     "test:workspace-read": "node tests/workspace-read.mjs",
     "test:github-connection": "node tests/github-connection.mjs && node tests/github-token-lifecycle.mjs",

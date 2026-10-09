@@ -107,6 +107,8 @@ export function alignmentProblems(data){
  // WH-063 email change and compromise children (WH-199 contract): the parent waits for its contract, connected
  // synthetic acceptance and physical-device/delivery acceptance.
  required[63]=[199,204,205];
+ // WH-034 domain purchase children (WH-192 contract): the parent waits for its contract, connected and live acceptance.
+ required[34]=[192,197,198];
  const forbidden={
   22:[23,41,47,49,104],42:[23,47,49,104],43:[23,47,49,104],
   48:[49,87,104,112,118],52:[12,18,36,68,69,74,86],
@@ -129,6 +131,10 @@ export function alignmentProblems(data){
  for(let child=199;child<=205;child++)forbidden[child]=[48,49,104];
  for(let child=199;child<=204;child++)forbidden[child].push(5);
  for(const child of [199,200,201,203,204])forbidden[child].push(36);
+ // Domain purchase children never reach benefit redemption (WH-045), premium AI funding (WH-044), the finance-period gate
+ // (WH-023) or commercial/paid-tier launch (WH-047/049/104). Only live acceptance (WH-198) waits for WH-041 real-money terms.
+ for(let child=192;child<=197;child++)forbidden[child]=[23,41,44,45,47,49,104];
+ forbidden[198]=[23,44,45,47,49,104];
  for(const [from,targets] of Object.entries(required))for(const to of targets){
   if(!tasks.has(id(from))||!tasks.has(id(to)))problems.push(`Missing alignment task ${id(from)} or ${id(to)}`);
   else if(!reaches(id(from),id(to)))problems.push(`${id(from)} must follow shared prerequisite ${id(to)}`);

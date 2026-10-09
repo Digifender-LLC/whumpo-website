@@ -18,8 +18,10 @@ missing('WH-116','WH-121');missing('WH-090','WH-054');missing('WH-090','WH-099')
 missing('WH-068','WH-154');missing('WH-068','WH-160');
 missing('WH-077','WH-186');missing('WH-077','WH-191');
 missing('WH-063','WH-199');missing('WH-063','WH-204');missing('WH-063','WH-205');
+missing('WH-034','WH-192');missing('WH-034','WH-197');missing('WH-034','WH-198');
 for(const [from,to] of [['WH-121','WH-020'],['WH-122','WH-090'],['WH-116','WH-020'],['WH-156','WH-069'],['WH-158','WH-094'],['WH-159','WH-080'],['WH-154','WH-036'],['WH-186','WH-018'],['WH-186','WH-067'],['WH-187','WH-072'],['WH-188','WH-049'],['WH-191','WH-104'],
- ['WH-199','WH-036'],['WH-200','WH-005'],['WH-203','WH-036'],['WH-204','WH-048'],['WH-205','WH-104']]){
+ ['WH-199','WH-036'],['WH-200','WH-005'],['WH-203','WH-036'],['WH-204','WH-048'],['WH-205','WH-104'],
+ ['WH-193','WH-045'],['WH-197','WH-049'],['WH-195','WH-041'],['WH-196','WH-044'],['WH-194','WH-023'],['WH-198','WH-104'],['WH-198','WH-047']]){
  const data=structuredClone(current);task(data,from).dependsOn.push(to);
  assert.ok(alignmentProblems(data).includes(`${from} must remain independent of downstream/optional gate ${to}`));refused++;
 }
