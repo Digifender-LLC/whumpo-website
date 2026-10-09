@@ -29,6 +29,9 @@ try{
  const response=await view(),html=await response.text();
  assert.equal(response.status,200);assert.equal(html,ownerHTML);assert.ok(html.includes('src="data:image/jpeg;base64,'));assert.ok(!html.includes('assets/'+photo));
  assert.match(response.headers.get('content-security-policy'),/img-src data:/);
+ // The inlined photo is charged to the link's project photo budget, not only the platform pool (WH-004 B6);
+ // the owner preview above is not. Budget exhaustion and fair share: tests/boundary-guest-preview-read-pool.mjs.
+ assert.equal(await db.prepare('SELECT read_ops FROM storage_project_usage WHERE project_id=?').bind(site.project).first('read_ops'),1);
  for(const path of ['/assets/'+photo+'.jpg','/s/'+site.project+'/assets/'+photo+'.jpg'])assert.equal((await m.host.fetch(new Request('https://preview.whumpo.site'+path),env)).status,404);
  // An unpublished private photo stays unavailable on the project's public host as well.
  assert.equal((await m.host.fetch(new Request('https://'+site.project+'.whumpo.site/assets/'+photo+'.jpg'),env)).status,404);
