@@ -100,16 +100,19 @@ try{
   assert.equal((await w.db.prepare('SELECT count(*) AS n FROM identity_sessions WHERE account_id=?').bind(w.owner.account).first()).n,0);
   const identityAfter=await w.db.prepare('SELECT auth_epoch,credential_revision FROM identity_accounts WHERE account_id=?').bind(w.owner.account).first();
   assert.equal(identityAfter.auth_epoch,identityBefore.auth_epoch);assert.equal(identityAfter.credential_revision,identityBefore.credential_revision);
+  // FIXTURE-ONLY: the receipt is aged, and its id re-minted for that age, BEFORE any evidence run. The receipt table is not a watched
+  // authority table, so the harness's rename guard could not catch a later rename here: the call order is what keeps it honest.
+  const ridAged=await w.ageReceipt('operator_session_revocations',rid,100*DAY);
   // First inspected AFTER the revocation: each archived session record is observed absent, the post-archive one is not named at all.
   await w.held(a0,'suppressed-record');assert.equal(await w.events(),2);
   const evidence=await w.evidence(a0);
   assert.deepEqual(evidence.events.map(e=>e.kind),['record-suppressed','record-suppressed']);
-  assert.deepEqual(evidence.events.map(e=>e.data.table),['identity_sessions','identity_sessions']);
-  assert.deepEqual(evidence.events.map(e=>e.data.key.id).sort(),[w.owner.authority,second.authority].sort());
+  // Each suppression carries exactly its table and key, nothing else (no reason, operator, digest or other leaked field).
+  const byId=(x,y)=>x.key.id<y.key.id?-1:1;
+  assert.deepEqual(evidence.events.map(e=>e.data).sort(byId),[w.owner.authority,second.authority].map(sessionId=>({table:'identity_sessions',key:{id:sessionId}})).sort(byId));
   assert.ok(!evidence.events.some(e=>e.data.key.id===third.authority),'No event for the session created after the archive');
   assert.ok(!evidence.events.some(e=>e.kind==='identity-epoch'),'No epoch event: revocation does not advance the identity epoch');
   // An archive taken after the revocation has no sessions and contains the receipt, which is not watched: verified.
-  const ridAged=await w.ageReceipt('operator_session_revocations',rid,100*DAY);
   const a1=await w.register();await w.verified(a1);assert.equal(await w.events(),2);
   // A later sign-in is an ordinary new row: not watched, and a0 is unchanged.
   await w.session();
@@ -142,7 +145,10 @@ try{
  //    Hence nothing can reappear under an identity the inventory has permanently recorded as suppressed, and the stream is not poisoned.
  //    Each refusal uses the SAME old id with an otherwise valid payload (a future expiry, or current state to revoke or clean), through the
  //    tool (preview and apply) and as a direct insert, and each has a fresh-id control that succeeds with the same payload.
+ // The three direct inserts, each ONE statement used for both the refusal of an old id and the fresh-id control of the same payload.
  const stopInsert=(w,cid,project)=>w.db.prepare("INSERT INTO operator_containments(id,scope,subject_kind,subject_id,allowance,operator_ref,reason,request_digest,expires_at) VALUES(?,'serving','project',?,NULL,'human:fixture','Reuse attempt',?,?)").bind(cid,project,'d'.repeat(64),hours(48)).run();
+ const revokeInsert=(w,cid)=>w.db.prepare("INSERT INTO operator_session_revocations(id,account_id,auth_epoch,credential_revision,sessions,operator_ref,reason,request_digest,review_digest) SELECT ?,a.account_id,a.auth_epoch,a.credential_revision,(SELECT json_group_array(id) FROM (SELECT id FROM identity_sessions WHERE account_id=a.account_id ORDER BY id)),'human:fixture','Reuse attempt',?,? FROM identity_accounts a WHERE a.account_id=?").bind(cid,'a'.repeat(64),'b'.repeat(64),w.owner.account).run();
+ const cleanupInsert=(w,cid,before,stopId)=>w.db.prepare("INSERT INTO operator_retention_receipts(id,cutoff,containments,revocations,receipts,operator_ref,request_digest,review_digest) VALUES(?,?,?,'[]','[]',?,?,?)").bind(cid,before,JSON.stringify([stopId+':serving']),OPERATOR,'a'.repeat(64),'b'.repeat(64)).run();
  const stopRequest=(w,cid)=>({action:'stop-serving',id:cid,project:w.projectId,expiresAt:hours(48),operator:OPERATOR,reason:REASON});
  {
   // Observed: an evidence run saw the absence in between, so the identity is a permanent record-suppressed event.
@@ -194,8 +200,7 @@ try{
   const revokeRequest=cid=>({action:'revoke-sessions',id:cid,account,operator:OPERATOR,reason:REASON});
   await assert.rejects(w.operate(revokeRequest(revokeId)),FRESH_ID);
   await assert.rejects(runContainment(w.db,revokeRequest(revokeId),'f'.repeat(64)),FRESH_ID);
-  const revokeInsert=cid=>w.db.prepare("INSERT INTO operator_session_revocations(id,account_id,auth_epoch,credential_revision,sessions,operator_ref,reason,request_digest,review_digest) SELECT ?,a.account_id,a.auth_epoch,a.credential_revision,(SELECT json_group_array(id) FROM (SELECT id FROM identity_sessions WHERE account_id=a.account_id ORDER BY id)),'human:fixture','Reuse attempt',?,? FROM identity_accounts a WHERE a.account_id=?").bind(cid,'a'.repeat(64),'b'.repeat(64),account).run();
-  await assert.rejects(revokeInsert(revokeId),/operator_revocation_invalid/);
+  await assert.rejects(revokeInsert(w,revokeId),/operator_revocation_invalid/);
   assert.equal((await w.db.prepare('SELECT count(*) AS n FROM operator_session_revocations WHERE id=?').bind(revokeId).first()).n,0);
   assert.equal((await w.db.prepare('SELECT count(*) AS n FROM identity_sessions WHERE account_id=?').bind(account).first()).n,1,'The refused revocation removed nothing');
   // Cleanup: something is eligible, so the payload is valid; the old cleanup-receipt id is refused, a fresh id is not.
@@ -203,7 +208,7 @@ try{
   const before=iso(Date.now()-91*DAY),cleanupRequest=cid=>({action:'cleanup',id:cid,before,operator:OPERATOR});
   await assert.rejects(runContainment(w.db,cleanupRequest(cleanupId)),FRESH_ID);
   await assert.rejects(runContainment(w.db,cleanupRequest(cleanupId),'f'.repeat(64)),FRESH_ID);
-  await assert.rejects(w.db.prepare("INSERT INTO operator_retention_receipts(id,cutoff,containments,revocations,receipts,operator_ref,request_digest,review_digest) VALUES(?,?,?,'[]','[]',?,?,?)").bind(cleanupId,before,JSON.stringify([s3+':serving']),OPERATOR,'a'.repeat(64),'b'.repeat(64)).run(),/operator_retention_invalid/);
+  await assert.rejects(cleanupInsert(w,cleanupId,before,s3),/operator_retention_invalid/);
   assert.equal(await w.present(s3),1,'The refused cleanup deleted nothing');
   assert.equal((await w.db.prepare('SELECT count(*) AS n FROM operator_retention_receipts WHERE id=?').bind(cleanupId).first()).n,0);
   // Controls: the same payloads under fresh ids succeed, and the inventory has neither refused nor gained an event.
@@ -211,6 +216,33 @@ try{
   assert.deepEqual((await w.cleanup()).receipt.deleted,{containments:1,revocations:0,receipts:0});
   await w.held(a1,'suppressed-record');await w.held(a2,'suppressed-record');assert.equal(await w.events(),3);
   const a3=await w.register();await w.verified(a3);assert.equal(await w.events(),3);
+  await w.close();
+ }
+ {
+  // Same-statement controls for the direct inserts above, isolated in a world of their own (no archive, no evidence run, so no inventory
+  // side effect): an accepted revocation receipt deletes the account's sessions and an accepted cleanup receipt deletes its listed stop,
+  // which would change what the refusal worlds go on to assert. Each statement is the very function the refusals call, with only the id
+  // changed to a fresh action id, so those refusals are caused by the id and by nothing else in the payload.
+  const w=await world('id-reuse-direct-controls'),account=w.owner.account,other=await w.project();
+  const fresh=aid();await stopInsert(w,fresh,w.projectId);
+  assert.equal(await w.present(fresh),1,'The direct stop insert is valid with a fresh id');
+  const sessions=async()=>(await w.db.prepare('SELECT count(*) AS n FROM identity_sessions WHERE account_id=?').bind(account).first()).n;
+  assert.equal(await sessions(),1);
+  const freshRevoke=aid();await revokeInsert(w,freshRevoke,account);
+  assert.equal((await w.db.prepare('SELECT count(*) AS n FROM operator_session_revocations WHERE id=?').bind(freshRevoke).first()).n,1,'The direct revocation insert is valid with a fresh id');
+  assert.equal(await sessions(),0,'and its apply trigger removed the listed session');
+  let s3=await w.stopServing(other);await w.lift(s3);s3=await w.age(s3,100*DAY);
+  const freshCleanup=aid();await cleanupInsert(w,freshCleanup,iso(Date.now()-91*DAY),s3);
+  assert.equal((await w.db.prepare('SELECT count(*) AS n FROM operator_retention_receipts WHERE id=?').bind(freshCleanup).first()).n,1,'The direct cleanup receipt insert is valid with a fresh id');
+  assert.equal(await w.present(s3),0,'and its apply trigger deleted the listed stop');
+  // The containment update guard is back after aging AND still keys on the id: a valid resolution of an expired, unresolved aged row is
+  // refused only when it also renames the row, and accepted without the rename (so the refusal is the id clause, not the resolution).
+  let e=await w.stopServing(await w.project());e=await w.expireOld(e,100*DAY);
+  const resolve=(rename)=>w.db.prepare(`UPDATE operator_containments SET ${rename?'id=?,':''}resolution='closed',resolved_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),resolved_by='human:fixture',resolution_reason='Identity probe',resolution_digest=? WHERE id=?`).bind(...(rename?[aid()]:[]),'c'.repeat(64),e).run();
+  await assert.rejects(resolve(true),/operator_containment_immutable/);
+  assert.equal((await w.db.prepare('SELECT resolution FROM operator_containments WHERE id=?').bind(e).first()).resolution,null,'The refused rename resolved nothing');
+  await resolve(false);
+  assert.equal((await w.db.prepare('SELECT resolution FROM operator_containments WHERE id=?').bind(e).first()).resolution,'closed','The same resolution without a rename is accepted');
   await w.close();
  }
  {
