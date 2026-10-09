@@ -1,6 +1,6 @@
 # Review and receipt retention (WH-061)
 
-**Status: planned. Design and offline reference only (WH-180, October 9, 2026 UTC, at `ca17c6a`; rebased onto `92a001f` the same day, where `--inventory` and the contract test reproduce the same 640 triggers and 88 capped tables because no schema input changed).** Nothing here is implemented, deployed or accepted. No schema, trigger, route, scheduled job or Worker source changes. Every trigger change below is a proposal. It needs the owner-run empty-D1 cutover (`pnpm run deploy prepare/apply` with `schemaChange: "initialize"`, see [releases](releases.md)), which wipes test data.
+**Status: planned. Design and offline reference only (WH-180, October 9, 2026 UTC, at `ca17c6a`; ported onto `d3ebaf2` the same day, where `--inventory` and the contract test reproduce the same 640 triggers and 88 capped tables because no schema input changed).** Nothing here is implemented, deployed or accepted. No schema, trigger, route, scheduled job or Worker source changes. Every trigger change below is a proposal. It needs the owner-run empty-D1 cutover (`pnpm run deploy prepare/apply` with `schemaChange: "initialize"`, see [releases](releases.md)), which wipes test data.
 
 WH-061's outcome: directory owners can maintain a live snapshot on supported domains without eventually hitting an unrecoverable private-test receipt ceiling. This document:
 
