@@ -1,6 +1,6 @@
 # Review and receipt retention (WH-061)
 
-**Status: planned. Design and offline reference only (WH-180, October 9, 2026 UTC, at `ca17c6a`; ported onto `d3ebaf2` the same day, where `--inventory` and the contract test reproduce the same 640 triggers and 88 capped tables because no schema input changed).** Nothing here is implemented, deployed or accepted. No schema, trigger, route, scheduled job or Worker source changes. Every trigger change below is a proposal. It needs the owner-run empty-D1 cutover (`pnpm run deploy prepare/apply` with `schemaChange: "initialize"`, see [releases](releases.md)), which wipes test data.
+**Status: planned. Design and offline reference only (WH-180, October 9, 2026 UTC, at `ca17c6a`; ported onto `d3ebaf2` the same day with the same 640 triggers and 88 capped tables; re-ported onto `4dea09c` the same day after WH-050 (#186) added reviewed operator retention, where `--inventory` and the contract test report 648 triggers and 90 capped tables: `operator_retention_receipts` and `operator_session_revocations` are new R5 operator evidence rows, and `operator_containments` is now deleted by the reviewed `operator_retention_apply` cleanup trigger; the ceiling, shared-ceiling and other-lifetime sets are unchanged).** Nothing here is implemented, deployed or accepted. No schema, trigger, route, scheduled job or Worker source changes. Every trigger change below is a proposal. It needs the owner-run empty-D1 cutover (`pnpm run deploy prepare/apply` with `schemaChange: "initialize"`, see [releases](releases.md)), which wipes test data.
 
 WH-061's outcome: directory owners can maintain a live snapshot on supported domains without eventually hitting an unrecoverable private-test receipt ceiling. This document:
 
@@ -48,7 +48,7 @@ Class, lane and turnover values:
   - R2: receipt ring with a replay horizon.
   - R3: reconcile first, then compact.
   - R4: [version retention](version-retention.md).
-  - R5: restricted ([WH-015](data-lifecycle.md#wh-015-restricted-cases--october-4-2026-utc)); never pruned here.
+  - R5: restricted ([WH-015](data-lifecycle.md#wh-015-restricted-cases--october-4-2026-utc) cases, or WH-050 operator records removed only by reviewed operator cleanup, see [capacity and fairness](capacity-and-fairness.md)); never pruned here.
   - R6: unchanged.
 - **Turnover today:**
   - `lifetime`: terminal rows count until project or account cleanup.
@@ -56,7 +56,7 @@ Class, lane and turnover values:
   - `expiring`: a sweep deletes expired rows.
   - `window`: a time-window counter.
   - `owner-removable`: the owner can remove live rows.
-  - `restricted`: WH-015 retention decisions govern removal.
+  - `restricted`: WH-015 retention decisions or WH-050 reviewed operator cleanup govern removal.
 
 <!-- review-retention:inventory:start -->
 | Counted table | Capacity trigger(s) | Caps | Class | Lane | Turnover today | Deleted by | WH-009 class |
@@ -126,7 +126,9 @@ Class, lane and turnover values:
 | `module_files` | `module_file_admit` | visitor+instance 10 (window) | inventory | R6 | window | app+cascade | module-files |
 | `module_records` | `module_record_admit` | project 20000 · visitor+instance 20 (window) · instance 10000 | inventory | R6 | expiring | app+cascade | module-records |
 | `module_request_receipts` | `module_record_admit`, `module_request_admit` | project 100 (window) · owner 100 (window) · instance 60 (window) · instance 20000 (window) · platform 500 (window) · platform 1000 (window) | receipt | R2 | window | app+cascade | module-registry |
-| `operator_containments` | `operator_containment_admit` | platform 10000 | evidence | R5 | restricted | none | operator-containment |
+| `operator_containments` | `operator_containment_admit` | platform 10000 | evidence | R5 | restricted | trigger | operator-containment |
+| `operator_retention_receipts` | `operator_retention_apply` | platform ≤10000 | evidence | R5 | restricted | trigger | operator-containment |
+| `operator_session_revocations` | `operator_session_revocation_admit` | platform 10000 | evidence | R5 | restricted | trigger | operator-containment |
 | `photo_scan_tickets` | `photo_scan_ticket_quota` | owner 100 · platform 5000 | evidence | R5 | lifetime | cascade | safety-checks |
 | `project_files` | `project_file_quota` | project 20 · owner 50 · platform 500 | inventory | R6 | owner-removable | trigger+cascade | project-media |
 | `project_files+file_cleanup` | `project_file_cleanup_capacity` | platform 500 | inventory | R6 | owner-removable | app+trigger+cascade | project-media |
