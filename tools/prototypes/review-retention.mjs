@@ -106,10 +106,10 @@ export const lifecycleTable=table=>({app_migration_current:'app_migration_checks
 //           operation (external dispatch with unknown-outcome states) · version (referenced artifact or live slot)
 //           evidence (restricted safety/operator evidence) · inventory (live identity/resource rows) · rate (windowed counter)
 // lane:     R1 active caps + compaction · R2 receipt ring + replay horizon · R3 reconcile first, then compact
-//           R4 version retention (docs/version-retention.md) · R5 restricted (WH-015, never pruned here) · R6 unchanged
+//           R4 version retention (docs/version-retention.md) · R5 restricted (WH-015 cases or WH-050 operator records, never pruned here) · R6 unchanged
 // turnover: how rows stop counting today. lifetime (terminal rows count until project/account cleanup) · pending-only
 //           (cap excludes applied/expired rows) · expiring (a sweep deletes expired rows) · window (time-window counter)
-//           · owner-removable (live rows the owner can remove) · restricted (WH-015 retention decisions)
+//           · owner-removable (live rows the owner can remove) · restricted (WH-015 retention decisions or WH-050 reviewed operator cleanup)
 // withdrawal: the rows that withdraw/disable/revoke and must be exempt from capacity (proposal).
 const R=(cls,lane,turnover,lifecycle,withdrawal=null)=>Object.freeze({class:cls,lane,turnover,lifecycle,withdrawal});
 export const capRegistry=Object.freeze({
@@ -179,6 +179,8 @@ export const capRegistry=Object.freeze({
  module_records:R('inventory','R6','expiring','module-records'),
  module_request_receipts:R('receipt','R2','window','module-registry'),
  operator_containments:R('evidence','R5','restricted','operator-containment'),
+ operator_retention_receipts:R('evidence','R5','restricted','operator-containment'),
+ operator_session_revocations:R('evidence','R5','restricted','operator-containment'),
  photo_scan_tickets:R('evidence','R5','lifetime','safety-checks'),
  project_files:R('inventory','R6','owner-removable','project-media'),
  'project_files+file_cleanup':R('inventory','R6','owner-removable','project-media'),
