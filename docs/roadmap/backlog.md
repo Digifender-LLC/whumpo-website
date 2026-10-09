@@ -2,7 +2,7 @@
 
 > Generated from `backlog.json` by `node tools/roadmap.mjs render`. Edit the JSON source, then render again.
 
-Reviewed 2026-10-01 against source `db8b740ab2346f55f2985593b1ec531a99027630`. 164 planned tasks.
+Reviewed 2026-10-01 against source `db8b740ab2346f55f2985593b1ec531a99027630`. 170 planned tasks.
 
 Planning readiness and dependencies describe the plan. Current execution, claims, blockers, and completion evidence live in GitHub Issues. A ready task is only a candidate: verify live dependency completion and authorization before work.
 
@@ -3100,7 +3100,7 @@ Directory owners can maintain a live snapshot on supported domains without event
 
 ### Dependencies and blockers
 
-Planning dependencies: WH-033, WH-037, WH-009. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+Planning dependencies: WH-033, WH-037, WH-009, WH-180, WH-181, WH-182, WH-183, WH-184. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
 No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
 
@@ -3110,6 +3110,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/version-retention.md](../../docs/version-retention.md)
 - [docs/site-health.md](../../docs/site-health.md)
 - [docs/integrations/domain-hosting.md](../../docs/integrations/domain-hosting.md)
+- [docs/review-retention.md](../../docs/review-retention.md)
 
 ### Execution coordination
 
@@ -3117,7 +3118,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-09 UTC: decomposed into WH-180-184 (WH-185 deferred, not a dependency) with the planned design in docs/review-retention.md: machine-checked inventory of all 88 capped tables from 640 schema triggers (28 ceiling-set review/receipt/operation tables, 22 of them with a platform-wide lifetime cap, the WH-004 B1 class), row states, option D (active-only per-project/per-owner caps under a fair-share ceiling, history window, sealed receipts with a replay horizon, capacity-exempt withdrawals), the exact cutover proposal and the directory publication/export/restore/custom-host/health agreement map. Planning and offline reference only: no schema, trigger, source, route, job or deployment change. Acceptance is unchanged and closes only after every child plus live custom-host acceptance through WH-033; no child reaches WH-033/049/104. Live GitHub issue state was not read from this session.
 
 ## WH-063 — Define verified email changes and compromised-account recovery
 
@@ -4227,6 +4228,273 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
 
+## WH-180 — Freeze the review and receipt retention contract and decompose WH-061
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **ready**. Kind: decision. Size: S.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Every review/receipt capacity change builds on one machine-checked inventory, row-state classification and retention policy instead of per-table ceilings that eventually need operator database edits.
+
+### Scope
+
+- Inventory every row-count capacity trigger in the canonical schema inputs with scope, limit, deleter, turnover and WH-009 class, machine-checked against the schema, code and docs/data-lifecycle.json
+- Classify row states (pending, uncertain, applied-referenced, held, applied-history, applied-unreferenced, superseded, expired, failed) as active authority, retained evidence or compactable
+- Choose between pruning, per-owner caps, sealed-receipt compaction and a combination; state the safety-withdrawal exemption, the exact cutover proposal and the directory snapshot/custom-host/health agreement map
+- Add an offline reference model and conformance suite without Worker imports
+
+### Acceptance criteria
+
+- [ ] docs/review-retention.md states the inventory, decision, cutover proposal, owner decisions and child slices, marked planned
+- [ ] Offline checks prove per-owner non-starvation under a bounded global ceiling, pruning never removes active/unknown/held/referenced rows, withdrawals are exempt and bounded, replay survives compaction and turnover needs no operator edit
+- [ ] The documented inventory cannot drift from the schema capacity triggers, and every mutant is caught by a named check
+- [ ] WH-061 keeps its acceptance and depends on every child; no child reaches WH-033/049/104
+
+### Verification
+
+- node tests/review-retention-contract.mjs
+- node tools/roadmap.mjs validate, alignment and render --check
+- git diff --check
+
+### Dependencies and blockers
+
+Planning dependencies: WH-009. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/review-retention.md](../../docs/review-retention.md)
+- [tools/prototypes/review-retention.mjs](../../tools/prototypes/review-retention.mjs)
+- [tests/review-retention-contract.mjs](../../tests/review-retention-contract.mjs)
+- [docs/directories.md](../../docs/directories.md)
+- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-09 UTC: contract and offline reference only, not deployed. Local branch claude/wh-061-review-retention-design at ca17c6a, rebased as claude/wh-061-review-retention-design-rb onto origin/main 92a001f plus test-only 9847281 with the same inventory and test result (not pushed): docs/review-retention.md (planned), tools/prototypes/review-retention.mjs (node builtins only, no Worker import) and tests/review-retention-contract.mjs (15 reference and 3 static checks; 640 triggers to 88 capped tables; 25/25 mutants caught), added to the fast profile. Proves the documented inventory and the synthetic model only, not D1 triggers, routes or deployment. Open owner decisions OD-1 to OD-8 are listed in the contract.
+
+## WH-181 — Active-only review capacity, sealed receipts and capacity-exempt withdrawals in the current schema
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+No owner can exhaust a shared review table for other owners, and terminal review rows stop counting against any cap without being lost as replay evidence.
+
+### Scope
+
+- Rewrite the capacity triggers of every ceiling-set family in docs/review-retention.md to count active rows per project and per owner under a fair-share platform ceiling
+- Add the review_receipts table, its binding and immutability triggers, and its WH-009 lifecycle classification
+- Exempt unpublish/disable/revoke withdrawals (owner and safety) from capacity with same-target supersession; rewrite delete guards to allow only eligible, receipted, unreferenced and unheld deletions
+- Add directories.live_review_id/live_digest and site_health_checks.directory_review_id; prepare the owner-run empty-D1 cutover plan
+
+### Acceptance criteria
+
+- [ ] The WH-004 B1 reproduction passes on local D1: one owner at capacity does not block another owner's review or any withdrawal
+- [ ] Delete guards refuse referenced, pending, uncertain, held and unreceipted rows, including references added after review
+- [ ] Current-schema cutover only with explicit owner authorization in the conversation; no data-preservation migration
+- [ ] Local verification is not live acceptance
+
+### Verification
+
+- pnpm check
+- pnpm test:directories
+- pnpm test:directory-history
+- node tests/review-retention-contract.mjs
+- node tests/lifecycle-catalog.mjs
+- Focused local D1 suites for each changed review family
+
+### Dependencies and blockers
+
+Planning dependencies: WH-180. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/review-retention.md](../../docs/review-retention.md)
+- [schema/platform.sql](../../schema/platform.sql)
+- [src/shared-modules/schema.sql](../../src/shared-modules/schema.sql)
+- [docs/releases.md](../../docs/releases.md)
+- [docs/data-lifecycle.json](../../docs/data-lifecycle.json)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-182 — Operator-free review turnover at admission and in daily maintenance
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Routine review turnover happens automatically inside each admission and in the existing daily maintenance pass, with no raw operator database edits.
+
+### Scope
+
+- Seal and remove eligible rows for the caller's project inside each review admission batch, bounded per call
+- Add a bounded daily reviews job to the existing runMaintenance pass for idle projects and evict sealed receipts after the replay horizon
+- Add the review families to the maintenance counters and inventory
+
+### Acceptance criteria
+
+- [ ] A long-lived synthetic owner can keep editing and publishing without refusal or operator action, and storage stays bounded
+- [ ] Pruning re-evaluates references, holds and unknown outcomes in the deleting statement; held and in-flight rows survive
+- [ ] Retries within the replay horizon return the original outcome from sealed receipts
+
+### Verification
+
+- node tests/maintenance-scheduled.mjs
+- node tests/maintenance-inventory.mjs
+- node tests/review-retention-contract.mjs
+- Focused local D1 turnover suite
+
+### Dependencies and blockers
+
+Planning dependencies: WH-181. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/review-retention.md](../../docs/review-retention.md)
+- [docs/maintenance.md](../../docs/maintenance.md)
+- [src/index.ts](../../src/index.ts)
+- [tools/report-maintenance.mjs](../../tools/report-maintenance.mjs)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-183 — Directory live-snapshot identity, custom-host directory paths and health wiring
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Publication, public page/JSON, export, draft restore, custom-host serving and health all name and verify the same approved directory snapshot.
+
+### Scope
+
+- Serve /directory and /directory.json on active custom-hostname mappings through the existing site-host mapping and publicDirectory, with a live-digest ETag
+- Label compacted history entries as digest-only and keep restore/export on retained snapshots
+- Add the directory review to the site-health identity and verify the served JSON digest
+
+### Acceptance criteria
+
+- [ ] Local fixtures with an active domain mapping serve exactly the approved snapshot; foreign hosts and unpublished directories return 404
+- [ ] Health becomes changed/unhealthy when the directory publication changes or the served digest differs
+- [ ] No hosting activation, provider call or DNS change; live custom-host acceptance stays with WH-061 through WH-033
+
+### Verification
+
+- pnpm check
+- pnpm test:directories
+- pnpm test:directory-history
+- pnpm test:site-health
+- pnpm test:domain-hosting
+
+### Dependencies and blockers
+
+Planning dependencies: WH-181. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/review-retention.md](../../docs/review-retention.md)
+- [docs/directories.md](../../docs/directories.md)
+- [docs/site-health.md](../../docs/site-health.md)
+- [docs/integrations/domain-hosting.md](../../docs/integrations/domain-hosting.md)
+- [src/site-host.ts](../../src/site-host.ts)
+- [src/directory.ts](../../src/directory.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-184 — Connected local acceptance for sustainable directory and review retention
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: verification. Size: S.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+One connected local journey proves a directory owner can edit, publish, restore and export indefinitely while other owners and withdrawals are unaffected.
+
+### Scope
+
+- Long-lived synthetic directory journey past every former ceiling with turnover, restore and export after compaction
+- B1 regression across owners and safety withdrawal at capacity
+- Custom-host fixture and health agreement on the exact snapshot
+
+### Acceptance criteria
+
+- [ ] No refusal, operator action or lost replay answer across the journey; storage bounded
+- [ ] Evidence is local acceptance only and records exact commands and source commit
+
+### Verification
+
+- pnpm verify fast
+- pnpm test:directories
+- pnpm test:directory-history
+- Connected local journey script named in the slice
+
+### Dependencies and blockers
+
+Planning dependencies: WH-182, WH-183. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/review-retention.md](../../docs/review-retention.md)
+- [docs/verification.md](../../docs/verification.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
 ## WH-199 — Freeze the verified email change and compromise-response contract and decompose WH-063
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **ready**. Kind: decision. Size: S.
@@ -4574,6 +4842,53 @@ Planning dependencies: WH-202, WH-204, WH-005. Verify completion in current issu
 
 - [docs/email-change-and-compromise.md](../../docs/email-change-and-compromise.md)
 - [docs/acceptance.md](../../docs/acceptance.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-185 — Bounded directory bulk import and schema expansion with a scoped review
+
+Phase: **Useful websites and applications** (F2). Priority: **P2**. Planning readiness: **deferred**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Owners can import a bounded set of listings or use an expanded directory schema only through a separately scoped, tenant-isolated review.
+
+### Scope
+
+- Import of whumpo-directory v1 files through validateDirectoryExport into a reviewed draft, with size and rate bounds
+- Any new field or listing bound gets its own capacity inventory entry, safety screening decision and review
+
+### Acceptance criteria
+
+- [ ] Imports never bypass review, tenant isolation or capacity; imported text follows the content-safety contract
+- [ ] Owner decides scope before work starts
+
+### Verification
+
+- node tests/review-retention-contract.mjs
+- Focused local D1 import suite
+
+### Dependencies and blockers
+
+Planning dependencies: WH-184. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/review-retention.md](../../docs/review-retention.md)
+- [docs/directories.md](../../docs/directories.md)
+- [docs/safety-coverage.md](../../docs/safety-coverage.md)
 
 ### Execution coordination
 
