@@ -44,8 +44,24 @@ const integer=n=>Number.isSafeInteger(n)&&n>=0;
 const minute=ms=>new Date(ms).toISOString().slice(0,16)+'Z';
 function median(values){const v=[...values].sort((a,b)=>a-b),m=v.length>>1;return v.length%2?v[m]:(v[m-1]+v[m])/2;}
 
-export async function funnelReport(db,{now=Date.now(),days=90,minimumAccounts=5}={}){
- if(!integer(now)||!Number.isSafeInteger(days)||days<1||days>180||!Number.isSafeInteger(minimumAccounts)||minimumAccounts<1||minimumAccounts>50)throw Error('Invalid funnel report window');
+/** Owner-approved floor (October 8, 2026 UTC): a report cell never describes fewer than five accounts. Callers may only be stricter. */
+export const funnelMinimumAccounts=5;
+const usage='Usage: node tools/report-funnel.mjs [--days 1-180] [--minimum 5-50]';
+/** Parses operator arguments with the same bounds funnelReport enforces. */
+export function parseFunnelReportArguments(args){
+ const options={};
+ if(args.length%2)throw Error(usage);
+ for(let i=0;i<args.length;i+=2){
+  const [flag,value]=[args[i],Number(args[i+1])];
+  if(flag==='--days'&&options.days===undefined&&Number.isSafeInteger(value)&&value>=1&&value<=180)options.days=value;
+  else if(flag==='--minimum'&&options.minimumAccounts===undefined&&Number.isSafeInteger(value)&&value>=funnelMinimumAccounts&&value<=50)options.minimumAccounts=value;
+  else throw Error(usage);
+ }
+ return options;
+}
+
+export async function funnelReport(db,{now=Date.now(),days=90,minimumAccounts=funnelMinimumAccounts}={}){
+ if(!integer(now)||!Number.isSafeInteger(days)||days<1||days>180||!Number.isSafeInteger(minimumAccounts)||minimumAccounts<funnelMinimumAccounts||minimumAccounts>50)throw Error('Invalid funnel report window');
  const since=minute(now-days*86400000),cutoff=minute(now-180*86400000),k=minimumAccounts;
  const cell=(events,accounts)=>{if(!integer(events)||!integer(accounts))throw Error('Invalid funnel counts');return accounts>=k?{events,accounts}:{suppressed:true};};
  const reach=accounts=>{if(!integer(accounts))throw Error('Invalid funnel counts');return accounts>=k?{accounts}:{suppressed:true};};
@@ -80,13 +96,7 @@ export async function funnelReport(db,{now=Date.now(),days=90,minimumAccounts=5}
 
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  try{
-  const args=process.argv.slice(2),options={};
-  for(let i=0;i<args.length;i+=2){
-   const [flag,value]=[args[i],Number(args[i+1])];
-   if(flag==='--days'&&options.days===undefined)options.days=value;
-   else if(flag==='--minimum'&&options.minimumAccounts===undefined&&value>=3)options.minimumAccounts=value;
-   else throw Error('Usage: node tools/report-funnel.mjs [--days 1-180] [--minimum 3-50]');
-  }
+  const options=parseFunnelReportArguments(process.argv.slice(2));
   const config=JSON.parse(await readFile('wrangler.jsonc','utf8'));
   const credentials=process.env.CLOUDFLARE_API_TOKEN?{type:'api_token',token:process.env.CLOUDFLARE_API_TOKEN}:undefined;
   const api=cloudflareClient(config.account_id,fetch,credentials);
