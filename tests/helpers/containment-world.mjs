@@ -109,20 +109,30 @@ export async function containmentHarness(suite){
   // The aged action row's id moves with its timestamps: minted for the instant the row claims to have been created, and
   // therefore older than the new-id window, so reusing it after cleanup is refused by the schema (the reuse proof).
   const stampedId=createdMs=>{const aged=actionIdAged(Date.now()-createdMs);assert.ok(Math.abs(actionIdTime(aged)-createdMs)<5000);assert.ok(actionIdTime(aged)<Date.now()-actionIdWindowMs,'An aged id is outside the window of a new id');return aged;};
+  // A rename models delete plus insert of the key, so it is allowed only for a key no archive record or evidence event names yet:
+  // the id is minted for the row's claimed age BEFORE any registration or inventory observation of that row (checked here on the
+  // inventory file itself, read-only), never changed afterwards.
+  const unobserved=cid=>{
+   const peek=new DatabaseSync(file,{readOnly:true});
+   try{assert.equal(peek.prepare('SELECT (SELECT count(*) FROM event WHERE instr(selection,?)>0 OR instr(data,?)>0)+(SELECT count(*) FROM archive WHERE instr(records,?)>0) AS n').get(cid,cid,cid).n,0,'An action id is never renamed once an archive or evidence event names it');}finally{peek.close();}
+  };
   // FIXTURE-ONLY: a resolved action moved `ms` into the past (created two hours before it was resolved). Returns the new id.
   const age=async(cid,ms)=>{
+   unobserved(cid);
    const [{resolution}]=(await db.prepare('SELECT resolution FROM operator_containments WHERE id=? AND resolved_at IS NOT NULL').bind(cid).all()).results,resolved=Date.now()-ms,next=stampedId(resolved-2*HOUR);
    await rewrite('operator_containment_resolve','UPDATE operator_containments SET id=?,created_at=?,expires_at=?,resolved_at=? WHERE id=?',next,iso(resolved-2*HOUR),iso(resolution==='lifted'?resolved+HOUR:resolved-60000),iso(resolved),cid);
    return next;
   };
   // FIXTURE-ONLY: an unresolved action whose expiry passed `ms` ago (a real expiry needs real waiting). Returns the new id.
   const expireOld=async(cid,ms)=>{
+   unobserved(cid);
    const next=stampedId(Date.now()-ms-2*HOUR);
    await rewrite('operator_containment_resolve','UPDATE operator_containments SET id=?,created_at=?,expires_at=? WHERE id=? AND resolved_at IS NULL',next,iso(Date.now()-ms-2*HOUR),iso(Date.now()-ms),cid);
    return next;
   };
   // FIXTURE-ONLY: a revocation or cleanup receipt moved `ms` into the past (its id moves with its creation time). Returns the new id.
   const ageReceipt=async(table,rid,ms)=>{
+   unobserved(rid);
    const next=stampedId(Date.now()-ms),guard=table==='operator_session_revocations'?'operator_session_revocation_immutable':'operator_retention_immutable';
    await rewrite(guard,`UPDATE ${table} SET id=?,created_at=? WHERE id=?`,next,iso(Date.now()-ms),rid);
    return next;
@@ -130,6 +140,7 @@ export async function containmentHarness(suite){
   // FIXTURE-ONLY: one resolved action, aged with timestamps computed by the DATABASE clock (`modifiers` are SQLite date modifiers
   // for the resolution instant, for example ['-90 days','+30 seconds']), so a boundary test cannot flake on this process's clock.
   const ageBySql=async(cid,modifiers,ageMs)=>{
+   unobserved(cid);
    const next=stampedId(Date.now()-ageMs-2*HOUR),f="'%Y-%m-%dT%H:%M:%fZ'";
    await rewrite('operator_containment_resolve',`UPDATE operator_containments SET id=?,created_at=strftime(${f},'now',?,?,'-2 hours'),expires_at=strftime(${f},'now',?,?,'+1 hour'),resolved_at=strftime(${f},'now',?,?) WHERE id=?`,next,...modifiers,...modifiers,...modifiers,cid);
    return next;
