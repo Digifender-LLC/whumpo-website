@@ -156,6 +156,8 @@ Status: **implemented in source, not wired** (October 9, 2026 UTC). Like WH-200,
 | --- | --- |
 | [compromise.ts](../src/email-change/compromise.ts) | `compromiseBounds` (10-minute review, 30-minute kit offer, the shared kit offer lifetime). `revokedAuthority`: sessions, grants, challenges and kit offers, the same rows the identity engine's own emergency removal deletes. `recoveryGrantOperations`. Closed parsers for prepare, kit offer, kit save and commit. `prepareCompromiseReview` returns the snapshot: active passkeys, session metadata (no token or hash), kit generation, the pending change and each connection's state, plus `accountRecoveryOnly: true`. `prepareReviewKit` and `saveReviewKit` handle the replacement kit offer bound to the review; the store keeps only the verifier, and the save is idempotent. `commitCompromiseReview` does the guarded commit described below. `admitSignIn` is the sign-in fence. `admitRecovery` treats the address as a lookup key and the kit as the proof. |
 | [revocation.ts](../src/email-change/revocation.ts) | `ProviderConnection` records hold no credential material; `credentialHeld` says whether the store still keeps the ciphertext. The file also has `disableForReview`, `authorizeConnectionUse`, `dispatchRevocation` (one claimed attempt, one `ProviderRevoker` call), `reconcileRevocation`, `eraseConnectionCredential`, `closureHolds`, `revocationBounds` (3 reads in 72 hours) and `createSyntheticRevoker`. The synthetic revoker is for tests only: no network, no credential, and it recognizes only `github` and `cloudflare`. |
+| [provider-revokers.ts](../src/email-change/provider-revokers.ts) | `createGitHubRevoker` and `createCloudflareRevoker`, the `ProviderRevoker` adapters over the existing revocation requests (section 3.1.1). Every effect is an injected seam: `transport` (the existing modules' `(url, init)` shape), `open` (the only place a held credential is decrypted; WH-201 supplies it) and `observe` (content-free events). Also `githubReconcileEvidence`, which reads saved grant receipts and never calls a provider. |
+| [connection-holds.ts](../src/email-change/connection-holds.ts) | `githubConnectionHolds` and `cloudflareConnectionHolds` map current-schema rows onto `ProviderConnection` holds, one per held credential (`gh-<vault id>`, `cf-<vault id>`). `connectionClosureBlockers` and `closureInventoryConnectionHolds` say what blocks account closure. Read-only: no table, no write. |
 
 The commit runs these checks in this order:
 
@@ -191,12 +193,50 @@ Refinements of the WH-199 reference, none reachable by any customer, API or mode
 - `admitRecovery` refuses an address that another account holds reserved inside its undo window, with the same generic error. Under the reservation rule this cannot happen; the check keeps the lookup unambiguous even if that rule is ever broken.
 - The `dataClasses` list moved to [policy.ts](../src/email-change/policy.ts). The `owner-security-reviews` class now names the kit offer verifier.
 
+#### 3.1.1 Provider adapters and connection-state mapping (WH-203)
+
+Status: **implemented in source, not wired** (October 9, 2026 UTC). No route, Worker entry, table or provider call uses them. The adapters import only `revocation.ts` and `policy.ts`. They do not import `src/github-connection.ts`, `src/cloudflare-connection.ts` or the connection vault, so the Worker import-graph check still covers the whole `src/email-change` directory.
+
+Each adapter sends the same request the existing single-token cleaner sends. `tests/email-change-revokers.mjs` checks this by running the existing `cleanupGitHub` and `cleanupCloudflare` on the current schema through their own injected transport, then comparing URL, method, headers, body and redirect mode.
+
+| Provider | Request | Outcome |
+| --- | --- | --- |
+| GitHub | `DELETE https://api.github.com/applications/{client_id}/token`, client Basic authentication, body `{access_token}`, `redirect: manual`, 10-second deadline | `revoked` only for an exact, non-redirected `204` when no refresh credential is held. With refresh custody, the same `204` is `access-revoked-refresh-held`, the same effect as cleanup's `access_revoked_at`. No call is sent for a token whose access revocation was already observed (`refresh-held`) or that a reviewed grant deletion is dispatching or holding as uncertain (`grant-pending`). The app-wide grant deletion is never sent: it needs the owner's separate reviewed consent. |
+| Cloudflare | `POST https://dash.cloudflare.com/oauth2/revoke` once per known token (access, then refresh), form body `{token, token_type_hint}`, client Basic authentication | `revoked` only when every token gets an exact, non-redirected `200`. A transport loss stops the attempt, as in the existing cleaner. |
+
+These rules apply to every outcome:
+
+- **Unknown.** Any other status, a redirect, a throw, a timeout or a partial token set is `unknown` (or one of the GitHub hold outcomes above). The dispatcher records it as `uncertain` and never sends again.
+- **Not revoked.** `not-revoked` means nothing was sent: the credential could not be opened, or it belongs to another app client. The retired credential then stays `queued`.
+- **Stricter than cleanup.** The existing background cleaners retry a non-receipt reply under their claim lease. A compromise hold does not.
+- **Content-free.** Errors and `observe` events never carry a token, client secret or authorization value.
+
+`githubReconcileEvidence` is the only settling evidence for a held GitHub credential. It is a saved `github_grant_revocations` receipt in state `revoked` with `http_status` `204` for the same owner, app client and token. It returns `null` otherwise, and it never calls a provider. Cloudflare has no supported read that proves revocation, so its uncertain holds wait for the read bound.
+
+| Current state (schema/platform.sql) | Hold |
+| --- | --- |
+| GitHub `active`, the connection's unexpired active token | access `active`, revocation `none` |
+| GitHub `active`, any other token (staged or expired) | access `disabled`, revocation `none` |
+| GitHub `revoking`, unexpired `github_revocation_claims` | `dispatching` |
+| GitHub `revoking`, refresh custody with `access_revoked_at` | `uncertain` (only the reviewed grant deletion settles it) |
+| GitHub `revoking`, otherwise | `queued` |
+| Grant deletion naming the token: `dispatching` / `uncertain` / `revoked` | `dispatching` / `uncertain` / `revoked` with a reconciled receipt; `review` and `cancelled` change nothing |
+| Cloudflare `active` / `staged` | revocation `none` (`active` access only while unexpired) |
+| Cloudflare `revoking` with an unexpired `revoke_after` lease / otherwise | `dispatching` / `queued` |
+
+Any other state is refused (`UNKNOWN_STATE`), and so is another owner's row (`FOREIGN_ROW`). For account closure, `connectionClosureBlockers` returns three lists: `closureHolds`, credentials still live (closure must queue them first) and unresolved `connection_oauth_exchanges`. `closureInventoryConnectionHolds` names the non-zero connection metrics of the existing [account-closure inventory](../tools/account-closure-inventory.mjs): `githubCredentials`, `cloudflareCredentials`, `githubRefreshCustody`, `githubGrantUncertain` and `unresolvedConnectionExchanges`. On SQLite with the current schema, the mapped holds equal the inventory's pending-revocation counts. Held and live credentials together equal its credential counts.
+
 Obligations the module cannot meet alone, left to the storage and adapter slices (WH-201, then WH-204 for connected proof):
 
 - Store reviews, review kit offers, saved receipts and connection revocation holds in current-schema tables (none exist; this change adds none). Write each commit in one revision-guarded batch, and repeat the epoch, fresh-passkey and review-binding predicates in the committing statements.
-- Implement `ProviderRevoker` over the existing adapters. GitHub's single-access-token `204` does **not** settle a retained refresh credential ([custody rules](connection-key-lifecycle.md#github-refresh-credential-custody--october-2-2026-utc)). The adapter may report `revoked` only when the whole retained credential set has an exact receipt, such as the reviewed grant revocation. Otherwise the hold must stay. Cloudflare reports `revoked` only when every known token gets `200`.
-- Map the existing GitHub and Cloudflare connection, vault and grant-revocation states onto these holds, and feed `closureHolds` into the account-closure inventory.
+- Wire the adapters (WH-201):
+  - Supply `open`, which reads the vault and custody rows and unseals the access token with the existing purpose strings.
+  - Persist `access_revoked_at` after an `access-revoked-refresh-held` event, and erase both the vault row and the custody row only with a receipt.
+  - Fence the compromise claim against the existing cleanup claims and grant dispatch, so one credential is never dispatched by two paths.
+  - Schedule reconciliation. Today the read bound advances only on authenticated reads. A GitHub refresh hold that is waiting for the owner's reviewed grant deletion therefore stays `uncertain` until that receipt exists. After it becomes `unresolved`, a later receipt cannot settle it through `reconcileRevocation`; only an operator can.
+- Read the mapping inputs from D1 and feed `connectionClosureBlockers` into account closure. The closure flow itself is not implemented.
 - Mount direct Settings controls outside Chat, available while inference is down.
+- Run focused SQLite/local D1 handler suites over the stored review and hold (WH-201), then connected synthetic acceptance on the actual Worker (WH-204).
 
 ## 4. Data classes and retention (WH-116 / WH-009 extension)
 
@@ -227,7 +267,7 @@ Restore and forward repair must never revive a superseded change, a used token, 
 | Emergency removal | `removePasskey` below two keys with epoch advance (`tests/identity-recovery.mjs`) | Conforms. **G-E7** **Resolved in source, not wired.** `commitCompromiseReview` in [compromise.ts](../src/email-change/compromise.ts) combines removal (down to zero keys), the epoch advance with the same `revokedAuthority` rows the engine deletes, kit rotation with save-before-rotation and change cancellation in one step (WH-203; agreement with `recovery.ts` and `kits.ts` is pinned by the harness). No route, table or Worker entry reaches it. |
 | Kit rotation | `rotateKit` prepare/save/commit (`tests/identity-kits.mjs`, 47 checks) | Conforms; reused by the review. |
 | Operator session revocation | WH-050 CLI, no epoch change | Conforms as a containment step; not a compromise review. |
-| Provider revocation | GitHub disconnect, single-token cleanup and reviewed grant revocation (`tests/github-connection.mjs`, `github-token-lifecycle.mjs`, `github-grant-revocation.mjs`); Cloudflare RFC 7009 disconnect (`tests/cloudflare-connection.mjs`) | Conforms to revoke-before-erase. **G-E8** **Resolved in source, not wired.** One review selects any set of connections; [revocation.ts](../src/email-change/revocation.ts) disables them, holds the credential, dispatches once per claim, holds unknown and interrupted outcomes, reconciles read-only and reports `closureHolds` (WH-203). The `ProviderRevoker` adapters over `src/github-connection.ts` and `src/cloudflare-connection.ts`, their state mapping and the closure inventory are not built. The harness pins the adapters' `204`/`200` receipt rules. |
+| Provider revocation | GitHub disconnect, single-token cleanup and reviewed grant revocation (`tests/github-connection.mjs`, `github-token-lifecycle.mjs`, `github-grant-revocation.mjs`); Cloudflare RFC 7009 disconnect (`tests/cloudflare-connection.mjs`) | Conforms to revoke-before-erase. **G-E8** **Resolved in source, not wired.** One review selects any set of connections; [revocation.ts](../src/email-change/revocation.ts) disables them, holds the credential, dispatches once per claim, holds unknown and interrupted outcomes, reconciles read-only and reports `closureHolds` (WH-203). The `ProviderRevoker` adapters and the mapping of current connection states and closure-inventory metrics are in source too ([section 3.1.1](#311-provider-adapters-and-connection-state-mapping-wh-203)). `tests/email-change-revokers.mjs` checks them against the existing cleaners on the current schema. Nothing wires them, stores a hold or runs account closure. |
 | Platform sender | `notify@whumpo.com`, Cloudflare adapter (`tests/contact-notifications.mjs`, `tests/notifications-contract.mjs`); not live | **G-E10** No account templates in the v1 catalog; the WH-036 live send is not done. |
 | Security-event notices | None | **G-E11** No notices for passkey added/removed, recovery started/secured or kit rotated (runbook G5). |
 | No model path | `agentProfile` excludes email (checked); identity routes outside Chat | Conforms. The WH-200 and WH-203 module has no model, agent, Chat or mailbox export, and no Worker entry imports it (checked). WH-201 must keep the agent catalogue free of these operations when it mounts them. |
@@ -266,7 +306,7 @@ WH-063 stays the parent. Its acceptance is unchanged, and it closes only when ev
 | WH-200 | Source state machine and confirmation-token handling over the current identity engine; isolated canonical inputs on disposable SQLite/local D1 (G-E1, G-E6). **Pure module done** ([section 2.1](#21-source-module-wh-200)). Open: the isolated canonical inputs and focused SQLite/local D1 handler suites. | WH-199, WH-115 |
 | WH-201 | Complete current schema, lifecycle classes, maintenance/closure inventory, trusted HTTP adapter and Settings controls (inactive delivery → `delivery_unavailable`), and one owner-authorized empty-D1 cutover | WH-200 |
 | WH-202 | Account templates in the WH-155 catalog, routing through the WH-156 outbox, support-notice and security-event gating (G-E5, G-E10, G-E11) | WH-201, WH-156, WH-036 (blocked on its live send) |
-| WH-203 | Compromise review: passkeys, sessions, kit, pending change and provider connections in one guarded commit (G-E7, G-E8). **Pure module done** ([section 3.1](#31-source-module-wh-203)). Open: the `ProviderRevoker` adapters over the existing GitHub/Cloudflare revocation, and focused SQLite/local D1 handler suites with synthetic providers. | WH-200 |
+| WH-203 | Compromise review: passkeys, sessions, kit, pending change and provider connections in one guarded commit (G-E7, G-E8). **Pure module, provider adapters and connection-state mapping done** ([section 3.1](#31-source-module-wh-203)). Open: the focused SQLite/local D1 handler suites with synthetic providers over stored reviews and holds, which need the WH-201 tables and wiring. | WH-200 |
 | WH-204 | Connected synthetic acceptance: actual Worker, current schema, signed synthetic WebAuthn, synthetic mailer/providers, browser checks | WH-201, WH-203 |
 | WH-205 | Physical-device and approved delivery canary acceptance on disposable identities | WH-202, WH-204, WH-005 (blocked) |
 
@@ -306,7 +346,7 @@ Nine read-only agreement and static checks:
 4. The inactive support-notice recipient (G-E5) is unchanged.
 5. G-E7: the review revokes the same rows (`identity_sessions`, `identity_grants`, `identity_challenges`, `identity_kit_offers`) that `removePasskey` in `recovery.ts` deletes. The engine allows zero keys (`recovering`), kit rotation in `kits.ts` advances the epoch, and the review and kit offer lifetimes are pinned.
 6. G-E8: the existing adapters settle revocation only on an exact receipt (GitHub `DELETE` → `204`, Cloudflare `oauth2/revoke` → `200` for every token), and the reconciliation bound is pinned.
-7. The module is pure. Every file in `src/email-change/` is listed and checked. It imports only `../security` and its own files and makes no fetch, D1, env or console call. An esbuild import graph of `src/index.ts`, `src/site-host.ts`, `src/app-host.ts` and `src/runtime/worker.ts` never reaches it.
+7. The module is pure. Every file in `src/email-change/` is listed and checked, including the WH-203 `provider-revokers.ts` and `connection-holds.ts`. It imports only `../security` and its own files and makes no fetch, D1, env or console call. An esbuild import graph of `src/index.ts`, `src/site-host.ts`, `src/app-host.ts` and `src/runtime/worker.ts` never reaches it.
 8. The address rule is the WH-036 destination rule.
 9. The SHA-256 shim used for mutant runs gives the same digests as `hashToken`.
 
@@ -322,5 +362,29 @@ The suite also runs against **41** deliberately broken copies. Each must be caug
 - unresolved hold does not block account closure.
 
 Mutant runs use a `node:crypto` SHA-256 for `hashToken`, because Node's WebCrypto digest dominated the run time. The unmodified run uses the real WebCrypto path. On this 2-vCPU host at load average 3.3, the whole run took 1.6–2.0 seconds wall over six runs, within the roughly 3-second budget of the deploy build's `verify fast`, so it stays in `fast`.
+
+### 9.1 Provider adapters (WH-203)
+
+`node tests/email-change-revokers.mjs` (also `pnpm test:email-change-revokers`) is a separate script. It is not part of any `verify` profile. It bundles `revocation.ts`, `provider-revokers.ts` and `connection-holds.ts` and drives them through the source dispatcher with a storage-only driver. Every transport is synthetic and every credential is a `SYNTHETIC-<KIND>-<NNNN>` canary. It has nine checks:
+
+- the GitHub receipt rule: exact request shape, other statuses, redirects, and nothing sent for another provider, another app client or an unreadable credential;
+- a GitHub single-token `204` never settles a retained refresh credential or the grant, and no call is made after an observed access revocation or during a pending grant deletion;
+- the Cloudflare `200`-for-every-token rule, including partial sets and transport loss;
+- timeouts, lost responses, unexpected statuses and redirects are held as `uncertain` and never resent, including after a second review or an interrupted claim;
+- reconciliation is read-only and accepts only the exact saved grant receipt;
+- a credential is erased only with an exact receipt;
+- the state mapping, including refusal of unknown states and foreign rows;
+- the closure blockers and inventory metrics;
+- no canary (token, client secret or Basic credential) in any event, error or stored record.
+
+Five agreement and static checks follow:
+
+1. On a fresh in-memory SQLite database with the current schema, the existing `cleanupGitHub` sends the same request as the GitHub adapter. Their receipt decisions agree for `204`, `200`, `404` and `500`, and for refresh custody (`access_revoked_at` recorded, credential kept, no second call).
+2. The same for `cleanupCloudflare` and the Cloudflare adapter, for `200/200`, `200/400` and `204/200`.
+3. The mapping of rows read from that database agrees with `accountClosureInventory`.
+4. The mapped state lists equal the schema's `CHECK` lists.
+5. The new files import only `./policy` and `./revocation` and are listed in the contract harness's purity and graph check.
+
+The suite also runs against **22** deliberately broken copies of the two new files, each caught by its named check (`--explain`). On October 9, 2026 UTC it took 1.3–2.0 seconds wall at load average 7 to 9.
 
 These checks prove the frozen contract and the unwired WH-200/WH-203 source module only. They do not prove D1 atomicity, real delivery, real provider revocation, devices or acceptance. No database, network, model, credential, Cloudflare resource or deployment is involved. All addresses use `example.test`. All kit keys, tokens and ciphertext handles are `SYNTHETIC-*` placeholders or random values generated during the run.
