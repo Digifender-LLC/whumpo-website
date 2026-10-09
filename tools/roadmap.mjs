@@ -102,6 +102,8 @@ export function alignmentProblems(data){
  for(let feature=91;feature<=103;feature++)required[feature]=[122,105,116];
  // WH-068 notification children (WH-154 contract): the parent waits for its contract, connected acceptance and canary.
  required[68]=[154,159,160];
+ // WH-034 domain purchase children (WH-192 contract): the parent waits for its contract, connected and live acceptance.
+ required[34]=[192,197,198];
  const forbidden={
   22:[23,41,47,49,104],42:[23,47,49,104],43:[23,47,49,104],
   48:[49,87,104,112,118],52:[12,18,36,68,69,74,86],
@@ -115,6 +117,10 @@ export function alignmentProblems(data){
  // (WH-160) waits for the WH-036 live sender.
  for(let child=154;child<=159;child++)forbidden[child]=[36,69,80,94];
  forbidden[160]=[69,80,94];
+ // Domain purchase children never reach benefit redemption (WH-045), premium AI funding (WH-044), the finance-period gate
+ // (WH-023) or commercial/paid-tier launch (WH-047/049/104). Only live acceptance (WH-198) waits for WH-041 real-money terms.
+ for(let child=192;child<=197;child++)forbidden[child]=[23,41,44,45,47,49,104];
+ forbidden[198]=[23,44,45,47,49,104];
  for(const [from,targets] of Object.entries(required))for(const to of targets){
   if(!tasks.has(id(from))||!tasks.has(id(to)))problems.push(`Missing alignment task ${id(from)} or ${id(to)}`);
   else if(!reaches(id(from),id(to)))problems.push(`${id(from)} must follow shared prerequisite ${id(to)}`);
