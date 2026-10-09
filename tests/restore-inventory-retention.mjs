@@ -223,6 +223,8 @@ try{
   const a0=await w.register(); // contains the stored two-day-old stop
   assert.equal((await runContainment(w.db,request,review)).replayed,true);assert.equal((await runContainment(w.db,request)).alreadyApplied,true);
   assert.equal(await w.present(seeded),1);
+  // The fixture guard fires: an id an archive already names can never be renamed by an aging helper (that would model delete plus insert).
+  await assert.rejects(()=>w.age(seeded,100*DAY),/never renamed once an archive or evidence event names it/);assert.equal(await w.present(seeded),1);
   await assert.rejects(runContainment(w.db,{...request,id:newActionId(Date.now()-2*DAY)}),FRESH_ID,'A never-applied two-day-old request needs a new id');
   await w.verified(a0);assert.equal(await w.events(),0,'The replay changed nothing');
   await w.close();
