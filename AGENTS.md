@@ -29,6 +29,7 @@ Whumpo is a private test-stage, Cloudflare-hosted AI website and application pla
 - Frontend source is authoritative; do not hand-edit generated bundles. Use existing scripts and patterns. Avoid adding dependencies for routine work.
 - Use Node.js 24 and pnpm 11. `pnpm check` type-checks both TypeScript projects. Run only the verification appropriate to the requested change and report exactly what ran.
 - Preserve unrelated working-tree changes. Inspect `git status` before edits and review the diff after.
+- **Agent authorization:** All agents are authorized to commit, push, and create pull requests (PRs) for their changes to anything they work on; no need to ask permission.
 
 ## Subagent routing and orchestration
 
