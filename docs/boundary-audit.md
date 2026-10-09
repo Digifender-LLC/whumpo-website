@@ -274,6 +274,8 @@ git diff --check
 
 Port onto `main` `4dea09c` (October 9, 2026 UTC; slice 1 was already on `main` as #224): the registry check reported the #186 serving-stop guard's seven path comparisons and one moved anchor (the operator-containment apply check now also refuses a malformed digest). The guard was registered as the `operator-serving-stop` family, the anchor follows the current code, and the summary above was regenerated (52 families). The same slice 2 commands passed again with the same B1, B4, B5 and B6 exits, plus `node tests/operator-containment.mjs`.
 
+Rebuilt onto `main` `89fa009` (October 9, 2026 UTC) as `claude/wh-004-audit-visitor-workers-main-train2`, carrying only this slice; the B4 fix (#239) had been merged into the previous slice 2 branch instead of `main` and is re-stacked separately. Main's changes since `4dea09c` (WH-050 safety-hold classification, the WH-063 contract, the WH-001 summaries and the WH-073 runtime-Worker proof) moved no registered route, control, job, tool or anchor: `node tools/boundary-audit.mjs` and `node tests/boundary-audit.mjs` passed with the registry and summary unchanged, and the slice 2 suites gave the same B1, B4, B5 and B6 exits (1) and passing characterizations.
+
 No remote, Cloudflare, provider or deployment operation was performed; fixtures are synthetic and disposable. No operator tool was run against a real account; the create-invite characterization runs the tool against a recording stub in a temporary directory. No `src/` or schema file changed.
 
 ## Remaining WH-004 work
