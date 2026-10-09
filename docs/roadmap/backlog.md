@@ -4121,7 +4121,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/130. Planning owner: Unassigne
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-08 UTC: the Chat guestPreview revoke/delete controls now save their effect in the same revision-checked batch as the Chat turn (WH-004 finding B3), so a request refused with 409 changes nothing. Verified only locally by node tests/guest-preview-chat-atomic.mjs on SQLite and --d1; not deployed. See docs/guest-previews.md.
 
 ## WH-152 — Accept the accountless guest preview journey in real browsers
 
