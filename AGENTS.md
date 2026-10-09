@@ -35,7 +35,9 @@ Whumpo is a private test-stage, Cloudflare-hosted AI website and application pla
 
 The primary agent acts as an orchestrator, coordinating work through context-scoped subagents rather than performing coding and edits directly. This division of labor optimizes reasoning effort and keeps the main conversation focused on coordination and decision-making.
 
-When delegating to subagents, route work based on task complexity and requirements. Models are listed from cheapest to most capable; prices are Anthropic API list prices per million input/output tokens as of 2026-09-25 and should be re-checked before relying on them:
+When delegating to subagents, route work based on task complexity and requirements. Low complexity tasks can also be delegated to **DeepSeek V4.1 Flash** (`opencode/deepseek-v4.1-flash`), **Space Bunny Free** (`opencode/space-bunny-free`), or **Muse 1.3 Contributor** (`opencode/muse-spark-1.3-contributor-free`), all from the **OpenCode** provider.
+
+Models are listed from cheapest to most capable; prices are Anthropic API list prices per million input/output tokens as of 2026-09-25 and should be re-checked before relying on them:
 
 - **Haiku 4.5** ($1/$5): Fastest and cheapest. Use for simple, well-defined tasks (file reads, pattern matching, exploratory searches, quick lookups, routine single-file edits, small scripts). Has a 200K context window, so avoid it for work that needs large amounts of code in context.
 - **Sonnet 5.5** ($2/$10): Balanced speed and capability for general-purpose work (multi-file refactoring, feature implementation, moderate complexity analysis, code review). The default choice for most substantive tasks.
