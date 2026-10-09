@@ -10,6 +10,7 @@ Whumpo should first become a dependable way for an invited customer to create, i
 - [Logical resources and workload placement](../workload-placement.md): WH-071 interface, lifecycle/export and conditional hosting decision.
 - [Shared modules](../shared-modules.md): WH-067 contract, existing-service mapping and WH-123–130 slices (planned).
 - [Notifications](../notifications.md): WH-068 template/sender/recipient/receipt contract, WH-036 contact-notice gap map and WH-154–160 slices (planned).
+- [Review and receipt retention](../review-retention.md): WH-061 capacity inventory, retention design, cutover proposal and WH-180–185 slices (planned).
 - [Architecture and sequencing alignment](alignment.md): shared contracts, corrected dependency paths, current build order and persistent graph checks.
 - [Full backlog](backlog.md): every task, dependency, acceptance criterion and verification boundary.
 - [Chat as the primary workspace](chat-first-experience.md): interactive forms, agent-managed dashboards/views, continuity and WH-105–112 delivery packets.
