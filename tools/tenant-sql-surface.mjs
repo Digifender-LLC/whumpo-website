@@ -1,6 +1,6 @@
 // WH-054 packet 1a: AST report of the SQL surface and tenant-taking helpers in `src`, with the reviewed dynamic
 // allowlist. It parses TypeScript with the TypeScript 7 syntax tree (typescript/unstable/sync, the method the
-// open boundary audit uses), never imports or runs the source, and never touches a database.
+// WH-004 boundary audit, tools/boundary-audit.mjs, uses), never imports or runs the source, and never touches a database.
 //
 //   node tools/tenant-sql-surface.mjs [check]          gate: dynamic SQL sites must match the reviewed allowlist
 //   node tools/tenant-sql-surface.mjs report [--json]  the full surface report

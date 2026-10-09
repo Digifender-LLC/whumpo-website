@@ -37,8 +37,9 @@ assert.deepEqual(report.intended.splitTables,['profile_photo_scan_tickets','cont
 for(const table of report.intended.splitTables)assert.ok(!observed.tables.includes(table));
 assert.equal(report.byRetarget['hand-written']+report.byRetarget.keep+report.byRetarget['typed-subject']+report.byRetarget.split,111);
 assert.ok(!registry.columns.some(c=>c.retarget==='mechanical'),'no entry claims a mechanical rename');
-// Indirect tenants: 78 reach a tenant (38 through a project_id foreign key), 29 do not, with the method recorded.
-assert.deepEqual([report.derived.reachesTenant,report.derived.direct,report.derived.chained,report.derived.noTenantPath,report.derived.textualProjectIdWithoutForeignKey],[78,38,40,29,6]);
+// Indirect tenants: 78 reach a tenant (38 through a project_id foreign key), 31 do not (29 at ca17c6a plus the two WH-050
+// operator receipt tables added on main), with the method recorded.
+assert.deepEqual([report.derived.reachesTenant,report.derived.direct,report.derived.chained,report.derived.noTenantPath,report.derived.textualProjectIdWithoutForeignKey],[78,38,40,31,6]);
 assert.match(report.derived.method,/Breadth-first search over foreign keys/);
 assert.ok(registry.textualIdentity.some(t=>t.column==='file_cleanup.owner_user_id')&&registry.textualIdentity.some(t=>t.column==='cms_deployments.account_id'));
 // Account, custody, payer and actor stay separate roles on separate intended columns.
@@ -149,10 +150,12 @@ const spike=['inference_delete_guard','cms_publication_media_retained','cms_impo
 const baselined=new Set(baseline.bodies.crossTypeFindings.map(f=>f.object));
 for(const name of spike)assert.ok(baselined.has(name),name);
 assert.ok(baselined.has('safety_held_projects')&&baselined.has('operator_contained_projects'),'the views the spike called uncounted are found too');
-assert.equal(baselined.size,44);
+// 44 objects at ca17c6a plus WH-050's operator_containment_retained (same hold-subject comparison as the safety_hold_* triggers).
+assert.ok(baselined.has('operator_containment_retained'));
+assert.equal(baselined.size,45);
 const current=await runChecks();
 assert.deepEqual(current.problems,[]);
-assert.deepEqual([current.bodies.findings.total,current.bodies.findings.new,current.bodies.findings.stale],[48,0,0]);
+assert.deepEqual([current.bodies.findings.total,current.bodies.findings.new,current.bodies.findings.stale],[49,0,0]);
 
 // ---- the command line ----
 const cli=args=>spawnSync(process.execPath,['tools/tenant-classification.mjs',...args],{encoding:'utf8'});
