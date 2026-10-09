@@ -5218,7 +5218,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-09 UTC: planning-only provider readiness plan in docs/connector-provider-readiness.md (offline check tests/connector-provider-readiness.mjs) re-read official provider documentation for gmail.readonly (restricted) and gmail.send (sensitive). Blocking approvals: separate Google Cloud test/production projects, Search Console domain verification, brand plus sensitive- and restricted-scope verification with a demo video, an annual CASA security assessment by a developer-paid authorized assessor, and counsel review of Limited Use and the Workspace AI-training clause before any model-context use. No provider account, client, consent screen or submission was created and no approval, verification or assessment is claimed. Status unchanged: not delivered.
 
 ## WH-097 — Deliver requested Google Calendar reads and reviewed event changes
 
@@ -5280,7 +5280,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-09 UTC: planning-only provider readiness plan in docs/connector-provider-readiness.md (offline check tests/connector-provider-readiness.mjs) re-read official provider documentation for calendar.calendarlist.readonly and calendar.events.owned (sensitivity class requires verification). Blocking approvals: the shared Google projects and domain verification, brand and sensitive-scope verification with a demo video, and counsel review of Limited Use and the AI clause; client event IDs do not guarantee duplicate detection, so readback stays required. No provider account, client, consent screen or submission was created and no approval, verification or assessment is claimed. Status unchanged: not delivered.
 
 ## WH-098 — Deliver requested Outlook email reads and reviewed send or reply actions
 
@@ -5342,7 +5342,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-09 UTC: planning-only provider readiness plan in docs/connector-provider-readiness.md (offline check tests/connector-provider-readiness.mjs) re-read official provider documentation for delegated offline_access, Mail.Read and Mail.Send (admin consent not required by default). Blocking approvals: an Entra work/school tenant, a verified Microsoft AI Cloud Partner Program account and publisher verification with a matching verified domain, tenant consent/admin-approval handling, and counsel review of Microsoft APIs Terms of Use sections 3(c) and 5; Graph paging conflicts with the contract's token-extraction rule (first page only recommended). No provider account, client, consent screen or submission was created and no approval, verification or assessment is claimed. Status unchanged: not delivered.
 
 ## WH-099 — Deliver requested Microsoft Calendar reads and reviewed event changes
 
@@ -5404,7 +5404,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-09 UTC: planning-only provider readiness plan in docs/connector-provider-readiness.md (offline check tests/connector-provider-readiness.mjs) re-read official provider documentation for delegated offline_access and Calendars.ReadWrite. Blocking approvals: the same Microsoft tenant, partner account and publisher verification, and section 3(c) counsel review; attendee invitations cannot be suppressed and must be disclosed in the review. No provider account, client, consent screen or submission was created and no approval, verification or assessment is claimed. Status unchanged: not delivered.
 
 ## WH-100 — Deliver requested HubSpot contact lookup and reviewed lead mapping
 
@@ -5466,7 +5466,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-09 UTC: planning-only provider readiness plan in docs/connector-provider-readiness.md (offline check tests/connector-provider-readiness.mjs) re-read official provider documentation for oauth, crm.objects.contacts.read and crm.objects.contacts.write. Blocking approvals: HubSpot developer and test accounts, a Marketplace-distributed OAuth app and signed Acceptable Use Policy (25-install cap until listed; listing needs three unaffiliated active installs and HubSpot review), and counsel review of the Developer Terms AI-training and third-party-sharing clauses. The catalog's OAuth v1 token and refresh-token delete endpoints are deprecated on 2027-02-16 and must move to date-versioned endpoints before a client is registered. No provider account, client, consent screen or submission was created and no approval, verification or assessment is claimed. Status unchanged: not delivered.
 
 ## WH-101 — Deliver Business Pro staging and exact release promotion
 
