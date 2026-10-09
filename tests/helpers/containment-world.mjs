@@ -26,9 +26,10 @@ import {syntheticAuthority} from './synthetic-platform.mjs';
 // database, and no acceptance of recovery: every result keeps serving, provider dispatch and key retirement false.
 //
 // Fixture-only manipulations are labelled FIXTURE-ONLY. The database clock cannot move and the admission triggers admit only rows
-// created now, so a fixture may (a) age a row, (b) back-date an expiry, (c) insert bulk or short-expiry rows directly through
-// the admit trigger (they skip the operator tool, not the schema) and (d) make the deliberately illegal removals of the
-// containment suite. An aged action row always carries an action id minted for its creation time (`actionIdAged`), exactly as
+// created now, so a fixture may (a) age a row, (b) back-date an expiry, (c) insert young bulk (512/513) or short-expiry rows
+// directly through the admit trigger (they skip the operator tool, not the schema), (d) seed whole AGED rows (`agedBulk`, the
+// row-lifecycle stop, the stored-replay stop) with only the admit trigger dropped, because that trigger compares with the clock
+// now, and (e) make the deliberately illegal removals of the containment suite. An aged action row always carries an action id minted for its creation time (`actionIdAged`), exactly as
 // a real row of that age would: a young id on an old row would pass the new-id window and so prove nothing about reuse.
 Error.stackTraceLimit=0;
 export const toolsDirectory=resolve(dirname(fileURLToPath(import.meta.url)),'..','..','tools');
@@ -71,8 +72,12 @@ export async function containmentHarness(suite){
    for(const key of ['servingAllowed','providerDispatchAllowed','retirementAllowed'])assert.equal(result[key],false);
    return result;
   };
-  const verified=async(archive,handle)=>{const r=await inspect(archive,handle);assert.equal(r.status,'verified');assert.deepEqual(r.holds,[]);counts.verifications++;return r;};
-  const held=async(archive,code,handle)=>{const r=await inspect(archive,handle);assert.equal(r.status,'held');assert.deepEqual(r.holds,[code]);counts.holds++;return r;};
+  // An unexpected `independent-evidence` is a refusal of the evidence request. The inventory gives each request a 10 s wall deadline
+  // (tools/restore-inventory.mjs), so on a CPU-starved host it can also mean the deadline was missed: re-run the script alone before
+  // treating it as a regression. The deadline is deliberately neither widened nor retried here.
+  const hint=r=>r.holds?.includes('independent-evidence')?' (independent-evidence may also be the 10 s evidence deadline missed on a starved host; re-run this script alone)':'';
+  const verified=async(archive,handle)=>{const r=await inspect(archive,handle);assert.equal(r.status,'verified',`Expected verified, got holds ${JSON.stringify(r.holds)}${hint(r)}`);assert.deepEqual(r.holds,[]);counts.verifications++;return r;};
+  const held=async(archive,code,handle)=>{const r=await inspect(archive,handle);assert.equal(r.status,'held');assert.deepEqual(r.holds,[code],`Expected hold ${code}, got ${JSON.stringify(r.holds)}${hint(r)}`);counts.holds++;return r;};
   const outcome=async(archive,handle)=>{const r=await inspect(archive,handle);return r.status==='verified'?'verified':r.holds[0];};
   const request=manifest=>new Request('https://restore-evidence.internal/v2/check',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({version:2,snapshotId:manifest.snapshotId,manifestDigest:restoreManifestDigest(manifest),challenge:id()})});
   const evidence=async(archive,handle=inventory)=>{const response=await handle.evidenceSource.fetch(request(archive.manifest));assert.equal(response.status,200);return response.json();};
@@ -106,6 +111,15 @@ export async function containmentHarness(suite){
    await withoutTriggers(db,[name],()=>db.prepare(statement).bind(...values).run());
    assert.equal((await db.prepare('SELECT sql FROM sqlite_master WHERE type=? AND name=?').bind('trigger',name).first())?.sql,stored,'The dropped guard was restored exactly');
   };
+  // After an aging fixture, the dropped update guard must BEHAVE as restored, not only read back identical: an UPDATE that would rename
+  // the aged row to a fresh id is refused with the table's immutability code and leaves the row where it was. (A resolved containment
+  // and both receipt tables refuse every UPDATE; the id-specific clause of the containment guard is pinned in the retention suite.)
+  const IMMUTABLE={operator_containments:'operator_containment_immutable',operator_session_revocations:'operator_revocation_immutable',operator_retention_receipts:'operator_retention_immutable'};
+  const stillImmutable=async(table,rowId)=>{
+   await assert.rejects(db.prepare(`UPDATE ${table} SET id=? WHERE id=?`).bind(aid(),rowId).run(),new RegExp(IMMUTABLE[table]),`${table}: the identity of the aged row is immutable again`);
+   assert.equal((await db.prepare(`SELECT count(*) AS n FROM ${table} WHERE id=?`).bind(rowId).first()).n,1,'The refused rename left the row in place');
+   return rowId;
+  };
   // The aged action row's id moves with its timestamps: minted for the instant the row claims to have been created, and
   // therefore older than the new-id window, so reusing it after cleanup is refused by the schema (the reuse proof).
   const stampedId=createdMs=>{const aged=actionIdAged(Date.now()-createdMs);assert.ok(Math.abs(actionIdTime(aged)-createdMs)<5000);assert.ok(actionIdTime(aged)<Date.now()-actionIdWindowMs,'An aged id is outside the window of a new id');return aged;};
@@ -121,21 +135,21 @@ export async function containmentHarness(suite){
    unobserved(cid);
    const [{resolution}]=(await db.prepare('SELECT resolution FROM operator_containments WHERE id=? AND resolved_at IS NOT NULL').bind(cid).all()).results,resolved=Date.now()-ms,next=stampedId(resolved-2*HOUR);
    await rewrite('operator_containment_resolve','UPDATE operator_containments SET id=?,created_at=?,expires_at=?,resolved_at=? WHERE id=?',next,iso(resolved-2*HOUR),iso(resolution==='lifted'?resolved+HOUR:resolved-60000),iso(resolved),cid);
-   return next;
+   return stillImmutable('operator_containments',next);
   };
   // FIXTURE-ONLY: an unresolved action whose expiry passed `ms` ago (a real expiry needs real waiting). Returns the new id.
   const expireOld=async(cid,ms)=>{
    unobserved(cid);
    const next=stampedId(Date.now()-ms-2*HOUR);
    await rewrite('operator_containment_resolve','UPDATE operator_containments SET id=?,created_at=?,expires_at=? WHERE id=? AND resolved_at IS NULL',next,iso(Date.now()-ms-2*HOUR),iso(Date.now()-ms),cid);
-   return next;
+   return stillImmutable('operator_containments',next);
   };
   // FIXTURE-ONLY: a revocation or cleanup receipt moved `ms` into the past (its id moves with its creation time). Returns the new id.
   const ageReceipt=async(table,rid,ms)=>{
    unobserved(rid);
    const next=stampedId(Date.now()-ms),guard=table==='operator_session_revocations'?'operator_session_revocation_immutable':'operator_retention_immutable';
    await rewrite(guard,`UPDATE ${table} SET id=?,created_at=? WHERE id=?`,next,iso(Date.now()-ms),rid);
-   return next;
+   return stillImmutable(table,next);
   };
   // FIXTURE-ONLY: one resolved action, aged with timestamps computed by the DATABASE clock (`modifiers` are SQLite date modifiers
   // for the resolution instant, for example ['-90 days','+30 seconds']), so a boundary test cannot flake on this process's clock.
@@ -143,7 +157,7 @@ export async function containmentHarness(suite){
    unobserved(cid);
    const next=stampedId(Date.now()-ageMs-2*HOUR),f="'%Y-%m-%dT%H:%M:%fZ'";
    await rewrite('operator_containment_resolve',`UPDATE operator_containments SET id=?,created_at=strftime(${f},'now',?,?,'-2 hours'),expires_at=strftime(${f},'now',?,?,'+1 hour'),resolved_at=strftime(${f},'now',?,?) WHERE id=?`,next,...modifiers,...modifiers,...modifiers,cid);
-   return next;
+   return stillImmutable('operator_containments',next);
   };
   // FIXTURE-ONLY: the table forbids deletes of unresolved or young rows. This stands in for an ILLEGAL removal (a database
   // restored from elsewhere, an operator with direct access), used only by the removal cases. Normal retention uses `cleanup` above.
