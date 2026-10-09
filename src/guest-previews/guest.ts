@@ -1,5 +1,6 @@
 import {savedVersionHTML,type SavedVersionRow} from '../photo-versions';
-import {StorageLimitError} from '../storage-budget';
+import {StorageLimitError,reserveGuestPreviewPhotoReads} from '../storage-budget';
+import {PublicClientLimitError} from '../public-admission';
 import {guestPreviewOrigin} from '../hosts';
 import {GuestPreviewError,guestPreviewLimits as limits,guestTokenHash,sha256Hex,guestInclusion,guestLinkCurrent} from './policy';
 
@@ -79,8 +80,13 @@ async function view(request:Request,env:Env){
  const row=await env.DB.prepare('SELECT v.id,v.html,v.component_id,v.config_json FROM site_versions v WHERE v.id=? AND v.project_id=?').bind(admitted.version_id,link.project_id).first<SavedVersionRow>();
  if(!row)return frameMessage(404,'This preview link is unavailable.');
  let html:string;
- try{html=await savedVersionHTML(env,row);}
- catch(error){return error instanceof StorageLimitError?frameMessage(503,'This preview is temporarily unavailable.'):frameMessage(404,'This preview link is unavailable.');}
+ // Inlined photos charge the link's project like its public photos (per-client sub-limit, project
+ // budget with operator containment and account fair share), not only the platform pool (WH-004 B6).
+ try{html=await savedVersionHTML(env,row,count=>reserveGuestPreviewPhotoReads(env.DB,request,link.project_id,count));}
+ catch(error){
+  if(error instanceof PublicClientLimitError)return frameMessage(429,error.message);
+  return error instanceof StorageLimitError?frameMessage(503,'This preview is temporarily unavailable.'):frameMessage(404,'This preview link is unavailable.');
+ }
  // Revocation, expiry, removal, a hold or lost inclusion during rendering wins over the read.
  if(!await stillCurrent(env.DB,link))return frameMessage(404,'This preview link is unavailable.');
  return new Response(html,{headers:frameHeaders});
