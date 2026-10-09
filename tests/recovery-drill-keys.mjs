@@ -23,7 +23,7 @@ import {currentSchemaArtifact,currentSchemaPlan,inspectSchema} from '../tools/cu
 import {captureRecoveryPoint,verifyRecoveryPoint,openArchivedControl,restoreControlD1,restoreDiscrepancies,isolatedObjects,DrillHold} from '../tools/recovery-drill.mjs';
 
 Error.stackTraceLimit=0;
-const directory=await mkdtemp('/tmp/whumpo-recovery-keys-'),phases={},holds={};let refusals=0;
+const directory=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-recovery-keys-'),phases={},holds={};let refusals=0;
 const phase=async(name,work)=>{const start=performance.now();try{return await work();}finally{phases[name]=Math.round((performance.now()-start)*10)/10;console.error(`drill phase ${name}: ${phases[name]} ms`);}};
 const refuses=async(work,expected)=>{await assert.rejects(work,expected);refusals++;};
 const drillHold=(work,code)=>refuses(work,e=>e instanceof DrillHold&&e.code===code);
