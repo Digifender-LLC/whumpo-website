@@ -204,7 +204,12 @@
     "db:status": "node tools/database.mjs status",
     "test:current-schema": "node tests/current-schema.mjs",
     "test:photo-upload-recovery": "node tests/photo-upload-recovery.mjs",
-    "test:boundary-audit": "node tests/boundary-audit.mjs"
+    "test:boundary-audit": "node tests/boundary-audit.mjs",
+    "test:tenant-classification": "node tests/tenant-classification.mjs",
+    "test:tenant-schema-bodies": "node tests/tenant-schema-bodies.mjs",
+    "test:sqlite-authorizer": "node tests/sqlite-authorizer.mjs",
+    "test:tenant-sql-surface": "node tests/tenant-sql-surface.mjs",
+    "test:tenant-gates": "node tests/tenant-classification.mjs && node tests/tenant-schema-bodies.mjs && node tests/sqlite-authorizer.mjs && node tests/tenant-sql-surface.mjs"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
