@@ -193,7 +193,7 @@ As found: a guest view inlined the saved version's photos through [`savedVersion
 - **Reproduction (executed before the fix, local D1/R2, synthetic photo clearance):** the original `node tests/boundary-guest-preview-read-pool.mjs` (needs `python3` with Pillow, like the other photo suites; this run used a local Pillow virtualenv on `PATH`). Step 1 measured that one view adds one platform read and nothing to the project budget or per-client usage. Step 2 pre-seeded the monthly counter to 99,999 to stand in for prior views; a guest view took the last read and another tenant's first public photo read was then refused (`StorageLimitError`, which the site host serves as 503). Exited 1.
 - **Impact (before the fix):** every tenant's public photos, owner photo previews and exports fail until the monthly reset. Extends R3 (owner GETs) to an anonymous bearer path.
 - **Resolution (October 9, 2026, source only; not deployed; no schema change):** guest views now pass a read reservation to `savedVersionHTML` that calls `reserveGuestPreviewPhotoReads` ([`src/storage-budget.ts`](../src/storage-budget.ts)) for the link's project, with the WH-075 public-photo semantics once per photo: the per-client photo sub-limit (400 per connection per project per UTC day, the same key as that project's public photos), then in one all-or-none batch the project budget (10,000/month or the operator containment allowance), the account fair share and the platform ceiling. Refusals reuse existing guest-facing text: 429 with the public per-client message, otherwise the unchanged generic 503 "This preview is temporarily unavailable.", identical for project, fair-share and platform refusals. Owner previews and exports keep the platform-pool accounting (R3, out of scope); public site photo behavior is unchanged. Details: [guest-previews.md](guest-previews.md#limits).
-- **Regression:** `tests/boundary-guest-preview-read-pool.mjs` is now a regression on SQLite (in-memory R2 stand-in) or `--d1` (local D1 + local R2). It **passed on SQLite**; the `--d1` run was attempted but could not start (the shared `/tmp` user quota was exhausted by other sessions, so the local D1 fixture failed with `SQLITE_IOERR_WRITE`) and remains to be run. It asserts: exact owner-preview bytes; one two-photo view charges two reads to the project, platform and client; a client at 399 gets 429 with nothing charged; a project at 9,999 refuses its guests with no project or platform read taken while another tenant's public photo read succeeds; an account over its 10,000 fair share past half the pool is refused while an account under it reads; the platform ceiling stays all-or-none. Reverting the `src/` change makes it fail (exit 1).
+- **Regression:** `tests/boundary-guest-preview-read-pool.mjs` is now a regression on SQLite (in-memory R2 stand-in) or `--d1` (local D1 + local R2). It **passed on SQLite**; the `--d1` run could not start at first (the shared `/tmp` user quota was exhausted by other sessions, so the local D1 fixture failed with `SQLITE_IOERR_WRITE`) and **passed on local D1** on October 9, 2026 after rebasing onto `main` with #202 (the D1 fixture honors `TMPDIR`). It asserts: exact owner-preview bytes; one two-photo view charges two reads to the project, platform and client; a client at 399 gets 429 with nothing charged; a project at 9,999 refuses its guests with no project or platform read taken while another tenant's public photo read succeeds; an account over its 10,000 fair share past half the pool is refused while an account under it reads; the platform ceiling stays all-or-none. Reverting the `src/` change makes it fail (exit 1).
 - **Owner decisions still open:** whether guest views should keep sharing the per-connection photo sub-limit with the public site or get their own; whether an operator `photo` containment should also refuse guest-preview photos (it now does).
 
 ### B7 `create-invite` writes remotely by default (informational; operator guard rail) — characterization
@@ -262,7 +262,7 @@ node tests/boundary-site-isolation.mjs              # regression (standalone)
 node tests/boundary-visitor-gateway-isolation.mjs   # regression (standalone; one fixture-setup flake seen)
 node tests/boundary-operator-target.mjs             # B4, regression (exit 0)
 node tests/boundary-app-challenge-capacity.mjs      # B5, expected exit 1
-node tests/boundary-guest-preview-read-pool.mjs     # B6, expected exit 1 (python3 with Pillow on PATH)
+node tests/boundary-guest-preview-read-pool.mjs     # B6, expected exit 1 before the fix; regression since (python3 with Pillow on PATH)
 node tests/boundary-create-invite-default.mjs       # B7, characterization (exit 0)
 node tests/boundary-contact-delivery-health.mjs     # R8, characterization (exit 0)
 node tests/verification-profiles.mjs
@@ -288,7 +288,16 @@ node tools/roadmap.mjs render --check && node tools/roadmap.mjs validate && node
 git diff --check
 ```
 
-**Not run:** every local-D1 suite (`boundary-guest-preview-read-pool.mjs --d1`, `guest-previews.mjs --d1`, `guest-preview-photos.mjs` including its new project-budget assertion, `public-fairness.mjs`, `photo-versions.mjs`, `exports.mjs`). The shared `/tmp` user quota was exhausted by other sessions throughout (about 50 minutes of retries), so the D1 fixture failed with `SQLITE_IOERR_WRITE` before any assertion. Run them before merging.
+**Local-D1 suites:** none could run at first: the shared `/tmp` user quota was exhausted by other sessions throughout (about 50 minutes of retries), so the D1 fixture failed with `SQLITE_IOERR_WRITE` before any assertion. After rebasing onto `main` (with #178) plus #202, which makes the D1 fixture honor `TMPDIR`, they were run on October 9, 2026 UTC on Node 24.21.0 with `TMPDIR` on a home-directory path and python3 with Pillow on `PATH`, and all passed:
+
+```sh
+node tests/boundary-guest-preview-read-pool.mjs --d1   # B6 regression, local D1 + local R2: passed (exit 0)
+node tests/guest-previews.mjs --d1                     # local D1: 11 groups passed
+node tests/guest-preview-photos.mjs                    # local D1/R2, including the project-budget assertion: passed
+node tests/public-fairness.mjs                         # passed
+node tests/photo-versions.mjs                          # passed
+node tests/exports.mjs                                 # passed
+```
 
 ## Remaining WH-004 work
 
