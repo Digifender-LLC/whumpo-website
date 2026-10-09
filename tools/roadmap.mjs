@@ -104,6 +104,9 @@ export function alignmentProblems(data){
  required[68]=[154,159,160];
  // WH-077 portable export children (WH-186 contract): the parent waits for its contract, clean room and acceptance.
  required[77].push(186,189,191);
+ // WH-063 email change and compromise children (WH-199 contract): the parent waits for its contract, connected
+ // synthetic acceptance and physical-device/delivery acceptance.
+ required[63]=[199,204,205];
  const forbidden={
   22:[23,41,47,49,104],42:[23,47,49,104],43:[23,47,49,104],
   48:[49,87,104,112,118],52:[12,18,36,68,69,74,86],
@@ -121,6 +124,11 @@ export function alignmentProblems(data){
  // contract (WH-186) also stays upstream of the account export and module implementations it supports.
  for(let child=186;child<=191;child++)forbidden[child]=[49,72,104];
  forbidden[186].push(18,67);
+ // Email change/compromise children never reach the beta, paid-launch or paid-tier gates. Only the physical-device
+ // acceptance (WH-205) waits on WH-005, and only notification wiring (WH-202) and WH-205 wait on WH-036's live sender.
+ for(let child=199;child<=205;child++)forbidden[child]=[48,49,104];
+ for(let child=199;child<=204;child++)forbidden[child].push(5);
+ for(const child of [199,200,201,203,204])forbidden[child].push(36);
  for(const [from,targets] of Object.entries(required))for(const to of targets){
   if(!tasks.has(id(from))||!tasks.has(id(to)))problems.push(`Missing alignment task ${id(from)} or ${id(to)}`);
   else if(!reaches(id(from),id(to)))problems.push(`${id(from)} must follow shared prerequisite ${id(to)}`);
