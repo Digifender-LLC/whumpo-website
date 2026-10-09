@@ -1,6 +1,6 @@
 # Portable export migration guides
 
-**WH-190 documentation slice, October 9, 2026 UTC. Planned: documentation only. Nothing here is implemented, deployed or accepted.** These guides stack on the unmerged [portable export contract](portable-exports.md) (WH-186, PR #215, branch head `b213984`). They add no route, table, binding, provider, Cloudflare resource, schema change, dependency or `src/` change. [`tests/portable-migration-guides.mjs`](../tests/portable-migration-guides.mjs) checks their structure offline.
+**WH-190 documentation slice, October 9, 2026 UTC. Planned: documentation only. Nothing here is implemented, deployed or accepted.** These guides build on the [portable export contract](portable-exports.md) (WH-186), which merged into `main` as #225 (`d3ebaf2`) and is itself a planned contract. They add no route, table, binding, provider, Cloudflare resource, schema change, dependency or `src/` change. [`tests/portable-migration-guides.mjs`](../tests/portable-migration-guides.mjs) checks their structure offline.
 
 The frozen [unavailable-feature report](portable-exports.md#unavailable-feature-report) has 13 capabilities. For each one, this document gives:
 
@@ -19,7 +19,7 @@ No customer can download this bundle today. The [WH-187 builder](roadmap/backlog
 ## Rules that apply to every guide
 
 - **Tiers.** Only static public pages can be runnable (tier 1), and only when the bundle's own tier check passes. Everything else is data or source ([tiers](portable-exports.md#three-portability-tiers)). A frontend that needs private Whumpo APIs is never runnable.
-- **No Whumpo API, route, credential or model is available outside Whumpo.** An exported page, program or frontend that calls `/api`, `/modules`, `/backend`, `/app`, `/workspace` or a `whumpo.site` or `whumpo.com` origin does not work after you move it. Exporting does not delete, unpublish, move or transfer anything in Whumpo. It does not transfer a subscription, domain, provider authorization or approval.
+- **No Whumpo API, route, credential or model is available outside Whumpo.** An exported page, program or frontend that calls `/api`, `/modules`, `/backend`, a visitor application path under `/apps/`, the stateless-form path `/s/PROJECT/backend`, `/workspace` or a `whumpo.site` or `whumpo.com` origin does not work after you move it. Exporting does not delete, unpublish, move or transfer anything in Whumpo. It does not transfer a subscription, domain, provider authorization or approval.
 - **No adapter claim.** The WH-188 standalone runtime and the WH-189 clean-room evidence do not exist yet. Every replacement named below is standard software or a provider you choose yourself, not a Whumpo adapter. Whumpo has not tested any of them with your data. "Supported replacement" means only that the files use a standard format that this kind of host serves without Whumpo.
 - **Secrets.** The bundle contains no secret. Never paste a password, key, token, passkey, recovery code or authorization code into Whumpo Chat, a support message or a Whumpo form. Create every credential with your own provider and keep it there.
 - **Current version only.** Readers accept only:
@@ -83,7 +83,7 @@ process.exitCode=problems.length?1:0;
   - `site/public/_headers`, which holds the security headers;
   - the approved photos those pages use, under `site/public/assets/`.
 
-  The current compiler saves one page per version, so the unmerged WH-187 source exports one homepage.
+  The current compiler renders one to four public pages ([compiler](project-specification-compiler.md)), but the mounted storage and host adapter accepts only one homepage at `/` ([storage](project-specification-storage.md)), so saved versions have one page and the unmerged WH-187 source exports one homepage.
 - **Does not port:**
   - Staff-audience pages stay out of the static tier. Their text stays in `specification/specification.json`.
   - Hosted contact intake, backend forms, directory pages and any embedded Whumpo tool. A page that embeds a Whumpo-served tool makes the whole static tier `data-only`.
@@ -279,14 +279,14 @@ process.exitCode=problems.length?1:0;
 ## Contact inbox (contact-inbox)
 
 - **Report status:** `unavailable` when the project has a contact inbox, otherwise `not-used`. Report cost flag: `customer-provider`. Contract: [contact inbox](portable-exports.md#contact-inbox).
-- **In the bundle:** No messages. When the project has an inbox, the manifest records the exclusion `contact-inbox-separate-export`.
+- **In the bundle:** No messages. When the project has an inbox, the manifest records the exclusion `contact-inbox-separate-export`. That frozen name does not mean a separate inbox export exists; there is none.
 - **Does not port:**
   - messages and receipts;
   - the hosted contact page, Turnstile verification and caps;
   - owner notices.
 
   Messages become inaccessible after 30 days ([inbox and retention](contact-forms.md#inbox-and-retention)).
-- **Replacement:** Unavailable: Whumpo publishes no standalone inbox. Messages also have no file download today. The owner reads them in the private inbox, which shows at most 100 unexpired messages per project. The WH-018 account export (unmerged PR #170) lists them as an omission with their own path.
+- **Replacement:** Unavailable: Whumpo publishes no standalone inbox. Messages also have no file download or other export today. The owner reads them in the private inbox, which shows at most 100 unexpired messages per project, and can delete them one at a time. The WH-018 account export (unmerged PR #170) also leaves them out, listing the inbox only as an omission (reason `separate-inbox-retention`).
 - **Your steps:**
   1. Before the 30-day window ends, read the inbox and copy what you need into your own system.
   2. Build your own contact handler with bot protection and email ([forms guide](#forms-and-public-intake-forms), [notifications guide](#notifications-notifications)).
@@ -347,11 +347,11 @@ process.exitCode=problems.length?1:0;
 
 | Contract | State | How this guide uses it |
 | --- | --- | --- |
-| WH-186 [portable export contract](portable-exports.md) | Unmerged (PR #215) | Source of the capability list, statuses, cost flags, layout and rules. This guide changes none of them. |
+| WH-186 [portable export contract](portable-exports.md) | Merged (#225), planned contract | Source of the capability list, statuses, cost flags, layout and rules. This guide changes none of them. |
 | WH-187 bundle builder | Unmerged branch `claude/wh-187-portable-bundle-builder`, disposable local tests only | Details labelled "unmerged WH-187": one homepage, 200 records per schema, the receipt header, and connections, domains and inbox reported from counts only. |
 | WH-140 [connector contract](connectors.md) | Merged (#116) | Connectors guide: revocation lifecycle, no token export, planned providers unavailable. |
 | WH-068 [notification contract](notifications.md) | Merged (#180) | Notifications guide: platform sender only, no customer-domain sender, consent not portable. |
-| WH-070 presentation contract (`docs/customer-presentation.md`) | Unmerged branch `claude/wh-070-presentation-contract-rb`, not linked here | Its planned deterministic composition export (WH-167) is labelled as needing Whumpo module APIs. That matches the frozen rule that `frontend/<id>/` is never runnable. Re-check when it merges. |
+| WH-070 presentation contract (`docs/customer-presentation.md`) | Unmerged; re-ported onto `main` as branch `claude/wh-070-presentation-contract-main`, not linked here | Its planned deterministic composition export (WH-167) is labelled as needing Whumpo module APIs. That matches the frozen rule that `frontend/<id>/` is never runnable. Re-check when it merges. |
 | WH-061 review retention design (`docs/review-retention.md`) | Unmerged branch `claude/wh-061-review-retention-design-rb` | Proposes digest-only directory snapshots outside a history window. That affects history restore inside Whumpo, not the one snapshot in the bundle. |
 | WH-018 account export | Unmerged (PR #170) | Chat history and the contact inbox omission. |
 
@@ -395,9 +395,9 @@ Fetched with Firecrawl scrape (live fetch), WebFetch or the Cloudflare documenta
 
 ## Gaps and owner decisions
 
-- **Contact inbox wording.** The contract says inbox messages "keep the existing inbox export". Today the only path is the owner's private inbox read (up to 100 unexpired messages). There is no file download. Decision: add an owner download of unexpired messages, or correct the contract wording. Recommended: correct the wording now and decide on the download separately.
+- **Contact inbox download.** The contract no longer claims an inbox export: the only path is the owner's private inbox read (up to 100 unexpired messages), with no file download. The exclusion keeps its frozen v1 name `contact-inbox-separate-export`. Open decision: add an owner download of unexpired messages, or keep the inbox out of every export.
 - **No adapter evidence.** Every replacement here is customer-chosen standard software, so these guides make no adapter claim. Any future WH-188 runner or loader must update its guide only with WH-189 evidence.
-- **Unmerged inputs.** WH-186, WH-187, WH-070, WH-061 and WH-018 are unmerged. Recheck every "unmerged" label when each one merges, especially WH-070's composition export and WH-187's bounds.
+- **Unmerged inputs.** WH-187, WH-070, WH-061 and WH-018 are unmerged (the WH-186 contract merged as #225). Recheck every "unmerged" label when each one merges, especially WH-070's composition export and WH-187's bounds.
 - **Not re-verified here:** registry-specific transfer rules, email provider pricing, identity provider pricing, and whether Cron Triggers are on Workers Free. All of these require verification.
 - The [open owner decisions](portable-exports.md#open-owner-decisions) of the contract (first runnable subset, allowance, visitor data and hold disclosure, one static path, signatures, adapter license and prepared-bundle retention) are unchanged.
 
