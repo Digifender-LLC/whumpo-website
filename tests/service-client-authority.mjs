@@ -9,7 +9,7 @@ import {workspaceFixture} from './helpers/workspace-identity.mjs';
 const core=await currentSiteFixtureHandlers(),m={...core,...core.serviceClientCompiler,...core.serviceClientOwned,...core.contacts,...core.backendForms,...core.backend,...core.backendPublication};
 const store=await databaseFixture({d1:true}),db=store.db,scopes=new Map(),scope=user=>scopes.get(user);
 async function accountAuthority(user){const authority=await workspaceFixture(db,m,user);scopes.set(user,await authority.scope());}
-const dir=await mkdtemp('/tmp/whumpo-client-authority-');let runtime;
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-client-authority-');let runtime;
 const id=()=>crypto.randomUUID(),now=()=>new Date().toISOString();
 const oldFetch=globalThis.fetch;let network=0,executions=0;
 try{

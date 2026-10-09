@@ -7,7 +7,7 @@ import {resolve,sep} from 'node:path';
 import {createRequire} from 'node:module';
 import {build} from 'vite';
 const {chromium}=createRequire(import.meta.url)(process.env.WHUMPO_PLAYWRIGHT||'@playwright/test');
-const dir=await mkdtemp('/tmp/whumpo-fields-browser-'),html=`frontend/fields-fixture-${process.pid}.html`,root=resolve(dir,'web');
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-fields-browser-'),html=`frontend/fields-fixture-${process.pid}.html`,root=resolve(dir,'web');
 let server,browser,page,phase='build',origin;const errors=[],requests=[];
 try{
  await writeFile(html,'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Whumpo fields acceptance</title></head><body><div id="root"></div><script type="module" src="/@fs/'+resolve('tests/fixtures/chat-fields.tsx')+'"></script></body></html>');

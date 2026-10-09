@@ -18,7 +18,7 @@ import {hearOrca} from './helpers/orca-output.mjs';
 import {keyboardJourney} from './helpers/keyboard-journey.mjs';
 import {currentFixtureModules} from './helpers/current-modules.mjs';
 const {chromium}=createRequire(import.meta.url)(process.env.WHUMPO_PLAYWRIGHT||'@playwright/test');
-const dir=await mkdtemp('/tmp/whumpo-form-browser-'),html=`frontend/form-fixture-${process.pid}.html`;
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-form-browser-'),html=`frontend/form-fixture-${process.pid}.html`;
 let savedTurnUnavailable=false,holdSavedTurn=false;
 let browser,server,fixture,page,phase='build',network=0,loseOperation=null,receiptsUnavailable=false,holdOperation=null,releaseHeld=null,cardUnavailable=false,comparisonUnavailable=false,resourcesUnavailable=false,loseContinuation=false,loseConnectionStart=false,loseConnectionCallback=false,connectionStatusUnavailable=false,photoStatusUnavailable=false,losePhotoUpload=false,stopPhotoUpload=false,loseChatAction=false,releaseModel=null;
 const originalFetch=globalThis.fetch,requests=[],errors=[],modelSteps=[],background=[],activeRequests=new Set();let modelCalls=0,consentTokenCalls=0,resultSummary;

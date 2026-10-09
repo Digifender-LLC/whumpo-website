@@ -10,7 +10,7 @@ Error.stackTraceLimit=0;
 // explicitly synthetic photo clearance (no detector runs). Bytes are digest-verified and inlined
 // into the single sandboxed preview response; no object URL or asset alias is served.
 const m=await currentSiteFixtureHandlers(),store=await databaseFixture({d1:true,r2:true}),{db,env}=store;
-const dir=await mkdtemp('/tmp/whumpo-guest-photos-');
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-guest-photos-');
 const originalFetch=globalThis.fetch;let network=0;globalThis.fetch=async()=>{network++;throw Error('No network is allowed');};
 try{
  execFileSync('python3',['-c',"from PIL import Image; import sys; Image.new('RGB',(32,24),(60,110,80)).save(sys.argv[1])",dir+'/photo.jpg']);

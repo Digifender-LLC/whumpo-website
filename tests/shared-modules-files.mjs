@@ -30,7 +30,7 @@ function memoryBucket(){
  };
 }
 const FILES=d1?fixture.env.FILES:memoryBucket();
-const dir=await mkdtemp('/tmp/whumpo-module-files-');
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-module-files-');
 execFileSync('python3',['-c',"from PIL import Image; import sys; Image.new('RGB',(32,24),(80,120,60)).save(sys.argv[1]+'/a.jpg'); Image.new('RGB',(40,30),(20,40,200)).save(sys.argv[1]+'/b.jpg')",dir]);
 const jpegA=new Uint8Array(await readFile(dir+'/a.jpg')),jpegB=new Uint8Array(await readFile(dir+'/b.jpg'));await rm(dir,{recursive:true,force:true});
 const row=(q,...p)=>db.prepare(q).bind(...p).first(),rows=async(q,...p)=>(await db.prepare(q).bind(...p).all()).results,run=(q,...p)=>db.prepare(q).bind(...p).run();

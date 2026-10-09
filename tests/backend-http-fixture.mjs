@@ -8,7 +8,7 @@ import {execFileSync} from 'node:child_process';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
 export async function backendHttpFixture(){
- const dir=await mkdtemp('/tmp/whumpo-backend-http-');let store,runtime,server;
+ const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-backend-http-');let store,runtime,server;
  const dispose=async()=>{if(server){server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}await runtime?.dispose();await store?.close();await rm(dir,{recursive:true,force:true});};
  try{
   store=await databaseFixture({d1:true,r2:true});const db=store.db,owners=new Map();

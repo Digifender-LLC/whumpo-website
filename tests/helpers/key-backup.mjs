@@ -5,7 +5,7 @@ import {createConnectionRecoveryKey,createConnectionKeyBackup} from '../../tools
 /** Real encrypted files with invented keys. These local sibling directories are
  * not an assertion of independently operated or offsite custody. */
 export async function keyBackupFixture(){
- const directory=await mkdtemp('/tmp/whumpo-key-backup-');
+ const directory=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-key-backup-');
  try{
   for(const name of ['source','recovery','capsules'])await mkdir(join(directory,name),{mode:0o700});
   const recoveryKeyFile=join(directory,'recovery/wrapping.key');await createConnectionRecoveryKey({recoveryKeyFile});

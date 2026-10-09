@@ -28,7 +28,7 @@ const grantJourney=process.argv.includes('--github-grant'),crossTab=process.argv
 if([accessibility,grantJourney,crossTab,accountHelp,siteSafety,savedWork,support,navigation].filter(Boolean).length>1)throw Error('Run the owner accessibility and GitHub grant journeys separately.');
 let providerCalls=0,modelCalls=0;
 const require=createRequire(import.meta.url),{chromium}=require(process.env.WHUMPO_PLAYWRIGHT||'@playwright/test');
-const dir=await mkdtemp('/tmp/whumpo-identity-browser-'),html=`frontend/identity-fixture-${process.pid}.html`,origin='http://localhost:8787';
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-identity-browser-'),html=`frontend/identity-fixture-${process.pid}.html`,origin='http://localhost:8787';
 let browser,server,fixture,page,phase='build';const originalFetch=globalThis.fetch,originalEqual=crypto.subtle.timingSafeEqual;
 const audit={steps:[],calls:0,posts:[],failChat:false,failDashboard:false,loseChat:false,stopChat:false,holdDashboard:false,releaseDashboard:null},background=[];
 const requests=[],errors=[];let loseSecureReply=false,holdAddReply=false,releaseAddReply=null,holdWelcomeReply=false,releaseWelcomeReply=null;

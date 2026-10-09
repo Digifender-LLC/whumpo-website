@@ -12,7 +12,7 @@ import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
 import {currentSiteFixtureHandlers} from './current-site-fixture.mjs';
 const require=createRequire(import.meta.url),{chromium}=require(process.env.WHUMPO_PLAYWRIGHT||'@playwright/test');
-const dir=await mkdtemp('/tmp/whumpo-pwa-browser-'),root=resolve(dir,'web'),origin='http://localhost:8787';let fixture,server,browser;
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-pwa-browser-'),root=resolve(dir,'web'),origin='http://localhost:8787';let fixture,server,browser;
 const requests=[],errors=[];let workerRevision=0;
 try{
  await viteBuild({build:{outDir:root},logLevel:'error'});await buildPwa(pathToFileURL(root+'/'));

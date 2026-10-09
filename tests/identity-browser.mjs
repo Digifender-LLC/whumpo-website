@@ -12,7 +12,7 @@ import {build} from 'esbuild';
 import {build as viteBuild} from 'vite';
 import {identityDatabase} from './helpers/identity-database.mjs';
 const require=createRequire(import.meta.url),{chromium}=require(process.env.WHUMPO_PLAYWRIGHT||'@playwright/test');
-const dir=await mkdtemp('/tmp/whumpo-identity-browser-'),html=`frontend/identity-fixture-${process.pid}.html`,origin='http://localhost:8787';
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-identity-browser-'),html=`frontend/identity-fixture-${process.pid}.html`,origin='http://localhost:8787';
 let browser,server,fixture,phase='build';const originalFetch=globalThis.fetch,originalEqual=crypto.subtle.timingSafeEqual;
 const requests=[],errors=[];let loseSecureReply=false;
 try{

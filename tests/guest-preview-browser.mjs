@@ -17,7 +17,7 @@ import {paidPlan} from './helpers/paid-plan.mjs';
 import {keyboardJourney} from './helpers/keyboard-journey.mjs';
 const {chromium}=createRequire(import.meta.url)(process.env.WHUMPO_PLAYWRIGHT||'@playwright/test');
 const logs=[];for(const level of ['log','info','warn','error','debug']){const original=console[level].bind(console);console[level]=(...a)=>{logs.push(a.map(String).join(' '));if(level==='error')original(...a);};}
-const dir=await mkdtemp('/tmp/whumpo-guest-journey-'),html=`frontend/guest-owner-fixture-${process.pid}.html`,id=()=>crypto.randomUUID();
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-guest-journey-'),html=`frontend/guest-owner-fixture-${process.pid}.html`,id=()=>crypto.randomUUID();
 const m=await currentSiteFixtureHandlers(),fixture=await databaseFixture({d1:true,r2:true}),{db,env}=fixture;
 const originalFetch=globalThis.fetch;let network=0;globalThis.fetch=async()=>{network++;throw Error('No external request allowed');};
 let ownerServer,guestServer,browser,phase='setup';
