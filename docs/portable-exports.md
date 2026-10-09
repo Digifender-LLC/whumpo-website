@@ -20,8 +20,8 @@ Export never deletes, moves, unpublishes or transfers anything in Whumpo, and it
 | Existing path | What it proves today | Gap this contract closes |
 | --- | --- | --- |
 | Static source download ([`src/exports.ts`](../src/exports.ts), [MVP](mvp.md#source-export)) | `whumpo-static-site` v1: one exact saved homepage, `_headers`, checked photos and a checksum in a deterministic stored ZIP (fixed timestamp). Owner-only existing route. | One page only; no data, module versions, exclusion list or capability report. It is the existing tier-1 path and stays the static projection ([decision 4](#open-owner-decisions)). |
-| GitHub backup ([github-backups.md](integrations/github-backups.md)) | Pushes that same archive to a customer repository. | Same scope as the static download. |
-| Module serializers ([shared modules](shared-modules.md#records-export-serializer-wh-127--october-4-2026-utc)) | `whumpo-module-records` v1, `whumpo-module-files` v1, `whumpo-access-roles` v1 and the directory export (`whumpo-directory` v1) with import validation. Source and local tests only; **not deployed** (pending empty-database cutover). | Not composed into one per-project bundle; visitor slices are owner-run with separate approval. |
+| GitHub backup ([github-backups.md](integrations/github-backups.md#artifact-boundary)) | Builds that same deterministic archive and binds its SHA-256 to the owner's review, then unpacks it on the server: the customer repository receives readable files under `whumpo/PROJECT_ID/versions/VERSION_ID/`, not a ZIP. | Same scope as the static download. |
+| Module serializers ([shared modules](shared-modules.md#records-export-serializer-wh-127--october-4-2026-utc)) | `whumpo-module-records` v1, `whumpo-module-files` v1 and `whumpo-access-roles` v1 with import validation: source and local tests only, **not deployed** (pending empty-database cutover). The directory export (`whumpo-directory` v1, owner route `GET /api/projects/PROJECT_ID/directory/snapshots/SNAPSHOT_ID/export`) is deployed: it shipped on September 29, 2026 ([deployment](deployment.md#directory-history-recovery-and-data-exports--september-29-2026)) and is in the release the October 4 whumpo cutover deployed onto a new empty database. Only its WH-129 module export-hook wrapper is source-only and not deployed ([directories](directories.md)). | Not composed into one per-project bundle; visitor slices are owner-run with separate approval. |
 | Account export (WH-018, PR #170 branch) | Exact owner review, single-use download, per-account allowance, secret/other-tenant exclusion, approved-only media. Source and local tests only, not merged. | Account-wide and human-readable, explicitly **not** a restore input or portable project delivery. |
 | Other exports | Visitor self-export (`whumpo-visitor-export-v1`), backend state (`whumpo-backend-state`), CMS content draft download. | Separate audiences; not composed here. The visitor document stays on its own visitor-authenticated path. |
 
@@ -29,7 +29,7 @@ Export never deletes, moves, unpublishes or transfers anything in Whumpo, and it
 
 | Tier | Contents | Claim allowed in v1 |
 | --- | --- | --- |
-| **1. Static source download** | `site/public/`: compiled public pages, approved photos, `_headers`. | **Runnable** only if every static file passes the tier check: no script, no network call, no Whumpo origin, no platform route (`/api`, `/modules`, `/backend`, `/app`, `/workspace`), no form action or form endpoint. |
+| **1. Static source download** | `site/public/`: compiled public pages, approved photos, `_headers`. | **Runnable** only if every static file passes the tier check: no script, no network call, no Whumpo origin, no platform route (`/api`, `/modules`, `/backend`, `/apps` for visitor application pages at `/apps/<uuid>/…`, `/s/<project>/backend` for the stateless-form path the project host maps `/backend` to, `/workspace`; a bare `/app` is refused too), no form action or form endpoint. |
 | **2. Data portability** | `specification/`, `data/` (JSON data sets and JPEG files), `source/` (reviewed custom source), `frontend/` (custom presentation source). | **Data only.** Readable, checksummed and importable elsewhere; nothing here runs by itself. |
 | **3. Functioning standalone application** | A frontend plus working replacements for the managed capabilities it uses. | **Unavailable in v1.** Records, forms, files, access, notifications, connectors and custom functions have no supported standalone runtime yet ([report](#unavailable-feature-report)). WH-188 may add a narrow subset only with WH-189 clean-room evidence. |
 
@@ -103,7 +103,7 @@ The reference `readBundle` is the only decoder. It refuses, with a typed code:
 
 **Included** (allowlist, per lifecycle class export policy): the saved specification; public pages whose saved HTML digest matches and whose every photo belongs to the project and is approved; other approved owner photos; the directory; staff role list (opaque visitor IDs, grant dates, state); reviewed and cleared custom source; custom frontend source; and, only with `visitorData`, retained module records and approved module files.
 
-**Never included:** other tenants' data; platform secrets and bindings; passkeys, sessions, recovery material, invitation codes, provider tokens and ciphertext, verification codes and proof tokens; R2 keys, database IDs and other physical locators; internal review envelopes, hashes and receipts; safety cases, evidence and holds; held, pending, blocked or unapproved media and imports; uncleared source; records past their retention window; and the contact inbox (it keeps its own export path). The builder never reads credential tables. As defense in depth, any credential-shaped structural key in included JSON fails the build (`SECRET_FIELD`). Customer-defined record field values are customer data and are not reinterpreted.
+**Never included:** other tenants' data; platform secrets and bindings; passkeys, sessions, recovery material, invitation codes, provider tokens and ciphertext, verification codes and proof tokens; R2 keys, database IDs and other physical locators; internal review envelopes, hashes and receipts; safety cases, evidence and holds; held, pending, blocked or unapproved media and imports; uncleared source; records past their retention window; and contact inbox messages (no inbox export exists: the owner reads them only in the private inbox, at most 100 unexpired messages per project, and they expire after 30 days). The builder never reads credential tables. As defense in depth, any credential-shaped structural key in included JSON fails the build (`SECRET_FIELD`). Customer-defined record field values are customer data and are not reinterpreted.
 
 **Cross-tenant references.** Every row and object is checked against the requested project at build time, not only by query scope. A page that references a photo stored for another project is not exported (`not-cleared`), and the foreign bytes are never read into the bundle.
 
@@ -115,7 +115,7 @@ The reference `readBundle` is the only decoder. It refuses, with a typed code:
 | `staff-page-not-served` | Staff-audience pages left out of the static tier; their text stays in the specification. |
 | `visitor-dataset-not-requested` | Visitor-subject data sets left out because the owner did not select visitor data. |
 | `credentials-and-sessions` | Always present with count `null`: credentials are never read, so they are not counted. |
-| `contact-inbox-separate-export` | The project has a contact inbox; its messages use the existing inbox export. |
+| `contact-inbox-separate-export` | The project has a contact inbox; its messages are left out. Despite the frozen v1 name, no separate inbox export exists today: the only owner paths are the private inbox read (`GET /api/projects/PROJECT_ID/inbox`, at most 100 unexpired messages) and per-message deletion, and the unmerged WH-018 account export also omits the inbox (reason `separate-inbox-retention`). |
 
 **Hold non-disclosure.** Following the WH-018 security review, a preservation or safety hold is never distinguishable in a bundle, review or count: a held item and a pending item produce byte-identical bundles. Export never places, releases or bypasses a hold, and a hold placed after the review applies at download time under the same generic category. Restricted preservation (LC-06) remains its own operator process. Whether the generic count itself is acceptable is a counsel/safety-owner question ([decision 3](#open-owner-decisions)).
 
@@ -140,7 +140,7 @@ Instructions must never ask the customer to paste a secret into Chat, a support 
 
 ## Capability migration paths
 
-Official sources were retrieved on **October 9, 2026 UTC**. They are planning inputs, not verified Whumpo or customer account entitlement, a quote or an activation. Customer-side prices are the customer's own provider terms and **require verification** before relying on them.
+Per-capability customer steps, secrets, cost flags and offline checks are in the [portable migration guides](portable-migration-guides.md) (WH-190, planned). Official sources were retrieved on **October 9, 2026 UTC**. They are planning inputs, not verified Whumpo or customer account entitlement, a quote or an activation. Customer-side prices are the customer's own provider terms and **require verification** before relying on them.
 
 | Option | Documented facts (retrieved October 9, 2026) | Whumpo use |
 | --- | --- | --- |
@@ -155,51 +155,51 @@ Official sources were retrieved on **October 9, 2026 UTC**. They are planning in
 
 ### Static pages
 
-**Runnable** when the tier check passes. Upload `site/public` anywhere, apply `_headers`, and point DNS yourself. The pages contain no scripts and no Whumpo calls; the existing CSP (`default-src 'none'`, `form-action 'none'`) keeps them self-contained. Hosted contact intake and other Whumpo-served tools are not included.
+**Runnable** when the tier check passes. Upload `site/public` anywhere, apply `_headers`, and point DNS yourself. The pages contain no scripts and no Whumpo calls; the existing CSP (`default-src 'none'`, `form-action 'none'`) keeps them self-contained. Hosted contact intake and other Whumpo-served tools are not included. Customer migration guide: [static public pages](portable-migration-guides.md#static-public-pages-content-pages).
 
 ### Content collections
 
-**Data only.** `data/directory.json` holds the published snapshot. A static rendering of the public directory is a WH-188 candidate because it is read-only.
+**Data only.** `data/directory.json` holds the published snapshot. A static rendering of the public directory is a WH-188 candidate because it is read-only. Customer migration guide: [content collections](portable-migration-guides.md#content-collections-and-the-directory-content-collections).
 
 ### Records and forms
 
-**Records data only, forms unavailable.** Retained records export as `whumpo-module-records` v1 (visitor scope). Record views, staff updates, retention timers and public intake (Turnstile, quotas, receipts) need the customer's own database, form handler and bot protection. Candidate adapter: SQLite or the customer's own D1 behind a published handler (WH-188/190), with no Whumpo source disclosed.
+**Records data only, forms unavailable.** Retained records export as `whumpo-module-records` v1 (visitor scope). Record views, staff updates, retention timers and public intake (Turnstile, quotas, receipts) need the customer's own database, form handler and bot protection. Candidate adapter: SQLite or the customer's own D1 behind a published handler (WH-188/190), with no Whumpo source disclosed. Customer migration guides: [records](portable-migration-guides.md#records-records) and [forms](portable-migration-guides.md#forms-and-public-intake-forms).
 
 ### Files and galleries
 
-**Data only.** Approved JPEGs with SHA-256 per file. Read and upload policies must be rebuilt on the destination's storage. Published galleries are already static pages.
+**Data only.** Approved JPEGs with SHA-256 per file. Read and upload policies must be rebuilt on the destination's storage. Published galleries are already static pages. Customer migration guide: [files](portable-migration-guides.md#files-photos-and-galleries-files).
 
 ### Visitor access and staff roles
 
-**Unavailable.** The staff list exports as data. Passkeys, sessions and recovery cannot move (passkeys are domain-bound), so visitors re-enroll on the destination.
+**Unavailable.** The staff list exports as data. Passkeys, sessions and recovery cannot move (passkeys are domain-bound), so visitors re-enroll on the destination. Customer migration guide: [access](portable-migration-guides.md#visitor-access-and-staff-roles-access).
 
 ### Notifications
 
-**Unavailable.** Templates and rules stay in the specification. Delivery needs the customer's own email provider, sender domain and DNS. Align with the WH-068 notification contract when it merges.
+**Unavailable.** Templates and rules stay in the specification. Delivery needs the customer's own email provider, sender domain and DNS. The [WH-068 notification contract](notifications.md) merged as #180 as a planned contract; no customer-configured notification is implemented yet (WH-155–160). Customer migration guide: [notifications](portable-migration-guides.md#notifications-notifications).
 
 ### Connectors
 
-**Unavailable.** Connector catalog entries and consent receipts are Whumpo's ([connector contract](connectors.md)). The customer reauthorizes providers directly; repositories, zones and other customer-owned resources stay where they are.
+**Unavailable.** Connector catalog entries and consent receipts are Whumpo's ([connector contract](connectors.md)). The customer reauthorizes providers directly; repositories, zones and other customer-owned resources stay where they are. Customer migration guide: [connectors](portable-migration-guides.md#connectors-connectors).
 
 ### Custom functions
 
-**Data only.** Reviewed, cleared source plus `program.json` (engine `quickjs`, JSON I/O, digest). Whumpo's gateway, budgets and review gates do not travel with it.
+**Data only.** Reviewed, cleared source plus `program.json` (engine `quickjs`, JSON I/O, digest). Whumpo's gateway, budgets and review gates do not travel with it. Customer migration guide: [custom functions](portable-migration-guides.md#custom-functions-custom-functions).
 
 ### Contact inbox
 
-**Unavailable.** Messages keep the existing inbox export and 30-day retention. Intake needs the customer's own handler and bot protection.
+**Unavailable.** Messages are not in the bundle and there is no inbox file export: the owner reads unexpired messages (at most 100 per project) in the private inbox, and they expire after the 30-day retention window. Intake needs the customer's own handler and bot protection. Customer migration guide: [contact inbox](portable-migration-guides.md#contact-inbox-contact-inbox).
 
 ### Domains and DNS
 
-**Unavailable.** Hostnames and DNS stay with the customer's registrar or DNS provider. Whumpo detaches only its own hosting under the normal domain lifecycle; export changes nothing.
+**Unavailable.** Hostnames and DNS stay with the customer's registrar or DNS provider. Whumpo detaches only its own hosting under the normal domain lifecycle; export changes nothing. Customer migration guide: [domains](portable-migration-guides.md#domains-and-dns-domains).
 
 ### Automation rules
 
-**Unavailable.** Rule configuration stays in the specification; execution needs the customer's own scheduler or workflow tool.
+**Unavailable.** Rule configuration stays in the specification; execution needs the customer's own scheduler or workflow tool. Customer migration guide: [automation](portable-migration-guides.md#automation-rules-automation).
 
 ### Maintainer AI
 
-**Unavailable by design.** The owner-maintenance model, its context and its funding are never exported, and nothing in the exported subset depends on it. Chat history belongs to the WH-018 account export.
+**Unavailable by design.** The owner-maintenance model, its context and its funding are never exported, and nothing in the exported subset depends on it. Chat history belongs to the WH-018 account export. Customer migration guide: [maintainer AI](portable-migration-guides.md#maintainer-ai-maintainer-ai).
 
 ## Format versions under the current-version-only policy
 
@@ -248,6 +248,6 @@ WH-077 stays the parent with its acceptance unchanged and depends on every child
 
 ## Verification
 
-`node tests/portable-export-contract.mjs` (`pnpm test:portable-export-contract`) runs offline with synthetic data: deterministic bytes and hashes (including reordered inputs and fixed ZIP timestamps); other-tenant, platform-secret, credential, private, unapproved, held, expired and staff-page exclusion; hold non-disclosure; separate visitor-data approval; tier labelling and forged runnable claims; report completeness and documented migration anchors; version, format and data-set refusals with no legacy decoder; tamper detection; an in-process static loader; restored data/asset/version comparison; and the clean-environment boot in a permission-restricted child process. Each of 28 deliberate mutants of the reference must be caught by its named check. It is not in `pnpm verify fast` because it measured above that profile's 2-second budget on the development host ([verification](verification.md#wh-077-portable-export-contract--october-8-2026-utc)). It proves the frozen contract and the reference, not the WH-187 builder over D1/R2, OS-level isolation or any live behavior.
+`node tests/portable-export-contract.mjs` (`pnpm test:portable-export-contract`) runs offline with synthetic data: deterministic bytes and hashes (including reordered inputs and fixed ZIP timestamps); other-tenant, platform-secret, credential, private, unapproved, held, expired and staff-page exclusion; hold non-disclosure; separate visitor-data approval; tier labelling and forged runnable claims; report completeness and documented migration anchors; version, format and data-set refusals with no legacy decoder; tamper detection; an in-process static loader; restored data/asset/version comparison; and the clean-environment boot in a permission-restricted child process. Each of 30 deliberate mutants of the reference must be caught by its named check. It is not in `pnpm verify fast` because it measured above that profile's 2-second budget on the development host ([verification](verification.md#wh-077-portable-export-contract--october-8-2026-utc)). It proves the frozen contract and the reference, not the WH-187 builder over D1/R2, OS-level isolation or any live behavior.
 
-**Result at this slice (October 9, 2026 UTC, Node 24.21.0):** 12 reference checks, 2 clean-environment boot checks and 1 static check passed; 28 of 28 mutants were caught, each by its intended check (`--explain` prints the mapping).
+**Result at this slice (October 9, 2026 UTC, Node 24.21.0):** 12 reference checks, 2 clean-environment boot checks and 1 static check passed; 28 of 28 mutants were caught, each by its intended check (`--explain` prints the mapping). After the tier check was extended to `/apps/` and `/s/<project>/backend` paths (two new mutants), 30 of 30 were caught on October 9, 2026 UTC.
