@@ -15,7 +15,7 @@ import {readBuildInputs} from '../tools/build-snapshot.mjs';
 
 const live=process.env.RUN_LIVE_MUSE==='1';
 if(live&&!process.env.WHUMPO_MUSE_KEY_FILE)throw Error('Real Muse requires WHUMPO_MUSE_KEY_FILE');
-const dir=await mkdtemp('/tmp/whumpo-view-lifecycle-'),id=()=>crypto.randomUUID();
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-view-lifecycle-'),id=()=>crypto.randomUUID();
 const reportDir=process.env.WHUMPO_LIFECYCLE_EVIDENCE??dir;
 await mkdir(reportDir,{recursive:true,mode:0o700});
 const fixtureDigest=createHash('sha256').update(await readFile(new URL(import.meta.url))).digest('hex');

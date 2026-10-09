@@ -12,7 +12,7 @@ for(const change of [{appId:'1e2'},{appId:0},{appId:'9007199254740992'},{slug:'.
 const github={retainedCredentials:0,pendingRevocations:0,missing:Object.keys(secrets)};
 requireFreshGitHubSetup({providers:{github}});
 for(const change of [{retainedCredentials:1},{pendingRevocations:1},{missing:[...github.missing,'CONNECTION_ENCRYPTION_KEYRING']},{missing:[]}])assert.throws(()=>requireFreshGitHubSetup({providers:{github:{...github,...change}}}));
-const dir=await mkdtemp('/tmp/whumpo-app-setup-');
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-app-setup-');
 try{
  await mkdir(dir+'/.secrets',{mode:0o700});await writeFile(dir+'/.secrets/github-app.json','{"clientSecret":"SYNTHETIC_SECRET_SENTINEL",INVALID}',{mode:0o600});
  const result=spawnSync(process.execPath,[new URL('../tools/configure-github-app.mjs',import.meta.url).pathname],{cwd:dir,encoding:'utf8'});

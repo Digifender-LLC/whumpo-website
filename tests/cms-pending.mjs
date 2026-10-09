@@ -9,7 +9,7 @@ import {workspaceFixture} from './helpers/workspace-identity.mjs';
 const bundle=await build({stdin:{resolveDir:process.cwd(),contents:"export {hashToken,newSessionToken} from './src/security';export {admitWorkspace} from './src/workspace-identity/admission';export {resolveIdentity} from './src/workspace-identity/authority';export * from './src/cms-pending';export {sendChat,readChat} from './src/chat';export {getBilling} from './src/billing';export {cmsContentAction} from './src/cms-content';export {prepareSiteAction} from './src/site-agent';"},bundle:true,format:'esm',platform:'node',write:false});
 const identity=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
 const {pendingCMSWork,describePendingCMS,cmsPendingRequest,sendChat,readChat,getBilling,cmsContentAction,prepareSiteAction}=identity;
-const dir=await mkdtemp('/tmp/whumpo-cms-pending-');let store;
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-cms-pending-');let store;
 try{
  store=await databaseFixture({d1:true,r2:true});const db=store.db,id=()=>crypto.randomUUID(),owner=id(),other=id(),project=id(),foreign=id();
  const accounts=new Map(),scopes=new Map(),scope=user=>scopes.get(user);

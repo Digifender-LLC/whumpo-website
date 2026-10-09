@@ -11,7 +11,7 @@ import {createRestoreInventory,openRestoreInventory} from '../tools/restore-inve
 import {inspectIsolatedRestore,restoreManifestDigest} from '../tools/restore-admission.mjs';
 
 Error.stackTraceLimit=0;
-const directory=await mkdtemp('/tmp/whumpo-inventory-freshness-'),inventoryFile=join(directory,'current.whumpo-restore-inventory'),streamId='fresh-source',id=()=>crypto.randomUUID();
+const directory=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-inventory-freshness-'),inventoryFile=join(directory,'current.whumpo-restore-inventory'),streamId='fresh-source',id=()=>crypto.randomUUID();
 const fixture=await sqliteD1(),{db,sql}=fixture,{identity:m}=await currentFixtureModules([]),keys=await keyBackupFixture(),keyring=fixtureKeyring(),{proof:keyBackup}=await keys.create(keyring);
 const copies=[],handles=[];let refusals=0,verified=0;const network=globalThis.fetch;globalThis.fetch=()=>assert.fail('No network permitted');
 const open=async(sourceDb=db)=>{const h=await openRestoreInventory({inventoryFile,expectedStreamId:streamId,...(sourceDb?{sourceDb}:{})});handles.push(h);return h;};

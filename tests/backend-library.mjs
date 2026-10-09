@@ -10,7 +10,7 @@ async function accountAuthority(user=crypto.randomUUID()){const authority=await 
 const {inspectionRequest}=m,{backendLibrary,readBackendComponent,installBackendComponent}=m.backendLibrary,{backendChatCommand,backendAction}=m.backendChat,{saveBackend}=m.backend;
 for(const operation of ['library','component'])assert.equal(inspectionRequest(JSON.stringify({reply:'Inspect reusable helper',action:{kind:'backend',operation,...(operation==='component'?{reference:'line-total@1'}:{})}})),true);
 assert.equal(inspectionRequest(JSON.stringify({reply:'Copy helper',action:{kind:'backend',operation:'useComponent',reference:'line-total@1',projectId:crypto.randomUUID()}})),false);
-const dir=await mkdtemp('/tmp/whumpo-library-');let runtime;
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-library-');let runtime;
 try{
  const id=()=>crypto.randomUUID();
  async function fixture(){const user=id(),project=id(),now=new Date().toISOString();await accountAuthority(user);await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Private fixture','','draft',?,?)").bind(project,user,now,now).run();return {user,project};}

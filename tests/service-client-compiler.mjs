@@ -7,7 +7,7 @@ import {build} from 'esbuild';
 import {createHash} from 'node:crypto';
 import {checkSpecificationCompiler} from '../tools/check-specification-compiler.mjs';
 import {checkServiceClientCompiler} from '../tools/check-service-client-compiler.mjs';
-const root=process.cwd(),temp=await mkdtemp('/tmp/whumpo-client-compiler-'),hash=value=>createHash('sha256').update(value).digest('hex');
+const root=process.cwd(),temp=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-client-compiler-'),hash=value=>createHash('sha256').update(value).digest('hex');
 const oldFetch=globalThis.fetch;let network=0;
 try{
  const originalCompiler=await checkSpecificationCompiler(),checked=await checkServiceClientCompiler();assert.match(originalCompiler.compilerDigest,/^[0-9a-f]{64}$/);
