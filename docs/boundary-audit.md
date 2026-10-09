@@ -305,6 +305,20 @@ node tests/photo-versions.mjs                          # passed
 node tests/exports.mjs                                 # passed
 ```
 
+Rebuilt on October 9, 2026 UTC as `claude/wh-004-b6-guest-photo-budget-train4` (replaces closed PR #240). It is stacked on `claude/wh-004-b4-operator-target-main-train2` (`11ff52c`, the B4 fix over the slice 2 rebuild onto `main` `89fa009`), because B6 is registered only in the slice 2 registry. The two B6 commits applied without conflict. `node tools/boundary-audit.mjs` passed, `node tools/boundary-audit.mjs summary` reproduced the summary above byte for byte, and the registry has 710 anchors. Run on Node 24.21.0 with `TMPDIR` on a home-directory path and python3 with Pillow on `PATH`:
+
+```sh
+node tests/boundary-guest-preview-read-pool.mjs        # SQLite + in-memory R2: passed (exit 0); with the four src/ files reverted to 11ff52c: failed (exit 1)
+node tests/boundary-guest-preview-read-pool.mjs --d1   # local D1 + local R2: passed (exit 0)
+node tests/guest-previews.mjs                          # SQLite: 12 groups passed
+node tests/guest-previews.mjs --d1                     # local D1: 12 groups passed
+node tests/guest-preview-photos.mjs                    # local D1/R2: passed
+node tests/public-fairness.mjs                         # passed
+node tests/photo-versions.mjs                          # passed
+node tests/exports.mjs                                 # passed
+node tests/boundary-audit.mjs                          # passed
+```
+
 ## Remaining WH-004 work
 
 - Owner decisions and remediation for B1 and B5, the two open B6 policy questions (remediated in source), the B7 guard-rail question (and R2/R4/R8/R14 policy). B2 was resolved by correcting the runbook, B3 was fixed by #178 and B4 was fixed in the tool.

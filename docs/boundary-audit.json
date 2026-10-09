@@ -162,7 +162,7 @@
    "id": "B6",
    "severity": "low",
    "title": "Guest-preview views draw only the platform-wide photo read pool, bypassing the per-project fair share",
-   "status": "resolved October 9, 2026 in source: guest views charge the link's project photo budget, account fair share and per-client sub-limit (executed regression on local SQLite; the --d1 run is still to do; not deployed)",
+   "status": "resolved October 9, 2026 in source: guest views charge the link's project photo budget, account fair share and per-client sub-limit (executed regression on local SQLite and on local D1 + local R2; not deployed)",
    "owner": "Guest-preview and storage-budget maintainers; owner decisions open on sharing the per-client sub-limit with public photos and on operator photo containment reaching guest previews",
    "reproduction": "node tests/boundary-guest-preview-read-pool.mjs [--d1] (regression, needs python3 with Pillow; exit 0)",
    "evidence": [
