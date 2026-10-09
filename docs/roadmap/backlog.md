@@ -6182,10 +6182,10 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 ### References
 
 - [docs/domain-purchases.md](../../docs/domain-purchases.md)
-- [tools/prototypes/domain-purchase.mjs](../../tools/prototypes/domain-purchase.mjs)
+- [src/domain-purchase/order.ts](../../src/domain-purchase/order.ts)
 - [tests/domain-purchase-contract.mjs](../../tests/domain-purchase-contract.mjs)
 - [docs/domains.md](../../docs/domains.md)
-- [src/domain-purchase-quote.ts](../../src/domain-purchase-quote.ts)
+- [src/domain-purchase/quote.ts](../../src/domain-purchase/quote.ts)
 - [docs/job-envelope.md](../../docs/job-envelope.md)
 
 ### Execution coordination
@@ -6235,7 +6235,8 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 ### References
 
 - [docs/domain-purchases.md](../../docs/domain-purchases.md)
-- [src/domain-purchase-quote.ts](../../src/domain-purchase-quote.ts)
+- [src/domain-purchase/quote.ts](../../src/domain-purchase/quote.ts)
+- [src/domain-purchase/order.ts](../../src/domain-purchase/order.ts)
 - [src/plans.ts](../../src/plans.ts)
 
 ### Execution coordination
@@ -6244,7 +6245,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-09 UTC: source slice on local branch claude/wh-193-domain-quote-state-machine, stacked on the unmerged WH-192 branch claude/wh-034-registrar-purchase-contract-r2 (PR #245, base origin/main 4dea09c); not pushed or merged, issue not created or claimed from this session. Added pure modules src/domain-purchase/quote.ts, order.ts, registrar.ts (one adapter interface: check, register, read-only lookup; synthetic in-memory registrar) and renewal.ts, and deleted src/domain-purchase-quote.ts (no caller existed outside its test) and tools/prototypes/domain-purchase.mjs (the source is now the only implementation). Gaps G-D1 to G-D6 are closed in source. node tests/domain-purchase-contract.mjs runs against the bundled source: 20 source checks and 3 policy/static checks passed, and 26 of 26 source mutants were caught, each by its intended check; an esbuild import-graph check shows src/index.ts, src/site-host.ts, src/app-host.ts and src/runtime/worker.ts do not reach the module. node tests/domain-purchase-quote.mjs passed for the new shape. The three acceptance criteria hold for the source module and synthetic registrar only: no schema, route, Chat binding, persistence, real registrar, payment, provider or customer-visible change, so D1 atomicity, holds and real adapters remain WH-194 to WH-197. Behaviour changes versus the deleted helper are listed in docs/domain-purchases.md; none was reachable by a customer, API or model.
 
 ## WH-194 — Current-schema domain orders, reviews, funding holds and registrant data class
 
