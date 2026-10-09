@@ -13,6 +13,8 @@ export default {
    const page=(local?url.pathname:'/apps/'+project+url.pathname).match(/^\/apps\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/$/);
    if(page&&request.method==='GET'&&!url.search){
     if(!(await env.API_LIMITER.limit({key:'page:'+(request.headers.get('cf-connecting-ip')??'unknown')})).success)return secure(new Response('Please try again in a minute.',{status:429}));
+    // An operator serving stop keeps this same static visitor client: the gateway refuses its configuration, so it
+    // opens only the visitor's own sign-in, recovery, saved data, export and deletion (never the program or modules).
     if(!await liveAppPage(env.DB,page[1]))return secure(new Response('This application page is unavailable.',{status:404}));
     return secure(await env.ASSETS.fetch(new Request(origin+'/index.html')));
    }

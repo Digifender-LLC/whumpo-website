@@ -1954,14 +1954,16 @@
     {
       "id": "operator-containment",
       "tables": [
-        "operator_containments"
+        "operator_containments",
+        "operator_retention_receipts",
+        "operator_session_revocations"
       ],
       "scope": "mixed",
-      "purpose": "Operator containment actions (WH-050 F7, runbook G3): a temporary freeze or per-project allowance for one account or project's public backend calls, visitor transitions, contact submissions and public photo reads, or a freeze of pooled owner build jobs (WH-074 `build` scope, which also cancels running and unpublished jobs in scope), with the operator reference, private reason, request digest, expiry and any lift. The rows are the audit and are enforced only inside the public admission triggers.",
-      "currentRetention": "Append-only except a single lift; a delete trigger refuses removal. Every action expires within 30 days. No foreign key, so account/project closure neither is blocked by nor erases the record. Bounded at 10,000 rows, after which new containment fails closed (reported by the platform counter report).",
-      "proposedRetention": "Keep while related incident records are kept; a reviewed retention schedule (for example 1 year after expiry or lift) requires an owner decision before any cleanup is added.",
-      "deletionAuthority": "No ordinary deletion. A future reviewed operator retention procedure only; customers, owners, models and agents cannot remove or edit containment records.",
-      "exportPolicy": "Not exported and never shown to customers: customers see only the existing generic limit or busy responses. Operator references and reasons stay out of customer output, ordinary logs, GitHub and model context.",
+      "purpose": "Operator containment actions (WH-050 F7, runbook G3): a temporary freeze or per-project allowance for one account or project's public backend calls, visitor transitions, contact submissions and public photo reads, a freeze of pooled owner build jobs (WH-074 `build` scope, which also cancels running and unpublished jobs in scope), and a separate project serving stop (`serving` scope, owner decision October 8, 2026), with the operator reference, private reason, request or review digest, expiry and explicit resolution; separate account workspace session revocation receipts bound to the exact reviewed identity state (owner decision October 8, 2026); and content-free cleanup receipts. The rows are the audit and are enforced only inside the public admission/serving predicates and the revocation trigger.",
+      "currentRetention": "Owner decision October 8, 2026: active and unresolved records remain until resolved. A containment or serving stop always expires within 30 days, but expiry is not resolution: an expired action stays retained until an operator records a reviewed close (a lift ends it early while active). Resolved containment rows, session revocation receipts (completed when applied) and cleanup receipts may be deleted only by the reviewed `cleanup` action at least 90 days after resolution, revocation or receipt, never inside an unreleased safety preservation hold on the subject account or project; delete triggers refuse everything else. No foreign key, so account/project closure neither is blocked by nor erases the records. Each table is bounded at 10,000 rows, after which new actions fail closed (reported by the platform counter report).",
+      "proposedRetention": "Implemented as the current retention above (owner decision October 8, 2026, issue #111). Deletion is not automatic: an operator previews and applies cleanup with the exact review digest.",
+      "deletionAuthority": "Reviewed operator cleanup only (tools/operator-containment.mjs `cleanup`, exact preview digest, cutoff at least 90 days old, at most 500 records per kind per run, atomic receipt). Customers, owners, models and agents cannot remove or edit operator records.",
+      "exportPolicy": "Not exported and never shown to customers: customers see only the existing generic limit, busy, unavailable or signed-out responses. Operator references and reasons stay out of customer output, ordinary logs, GitHub and model context.",
       "references": [
         "tools/operator-containment-input.mjs",
         "tools/operator-containment.mjs",
@@ -1975,10 +1977,10 @@
           "control-d1"
         ],
         "readers": [
-          "Operator containment CLI with the existing operator D1 authorization; admission triggers read only the active effect"
+          "Operator containment CLI with the existing operator D1 authorization; admission and serving predicates read only the active effect; the revocation trigger reads only the account's own identity state"
         ],
         "processors": [
-          "Deterministic public admission triggers (backend, visitor transition, contact, public photo)"
+          "Deterministic public admission triggers (backend, visitor transition, contact, public photo), the operator_serving_stopped predicate (site host, visitor host, contact page, guest preview) and the session revocation trigger"
         ],
         "remainingExposure": [
           "Free-text reasons are operator-written and could contain sensitive detail; operators must record identifiers and categories only, never customer content or credentials."

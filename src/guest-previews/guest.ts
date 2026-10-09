@@ -38,11 +38,11 @@ async function findLink(db:D1Database,token:unknown){
  const link=await db.prepare('SELECT id,owner_user_id,project_id FROM guest_preview_links WHERE token_hash=?').bind(hash).first<Link>();
  return link?{...link,hash}:null;
 }
-/** Exact current capability: same token hash, current link/version/hold state and the owner's
+/** Exact current capability: same token hash, current link/version/hold state, no operator serving stop and the owner's
  * current feature inclusion for that project, evaluated together in one statement. */
 function current(link:Link&{hash:string},t='guest_preview_links'){
  const included=guestInclusion(link.owner_user_id,link.project_id);
- return {sql:`${t}.id=? AND ${t}.token_hash=? AND ${guestLinkCurrent(t)} AND ${included.sql}`,params:[link.id,link.hash,...included.params]};
+ return {sql:`${t}.id=? AND ${t}.token_hash=? AND ${guestLinkCurrent(t)} AND NOT EXISTS(SELECT 1 FROM operator_serving_stopped WHERE project_id=${t}.project_id) AND ${included.sql}`,params:[link.id,link.hash,...included.params]};
 }
 async function stillCurrent(db:D1Database,link:Link&{hash:string}){
  const gate=current(link,'l');

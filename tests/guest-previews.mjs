@@ -5,6 +5,7 @@ import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.mjs';
 import {paidPlan} from './helpers/paid-plan.mjs';
 import {accountClosureInventory} from '../tools/account-closure-inventory.mjs';
+import {runContainment} from '../tools/operator-containment-input.mjs';
 Error.stackTraceLimit=0;
 // WH-092 guest preview links and accountless feedback. Actual platform and sites handlers run
 // against the complete current schema in disposable SQLite, or local D1 with --d1. No provider,
@@ -256,6 +257,19 @@ try{
   assert.equal((await row('SELECT count(*) n FROM guest_preview_links WHERE owner_user_id=?',a.user)).n,0);
   assert.equal((await row('SELECT count(*) n FROM guest_preview_feedback f LEFT JOIN guest_preview_links l ON l.id=f.link_id WHERE l.id IS NULL')).n,0);
   await assert.rejects(()=>run('DELETE FROM users WHERE id=?',b.user),/safety_preservation_hold/);
+ });
+
+ await check('operator serving stop withdraws guest previews without changing links',async()=>{
+  const o=await owner(),live=await issue(o,o.project,o.version),other=await owner(),theirs=await issue(other,other.project,other.version);
+  assert.equal((await view(live.token)).status,200);
+  const stop={action:'stop-serving',id:id(),project:o.project,expiresAt:new Date(Date.now()+3600000).toISOString(),operator:'human:operator',reason:'Synthetic serving stop'};
+  await runContainment(db,stop,(await runContainment(db,stop)).applyDigest);
+  assert.equal((await view(live.token)).status,404);assert.equal((await status(live.token)).status,404);assert.equal((await comment(live.token)).status,404);
+  assert.equal((await view(theirs.token)).status,200,'Another tenant keeps its previews');
+  assert.equal((await row('SELECT revoked_at FROM guest_preview_links WHERE id=?',live.link.id)).revoked_at,null,'The stop does not revoke the link');
+  const lift={action:'lift',id:stop.id,operator:'human:operator',reason:'Synthetic lift'};
+  await runContainment(db,lift,(await runContainment(db,lift)).applyDigest);
+  assert.equal((await view(live.token)).status,200,'Lifting restores the same link');
  });
 
  await check('no token or guest content in logs',async()=>{
