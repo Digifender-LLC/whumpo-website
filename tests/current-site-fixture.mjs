@@ -33,6 +33,8 @@ export async function currentSiteFixtureHandlers(){
   export * as accessSetup from './src/shared-modules/access-setup';
   export {readAppAccess} from './src/app-access';
   export {continueAccountClosures,closureContinuation} from './src/account-lifecycle/closure';
+  export * as portableExport from './src/account-lifecycle/portable';
+  export * as portableBundle from './src/account-lifecycle/portable-bundle';
   export * as appResource from './src/app-resource';
   export * as sharedModuleRecords from './src/shared-modules/records';
   export * as sharedModuleFiles from './src/shared-modules/files';

@@ -8,6 +8,7 @@ import {admitWorkspace,workspaceBindings,workspaceTransport} from '../workspace-
 import {ModuleError} from '../shared-modules/policy';
 import {AccountLifecycleError,prepareClosure,confirmClosure,resumeClosure,closureStatus} from './closure';
 import {prepareAccountExport,downloadAccountExport} from './export';
+import {preparePortableExport,downloadPortableExport} from './portable';
 
 export const accountLifecyclePrefix='/api/account/v1/';
 const maxBody=4096;
@@ -18,7 +19,7 @@ async function body(request:Request):Promise<unknown>{
  const text=await request.text();if(text.length>maxBody)throw invalid();
  try{return JSON.parse(text) as unknown;}catch{throw invalid();}
 }
-export const accountLifecycleActions=['export/prepare','export/download','closure/prepare','closure/confirm','closure/resume','closure/status'] as const;
+export const accountLifecycleActions=['export/prepare','export/download','portable/prepare','portable/download','closure/prepare','closure/confirm','closure/resume','closure/status'] as const;
 type Action=typeof accountLifecycleActions[number];
 
 /** Returns null for every other path. */
@@ -34,6 +35,8 @@ export async function handleAccountLifecycleRequest(request:Request,env:Env):Pro
   switch(action){
    case 'export/prepare':return respond(await prepareAccountExport(db,user,data));
    case 'export/download':return await downloadAccountExport(scoped,user,data);
+   case 'portable/prepare':return respond(await preparePortableExport(db,user,data));
+   case 'portable/download':return await downloadPortableExport(scoped,user,data);
    case 'closure/prepare':return respond(await prepareClosure(db,user,data));
    case 'closure/confirm':return respond(await confirmClosure(scoped,user,data,transport));
    case 'closure/resume':return respond(await resumeClosure(scoped,user,data,transport));

@@ -1,15 +1,17 @@
-/** WH-018 owner account export and closure client. It calls only the six existing `/api/account/v1/` routes with the
+/** WH-018 owner account export and closure client, and the WH-187 portable project bundle. It calls only the eight
+ * `/api/account/v1/` routes with the
  * ordinary same-origin passkey session. The server still enforces the exact review digest, the fresh passkey proof on
  * download/confirm and the stop-new-work guard; this client reauthenticates once through the existing identity ceremony
  * when the proof is stale and retries the same request. No Chat turn, agent action or model reaches it; nothing is
  * cached or stored. */
 export const accountLifecyclePrefix='/api/account/v1/';
-export const accountLifecycleActions=Object.freeze(['export/prepare','export/download','closure/prepare','closure/confirm','closure/resume','closure/status'] as const);
+export const accountLifecycleActions=Object.freeze(['export/prepare','export/download','portable/prepare','portable/download','closure/prepare','closure/confirm','closure/resume','closure/status'] as const);
 export type AccountLifecycleAction=typeof accountLifecycleActions[number];
 type Fetch=(input:string,init:RequestInit)=>Promise<Response>;
 export type AccountTransport={fetch:Fetch;reauth:()=>Promise<unknown>};
 export type AccountResult<T>={state:'ok';value:T}|{state:'error';code:string;message:string;status:number};
 
+export type PortableReview={id:string;digest:string;expiresAt:number;format:'whumpo-portable-export';formatVersion:1;filter:'portable-filter@1';projectId:string;visitorData:boolean;tiers:Record<string,string>;includes:string[];excludes:string[];notice:string};
 export type ExportReview={id:string;digest:string;expiresAt:number;format:'whumpo-account-export-v1';visitorData:boolean;projects:number;includes:string[];excludes:string[];notice:string};
 export type ClosureReview={id:string;digest:string;expiresAt:number;canConfirm:boolean;requiredBeforeClosure:{id:string;count:number;action:string}[];removes:Record<string,number>;effects:string[];remainsAfterClosure:string[]};
 export type ClosureStep={step:'freeze'|'withdraw'|'credentials'|'holds'|'operations'|'purge';state:'pending'|'done'|'waiting'|'blocked';attempts:number;updatedAt:number;origin:'owner'|'maintenance'|null;detail:Record<string,unknown>};
@@ -56,6 +58,16 @@ export async function downloadAccountExport(review:Pick<ExportReview,'id'|'diges
  if(!result.ok)return {state:'error',code:result.code,message:result.message,status:result.status};
  if(result.response.headers.get('content-type')!=='application/zip')return {state:'error',code:'unavailable',message:fallback,status:503};
  try{return {state:'ok',value:await result.response.blob()};}catch{return {state:'error',code:'interrupted',message:'The download was interrupted. Prepare a fresh export.',status:503};}
+}
+/** Exact portable bundle review for one owned project (WH-187). Visitor datasets are a separate explicit choice. */
+export const preparePortableExport=(requestId:string,projectId:string,visitorData:boolean,t:AccountTransport)=>json('portable/prepare',{requestId:reviewId(requestId),projectId:reviewId(projectId),visitorData},t,v=>v.review as PortableReview);
+/** Downloads the bundle after a fresh passkey proof. `sha256` is the out-of-band receipt digest of the whole file. */
+export async function downloadPortableExport(review:Pick<PortableReview,'id'|'digest'>,t:AccountTransport):Promise<AccountResult<{blob:Blob;sha256:string}>>{
+ const result=await request('portable/download',{reviewId:reviewId(review.id),reviewDigest:reviewDigest(review.digest)},t);
+ if(!result.ok)return {state:'error',code:result.code,message:result.message,status:result.status};
+ const sha256=result.response.headers.get('x-whumpo-bundle-sha256')??'';
+ if(result.response.headers.get('content-type')!=='application/zip'||!digest.test(sha256))return {state:'error',code:'unavailable',message:fallback,status:503};
+ try{return {state:'ok',value:{blob:await result.response.blob(),sha256}};}catch{return {state:'error',code:'interrupted',message:'The download was interrupted. Prepare a fresh export.',status:503};}
 }
 export const prepareAccountClosure=(requestId:string,t:AccountTransport)=>json('closure/prepare',{requestId:reviewId(requestId)},t,v=>v.review as ClosureReview);
 /** Confirmation uses the reviewed id and digest and the fixed closure control; it needs a fresh passkey proof. */

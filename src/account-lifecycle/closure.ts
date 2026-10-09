@@ -14,12 +14,11 @@ import {assertWorkspace,assertMaintenanceDatabase,requireFreshWorkspace} from '.
 import {revokeGitHubCustody,githubConfig} from '../github-connection';
 import {revokeCloudflareCustody,cloudflareConfig} from '../cloudflare-connection';
 import {closureCounts,type ClosureCounts} from './inventory';
+import {AccountLifecycleError} from './errors';
+import {saveReview} from './review';
 
-export class AccountLifecycleError extends Error{
- constructor(readonly status:400|404|409|503,readonly code:'invalid_request'|'not_found'|'stale_review'|'request_conflict'|'action_required'|'closure_exists'|'closure_unavailable',message:string){super(message);this.name='AccountLifecycleError';}
-}
+export {AccountLifecycleError};
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const reviewSeconds=600;
 export const closureSteps=['freeze','withdraw','credentials','holds','operations','purge'] as const;
 type Step=typeof closureSteps[number];
 type StepState='pending'|'done'|'waiting'|'blocked';
@@ -93,29 +92,6 @@ function presentClosure(id:string,reviewDigest:string,expiresAt:number,b:Awaited
   ]};
 }
 
-/** The client-visible review digest is opaque: a hash of a fresh server-side random value with the binding, so it
- * reveals nothing about the binding (equal bindings give different digests). Exactness is enforced server-side by the
- * stored digest and binding. */
-async function saveReview(db:D1Database,user:string,kind:'export'|'closure',requestId:string,requestHash:string,binding:unknown){
- const reviewDigest=await hashToken(JSON.stringify([crypto.randomUUID(),crypto.randomUUID(),binding])),created=now(),expires=created+reviewSeconds;
- const existing=await db.prepare('SELECT request_hash,review_digest,binding_json,expires_at FROM account_lifecycle_reviews WHERE id=? AND user_id=? AND kind=?').bind(requestId,user,kind).first<{request_hash:string;review_digest:string;binding_json:string;expires_at:number}>();
- if(existing){
-  if(existing.request_hash!==requestHash)throw new AccountLifecycleError(409,'request_conflict','This request ID was already used for a different review.');
-  if(existing.expires_at<=created)throw new AccountLifecycleError(409,'stale_review','This review expired. Prepare a new review.');
-  return {reviewDigest:existing.review_digest,expiresAt:existing.expires_at,binding:JSON.parse(existing.binding_json) as unknown};
- }
- try{
-  await db.batch([
-   db.prepare('DELETE FROM account_lifecycle_reviews WHERE user_id=? AND expires_at<=?').bind(user,created),
-   db.prepare('INSERT INTO account_lifecycle_reviews(id,user_id,kind,request_hash,binding_json,review_digest,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?)').bind(requestId,user,kind,requestHash,JSON.stringify(binding),reviewDigest,created,expires),
-  ]);
- }catch(error){
-  if(String(error).includes('account_lifecycle_review_capacity'))throw new AccountLifecycleError(409,'request_conflict','Too many open account reviews. Wait ten minutes and try again.');
-  if(/UNIQUE|PRIMARY KEY/.test(String(error)))throw new AccountLifecycleError(409,'request_conflict','This request ID was already used for a different review.');
-  throw error;
- }
- return {reviewDigest,expiresAt:expires,binding};
-}
 export {saveReview as saveAccountReview};
 
 export async function prepareClosure(db:D1Database,user:string,input:unknown){

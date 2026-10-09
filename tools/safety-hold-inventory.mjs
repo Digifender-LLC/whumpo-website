@@ -126,8 +126,7 @@ export const deletionSites={
  'src/restore-suppression.ts::github_token_vault':excluded(credential),
  'src/restore-suppression.ts::github_refresh_custody':excluded(credential),
  'src/restore-suppression.ts::cloudflare_token_vault':excluded(credential),
- 'src/account-lifecycle/closure.ts::account_lifecycle_reviews':excluded(proposals),
- 'src/account-lifecycle/export.ts::account_lifecycle_reviews':excluded('A download consumes its own ten-minute export review (single use); the review holds a content-free binding, never customer content.'),
+ 'src/account-lifecycle/review.ts::account_lifecycle_reviews':excluded('Expired-review cleanup, and an account-export or portable-bundle download consuming its own ten-minute export review (single use); a review holds a content-free binding, never customer content.'),
  'src/site-health.ts::site_health_budget':excluded('Platform monitoring budget; no customer content.'),
  'src/site-health.ts::site_health_checks':excluded('Platform availability checks of public pages; no customer content beyond the public URL status.'),
 };

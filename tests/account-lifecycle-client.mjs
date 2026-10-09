@@ -28,7 +28,7 @@ function owner(session){
 let checks=0;
 try{
  await initializeFixtureKeys(db);
- // The client names exactly the server's six actions and nothing else; no Chat, agent or generated page reaches them.
+ // The client names exactly the server's eight actions and nothing else; no Chat, agent or generated page reaches them.
  assert.deepEqual([...client.accountLifecycleActions],[...accountLifecycleActions]);assert.equal(client.accountLifecyclePrefix,accountLifecyclePrefix);checks++;
  const sources=async dir=>(await readdir(dir,{recursive:true})).filter(f=>/\.tsx?$/.test(f)).map(f=>dir+'/'+f);
  for(const file of [...await sources('src'),...await sources('frontend/src')]){
@@ -93,5 +93,5 @@ try{
  await run('DELETE FROM backend_form_settings WHERE project_id=?',bProject.project);
  assert.deepEqual(await client.readAccountClosure(b.t),{state:'ok',value:null});assert.ok(await row('SELECT id FROM users WHERE id=?',b.account));checks++;
  assert.ok(a.state.paths.every(p=>p.startsWith(accountLifecyclePrefix)));assert.equal(network,0);
- console.log(`Account lifecycle client passed (${d1?'local D1':'SQLite'}): ${checks} checks. Six-action client only reachable from the identity-only account page; export review replay/conflict and one-reauth download of a complete archive; stale, foreign and unrefreshable proofs refused; closure review with removals, remains and blockers; one-reauth confirm, waiting journal, status/replay, export while closing, resume to the final receipt; other tenant intact; no network.`);
+ console.log(`Account lifecycle client passed (${d1?'local D1':'SQLite'}): ${checks} checks. Eight-action client (account export, portable bundle, closure) only reachable from the identity-only account page; export review replay/conflict and one-reauth download of a complete archive; stale, foreign and unrefreshable proofs refused; closure review with removals, remains and blockers; one-reauth confirm, waiting journal, status/replay, export while closing, resume to the final receipt; other tenant intact; no network.`);
 }finally{globalThis.fetch=originalFetch;await fixture.close();}
