@@ -31,7 +31,7 @@ const network=globalThis.fetch;globalThis.fetch=()=>assert.fail('Operator invent
 const worlds=[];let holds=0,verifications=0;
 
 async function world(label,inventoryModule=realInventory){
- const directory=await mkdtemp('/tmp/whumpo-containment-evidence-'),file=join(directory,'current.whumpo-restore-inventory'),streamId='containment-'+label;
+ const directory=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-containment-evidence-'),file=join(directory,'current.whumpo-restore-inventory'),streamId='containment-'+label;
  const fixture=await sqliteD1(),{db,sql}=fixture,copies=[],handles=[];
  await initializeFixtureKeys(db,keyring);
  const owner=await workspaceFixture(db,m);
@@ -144,7 +144,7 @@ try{
   // The trigger admits only a future expiry, so use the shortest real one and let it pass.
   await w.db.prepare("INSERT INTO operator_containments(id,scope,subject_kind,subject_id,allowance,operator_ref,reason,request_digest,expires_at) VALUES(?,'contact','account',?,NULL,'human:fixture','Short expiry',?,strftime('%Y-%m-%dT%H:%M:%fZ','now','+2 seconds'))").bind(id(),w.owner.account,'c'.repeat(64)).run();
   await new Promise(resolve=>setTimeout(resolve,2400));
-  assert.equal((await w.db.prepare("SELECT count(*) AS n FROM operator_containments WHERE expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') AND lifted_at IS NULL").first()).n,1,'The row really expired');
+  assert.equal((await w.db.prepare("SELECT count(*) AS n FROM operator_containments WHERE expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') AND resolved_at IS NULL").first()).n,1,'The row really expired');
   await w.held(a0,'stale-authority');await w.close();
  }
 
@@ -190,7 +190,7 @@ try{
   const w=await world('overflow-active'),a0=await w.register();
   // The same applies to rows that are all still ACTIVE (unexpired and unlifted), not only to retained history.
   await w.bulk(513);
-  assert.equal((await w.db.prepare("SELECT count(*) AS n FROM operator_containments WHERE lifted_at IS NULL AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')").first()).n,513);
+  assert.equal((await w.db.prepare("SELECT count(*) AS n FROM operator_containments WHERE resolved_at IS NULL AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')").first()).n,513);
   await w.held(a0,'independent-evidence');assert.equal(await w.events(),0,'All-or-none: nothing is partially appended');
   await w.close();
  }
@@ -208,7 +208,7 @@ try{
   assert.ok(source.includes(original),'The canary must find the declaration it removes');
   source=source.replace(original,'export const restoreAuthorityTables=Object.freeze([]);').replaceAll("from './",`from '${pathToFileURL(toolsDirectory).href}/`);
   assert.ok(!source.includes(original));
-  const directory=await mkdtemp('/tmp/whumpo-containment-canary-'),file=join(directory,'restore-inventory-canary.mjs');
+  const directory=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-containment-canary-'),file=join(directory,'restore-inventory-canary.mjs');
   try{
    await writeFile(file,source);
    assert.equal(await scenario(await import(pathToFileURL(file).href)),'verified','Without derivation the old archive verifies: the gap this suite pins');
