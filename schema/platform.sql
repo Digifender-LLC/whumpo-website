@@ -2802,9 +2802,24 @@ CREATE TRIGGER storage_project_usage_update BEFORE UPDATE ON storage_project_usa
  SELECT RAISE(ABORT,'storage_project_counter') WHERE NEW.project_id<>OLD.project_id OR NEW.period<>OLD.period OR NEW.read_ops<>OLD.read_ops+1;
 END;
 
+-- Operator action identity (containments, session revocations and cleanup receipts): every new id is a lowercase
+-- canonical UUIDv7 whose embedded millisecond timestamp lies within [now - 1 day, now + 1 minute] by this database's
+-- clock at insert. The id therefore carries its own creation time, so no ledger of used ids is needed: a row inserted at
+-- time c has an id time of at most c + 1 minute, and every delete trigger below needs the row to be at least 90 days past
+-- its resolution or creation (each stamped within a minute of the clock, so never before c - 1 minute), hence cleaned no
+-- earlier than c + 90 days - 1 minute; by the time a cleaned id could be proposed again its timestamp is older than a day
+-- and this check refuses it for good. Retention is unchanged; an applied action keeps
+-- replaying from its stored row, and only a never-applied request older than a day needs a new id. Assumes the database
+-- clock does not run backwards by more than the window, as the one-minute created_at/resolved_at checks already do.
+-- The expression is fail-closed: anything that is not exactly that shape or does not compare as inside the window (including
+-- NULL) is refused. (D1 limits GLOB pattern length, so the shape is checked in pieces rather than by one full-length pattern.)
 -- A serving stop is its own action (never mixed with other scopes), and a project has at most one active serving stop.
 CREATE TRIGGER operator_containment_admit BEFORE INSERT ON operator_containments BEGIN
  SELECT RAISE(ABORT,'operator_containment_invalid') WHERE NEW.resolved_at IS NOT NULL
+  OR typeof(NEW.id)<>'text' OR length(NEW.id)<>36 OR length(replace(NEW.id,'-',''))<>32 OR replace(NEW.id,'-','') GLOB '*[^0-9a-f]*'
+  OR substr(NEW.id,9,1)<>'-' OR substr(NEW.id,14,1)<>'-' OR substr(NEW.id,19,1)<>'-' OR substr(NEW.id,24,1)<>'-' OR substr(NEW.id,15,1)<>'7' OR substr(NEW.id,20,1) NOT IN ('8','9','a','b')
+  OR (substr(NEW.id,1,8)||substr(NEW.id,10,4) BETWEEN printf('%012x',CAST((julianday('now','-1 day')-2440587.5)*86400000 AS INTEGER))
+   AND printf('%012x',CAST((julianday('now','+1 minute')-2440587.5)*86400000 AS INTEGER))) IS NOT 1
   OR NEW.created_at IS NOT strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at) OR abs(julianday(NEW.created_at)-julianday('now'))>1.0/1440
   OR NEW.expires_at IS NOT strftime('%Y-%m-%dT%H:%M:%fZ',NEW.expires_at)
   OR NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') OR NEW.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now','+30 days')
@@ -2841,7 +2856,11 @@ BEGIN UPDATE build_jobs SET state='cancelled',finished_at=coalesce(finished_at,s
 -- Session revocation applies only to the exact reviewed identity state: same epoch and credential revision, and the same
 -- complete set of the account's session rows. Any sign-in, sign-out, passkey or recovery change in between is stale.
 CREATE TRIGGER operator_session_revocation_admit BEFORE INSERT ON operator_session_revocations BEGIN
- SELECT RAISE(ABORT,'operator_revocation_invalid') WHERE NEW.created_at IS NOT strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at) OR abs(julianday(NEW.created_at)-julianday('now'))>1.0/1440;
+ SELECT RAISE(ABORT,'operator_revocation_invalid') WHERE typeof(NEW.id)<>'text' OR length(NEW.id)<>36 OR length(replace(NEW.id,'-',''))<>32 OR replace(NEW.id,'-','') GLOB '*[^0-9a-f]*'
+  OR substr(NEW.id,9,1)<>'-' OR substr(NEW.id,14,1)<>'-' OR substr(NEW.id,19,1)<>'-' OR substr(NEW.id,24,1)<>'-' OR substr(NEW.id,15,1)<>'7' OR substr(NEW.id,20,1) NOT IN ('8','9','a','b')
+  OR (substr(NEW.id,1,8)||substr(NEW.id,10,4) BETWEEN printf('%012x',CAST((julianday('now','-1 day')-2440587.5)*86400000 AS INTEGER))
+   AND printf('%012x',CAST((julianday('now','+1 minute')-2440587.5)*86400000 AS INTEGER))) IS NOT 1
+  OR NEW.created_at IS NOT strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at) OR abs(julianday(NEW.created_at)-julianday('now'))>1.0/1440;
  SELECT RAISE(ABORT,'operator_revocation_stale') WHERE NOT EXISTS(SELECT 1 FROM identity_accounts WHERE account_id=NEW.account_id AND auth_epoch=NEW.auth_epoch AND credential_revision=NEW.credential_revision)
   OR NEW.sessions IS NOT (SELECT json_group_array(id) FROM (SELECT id FROM identity_sessions WHERE account_id=NEW.account_id ORDER BY id));
  SELECT RAISE(ABORT,'operator_revocation_capacity') WHERE (SELECT count(*) FROM operator_session_revocations)>=10000;
@@ -2857,7 +2876,11 @@ BEGIN SELECT RAISE(ABORT,'operator_revocation_immutable'); END;
 -- A cleanup receipt names only records that still exist and were resolved (or completed) at or before a cutoff at least
 -- 90 days old; it then deletes exactly those records in the same statement. Each record's own delete trigger still applies.
 CREATE TRIGGER operator_retention_admit BEFORE INSERT ON operator_retention_receipts BEGIN
- SELECT RAISE(ABORT,'operator_retention_invalid') WHERE NEW.created_at IS NOT strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at) OR abs(julianday(NEW.created_at)-julianday('now'))>1.0/1440
+ SELECT RAISE(ABORT,'operator_retention_invalid') WHERE typeof(NEW.id)<>'text' OR length(NEW.id)<>36 OR length(replace(NEW.id,'-',''))<>32 OR replace(NEW.id,'-','') GLOB '*[^0-9a-f]*'
+  OR substr(NEW.id,9,1)<>'-' OR substr(NEW.id,14,1)<>'-' OR substr(NEW.id,19,1)<>'-' OR substr(NEW.id,24,1)<>'-' OR substr(NEW.id,15,1)<>'7' OR substr(NEW.id,20,1) NOT IN ('8','9','a','b')
+  OR (substr(NEW.id,1,8)||substr(NEW.id,10,4) BETWEEN printf('%012x',CAST((julianday('now','-1 day')-2440587.5)*86400000 AS INTEGER))
+   AND printf('%012x',CAST((julianday('now','+1 minute')-2440587.5)*86400000 AS INTEGER))) IS NOT 1
+  OR NEW.created_at IS NOT strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at) OR abs(julianday(NEW.created_at)-julianday('now'))>1.0/1440
   OR NEW.cutoff IS NOT strftime('%Y-%m-%dT%H:%M:%fZ',NEW.cutoff) OR NEW.cutoff>strftime('%Y-%m-%dT%H:%M:%fZ','now','-90 days');
  SELECT RAISE(ABORT,'operator_retention_stale') WHERE
   (SELECT count(*) FROM operator_containments WHERE id||':'||scope IN (SELECT value FROM json_each(NEW.containments)) AND resolved_at<=NEW.cutoff)<>json_array_length(NEW.containments)

@@ -1,4 +1,4 @@
-import {createHash} from 'node:crypto';
+import {createHash,randomBytes} from 'node:crypto';
 // WH-050 F7 / runbook G3: operator-only containment of one account or project's public allowances, a separate project
 // serving stop and a separate account workspace session revocation (owner decision October 8, 2026), plus reviewed
 // retention cleanup (resolved records 90 days after resolution; owner decision October 8, 2026).
@@ -7,6 +7,7 @@ import {createHash} from 'node:crypto';
 // the revocation/retention triggers), so no request path can bypass it, and customers only ever see the existing generic
 // limit, busy, unavailable or signed-out responses. Nothing here edits customer content or publications.
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
+const uuidV7=/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const iso=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 export const containmentScopes=Object.freeze(['backend','transition','contact','photo','build']);
 /** Freeze-only scopes: no temporary allowance exists, and the build limits stay as built (WH-074). */
@@ -25,9 +26,31 @@ export const retentionMs=90*86400000;
 const cleanupLimit=500;
 /** Stored cleanup receipts, checked after each cleanup's own deletions (schema operator_retention_apply). */
 export const retentionReceiptLimit=10000;
+/**
+ * An action id (containment, session revocation or cleanup receipt) is a lowercase canonical UUIDv7 that carries its own
+ * creation time; the schema admits a new one only within [now - 1 day, now + 1 minute] by the database clock, so a cleaned
+ * id can never be reused. Only the schema is the boundary; `--new-id` and `newActionId` are conveniences.
+ */
+export const actionIdWindowMs=86400000;
+export const actionIdFutureMs=60000;
+/** Mints a UUIDv7 stamped `now` (milliseconds since the epoch); the remaining bits are cryptographically random. */
+export function newActionId(now=Date.now()){
+ if(!Number.isSafeInteger(now)||now<0||now>=2**48)throw RangeError('Action ID time out of range');
+ const b=randomBytes(16);
+ for(let i=0;i<6;i++)b[i]=Math.floor(now/2**(8*(5-i)))%256;
+ b[6]=0x70|(b[6]&15);b[8]=0x80|(b[8]&63);
+ const h=b.toString('hex');
+ return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
+}
+/** Millisecond timestamp embedded in a UUIDv7 action id, or null when `value` is not a lowercase canonical UUIDv7. */
+export function actionIdTime(value){return typeof value==='string'&&uuidV7.test(value)?Number.parseInt(value.slice(0,8)+value.slice(9,13),16):null;}
 const fail=()=>{throw Error('Invalid operator containment request');};
+const staleId=()=>{throw Error('Request ID must be a new UUIDv7 minted within the last day (node tools/operator-containment.mjs --new-id); an unapplied older request needs a new ID');};
 function keys(value,allowed,required=allowed){if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).some(k=>!allowed.includes(k))||required.some(k=>!Object.hasOwn(value,k)))fail();}
 function id(value){if(typeof value!=='string'||!uuid.test(value))fail();return value;}
+function actionId(value){if(actionIdTime(value)===null)fail();return value;}
+/** A request that matches no stored record must carry an id minted inside the window (the schema enforces the same by its own clock). */
+function fresh(value,now){const at=actionIdTime(value);if(at===null||at<now-actionIdWindowMs||at>now+actionIdFutureMs)staleId();}
 function operator(value){if(typeof value!=='string'||!/^[A-Za-z0-9_.:@-]{1,128}$/.test(value))fail();return value;}
 function reason(value){if(typeof value!=='string'||!value.trim()||value.trim().length>500||/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value))fail();return value.trim();}
 function time(value){if(typeof value!=='string'||!iso.test(value)||!Number.isFinite(Date.parse(value))||new Date(Date.parse(value)).toISOString()!==value)fail();return value;}
@@ -49,12 +72,12 @@ export function containmentInput(raw){
    else if(target.kind==='project'&&!freezeOnlyScopes.includes(scope)&&Number.isSafeInteger(effect)&&effect>=0&&effect<=containmentAllowances[scope].maximum&&effect!==containmentAllowances[scope].normal)scopes[scope]=effect;
    else fail();
   }
-  return {action:'contain',id:id(v.id),subject:target,scopes,expiresAt:time(v.expiresAt),operator:operator(v.operator),reason:reason(v.reason)};
+  return {action:'contain',id:actionId(v.id),subject:target,scopes,expiresAt:time(v.expiresAt),operator:operator(v.operator),reason:reason(v.reason)};
  }
- if(v.action==='stop-serving'){keys(v,['action','id','project','expiresAt','operator','reason']);return {action:'stop-serving',id:id(v.id),project:id(v.project),expiresAt:time(v.expiresAt),operator:operator(v.operator),reason:reason(v.reason)};}
- if(v.action==='revoke-sessions'){keys(v,['action','id','account','operator','reason']);return {action:'revoke-sessions',id:id(v.id),account:id(v.account),operator:operator(v.operator),reason:reason(v.reason)};}
- if(v.action==='lift'||v.action==='close'){keys(v,['action','id','operator','reason']);return {action:v.action,id:id(v.id),operator:operator(v.operator),reason:reason(v.reason)};}
- if(v.action==='cleanup'){keys(v,['action','id','before','operator']);return {action:'cleanup',id:id(v.id),before:time(v.before),operator:operator(v.operator)};}
+ if(v.action==='stop-serving'){keys(v,['action','id','project','expiresAt','operator','reason']);return {action:'stop-serving',id:actionId(v.id),project:id(v.project),expiresAt:time(v.expiresAt),operator:operator(v.operator),reason:reason(v.reason)};}
+ if(v.action==='revoke-sessions'){keys(v,['action','id','account','operator','reason']);return {action:'revoke-sessions',id:actionId(v.id),account:id(v.account),operator:operator(v.operator),reason:reason(v.reason)};}
+ if(v.action==='lift'||v.action==='close'){keys(v,['action','id','operator','reason']);return {action:v.action,id:actionId(v.id),operator:operator(v.operator),reason:reason(v.reason)};}
+ if(v.action==='cleanup'){keys(v,['action','id','before','operator']);return {action:'cleanup',id:actionId(v.id),before:time(v.before),operator:operator(v.operator)};}
  fail();
 }
 export function containmentDigest(input){return createHash('sha256').update(JSON.stringify({version:1,policy:'operator-containment-v1',input})).digest('hex');}
@@ -171,6 +194,7 @@ export async function runContainment(db,input,apply,now=Date.now()){
    if(existing.some(r=>r.request_digest!==digest))throw Error('Containment ID already used for a different request');
    if(apply!==undefined)return {applied:true,replayed:true,containments:existing.map(r=>record(r,now))};
   }
+  if(!existing.length)fresh(input.id,now);
   const target=await readSubject(db,input.subject);if(!target)throw Error('Subject not found');
   const expires=Date.parse(input.expiresAt);
   if(!existing.length&&(expires<=now||expires>now+maximumContainmentMs))throw Error('Expiry must be in the future and at most 30 days away');
@@ -181,7 +205,7 @@ export async function runContainment(db,input,apply,now=Date.now()){
   await db.batch(scopes.map(([scope,effect])=>db.prepare(`INSERT INTO operator_containments(id,scope,subject_kind,subject_id,allowance,operator_ref,reason,request_digest,expires_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(id,scope) DO NOTHING`)
    .bind(input.id,scope,input.subject.kind,input.subject.id,effect==='freeze'?null:effect,input.operator,input.reason,digest,input.expiresAt)));
   const saved=await action(db,input.id);
-  if(saved.length!==scopes.length||saved.some(r=>r.request_digest!==digest))throw Error('Containment outcome uncertain; read status and retry the same request');
+  if(saved.length!==scopes.length||saved.some(r=>r.request_digest!==digest))throw Error('Containment outcome uncertain; read status and retry the same request within one day');
   return {applied:true,replayed:false,containments:saved.map(r=>record(r,now))};
  }
  if(input.action==='stop-serving'){
@@ -194,6 +218,7 @@ export async function runContainment(db,input,apply,now=Date.now()){
    if(apply!==r.request_digest)throw Error('Preview this exact request before applying it');
    return {applied:true,replayed:true,containments:[record(r,now)]};
   }
+  fresh(input.id,now);
   const current=await servingState(db,input,now);if(!current)throw Error('Subject not found');
   const expires=Date.parse(input.expiresAt);
   if(expires<=now||expires>now+maximumContainmentMs)throw Error('Expiry must be in the future and at most 30 days away');
@@ -209,7 +234,7 @@ export async function runContainment(db,input,apply,now=Date.now()){
    .bind(input.id,input.operator,input.reason,review,input.expiresAt,current.project,current.account,r.site??-1,r.backend??-1,r.app??-1).all();
   const saved=await action(db,input.id);
   if(!saved.length&&!results.length)throw Error('Review is stale; the project changed after preview. Preview again');
-  if(saved.length!==1||saved[0].request_digest!==review)throw Error('Serving stop outcome uncertain; read status and retry the same request');
+  if(saved.length!==1||saved[0].request_digest!==review)throw Error('Serving stop outcome uncertain; read status and retry the same request within one day');
   return {applied:true,replayed:false,containments:saved.map(row=>record(row,now))};
  }
  if(input.action==='revoke-sessions'){
@@ -220,6 +245,7 @@ export async function runContainment(db,input,apply,now=Date.now()){
    if(apply!==existing.review_digest)throw Error('Preview this exact request before applying it');
    return {applied:true,replayed:true,revocation:revocation(existing)};
   }
+  fresh(input.id,now);
   const current=await identityState(db,input.account);if(!current)throw Error('Subject not found');
   if(!JSON.parse(current.review.sessions).length)throw Error('No workspace sessions to revoke');
   const review=reviewDigest(input,current.review);
@@ -233,10 +259,11 @@ export async function runContainment(db,input,apply,now=Date.now()){
    const saved=await db.prepare(`SELECT ${revocationColumns} FROM operator_session_revocations WHERE id=?`).bind(input.id).first();
    if(saved&&saved.review_digest===review)return {applied:true,replayed:true,revocation:revocation(saved)};
    if(/operator_revocation_stale/.test(String(error?.message)))throw Error('Review is stale; account sessions or passkeys changed after preview. Preview again');
-   throw Error('Revocation outcome uncertain; read status and retry the same request');
+   if(/operator_revocation_invalid/.test(String(error?.message)))staleId();
+   throw Error('Revocation outcome uncertain; read status and retry the same request within one day');
   }
   const saved=await db.prepare(`SELECT ${revocationColumns} FROM operator_session_revocations WHERE id=?`).bind(input.id).first();
-  if(!saved||saved.review_digest!==review)throw Error('Revocation outcome uncertain; read status and retry the same request');
+  if(!saved||saved.review_digest!==review)throw Error('Revocation outcome uncertain; read status and retry the same request within one day');
   return {applied:true,replayed:false,revocation:revocation(saved)};
  }
  if(input.action==='cleanup'){
@@ -248,6 +275,7 @@ export async function runContainment(db,input,apply,now=Date.now()){
    if(apply!==existing.review_digest)throw Error('Preview this exact request before applying it');
    return {applied:true,replayed:true,receipt:receipt(existing)};
   }
+  fresh(input.id,now);
   if(Date.parse(input.before)>now-retentionMs)throw Error('Cleanup cutoff must be at least 90 days in the past');
   const current=await cleanupState(db,input.before,now),c=current.candidates;
   const review=reviewDigest(input,c),total=c.containments.length+c.revocations.length+c.receipts.length;
@@ -264,10 +292,11 @@ export async function runContainment(db,input,apply,now=Date.now()){
    const saved=await db.prepare('SELECT id,cutoff,containments,revocations,receipts,operator_ref,request_digest,review_digest,created_at FROM operator_retention_receipts WHERE id=?').bind(input.id).first();
    if(saved&&saved.review_digest===review)return {applied:true,replayed:true,receipt:receipt(saved)};
    if(/operator_retention_capacity/.test(String(error?.message)))throw Error('Cleanup receipt storage is full and no cleanup receipt is old enough to remove; nothing was deleted');
+   if(/operator_retention_invalid/.test(String(error?.message)))staleId();
    throw Error('Cleanup refused: a listed record changed, was removed or entered a safety hold. Preview again');
   }
   const saved=await db.prepare('SELECT id,cutoff,containments,revocations,receipts,operator_ref,request_digest,review_digest,created_at FROM operator_retention_receipts WHERE id=?').bind(input.id).first();
-  if(!saved||saved.review_digest!==review)throw Error('Cleanup outcome uncertain; read status and retry the same request');
+  if(!saved||saved.review_digest!==review)throw Error('Cleanup outcome uncertain; read status and retry the same request within one day');
   return {applied:true,replayed:false,receipt:receipt(saved)};
  }
  // lift (still active) or close (already expired): the single explicit resolution of every row of one action.
