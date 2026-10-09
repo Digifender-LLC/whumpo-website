@@ -173,6 +173,7 @@
     "test:service-client-authority": "node tests/service-client-authority.mjs",
     "test:service-client-journey": "node tests/service-client-journey.mjs",
     "test:service-client-activation": "node tests/service-client-activation.mjs",
+    "test:portable-export-contract": "node tests/portable-export-contract.mjs",
     "test:subscriptions": "node tests/subscriptions.mjs",
     "setup:stripe": "node tools/stripe-sandbox.mjs",
     "test:current-website-specifications": "node tests/current-website-specifications.mjs",
