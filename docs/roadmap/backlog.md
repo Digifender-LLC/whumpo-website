@@ -2,7 +2,7 @@
 
 > Generated from `backlog.json` by `node tools/roadmap.mjs render`. Edit the JSON source, then render again.
 
-Reviewed 2026-10-01 against source `db8b740ab2346f55f2985593b1ec531a99027630`. 157 planned tasks.
+Reviewed 2026-10-01 against source `db8b740ab2346f55f2985593b1ec531a99027630`. 164 planned tasks.
 
 Planning readiness and dependencies describe the plan. Current execution, claims, blockers, and completion evidence live in GitHub Issues. A ready task is only a candidate: verify live dependency completion and authorization before work.
 
@@ -3152,7 +3152,7 @@ Owners can change an account email or respond to compromise without mistaking th
 
 ### Dependencies and blockers
 
-Planning dependencies: WH-005, WH-035, WH-036. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+Planning dependencies: WH-005, WH-035, WH-036, WH-199, WH-200, WH-201, WH-202, WH-203, WH-204, WH-205. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
 No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
 
@@ -3164,6 +3164,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [frontend/src/identity/flow.tsx](../../frontend/src/identity/flow.tsx)
 - [frontend/src/profile-picture-picker.tsx](../../frontend/src/profile-picture-picker.tsx)
 - [docs/roadmap/identity-and-data-protection.md](../../docs/roadmap/identity-and-data-protection.md)
+- [docs/email-change-and-compromise.md](../../docs/email-change-and-compromise.md)
 
 ### Execution coordination
 
@@ -3171,7 +3172,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-09 UTC: decomposed into WH-199 to WH-205 with the planned contract in docs/email-change-and-compromise.md (WH-199). Planning and offline reference only: no table, route, binding, provider, sender, DNS record or deployment, and no src/ or schema change. Confirmed from source that the account email (users.email) is an unverified signup identifier with no verification state or change path; it stays a lookup identifier and never a recovery or authorization factor. The parent acceptance is unchanged and closes only after every child; no child reaches WH-048, WH-049 or WH-104, only WH-205 waits on WH-005 and only WH-202/WH-205 wait on the WH-036 live sender. Exact source gaps G-E1 to G-E11 are mapped in the contract; owner decisions are listed there, not assumed.
 
 ## WH-092 — Deliver expiring private preview links and guest feedback
 
@@ -4216,6 +4217,362 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
 - [docs/feature-inclusion.md](../../docs/feature-inclusion.md)
 - [docs/releases.md](../../docs/releases.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-199 — Freeze the verified email change and compromise-response contract and decompose WH-063
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **ready**. Kind: decision. Size: S.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Every WH-063 slice builds against one frozen address-change, confirmation-token, notice and compromise-review model in which an email address is never a recovery or authorization factor.
+
+### Scope
+
+- Record the current state from source: the account email is an unverified signup identifier used for display, the WebAuthn user name, the kit label and recovery lookup, with no verification state or change path
+- Freeze the verified change: fresh passkey, one pending change with expiry, hash-only single-use confirmation tokens minted at dispatch, old-address notice, cancel and undo window, no enumeration, rate limits, platform sender only and no model or Chat authority
+- Freeze the compromise review distinct from lost-passkey recovery: epoch advance revoking every session/grant/challenge, emergency revocation below two keys, kit rotation with save-before-rotation, pending-change cancellation and provider revocation before local erasure with held unknown outcomes
+- Classify the new data (WH-116/WH-009), map current code/tests with exact gaps, list owner decisions with dated official references, and add an offline reference with a mutation-checked conformance harness without Worker imports
+
+### Acceptance criteria
+
+- [ ] docs/email-change-and-compromise.md states the current state, frozen protocol, compromise response, data classes, gap map, owner decisions and child slices, marked planned
+- [ ] Offline checks prove that the email is never a factor and that a change needs fresh passkey proof; that confirmation is single use with hash-only storage and refuses expired, stale and competing changes; that retries are idempotent and the old address is notified; that sign-in is fenced by the epoch and emergency revocation may go below the two-passkey count; that provider revocation precedes erasure and unknown outcomes stay held; that recovery grants stay restricted, no content recovery is claimed and unknown versions are refused; each named mutant is caught by its intended check
+- [ ] WH-063 keeps its acceptance and depends on every child; no child reaches WH-048, WH-049 or WH-104
+- [ ] No real address, credential, provider, sender, schema or deployment change
+
+### Verification
+
+- node tests/email-change-contract.mjs
+- node tools/verify.mjs fast
+- node tools/roadmap.mjs validate, alignment and render --check
+- git diff --check
+
+### Dependencies and blockers
+
+Planning dependencies: WH-113, WH-116, WH-154. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/email-change-and-compromise.md](../../docs/email-change-and-compromise.md)
+- [tools/prototypes/email-change.mjs](../../tools/prototypes/email-change.mjs)
+- [tests/email-change-contract.mjs](../../tests/email-change-contract.mjs)
+- [docs/workspace-identity.md](../../docs/workspace-identity.md)
+- [docs/notifications.md](../../docs/notifications.md)
+- [docs/connection-key-lifecycle.md](../../docs/connection-key-lifecycle.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-09 UTC: contract and offline reference only, local commit on branch claude/wh-063-email-change-contract (not pushed or merged; issue not created or claimed from this session). Added docs/email-change-and-compromise.md (planned), tools/prototypes/email-change.mjs (imports only node:crypto) and tests/email-change-contract.mjs, registered as pnpm test:email-change-contract and in the fast verification profile (1.0 to 1.5 s wall on the 2-vCPU host). The harness passed 25 reference checks and 5 read-only source-agreement checks and caught 32 of 32 deliberate mutants, each by its intended check. Synthetic accounts, addresses, kit keys, mailer and provider only; proves the frozen contract and reference, not D1 storage, delivery, devices or acceptance. NIST SP 800-63B-4 and OWASP cheat-sheet text read October 9, 2026. No table, route, binding, provider, DNS or deployment change.
+
+## WH-200 — Source email-change state machine and confirmation-token handling over the current identity engine
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+The identity engine can hold, confirm, cancel and undo a verified address change whose only proof of the new mailbox is a hash-stored single-use token, without making any address a factor.
+
+### Scope
+
+- Domain operations in src/workspace-identity/ for request, confirm, cancel, undo and read, using the shared principal, fresh-passkey predicate, committing epoch guards and effect receipts (gaps G-E1, G-E6)
+- Hash-only token minting inside the claimed delivery attempt, expiry, supersession, epoch binding, uniqueness recheck at commit, previous-address reservation for the undo window and generic responses for addresses another account uses
+- Rate limits for requests, per-address messages and confirmation failures; a mailer interface with a synthetic transport only; isolated canonical schema inputs exercised on disposable SQLite/local D1, not yet assembled into the complete current schema
+
+### Acceptance criteria
+
+- [ ] Actual handlers refuse restricted grants, stale sessions, unknown versions, retired password fields, expired, superseded, stale, foreign and replayed tokens, and never store token plaintext
+- [ ] Same request ID replays read the saved result; a lost confirmation reply is recovered by readback without a second effect; concurrent confirm/cancel/compromise commits produce exactly one outcome
+- [ ] Recovery lookup, sign-in and sessions are unchanged by verification state; no real address or credential is used
+
+### Verification
+
+- pnpm check
+- Focused SQLite/local D1 suites mirroring tests/email-change-contract.mjs against the actual handlers
+- node tests/identity-recovery.mjs, identity-kits.mjs and identity-authority.mjs
+
+### Dependencies and blockers
+
+Planning dependencies: WH-199, WH-115. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/email-change-and-compromise.md](../../docs/email-change-and-compromise.md)
+- [tools/prototypes/email-change.mjs](../../tools/prototypes/email-change.mjs)
+- [src/workspace-identity/authority.ts](../../src/workspace-identity/authority.ts)
+- [src/workspace-identity/recovery.ts](../../src/workspace-identity/recovery.ts)
+- [src/workspace-identity/canonical-inputs.sql](../../src/workspace-identity/canonical-inputs.sql)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-201 — Email change and security-review schema, lifecycle registration and current-schema cutover
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+The verification state, pending changes, limits and security-review records exist in the complete current schema with lifecycle classes, maintenance and export rules, installed through one reviewed empty-database cutover.
+
+### Scope
+
+- Add the canonical schema inputs to tools/current-schema.mjs and register the planned classes in docs/data-lifecycle.json with retention, export allowlists and protection profiles
+- Mount the trusted HTTP adapter and Settings controls with Origin, body and rate-limit boundaries; while platform delivery is inactive a change request returns delivery_unavailable and stores nothing
+- Bounded maintenance for expired changes, limits and reviews; account-closure and restore inventory; the empty-D1 cutover only with the owner's explicit authorization at that time
+
+### Acceptance criteria
+
+- [ ] The complete current schema, lifecycle validator, maintenance and closure inventories include every new table; no table is unclassified
+- [ ] Restore and forward repair cannot revive a superseded change, a used token or an earlier verification state
+- [ ] No migration replay, legacy reader or password field; the cutover is recorded with its readback
+
+### Verification
+
+- pnpm check
+- node tests/lifecycle-catalog.mjs and the focused handler suites on local D1
+- node tools/verify.mjs fast and protection
+
+### Dependencies and blockers
+
+Planning dependencies: WH-200. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/email-change-and-compromise.md](../../docs/email-change-and-compromise.md)
+- [tools/current-schema.mjs](../../tools/current-schema.mjs)
+- [docs/data-lifecycle.json](../../docs/data-lifecycle.json)
+- [docs/data-protection.md](../../docs/data-protection.md)
+- [docs/releases.md](../../docs/releases.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-202 — Wire account email notices to platform delivery after the WH-036 live sender
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **blocked**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Confirmation messages and content-free account notices leave only through the platform sender and the shared outbox, with no customer mailbox, model or Chat involvement.
+
+### Scope
+
+- Add versioned platform-obligation templates for the new-address confirmation and the requested, completed, undone and security-review notices to the WH-155 catalog through a reviewed amendment (gap G-E10)
+- Route them through the WH-156 outbox: token minted inside the claimed attempt, unknown outcomes never redispatched, definite refusals ending the change, old-address notice failures never blocking it
+- Gate the inactive support notice and any account notice on the recorded verification decision (gap G-E5); security-event notices for passkey, kit and recovery events only if the owner approves them (gap G-E11)
+
+### Acceptance criteria
+
+- [ ] Every send uses notify@whumpo.com through the reviewed provider; no configuration, caller or connected mailbox can supply a sender, recipient or header
+- [ ] No token plaintext in the outbox, receipts, logs or model context; duplicate passes and lost responses send at most once per attempt
+- [ ] No new provider, sender, DNS change or spending beyond the reviewed WH-036 activation
+
+### Verification
+
+- pnpm check
+- pnpm test:contacts and node tests/notifications-contract.mjs
+- Focused synthetic-transport suites for the account templates
+
+### Dependencies and blockers
+
+Planning dependencies: WH-201, WH-156, WH-036. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+- WH-036 sender activation and its live canary to explicitly approved addresses (not done as of October 9, 2026)
+- Owner decision on security notices to an unverified account email (docs/email-change-and-compromise.md decision 4)
+
+### References
+
+- [docs/email-change-and-compromise.md](../../docs/email-change-and-compromise.md)
+- [docs/notifications.md](../../docs/notifications.md)
+- [docs/contact-forms.md](../../docs/contact-forms.md)
+- [src/support-delivery.ts](../../src/support-delivery.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-203 — Coordinated compromise review across passkeys, sessions, recovery kit, pending changes and provider connections
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+An owner who suspects compromise reviews one current snapshot and secures the account in one guarded commit that fences all old authority and starts provider revocation without erasing reconciliation authority.
+
+### Scope
+
+- Review/commit operations bound to epoch, credential revision, kit generation and connection set: emergency revocation below two keys, epoch advance revoking every session/grant/challenge, kit rotation with save-before-rotation and pending email change cancellation (gaps G-E7, G-E8)
+- Provider connections: immediate local disable, retained encrypted credentials and queued revocation through the existing GitHub/Cloudflare adapters; erasure only after an exact receipt; unknown outcomes held for bounded read-only reconciliation; coordinate with WH-117 custody and the WH-140 connector contract for future providers
+- Direct controls only, reachable while inference is unavailable; restricted recovery grants cannot reach connection or email operations; no password, support or Chat path and no content-recovery claim
+
+### Acceptance criteria
+
+- [ ] In-flight sign-ins, sessions and grants admitted before the commit fail afterward; retained passkeys sign in to the new epoch only
+- [ ] Lost commit replies read the saved receipt; stale or expired reviews are refused; competing commits produce one effect
+- [ ] A credential is never erased before a definitive provider receipt; unknown outcomes keep the hold and block account closure
+
+### Verification
+
+- pnpm check
+- Focused SQLite/local D1 suites with synthetic providers
+- node tests/github-grant-revocation.mjs and tests/cloudflare-connection.mjs
+
+### Dependencies and blockers
+
+Planning dependencies: WH-200. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/email-change-and-compromise.md](../../docs/email-change-and-compromise.md)
+- [docs/identity-recovery.md](../../docs/identity-recovery.md)
+- [docs/connection-key-lifecycle.md](../../docs/connection-key-lifecycle.md)
+- [docs/integrations/cloudflare-connection.md](../../docs/integrations/cloudflare-connection.md)
+- [docs/incident-runbooks.md](../../docs/incident-runbooks.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-204 — Connected synthetic acceptance for email change and compromise review
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: verification. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+The actual Worker, current schema and trusted browser flow prove the email change and compromise journeys with synthetic identities, mailer and providers.
+
+### Scope
+
+- Local D1 and signed synthetic WebAuthn: two accounts, maintainer inference unavailable, replay, expiry, competing change, lost replies, concurrent sign-in around a compromise commit, emergency zero-key recovery and provider unknown outcomes
+- Desktop and mobile browser checks with synthetic addresses and kits; keyboard and screen-reader paths
+
+### Acceptance criteria
+
+- [ ] Every refusal and race listed in the contract passes against actual handlers; no real address, credential or provider is used
+- [ ] Evidence is recorded as local synthetic acceptance only
+
+### Verification
+
+- Connected local suites and quality-managed browser checks recorded in the feature doc
+
+### Dependencies and blockers
+
+Planning dependencies: WH-201, WH-203. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/email-change-and-compromise.md](../../docs/email-change-and-compromise.md)
+- [docs/identity-web.md](../../docs/identity-web.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-205 — Physical-device and approved delivery acceptance for email change and compromise review
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **blocked**. Kind: verification. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Real passkeys on supported devices and the reviewed platform sender prove the journeys on disposable test identities before activation.
+
+### Scope
+
+- Disposable invited identities on the WH-005 device matrix: change, confirm on another device, cancel, undo, compromise commit with retained and revoked passkeys, zero-key recovery
+- Delivery canary only to explicitly approved addresses; record provider readback and receipts
+
+### Acceptance criteria
+
+- [ ] Device, OS, browser, date and identity type are recorded; no real customer address or credential changes
+- [ ] Old sessions and revoked passkeys fail after the commit; messages reach only approved addresses without duplicates on lost responses
+
+### Verification
+
+- Physical-device and approved delivery canary evidence recorded in the feature doc and issue
+
+### Dependencies and blockers
+
+Planning dependencies: WH-202, WH-204, WH-005. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+- WH-005 physical-device identity acceptance
+- WH-036 live sender and an owner-approved delivery canary to explicitly approved addresses
+- Owner decisions in docs/email-change-and-compromise.md
+
+### References
+
+- [docs/email-change-and-compromise.md](../../docs/email-change-and-compromise.md)
+- [docs/acceptance.md](../../docs/acceptance.md)
 
 ### Execution coordination
 
