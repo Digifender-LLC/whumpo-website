@@ -5,9 +5,9 @@
  "contract": "docs/workspace-collaboration.md",
  "evidence": "docs/workspace-collaboration-evidence.md",
  "baseline": {
-  "sourceCommit": "ca17c6a",
-  "reviewedSchemaSha256": "68617fbf7b3757411247514411e3a7beb637df9ce1d1b090a22fc03c1c6f2742",
-  "tables": 219,
+  "sourceCommit": "4dea09c",
+  "reviewedSchemaSha256": "42d5aaa76d22870d0aacbb96590c1e54f7f5c3ad434cbad4cc5ab024f0806388",
+  "tables": 221,
   "usersForeignKeyColumns": 111
  },
  "vocabulary": {
@@ -256,6 +256,8 @@
    "identity_challenges",
    "maintenance_health",
    "operator_containments",
+   "operator_retention_receipts",
+   "operator_session_revocations",
    "plan_catalog",
    "safety_case_audit",
    "safety_case_evidence",
@@ -291,6 +293,7 @@
   {"column":"safety_preserved_records.subject_user_id","kind":"hold-subject","type":"account","note":"Already mixed: filled from the project owner (tenant) or OLD.user_id (person)."},
   {"column":"safety_evidence_objects.subject_user_id","kind":"hold-subject","type":"account"},
   {"column":"operator_containments.subject_id","kind":"containment-subject","type":"account","note":"subject_kind is account or project; the view operator_contained_projects joins projects.owner_user_id = subject_id."},
+  {"column":"operator_session_revocations.account_id","kind":"account-textual","type":"account","note":"WH-050 (added on main after ca17c6a): the person whose workspace sessions an operator revoked; no foreign key so closure neither blocks nor erases the receipt. Stays an account; a mechanical tenant rename must not touch it."},
   {"column":"module_request_receipts.principal_hash","kind":"hashed-principal","note":"Built from owner, userId and projectId; must include the workspace and the acting member."},
   {"column":"publication_actions.confirmed_by","kind":"actor-textual"},
   {"column":"contact_reviews.confirmed_by","kind":"actor-textual"},
