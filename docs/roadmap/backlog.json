@@ -4389,7 +4389,13 @@
         "WH-067",
         "WH-076",
         "WH-009",
-        "WH-071"
+        "WH-071",
+        "WH-186",
+        "WH-187",
+        "WH-188",
+        "WH-189",
+        "WH-190",
+        "WH-191"
       ],
       "blockers": [],
       "outcome": "Customers can export what they own with an honest account of managed dependencies and a tested route to running supported outcomes elsewhere.",
@@ -4420,7 +4426,245 @@
         "docs/shared-components.md",
         "docs/app-data.md",
         "docs/roadmap/alignment.md",
+        "docs/workload-placement.md",
+        "docs/portable-exports.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": [
+        "2026-10-08 UTC: decomposed into WH-186 to WH-191 with the planned contract in docs/portable-exports.md (WH-186). Planning and offline reference only: no route, table, binding, provider, Cloudflare resource, schema change or deployment, and no src/ behavior change. The parent acceptance is unchanged and closes only after every child; no child depends on WH-049, WH-072 or WH-104. The existing whumpo-static-site v1 download and the WH-126 to WH-129 serializers are mapped as reused sources; the WH-018 account export (PR #170, unmerged at this point) supplies the review, allowance and serializer composition that WH-187 reuses."
+      ]
+    },
+    {
+      "id": "WH-186",
+      "title": "Freeze the portable export contract and decompose WH-077",
+      "phase": "F5",
+      "priority": "P1",
+      "readiness": "ready",
+      "kind": "decision",
+      "size": "S",
+      "dependsOn": [
+        "WH-009",
+        "WH-071",
+        "WH-116",
+        "WH-123"
+      ],
+      "blockers": [],
+      "outcome": "Every WH-077 slice builds against one frozen bundle format, permission filter, tier vocabulary, unavailable-feature report and clean-environment verification plan instead of inventing its own.",
+      "scope": [
+        "Freeze the versioned whumpo-portable-export bundle: deterministic stored ZIP, canonical manifest, file checksums, exact compiler/component/module/data-set versions, exclusions and report",
+        "Freeze portable-filter@1: owner-only authority, allowlisted lifecycle classes, separate visitor-data approval, generic not-cleared exclusion with hold non-disclosure, and secret exclusion with reconfiguration instructions",
+        "Name the three tiers (static source download, data portability, functioning standalone application) and the mechanical rule that a frontend needing private Whumpo APIs is never runnable",
+        "Evaluate self-hostable runtimes and migration paths per shared capability with dated official sources; add an offline reference, conformance harness and mutation check without Worker imports"
+      ],
+      "acceptance": [
+        "docs/portable-exports.md states the frozen format, filter, tiers, report, migration paths, verification plan and child slices, marked planned",
+        "Offline checks prove deterministic bytes and hashes, other-tenant/secret/credential/private/held exclusion, hold non-disclosure, tier labelling with forged-claim refusal, report completeness, unknown/stale version refusal without a legacy decoder, tamper detection and a permission-restricted static boot from the bundle alone",
+        "WH-077 keeps its acceptance and depends on every child; no child reaches WH-049, WH-072 or WH-104, and the contract does not depend on WH-018 or WH-067",
+        "Open owner decisions are listed rather than assumed"
+      ],
+      "verification": [
+        "node tests/portable-export-contract.mjs",
+        "node tools/roadmap.mjs validate, alignment and render --check",
+        "node tests/roadmap-alignment.mjs",
+        "git diff --check"
+      ],
+      "references": [
+        "docs/portable-exports.md",
+        "tools/prototypes/portable-export.mjs",
+        "tests/portable-export-contract.mjs",
+        "docs/workload-placement.md",
+        "docs/shared-modules.md",
+        "docs/data-lifecycle.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": [
+        "2026-10-09 UTC: contract and offline reference only, local commit on branch claude/wh-077-portable-export-contract (not pushed or merged; issue not created or claimed from this session). Added docs/portable-exports.md (planned), tools/prototypes/portable-export.mjs (builtins only) and tests/portable-export-contract.mjs, registered as pnpm test:portable-export-contract. node tests/portable-export-contract.mjs passed 12 reference checks, 2 clean-environment boot checks (permission-restricted child processes with an empty environment and in-process outbound refusal; not OS-level network isolation) and 1 static check, and caught 28 of 28 deliberate mutants, each by its intended check. Not added to pnpm verify fast: measured 2.1 to 3.7 seconds wall time under load, above its 2-second budget. Synthetic data only; proves the frozen contract and reference, not a D1/R2 builder, a standalone runtime or acceptance. Provider facts read from official pages on October 9, 2026; customer-side pricing and entitlement require verification."
+      ]
+    },
+    {
+      "id": "WH-187",
+      "title": "Build the portable bundle and permission filter in source",
+      "phase": "F5",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-186",
+        "WH-018",
+        "WH-126",
+        "WH-127",
+        "WH-128",
+        "WH-129"
+      ],
+      "blockers": [],
+      "outcome": "An owner can review and download one deterministic, checksummed portable bundle per project that contains only what the frozen filter allows.",
+      "scope": [
+        "Owner-only prepare/download route reusing the WH-018 exact review, recent passkey proof, single-use download and per-account allowance; no Chat, agent or model path",
+        "One per-project section composer over the existing records, files, roles and directory serializers and the static site archive, shared with the account export rather than duplicated",
+        "Deterministic stored ZIP, canonical manifest, receipt digest, exclusion counts and the unavailable-feature report exactly as frozen; bounds fail closed",
+        "Two-tenant, held/pending/blocked media, staff page, visitor-scope, expired-record, uncleared-source and credential-table fixtures against actual handlers and the complete current schema"
+      ],
+      "acceptance": [
+        "Bundles from actual handlers pass the WH-186 reader and conformance checks byte for byte on synthetic projects",
+        "Other-tenant data, platform secrets, credentials, held or unapproved content and unrequested visitor data never appear; holds are indistinguishable from other uncleared items",
+        "Replay, stale review, foreign owner and stale proof are refused like the account export; no new provider, binding or paid service"
+      ],
+      "verification": [
+        "pnpm check",
+        "node tests/portable-export-contract.mjs",
+        "Focused disposable SQLite and local D1/R2 suite for the route and composer"
+      ],
+      "references": [
+        "docs/portable-exports.md",
+        "src/exports.ts",
+        "docs/shared-modules.md",
+        "docs/account-closure.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-188",
+      "title": "Provide a standalone runtime for the claimed portable subset",
+      "phase": "F5",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-187"
+      ],
+      "blockers": [],
+      "outcome": "A customer can run the claimed portable subset from the bundle alone with a published loader, without Whumpo APIs, credentials or the maintainer.",
+      "scope": [
+        "Published static loader and host instructions for site/public, separate from Whumpo platform source and under an owner-selected license",
+        "Any additional subset only by owner decision (for example a static directory projection or a QuickJS runner for stateless custom functions), each with its own report status change",
+        "Keep the frontend tier rule: anything that still calls Whumpo routes stays source, never runnable"
+      ],
+      "acceptance": [
+        "The loader serves only checksum-verified files from a bundle and refuses tampered, unknown-version or non-runnable bundles",
+        "No Whumpo API, credential, model or network destination is needed to run the claimed subset",
+        "Internal platform source is not disclosed"
+      ],
+      "verification": [
+        "node tests/portable-export-contract.mjs",
+        "Loader conformance against WH-187 bundles"
+      ],
+      "references": [
+        "docs/portable-exports.md",
+        "tools/prototypes/portable-export.mjs"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-189",
+      "title": "Verify portable exports in a clean isolated environment",
+      "phase": "F5",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "verification",
+      "size": "M",
+      "dependsOn": [
+        "WH-188"
+      ],
+      "blockers": [],
+      "outcome": "The advertised portable subset is proven to boot and its data to import in an OS-isolated environment with Whumpo APIs and the maintainer model unavailable.",
+      "scope": [
+        "Container or VM with no network interface or deny-all egress, a fresh filesystem and no Whumpo credentials or model endpoint",
+        "Boot the WH-188 loader from WH-187 bundles, import every data set, and compare restored data, assets, module versions and documented exclusions with the source project",
+        "Record what the in-process reference guard could not prove"
+      ],
+      "acceptance": [
+        "The claimed subset serves byte-identical files with zero outbound connection attempts",
+        "Restored data, assets and versions match the source; every exclusion is documented",
+        "No capability is reclassified as runnable without this evidence"
+      ],
+      "verification": [
+        "Clean-room boot and import run with recorded environment, tool versions and results",
+        "node tests/portable-export-contract.mjs"
+      ],
+      "references": [
+        "docs/portable-exports.md",
         "docs/workload-placement.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-190",
+      "title": "Document managed-service adapters and migration paths per shared capability",
+      "phase": "F5",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "decision",
+      "size": "M",
+      "dependsOn": [
+        "WH-186",
+        "WH-140"
+      ],
+      "blockers": [],
+      "outcome": "For every shared capability a customer sees a supported replacement adapter, a documented migration path or an explicit unavailable status, with their own action and cost steps.",
+      "scope": [
+        "Per-capability migration guides for content, records/forms, files, access, notifications, connectors, custom functions, contact inbox, domains, automation and the maintainer, consistent with the frozen report",
+        "Dated official provider facts and customer-side cost flags, with unknown entitlement and pricing labelled as requiring verification",
+        "Align with the connector and notification contracts and the presentation contract as they merge"
+      ],
+      "acceptance": [
+        "Every report entry links to a current migration section; unsupported managed integrations and customer action/cost steps are explicit",
+        "No guide asks the customer to share a secret with Whumpo; no adapter claim exceeds WH-189 evidence"
+      ],
+      "verification": [
+        "node tests/portable-export-contract.mjs (migration anchors)",
+        "Documentation link and dated-source review"
+      ],
+      "references": [
+        "docs/portable-exports.md",
+        "docs/connectors.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-191",
+      "title": "Accept portable exports on the test environment and with a customer",
+      "phase": "F5",
+      "priority": "P1",
+      "readiness": "blocked",
+      "kind": "verification",
+      "size": "M",
+      "dependsOn": [
+        "WH-189",
+        "WH-190"
+      ],
+      "blockers": [
+        "Owner-run empty-database cutover and release of the WH-125 to WH-129 module schema and the WH-187 route, with separate owner authorization for each remote operation",
+        "A consenting test customer or owner-run synthetic project for customer acceptance"
+      ],
+      "outcome": "An owner exports a deployed test project through the real route and runs the claimed subset elsewhere, and a customer confirms the exit contract is understandable.",
+      "scope": [
+        "Live export of a synthetic project on the deployed test environment, verified in the WH-189 clean room",
+        "Customer walkthrough of tiers, exclusions, reconfiguration and cost steps",
+        "Record release identity, UTC times and readback; no customer DNS change or paid destination is set up by Whumpo"
+      ],
+      "acceptance": [
+        "A deployed bundle passes the reader and clean-room boot for the claimed subset",
+        "The customer can identify what runs, what is data only and what they must do and pay for",
+        "Live and customer evidence are recorded separately from local tests"
+      ],
+      "verification": [
+        "Recorded live export, clean-room run and customer acceptance notes"
+      ],
+      "references": [
+        "docs/portable-exports.md",
+        "docs/releases.md"
       ],
       "issue": null,
       "owner": null,
