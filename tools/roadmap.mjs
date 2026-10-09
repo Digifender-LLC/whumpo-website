@@ -104,6 +104,9 @@ export function alignmentProblems(data){
  required[68]=[154,159,160];
  // WH-077 portable export children (WH-186 contract): the parent waits for its contract, clean room and acceptance.
  required[77].push(186,189,191);
+ // WH-061 retention children (WH-180 contract): the parent waits for every child; live custom-host acceptance stays
+ // with the parent through WH-033.
+ required[61]=[180,181,182,183,184];
  const forbidden={
   22:[23,41,47,49,104],42:[23,47,49,104],43:[23,47,49,104],
   48:[49,87,104,112,118],52:[12,18,36,68,69,74,86],
@@ -121,6 +124,8 @@ export function alignmentProblems(data){
  // contract (WH-186) also stays upstream of the account export and module implementations it supports.
  for(let child=186;child<=191;child++)forbidden[child]=[49,72,104];
  forbidden[186].push(18,67);
+ // Retention children never wait on custom-domain hosting acceptance, the paid launch or the cumulative launch gate.
+ for(let child=180;child<=185;child++)forbidden[child]=[33,49,104];
  for(const [from,targets] of Object.entries(required))for(const to of targets){
   if(!tasks.has(id(from))||!tasks.has(id(to)))problems.push(`Missing alignment task ${id(from)} or ${id(to)}`);
   else if(!reaches(id(from),id(to)))problems.push(`${id(from)} must follow shared prerequisite ${id(to)}`);
