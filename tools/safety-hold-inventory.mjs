@@ -31,6 +31,12 @@ export const deletionSites={
  'schema/platform.sql::app_sessions':excluded(credential),
  'schema/platform.sql::app_recovery_documents':{decision:'preserved',mechanism:'safety_hold_app_recovery_document',note:'Point-in-time copies cleared by visitor revocation or recovery-point removal inside a held project are copied into safety_preserved_records first (owner decision, October 4, 2026); revocation and removal still succeed without visible difference.'},
  'schema/platform.sql::app_migration_documents':excluded('Transient migration outputs; the primary visitor documents are retained.'),
+ // WH-050 operator controls (#186). The two record tables refuse deletion inside held scope or inside 90 days, and the
+ // retention receipt only names ids: no customer content is held by any of the four sites.
+ 'schema/platform.sql::operator_containments':blocked('operator_containment_retained','Reviewed retention cleanup (operator_retention_apply) of a resolved containment older than 90 days: the trigger refuses an unresolved or recent record and any record whose subject is a held account, a held project or the owner of a held project.'),
+ 'schema/platform.sql::operator_session_revocations':blocked('operator_session_revocation_retained','Reviewed retention cleanup of an operator session-revocation record: refused inside 90 days and for any account under an unreleased preservation hold.'),
+ 'schema/platform.sql::operator_retention_receipts':excluded('Process receipt naming only record ids and a cutoff, no customer content; its own trigger (operator_retention_retained) keeps it 90 days, and the records it refers to are covered by the containment and revocation triggers.'),
+ 'schema/platform.sql::identity_sessions':excluded(credential),
  'schema/platform.sql::domain_claims':excluded('DNS ownership-claim workflow state; no customer content.'),
  'src/public-admission.ts::public_client_usage':excluded('Hashed per-client admission counters (WH-075); no customer content and no source address, only a daily SHA-256 key.'),
  'src/public-admission.ts::storage_project_usage':excluded('Per-project monthly photo-read counters (WH-075); usage totals only, no customer content.'),
