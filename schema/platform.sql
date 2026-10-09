@@ -2812,11 +2812,12 @@ END;
 -- replaying from its stored row, and only a never-applied request older than a day needs a new id. Assumes the database
 -- clock does not run backwards by more than the window, as the one-minute created_at/resolved_at checks already do.
 -- The expression is fail-closed: anything that is not exactly that shape or does not compare as inside the window (including
--- NULL) is refused. (D1 limits GLOB pattern length, so the shape is checked in pieces rather than by one full-length pattern.)
+-- NULL, and an embedded NUL or trailing bytes, which SQLite's text length() and GLOB stop at, so the byte length must be 36 too)
+-- is refused. (D1 limits GLOB pattern length, so the shape is checked in pieces rather than by one full-length pattern.)
 -- A serving stop is its own action (never mixed with other scopes), and a project has at most one active serving stop.
 CREATE TRIGGER operator_containment_admit BEFORE INSERT ON operator_containments BEGIN
  SELECT RAISE(ABORT,'operator_containment_invalid') WHERE NEW.resolved_at IS NOT NULL
-  OR typeof(NEW.id)<>'text' OR length(NEW.id)<>36 OR length(replace(NEW.id,'-',''))<>32 OR replace(NEW.id,'-','') GLOB '*[^0-9a-f]*'
+  OR typeof(NEW.id)<>'text' OR length(NEW.id)<>36 OR length(CAST(NEW.id AS BLOB))<>36 OR length(replace(NEW.id,'-',''))<>32 OR replace(NEW.id,'-','') GLOB '*[^0-9a-f]*'
   OR substr(NEW.id,9,1)<>'-' OR substr(NEW.id,14,1)<>'-' OR substr(NEW.id,19,1)<>'-' OR substr(NEW.id,24,1)<>'-' OR substr(NEW.id,15,1)<>'7' OR substr(NEW.id,20,1) NOT IN ('8','9','a','b')
   OR (substr(NEW.id,1,8)||substr(NEW.id,10,4) BETWEEN printf('%012x',CAST((julianday('now','-1 day')-2440587.5)*86400000 AS INTEGER))
    AND printf('%012x',CAST((julianday('now','+1 minute')-2440587.5)*86400000 AS INTEGER))) IS NOT 1
@@ -2856,7 +2857,7 @@ BEGIN UPDATE build_jobs SET state='cancelled',finished_at=coalesce(finished_at,s
 -- Session revocation applies only to the exact reviewed identity state: same epoch and credential revision, and the same
 -- complete set of the account's session rows. Any sign-in, sign-out, passkey or recovery change in between is stale.
 CREATE TRIGGER operator_session_revocation_admit BEFORE INSERT ON operator_session_revocations BEGIN
- SELECT RAISE(ABORT,'operator_revocation_invalid') WHERE typeof(NEW.id)<>'text' OR length(NEW.id)<>36 OR length(replace(NEW.id,'-',''))<>32 OR replace(NEW.id,'-','') GLOB '*[^0-9a-f]*'
+ SELECT RAISE(ABORT,'operator_revocation_invalid') WHERE typeof(NEW.id)<>'text' OR length(NEW.id)<>36 OR length(CAST(NEW.id AS BLOB))<>36 OR length(replace(NEW.id,'-',''))<>32 OR replace(NEW.id,'-','') GLOB '*[^0-9a-f]*'
   OR substr(NEW.id,9,1)<>'-' OR substr(NEW.id,14,1)<>'-' OR substr(NEW.id,19,1)<>'-' OR substr(NEW.id,24,1)<>'-' OR substr(NEW.id,15,1)<>'7' OR substr(NEW.id,20,1) NOT IN ('8','9','a','b')
   OR (substr(NEW.id,1,8)||substr(NEW.id,10,4) BETWEEN printf('%012x',CAST((julianday('now','-1 day')-2440587.5)*86400000 AS INTEGER))
    AND printf('%012x',CAST((julianday('now','+1 minute')-2440587.5)*86400000 AS INTEGER))) IS NOT 1
@@ -2876,7 +2877,7 @@ BEGIN SELECT RAISE(ABORT,'operator_revocation_immutable'); END;
 -- A cleanup receipt names only records that still exist and were resolved (or completed) at or before a cutoff at least
 -- 90 days old; it then deletes exactly those records in the same statement. Each record's own delete trigger still applies.
 CREATE TRIGGER operator_retention_admit BEFORE INSERT ON operator_retention_receipts BEGIN
- SELECT RAISE(ABORT,'operator_retention_invalid') WHERE typeof(NEW.id)<>'text' OR length(NEW.id)<>36 OR length(replace(NEW.id,'-',''))<>32 OR replace(NEW.id,'-','') GLOB '*[^0-9a-f]*'
+ SELECT RAISE(ABORT,'operator_retention_invalid') WHERE typeof(NEW.id)<>'text' OR length(NEW.id)<>36 OR length(CAST(NEW.id AS BLOB))<>36 OR length(replace(NEW.id,'-',''))<>32 OR replace(NEW.id,'-','') GLOB '*[^0-9a-f]*'
   OR substr(NEW.id,9,1)<>'-' OR substr(NEW.id,14,1)<>'-' OR substr(NEW.id,19,1)<>'-' OR substr(NEW.id,24,1)<>'-' OR substr(NEW.id,15,1)<>'7' OR substr(NEW.id,20,1) NOT IN ('8','9','a','b')
   OR (substr(NEW.id,1,8)||substr(NEW.id,10,4) BETWEEN printf('%012x',CAST((julianday('now','-1 day')-2440587.5)*86400000 AS INTEGER))
    AND printf('%012x',CAST((julianday('now','+1 minute')-2440587.5)*86400000 AS INTEGER))) IS NOT 1

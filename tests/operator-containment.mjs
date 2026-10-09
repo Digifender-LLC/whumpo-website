@@ -327,12 +327,37 @@ try{
  const stamped=(rid,seconds)=>db.prepare(`INSERT INTO operator_containments(id,scope,subject_kind,subject_id,allowance,operator_ref,reason,request_digest,created_at,expires_at) VALUES(?,'backend','project',?,NULL,'human:test','reason',?,strftime('%Y-%m-%dT%H:%M:%fZ','now','${seconds} seconds'),?)`).bind(rid,xb.project,'f'.repeat(64),hours(1)).run();
  await stamped(aid(),55);await stamped(aid(),-55);
  await assert.rejects(stamped(newActionId(Date.now()+120000),55),/operator_containment_invalid/);await assert.rejects(stamped(actionIdAged(actionIdWindowMs+3600000),-55),/operator_containment_invalid/);
+ // ... and a created_at beyond that tolerance is refused even for a perfectly fresh id.
+ for(const seconds of [65,-65])await assert.rejects(stamped(aid(),seconds),/operator_containment_invalid/,'created_at '+seconds+' seconds from the database clock');
  // Cleanup receipts, same: each accepted id records the cleanup of one aged record, each refused id aborts the same valid listing.
  const aged=[];for(let i=0;i<3;i++)aged.push(await oldAction(xs,Date.now()-100*86400000-i*1000));
  const listed=(rid,record)=>db.prepare("INSERT INTO operator_retention_receipts(id,cutoff,containments,revocations,receipts,operator_ref,request_digest,review_digest) VALUES(?,?,?,'[]','[]','human:x',?,?)").bind(rid,at(Date.now()-retentionMs),JSON.stringify([record.id+':photo']),'a'.repeat(64),'b'.repeat(64)).run();
  for(const [name,rid] of Object.entries(edge.refused)){await assert.rejects(listed(rid,aged[0]),/operator_retention_invalid/,name);assert.equal(await receiptExists(rid),false,name);}
  assert.equal(await containmentExists(aged[0].id),true,'Refused receipts delete nothing');
  for(const [[name,rid],record] of Object.entries(edge.accepted).map((entry,i)=>[entry,aged[i]])){await listed(rid,record);assert.equal(await receiptExists(rid),true,name);assert.equal(await containmentExists(record.id),false,name);}
+ // A receipt's created_at beyond the one-minute tolerance is refused even for a fresh id (the listed record stays).
+ const extra=await oldAction(xs,Date.now()-100*86400000-5000);
+ for(const seconds of [65,-65])await assert.rejects(db.prepare(`INSERT INTO operator_retention_receipts(id,cutoff,containments,revocations,receipts,operator_ref,request_digest,review_digest,created_at) VALUES(?,?,?,'[]','[]','human:x',?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now','${seconds} seconds'))`)
+  .bind(aid(),at(Date.now()-retentionMs),JSON.stringify([extra.id+':photo']),'a'.repeat(64),'b'.repeat(64)).run(),/operator_retention_invalid/,'created_at '+seconds+' seconds from the database clock');
+ assert.equal(await containmentExists(extra.id),true,'Refused receipts delete nothing');
+ // Clock skew: this machine's clock can differ from the database's, so a cleanup can pass the tool's own checks and fail the
+ // schema's. The tool names the check that failed (from the database clock, read-only) and never repeats database error text.
+ // (a) This machine 2 minutes ahead: a cutoff exactly 90 days old by its clock is under 90 days by the database's.
+ const ahead=Date.now()+120000,aheadCleanup={action:'cleanup',id:aid(),before:at(ahead-retentionMs),operator:OPERATOR},aheadPreview=await runContainment(db,aheadCleanup,undefined,ahead);
+ assert.ok(aheadPreview.applyDigest&&aheadPreview.delete.containments>=1);
+ await assert.rejects(runContainment(db,aheadCleanup,aheadPreview.applyDigest,ahead),error=>{
+  assert.match(error.message,/^Cleanup cutoff must be at least 90 days in the past by the database clock; choose an earlier cutoff\. This machine's clock differs from the database clock by about 1[12]\d seconds; correct it first\.$/);
+  assert.doesNotMatch(error.message,/new UUIDv7|operator_|SQLITE|trigger/i);return true;});
+ assert.equal(await containmentExists(extra.id),true,'The skew-refused cleanup deleted nothing');assert.equal(await receiptExists(aheadCleanup.id),false);
+ // (b) This machine 2 minutes behind: an ID 30 seconds past the window by the database clock is still inside it by this machine's.
+ const behind=Date.now()-120000,behindCleanup={action:'cleanup',id:newActionId(Date.now()-actionIdWindowMs-30000),before:at(behind-retentionMs),operator:OPERATOR},behindPreview=await runContainment(db,behindCleanup,undefined,behind);
+ assert.ok(behindPreview.applyDigest);
+ await assert.rejects(runContainment(db,behindCleanup,behindPreview.applyDigest,behind),error=>{
+  assert.match(error.message,/^Request ID must be a new UUIDv7 minted within the last day .* This machine's clock differs from the database clock by about 1[12]\d seconds; correct it first\.$/);
+  assert.doesNotMatch(error.message,/operator_|SQLITE|trigger/i);return true;});
+ assert.equal(await containmentExists(extra.id),true);assert.equal(await receiptExists(behindCleanup.id),false);
+ // Fixture cleanup: remove the extra aged record directly (its retention has elapsed) so later counts are unchanged.
+ assert.equal((await db.prepare('DELETE FROM operator_containments WHERE id=?').bind(extra.id).run()).meta.changes,1);
  // The tool agrees for every action that writes: a request matching no stored record needs a new id, whatever else it says.
  for(const name of ['25 hours old','2 minutes ahead','epoch zero','far future']){const rid=edge.refused[name],fresh=/new UUIDv7 minted within the last day/;
   for(const apply of [undefined,'f'.repeat(64)]){
@@ -371,32 +396,36 @@ try{
    SELECT CASE WHEN i<=?2 THEN ?4 ELSE ?5 END||printf('-7000-8000-%012x',?3*100000+i),strftime('%Y-%m-%dT%H:%M:%fZ','now','-190 days'),'["fixture:photo"]','[]','[]','human:fixture',printf('%064d',0),printf('%064d',0),
    CASE WHEN i<=?2 THEN strftime('%Y-%m-%dT%H:%M:%fZ','now','-100 days') ELSE strftime('%Y-%m-%dT%H:%M:%fZ','now') END FROM n`).bind(total,old,batch,stamp(Date.now()-100*86400000),stamp(Date.now())).run();}
   finally{for(const sql of saved)await db.prepare(sql).run();}};
- // The earlier cleanup's own receipt is also moved 100 days into the past (a fixture clock move: its id moves with it, the
- // way a receipt created then would carry an old id), so this run purges it. The two old fixture receipts are inserted aged.
- const agedCleanupId=actionIdAged(100*86400000);
- await rewrite('operator_retention_immutable',"UPDATE operator_retention_receipts SET id=?,created_at=strftime('%Y-%m-%dT%H:%M:%fZ','now','-100 days') WHERE id=?",agedCleanupId,cleanup.id);
- await fill(10000-await receiptCount(),2);assert.equal(await receiptCount(),10000);
+ // A historical cleanup receipt, inserted whole before any assertion about it: its request and id are minted for the moment it
+ // claims (100 days ago), and nothing is ever renamed afterwards. The tool-applied `cleanup` above stays young and keeps its own id.
+ const histCleanup={action:'cleanup',id:newActionId(Date.now()-100*86400000),before:at(Date.now()-190*86400000),operator:OPERATOR},histReview='c'.repeat(64);
+ await withoutTriggers(db,['operator_retention_admit','operator_retention_apply'],()=>db.prepare("INSERT INTO operator_retention_receipts(id,cutoff,containments,revocations,receipts,operator_ref,request_digest,review_digest,created_at) VALUES(?,?,'[\"fixture:photo\"]','[]','[]',?,?,?,?)")
+  .bind(histCleanup.id,histCleanup.before,OPERATOR,containmentDigest(histCleanup),histReview,at(Date.now()-100*86400000)).run());
+ await fill(10000-await receiptCount(),2);const purged=[histCleanup.id];assert.equal(await receiptCount(),10000);
  const oldReceipts=(await db.prepare("SELECT id FROM operator_retention_receipts WHERE operator_ref='human:fixture' AND created_at<strftime('%Y-%m-%dT%H:%M:%fZ','now','-90 days') ORDER BY id").all()).results.map(r=>r.id);
- assert.equal(oldReceipts.length,2);for(const rid of [agedCleanupId,...oldReceipts])assert.ok(Date.now()-actionIdTime(rid)>99*86400000);
+ assert.equal(oldReceipts.length,2);purged.push(...oldReceipts);for(const rid of purged)assert.ok(Date.now()-actionIdTime(rid)>99*86400000);
  const w=await user(),pC=await project(w),c1=await oldAction(pC,Date.now()-retentionMs-86400000);
  const N3=Date.now(),full={action:'cleanup',id:aid(),before:at(N3-retentionMs),operator:OPERATOR},fp=await runContainment(db,full,undefined,N3);
  assert.deepEqual(fp.delete,{containments:1,revocations:0,receipts:3});assert.deepEqual(fp.receiptCapacity,{stored:10000,limit:10000,afterCleanup:9998});assert.ok(fp.applyDigest);
  // Rollback: a hold racing the apply aborts the whole statement at the full store; no receipt, nothing deleted.
  await assert.rejects(runContainment(interceptDatabase(db,/INSERT INTO operator_retention_receipts/,()=>hold(w,pC.project,'hold-wh050-full')),full,fp.applyDigest,N3),/Cleanup refused/);
- assert.equal(await receiptCount(),10000);assert.equal(await receiptExists(agedCleanupId),true);assert.equal(await containmentExists(c1.id),true);assert.equal(await receiptExists(full.id),false);
+ assert.equal(await receiptCount(),10000);assert.equal(await receiptExists(histCleanup.id),true);assert.equal(await containmentExists(c1.id),true);assert.equal(await receiptExists(full.id),false);
  await release('hold-wh050-full');
  const fullApplied=await runContainment(db,full,fp.applyDigest,N3);assert.deepEqual(fullApplied.receipt.deleted,{containments:1,revocations:0,receipts:3});
- assert.equal(await receiptCount(),9998);assert.equal(await receiptExists(agedCleanupId),false);for(const rid of oldReceipts)assert.equal(await receiptExists(rid),false);assert.equal(await containmentExists(c1.id),false);
+ assert.equal(await receiptCount(),9998);for(const rid of purged)assert.equal(await receiptExists(rid),false);assert.equal(await receiptExists(cleanup.id),true,'The tool-applied receipt is young and stays');assert.equal(await containmentExists(c1.id),false);
  for(const r of [b2,held,e,inside])assert.equal(await containmentExists(r.id),true,'Young, held and unresolved records survive the full-store cleanup');
- // Replay after the receipt was purged cannot repeat the cleanup on records that are eligible now.
+ // Replay after the receipt was purged cannot repeat the cleanup on records that are eligible now: the exact historical request
+ // (its own id, cutoff, operator and the review it was applied under) matches no stored receipt any more, and its id is 100 days old.
  const pD=await project(w),d1=await oldAction(pD,Date.now()-retentionMs-86400000);
  // Neither the purged receipts' ids nor the original request ID (now 100 days old) can be used for a new cleanup: the tool
  // refuses them, and the schema refuses a direct receipt listing a perfectly valid record under any of them.
  const listing=rid=>db.prepare("INSERT INTO operator_retention_receipts(id,cutoff,containments,revocations,receipts,operator_ref,request_digest,review_digest) VALUES(?,?,?,'[]','[]','human:x',?,?)").bind(rid,at(Date.now()-retentionMs),JSON.stringify([d1.id+':photo']),'a'.repeat(64),'b'.repeat(64)).run();
- for(const rid of [agedCleanupId,...oldReceipts]){
+ await assert.rejects(runContainment(db,histCleanup,histReview),/new UUIDv7 minted within the last day/,'Exact replay of the purged historical cleanup');
+ await assert.rejects(runContainment(db,histCleanup),/new UUIDv7 minted within the last day/,'... and its preview');
+ for(const rid of purged){
   for(const apply of [undefined,'f'.repeat(64)])await assert.rejects(runContainment(db,{...cleanup,id:rid,before:at(Date.now()-retentionMs)},apply),/new UUIDv7 minted within the last day/);
   await assert.rejects(listing(rid),/operator_retention_invalid/);}
- assert.equal(await containmentExists(d1.id),true,'Reused receipt ids deleted nothing');for(const rid of [agedCleanupId,...oldReceipts])assert.equal(await receiptExists(rid),false);
+ assert.equal(await containmentExists(d1.id),true,'Reused receipt ids deleted nothing');for(const rid of purged)assert.equal(await receiptExists(rid),false);
  // Full again with no receipt old enough: the tool refuses and the schema aborts the same statement.
  await fill(10000-await receiptCount(),0);assert.equal(await receiptCount(),10000);
  const none={action:'cleanup',id:aid(),before:at(Date.now()-retentionMs),operator:OPERATOR},np=await runContainment(db,none);
