@@ -140,7 +140,7 @@ Instructions must never ask the customer to paste a secret into Chat, a support 
 
 ## Capability migration paths
 
-Official sources were retrieved on **October 9, 2026 UTC**. They are planning inputs, not verified Whumpo or customer account entitlement, a quote or an activation. Customer-side prices are the customer's own provider terms and **require verification** before relying on them.
+Per-capability customer steps, secrets, cost flags and offline checks are in the [portable migration guides](portable-migration-guides.md) (WH-190, planned). Official sources were retrieved on **October 9, 2026 UTC**. They are planning inputs, not verified Whumpo or customer account entitlement, a quote or an activation. Customer-side prices are the customer's own provider terms and **require verification** before relying on them.
 
 | Option | Documented facts (retrieved October 9, 2026) | Whumpo use |
 | --- | --- | --- |
@@ -155,51 +155,51 @@ Official sources were retrieved on **October 9, 2026 UTC**. They are planning in
 
 ### Static pages
 
-**Runnable** when the tier check passes. Upload `site/public` anywhere, apply `_headers`, and point DNS yourself. The pages contain no scripts and no Whumpo calls; the existing CSP (`default-src 'none'`, `form-action 'none'`) keeps them self-contained. Hosted contact intake and other Whumpo-served tools are not included.
+**Runnable** when the tier check passes. Upload `site/public` anywhere, apply `_headers`, and point DNS yourself. The pages contain no scripts and no Whumpo calls; the existing CSP (`default-src 'none'`, `form-action 'none'`) keeps them self-contained. Hosted contact intake and other Whumpo-served tools are not included. Customer migration guide: [static public pages](portable-migration-guides.md#static-public-pages-content-pages).
 
 ### Content collections
 
-**Data only.** `data/directory.json` holds the published snapshot. A static rendering of the public directory is a WH-188 candidate because it is read-only.
+**Data only.** `data/directory.json` holds the published snapshot. A static rendering of the public directory is a WH-188 candidate because it is read-only. Customer migration guide: [content collections](portable-migration-guides.md#content-collections-and-the-directory-content-collections).
 
 ### Records and forms
 
-**Records data only, forms unavailable.** Retained records export as `whumpo-module-records` v1 (visitor scope). Record views, staff updates, retention timers and public intake (Turnstile, quotas, receipts) need the customer's own database, form handler and bot protection. Candidate adapter: SQLite or the customer's own D1 behind a published handler (WH-188/190), with no Whumpo source disclosed.
+**Records data only, forms unavailable.** Retained records export as `whumpo-module-records` v1 (visitor scope). Record views, staff updates, retention timers and public intake (Turnstile, quotas, receipts) need the customer's own database, form handler and bot protection. Candidate adapter: SQLite or the customer's own D1 behind a published handler (WH-188/190), with no Whumpo source disclosed. Customer migration guides: [records](portable-migration-guides.md#records-records) and [forms](portable-migration-guides.md#forms-and-public-intake-forms).
 
 ### Files and galleries
 
-**Data only.** Approved JPEGs with SHA-256 per file. Read and upload policies must be rebuilt on the destination's storage. Published galleries are already static pages.
+**Data only.** Approved JPEGs with SHA-256 per file. Read and upload policies must be rebuilt on the destination's storage. Published galleries are already static pages. Customer migration guide: [files](portable-migration-guides.md#files-photos-and-galleries-files).
 
 ### Visitor access and staff roles
 
-**Unavailable.** The staff list exports as data. Passkeys, sessions and recovery cannot move (passkeys are domain-bound), so visitors re-enroll on the destination.
+**Unavailable.** The staff list exports as data. Passkeys, sessions and recovery cannot move (passkeys are domain-bound), so visitors re-enroll on the destination. Customer migration guide: [access](portable-migration-guides.md#visitor-access-and-staff-roles-access).
 
 ### Notifications
 
-**Unavailable.** Templates and rules stay in the specification. Delivery needs the customer's own email provider, sender domain and DNS. Align with the WH-068 notification contract when it merges.
+**Unavailable.** Templates and rules stay in the specification. Delivery needs the customer's own email provider, sender domain and DNS. Align with the WH-068 notification contract when it merges. Customer migration guide: [notifications](portable-migration-guides.md#notifications-notifications).
 
 ### Connectors
 
-**Unavailable.** Connector catalog entries and consent receipts are Whumpo's ([connector contract](connectors.md)). The customer reauthorizes providers directly; repositories, zones and other customer-owned resources stay where they are.
+**Unavailable.** Connector catalog entries and consent receipts are Whumpo's ([connector contract](connectors.md)). The customer reauthorizes providers directly; repositories, zones and other customer-owned resources stay where they are. Customer migration guide: [connectors](portable-migration-guides.md#connectors-connectors).
 
 ### Custom functions
 
-**Data only.** Reviewed, cleared source plus `program.json` (engine `quickjs`, JSON I/O, digest). Whumpo's gateway, budgets and review gates do not travel with it.
+**Data only.** Reviewed, cleared source plus `program.json` (engine `quickjs`, JSON I/O, digest). Whumpo's gateway, budgets and review gates do not travel with it. Customer migration guide: [custom functions](portable-migration-guides.md#custom-functions-custom-functions).
 
 ### Contact inbox
 
-**Unavailable.** Messages keep the existing inbox export and 30-day retention. Intake needs the customer's own handler and bot protection.
+**Unavailable.** Messages keep the existing inbox export and 30-day retention. Intake needs the customer's own handler and bot protection. Customer migration guide: [contact inbox](portable-migration-guides.md#contact-inbox-contact-inbox).
 
 ### Domains and DNS
 
-**Unavailable.** Hostnames and DNS stay with the customer's registrar or DNS provider. Whumpo detaches only its own hosting under the normal domain lifecycle; export changes nothing.
+**Unavailable.** Hostnames and DNS stay with the customer's registrar or DNS provider. Whumpo detaches only its own hosting under the normal domain lifecycle; export changes nothing. Customer migration guide: [domains](portable-migration-guides.md#domains-and-dns-domains).
 
 ### Automation rules
 
-**Unavailable.** Rule configuration stays in the specification; execution needs the customer's own scheduler or workflow tool.
+**Unavailable.** Rule configuration stays in the specification; execution needs the customer's own scheduler or workflow tool. Customer migration guide: [automation](portable-migration-guides.md#automation-rules-automation).
 
 ### Maintainer AI
 
-**Unavailable by design.** The owner-maintenance model, its context and its funding are never exported, and nothing in the exported subset depends on it. Chat history belongs to the WH-018 account export.
+**Unavailable by design.** The owner-maintenance model, its context and its funding are never exported, and nothing in the exported subset depends on it. Chat history belongs to the WH-018 account export. Customer migration guide: [maintainer AI](portable-migration-guides.md#maintainer-ai-maintainer-ai).
 
 ## Format versions under the current-version-only policy
 
