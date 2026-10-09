@@ -1,9 +1,10 @@
-// WH-004 boundary registry check. Offline: parses dispatcher source with the TypeScript 7 syntax tree and
-// compares it with docs/boundary-audit.json. No Worker, database, network or credential is used.
+// WH-004 boundary registry check. Offline: parses dispatcher, scheduled-handler and operator-tool source with the
+// TypeScript 7 syntax tree, reads wrangler*.jsonc, and compares them with docs/boundary-audit.json. No Worker,
+// database, network, credential or tool is run.
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
-import {root,extractSurface,loadRegistry,registryProblems,summaryBlock,summaryStart,summaryEnd,reportPath,cellNames} from '../tools/boundary-audit.mjs';
+import {root,extractSurface,loadRegistry,registryProblems,summaryBlock,summaryStart,summaryEnd,reportPath,surfaces} from '../tools/boundary-audit.mjs';
 
 const registry=loadRegistry(),surface=extractSurface(),report=readFileSync(resolve(root,reportPath),'utf8');
 const problems=registryProblems(registry,surface,{report});
@@ -59,11 +60,57 @@ assert.ok(indexSource.includes(operatorCall),'mutation anchor: operator router c
 const reordered=indexSource.replace(operatorCall,'').replace('  const identity=await handleIdentityRequest(request,env);if(identity)return identity;\n','  const identity=await handleIdentityRequest(request,env);if(identity)return identity;\n'+operatorCall);
 assert.ok(registryProblems(registry,extractSurface({overrides:{'src/index.ts':reordered}}),{report}).some(p=>p.startsWith('platform dispatch order changed')));
 
+// Slice 2: the sites, apps and runtime Workers, Worker reachability, scheduled jobs and operator tools.
+for(const path of ['/apps/:project/account/delete','/apps/:project/modules/upload','/apps/:project/modules','/execute'])
+ assert.ok(surface.routes.some(r=>r.path===path),`${path} was not extracted`);
+assert.ok(surface.routes.some(r=>r.file==='src/site-host.ts'&&r.kind==='regex'&&r.match.includes('backend')),'the public backend route was not extracted');
+assert.ok(surface.routes.some(r=>r.kind==='job'&&r.match==='default photos'),'scheduled jobs were not extracted');
+assert.ok(surface.routes.some(r=>r.kind==='tool'&&r.file==='tools/cms-cloudflare.mjs'),'remote-capable tools were not extracted');
+assert.deepEqual(surface.workers.map(w=>[w.name,w.publicInternet]),[['whumpo-platform',true],['whumpo-sites',true],['whumpo-apps',false],['whumpo-runtime',false]]);
+const mutate=(file,from,to)=>{const source=readFileSync(resolve(root,file),'utf8'),next=source.replace(from,to);assert.notEqual(next,source,`mutation anchor not found in ${file}: ${from}`);return registryProblems(registry,extractSurface({overrides:{[file]:next}}),{report});};
+const strip=p=>p.replace(/ \([\w/.-]+:\d+(, path .*)?\)$/,'');
+// Mutation 6: a new site-host route after the GET/HEAD refusal is reported with the methods that gate allows.
+const siteGate="if(request.method!=='GET'&&request.method!=='HEAD')return new Response('Method not allowed',{status:405,headers:{...headers,allow:'GET, HEAD'}});";
+assert.deepEqual(mutate('src/site-host.ts',siteGate,siteGate+"\n  if(url.pathname==='/boundary-audit-stub')return new Response('stub');").map(strip),['unregistered route: src/site-host.ts exact /boundary-audit-stub [GET,HEAD]']);
+// Mutation 7: removing that refusal widens every public serving route to any method.
+const ungated=mutate('src/site-host.ts',siteGate,'');
+assert.ok(ungated.includes('registered route no longer mounted: src/site-host.ts regex /^\\/s\\/([0-9a-f-]{36})\\/?$/ [GET,HEAD] (family site-root)'),ungated.join('\n'));
+assert.ok(ungated.some(p=>p.startsWith('unregistered route: src/site-host.ts regex /^\\/s\\/([0-9a-f-]{36})\\/?$/ [ANY]')),ungated.join('\n'));
+// Mutation 8: a new host dispatch on the customer domain is reported.
+assert.deepEqual(mutate('src/site-host.ts',"if(project)url.pathname=","if(url.hostname==='admin.whumpo.site')return new Response('stub');\n  if(project)url.pathname=").map(strip),["unregistered host dispatch: src/site-host.ts host url.hostname==='admin.whumpo.site' [ANY]"]);
+// Mutation 9: deleting the visitor gateway's Origin/Sec-Fetch-Site refusal flags every later gateway route.
+const gatewayOrigin="  if(request.headers.get('sec-fetch-site')==='cross-site'||(request.headers.has('origin')&&request.headers.get('origin')!==origin)||method==='POST'&&request.headers.get('origin')!==origin)return json({error:'Origin check failed'},403);\n";
+const noOrigin=mutate('src/app-gateway.ts',gatewayOrigin,'');
+assert.ok(noOrigin.some(p=>p.startsWith('src/app-gateway.ts exact account/delete [POST]: registry says beforeOriginGate false, source says true')),noOrigin.join('\n'));
+assert.ok(noOrigin.length>=10&&noOrigin.every(p=>p.includes('beforeOriginGate')),noOrigin.join('\n'));
+// Mutation 10: dropping the POST-only refusal inside the module upload handler admits GET as well.
+const upload=mutate('src/app-gateway.ts',"if(path==='modules/upload'){\n   if(method!=='POST')return json({error:'Not found'},404);","if(path==='modules/upload'){");
+assert.deepEqual(upload.map(strip).sort(),['registered route no longer mounted: src/app-gateway.ts exact modules/upload [POST] (family visitor-modules)','unregistered route: src/app-gateway.ts exact modules/upload [GET,POST]']);
+// Mutation 11: the runtime accepting any method on /execute is reported.
+const runtime=mutate('src/runtime/worker.ts',"if(request.method!=='POST'||new URL(request.url).pathname!=='/execute')","if(new URL(request.url).pathname!=='/execute')");
+assert.deepEqual(runtime.map(strip).sort(),['registered route no longer mounted: src/runtime/worker.ts exact /execute [POST] (family runtime-execute)','unregistered route: src/runtime/worker.ts exact /execute [ANY]']);
+// Mutation 12: a public route or workers.dev URL on a service-binding-only Worker is reported.
+const appsConfig=JSON.parse(readFileSync(resolve(root,'wrangler.apps.jsonc'),'utf8'));
+const routed=registryProblems(registry,extractSurface({overrides:{'wrangler.apps.jsonc':JSON.stringify({...appsConfig,routes:[{pattern:'apps.whumpo.site/*',zone_name:'whumpo.site'}]})}}),{report});
+assert.deepEqual(routed,['Worker whumpo-apps: registry says routes [], wrangler.apps.jsonc says ["apps.whumpo.site/*"]','Worker whumpo-apps: registry says publicInternet false, wrangler.apps.jsonc says true']);
+const runtimeConfig=JSON.parse(readFileSync(resolve(root,'wrangler.runtime.jsonc'),'utf8'));
+assert.ok(registryProblems(registry,extractSurface({overrides:{'wrangler.runtime.jsonc':JSON.stringify({...runtimeConfig,workers_dev:true})}}),{report}).includes('Worker whumpo-runtime: registry says publicInternet false, wrangler.runtime.jsonc says true'));
+// Mutation 13: scheduled jobs: a new job, a provider job losing its configuration gate, and an unconfigured cron branch.
+assert.deepEqual(mutate('src/index.ts',"{name:'photos',run:()=>cleanupPhotos(env)},","{name:'photos',run:()=>cleanupPhotos(env)},{name:'boundary_stub',run:()=>cleanupPhotos(env)},").map(strip),['unregistered scheduled job: src/index.ts job default boundary_stub [SCHEDULED]']);
+assert.deepEqual(mutate('src/index.ts',"{name:'github',enabled:!!githubConfig(env),","{name:'github',").map(strip),['src/index.ts job default github [SCHEDULED]: registry says conditional true, source says false']);
+assert.ok(mutate('src/index.ts',"if(_event.cron==='47 * * * *'){","if(_event.cron==='13 * * * *'){").includes('scheduled branch "13 * * * *" is not a configured cron in wrangler.jsonc'));
+// Mutation 14: a new operator tool that reaches the Cloudflare API directly or through an import is reported; a
+// URL that appears only in a comment is not a remote marker.
+const tool=source=>registryProblems(registry,extractSurface({overrides:{'tools/boundary-audit-stub.mjs':source}}),{report}).map(strip);
+assert.deepEqual(tool("await fetch('https://api.cloudflare.com/client/v4/accounts');\n"),['unregistered remote-capable tool: tools/boundary-audit-stub.mjs tool cloudflare-api [CLI]']);
+assert.deepEqual(tool("import {cloudflareAccount} from './cms-cloudflare.mjs';\nconsole.log(cloudflareAccount);\n"),['unregistered remote-capable tool: tools/boundary-audit-stub.mjs tool via-import [CLI]']);
+assert.deepEqual(tool("// https://api.cloudflare.com is documented here only.\nconsole.log('local');\n"),[]);
+
 // Registry mutations: privileged cells, anchors and finding links are enforced.
 const clone=()=>structuredClone(registry);
 const privileged=registry.families.findIndex(f=>f.privileged.length);
 assert.ok(privileged>=0);
-for(const cell of cellNames){
+for(const cell of surfaces['platform-api'].privileged){
  const r=clone();delete r.families[privileged].cells[cell];
  assert.ok(registryProblems(r,surface,{report}).some(p=>p.includes(`cell ${cell}: required for privileged family`)),`missing ${cell} was not reported`);
 }
@@ -90,10 +137,23 @@ for(const cell of cellNames){
  const r=clone(),moved=r.families.find(f=>f.entries?.length).entries.pop();
  assert.ok(registryProblems(r,surface,{report}).some(p=>p.startsWith('unregistered route: '+moved.file)));
 }
+{
+ // Slice-2 surfaces must record tenant scoping and who can reach them.
+ const r=clone(),visitor=r.families.find(f=>f.surface==='visitor');
+ assert.ok(visitor,'no visitor family is registered');
+ delete visitor.cells.tenant;delete visitor.reach;
+ const p=registryProblems(r,surface,{report});
+ assert.ok(p.some(x=>x.includes(`family ${visitor.id} cell tenant: required for`)),p.join('\n'));
+ assert.ok(p.some(x=>x.includes(`family ${visitor.id}: reach (who can reach this family) is required`)),p.join('\n'));
+}
+{
+ const r=clone();r.workers=r.workers.filter(w=>w.name!=='whumpo-runtime');
+ assert.ok(registryProblems(r,surface,{report}).includes('unregistered Worker whumpo-runtime (wrangler.runtime.jsonc)'));
+}
 
 // The human report carries the generated matrix summary for the current registry.
 const start=report.indexOf(summaryStart),end=report.indexOf(summaryEnd);
 assert.ok(start>=0&&end>start,'docs/boundary-audit.md lacks the generated summary block');
 assert.equal(report.slice(start,end+summaryEnd.length),summaryBlock(registry),'Run `node tools/boundary-audit.mjs summary` and update docs/boundary-audit.md.');
 
-console.log(`Boundary audit registry: ${surface.routes.length} matcher occurrences, ${surface.controls.length} Chat controls, ${registry.families.length} families; 6 source and ${cellNames.length+5} registry mutations detected.`);
+console.log(`Boundary audit registry: ${surface.routes.length} matcher/job/tool occurrences across ${surface.workers.length} Workers, ${surface.controls.length} Chat controls, ${registry.families.length} families; 19 source/config mutations detected, 1 comment-only negative control ignored, and ${surfaces['platform-api'].privileged.length+7} registry mutations detected.`);
