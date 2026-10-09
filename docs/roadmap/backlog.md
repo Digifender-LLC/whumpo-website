@@ -4278,7 +4278,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-- 2026-10-09 UTC: contract and offline reference only, not deployed. Local branch claude/wh-061-review-retention-design at ca17c6a, rebased as claude/wh-061-review-retention-design-rb onto origin/main 92a001f plus test-only 9847281 with the same inventory and test result (not pushed): docs/review-retention.md (planned), tools/prototypes/review-retention.mjs (node builtins only, no Worker import) and tests/review-retention-contract.mjs (15 reference and 3 static checks; 640 triggers to 88 capped tables; 25/25 mutants caught), added to the fast profile. Proves the documented inventory and the synthetic model only, not D1 triggers, routes or deployment. Open owner decisions OD-1 to OD-8 are listed in the contract.
+- 2026-10-09 UTC: contract and offline reference only, not deployed. Written at ca17c6a and ported on 2026-10-09 UTC as claude/wh-061-review-retention-design-main onto origin/main d3ebaf2 (no schema input changed since), where --inventory and the contract test reproduced the same inventory and result; not merged: docs/review-retention.md (planned), tools/prototypes/review-retention.mjs (node builtins only, no Worker import) and tests/review-retention-contract.mjs (15 reference and 3 static checks; 640 triggers to 88 capped tables; 25/25 mutants caught), added to the fast profile. Proves the documented inventory and the synthetic model only, not D1 triggers, routes or deployment. Open owner decisions OD-1 to OD-8 are listed in the contract.
 
 ## WH-181 — Active-only review capacity, sealed receipts and capacity-exempt withdrawals in the current schema
 
