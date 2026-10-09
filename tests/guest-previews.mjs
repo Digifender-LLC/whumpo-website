@@ -5,7 +5,7 @@ import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.mjs';
 import {paidPlan} from './helpers/paid-plan.mjs';
 import {accountClosureInventory} from '../tools/account-closure-inventory.mjs';
-import {runContainment} from '../tools/operator-containment-input.mjs';
+import {runContainment,newActionId} from '../tools/operator-containment-input.mjs';
 Error.stackTraceLimit=0;
 // WH-092 guest preview links and accountless feedback. Actual platform and sites handlers run
 // against the complete current schema in disposable SQLite, or local D1 with --d1. No provider,
@@ -262,7 +262,7 @@ try{
  await check('operator serving stop withdraws guest previews without changing links',async()=>{
   const o=await owner(),live=await issue(o,o.project,o.version),other=await owner(),theirs=await issue(other,other.project,other.version);
   assert.equal((await view(live.token)).status,200);
-  const stop={action:'stop-serving',id:id(),project:o.project,expiresAt:new Date(Date.now()+3600000).toISOString(),operator:'human:operator',reason:'Synthetic serving stop'};
+  const stop={action:'stop-serving',id:newActionId(),project:o.project,expiresAt:new Date(Date.now()+3600000).toISOString(),operator:'human:operator',reason:'Synthetic serving stop'};
   await runContainment(db,stop,(await runContainment(db,stop)).applyDigest);
   assert.equal((await view(live.token)).status,404);assert.equal((await status(live.token)).status,404);assert.equal((await comment(live.token)).status,404);
   assert.equal((await view(theirs.token)).status,200,'Another tenant keeps its previews');
