@@ -18,7 +18,7 @@ Files: [`docs/boundary-audit.json`](boundary-audit.json) (registry), [`tools/bou
    - `gap`: `gapKind: "test"` means enforced but no test asserts it; `gapKind: "control"` means required by a contract or runbook but not enforced, and must name a finding;
    - `n/a`: with the reason (read-only, or not required by the current contract);
    - `unverified`: not established in this slice, with what is needed.
-3. **Anchors instead of line numbers.** Every enforcement and test citation is `{file, contains}`. The test checks that the file exists and still contains that exact text, so a deleted assertion or rewritten guard fails loudly, while unrelated edits do not. 695 anchors are checked (464 from slice 1).
+3. **Anchors instead of line numbers.** Every enforcement and test citation is `{file, contains}`. The test checks that the file exists and still contains that exact text, so a deleted assertion or rewritten guard fails loudly, while unrelated edits do not. 697 anchors are checked (464 from slice 1).
 4. **Review.** Four read-only reviews traced the privileged families end to end (cross-owner/project/visitor access, model-confirmation bypass, Origin, stale/replay, GET side effects). Every candidate finding was then re-checked in source by the auditor; the three reported below were **executed** against disposable fixtures. Candidates that could not be reproduced are listed as unverified risks. Slice 2 used four more read-only reviews (sites, apps, runtime/contact/scheduled, operator tools); the auditor re-checked each candidate in source, executed reproductions for B4–B6 and a characterization for B7, and kept everything not executed as an unverified risk.
 5. **Slice 2 extraction** (same tool, same offline compiler):
    - [`src/site-host.ts`](../src/site-host.ts) (both `fetch` handlers), [`src/app-host.ts`](../src/app-host.ts), [`src/app-gateway.ts`](../src/app-gateway.ts) `applicationGateway` and [`src/runtime/worker.ts`](../src/runtime/worker.ts): path matchers (including `new RegExp(...)` matchers, `[...].includes(pathname)` and the runtime's `if(method!=='POST'||pathname!=='/execute')return` form), **host/origin dispatch** (`customerProject(url.hostname)`, `url.hostname===guestPreviewHost`, `url.origin!==origin`, the custom-domain D1 lookup), and early-return **method refusals** (`if(method!=='GET'&&method!=='HEAD')return 405`, `!['GET','POST'].includes(method)`), which narrow the methods of every matcher they dominate. The platform's own `fetch()` host check is registered too.
@@ -62,7 +62,7 @@ Families: 51 (36 privileged; platform-api 28, visitor 16, service 1, scheduled 3
 | replay | 34 | 0 | 3 | 0 |
 | stale | 37 | 2 | 1 | 2 |
 | admission | 8 | 3 | 5 | 1 |
-| tenant | 20 | 1 | 0 | 1 |
+| tenant | 21 | 0 | 0 | 1 |
 
 Cells not recorded (not required for that family's surface and privilege): 133.
 
@@ -117,7 +117,7 @@ Cells not recorded (not required for that family's surface and privilege): 133.
 | scheduled-provider-cleanup | scheduled | connection, dns-hosting | 3 / 0 | evidenced | — | — | evidenced | evidenced | gap (test) | — | evidenced |
 | scheduled-contact-delivery | scheduled | notification | 1 / 0 | evidenced | — | — | n/a | evidenced | unverified | — | evidenced |
 | operator-release | operator-tool | release | 9 / 0 | evidenced | — | — | evidenced | evidenced | evidenced | — | evidenced |
-| operator-mutation | operator-tool | operator | 11 / 0 | gap (control B4) | — | — | evidenced | evidenced | evidenced | — | gap (control B4) |
+| operator-mutation | operator-tool | operator | 11 / 0 | gap (control B4) | — | — | evidenced | evidenced | evidenced | — | evidenced |
 | operator-read | operator-tool | no | 11 / 0 | evidenced | — | — | — | — | — | — | — |
 <!-- /boundary-audit summary -->
 
@@ -169,13 +169,14 @@ Every other typed control appends its effect to the batch that inserts the Chat 
 - **Resolution (#178, merged October 9, 2026 UTC):** `guestPreviewChatCommand` now only checks ownership and returns the revoke/delete as a statement guarded by the saved Chat turn (`guestPreviewTurnStatements` in [`src/guest-previews/owner.ts`](../src/guest-previews/owner.ts)); [`src/chat.ts`](../src/chat.ts) appends it to the revision-checked turn batch. `node tests/boundary-guest-preview-race.mjs` now passes as a regression (still outside verify profiles); the maintained regression is `tests/guest-preview-chat-atomic.mjs` (SQLite and `--d1`: stale-revision delete and revoke, fresh, replay, foreign-owner and held-comment cases). The `guest-previews` stale cell is now `evidenced`. Not deployed or live-accepted by this audit.
 - **Original remediation note:** Chat and guest-preview maintainers: return the revoke/delete statements to the turn batch like other controls. Source change needs owner sign-off.
 
-### B4 Hosting recovery tool targets a retired control database (low; operator tooling)
+### B4 Hosting recovery tool targets a retired control database (low; operator tooling) — resolved October 9, 2026
 
 [`tools/reconcile-domain-hosting.mjs`](../tools/reconcile-domain-hosting.mjs) sends its D1 queries to a hard-coded database `680f98b9-…` (the `whumpo-control` database replaced on October 3, 2026). Every other remote tool resolves the database from `wrangler.jsonc` (`dba4c707-…`, `whumpo-control-2026-10-04`).
 
-- **Reproduction (executed, static and offline):** `node tests/boundary-operator-target.mjs` compares the tool's endpoint with the bound control database and exits 1. The tool was not run.
+- **Reproduction (executed, static and offline):** before the fix, `node tests/boundary-operator-target.mjs` compared the tool's endpoint with the bound control database and exited 1. The tool was not run.
+- **Resolution (October 9, 2026):** the tool now reads `account_id` and the `DB` binding from `wrangler.jsonc` and refuses to run if either is missing or malformed. The test now passes: it asserts the tool pins no endpoint, builds its endpoint from the configured account and database, and that no other operator tool pins a database id. The tool was not run against Cloudflare, so remote behavior is unverified. The `ENVIRONMENT==='test'` pin suggested below was not added; it remains optional hardening.
 - **Impact:** `inspect`/`apply` would read and write a retired database (or fail if it no longer exists), so hosting recovery cannot act on current connections and an operator could believe a recovery was recorded. Live hosting state is not changed, and hosting is inactive behind `DOMAIN_HOSTING_READY`. Whether `680f98b9` still exists was not checked (no remote read).
-- **Remediation ownership:** operator tooling maintainers: read `account_id` and the `DB` binding from `wrangler.jsonc` like `review-fair-use.mjs`, and add an `ENVIRONMENT==='test'` pin. Tool-only change; no schema. Do not run the tool remotely until fixed.
+- **Original remediation note:** operator tooling maintainers: read `account_id` and the `DB` binding from `wrangler.jsonc` like `review-fair-use.mjs`, and add an `ENVIRONMENT==='test'` pin. Tool-only change; no schema. Do not run the tool remotely until fixed.
 
 ### B5 Anonymous visitor login starts can exhaust app challenge capacity (low; availability, cross-tenant)
 
@@ -257,7 +258,7 @@ Slice 2, on Node 24.21.0 at base `21204da` plus this change:
 node tests/boundary-audit.mjs                       # registry, 19 source/config + 13 registry mutations
 node tests/boundary-site-isolation.mjs              # regression (standalone)
 node tests/boundary-visitor-gateway-isolation.mjs   # regression (standalone; one fixture-setup flake seen)
-node tests/boundary-operator-target.mjs             # B4, expected exit 1
+node tests/boundary-operator-target.mjs             # B4, regression (exit 0)
 node tests/boundary-app-challenge-capacity.mjs      # B5, expected exit 1
 node tests/boundary-guest-preview-read-pool.mjs     # B6, expected exit 1 (python3 with Pillow on PATH)
 node tests/boundary-create-invite-default.mjs       # B7, characterization (exit 0)
