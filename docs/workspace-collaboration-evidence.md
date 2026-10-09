@@ -135,7 +135,7 @@ Source facts that make the lease problem real: `stripe_paid_invoices.created_at`
 
 ## Packet 1a local checks (implemented source, run on the current schema)
 
-**Evidence level: local source and in-memory SQLite plus the TypeScript syntax tree, run on the tree that contains this text. No behavior, schema, deployment, provider or owner decision.** Tool usage, limits and the exact gates are in [tenant classification](tenant-classification.md); this section records what they measured and where it differs from the review. Re-run on October 9, 2026 (UTC) after the port onto main `4dea09c`; where main's WH-050 schema change moved a figure, the `ca17c6a` value is given beside it.
+**Evidence level: local source and in-memory SQLite plus the TypeScript syntax tree, run on the tree that contains this text. No behavior, schema, deployment, provider or owner decision.** Tool usage, limits and the exact gates are in [tenant classification](tenant-classification.md); this section records what they measured and where it differs from the review. Re-run on October 9, 2026 (UTC) after the port onto main `4dea09c`; where main's WH-050 schema change moved a figure, the `ca17c6a` value is given beside it. Re-run again the same day on main `89fa009` (the rebuild replacing closed #250): every figure below was identical, including the 137 tables the authorizer probe reached.
 
 | Check | Result on the current tree | Caveat |
 | --- | --- | --- |
