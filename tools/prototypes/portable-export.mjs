@@ -48,7 +48,7 @@ export const capabilityCatalog=Object.freeze({
  'custom-functions':{allowed:['data-only','not-used'],cost:'customer-provider',migration:'custom-functions',
   actions:['The reviewed program source is included; running it needs your own QuickJS host and input/output wiring.']},
  'contact-inbox':{allowed:['unavailable','not-used'],cost:'customer-provider',migration:'contact-inbox',
-  actions:['Export inbox messages from the contact inbox separately; replace intake with your own form handler.']},
+  actions:['Copy any messages you need from the private contact inbox before they expire (there is no inbox export); replace intake with your own form handler.']},
  domains:{allowed:['unavailable','not-used'],cost:'customer-provider',migration:'domains-and-dns',
   actions:['Point your domain DNS at the new host yourself; Whumpo does not change DNS for an export.']},
  automation:{allowed:['unavailable','not-used'],cost:'customer-provider',migration:'automation-rules',
@@ -110,7 +110,9 @@ const privateMarkers=[
  ['script',/<script\b/i],
  ['dynamic-network',/\bfetch\s*\(|XMLHttpRequest|sendBeacon|new\s+WebSocket|EventSource/],
  ['whumpo-origin',/[a-z0-9-]*\.?whumpo\.(?:site|com|app|dev)\b/i],
- ['platform-route',/["'`(=\s]\/(?:api|modules|backend|app|workspace)(?:[/?"'`)\s]|$)/m],
+ // Visitor application pages live under /apps/<uuid>/ (a bare /app is refused too); the project host maps /backend to the
+ // internal stateless-form path /s/<project>/backend[/<review>], which is also refused when it appears directly.
+ ['platform-route',/["'`(=\s]\/(?:api|modules|backend|apps?|workspace|s\/[0-9a-f-]{36}\/backend)(?:[/?"'`)\s]|$)/m],
  ['form-post',/<form\b[^>]*\baction\s*=/i],
  ['form-endpoint',/data-endpoint\s*=/i],
 ];

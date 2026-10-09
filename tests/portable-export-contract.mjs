@@ -201,6 +201,9 @@ async function suite(m){
   assert.equal(m.classifyFrontend({'index.html':backendForm}).runnable,false);
   assert.equal(m.classifyFrontend({'index.html':page('Plain','<p>Hi</p>')}).runnable,true);
   for(const html of ['<a href="https://app-x.whumpo.site/">x</a>','<img src="/api/v1/photo">','<form action="/contact">'])assert.equal(m.classifyFrontend({'a.html':html}).runnable,false,html);
+  // Relative visitor-application and stateless-form paths are platform routes even without a Whumpo host name.
+  for(const href of ['/apps/00000000-0000-4000-8000-000000000001/','/s/00000000-0000-4000-8000-000000000002/backend/00000000-0000-4000-8000-000000000003'])
+   assert.deepEqual(m.classifyFrontend({'a.html':`<a href="${href}">x</a>`}).requires,['platform-route'],href);
   // A project whose public pages need the platform has no runnable claim at all.
   const store=fixture();const p=store.projects[A];
   for(const pg of p.pages){pg.html=pg.html.replace('</body>','<script>fetch("/modules")</script></body>');pg.digest=hex(pg.html);}
@@ -381,6 +384,8 @@ const mutants=[
  ['visitor scope ignored',"used.add('records');if(instance.config.forms?.length)used.add('forms');\n   if(!scope.visitorData)","used.add('records');if(instance.config.forms?.length)used.add('forms');\n   if(false)"],
  ['credential keys allowed','if(credentialKey.test(key))return `.${key}`;',''],
  ['tier scan disabled','return {runnable:list.length===0,requires:list};','return {runnable:true,requires:list};'],
+ ['visitor application route not scanned','|apps?|','|app|'],
+ ['stateless form route not scanned','|s\\/[0-9a-f-]{36}\\/backend)',')'],
  ['reader trusts the runnable claim',"check(verdict.runnable,'FALSE_RUNNABLE_CLAIM',verdict.requires.join(','));",''],
  ['capability status not checked',"check(capabilityCatalog[entry.capability].allowed.includes(entry.status),'FALSE_RUNNABLE_CLAIM',`${entry.capability}=${entry.status}`);",''],
  ['report completeness not checked',"check(listed.length===capabilities.length&&capabilities.every((c,i)=>listed[i]===c),'REPORT_INCOMPLETE',listed.join(','));",''],
@@ -402,7 +407,7 @@ const killedBy={
  'unapproved media exported':'private, unapproved and held','held media exported':'private, unapproved and held','staff page served':'private, unapproved and held',
  'expired records exported':'private, unapproved and held','uncleared source exported':'private, unapproved and held',
  'hold disclosed in exclusions':'hold non-disclosure','visitor scope ignored':'visitor datasets need separate approval','credential keys allowed':'platform secrets and credentials',
- 'tier scan disabled':'tier labelling','reader trusts the runnable claim':'tier labelling','capability status not checked':'tier labelling',
+ 'tier scan disabled':'tier labelling','visitor application route not scanned':'tier labelling','stateless form route not scanned':'tier labelling','reader trusts the runnable claim':'tier labelling','capability status not checked':'tier labelling',
  'report completeness not checked':'unavailable-feature report',
  'newer format accepted':'version and format refusals','older format accepted (legacy decoder)':'version and format refusals','unknown fields accepted':'version and format refusals','dataset version not checked':'version and format refusals',
  'file checksum not checked':'tamper detection','unlisted files accepted':'tamper detection','unsafe paths accepted':'tamper detection','noncanonical archive accepted':'tamper detection','archive digest not checked':'tamper detection',
