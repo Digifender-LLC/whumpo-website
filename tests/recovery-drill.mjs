@@ -30,7 +30,7 @@ import {captureRecoveryPoint,verifyRecoveryPoint,openArchivedControl,restoreCont
 
 Error.stackTraceLimit=0;
 const id=()=>crypto.randomUUID(),hash=v=>createHash('sha256').update(v).digest('hex');
-const directory=await mkdtemp('/tmp/whumpo-recovery-drill-'),phases={},holds={};let refusals=0;
+const directory=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-recovery-drill-'),phases={},holds={};let refusals=0;
 const phase=async(name,work)=>{const start=performance.now();try{return await work();}finally{phases[name]=Math.round((performance.now()-start)*10)/10;console.error(`drill phase ${name}: ${phases[name]} ms`);}};
 const drillHold=async(work,code)=>{await assert.rejects(work,e=>e instanceof DrillHold&&e.code===code,code);refusals++;};
 const closers=[];let fixture,isolated,sourceRuntime,restoredRuntime;
