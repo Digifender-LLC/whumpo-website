@@ -3,7 +3,7 @@ import {assertWorkspace} from '../workspace-identity/admission';
 import {requireSpecificationAvailable} from '../specification-safety';
 import {GuestPreviewError,guestPreviewFeature,guestPreviewOperation,sha256Hex} from './policy';
 import type {GuestPreviewFacts} from './shape';
-import {createGuestPreview,listGuestPreviews,revokeGuestPreview,deleteGuestPreview,issuance,ownedProject} from './owner';
+import {createGuestPreview,listGuestPreviews,guestPreviewTurnStatements,issuance,ownedProject} from './owner';
 
 /** WH-151 owner bindings over the WH-150 domain handlers. This module is an adapter only: it owns no
  * table, token, eligibility rule or ownership check. Every effect calls the handler that the HTTP
@@ -68,10 +68,11 @@ export async function confirmGuestPreviewIssue(db:D1Database,userId:string,proje
 }
 
 /** Owner Chat controls. Command strings are private adapters for sendChatControl; no token, comment text or
- * hash is ever part of a command or its reply, so nothing here reaches history or model context. */
-export async function guestPreviewChatCommand(db:D1Database,userId:string,command:string){
+ * hash is ever part of a command or its reply, so nothing here reaches history or model context. The effect is
+ * returned as statements for Chat to append to its revision-checked turn batch (WH-004 B3); nothing is applied here. */
+export async function guestPreviewChatCommand(db:D1Database,userId:string,turnId:string,command:string){
  const revoke=/^\/guest-preview-revoke ([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})$/.exec(command);
- if(revoke){const {link}=await revokeGuestPreview(db,userId,revoke[1]);return {reply:`Preview link ${link.id} is revoked. Guests can no longer open it or comment. Your saved comments are unchanged.`};}
+ if(revoke)return {reply:`Preview link ${revoke[1]} is revoked. Guests can no longer open it or comment. Your saved comments are unchanged.`,statements:await guestPreviewTurnStatements(db,userId,turnId,'revoke',revoke[1])};
  const remove=/^\/guest-preview-delete ([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}) DELETE$/.exec(command);
- if(remove){await deleteGuestPreview(db,userId,remove[1]);return {reply:`Preview link ${remove[1]} and its saved comments were deleted. Guests can no longer open it.`};}
+ if(remove)return {reply:`Preview link ${remove[1]} and its saved comments were deleted. Guests can no longer open it.`,statements:await guestPreviewTurnStatements(db,userId,turnId,'delete',remove[1])};
 }

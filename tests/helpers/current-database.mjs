@@ -2,11 +2,13 @@ import {sqliteD1} from '../sqlite-d1.mjs';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {currentSchema} from '../../tools/current-schema.mjs';
 import {execFileSync} from 'node:child_process';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 export async function databaseFixture({d1=false,r2=false,allowedArguments=[]}={}){
  if(process.argv.slice(2).some(arg=>arg!=='--d1'&&!allowedArguments.includes(arg)))throw Error('Unsupported fixture argument');
  if(new Set(process.argv.slice(2)).size!==process.argv.length-2)throw Error('Repeated fixture argument');
  if(!d1&&!r2&&process.argv.length===2)return sqliteD1();
- const directory=await mkdtemp('/tmp/whumpo-feature-inclusion-'),config=directory+'/wrangler.json';
+ const directory=await mkdtemp(join(tmpdir(),'whumpo-feature-inclusion-')),config=directory+'/wrangler.json';
  try{
   await writeFile(config,JSON.stringify({name:'whumpo-feature-inclusion-local',compatibility_date:'2026-09-29',d1_databases:[{binding:'DB',database_name:'feature-inclusion-local',database_id:crypto.randomUUID()}],...(r2?{r2_buckets:[{binding:'FILES',bucket_name:'whumpo-fixture-files'}]}:{})}));
   await writeFile(directory+'/schema.sql',await currentSchema());
