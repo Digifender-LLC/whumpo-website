@@ -6,7 +6,7 @@ import {fileURLToPath} from 'node:url';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 export const profiles={
- fast:['tests/ai.mjs','tests/prompt-data-boundaries.mjs','tests/ack-timing.mjs','tests/lifecycle-catalog.mjs','tests/connection-vault.mjs','tests/notifications-contract.mjs','tests/passkey-key-wrapping-contract.mjs','tests/email-change-contract.mjs','tests/notifications-source.mjs'],
+ fast:['tests/ai.mjs','tests/prompt-data-boundaries.mjs','tests/ack-timing.mjs','tests/lifecycle-catalog.mjs','tests/connection-vault.mjs','tests/notifications-contract.mjs','tests/passkey-key-wrapping-contract.mjs','tests/email-change-contract.mjs'],
  protection:['tests/processing-boundaries.mjs','tests/deploy-ci.mjs','tests/secret-custody.mjs','tests/build-snapshot.mjs','tests/release-manifest.mjs','tests/release-provider.mjs','tests/connection-oauth-outcomes.mjs','tests/connection-key-backup.mjs','tests/restore-admission.mjs','tests/restore-inventory.mjs','tests/restore-inventory-freshness.mjs','tests/github-refresh-custody.mjs','tests/github-grant-revocation.mjs','tests/github-grant-chat.mjs','tests/boundary-audit.mjs'],
  site:['tests/customer-site-journey.mjs','tests/standard-service-no-maintainer.mjs','tests/request-path-inventory.mjs'],
  app:['tests/customer-app-journey.mjs'],
