@@ -45,7 +45,22 @@ export function newActionId(now=Date.now()){
 /** Millisecond timestamp embedded in a UUIDv7 action id, or null when `value` is not a lowercase canonical UUIDv7. */
 export function actionIdTime(value){return typeof value==='string'&&uuidV7.test(value)?Number.parseInt(value.slice(0,8)+value.slice(9,13),16):null;}
 const fail=()=>{throw Error('Invalid operator containment request');};
-const staleId=()=>{throw Error('Request ID must be a new UUIDv7 minted within the last day (node tools/operator-containment.mjs --new-id); an unapplied older request needs a new ID');};
+const staleMessage='Request ID must be a new UUIDv7 minted within the last day (node tools/operator-containment.mjs --new-id); an unapplied older request needs a new ID';
+const staleId=()=>{throw Error(staleMessage);};
+/**
+ * After the schema aborts a new revocation or cleanup receipt as invalid, say which of its checks failed, from the database's
+ * own clock (a read-only query) rather than assuming the ID: this machine's clock may differ from the database's, so the ID
+ * or the cutoff can pass the tool's check and fail the schema's. Only fixed text and a whole number of seconds are reported.
+ */
+async function refuseInvalid(db,input,now,cutoff){
+ const read=await db.prepare("SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now') AS now").first().catch(()=>null),dbNow=read?Date.parse(read.now):Number.NaN;
+ if(!Number.isFinite(dbNow))throw Error('Request refused by the database request checks; read status and preview again');
+ const skew=Math.abs(dbNow-now),note=skew>30000?` This machine's clock differs from the database clock by about ${Math.round(skew/1000)} seconds; correct it first.`:'';
+ const at=actionIdTime(input.id);
+ if(at===null||at<dbNow-actionIdWindowMs||at>dbNow+actionIdFutureMs)throw Error(staleMessage+note);
+ if(cutoff!==undefined&&Date.parse(cutoff)>dbNow-retentionMs)throw Error('Cleanup cutoff must be at least 90 days in the past by the database clock; choose an earlier cutoff.'+note);
+ throw Error('Request refused by the database request checks; read status and preview again'+note);
+}
 function keys(value,allowed,required=allowed){if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).some(k=>!allowed.includes(k))||required.some(k=>!Object.hasOwn(value,k)))fail();}
 function id(value){if(typeof value!=='string'||!uuid.test(value))fail();return value;}
 function actionId(value){if(actionIdTime(value)===null)fail();return value;}
@@ -259,7 +274,7 @@ export async function runContainment(db,input,apply,now=Date.now()){
    const saved=await db.prepare(`SELECT ${revocationColumns} FROM operator_session_revocations WHERE id=?`).bind(input.id).first();
    if(saved&&saved.review_digest===review)return {applied:true,replayed:true,revocation:revocation(saved)};
    if(/operator_revocation_stale/.test(String(error?.message)))throw Error('Review is stale; account sessions or passkeys changed after preview. Preview again');
-   if(/operator_revocation_invalid/.test(String(error?.message)))staleId();
+   if(/operator_revocation_invalid/.test(String(error?.message)))await refuseInvalid(db,input,now);
    throw Error('Revocation outcome uncertain; read status and retry the same request within one day');
   }
   const saved=await db.prepare(`SELECT ${revocationColumns} FROM operator_session_revocations WHERE id=?`).bind(input.id).first();
@@ -292,7 +307,7 @@ export async function runContainment(db,input,apply,now=Date.now()){
    const saved=await db.prepare('SELECT id,cutoff,containments,revocations,receipts,operator_ref,request_digest,review_digest,created_at FROM operator_retention_receipts WHERE id=?').bind(input.id).first();
    if(saved&&saved.review_digest===review)return {applied:true,replayed:true,receipt:receipt(saved)};
    if(/operator_retention_capacity/.test(String(error?.message)))throw Error('Cleanup receipt storage is full and no cleanup receipt is old enough to remove; nothing was deleted');
-   if(/operator_retention_invalid/.test(String(error?.message)))staleId();
+   if(/operator_retention_invalid/.test(String(error?.message)))await refuseInvalid(db,input,now,input.before);
    throw Error('Cleanup refused: a listed record changed, was removed or entered a safety hold. Preview again');
   }
   const saved=await db.prepare('SELECT id,cutoff,containments,revocations,receipts,operator_ref,request_digest,review_digest,created_at FROM operator_retention_receipts WHERE id=?').bind(input.id).first();
