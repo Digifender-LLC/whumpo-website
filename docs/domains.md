@@ -51,6 +51,8 @@ Deployed test platform version `5d276f56-f5a9-43ee-8eed-7904b7b4a79f`. All 18 ma
 
 ## Registrar quote review foundation — September 29, 2026
 
+**Superseded October 9, 2026 (WH-193):** the helper described below was deleted and replaced by the v1 quote and order modules in `src/domain-purchase/`; see the [domain purchase contract](domain-purchases.md#source-implementation-wh-193). This section is the dated record of what was built then.
+
 `src/domain-purchase-quote.ts` now validates a registrar-independent **read-only** purchase review. There is no connected registrar, availability search, payment, order endpoint, registration/renewal dispatch or benefit redemption. Provider selection is awaiting the owner's direction. No registry call or purchase was made for this work.
 
 A trusted registrar adapter must establish the exact canonical domain, owner/project, registration-versus-renewal eligibility, one-year term, USD customer price, fees, taxes, current renewal-price breakdown, premium flag, provider reference, terms version and quote validity. These must be provider-verified/server-priced values, never AI guesses, public domain-search snippets or user-supplied prices. For renewal, `available` means eligible for this owner's renewal operation; it must not be populated using a registration-availability check. Hostname validation does not prove registrability, registry policy compliance or ownership; those remain the adapter's responsibility.
