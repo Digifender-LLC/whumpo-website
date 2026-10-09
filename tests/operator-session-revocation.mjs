@@ -8,7 +8,8 @@ import {build} from 'esbuild';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {authenticator} from './helpers/webauthn-authenticator.mjs';
 import {interceptDatabase} from './helpers/workspace-identity.mjs';
-import {runContainment,containmentInput,retentionMs} from '../tools/operator-containment-input.mjs';
+import {runContainment,containmentInput,containmentDigest,retentionMs,actionIdTime} from '../tools/operator-containment-input.mjs';
+import {newActionId,actionIdAged,withoutTriggers,windowIds} from './helpers/operator-action-ids.mjs';
 const built=await build({stdin:{contents:"export {default as worker} from './src/index';export * from './src/workspace-identity/http';export {hashToken} from './src/security';",resolveDir:process.cwd()},bundle:true,platform:'node',format:'esm',write:false,logLevel:'silent'});
 const {worker,identityCookies,hashToken}=await import('data:text/javascript;base64,'+Buffer.from(built.outputFiles[0].text).toString('base64'));
 const fixture=await databaseFixture(),db=fixture.db,originalFetch=globalThis.fetch,originalEqual=crypto.subtle.timingSafeEqual;
@@ -16,7 +17,8 @@ crypto.subtle.timingSafeEqual=(a,b)=>timingSafeEqual(Buffer.from(a),Buffer.from(
 globalThis.fetch=async()=>Response.json({success:true,hostname:'whumpo.com',action:'register'});
 const env={DB:db,ENVIRONMENT:'test',TURNSTILE_SECRET:'synthetic-only',TURNSTILE_SITE_KEY:'synthetic-public',AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})}};
 const handle=request=>worker.fetch(request,env,{waitUntil:()=>{}});
-const base='https://whumpo.com/api/auth/identity/v1/',id=()=>crypto.randomUUID(),run=(sql,...values)=>db.prepare(sql).bind(...values).run(),row=(sql,...values)=>db.prepare(sql).bind(...values).first();
+// `id` is for ordinary ids; every operator action id is a UUIDv7 minted for its moment (`aid`).
+const base='https://whumpo.com/api/auth/identity/v1/',id=()=>crypto.randomUUID(),aid=()=>newActionId(),run=(sql,...values)=>db.prepare(sql).bind(...values).run(),row=(sql,...values)=>db.prepare(sql).bind(...values).first();
 const counters=new Map();// WebAuthn signature counters are per authenticator, shared by every browser that uses it.
 class Browser{
  cookies=new Map();
@@ -46,7 +48,6 @@ async function ready(){
 const OPERATOR='human:PRIVATE-OPERATOR-CANARY',REASON='PRIVATE-REASON-CANARY stolen session report';
 const identity=account=>row(`SELECT a.stage,a.auth_epoch,a.credential_revision,a.kit_generation,a.kit_verifier,(SELECT count(*) FROM identity_credentials WHERE account_id=a.account_id) credentials,
  (SELECT count(*) FROM identity_grants WHERE account_id=a.account_id) grants,(SELECT count(*) FROM identity_attempts WHERE account_id=a.account_id) attempts,(SELECT count(*) FROM identity_sessions WHERE account_id=a.account_id) sessions FROM identity_accounts a WHERE a.account_id=?`,account);
-const rewrite=async(name,sql,...values)=>{const trigger=(await row('SELECT sql FROM sqlite_master WHERE name=?',name)).sql;await run('DROP TRIGGER '+name);try{await run(sql,...values);}finally{await run(trigger);}};
 let cases=0;
 try{
  const a=await ready(),other=await ready();
@@ -54,8 +55,8 @@ try{
  const phone=new Browser();await phone.assertion('login',a.second);assert.equal((await phone.profile()).status,200);
  const recovering=new Browser();await recovering.ok('recovery/start',{version:1,email:a.email,key:a.kit.key});assert.equal((await recovering.state()).purpose,'recovery');
  assert.equal((await a.b.profile()).status,200);
- const revoke={action:'revoke-sessions',id:id(),account:a.account,operator:OPERATOR,reason:REASON};
- for(const bad of [{...revoke,account:'x'},{...revoke,sessions:[]},{...revoke,operator:'has space'},{...revoke,reason:''}])assert.throws(()=>containmentInput(JSON.stringify(bad)),/Invalid operator containment request/);cases++;
+ const revoke={action:'revoke-sessions',id:aid(),account:a.account,operator:OPERATOR,reason:REASON};
+ for(const bad of [{...revoke,id:crypto.randomUUID()},{...revoke,id:revoke.id.toUpperCase()},{...revoke,account:'x'},{...revoke,sessions:[]},{...revoke,operator:'has space'},{...revoke,reason:''}])assert.throws(()=>containmentInput(JSON.stringify(bad)),/Invalid operator containment request/);cases++;
  await assert.rejects(runContainment(db,{...revoke,account:id()}),/Subject not found/);cases++;
 
  // Preview writes nothing and reports what is preserved.
@@ -72,7 +73,7 @@ try{
  // The trigger also refuses a forged receipt naming a different session set or epoch.
  const ids=(await row('SELECT json_group_array(id) ids FROM (SELECT id FROM identity_sessions WHERE account_id=? ORDER BY id)',a.account)).ids;
  for(const [epoch,sessions] of [[before.auth_epoch+1,ids],[before.auth_epoch,JSON.stringify(JSON.parse(ids).slice(1))]])
-  await assert.rejects(run('INSERT INTO operator_session_revocations(id,account_id,auth_epoch,credential_revision,sessions,operator_ref,reason,request_digest,review_digest) VALUES(?,?,?,?,?,?,?,?,?)',id(),a.account,epoch,before.credential_revision,sessions,'human:x','r','a'.repeat(64),'b'.repeat(64)),/operator_revocation_stale/);cases++;
+  await assert.rejects(run('INSERT INTO operator_session_revocations(id,account_id,auth_epoch,credential_revision,sessions,operator_ref,reason,request_digest,review_digest) VALUES(?,?,?,?,?,?,?,?,?)',aid(),a.account,epoch,before.credential_revision,sessions,'human:x','r','a'.repeat(64),'b'.repeat(64)),/operator_revocation_stale/);cases++;
 
  // Apply with the exact current review: every listed session is deleted in the receipt's own statement.
  const exact=await runContainment(db,revoke);const applied=await runContainment(db,revoke,exact.applyDigest);
@@ -98,21 +99,49 @@ try{
  // Nothing to revoke is refused rather than recorded.
  const empty=new Browser(),code=id(),email=id()+'@example.invalid';await run("INSERT INTO invitations VALUES(?,strftime('%Y-%m-%dT%H:%M:%fZ','now'),strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 hour'),NULL,NULL)",await hashToken(code));
  const o=await empty.ok('signup/options',{version:1,email,inviteCode:code,usBased:true,turnstileToken:id()});await empty.ok('signup/verify',{version:1,credential:authenticator().registration(o.options)});
- await assert.rejects(runContainment(db,{...revoke,id:id(),account:(await row('SELECT id FROM users WHERE email=?',email)).id}),/No workspace sessions to revoke/);cases++;
+ await assert.rejects(runContainment(db,{...revoke,id:aid(),account:(await row('SELECT id FROM users WHERE email=?',email)).id}),/No workspace sessions to revoke/);cases++;
 
  // Retention: completed on application, deletable by reviewed cleanup 90 days later, never inside a safety hold.
- const N=Date.now(),old=new Date(N-retentionMs-1000).toISOString(),otherRevoke={action:'revoke-sessions',id:id(),account:other.account,operator:OPERATOR,reason:REASON};
- await runContainment(db,otherRevoke,(await runContainment(db,otherRevoke)).applyDigest);
- for(const r of [revoke,otherRevoke])await rewrite('operator_session_revocation_immutable','UPDATE operator_session_revocations SET created_at=? WHERE id=?',old,r.id);
+ // Fixture history: receipts of long-past revocations, each inserted whole with an id minted for its own creation time
+ // (never a young id with an aged created_at); only the admission trigger, which compares with the clock now, is skipped.
+ // The listed session is long gone, so the receipt's apply trigger deletes nothing.
+ const N=Date.now(),day=86400000;
+ const history=async(account,createdMs)=>{const input={action:'revoke-sessions',id:newActionId(createdMs),account,operator:OPERATOR,reason:REASON};
+  await withoutTriggers(db,['operator_session_revocation_admit'],()=>run('INSERT INTO operator_session_revocations(id,account_id,auth_epoch,credential_revision,sessions,operator_ref,reason,request_digest,review_digest,created_at) VALUES(?,?,1,0,?,?,?,?,?,?)',
+   input.id,account,'["long-gone-session"]',OPERATOR,REASON,containmentDigest(input),'b'.repeat(64),new Date(createdMs).toISOString()));return input;};
+ const agedA=await history(a.account,N-100*day),agedHeld=await history(other.account,N-100*day);
  await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES('case-wh050-revocation',?,'intake-1','human:reviewer',unixepoch(),unixepoch()+31536000)",other.account);
  await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES('hold-wh050-revocation','case-wh050-revocation',?,'account','basis-1','human:approver',unixepoch(),unixepoch()+86400)",other.account);
- await assert.rejects(run('DELETE FROM operator_session_revocations WHERE id=?',otherRevoke.id),/operator_revocation_immutable/,'Held receipts stay');
- const cleanup={action:'cleanup',id:id(),before:new Date(N-retentionMs).toISOString(),operator:OPERATOR},cp=await runContainment(db,cleanup,undefined,N);
- assert.equal(cp.delete.revocations,1);assert.equal(cp.retained.revocationsRetained,1);
+ await assert.rejects(run('DELETE FROM operator_session_revocations WHERE id=?',agedHeld.id),/operator_revocation_immutable/,'Held receipts stay');
+ await assert.rejects(run('DELETE FROM operator_session_revocations WHERE id=?',revoke.id),/operator_revocation_immutable/,'A receipt inside retention stays');
+ const cleanup={action:'cleanup',id:aid(),before:new Date(N-retentionMs).toISOString(),operator:OPERATOR},cp=await runContainment(db,cleanup,undefined,N);
+ assert.equal(cp.delete.revocations,1);assert.equal(cp.retained.revocationsRetained,2);
  assert.deepEqual((await runContainment(db,cleanup,cp.applyDigest,N)).receipt.deleted,{containments:0,revocations:1,receipts:0});
- assert.equal((await row('SELECT count(*) n FROM operator_session_revocations WHERE id=?',revoke.id)).n,0);assert.equal((await row('SELECT count(*) n FROM operator_session_revocations WHERE id=?',otherRevoke.id)).n,1);cases++;
- // Replay after cleanup cannot revive the old revocation: its reviewed sessions no longer exist.
- await assert.rejects(runContainment(db,revoke,exact.applyDigest),/Review is stale or differs/);
- assert.equal((await again.profile()).status,200,'The current session survives the replay attempt');cases++;
- console.log(`Operator session revocation passed on ${process.argv.includes('--d1')?'actual local D1':'SQLite'}: ${cases} groups — exact reviewed state with stale and racing refusal, atomic receipt and deletion, old sessions denied with the ordinary signed-out response, passkeys/kit/epoch/recovery preserved, new sign-in and recovery work, tenant isolation, idempotent replay, immutable receipt, 90-day cleanup with safety-hold retention and no revival after cleanup.`);
+ const present=rid=>row('SELECT count(*) n FROM operator_session_revocations WHERE id=?',rid).then(r=>r.n===1);
+ assert.equal(await present(agedA.id),false);assert.equal(await present(agedHeld.id),true);assert.equal(await present(revoke.id),true);cases++;
+ // A cleaned id can never return: the tool refuses a new preview and apply under it, and the schema refuses a receipt that
+ // names the exact current reviewed state under it (the id's own time is older than the one-day window).
+ const forge=async(rid,seconds=0)=>{const st=await identity(a.account),ids=(await row('SELECT json_group_array(id) ids FROM (SELECT id FROM identity_sessions WHERE account_id=? ORDER BY id)',a.account)).ids;
+  return run(`INSERT INTO operator_session_revocations(id,account_id,auth_epoch,credential_revision,sessions,operator_ref,reason,request_digest,review_digest,created_at) VALUES(?,?,?,?,?,'human:x','r',?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now','${seconds} seconds'))`,rid,a.account,st.auth_epoch,st.credential_revision,ids,'a'.repeat(64),'b'.repeat(64));};
+ const signIn=()=>new Browser().assertion('login',a.first),sessions=async()=>(await identity(a.account)).sessions,staleId=/new UUIDv7 minted within the last day/;
+ for(const apply of [undefined,'f'.repeat(64)])await assert.rejects(runContainment(db,agedA,apply),staleId);
+ assert.equal(await sessions(),1,'The current session survives the reuse attempts');
+ await assert.rejects(forge(agedA.id),/operator_revocation_invalid/);assert.equal(await present(agedA.id),false);assert.equal(await sessions(),1);cases++;
+ // Window edges at the schema boundary: every refused id aborts the very receipt that each accepted id records.
+ const edge=windowIds();
+ for(const [name,rid] of Object.entries(edge.refused)){await assert.rejects(forge(rid),/operator_revocation_invalid/,name);assert.equal(await present(rid),false,name);}
+ await assert.rejects(forge(null),/operator_revocation_invalid/,'A NULL id is refused although a TEXT primary key admits it');
+ // The window is the database clock's, never the receipt's created_at: a created_at at its one-minute tolerance cannot carry a later or older id.
+ await assert.rejects(forge(newActionId(Date.now()+120000),55),/operator_revocation_invalid/);await assert.rejects(forge(actionIdAged(day+3600000),-55),/operator_revocation_invalid/);
+ assert.equal(await sessions(),1,'Refused receipts revoke nothing');
+ for(const [name,rid] of Object.entries(edge.accepted)){if(!await sessions())await signIn();await forge(rid);assert.equal(await present(rid),true,name);assert.equal(await sessions(),0,name);}
+ await signIn();const tolerant=aid();await forge(tolerant,55);assert.equal(await present(tolerant),true);cases++;
+ // The tool agrees: a request matching no stored receipt needs a new id, whatever the account state.
+ for(const name of ['25 hours old','2 minutes ahead','epoch zero','far future'])for(const apply of [undefined,'f'.repeat(64)])await assert.rejects(runContainment(db,{...revoke,id:edge.refused[name]},apply),staleId,name);
+ // Replay of an applied receipt is unaffected by the window: its stored row answers, however old the id; only a never-applied request needs a new id.
+ const twoDays=2*day,appliedOld=await history(a.account,Date.now()-twoDays);
+ assert.equal((await runContainment(db,appliedOld,'b'.repeat(64))).replayed,true);assert.equal((await runContainment(db,appliedOld)).alreadyApplied,true);
+ await assert.rejects(runContainment(db,{...appliedOld,reason:'Another'}),/already used/);
+ await assert.rejects(runContainment(db,{...appliedOld,id:newActionId(Date.now()-twoDays)}),staleId);cases++;
+ console.log(`Operator session revocation passed on ${process.argv.includes('--d1')?'actual local D1':'SQLite'}: ${cases} groups — exact reviewed state with stale and racing refusal, atomic receipt and deletion, old sessions denied with the ordinary signed-out response, passkeys/kit/epoch/recovery preserved, new sign-in and recovery work, tenant isolation, idempotent replay, immutable receipt, 90-day cleanup with safety-hold retention, a cleaned revocation ID refused for good (UUIDv7 time window at the schema, fail-closed shape and NULL, created_at tolerance not usable), and replay of an applied old receipt unaffected.`);
 }finally{globalThis.fetch=originalFetch;crypto.subtle.timingSafeEqual=originalEqual;await fixture.close();}

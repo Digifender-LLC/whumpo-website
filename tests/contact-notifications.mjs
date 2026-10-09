@@ -2,6 +2,7 @@ import {currentSiteFixtureHandlers,createFixtureWebsite,changeFixtureWebsite} fr
 import assert from 'node:assert/strict';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
+import {newActionId} from '../tools/operator-containment-input.mjs';
 Error.stackTraceLimit=0;
 // WH-036: provider-neutral contact notification outbox. Synthetic provider only; no network and no real provider exists.
 const m=await currentSiteFixtureHandlers(),store=await databaseFixture({d1:true}),db=store.db,scopes=new Map(),scope=user=>scopes.get(user);
@@ -147,7 +148,7 @@ try{
   await N.confirmContactDestination(db,c.id,c.project,(await row('SELECT verification_code c FROM contact_notification_destinations WHERE project_id=?',c.project)).c);fc.calls.length=0;assert.equal((await N.runContactDelivery(db,settings,fc.send)).queued,0);
   // WH-050 containment of the contact scope stops notices while the inbox still works for the owner.
   const d=await account(),fd=provider(),vd=await verified(d,'owner-g@example.com',fd);await saveContact(db,d.project,vd.revision,msg());
-  await run("INSERT INTO operator_containments(id,scope,subject_kind,subject_id,allowance,operator_ref,reason,request_digest,expires_at) VALUES(?,'contact','project',?,NULL,'human:test','reason',?,?)",crypto.randomUUID(),d.project,'f'.repeat(64),new Date(Date.now()+3600000).toISOString());
+  await run("INSERT INTO operator_containments(id,scope,subject_kind,subject_id,allowance,operator_ref,reason,request_digest,expires_at) VALUES(?,'contact','project',?,NULL,'human:test','reason',?,?)",newActionId(),d.project,'f'.repeat(64),new Date(Date.now()+3600000).toISOString());
   fd.calls.length=0;r=await N.runContactDelivery(db,settings,fd.send);assert.equal(r.queued,0);assert.equal(fd.calls.length,0);
   // Another account's runner view is isolated: a notice always goes to its own project's destination.
   const e=await account(),fe=provider(),ve=await verified(e,'owner-h@example.com',fe);fe.calls.length=0;await saveContact(db,e.project,ve.revision,msg());await N.runContactDelivery(db,settings,fe.send);assert.deepEqual(fe.calls.map(n=>[n.projectId,n.recipient]),[[e.project,'owner-h@example.com']]);

@@ -13,7 +13,7 @@ import {dirname,resolve} from 'node:path';
 import {currentSiteFixtureHandlers,enableFixtureVisitorAccess} from './current-site-fixture.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.mjs';
-import {runContainment,containmentInput} from '../tools/operator-containment-input.mjs';
+import {runContainment,containmentInput,newActionId} from '../tools/operator-containment-input.mjs';
 const m=await currentSiteFixtureHandlers(),store=await databaseFixture(),db=store.db,sql=store.sql;
 const {buildJobs:J,backendChat:{backendAction:rawBackendAction,backendChatCommand},appActivation:{prepareApplication},sendAIChat,readChat,sendChat}=m;
 const owners=new Map(),scopes=new Map(),scope=user=>scopes.get(user),id=()=>crypto.randomUUID(),sha=x=>createHash('sha256').update(x).digest('hex');
@@ -185,7 +185,7 @@ try{
  await sendChat(scope(hana),hana,{id:id(),revision:(await readChat(scope(hana),hana)).state.revision,content:'/application-build '+hT});assert.equal(modelCalls,1,'Status reads never wake the model');
 
  // 11. WH-050 operator `build` freeze: refuses new jobs and cancels running/unpublished ones in the frozen scope only.
- const ivy=await account(undefined,1),jack=await account(undefined,1),hours=n=>new Date(Date.now()+n*3600000).toISOString(),freeze=(subject,extra={})=>({action:'contain',id:id(),subject,scopes:{build:'freeze'},expiresAt:hours(2),operator:'human:fixture',reason:'Synthetic build containment',...extra});
+ const ivy=await account(undefined,1),jack=await account(undefined,1),hours=n=>new Date(Date.now()+n*3600000).toISOString(),freeze=(subject,extra={})=>({action:'contain',id:newActionId(),subject,scopes:{build:'freeze'},expiresAt:hours(2),operator:'human:fixture',reason:'Synthetic build containment',...extra});
  async function contain(request){const preview=await runContainment(db,request);assert.equal(preview.preview,true);return runContainment(db,request,preview.applyDigest);}
  for(const bad of [{build:1},{build:0},{build:'stop'}])assert.throws(()=>containmentInput(JSON.stringify(freeze({kind:'project',id:id()},{scopes:bad}))),/Invalid operator containment request/,'Build is freeze-only; limits stay as built');
  const running=await draft(ivy,await project(ivy)),runningLease=await running.admit(),sibling=await draft(ivy),siblingLease=await sibling.admit(),neighbour=await draft(jack),neighbourLease=await neighbour.admit();
@@ -197,7 +197,7 @@ try{
  await assert.rejects((await draft(ivy,running.p)).admit(),/build_job_capacity/,'New jobs in the frozen project are refused with the generic capacity error');
  const refusedTurn=await turn(ivy);await assert.rejects(build(ivy,running.p,refusedTurn,note,noteIn('z'),noteOut('z'),service),e=>e.status===429&&!/contain|operator|freeze/i.test(e.message),'The owner sees only the generic capacity response');
  assert.equal(await db.prepare('SELECT id FROM backend_versions WHERE id=?').bind(refusedTurn).first(),null,'A refused build saves nothing');
- assert.throws(()=>sql.prepare("INSERT INTO operator_containments(id,scope,subject_kind,subject_id,allowance,operator_ref,reason,request_digest,expires_at) VALUES(?,'build','project',?,3,'human:x','r',?,strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 hour'))").run(id(),running.p,'f'.repeat(64)),/CHECK/,'No build allowance can be stored');
+ assert.throws(()=>sql.prepare("INSERT INTO operator_containments(id,scope,subject_kind,subject_id,allowance,operator_ref,reason,request_digest,expires_at) VALUES(?,'build','project',?,3,'human:x','r',?,strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 hour'))").run(newActionId(),running.p,'f'.repeat(64)),/CHECK/,'No build allowance can be stored');
  // A job that already succeeded but is not yet published is cancelled too, so it can never prepare an approval review.
  const kP=await project(jack),kT=await turn(jack),kPlan=await fixtureExtensionPlan(scope(jack),jack,kP,kT,'custom.visitor-transition');
  await J.cancelBuildJob(scope(jack),jack,neighbour.t);

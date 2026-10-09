@@ -6,6 +6,7 @@ import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
 import {accountClosureInventory} from '../tools/account-closure-inventory.mjs';
 import {validateDescriptor} from '../tools/prototypes/workload-placement.mjs';
+import {newActionId} from '../tools/operator-containment-input.mjs';
 Error.stackTraceLimit=0;
 // WH-127 records and forms module. Actual handlers (visitor gateway POST /modules, the workspace-origin owner routes,
 // the module engine, records handlers, commit triggers, retention expiry, Chat role reviews and activation reviews) run
@@ -181,7 +182,7 @@ try{
   const oneEntry=results.find(r=>r.status===200).body.result.entryId,removed=await ownerCall(b,envelope(ask,'records.remove',{target:{recordId:'enquiry',entryId:oneEntry}}));assert.equal(removed.status,200);
   assert.equal((await askOne(30)).body.code,'limited','Removal does not recycle the hourly allowance');
   // The operator's contact containment applies to anonymous module intake in the same way.
-  await run("INSERT INTO operator_containments(id,scope,subject_kind,subject_id,allowance,operator_ref,reason,request_digest,expires_at) VALUES(?,'contact','project',?,0,'operator:fixture','Synthetic containment',?,strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 day'))",id(),a.project,'0'.repeat(64));
+  await run("INSERT INTO operator_containments(id,scope,subject_kind,subject_id,allowance,operator_ref,reason,request_digest,expires_at) VALUES(?,'contact','project',?,0,'operator:fixture','Synthetic containment',?,strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 day'))",newActionId(),a.project,'0'.repeat(64));
   assert.equal((await publicGateway(a,submission(records,'public-form',publicValues()),{ip:'192.0.2.26',verify:good(records)})).body.code,'limited');
  });
 
