@@ -2,7 +2,9 @@
 
 **WH-063 contract slice (WH-199), October 9, 2026 UTC; source baseline `4dea09c`.** This is a **frozen contract**. It freezes how an owner changes the account email and how an owner responds to a suspected compromise, maps the current source with exact gaps, and splits the remaining [WH-063](roadmap/backlog.md#wh-063--define-verified-email-changes-and-compromised-account-recovery) work into WH-199–205.
 
-**WH-200 status (October 9, 2026 UTC): implemented in source as a pure module, not wired.** The verified-address-change state machine and the confirmation-token handling are in [`src/email-change/`](../src/email-change/policy.ts) (see [section 2.1](#21-source-module-wh-200)). It is pure functions over plain records: no persistence, route, Chat binding, sender, provider, table or schema change, and no Worker entry imports it (an esbuild import-graph check proves this). Accounts still cannot change their address, and nothing is sent. The [conformance harness](../tests/email-change-contract.mjs) runs the source against a synthetic in-memory store, the synthetic mailer and a fake provider revoker. The compromise review is still only an [offline reference](../tools/prototypes/compromise-review.mjs) for WH-203. That file also hosts the source module inside a synthetic identity engine (sign-in, sessions, recovery grants). No Worker imports it.
+**WH-200 status (October 9, 2026 UTC): implemented in source as a pure module, not wired.** The verified-address-change state machine and the confirmation-token handling are in [`src/email-change/`](../src/email-change/policy.ts) (see [section 2.1](#21-source-module-wh-200)). It is pure functions over plain records: no persistence, route, Chat binding, sender, provider, table or schema change, and no Worker entry imports it (an esbuild import-graph check proves this). Accounts still cannot change their address, and nothing is sent. The [conformance harness](../tests/email-change-contract.mjs) runs the source against a synthetic in-memory store, the synthetic mailer and the synthetic provider revoker.
+
+**WH-203 status (October 9, 2026 UTC): implemented in source as a pure module, not wired.** The compromise review, the sign-in and recovery fences, and provider revocation with held unknown outcomes are in [`compromise.ts`](../src/email-change/compromise.ts) and [`revocation.ts`](../src/email-change/revocation.ts) (see [section 3.1](#31-source-module-wh-203)). Same limits as WH-200: no persistence, route, Chat binding, provider call, table or schema change, and no Worker entry imports it. Nobody can run a compromise review yet, and no provider is contacted. The offline prototype `tools/prototypes/compromise-review.mjs` has been deleted, so the source is the only implementation. The harness keeps a storage-only driver that makes no review, fence or revocation decision.
 
 It builds on, and does not replace, the [shared workspace identity contract](workspace-identity.md) (WH-113) with its [authority](identity-authority.md), [ceremonies](identity-ceremonies.md), [kits](identity-kits.md) and [restricted recovery](identity-recovery.md); the [notification contract](notifications.md) (WH-068/154) and [WH-036 contact delivery](contact-forms.md#owner-notification-delivery-wh-036); the [connection key lifecycle](connection-key-lifecycle.md) and the [GitHub](integrations/github-connection.md) and [Cloudflare](integrations/cloudflare-connection.md) connections; [data protection](data-protection.md) (WH-116) with the [lifecycle catalogue](data-lifecycle.json); [passkey encryption feasibility](passkey-encryption-feasibility.md) (WH-118); the [incident runbooks](incident-runbooks.md#9-owner-identity-and-session-incidents-sev1); and the [current-version policy](current-version-policy.md).
 
@@ -78,7 +80,7 @@ Status: **implemented in source, not wired** (October 9, 2026 UTC). Every step t
 | [policy.ts](../src/email-change/policy.ts) | Contract version 1. `emailChangeBounds` holds the recommended decision values as versioned constants: 60-minute link, 7-day undo, the 10-minute fresh-passkey window and the rate limits. Also the platform sender, retired proof fields, message kinds, the closed-input parser, the address rule (the same pattern and length limits as WH-036 `normalizeDestination`, checked by the harness) and `authorizeOwner`. `authorizeOwner` admits only a current ordinary session of a `ready` account. It refuses authority from an earlier epoch (`IDENTITY_CHANGED`), restricted grants (`IDENTITY_INCOMPLETE`) and an old or non-passkey proof where a fresh proof is required (`PROOF_REQUIRED`). |
 | [change.ts](../src/email-change/change.ts) | Change states and the transition table. `requestEmailChange`, `confirmEmailChange`, `cancelEmailChange`, `undoEmailChange` and `readAccountEmail`, plus the address-reservation rule and the per-address limit key. |
 | [token.ts](../src/email-change/token.ts) | 256-bit base64url token minting, `tokenVerifier` (SHA-256 hex through the existing `hashToken`), the `PlatformMailer` interface, `deliverNotice` and `createSyntheticMailer`. `deliverNotice` mints the token only inside a claimed attempt and commits the verifier before the single mailer call. The synthetic mailer is for tests only: no network, and it rejects every recipient outside the reserved `.test` domain. |
-| [compromise.ts](../src/email-change/compromise.ts) | Only the compromise-review transitions WH-200 owns: `pendingChangeForReview` for the review snapshot, and `closeForSecurityReview`, which cancels a pending change inside the review commit and does nothing on a replay. |
+| [compromise.ts](../src/email-change/compromise.ts) | The WH-200 transitions: `pendingChangeForReview` for the review snapshot, and `closeForSecurityReview`, which cancels a pending change inside the review commit and does nothing on a replay. WH-203 added the rest of the review in the same file ([section 3.1](#31-source-module-wh-203)). |
 
 The behaviour is the contract above. A link alone never changes the account: confirmation needs the token and the same account's current session. Token plaintext reaches only the mailer call. Retries replay. Superseded, expired, cancelled, stale-epoch and foreign tokens are refused. The old address is notified without the token or the new address. An address held by another account gets the same response and no message. Undo restores the previous verification state. A session, in-flight sign-in or token from before a compromise commit cannot change the address afterward: the epoch fence refuses the authority, and the commit closes the pending change.
 
@@ -99,7 +101,7 @@ Obligations the module cannot meet alone, left to the storage and adapter slice 
 - Commit the delivery claim before the mailer call, and never re-pick a `dispatching` notice.
 - Register the data classes and maintenance.
 
-Left for WH-203: the review snapshot and its staleness binding, emergency passkey removal, the epoch advance that revokes every session, grant, challenge and kit offer, kit rotation with save-before-rotation, provider disable and revoke-before-erase with held unknown outcomes, the receipt and the review notice. These remain in the [reference](../tools/prototypes/compromise-review.mjs). Templates, the provider and the outbox are WH-202.
+WH-203 has since implemented the compromise review in source ([section 3.1](#31-source-module-wh-203)). Templates, the provider and the outbox are WH-202.
 
 ## 3. Compromise response
 
@@ -125,7 +127,7 @@ Compromise response is **not** lost-passkey recovery.
    - records a content-free receipt and queues a security-review notice.
 4. A lost commit reply is recovered by signing in again with a retained passkey and replaying the same request ID, which returns the saved receipt with no second effect. A changed payload is `request_conflict`.
 
-**Concurrent sign-in cannot restore authority.** A sign-in challenge issued before the commit, a session minted just before it, a restricted grant and a pending email-change token all carry the earlier epoch and fail afterward. A removed passkey cannot complete a sign-in. Only retained passkeys can sign in, at the new epoch. The reference fences by epoch. The implementation must also delete those rows in the same batch and recheck the epoch inside committing statements, as the identity engine already does ([workspace identity](workspace-identity.md#versioned-operation-contract)).
+**Concurrent sign-in cannot restore authority.** A sign-in challenge issued before the commit, a session minted just before it, a restricted grant and a pending email-change token all carry the earlier epoch and fail afterward. A removed passkey cannot complete a sign-in. Only retained passkeys can sign in, at the new epoch. The source does both halves. It fences by epoch (`authorizeOwner`, `admitSignIn`), and the commit step tells the store to delete those rows in the same batch (`revokeAuthorityBefore`). The storage slice must also recheck the epoch inside committing statements, as the identity engine already does ([workspace identity](workspace-identity.md#versioned-operation-contract)).
 
 ### Provider connections: revoke at the provider before local erasure
 
@@ -146,9 +148,59 @@ Compromise response is **not** lost-passkey recovery.
 
 [G5](incident-runbooks.md#3-gap-register-controls-this-runbook-needs-that-do-not-exist) (no owner notice of recovery or passkey events) needs a verified address and live delivery. WH-202 can add those notices if the owner approves (gap G-E11, decision 4). [G6](incident-runbooks.md#92-stolen-recovery-kit-g5g6) (stolen kit plus email → attacker recovery) is **not closed** by this contract. The email stays a lookup key, so knowing or controlling it adds no attacker power. A notice at recovery start gives the owner time to rotate the kit from a passkey session, which fences the attacker's attempt. A mandatory waiting period before securing recovery is listed as decision 6, not adopted.
 
+### 3.1 Source module (WH-203)
+
+Status: **implemented in source, not wired** (October 9, 2026 UTC). Like WH-200, every step takes the server-resolved principal and the rows the caller read. It returns the next rows, the notices to queue and the result, and stores nothing. The only adapter it calls is an injected `ProviderRevoker`.
+
+| File | Contents |
+| --- | --- |
+| [compromise.ts](../src/email-change/compromise.ts) | `compromiseBounds` (10-minute review, 30-minute kit offer, the shared kit offer lifetime). `revokedAuthority`: sessions, grants, challenges and kit offers, the same rows the identity engine's own emergency removal deletes. `recoveryGrantOperations`. Closed parsers for prepare, kit offer, kit save and commit. `prepareCompromiseReview` returns the snapshot: active passkeys, session metadata (no token or hash), kit generation, the pending change and each connection's state, plus `accountRecoveryOnly: true`. `prepareReviewKit` and `saveReviewKit` handle the replacement kit offer bound to the review; the store keeps only the verifier, and the save is idempotent. `commitCompromiseReview` does the guarded commit described below. `admitSignIn` is the sign-in fence. `admitRecovery` treats the address as a lookup key and the kit as the proof. |
+| [revocation.ts](../src/email-change/revocation.ts) | `ProviderConnection` records hold no credential material; `credentialHeld` says whether the store still keeps the ciphertext. The file also has `disableForReview`, `authorizeConnectionUse`, `dispatchRevocation` (one claimed attempt, one `ProviderRevoker` call), `reconcileRevocation`, `eraseConnectionCredential`, `closureHolds`, `revocationBounds` (3 reads in 72 hours) and `createSyntheticRevoker`. The synthetic revoker is for tests only: no network, no credential, and it recognizes only `github` and `cloudflare`. |
+
+The commit runs these checks in this order:
+
+1. Fresh passkey on a current ordinary session.
+2. Replay check. A saved receipt for the same request ID and payload is returned with no second effect; a changed payload is `REQUEST_CONFLICT`. The original session no longer works after the commit, so a lost reply is recovered by signing in again at the new epoch.
+3. Staleness. The review must be open and unexpired, with an unchanged epoch, credential revision, kit generation and connection set; otherwise `STALE_REVIEW`.
+4. Selections must be a subset of the snapshot.
+5. A chosen kit must be this review's own offer, saved, unexpired and from the current epoch; otherwise `KIT_NOT_SAVED`.
+
+It then returns:
+
+- the account with the selected passkeys removed (no two-key minimum; zero keys means `recovering`), the epoch advanced, and the saved kit's verifier and generation;
+- the review marked `committed` at `revision+1`;
+- the pending change closed by `closeForSecurityReview`;
+- the selected connections disabled with the credential held and revocation `queued`. A connection already queued, in flight, uncertain or unresolved is left as it is, so a second review never redispatches an unknown outcome;
+- `revokeAuthorityBefore`, the new epoch;
+- one content-free `security-review-completed` notice to the current address;
+- the saved receipt.
+
+The receipt carries only identifiers, counts and states. It has no content-recovery field.
+
+Revocation follows the order in the previous section:
+
+- **Dispatch.** The store commits the `dispatching` claim before the single provider call. `revoked` records the receipt and clears `credentialHeld` in the same write. `not-revoked` returns the hold to `queued` for the same retired credential. Anything else, including a throw, is `uncertain`. A record found still `dispatching` (a worker lost after its claim) becomes `uncertain` without a call.
+- **Reconciliation.** It accepts only authenticated evidence, treats "not found" as no proof, and becomes `unresolved` after 3 reads or 72 hours.
+- **Erasure and closure.** Erasure needs `revoked` plus a receipt. `closureHolds` lists every held credential that is queued, in flight, uncertain or unresolved.
+
+Refinements of the WH-199 reference, none reachable by any customer, API or model:
+
+- The kit save acknowledgment is recorded on the offer by `saveReviewKit`, as the [shared kit flow](identity-kits.md) does. The commit names only `rotateKit: {offerId}`; the reference's client-supplied `saved: true` is now an unknown field.
+- The snapshot binding includes the kit generation, which the reference omitted. A kit offer must also come from the current epoch and be unexpired.
+- The commit returns `revokeAuthorityBefore`, and the harness's store deletes the older sessions, grants, challenges and kit offers in the same batch. The reference only fenced them by epoch.
+- `admitRecovery` refuses an address that another account holds reserved inside its undo window, with the same generic error. Under the reservation rule this cannot happen; the check keeps the lookup unambiguous even if that rule is ever broken.
+- The `dataClasses` list moved to [policy.ts](../src/email-change/policy.ts). The `owner-security-reviews` class now names the kit offer verifier.
+
+Obligations the module cannot meet alone, left to the storage and adapter slices (WH-201, then WH-204 for connected proof):
+
+- Store reviews, review kit offers, saved receipts and connection revocation holds in current-schema tables (none exist; this change adds none). Write each commit in one revision-guarded batch, and repeat the epoch, fresh-passkey and review-binding predicates in the committing statements.
+- Implement `ProviderRevoker` over the existing adapters. GitHub's single-access-token `204` does **not** settle a retained refresh credential ([custody rules](connection-key-lifecycle.md#github-refresh-credential-custody--october-2-2026-utc)). The adapter may report `revoked` only when the whole retained credential set has an exact receipt, such as the reviewed grant revocation. Otherwise the hold must stay. Cloudflare reports `revoked` only when every known token gets `200`.
+- Map the existing GitHub and Cloudflare connection, vault and grant-revocation states onto these holds, and feed `closureHolds` into the account-closure inventory.
+- Mount direct Settings controls outside Chat, available while inference is down.
+
 ## 4. Data classes and retention (WH-116 / WH-009 extension)
 
-These are planned classes. WH-201 registers the real tables in [data-lifecycle.json](data-lifecycle.json). The [reference](../tools/prototypes/compromise-review.mjs) exports the same list as `dataClasses`. The WH-200 records match it. A change row holds only the token's SHA-256 verifier. Limits are keyed by a hash of the address (`addressKey`). Queued notices hold no token.
+These are planned classes. WH-201 registers the real tables in [data-lifecycle.json](data-lifecycle.json). [policy.ts](../src/email-change/policy.ts) exports the same list as `dataClasses`, and the WH-200 and WH-203 records match it. A change row holds only the token's SHA-256 verifier. Limits are keyed by a hash of the address (`addressKey`). Queued notices hold no token.
 
 | Class | Records | Protection | Proposed retention | Export |
 | --- | --- | --- | --- | --- |
@@ -156,7 +208,7 @@ These are planned classes. WH-201 registers the real tables in [data-lifecycle.j
 | `owner-email-changes` | Pending change, token **verifier only**, previous-address undo reservation | managed-readable; SHA-256 verifier, never plaintext | Pending until confirmed/cancelled/superseded/stale/expired; terminal rows 30 days with the new address replaced by its hash; previous address until the undo window ends | Open pending address and expiry; never verifiers, request hashes or limit keys |
 | `owner-email-change-limits` | Request times, hashed per-address daily keys, failure counts | managed-readable | 48 hours | None |
 | `platform-notifications` (WH-156 shared outbox) | Content-free account notices | managed-readable; **no token stored** | 30 days; unknown/unresolved evidence until resolved | State and time |
-| `owner-security-reviews` | Snapshot identifiers, selections, commit receipt | managed-readable; identifiers and counts only | 90 days after commit or expiry | Time, selections, outcome |
+| `owner-security-reviews` | Snapshot identifiers, selections, review kit offer verifier, commit receipt | managed-readable; SHA-256 kit offer verifier, otherwise identifiers and counts only | 90 days after commit or expiry | Time, selections, outcome |
 | `connections` (existing) | Encrypted credentials held for revocation, receipts | application-encrypted | Until a definitive revocation receipt or reconciled evidence; unresolved holds block closure | Connection state only |
 
 Restore and forward repair must never revive a superseded change, a used token, an earlier verification state, an earlier epoch or an erased-without-receipt credential ([backup and current restore](data-protection.md#backup-deletion-and-current-restore)).
@@ -172,13 +224,13 @@ Restore and forward repair must never revive a superseded change, a used token, 
 | Change path | None reachable (`updateProfile` allowlist; checked) | **G-E6** **Resolved in source, not wired.** Request, confirm, cancel, undo and read are in [change.ts](../src/email-change/change.ts), with token minting and delivery in [token.ts](../src/email-change/token.ts) (WH-200). No route, Settings control or Worker entry reaches them (esbuild import-graph check). WH-201 mounts the adapter. |
 | Support notice | `support-delivery.ts` recipient `u.email`, inactive | **G-E5** Must require a verified address (or the decision 4 rule) before any support provider is activated (WH-202). |
 | Fresh passkey | `authority.ts` 600-second predicate (`tests/identity-authority.mjs`, 72 checks) | Conforms. `authorizeOwner` in [policy.ts](../src/email-change/policy.ts) uses the same window and the same passkey-only proof (checked). |
-| Emergency removal | `removePasskey` below two keys with epoch advance (`tests/identity-recovery.mjs`) | Conforms. **G-E7** No single review that combines removal, kit rotation, change cancellation and connections (WH-203). |
+| Emergency removal | `removePasskey` below two keys with epoch advance (`tests/identity-recovery.mjs`) | Conforms. **G-E7** **Resolved in source, not wired.** `commitCompromiseReview` in [compromise.ts](../src/email-change/compromise.ts) combines removal (down to zero keys), the epoch advance with the same `revokedAuthority` rows the engine deletes, kit rotation with save-before-rotation and change cancellation in one step (WH-203; agreement with `recovery.ts` and `kits.ts` is pinned by the harness). No route, table or Worker entry reaches it. |
 | Kit rotation | `rotateKit` prepare/save/commit (`tests/identity-kits.mjs`, 47 checks) | Conforms; reused by the review. |
 | Operator session revocation | WH-050 CLI, no epoch change | Conforms as a containment step; not a compromise review. |
-| Provider revocation | GitHub disconnect, single-token cleanup and reviewed grant revocation (`tests/github-connection.mjs`, `github-token-lifecycle.mjs`, `github-grant-revocation.mjs`); Cloudflare RFC 7009 disconnect (`tests/cloudflare-connection.mjs`) | Conforms to revoke-before-erase. **G-E8** No coordinated multi-provider selection from one review, and no closure-blocking summary in that review. |
+| Provider revocation | GitHub disconnect, single-token cleanup and reviewed grant revocation (`tests/github-connection.mjs`, `github-token-lifecycle.mjs`, `github-grant-revocation.mjs`); Cloudflare RFC 7009 disconnect (`tests/cloudflare-connection.mjs`) | Conforms to revoke-before-erase. **G-E8** **Resolved in source, not wired.** One review selects any set of connections; [revocation.ts](../src/email-change/revocation.ts) disables them, holds the credential, dispatches once per claim, holds unknown and interrupted outcomes, reconciles read-only and reports `closureHolds` (WH-203). The `ProviderRevoker` adapters over `src/github-connection.ts` and `src/cloudflare-connection.ts`, their state mapping and the closure inventory are not built. The harness pins the adapters' `204`/`200` receipt rules. |
 | Platform sender | `notify@whumpo.com`, Cloudflare adapter (`tests/contact-notifications.mjs`, `tests/notifications-contract.mjs`); not live | **G-E10** No account templates in the v1 catalog; the WH-036 live send is not done. |
 | Security-event notices | None | **G-E11** No notices for passkey added/removed, recovery started/secured or kit rotated (runbook G5). |
-| No model path | `agentProfile` excludes email (checked); identity routes outside Chat | Conforms. The WH-200 module has no model, agent, Chat or mailbox export (checked). WH-201/203 must keep the agent catalogue free of these operations. |
+| No model path | `agentProfile` excludes email (checked); identity routes outside Chat | Conforms. The WH-200 and WH-203 module has no model, agent, Chat or mailbox export, and no Worker entry imports it (checked). WH-201 must keep the agent catalogue free of these operations when it mounts them. |
 
 `tests/profile.mjs` and `tests/profile-http.mjs` cover the current profile allowlist. The implementing slices select those suites, plus the identity suites above, by the files they change.
 
@@ -214,18 +266,18 @@ WH-063 stays the parent. Its acceptance is unchanged, and it closes only when ev
 | WH-200 | Source state machine and confirmation-token handling over the current identity engine; isolated canonical inputs on disposable SQLite/local D1 (G-E1, G-E6). **Pure module done** ([section 2.1](#21-source-module-wh-200)). Open: the isolated canonical inputs and focused SQLite/local D1 handler suites. | WH-199, WH-115 |
 | WH-201 | Complete current schema, lifecycle classes, maintenance/closure inventory, trusted HTTP adapter and Settings controls (inactive delivery → `delivery_unavailable`), and one owner-authorized empty-D1 cutover | WH-200 |
 | WH-202 | Account templates in the WH-155 catalog, routing through the WH-156 outbox, support-notice and security-event gating (G-E5, G-E10, G-E11) | WH-201, WH-156, WH-036 (blocked on its live send) |
-| WH-203 | Compromise review: passkeys, sessions, kit, pending change and provider connections in one guarded commit (G-E7, G-E8) | WH-200 |
+| WH-203 | Compromise review: passkeys, sessions, kit, pending change and provider connections in one guarded commit (G-E7, G-E8). **Pure module done** ([section 3.1](#31-source-module-wh-203)). Open: the `ProviderRevoker` adapters over the existing GitHub/Cloudflare revocation, and focused SQLite/local D1 handler suites with synthetic providers. | WH-200 |
 | WH-204 | Connected synthetic acceptance: actual Worker, current schema, signed synthetic WebAuthn, synthetic mailer/providers, browser checks | WH-201, WH-203 |
 | WH-205 | Physical-device and approved delivery canary acceptance on disposable identities | WH-202, WH-204, WH-005 (blocked) |
 
 ## 9. Verification
 
-`node tests/email-change-contract.mjs` (also `pnpm test:email-change-contract`, and part of `node tools/verify.mjs fast`) bundles [`src/email-change`](../src/email-change/policy.ts) with esbuild and runs 26 checks. Every address-change decision is made by the source. The [reference](../tools/prototypes/compromise-review.mjs) only stores the rows the source returns, with a revision guard, and supplies the synthetic identity engine and the WH-203 compromise behaviour. The checks cover:
+`node tests/email-change-contract.mjs` (also `pnpm test:email-change-contract`, and part of `node tools/verify.mjs fast`) bundles [`src/email-change`](../src/email-change/policy.ts) with esbuild and runs 27 checks. Every decision is made by the source: address changes, the compromise review, the sign-in and recovery fences, and provider revocation. The harness's storage-only driver stores the rows the source returns under revision guards. It deletes the authority rows a commit revokes. It also stands in for the existing identity engine only where WH-203 does not decide: issuing and resolving session and grant tokens, and the engine's own emergency passkey removal. The checks cover:
 
 - the email never becomes a recovery or authorization factor (pending or verified address, wrong or missing kit, no email or link sign-in operation);
 - refusal of unknown versions, unknown fields and retired password fields;
 - fresh-passkey requirement;
-- restricted recovery authority;
+- restricted recovery authority, including the compromise commit and connection use;
 - delivery unavailable stores nothing, and the old-address notice carries no token or new address;
 - hash-only single-use tokens bound to the requesting account, with replay returning the saved receipt;
 - expiry, supersession and epoch staleness;
@@ -234,27 +286,41 @@ WH-063 stays the parent. Its acceptance is unchanged, and it closes only when ev
 - rate limits;
 - no redispatch after a lost provider response; definite refusals and deferrals; old-notice failure isolation;
 - cancel and undo;
-- emergency revocation to zero keys;
-- epoch-fenced sessions and in-flight sign-ins;
-- stale and expired reviews and idempotent commits;
-- kit rotation with save-before-rotation;
+- emergency revocation to zero keys, after which a removed passkey cannot sign in;
+- revocation of every session, grant, challenge and kit offer in the commit batch. Authority read before the commit and presented after it (a session, a grant or an in-flight sign-in challenge) is refused by the epoch fence;
+- stale and expired reviews, a review bound to the kit generation and connection set, and idempotent commits;
+- kit rotation with save-before-rotation and a kit offer bound to its own review;
 - pending change cancellation;
-- revoke-before-erase with held unknown outcomes and bounded read-only reconciliation;
+- revoke-before-erase with held unknown outcomes and bounded read-only reconciliation. Also: a second review leaves an uncertain hold unqueued, an interrupted attempt becomes uncertain without a call, and an unresolved hold blocks account closure;
 - no content-recovery claim;
-- no model or customer-mailbox capability, and one platform sender;
+- a content-free snapshot, receipt and security-review notice;
+- no model or customer-mailbox capability, one platform sender, and a synthetic revoker that recognizes only the two existing providers;
 - the data-class list;
-- concurrent confirm, cancel and review transitions computed from one read: each claims the same prior revision, so exactly one commits, and the losers then refuse or change nothing.
+- concurrent transitions computed from one read. For confirm, cancel and review, each claims the same prior revision, so exactly one commits and the losers then refuse or change nothing. For two compromise commits of one review, one commits and the loser is fenced or stale.
 
-Seven read-only agreement and static checks:
+Nine read-only agreement and static checks:
 
 1. The source fresh-passkey window and passkey-only proof match `authority.ts`.
 2. The recovery lookup is unchanged.
-3. `users.email` still has no verification state, there is no `email_change` table and no profile edit path, and the decision 1/2 values are pinned. WH-201 updates this pin with its schema.
+3. `users.email` still has no verification state; there is no `email_change` or `security_review` table and no profile edit path; and the decision 1/2 values are pinned. WH-201 updates this pin with its schema.
 4. The inactive support-notice recipient (G-E5) is unchanged.
-5. The module is pure: it imports only `../security` and its own files, makes no fetch, D1, env or console call, and an esbuild import graph of `src/index.ts`, `src/site-host.ts`, `src/app-host.ts` and `src/runtime/worker.ts` never reaches it. The reference imports only `node:crypto`.
-6. The address rule is the WH-036 destination rule.
-7. The SHA-256 shim used for mutant runs gives the same digests as `hashToken`.
+5. G-E7: the review revokes the same rows (`identity_sessions`, `identity_grants`, `identity_challenges`, `identity_kit_offers`) that `removePasskey` in `recovery.ts` deletes. The engine allows zero keys (`recovering`), kit rotation in `kits.ts` advances the epoch, and the review and kit offer lifetimes are pinned.
+6. G-E8: the existing adapters settle revocation only on an exact receipt (GitHub `DELETE` → `204`, Cloudflare `oauth2/revoke` → `200` for every token), and the reconciliation bound is pinned.
+7. The module is pure. Every file in `src/email-change/` is listed and checked. It imports only `../security` and its own files and makes no fetch, D1, env or console call. An esbuild import graph of `src/index.ts`, `src/site-host.ts`, `src/app-host.ts` and `src/runtime/worker.ts` never reaches it.
+8. The address rule is the WH-036 destination rule.
+9. The SHA-256 shim used for mutant runs gives the same digests as `hashToken`.
 
-The suite also runs against **33** deliberately broken copies, each of which must be caught by the check written for that property; `--explain` prints which check caught each and why. The original 32 are kept. Nineteen mutate the source (`policy.ts`, `change.ts`, `token.ts`, `compromise.ts`), including the new "stale session admitted to email operations". The fourteen that cover sign-in, recovery and the WH-203 compromise and revocation behaviour mutate the reference, because that behaviour has no source yet. Mutant runs use a `node:crypto` SHA-256 for `hashToken`, because Node's WebCrypto digest dominated the run time. The unmodified run uses the real WebCrypto path.
+The suite also runs against **41** deliberately broken copies. Each must be caught by the check written for that property; `--explain` prints which check caught each and why. All 41 mutate the source: `compromise.ts` 15, `change.ts` 11, `revocation.ts` 8, `policy.ts` 5 and `token.ts` 2. The 33 WH-200 mutants are kept. The 14 that targeted the deleted prototype now mutate the same rules in `compromise.ts` and `revocation.ts`, and are caught by the same named checks. Eight are new for WH-203:
 
-These checks prove the frozen contract, the WH-200 source module and the synthetic WH-203 reference only. They do not prove D1 atomicity, real delivery, provider revocation, devices or acceptance. No database, network, model, credential, Cloudflare resource or deployment is involved. All addresses use `example.test`, and all kit keys and tokens are `SYNTHETIC-*` placeholders.
+- removed passkey completes sign-in;
+- review not bound to the kit generation;
+- kit offer bound to another review accepted;
+- security-review notice not queued;
+- second review requeues an uncertain revocation;
+- interrupted revocation dispatch redispatched;
+- reconciliation read bound removed;
+- unresolved hold does not block account closure.
+
+Mutant runs use a `node:crypto` SHA-256 for `hashToken`, because Node's WebCrypto digest dominated the run time. The unmodified run uses the real WebCrypto path. On this 2-vCPU host at load average 3.3, the whole run took 1.6–2.0 seconds wall over six runs, within the roughly 3-second budget of the deploy build's `verify fast`, so it stays in `fast`.
+
+These checks prove the frozen contract and the unwired WH-200/WH-203 source module only. They do not prove D1 atomicity, real delivery, real provider revocation, devices or acceptance. No database, network, model, credential, Cloudflare resource or deployment is involved. All addresses use `example.test`. All kit keys, tokens and ciphertext handles are `SYNTHETIC-*` placeholders or random values generated during the run.
