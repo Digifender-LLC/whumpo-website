@@ -8,7 +8,7 @@ import {workspaceFixture} from './helpers/workspace-identity.mjs';
 import {cmsCloudflareProvider} from '../tools/cms-cloudflare.mjs';
 const {module,identity}=await currentFixtureModules(["src/cms-projects.ts", "src/cms-provision.ts"]);
 const {allocateCMSResources}=await module('src/cms-provision.ts'),{prepareCMS,confirmCMS}=await module('src/cms-projects.ts');
-const dir=await mkdtemp('/tmp/whumpo-cms-provision-');
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-cms-provision-');
 const store=await databaseFixture({d1:true,r2:true}),db=store.db,id=()=>crypto.randomUUID(),account='a'.repeat(32);
 const accounts=new Map(),scopes=new Map(),scope=user=>scopes.get(user);
 async function accountAuthority(user){if(!accounts.has(user)){const authority=await workspaceFixture(db,identity,user);accounts.set(user,authority);scopes.set(user,await authority.scope());}return accounts.get(user);}

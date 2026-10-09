@@ -7,7 +7,7 @@ import {resolve,sep} from 'node:path';
 import {build} from 'esbuild';
 import {databaseFixture} from '../tests/helpers/current-database.mjs';
 import {workspaceFixture} from '../tests/helpers/workspace-identity.mjs';
-const dir=await mkdtemp('/tmp/whumpo-shortcuts-browser-'),origin='http://localhost:8787',root=resolve('dist');let fixture,server,input;
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-shortcuts-browser-'),origin='http://localhost:8787',root=resolve('dist');let fixture,server,input;
 let finish;const finished=new Promise(resolve=>{finish=resolve});
 try{
  const b=await build({stdin:{contents:"export {default as platform} from './src/index';export {hashToken,newSessionToken} from './src/security';export {admitWorkspace} from './src/workspace-identity/admission';export {resolveIdentity} from './src/workspace-identity/authority';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});const m=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));

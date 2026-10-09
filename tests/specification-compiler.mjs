@@ -319,7 +319,7 @@ try{
 
 // A second checkout/process proves input-path independence and that the build gate
 // rejects source/constant drift without rewriting any working-tree file.
-const dir=await mkdtemp('/tmp/whumpo-compiler-lock-');
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-compiler-lock-');
 try{
  const paths=[...checked.sources.map(s=>s.path),'tools/check-specification-compiler.mjs','compiler-locks/project-content-v5.json','src/project-specification/compiler-artifacts.generated.ts','src/project-specification/catalog.ts','package.json'];
  for(const path of paths){await mkdir(dirname(join(dir,path)),{recursive:true});await copyFile(path,join(dir,path));}

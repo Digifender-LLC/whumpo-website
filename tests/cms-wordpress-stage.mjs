@@ -5,7 +5,7 @@ const encode=s=>new TextEncoder().encode(s);
 const item=(id,html='<p>A <strong>studio</strong> story.</p>',type='post',extra='')=>`<item><title>Studio story</title><link>https://old.example/story</link><dc:creator><![CDATA[Writer Name]]></dc:creator><wp:post_id>${id}</wp:post_id><wp:post_type>${type}</wp:post_type><wp:status>publish</wp:status><wp:post_name>story</wp:post_name><content:encoded><![CDATA[${html}]]></content:encoded>${extra}</item>`;
 const wxr=items=>`<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" xmlns:wp="http://wordpress.org/export/1.2/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/"><channel><title>Source site</title><wp:wxr_version>1.2</wp:wxr_version>${items}</channel></rss>`;
 const originalFetch=globalThis.fetch;let fetches=0;globalThis.fetch=()=>{fetches++;throw Error('Staging cannot fetch remote data');};
-const dir=await mkdtemp('/tmp/whumpo-wxr-stage-');
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-wxr-stage-');
 try{
  const xml=wxr(item(1)+item(2,'<p>Image</p><img src="http://169.254.169.254/latest/meta-data/">')+item(3,'','attachment','<wp:attachment_url>https://old.example/photo.jpg</wp:attachment_url>'));
  const report=await analyzeWordPress(encode(xml));assert.deepEqual(report.summary,{articles:2,reviewable:1,needsChanges:1,attachments:1});

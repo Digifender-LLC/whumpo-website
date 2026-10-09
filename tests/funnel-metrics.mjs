@@ -4,7 +4,7 @@ import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
 import {currentFixtureModules} from './helpers/current-modules.mjs';
 import {authenticator} from './helpers/webauthn-authenticator.mjs';
-import {funnelReport,funnelFamilies} from '../tools/report-funnel.mjs';
+import {funnelReport,funnelFamilies,funnelMinimumAccounts,parseFunnelReportArguments} from '../tools/report-funnel.mjs';
 import {accountClosureInventory} from '../tools/account-closure-inventory.mjs';
 Error.stackTraceLimit=0;
 // WH-025 synthetic funnel replay. Actual handlers write the receipts; the current
@@ -104,23 +104,44 @@ try{
   assert.equal(handled['publication_confirmed/website_publish'],undefined,'Receipt-derived events wait for the sweep');
   assert.ok(await derive()>0);
   assert.deepEqual(await tally(owner.user),{'welcome_completed/welcome':1,'draft_created/website':1,'interaction_started/content_change':2,'interaction_draft_saved/content_change':1,
-   'interaction_validation_failed/content_change':1,'interaction_submitted/content_change':1,'interaction_resumed/content_change':1,'interaction_continued/succeeded':1,
+   'interaction_validation_failed/content_change':1,'interaction_submitted/content_change':1,'interaction_continued/succeeded':1,
    'interaction_canceled/content_change':1,'edit_accepted/website_content':1,'review_prepared/website_publish':1,'publication_confirmed/website_publish':1,
-   'workspace_returned/day_7':1,'workspace_returned/day_30':1});
+   'workspace_returned/day_7':1,'workspace_returned/day_30':1},'A draft saved and submitted seconds later is not a resumed form');
   await assertContentFree([silent.user,declined.user,silent.project,declined.project]);
  });
- await test('operator aggregate matches operation receipts and suppresses small cells',async()=>{
-  const report=await funnelReport(db,{minimumAccounts:1});
-  for(const metric of ['welcome_completed','draft_created/website','edit_accepted/website_content','review_prepared/website','publication_confirmed','interaction_started','interaction_draft_saved','interaction_submitted','interaction_canceled','interaction_continued'])
-   assert.equal(report.receiptComparison.find(c=>c.metric===metric).status,'match',metric);
-  assert.deepEqual(report.activation.stages,{welcome_completed:{accounts:1},first_draft:{accounts:1},accepted_edit:{accounts:1},review_prepared:{accounts:1},publication_confirmed:{accounts:1},returned_day_7:{accounts:1},returned_day_30:{accounts:1}});
-  assert.equal(report.activation.timeToFirstPublication.accounts,1);assert.equal(report.coverage.consenting.accounts,1);
-  const suppressed=await funnelReport(db);assert.equal(suppressed.minimumAccounts,5);
-  assert.ok(Object.values(suppressed.activation.stages).every(s=>s.suppressed));assert.ok(suppressed.receiptComparison.every(c=>c.suppressed&&!('events' in c)));
-  assert.ok(suppressed.activation.events.every(c=>c.suppressed));assert.ok(suppressed.activation.timeToFirstDraft.suppressed);
-  const text=JSON.stringify([report,suppressed]);
-  for(const secret of [marker,owner.user,owner.project,silent.user,'@'])assert.ok(!text.includes(secret),'report is content- and identifier-free');
-  await assert.rejects(()=>funnelReport(db,{days:181}),/Invalid/);await assert.rejects(()=>funnelReport(db,{minimumAccounts:0}),/Invalid/);
+ // The owner-approved floor is five accounts, so unsuppressed reporting needs a five-account cohort of real journeys.
+ const cohort=[owner];
+ await test('operator aggregate matches operation receipts at the five-account floor and suppresses small cells',async()=>{
+  assert.equal(funnelMinimumAccounts,5);
+  const smaller=await funnelReport(db);
+  assert.equal(smaller.minimumAccounts,5);assert.equal(smaller.coverage.consenting.suppressed,true,'One consenting account is below the floor');
+  assert.ok(Object.values(smaller.activation.stages).every(s=>s.suppressed));assert.ok(smaller.receiptComparison.every(c=>c.suppressed&&!('events' in c)));
+  assert.ok(smaller.activation.events.every(c=>c.suppressed));assert.ok(smaller.activation.timeToFirstDraft.suppressed);assert.ok(smaller.activation.timeToFirstPublication.suppressed);
+  for(let i=0;i<4;i++){const o=await welcomed(true);await journey(o);await visit(o,8);await visit(o,31);cohort.push(o);}
+  assert.ok(await derive()>0);
+  const report=await funnelReport(db);
+  for(const metric of ['welcome_completed','draft_created/website','edit_accepted/website_content','review_prepared/website','publication_confirmed','interaction_started','interaction_draft_saved','interaction_submitted','interaction_canceled','interaction_continued']){
+   const c=report.receiptComparison.find(c=>c.metric===metric);assert.equal(c.status,'match',metric);assert.ok(!c.suppressed&&c.events>=5&&c.events===c.receipts,metric);
+  }
+  assert.equal(report.minimumAccounts,5);
+  assert.deepEqual(report.activation.stages,Object.fromEntries(['welcome_completed','first_draft','accepted_edit','review_prepared','publication_confirmed','returned_day_7','returned_day_30'].map(n=>[n,{accounts:5}])));
+  assert.equal(report.activation.timeToFirstPublication.accounts,5);assert.equal(report.activation.timeToFirstDraft.accounts,5);assert.equal(report.coverage.consenting.accounts,5);
+  assert.ok(report.activation.events.length>0&&report.activation.events.every(c=>!c.suppressed&&c.accounts===5),'Every activation cell has five accounts');
+  // A stricter floor than the owner's five still suppresses a five-account cohort; the maximum is accepted.
+  const stricter=await funnelReport(db,{minimumAccounts:6});assert.equal(stricter.minimumAccounts,6);
+  assert.ok(Object.values(stricter.activation.stages).every(s=>s.suppressed)&&stricter.receiptComparison.every(c=>c.suppressed&&!('events' in c)));
+  assert.equal((await funnelReport(db,{minimumAccounts:50})).minimumAccounts,50);
+  const text=JSON.stringify([report,smaller,stricter]);
+  for(const secret of [marker,...cohort.flatMap(o=>[o.user,o.project]),silent.user,'@'])assert.ok(!text.includes(secret),'report is content- and identifier-free');
+  // The floor cannot be lowered by the caller; days and the upper bound stay constrained.
+  for(const minimumAccounts of [-1,0,1,2,3,4,4.5,51,NaN,'5'])await assert.rejects(()=>funnelReport(db,{minimumAccounts}),/Invalid/,String(minimumAccounts));
+  for(const days of [0,181,1.5,NaN])await assert.rejects(()=>funnelReport(db,{days}),/Invalid/,String(days));
+  assert.equal((await funnelReport(db,{days:1})).window.days,1);assert.equal((await funnelReport(db,{days:180})).window.days,180);
+  // The operator command line enforces the same bounds before any remote read.
+  assert.deepEqual(parseFunnelReportArguments(['--minimum','5']),{minimumAccounts:5});assert.deepEqual(parseFunnelReportArguments(['--days','180','--minimum','50']),{days:180,minimumAccounts:50});
+  assert.deepEqual(parseFunnelReportArguments([]),{});
+  for(const args of [['--minimum','1'],['--minimum','3'],['--minimum','4'],['--minimum','51'],['--minimum','5.5'],['--minimum','x'],['--days','0'],['--days','181'],['--minimum','5','--minimum','6'],['--minimum'],['--unknown','5']])
+   assert.throws(()=>parseFunnelReportArguments(args),/Usage: .*--minimum 5-50/,args.join(' '));
  });
  await test('withdrawal deletes recorded events and stops recording; renewed consent is not retroactive',async()=>{
   const before=(await profile.readProfile(db,owner.user)).revision;
@@ -136,8 +157,11 @@ try{
   const form=await store.issueContentBrief(silent.scope,silent.user,{originTurnId:await origin(silent),projectId:silent.project,contentIds:['headline']});
   await store.mutateInteraction(silent.scope,silent.user,{version:1,requestId:id(),interactionId:form.envelope.id,definitionDigest:form.envelope.definitionDigest,expectedAnswerRevision:0,operation:'cancel'});await derive();
   assert.deepEqual(await tally(silent.user),{'interaction_started/content_change':1,'interaction_canceled/content_change':1},'Cancellation keeps its template family');
-  const report=await funnelReport(db,{minimumAccounts:1});
-  assert.ok(report.receiptComparison.every(c=>c.status==='match'),JSON.stringify(report.receiptComparison));
+  // Four report-cohort accounts plus the newly consenting account make exactly five consenting accounts, so rows are unsuppressed.
+  const report=await funnelReport(db);
+  assert.equal(report.coverage.consenting.accounts,5);
+  assert.ok(report.receiptComparison.every(c=>c.status==='match'&&!c.suppressed),JSON.stringify(report.receiptComparison));
+  assert.ok(!JSON.stringify(report).includes(owner.user),'A withdrawn account contributes nothing');
  });
  await test('bounded retention, per-account quota and account deletion',async()=>{
   const old=new Date(Date.now()-181*86400000).toISOString().slice(0,16)+'Z';
@@ -154,6 +178,63 @@ try{
   assert.equal((await accountClosureInventory(db,closing.account)).counts.funnelEvents,2000);
   await run('DELETE FROM users WHERE id=?',closing.account);
   assert.equal((await row('SELECT count(*) n FROM funnel_events WHERE user_id=?',closing.account)).n,0,'Account deletion cascades');
+  // Release the report cohort (withdrawal deletes its events) so the later cases keep their own counts.
+  for(const o of cohort.slice(1))await profile.updateProfile(o.scope,o.user,{revision:(await profile.readProfile(db,o.user)).revision,measurement_consent:false});
+  assert.equal((await row('SELECT count(*) n FROM funnel_events WHERE user_id IN (?,?,?,?)',...cohort.slice(1).map(o=>o.user))).n,0);
+ });
+ await test('interaction_resumed requires a 30-minute gap after the previous saved draft, once per form',async()=>{
+  const minute=60000,consentAt=Date.now()-6*3600000,iso=ms=>new Date(ms).toISOString(),t0=consentAt+60*minute;
+  assert.equal(funnel.funnelResumeGapMinutes,30);
+  // Consent moved back so rewritten receipt times are inside it; only the stored consent time changes.
+  await run('UPDATE user_profiles SET measurement_consented_at=?,revision=revision+1 WHERE user_id=?',iso(consentAt),silent.user);
+  assert.equal((await row('SELECT count(*) n FROM funnel_measured_accounts WHERE user_id=?',silent.user)).n,1);
+  // Real handlers write every receipt; the plan then gives each request an exact server time (offsets in ms from t0).
+  const plans={
+   below:[['save-draft',0],['submit',30*minute-1]],
+   exact:[['save-draft',0],['submit',30*minute]],
+   'above-save':[['save-draft',0],['save-draft',30*minute+1]],
+   'above-cancel':[['save-draft',0],['cancel',45*minute]],
+   'no-draft':[['submit',90*minute]],
+   // Continuous editing: each save follows the previous one by 20 minutes (100 minutes in all).
+   continuous:[['save-draft',0],['save-draft',20*minute],['save-draft',40*minute],['submit',60*minute]],
+   // Resumed at +31 minutes; later activity and a long final gap add nothing (one event per form).
+   repeated:[['save-draft',0],['save-draft',31*minute],['save-draft',36*minute],['submit',200*minute]],
+   // A draft saved before consent was never measured, so it cannot make a later action a measured resume.
+   'before-consent':[['save-draft',-61*minute],['submit',40*minute]]};
+  const forms={},submits={};
+  // A newly issued form supersedes the open one, so each plan runs to completion before the next form.
+  for(const [name,plan] of Object.entries(plans)){
+   forms[name]=(await store.issueContentBrief(silent.scope,silent.user,{originTurnId:await origin(silent),projectId:silent.project,contentIds:['headline','section-1-text']})).envelope;
+   for(const [step,[operation]] of plan.entries()){
+    if(step&&plan[step-1][0]==='save-draft')await new Promise(resolve=>setTimeout(resolve,1100)); // The store admits one draft save per second.
+    const request={version:1,requestId:id(),interactionId:forms[name].id,definitionDigest:forms[name].definitionDigest,expectedAnswerRevision:step,operation,...(operation==='cancel'?{}:{answers:{'field-1':'Answer '+marker,'field-2':'Detail '+marker}})};
+    await store.mutateInteraction(silent.scope,silent.user,request);if(operation==='submit')submits[name]=request;
+   }
+  }
+  // Receipts are immutable; the fixture lifts that trigger only to set exact times, then restores it.
+  const guard=(await row("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='chat_interaction_request_fixed'")).sql;
+  await run('DROP TRIGGER chat_interaction_request_fixed');
+  try{for(const [name,plan] of Object.entries(plans))for(const [step,[,offset]] of plan.entries())
+   assert.equal((await run('UPDATE chat_interaction_requests SET created_at=? WHERE interaction_id=? AND answer_revision=?',iso(t0+offset),forms[name].id,step+1)).meta.changes,1);}
+  finally{await run(guard);}
+  await assert.rejects(()=>run("UPDATE chat_interaction_requests SET created_at='2026-01-01T00:00:00.000Z'"),/chat_interaction_immutable/);
+  const lengths=Object.fromEntries(Object.keys(plans).map(n=>[n,plans[n].length]));
+  for(const [name,count] of Object.entries(lengths))assert.equal((await row('SELECT count(*) n FROM chat_interaction_requests WHERE interaction_id=?',forms[name].id)).n,count);
+  await derive();
+  const resumed=await rows("SELECT source_key,occurred_at,dimension FROM funnel_events WHERE user_id=? AND event='interaction_resumed'",silent.user),at=ms=>iso(ms).slice(0,16)+'Z';
+  assert.deepEqual(resumed.map(r=>r.source_key).sort(),['exact','above-save','above-cancel','repeated'].map(n=>'interaction:'+forms[n].id).sort(),'below, no-draft, continuous and pre-consent forms never resume');
+  assert.ok(resumed.every(r=>r.dimension==='content_change'));
+  const time=name=>resumed.find(r=>r.source_key==='interaction:'+forms[name].id).occurred_at;
+  assert.equal(time('exact'),at(t0+30*minute));assert.equal(time('above-save'),at(t0+30*minute+1));assert.equal(time('repeated'),at(t0+31*minute),'The first qualifying action is the resume time');
+  // Replaying a request reuses its receipt; a repeated sweep adds nothing; each form keeps exactly one event.
+  const before=(await row('SELECT count(*) n FROM chat_interaction_requests')).n;
+  await store.mutateInteraction(silent.scope,silent.user,submits.exact);await derive();
+  assert.equal((await row('SELECT count(*) n FROM chat_interaction_requests')).n,before);
+  assert.equal((await row("SELECT count(*) n FROM funnel_events WHERE user_id=? AND event='interaction_resumed'",silent.user)).n,4);
+  await assertContentFree([]);
+  // Withdrawal removes these events so later cases keep their counts.
+  await profile.updateProfile(silent.scope,silent.user,{revision:(await profile.readProfile(db,silent.user)).revision,measurement_consent:false});
+  assert.equal((await row('SELECT count(*) n FROM funnel_events WHERE user_id=?',silent.user)).n,0);
  });
  await test('identity friction is measured separately, after consent, without credentials or recovery data',async()=>{
   const request=()=>new Request('https://whumpo.com/api/auth/identity/v1/test',{method:'POST',headers:{origin:'https://whumpo.com'}});
@@ -186,10 +267,18 @@ try{
   const secrets=[...(await rows('SELECT id FROM identity_credentials')).map(r=>r.id),...(await rows('SELECT token_hash FROM identity_sessions UNION ALL SELECT token_hash FROM identity_grants')).map(r=>r.token_hash),
    ...(await rows('SELECT verifier FROM identity_kit_offers UNION ALL SELECT kit_verifier FROM identity_accounts WHERE kit_verifier IS NOT NULL')).map(r=>r.verifier),enrolled.key,workspaceKit.key,replacement.key,email];
   await assertContentFree(secrets);
-  const report=await funnelReport(db,{minimumAccounts:1});
-  assert.ok(report.identity.events.some(e=>e.event==='recovery_completed'));assert.ok(!report.activation.events.some(e=>e.event.startsWith('recovery')),'Identity reported separately from welcome');
-  assert.ok(report.receiptComparison.every(c=>c.status==='match'),'Pre-consent signup/enrollment receipts are excluded from both sides');
-  for(const secret of secrets)assert.ok(!JSON.stringify(report).includes(secret));
+  const alone=await funnelReport(db);
+  assert.ok(alone.identity.events.filter(e=>e.event==='recovery_completed').every(e=>e.suppressed),'One recovering account is below the floor');
+  assert.ok(alone.receiptComparison.every(c=>c.status==='match'),'Pre-consent signup/enrollment receipts are excluded from both sides');
+  // Four more consenting accounts with recorded recovery events make the identity cells reportable (rows are removed afterwards).
+  const others=[];
+  for(let i=0;i<4;i++){const other=await workspaceFixture(db,identity);await profile.updateProfile(db,other.account,{revision:0,measurement_consent:true});
+   await run("INSERT INTO funnel_events VALUES(?,'recovery_completed','recovery',?,?)",other.account,'recovery:fixture-'+i,new Date().toISOString().slice(0,16)+'Z');others.push(other.account);}
+  const report=await funnelReport(db);
+  assert.deepEqual(report.identity.events.find(e=>e.event==='recovery_completed'&&e.dimension==='recovery'),{event:'recovery_completed',dimension:'recovery',events:5,accounts:5});
+  assert.ok(!report.activation.events.some(e=>e.event.startsWith('recovery')),'Identity reported separately from welcome');
+  for(const secret of [...secrets,...others])assert.ok(!JSON.stringify([report,alone]).includes(secret));
+  await run('DELETE FROM funnel_events WHERE source_key LIKE ?','recovery:fixture-%');
  });
  assert.equal(network>0,true);
  console.log(`Funnel metrics passed (${process.argv.includes('--d1')?'local D1':'SQLite'}): ${cases} cases; actual welcome/form/website/publication/identity handlers, opt-in default, replay idempotency, withdrawal deletion, retention, quota, account cascade, receipt comparison, small-cell suppression and seeded-marker scans.`);

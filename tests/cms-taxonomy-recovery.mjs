@@ -6,7 +6,7 @@ import {build} from 'esbuild';
 import {databaseFixture} from './helpers/current-database.mjs';
 const b=await build({stdin:{contents:"export * from './src/cms-bridge';export * from './src/cms-taxonomy-shape';export * from './src/cms-taxonomy-recovery';export * from './src/cms-gateway';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
 const {signCMSRequest,verifyCMSRequest,cmsGateway,cmsTaxonomyDefinition,cmsTaxonomyTerm,taxonomyIntent,matchesTaxonomyIntent}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
-const dir=await mkdtemp('/tmp/whumpo-taxonomy-recovery-');let store;
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-taxonomy-recovery-');let store;
 try{
  store=await databaseFixture({d1:true,r2:true});const db=store.db,id=()=>crypto.randomUUID(),config={projectId:id(),ownerId:id(),secret:'local-taxonomy-recovery-'.repeat(4),origin:'https://cms.test'},env={DB:db,WHUMPO_CMS_PROJECT_ID:config.projectId,WHUMPO_CMS_OWNER_ID:config.ownerId,WHUMPO_CMS_BRIDGE_KEY:config.secret,WHUMPO_CMS_ORIGIN:config.origin};
  const objects=new Map();let posts=0,gets=0,drop=false,missing=false;

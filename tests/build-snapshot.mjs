@@ -3,7 +3,7 @@ import {mkdtemp,mkdir,writeFile,readFile,rm,symlink} from 'node:fs/promises';
 import {join} from 'node:path';
 import {saveBuildSnapshot,verifyBuildSnapshot,readBuildInputs} from '../tools/build-snapshot.mjs';
 import {deployPlatform} from '../tools/deploy-platform.mjs';
-const dir=await mkdtemp('/tmp/whumpo-build-snapshot-');
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-build-snapshot-');
 try{
  for(const d of ['src','frontend','web','public','public-app','tools','dist','compiler-locks','schema'])await mkdir(join(dir,d));
  for(const f of ['package.json','pnpm-lock.yaml','vite.config.ts','tsconfig.json','tsconfig.frontend.json','wrangler.jsonc','wrangler.apps.jsonc','wrangler.sites.jsonc','wrangler.runtime.jsonc','tools/current-schema.mjs','schema/platform.sql','tools/build.mjs','tools/build-pwa.mjs','tools/build-snapshot.mjs','tools/deploy-platform.mjs','tools/check-specification-compiler.mjs','compiler-locks/project-content-v5.json','tools/check-service-client-compiler.mjs','compiler-locks/project-service-clients-v4.json'])await writeFile(join(dir,f),'fixture');

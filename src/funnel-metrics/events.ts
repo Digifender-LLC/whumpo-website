@@ -4,6 +4,8 @@
  * Two handler-side recorders cover facts whose receipts lose their template family:
  * server-rejected answers and form cancellation. Both are consent-gated in SQL. */
 export const funnelRetentionDays=180;
+/** Owner decision (2026-10-08): an action resumes a form only after at least this long since the previous saved draft. */
+export const funnelResumeGapMinutes=30;
 const sweepLimit=500;
 const templateCase=(alias:string)=>`CASE json_extract(${alias}.envelope_json,'$.definition.template') WHEN 'content-change@1' THEN 'content_change' WHEN 'project-brief@1' THEN 'project_brief' WHEN 'project-select@1' THEN 'project_select' WHEN 'choice@1' THEN 'choice' WHEN 'custom@1' THEN 'custom' WHEN 'status@1' THEN 'status_view' END`;
 /** Removed forms no longer hold their envelope; reuse the family recorded when the form started. */
@@ -45,10 +47,13 @@ export const funnelDerivations:Derivation[]=[
  {event:'interaction_request',select:`SELECT r.user_id,CASE r.operation WHEN 'submit' THEN 'interaction_submitted' ELSE 'interaction_draft_saved' END,${template('i')},'request:'||r.request_id,${minute('r.created_at')}
   FROM chat_interaction_requests r JOIN chat_interactions i ON i.id=r.interaction_id AND i.user_id=r.user_id JOIN funnel_measured_accounts a ON a.user_id=r.user_id
   WHERE r.operation IN ('save-draft','submit') AND ${eligible('r.created_at')} AND ${absent('r.user_id',"CASE r.operation WHEN 'submit' THEN 'interaction_submitted' ELSE 'interaction_draft_saved' END","'request:'||r.request_id")}`},
- // Resumed: any later save/submit/cancel after an earlier saved draft. A proxy; it does not prove a separate visit.
+ // Resumed: the first save/submit/cancel whose immediately preceding request (answer_revision-1) is a saved draft at least
+ // funnelResumeGapMinutes earlier. Both times are the immutable server created_at of request receipts (replays reuse the receipt);
+ // the exact comparison is between identical-format UTC strings, so a gap of exactly 30:00.000 counts. Back-to-back saves never do.
  {event:'interaction_resumed',select:`SELECT r.user_id,'interaction_resumed',${template('i')},'interaction:'||r.interaction_id,${minute('min(r.created_at)')}
   FROM chat_interaction_requests r JOIN chat_interactions i ON i.id=r.interaction_id AND i.user_id=r.user_id JOIN funnel_measured_accounts a ON a.user_id=r.user_id
-  WHERE EXISTS(SELECT 1 FROM chat_interaction_requests d WHERE d.user_id=r.user_id AND d.interaction_id=r.interaction_id AND d.operation='save-draft' AND d.answer_revision<r.answer_revision)
+  JOIN chat_interaction_requests d ON d.user_id=r.user_id AND d.interaction_id=r.interaction_id AND d.operation='save-draft' AND d.answer_revision=r.answer_revision-1
+  WHERE d.created_at>=a.consented_at AND r.created_at>=strftime('%Y-%m-%dT%H:%M:%fZ',d.created_at,'+${funnelResumeGapMinutes} minutes')
    AND ${absent('r.user_id',"'interaction_resumed'","'interaction:'||r.interaction_id")} GROUP BY r.user_id,r.interaction_id HAVING ${eligible('min(r.created_at)')}`},
  {event:'interaction_removed',select:`SELECT i.user_id,CASE i.removal_reason WHEN 'discarded' THEN 'interaction_canceled' ELSE 'interaction_expired' END,${template('i')},'interaction:'||i.id,${minute('i.removed_at')}
   FROM chat_interactions i JOIN funnel_measured_accounts a ON a.user_id=i.user_id

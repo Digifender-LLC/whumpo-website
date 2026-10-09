@@ -11,7 +11,7 @@ import {workspaceFixture,workspaceSession,interceptDatabase} from './helpers/wor
 const bundle=await build({stdin:{contents:"export * from './src/profile';export {default as worker} from './src/index';export {hashToken,newSessionToken} from './src/security';export {admitWorkspace} from './src/workspace-identity/admission';export {resolveIdentity} from './src/workspace-identity/authority';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
 const m=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
 const {readProfile,updateProfile,agentProfile,updateProfilePhoto,profilePhoto,worker}=m;
-const dir=await mkdtemp('/tmp/whumpo-profile-'),fixture=await databaseFixture({d1:true,r2:true}),rawDB=fixture.db;
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-profile-'),fixture=await databaseFixture({d1:true,r2:true}),rawDB=fixture.db;
 execFileSync('python3',['-c',"from PIL import Image; import sys; Image.new('RGB',(128,128),(90,125,95)).save(sys.argv[1]+'/avatar.jpg'); Image.new('RGB',(300,300)).save(sys.argv[1]+'/large.jpg')",dir]);
 const jpeg=await readFile(dir+'/avatar.jpg');
 const env={...fixture.env,ENVIRONMENT:'test',AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})}};

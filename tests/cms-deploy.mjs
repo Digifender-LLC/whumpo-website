@@ -15,7 +15,7 @@ const {prepareCMSUnpublish,confirmCMSUnpublish,readCMSUnpublish,cmsUnpublishComm
 const {prepareCMSDiscard,confirmCMSDiscard,readCMSDiscard,cmsDiscardCommand}=await module('src/cms-discard.ts');
 const {cmsIndex}=await module('src/cms-index.ts');
 const {inspectWorkspace}=await module('src/workspace-read.ts'),{siteContext}=await module('src/site-agent.ts');
-const dir=await mkdtemp('/tmp/whumpo-cms-deploy-');
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-cms-deploy-');
 const store=await databaseFixture({d1:true,r2:true}),db=store.db,id=()=>crypto.randomUUID(),account='a'.repeat(32),master='local-master-fixture-'.repeat(4),digest='b'.repeat(64);
 const accounts=new Map(),scopes=new Map(),scope=user=>scopes.get(user);
 async function accountAuthority(user){if(!accounts.has(user)){const authority=await workspaceFixture(db,identity,user);accounts.set(user,authority);scopes.set(user,await authority.scope());}return accounts.get(user);}

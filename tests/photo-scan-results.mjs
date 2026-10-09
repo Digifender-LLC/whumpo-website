@@ -9,7 +9,7 @@ import {workspaceFixture} from './helpers/workspace-identity.mjs';
 const b=await build({stdin:{resolveDir:process.cwd(),contents:"export {hashToken,newSessionToken} from './src/security';export {admitWorkspace} from './src/workspace-identity/admission';export {resolveIdentity} from './src/workspace-identity/authority';export * from './src/photo-scan-results';export * from './src/profile';export {uploadPhoto,readPhoto} from './src/files';"},bundle:true,format:'esm',platform:'node',write:false});
 const identity=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
 const {reservePhotoScan,recordPhotoScan,updateProfile,updateProfilePhoto,profilePhoto,uploadPhoto,readPhoto}=identity;
-const dir=await mkdtemp('/tmp/whumpo-scan-results-');
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-scan-results-');
 let store;
 try{
 

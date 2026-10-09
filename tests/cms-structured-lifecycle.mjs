@@ -9,7 +9,7 @@ const live=process.argv.includes('--live');if(live&&process.env.RUN_LIVE_MUSE!==
 const {module,identity}=await currentFixtureModules(["src/ai-chat.ts", "src/billing.ts", "src/chat.ts", "src/cms-bridge.ts", "src/cms-content.ts", "src/cms-deploy.ts", "src/cms-gateway.ts", "src/cms-projects.ts", "src/cms-provision.ts", "src/index.ts", "src/security.ts"]);
 const {deployCMS,connectCMS}=await module('src/cms-deploy.ts'),{prepareCMS,confirmCMS}=await module('src/cms-projects.ts'),{allocateCMSResources}=await module('src/cms-provision.ts'),{deriveCMSSecret,verifyCMSRequest}=await module('src/cms-bridge.ts');
 const {cmsContentAction}=await module('src/cms-content.ts');
-const dir=await mkdtemp('/tmp/whumpo-cms-deploy-');
+const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-cms-deploy-');
 const store=await databaseFixture({d1:true,r2:true,allowedArguments:['--live']}),db=store.db,id=()=>crypto.randomUUID(),account='a'.repeat(32),master='local-master-fixture-'.repeat(4),digest='b'.repeat(64);
 const accounts=new Map(),scopes=new Map(),scope=user=>scopes.get(user);
 async function accountAuthority(user){if(!accounts.has(user)){const authority=await workspaceFixture(db,identity,user);accounts.set(user,authority);scopes.set(user,await authority.scope());}return accounts.get(user);}
