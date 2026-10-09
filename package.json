@@ -104,6 +104,7 @@
     "test:cms-database-snapshot": "node tests/cms-database-snapshot.mjs",
     "test:cms-media-snapshot": "node tests/cms-media-snapshot.mjs && node tests/cms-media-local.mjs",
     "test:cms-d1-restore": "node tests/cms-d1-restore.mjs",
+    "test:recovery-drill": "node tests/recovery-drill.mjs",
     "cms:verify-recovery": "node tools/verify-cms-recovery.mjs",
     "test:backend-publication": "node tests/backend-publication.mjs",
     "test:backend-forms": "node tests/backend-forms.mjs",

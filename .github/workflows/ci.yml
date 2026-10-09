@@ -43,12 +43,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           persist-credentials: false
       - name: Install gitleaks
         run: |
           curl -sSfL -o gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
           echo "${GITLEAKS_SHA256}  gitleaks.tgz" | sha256sum -c -
           tar xzf gitleaks.tgz gitleaks
-      - name: Scan full history
-        run: ./gitleaks git --no-banner --redact --config .gitleaks.toml .
+      - name: Scan working tree
+        run: ./gitleaks detect --no-banner --redact --config .gitleaks.toml --source . --no-git
