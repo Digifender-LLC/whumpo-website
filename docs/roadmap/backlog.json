@@ -3719,7 +3719,7 @@
       ],
       "references": [
         "docs/email-change-and-compromise.md",
-        "tools/prototypes/email-change.mjs",
+        "src/email-change/compromise.ts",
         "tests/email-change-contract.mjs",
         "docs/workspace-identity.md",
         "docs/notifications.md",
@@ -3762,14 +3762,18 @@
       ],
       "references": [
         "docs/email-change-and-compromise.md",
-        "tools/prototypes/email-change.mjs",
+        "src/email-change/change.ts",
+        "src/email-change/token.ts",
+        "tests/email-change-contract.mjs",
         "src/workspace-identity/authority.ts",
         "src/workspace-identity/recovery.ts",
         "src/workspace-identity/canonical-inputs.sql"
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-09 UTC: pure source module only, local branch claude/wh-200-email-change-state-machine from origin/main 89fa009 (not merged; issue not created or claimed from this session). Added src/email-change/policy.ts (contract version 1, emailChangeBounds with the recommended 60-minute link, 7-day undo and 10-minute fresh-passkey values, closed input, the WH-036 address rule, authorizeOwner), change.ts (request, confirm, cancel, undo and read over plain records with a transition table and revision guard), token.ts (256-bit token minted only inside a claimed delivery attempt, SHA-256 verifier via hashToken, PlatformMailer interface, a synthetic mailer that rejects every non-.test recipient) and compromise.ts (only the WH-200 parts of a compromise review: the pending-change snapshot entry and closing the change in the commit). The module lives in src/email-change rather than src/workspace-identity and is not imported by any Worker: an esbuild import graph of src/index.ts, src/site-host.ts, src/app-host.ts and src/runtime/worker.ts never reaches it, and planting a side-effect import in site-host made that check fail. tools/prototypes/email-change.mjs became tools/prototypes/compromise-review.mjs: it keeps the synthetic identity engine and the WH-203 compromise and revocation reference, which has no source yet, and now delegates every email-change decision to the source. node tests/email-change-contract.mjs passed 26 checks (one new: concurrent confirm, cancel and review transitions from one read commit exactly one outcome) and 7 agreement/static checks, and caught 33 of 33 mutants, each by its intended check (19 in src/email-change, 14 in the reference; the 32 originals plus a stale-session fence), in 1.8 to 2.2 s wall at load average 7.7, so it stays in the fast profile. Gaps G-E1 and G-E6 are resolved in source only. Open for WH-200: the isolated canonical schema inputs and focused SQLite/local D1 handler suites named in its scope and verification, so the acceptance (actual handlers, D1 atomicity of concurrent commits) is not met and the task stays open. No table, column, route, binding, Chat registration, provider, sender, real address or credential change; synthetic example.test addresses and SYNTHETIC-* values only."
+      ]
     },
     {
       "id": "WH-201",
@@ -3883,6 +3887,9 @@
       ],
       "references": [
         "docs/email-change-and-compromise.md",
+        "src/email-change/compromise.ts",
+        "src/email-change/revocation.ts",
+        "tests/email-change-contract.mjs",
         "docs/identity-recovery.md",
         "docs/connection-key-lifecycle.md",
         "docs/integrations/cloudflare-connection.md",
@@ -3890,7 +3897,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-09 UTC: pure source module only, local branch claude/wh-203-compromise-review stacked on the unmerged WH-200 branch claude/wh-200-email-change-state-machine (PR #262, 79bdca6); not merged, issue not created or claimed from this session. Extended src/email-change/compromise.ts (compromiseBounds, revokedAuthority, closed parsers, prepareCompromiseReview snapshot bound to epoch, credential revision, kit generation and connection set; prepareReviewKit/saveReviewKit with save-before-rotation; commitCompromiseReview: fresh passkey, saved-receipt replay, STALE_REVIEW, emergency removal down to zero keys, epoch advance with revokeAuthorityBefore for sessions, grants, challenges and kit offers, kit activation, pending-change closure, connection disable with the credential held, content-free receipt and security-review notice; admitSignIn and admitRecovery fences) and added src/email-change/revocation.ts (ProviderRevoker interface, claim-before-call dispatch, unknown and interrupted outcomes held as uncertain and never redispatched, authenticated read-only reconciliation bounded at 3 reads or 72 hours, erasure only with a receipt, closureHolds, a synthetic revoker). Deleted tools/prototypes/compromise-review.mjs; tests/email-change-contract.mjs now drives the source through a storage-only driver. It passed 27 checks and 9 agreement/static checks (new pins: the identity engine's removePasskey rows and zero-key stage, kit rotation epoch advance, and the GitHub 204 and Cloudflare 200 receipt rules) and caught 41 of 41 mutants, all in the source, each by its named check (the 33 WH-200 mutants, the 14 former prototype mutants now mutating source, and 8 new), in 1.6 to 2.0 s wall at load average 3.3, so it stays in the fast profile. Gaps G-E7 and G-E8 are resolved in source only. Open for WH-203: ProviderRevoker adapters over the existing GitHub and Cloudflare revocation (a GitHub single-token 204 must not report a retained refresh credential as revoked), the mapping of existing connection states and the closure inventory, and the focused SQLite/local D1 suites with synthetic providers plus tests/github-grant-revocation.mjs and tests/cloudflare-connection.mjs named in its verification; the acceptance is therefore not met against actual handlers and the task stays open. No table, column, route, binding, Chat registration, provider call, sender, real address or credential change; synthetic example.test addresses and SYNTHETIC-* values only."
+      ]
     },
     {
       "id": "WH-204",
