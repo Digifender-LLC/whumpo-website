@@ -124,6 +124,8 @@
     "plan:inference": "node tools/plan-inference-route.mjs",
     "test:model-policy": "node tests/model-policy.mjs",
     "test:model-costs": "node tests/model-costs.mjs",
+    "test:cost-events-contract": "node tests/cost-events-contract.mjs",
+    "test:cost-event-adapters": "node tests/cost-event-adapters.mjs",
     "test:ack-timing": "node tests/ack-timing.mjs",
     "test:app-activation": "node tests/app-activation.mjs",
     "test:app-activation-http": "node tests/app-activation-http.mjs",
