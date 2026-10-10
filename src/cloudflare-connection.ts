@@ -8,9 +8,22 @@ import {seal,unseal,connectionKeyringMetadata} from './connection-vault';
 import {ConnectionError} from './github-connection';
 import {connectionFeature,connectionInclusion,requireFeature,assertFeature,featurePredicate,type ConnectionUse} from './feature-admission';
 import {dnsRecoveryRead} from './connection-recovery';
+import {buildConnectorRequest} from './connector-catalog/builder';
+import {ConnectorContractError} from './connector-catalog/catalog';
 type CloudflareConfig={clientId:string;clientSecret:string;key:string};
 const callback='https://whumpo.com/api/connections/cloudflare/callback';
 const scopes=['zone.read','dns.read','dns.write'];
+/** Catalog operations the Cloudflare adapter sends, with their typed parameters. No caller URL, host, path or query. */
+export type CloudflareOperations={
+ 'zones.list':{page:number};'zone.get':{zone:string};
+ 'dnsRecords.findExact':{zone:string;name:string};
+ 'dnsRecord.create':{zone:string};
+};
+const apiPrefix='/client/v4';
+/** The only way this adapter forms an API request. Activation admits exactly `scopes`, so they are the granted set. */
+function cloudflareRequest(operationId:keyof CloudflareOperations,params:Record<string,unknown>,body?:unknown){
+ return buildConnectorRequest({providerId:'cloudflare',operationId,params,authority:'owner-request',grantedScopes:scopes,...(body===undefined?{}:{body})});
+}
 const now=()=>new Date().toISOString();
 const aad=(user:string,id:string,purpose:string)=>`whumpo:cloudflare:${purpose}:${user}:${id}`;
 export function cloudflareConfig(env:Env):CloudflareConfig|undefined{
@@ -117,7 +130,7 @@ export async function disconnectCloudflare(db:D1Database,userId:string,configura
 export async function cloudflareZones(db:D1Database,userId:string,configuration:CloudflareConfig|undefined,page=1,transport:typeof fetch=fetch){
  const config=required(configuration),scope=connectionFeature(userId,'cloudflare',null,'read');await requireFeature(db,scope);if(!Number.isSafeInteger(page)||page<1||page>100)throw new ConnectionError(400,'Choose a valid zone page.');
  const access=await cloudflareAccess(db,userId,config,transport,{projectId:null,operation:'read'});
- const data=await access.send('/zones?per_page=50&page='+page);
+ const data=await access.send('zones.list',{page});
  if(data.success!==true||!Array.isArray(data.result)||data.result.length>50)throw new ConnectionError(503,'Cloudflare returned invalid zone data.');
  const zones=data.result.flatMap((entry:unknown)=>{if(!entry||typeof entry!=='object')return [];const z=entry as Record<string,unknown>;return typeof z.id==='string'&&/^[0-9a-f]{32}$/.test(z.id)&&typeof z.name==='string'&&z.name.length<=253&&/^[a-z0-9.-]+$/.test(z.name)?[{id:z.id,name:z.name,status:z.status==='active'?'active':'not_active'}]:[];});
  const info=data.result_info as Record<string,unknown>|undefined;
@@ -143,15 +156,21 @@ export async function cloudflareAccess(db:D1Database,userId:string,configuration
  }
 
  await assertCurrent();
- return {tokenId:row.id,assertCurrent,async send(path:string,method:'GET'|'POST'='GET',body?:unknown){
-  const list=method==='GET'&&body===undefined&&'projectId' in use&&use.projectId===null&&use.operation==='read'&&/^\/zones\?per_page=50&page=(?:[1-9]|[1-9][0-9]|100)$/.test(path);
-  if(!list&&(!/^\/zones\/[0-9a-f]{32}(?:\/dns_records(?:\/[0-9a-f]{32})?)?(?:\?[^#]*)?$/.test(path)||method==='POST'&&!/^\/zones\/[0-9a-f]{32}\/dns_records$/.test(path)))throw new ConnectionError(400,'Invalid Cloudflare DNS operation.');
+ return {tokenId:row.id,assertCurrent,async send<O extends keyof CloudflareOperations>(operationId:O,params:CloudflareOperations[O],body?:unknown){
+  // The zone list keeps its narrower limits: an account-level read of pages 1-100 only.
+  const page=(params as {page?:unknown}).page;
+  if(operationId==='zones.list'&&!('projectId' in use&&use.projectId===null&&use.operation==='read'&&Number.isSafeInteger(page)&&(page as number)<=100))throw new ConnectionError(400,'Invalid Cloudflare DNS operation.');
+  // Only catalog-built requests are sent. Malformed operations or parameters are invalid; a reconciliation answers a
+  // refused body with its recovery refusal after the same access checks.
+  let built:ReturnType<typeof cloudflareRequest>|null=null;
+  try{built=cloudflareRequest(operationId,params,body);}catch(error){if(!('recoveryId' in use)||!(error instanceof ConnectorContractError)||!error.path.startsWith('body'))throw new ConnectionError(400,'Invalid Cloudflare DNS operation.');}
   const active=await db.prepare("SELECT ciphertext FROM cloudflare_token_vault WHERE id=? AND user_id=? AND state='active' AND expires_at>?").bind(row.id,userId,now()).first<{ciphertext:string}>();
   if(!active)throw new ConnectionError(401,'Cloudflare access changed. Refresh its status.');
   const tokens=JSON.parse(await unseal(config.key,aad(userId,row.id,'token'),active.ciphertext)) as Tokens;
-  const operation=method==='POST'?'dispatch':'recoveryId' in use?null:use.operation,recovery=await assertCurrent(operation);
-  if(recovery&&!dnsRecoveryRead(recovery,path,method,body))throw new ConnectionError(403,'DNS reconciliation can only inspect its recorded destination.');
-  const data=await json(await request('https://api.cloudflare.com/client/v4'+path,{method,headers:{authorization:'Bearer '+tokens.access,'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)},transport));
+  const operation=built?.kind==='action'?'dispatch':'recoveryId' in use?null:use.operation,recovery=await assertCurrent(operation);
+  if(recovery&&(!built||!dnsRecoveryRead(recovery,built.path.slice(apiPrefix.length),built.method,body)))throw new ConnectionError(403,'DNS reconciliation can only inspect its recorded destination.');
+  if(!built)throw new ConnectionError(400,'Invalid Cloudflare DNS operation.');
+  const data=await json(await request(built.url,{method:built.method,headers:{authorization:'Bearer '+tokens.access,'content-type':'application/json'},body:built.body},transport));
   await assertCurrent(operation);return data;
  }};
 }

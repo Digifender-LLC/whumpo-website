@@ -61,7 +61,7 @@ try{
  const racing=interceptDatabase(db,/UPDATE cloudflare_dns_actions SET state=\?/,()=>revoke(dispatch));await rejected(m.confirmDNS(await scoped(d.u,racing),d.u,review.id,cf,dnsProvider));assert.equal(posts,0);assert.equal((await m.listDNSActions(db,d.u)).actions[0].state,'review');
  const again=await grant(d.u,'cloudflare','dispatch',d.project);const uncertain=await m.confirmDNS(await scoped(d.u),d.u,review.id,cf,dnsProvider);assert.equal(uncertain.state,'uncertain');assert.equal(posts,1);
  await Promise.all([revoke(prep),revoke(confirm),revoke(again)]);await m.confirmDNS(await scoped(d.u),d.u,review.id,cf,dnsProvider);assert.equal(posts,1);
- const recovery=await m.cloudflareAccess(await scoped(d.u),d.u,cf,deny,{recoveryId:review.id});await rejected(recovery.send('/zones/'+zone+'/dns_records','POST',{}));await rejected(recovery.send('/zones/'+'b'.repeat(32)));await rejected(m.cloudflareAccess(await scoped(d.u),d.u,cf,deny,{recoveryId:id()}));
+ const recovery=await m.cloudflareAccess(await scoped(d.u),d.u,cf,deny,{recoveryId:review.id});await rejected(recovery.send('dnsRecord.create',{zone},{}));await rejected(recovery.send('zone.get',{zone:'b'.repeat(32)}));await rejected(m.cloudflareAccess(await scoped(d.u),d.u,cf,deny,{recoveryId:id()}));
  await rejected(m.reviewTXT(await scoped(d.u),d.u,id(),d.claim,zone,cf,deny));
  // Real source backup review and uncertain dispatch, then exact read-only recovery after grant loss.
  const u=await owner();await credentials(u);const site=await createFixtureProject(await (await workspaceSession(db,await currentSiteFixtureHandlers(),identities.get(u))).scope(),u,'Fixture','A harmless site');
@@ -71,7 +71,7 @@ try{
  const outcome=await m.confirmBackup(await scoped(u),undefined,u,backup.id,gh,ghProvider);assert.equal(outcome.state,'uncertain');assert.equal(commits,1);
  await Promise.all(grants.map(revoke));await m.confirmBackup(await scoped(u),undefined,u,backup.id,gh,ghProvider);assert.equal(commits,1);
  const access=await m.githubAccess(await scoped(u),u,gh,deny,{recoveryId:backup.id});
- for(const [path,options] of [['/user/installations',{}],['/repos/other/backup',{}],['/graphql',{method:'POST',body:JSON.stringify({query:'mutation X{noop}',variables:{}})}],['/graphql',{method:'POST',body:JSON.stringify({query:m.backupPathsQuery,variables:m.backupPathsVariables('test','backup','different/path','a'.repeat(40))})}]])await rejected(access.send(path,options));
+ for(const [operationId,params,body] of [['installations.list',{}],['repository.get',{owner:'other',name:'backup'}],['backup.commit',{},{query:'mutation X{noop}',variables:{}}],['backup.paths',{},{query:m.backupPathsQuery,variables:m.backupPathsVariables('test','backup','different/path','a'.repeat(40))}]])await rejected(access.send(operationId,params,body));
  assert.equal((await m.listBackups(db,u)).backups.length,1);const other=await owner();await rejected(m.confirmBackup(await scoped(other),undefined,other,backup.id,gh,deny),404);
  await db.prepare('UPDATE projects SET owner_user_id=? WHERE id=?').bind(other,site.project).run();await rejected(access.assertCurrent());assert.equal((await m.listBackups(db,u)).backups.length,0);
  const expired=await owner('business'),expiredDB=await scoped(expired);await credentials(expired);await identities.get(expired).revoke();

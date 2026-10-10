@@ -7,11 +7,28 @@ import {hashToken,newSessionToken} from './security';
 import {seal,unseal,connectionKeyringMetadata} from './connection-vault';
 import {connectionFeature,connectionInclusion,requireFeature,assertFeature,featurePredicate,type ConnectionUse} from './feature-admission';
 import {backupRecoveryRead} from './connection-recovery';
+import {buildConnectorRequest} from './connector-catalog/builder';
+import {connectorAuthorization} from './connector-catalog/catalog';
 export class ConnectionError extends Error{constructor(public status:number,message:string){super(message);}}
 type GitHubConfig={clientId:string;clientSecret:string;appId:number;slug:string;key:string};
 const callback='https://whumpo.com/api/connections/github/callback';
 const API='https://api.github.com';
 const apiHeaders={'accept':'application/vnd.github+json','x-github-api-version':'2026-03-10','user-agent':'Whumpo-test'};
+/** Catalog operations the GitHub adapter sends, with their typed parameters. No caller URL, host, path or header. */
+export type GitHubOperations={
+ 'user.get':Record<string,never>;'installations.list':Record<string,never>;
+ 'repositories.list':{installation:number;page:number};
+ 'repository.get':{owner:string;name:string};
+ 'branch.head':{owner:string;name:string;branch:string};
+ 'backup.paths':Record<string,never>;'backup.commit':Record<string,never>;
+};
+type GitHubBody={query:string;variables:Record<string,unknown>};
+// An active GitHub App user token holds exactly the App's catalog permissions; nothing else can be granted.
+const grantedScopes=connectorAuthorization('github').scopes;
+/** The only way this adapter forms an API request: catalog operation ID, typed parameters, registered body. */
+function githubRequest(operationId:keyof GitHubOperations,params:Record<string,unknown>,body?:GitHubBody){
+ return buildConnectorRequest({providerId:'github',operationId,params,authority:'owner-request',grantedScopes,...(body===undefined?{}:{body})});
+}
 export function githubConfig(env:Env):GitHubConfig|undefined{
  if(!env.GITHUB_CLIENT_ID||!env.GITHUB_CLIENT_SECRET||!env.GITHUB_APP_ID||!env.GITHUB_APP_SLUG||!env.CONNECTION_ENCRYPTION_KEYRING)return;
  if(!/^[A-Za-z0-9_.-]{1,100}$/.test(env.GITHUB_CLIENT_ID)||!/^[a-z0-9-]{1,100}$/.test(env.GITHUB_APP_SLUG)||!Number.isSafeInteger(Number(env.GITHUB_APP_ID))||Number(env.GITHUB_APP_ID)<1)return;
@@ -110,7 +127,7 @@ export async function finishGitHub(db:D1Database,userId:string,state:string,code
  try{
   if(!validLifetime||!data.access_token.startsWith('ghu_')||refreshToken&&!validRefreshLifetime)throw new ConnectionError(503,'GitHub must return an expiring GitHub App user token. Check the app configuration.');
   await assertFeature(db,scope);
-  const who=await readJSON(await request(API+'/user',{headers:{...apiHeaders,authorization:'Bearer '+data.access_token}},transport));
+  const who=await readJSON(await request(githubRequest('user.get',{}).url,{headers:{...apiHeaders,authorization:'Bearer '+data.access_token}},transport));
   if(!Number.isSafeInteger(who.id)||Number(who.id)<1||typeof who.login!=='string'||! /^[A-Za-z0-9-]{1,39}$/.test(who.login))throw new ConnectionError(503,'GitHub returned an invalid account.');
   if(refreshToken)await custody.identifyGitHub(Number(who.id));
   let results;try{results=await db.batch([
@@ -135,7 +152,7 @@ export async function disconnectGitHub(db:D1Database,userId:string,configuration
 
 export async function githubInstallations(db:D1Database,userId:string,configuration:GitHubConfig|undefined,transport:typeof fetch=fetch){
  const config=required(configuration),access=await githubAccess(db,userId,config,transport,{projectId:null,operation:'read'});
- const data=await readJSON(await access.send('/user/installations?per_page=100'));
+ const data=await readJSON(await access.send('installations.list',{}));
  // Recheck after the entire bounded body, not just after receiving headers.
  await access.assertCurrent();
  if(!Array.isArray(data.installations)||data.installations.length>100)throw new ConnectionError(503,'GitHub returned invalid installation data.');
@@ -166,14 +183,21 @@ export async function githubAccess(db:D1Database,userId:string,configuration:Git
  }
 
  await assertCurrent();
- return {tokenId:current.id,githubUserId:current.github_user_id,assertCurrent,async send(path:string,options:RequestInit={},operation:'read'|'prepare'|'confirm'|'dispatch'='recoveryId' in use?'read':use.operation){
-  if(!path.startsWith('/')||path.startsWith('//'))throw new ConnectionError(400,'Invalid GitHub API path.');
+ return {tokenId:current.id,githubUserId:current.github_user_id,assertCurrent,async send<O extends keyof GitHubOperations>(operationId:O,params:GitHubOperations[O],body?:GitHubBody){
+  // Only catalog-built requests are sent. A refused request is invalid, except that a reconciliation keeps
+  // answering every non-recorded read with its recovery refusal after the same access checks.
+  let built:ReturnType<typeof githubRequest>|null=null;
+  try{built=githubRequest(operationId,params,body);}catch{if(!('recoveryId' in use))throw new ConnectionError(400,'Invalid GitHub API path.');}
+  // The feature operation is the catalog's: dispatch for an action, otherwise the admitted use.
+  const operation=built?.kind==='action'?'dispatch':'recoveryId' in use?'read':use.operation;
   const row=await db.prepare("SELECT t.ciphertext FROM github_connections c JOIN github_token_vault t ON t.id=c.active_token_id AND t.user_id=c.user_id WHERE c.user_id=? AND t.id=? AND t.state='active' AND t.expires_at>?").bind(userId,current.id,new Date().toISOString()).first<{ciphertext:string}>();
   if(!row)throw new ConnectionError(401,'GitHub access changed. Reconnect and prepare a new review.');
   const token=await unseal(config.key,aad(userId,current.id,'token'),row.ciphertext);
   const recovery=await assertCurrent(operation);
-  if(recovery&&!backupRecoveryRead(recovery,path,options))throw new ConnectionError(403,'Backup reconciliation can only inspect its recorded destination.');
-  const response=await request(API+path,{...options,headers:{...apiHeaders,'content-type':'application/json',authorization:'Bearer '+token}},transport);
+  const options:RequestInit=built?.method==='POST'?{method:built.method,body:built.body}:{};
+  if(recovery&&(!built||!backupRecoveryRead(recovery,built.path,options)))throw new ConnectionError(403,'Backup reconciliation can only inspect its recorded destination.');
+  if(!built)throw new ConnectionError(400,'Invalid GitHub API path.');
+  const response=await request(built.url,{...options,headers:{...apiHeaders,'content-type':'application/json',authorization:'Bearer '+token}},transport);
   try{await assertCurrent(operation);}catch(error){await response.body?.cancel().catch(()=>{});throw error;}
   return response;
  }};
