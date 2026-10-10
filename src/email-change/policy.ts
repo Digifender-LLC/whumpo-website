@@ -78,3 +78,21 @@ export function authorizeOwner(principal:OwnerPrincipal|null|undefined,account:A
 }
 /** Entries of `times` inside the trailing window ending at `now`. */
 export const within=(times:readonly number[]|null|undefined,windowMs:number,now:number)=>(times??[]).filter(t=>now-t<windowMs);
+
+/** Planned lifecycle classes (WH-116/WH-009 extension). WH-201 registers them with the real tables in
+ * docs/data-lifecycle.json; until then nothing stores these records. */
+export const dataClasses=Object.freeze([
+ {id:'owner-email',status:'current-extension',records:['account email','verification time and sender'],protection:'managed-readable',secrets:'none',
+  retention:'while the account exists; enters closure purge',export:'address, verified time',deletion:'account closure'},
+ {id:'owner-email-changes',status:'planned',records:['pending change','confirmation-token verifier','previous-address undo reservation'],protection:'managed-readable',secrets:'token verifier only (SHA-256); plaintext exists only in the one provider call',
+  retention:'pending until confirmed, cancelled, superseded, stale or expired; terminal rows 30 days with the new address replaced by its hash; previous address until the undo window ends',
+  export:'current pending address and expiry; never token verifiers, request hashes or rate-limit keys',deletion:'cancellation, expiry cleanup, account closure'},
+ {id:'owner-email-change-limits',status:'planned',records:['per-account request times','hashed per-address daily send keys','confirmation failure counts'],protection:'managed-readable',secrets:'none (address keys are hashes)',
+  retention:'48 hours',export:'none',deletion:'bounded maintenance'},
+ {id:'platform-notifications',status:'planned',records:['content-free account notices in the WH-156 shared outbox'],protection:'managed-readable',secrets:'none: the confirmation token is never stored in the outbox',
+  retention:'30 days; unknown-outcome and unresolved evidence until resolved',export:'state and time only',deletion:'outbox expiry'},
+ {id:'owner-security-reviews',status:'planned',records:['review snapshot identifiers','selections','kit offer verifier','commit receipt'],protection:'managed-readable',secrets:'kit offer verifier only (SHA-256); otherwise identifiers and counts, never kit, token or credential material',
+  retention:'90 days after commit or expiry',export:'review time, selections and outcome',deletion:'retention cleanup, account closure'},
+ {id:'connections',status:'current',records:['encrypted provider credentials held for revocation','revocation receipts'],protection:'application-encrypted',secrets:'ciphertext retained until definitive provider revocation',
+  retention:'until definitive revocation or reconciled evidence; unresolved holds block closure',export:'connection state only',deletion:'only after an exact revocation receipt'},
+]);

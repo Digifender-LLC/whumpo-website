@@ -3490,7 +3490,7 @@
       ],
       "references": [
         "docs/email-change-and-compromise.md",
-        "tools/prototypes/compromise-review.mjs",
+        "src/email-change/compromise.ts",
         "tests/email-change-contract.mjs",
         "docs/workspace-identity.md",
         "docs/notifications.md",
@@ -3658,8 +3658,9 @@
       ],
       "references": [
         "docs/email-change-and-compromise.md",
-        "tools/prototypes/compromise-review.mjs",
         "src/email-change/compromise.ts",
+        "src/email-change/revocation.ts",
+        "tests/email-change-contract.mjs",
         "docs/identity-recovery.md",
         "docs/connection-key-lifecycle.md",
         "docs/integrations/cloudflare-connection.md",
@@ -3667,7 +3668,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-09 UTC: pure source module only, local branch claude/wh-203-compromise-review stacked on the unmerged WH-200 branch claude/wh-200-email-change-state-machine (PR #262, 79bdca6); not merged, issue not created or claimed from this session. Extended src/email-change/compromise.ts (compromiseBounds, revokedAuthority, closed parsers, prepareCompromiseReview snapshot bound to epoch, credential revision, kit generation and connection set; prepareReviewKit/saveReviewKit with save-before-rotation; commitCompromiseReview: fresh passkey, saved-receipt replay, STALE_REVIEW, emergency removal down to zero keys, epoch advance with revokeAuthorityBefore for sessions, grants, challenges and kit offers, kit activation, pending-change closure, connection disable with the credential held, content-free receipt and security-review notice; admitSignIn and admitRecovery fences) and added src/email-change/revocation.ts (ProviderRevoker interface, claim-before-call dispatch, unknown and interrupted outcomes held as uncertain and never redispatched, authenticated read-only reconciliation bounded at 3 reads or 72 hours, erasure only with a receipt, closureHolds, a synthetic revoker). Deleted tools/prototypes/compromise-review.mjs; tests/email-change-contract.mjs now drives the source through a storage-only driver. It passed 27 checks and 9 agreement/static checks (new pins: the identity engine's removePasskey rows and zero-key stage, kit rotation epoch advance, and the GitHub 204 and Cloudflare 200 receipt rules) and caught 41 of 41 mutants, all in the source, each by its named check (the 33 WH-200 mutants, the 14 former prototype mutants now mutating source, and 8 new), in 1.6 to 2.0 s wall at load average 3.3, so it stays in the fast profile. Gaps G-E7 and G-E8 are resolved in source only. Open for WH-203: ProviderRevoker adapters over the existing GitHub and Cloudflare revocation (a GitHub single-token 204 must not report a retained refresh credential as revoked), the mapping of existing connection states and the closure inventory, and the focused SQLite/local D1 suites with synthetic providers plus tests/github-grant-revocation.mjs and tests/cloudflare-connection.mjs named in its verification; the acceptance is therefore not met against actual handlers and the task stays open. No table, column, route, binding, Chat registration, provider call, sender, real address or credential change; synthetic example.test addresses and SYNTHETIC-* values only."
+      ]
     },
     {
       "id": "WH-204",
