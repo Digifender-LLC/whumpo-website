@@ -1,7 +1,8 @@
 /** WH-056 / WH-141 typed connector request builder (contract version 1, docs/connectors.md).
  * The only way to form a provider request: a catalog operation ID plus typed parameters, the server-derived authority
  * class and the scopes actually granted. Callers never supply a URL, host, path, header or free-form query or body.
- * Pure: it builds a plain request description and never sends it. No Worker imports this module yet. */
+ * Pure: it builds a plain request description and never sends it. The GitHub/Cloudflare adapters send only what it
+ * builds; only the platform Worker reaches it. */
 import {authorityClasses,availableProvider,check,connectorCatalog,deepFreeze,graphqlDocuments,graphqlVariables,paramTypes,plain,shape,validateCatalog,type AuthorityClass,type ConnectorCatalog,type ConnectorOperation,type ConnectorProviderId} from './catalog';
 
 export type ConnectorRequestInput={

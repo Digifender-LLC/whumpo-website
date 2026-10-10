@@ -14,12 +14,11 @@ function parseRepo(value:Record<string,unknown>):Repo{
  if(!Number.isSafeInteger(value.id)||Number(value.id)<1||typeof owner?.login!=='string'||typeof value.name!=='string'||!validName(owner.login,value.name)||typeof value.private!=='boolean'||typeof value.default_branch!=='string'||!value.default_branch||value.default_branch.length>255||/[\x00-\x1f\x7f]/.test(value.default_branch)||value.archived===true||value.disabled===true||permissions?.push!==true)throw new ConnectionError(403,'Choose an available repository where your GitHub App connection has write access.');
  return {id:Number(value.id),owner:owner.login,name:value.name,private:value.private,branch:value.default_branch,size:typeof value.size==='number'?value.size:-1};
 }
-const prefix=(repo:{owner:string;name:string})=>'/repos/'+encodeURIComponent(repo.owner)+'/'+encodeURIComponent(repo.name);
-async function repository(access:Access,owner:string,name:string){if(!validName(owner,name))throw new ConnectionError(400,'Invalid repository name.');const value=await readGitHubJSON(await access.send(prefix({owner,name})));await access.assertCurrent();return parseRepo(value);}
+async function repository(access:Access,owner:string,name:string){if(!validName(owner,name))throw new ConnectionError(400,'Invalid repository name.');const value=await readGitHubJSON(await access.send('repository.get',{owner,name}));await access.assertCurrent();return parseRepo(value);}
 export async function githubRepositories(db:D1Database,userId:string,config:GitHubConfig|undefined,installation:number,page:number,transport:typeof fetch=fetch){
  if(!Number.isSafeInteger(installation)||installation<1||!Number.isSafeInteger(page)||page<1||page>50)throw new ConnectionError(400,'Invalid repository page.');
  if(!(await githubInstallations(db,userId,config,transport)).installations.some(i=>i.id===installation))throw new ConnectionError(404,'Installation not found.');
- const access=await githubAccess(db,userId,config,transport,{projectId:null,operation:'read'}),data=await readGitHubJSON(await access.send(`/user/installations/${installation}/repositories?per_page=20&page=${page}`));
+ const access=await githubAccess(db,userId,config,transport,{projectId:null,operation:'read'}),data=await readGitHubJSON(await access.send('repositories.list',{installation,page}));
  await access.assertCurrent();
  if(!Array.isArray(data.repositories)||data.repositories.length>20)throw new ConnectionError(503,'GitHub returned invalid repositories.');
  const repositories=data.repositories.flatMap(r=>{try{return [parseRepo(r as Record<string,unknown>)];}catch{return [];}});
@@ -56,11 +55,11 @@ export async function reviewBackup(db:D1Database,bucket:R2Bucket|undefined,userI
  return view(await owned(db,userId,input.id));
 }
 async function branchHead(access:Access,repo:Repo){
- const response=await access.send(prefix(repo)+'/git/ref/heads/'+encodeURIComponent(repo.branch));if(response.status===404||response.status===409){await response.body?.cancel();throw new ConnectionError(409,'Initialize this repository with a README on its default branch before preparing a backup.');}
+ const response=await access.send('branch.head',{owner:repo.owner,name:repo.name,branch:repo.branch});if(response.status===404||response.status===409){await response.body?.cancel();throw new ConnectionError(409,'Initialize this repository with a README on its default branch before preparing a backup.');}
  const data=await readGitHubJSON(response),object=data.object as Record<string,unknown>|undefined;if(typeof object?.sha!=='string'||!sha.test(object.sha))throw new ConnectionError(503,'GitHub returned an invalid branch head.');await access.assertCurrent();return object.sha;
 }
 async function remoteCopy(access:Access,repo:Repo,b:Backup,head:string){
- const response=await readGitHubJSON(await access.send('/graphql',{method:'POST',body:JSON.stringify({query:backupPathsQuery,variables:backupPathsVariables(repo.owner,repo.name,b.path,head)})}));
+ const response=await readGitHubJSON(await access.send('backup.paths',{},{query:backupPathsQuery,variables:backupPathsVariables(repo.owner,repo.name,b.path,head)}));
  await access.assertCurrent();
  const data=response.data as {repository?:Record<string,{__typename?:string;oid?:string}|null>}|undefined;
  if(response.errors||!data?.repository||[0,1,2,3].some(i=>!Object.hasOwn(data.repository!,'p'+i)))throw new ConnectionError(503,'GitHub could not inspect the backup destination.');
@@ -97,7 +96,7 @@ export async function confirmBackup(db:D1Database,bucket:R2Bucket|undefined,user
   if(existing)return await completeBackup(db,userId,b,head);
   const query='mutation BackupCommit($input:CreateCommitOnBranchInput!){createCommitOnBranch(input:$input){commit{oid}}}';
   const input={branch:{repositoryNameWithOwner:repo.owner+'/'+repo.name,branchName:b.branch},expectedHeadOid:b.base_head,clientMutationId:b.id,message:{headline:`[skip ci] Whumpo source backup ${b.version_id}`},fileChanges:{additions:Object.entries(tree.files).map(([path,bytes])=>({path:b.path+'/'+path,contents:encoded(bytes)}))}};
-  const response=await access.send('/graphql',{method:'POST',body:JSON.stringify({query,variables:{input}})},'dispatch');
+  const response=await access.send('backup.commit',{},{query,variables:{input}});
   const result=await readGitHubJSON(response),data=result.data as {createCommitOnBranch?:{commit?:{oid?:string}}}|undefined,commit=data?.createCommitOnBranch?.commit?.oid;
   if(result.errors||typeof commit!=='string'||!sha.test(commit))throw new ConnectionError(503,'The GitHub commit response could not be verified.');
   if(!await remoteCopy(access,repo,b,commit))throw new ConnectionError(503,'The committed source files could not be verified.');

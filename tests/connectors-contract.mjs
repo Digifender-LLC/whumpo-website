@@ -7,9 +7,10 @@ import {fileURLToPath} from 'node:url';
 // WH-056 / WH-140 / WH-141 offline connector conformance harness, run against the source module
 // src/connector-catalog/{catalog,builder}.ts. Synthetic providers and invented identifiers only: no database, network,
 // OAuth client, credential, model or provider account. It proves the frozen catalog, the typed request builder, exact
-// agreement with the existing GitHub/Cloudflare code, and the synthetic reference runtime in tools/prototypes/connectors.mjs
-// (bundled with the same source). It does not prove the D1-backed adapters, which are not rewired to the catalog yet;
-// WH-142 must run runConformance() against them. Every suite check also runs against deliberately broken copies of the
+// agreement with the GitHub/Cloudflare adapters (which now send only catalog operations through the builder; their
+// request bytes are checked by tests/connection-sends.mjs), and the synthetic reference runtime in
+// tools/prototypes/connectors.mjs (bundled with the same source). It does not prove the D1-backed adapters' receipts and
+// consent; WH-142 must run runConformance() against them. Every suite check also runs against deliberately broken copies of the
 // source (mutants below), each of which must be caught by the check written for that property.
 const root=fileURLToPath(new URL('..',import.meta.url));
 const read=file=>readFileSync(join(root,file),'utf8');
@@ -138,7 +139,14 @@ async function suite(m){
   ['extra parameter',{owner:'org',name:'site',url:'https://evil.example'},'UNKNOWN_FIELD'],
   ['missing parameter',{owner:'org'},'MISSING_FIELD'],
  ])await test(`request refuses ${name}`,()=>throws(()=>req('github','repository.get',params),code));
+ await test('branch parameters accept exactly what the backup adapter accepts as a default branch',()=>{
+  for(const branch of ['main','release/2026+hotfix@x','zweig-ü','a..b','b'.repeat(255)])
+   assert.equal(req('github','branch.head',{owner:'org',name:'site',branch}).path,'/repos/org/site/git/ref/heads/'+encodeURIComponent(branch));
+  for(const branch of ['','b'.repeat(256),'main\u0000x','main\nx','main\u007f',7])throws(()=>req('github','branch.head',{owner:'org',name:'site',branch}),'INVALID_PARAM');
+ });
  await test('encoded parameters cannot change the path',()=>{
+  // A dot-segment branch is a valid string but would be resolved away by the URL parser.
+  for(const branch of ['.','..'])throws(()=>req('github','branch.head',{owner:'org',name:'site',branch}),'INVALID_PATH');
   const c=clone();c.providers.github.operations['repository.get'].params.name='query';
   const loose=m.createRequestBuilder(c);
   assert.equal(req('github','repository.get',{owner:'org',name:'a b'},undefined,{builder:loose}).path,'/repos/org/a%20b');
@@ -189,26 +197,32 @@ async function suite(m){
   assert.equal(g.authorization.revoke,'https://api.github.com/applications/{clientId}/token');assert.ok(gh.includes("request(API+'/applications/'+config.clientId+'/token'"));
   assert.ok(cf.includes(`const scopes=${JSON.stringify(c.scopes).replaceAll('"',"'")};`));
   assert.ok(cf.includes(`new URL('${c.authorization.authorize}')`)&&cf.includes(`request('${c.authorization.token}'`)&&cf.includes(`'${c.authorization.revoke}'`));
-  assert.ok(cf.includes(`request('${c.origins[0]}/client/v4'+path`));
+  // Cloudflare API requests are catalog-built under the fixed /client/v4 prefix; recovery strips exactly that prefix.
+  assert.ok(cf.includes("const apiPrefix='/client/v4';")&&cf.includes('request(built.url,')&&cf.includes('built.path.slice(apiPrefix.length)'));
+  for(const op of Object.values(c.operations))assert.ok(op.origin===c.origins[0]&&op.path.startsWith('/client/v4/'));
   for(const op of [...Object.values(g.operations),...Object.values(c.operations)])assert.ok(src.featureOperations.includes(op.feature));
  });
- await test('catalog-built GitHub requests are the paths the current adapters send',()=>{
-  assert.ok(gh.includes(`access.send('${req('github','installations.list',{}).path}')`));
-  assert.ok(backups.includes('`/user/installations/${installation}/repositories?per_page=20&page=${page}`'));
+ await test('the GitHub adapters send exactly the catalog GitHub operations',()=>{
+  assert.deepEqual(Object.keys(m.connectorCatalog.providers.github.operations),['user.get','installations.list','repositories.list','repository.get','branch.head','backup.paths','backup.commit']);
+  assert.equal(req('github','user.get',{}).url,'https://api.github.com/user');assert.ok(gh.includes("request(githubRequest('user.get',{}).url,{headers:"));
+  assert.ok(gh.includes("access.send('installations.list',{})"));
+  assert.ok(backups.includes("access.send('repositories.list',{installation,page})"));
   assert.equal(req('github','repositories.list',{installation:7,page:3}).path,'/user/installations/7/repositories?per_page=20&page=3');
+  assert.ok(backups.includes("access.send('repository.get',{owner,name})")&&backups.includes("access.send('branch.head',{owner:repo.owner,name:repo.name,branch:repo.branch})"));
   for(const op of ['backup.paths','backup.commit'])assert.equal(req('github',op,{},{query:m.graphqlDocuments[op==='backup.paths'?'BackupPaths':'BackupCommit'],variables:op==='backup.paths'?src.backupPathsVariables('o','n','a/b/c/d','a'.repeat(40)):{input:{}}}).path,'/graphql');
-  assert.ok(backups.includes("access.send('/graphql',{method:'POST'"));
+  assert.ok(backups.includes("access.send('backup.paths',{},{query:backupPathsQuery,")&&backups.includes("access.send('backup.commit',{},{query,variables:{input}})"));
+  assert.ok(gh.includes("buildConnectorRequest({providerId:'github',operationId,params,authority:'owner-request',grantedScopes,"));
  });
- await test('catalog-built Cloudflare requests pass the current Cloudflare send guard',()=>{
-  // The exact guard expressions from cloudflareAccess().send; the source must still contain them verbatim.
-  const list=/^\/zones\?per_page=50&page=(?:[1-9]|[1-9][0-9]|100)$/,zonePath=/^\/zones\/[0-9a-f]{32}(?:\/dns_records(?:\/[0-9a-f]{32})?)?(?:\?[^#]*)?$/,post=/^\/zones\/[0-9a-f]{32}\/dns_records$/;
-  for(const r of [list,zonePath,post])assert.ok(cf.includes(String(r)),String(r));
-  assert.ok(cf.includes("access.send('/zones?per_page=50&page='+page)"));
-  for(const page of [1,50,100])assert.ok(list.test(strip(req('cloudflare','zones.list',{page}).path)));
-  assert.ok(dns.includes("access.send('/zones/'+id)")&&zonePath.test(strip(req('cloudflare','zone.get',{zone}).path)));
-  assert.ok(zonePath.test(strip(req('cloudflare','dnsRecords.findExact',{zone,name:'_whumpo.www.example.com'}).path)));
+ await test('the Cloudflare adapters send exactly the catalog Cloudflare operations',()=>{
+  assert.deepEqual(Object.keys(m.connectorCatalog.providers.cloudflare.operations),['zones.list','zone.get','dnsRecords.findExact','dnsRecord.create']);
+  assert.ok(cf.includes("access.send('zones.list',{page})")&&dns.includes("access.send('zone.get',{zone:id})"));
+  assert.ok(dns.includes("access.send('dnsRecords.findExact',{zone:zoneId,name})")&&dns.includes("access.send('dnsRecord.create',{zone:a.zone_id},{type:"));
+  assert.ok(cf.includes("buildConnectorRequest({providerId:'cloudflare',operationId,params,authority:'owner-request',grantedScopes:scopes,"));
+  // The former path regex guard is gone; the zone list keeps its narrower page and use limits.
+  assert.ok(!/\/\^\\\/zones/.test(cf)&&cf.includes("&&(page as number)<=100"));
+  for(const page of [1,50,100])assert.equal(strip(req('cloudflare','zones.list',{page}).path),'/zones?per_page=50&page='+page);
   const create=req('cloudflare','dnsRecord.create',{zone},{type:'TXT',name:'x.example.com',content:'"v"',ttl:1,comment:'m'});
-  assert.equal(create.method,'POST');assert.ok(post.test(strip(create.path)));assert.ok(dns.includes("access.send('/zones/'+a.zone_id+'/dns_records','POST'"));
+  assert.equal(create.method,'POST');assert.equal(strip(create.path),'/zones/'+zone+'/dns_records');
  });
  await test('Cloudflare dnsRecoveryRead admits exactly the catalog reconcile reads',()=>{
   const a={zone_id:zone,record_name:'_whumpo.www.example.com'};
@@ -497,7 +511,7 @@ async function suite(m){
 suiteCount=await suite(await load());
 
 // ---------- Static checks, run once ----------
-await test('the module is pure and no Worker entry reaches it',async()=>{
+await test('the module is pure; only the platform Worker reaches it',async()=>{
  const allowed={'src/connector-catalog/catalog.ts':[],'src/connector-catalog/builder.ts':['./catalog']};
  for(const file of moduleFiles){
   const text=read(file);
@@ -505,10 +519,12 @@ await test('the module is pure and no Worker entry reaches it',async()=>{
   assert.deepEqual(specifiers,allowed[file],`${file} imports ${specifiers}`);
   assert.ok(!/\bfetch\s*\(|XMLHttpRequest|WebSocket|process\.env|D1Database|\.prepare\(|\benv\.[A-Z_]+|\bunseal\(|\bseal\(/.test(text),file);
  }
- for(const worker of ['src/index.ts','src/site-host.ts','src/app-host.ts','src/runtime/worker.ts']){
+ // The platform Worker sends GitHub/Cloudflare requests through the builder. The sites, apps and runtime Workers never
+ // load the catalog (feature admission and the vault, which the apps Worker reaches, import catalog types only).
+ for(const [worker,reach] of [['src/index.ts',moduleFiles],['src/site-host.ts',[]],['src/app-host.ts',[]],['src/runtime/worker.ts',[]]]){
   const out=await build({entryPoints:[join(root,worker)],bundle:true,format:'esm',platform:'node',write:false,metafile:true,logLevel:'silent',external:['cloudflare:*','*.wasm']});
   const inputs=Object.keys(out.metafile.inputs);assert.ok(inputs.length>5,worker);
-  assert.deepEqual(inputs.filter(p=>/connector-catalog|prototypes\//.test(p)),[],`${worker} reaches the connector catalog`);
+  assert.deepEqual(inputs.filter(p=>/connector-catalog|prototypes\//.test(p)).sort(),[...reach].sort(),`${worker} connector catalog reach`);
  }
 });
 
@@ -533,6 +549,8 @@ const mutants=[
  ['future contract version accepted',C,"check(catalog.contractVersion===contractVersion,'UNSUPPORTED_VERSION','catalog');",''],
  ['planned provider available',C,"check(entry.readiness!=='planned','PROVIDER_PLANNED',providerId);",''],
  ['planned provider connectable',C,"return !!e&&e.readiness!=='planned';","return !!e;"],
+ ['branch parameter admits control characters',C,"v.length<=255&&!/[\\u0000-\\u001f\\u007f]/.test(v)","v.length<=255"],
+ ['branch parameter unbounded',C,"v.length>=1&&v.length<=255&&","v.length>=1&&"],
  ['refresh custody for a no-refresh provider',C,"purpose!=='refresh'||entry.authorization.refresh!=='none'","true"],
  ['caller URL or path field accepted',B,"shape(input,inputKeys,'request',['body']);","shape(input,inputKeys,'request',['body','url','host','path','headers','query','origin','method']);"],
  ['rule may read',B,"check(authority!=='approved-rule'||op.kind==='action','RULE_READ_FORBIDDEN',operationId);",''],
@@ -562,6 +580,7 @@ const killedBy={
  'endpoint query accepted':'revocation endpoint with query','future contract version accepted':'future contract version',
  'planned provider available':'planned providers cannot start OAuth, seal credentials or build a request',
  'planned provider connectable':'catalog-derived providers, feature ids and vault contexts agree with the existing code',
+ 'branch parameter admits control characters':'branch parameters accept exactly what the backup adapter accepts','branch parameter unbounded':'branch parameters accept exactly what the backup adapter accepts',
  'refresh custody for a no-refresh provider':'OAuth descriptors and vault contexts come from the catalog for available providers only',
  'caller URL or path field accepted':'request input has no URL, host, path, header or query field',
  'rule may read':'builder enforces authority classes','owner-request-only operation accepts a rule':'builder enforces authority classes','rule without live acceptance':'builder enforces authority classes',
