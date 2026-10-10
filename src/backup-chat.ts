@@ -1,12 +1,13 @@
 import {FeatureInclusionError} from './feature-inclusion';
 import {ConnectionError,githubInstallations,type GitHubConfig} from './github-connection';
 import {githubRepositories,listBackups,reviewBackup,confirmBackup} from './github-backups';
+import {receiptLine,reviewDigestLine,reviewEchoFromText} from './connector-receipts';
 export type BackupChatOptions={github?:GitHubConfig;githubTransport?:typeof fetch;files?:R2Bucket};
 const uuid=/^[0-9a-f-]{36}$/,positive=(s:string)=>/^[1-9][0-9]*$/.test(s)&&Number.isSafeInteger(Number(s));
 type Receipt=Awaited<ReturnType<typeof reviewBackup>>;
 function describe(b:Receipt){
- const header=`GitHub backup: ${b.state}\nReview: ${b.id}\nVersion: ${b.versionId}\nRepository: ${b.repository} (${b.private?'private':'PUBLIC — anyone can read these files'})\nBranch: ${b.branch}\nFolder: ${b.path}`;
- if(b.state==='pending')return `${header}\n\nFiles: ${b.files.join(', ')}\nSource size: ${b.bytes} bytes\nSHA-256: ${b.sha256}\n\nConfirming copies this saved website's source and included photos to GitHub in one commit. It excludes account credentials and chat history. Existing repository files are preserved; a changed branch or conflicting folder requires another review. This does not publish or alter your Whumpo website.\nReview expires: ${b.expiresAt}\n\nUse the confirmation button for backup ${b.id} to authorize this exact backup.`;
+ const header=`GitHub backup: ${b.state}\nReview: ${b.id}\nVersion: ${b.versionId}\nRepository: ${b.repository} (${b.private?'private':'PUBLIC — anyone can read these files'})\nBranch: ${b.branch}\nFolder: ${b.path}\n${receiptLine(b.receipt)}`;
+ if(b.state==='pending')return `${header}\n\nFiles: ${b.files.join(', ')}\nSource size: ${b.bytes} bytes\nSHA-256: ${b.sha256}\n${reviewDigestLine(b.receipt.reviewDigest!)}\n\nConfirming copies this saved website's source and included photos to GitHub in one commit. It excludes account credentials and chat history. Existing repository files are preserved; a changed branch or conflicting folder requires another review. This does not publish or alter your Whumpo website.\nReview expires: ${b.expiresAt}\n\nUse the confirmation button for backup ${b.id} to authorize this exact backup.`;
  if(b.state==='expired')return header+"\nThis review expired. Ask to prepare a fresh review for the saved website version and authorized repository.";
  return `${header}\n${b.detail}\n${b.url?'Verified source copy: '+b.url:['dispatching','uncertain'].includes(b.state)?'Ask to check saved backup '+b.id+'; this reads GitHub without resending a commit. If unresolved, operator reconciliation is required.':'Prepare a fresh review after resolving the reported problem.'}\nThis is a historical receipt, not a guarantee of the repository\'s current contents or visibility.`;
 }
@@ -25,7 +26,9 @@ Ask to list repositories in this installation.`).join('\n\n'):'No active GitHub 
    if(verb==='/github-repos'){const page=Number(args[1]??1),result=await githubRepositories(db,user,options.github,Number(args[0]),page,options.githubTransport);return (result.repositories.length?result.repositories.map(r=>`${r.owner}/${r.name} · ${r.private?'private':'PUBLIC'} · default branch: ${r.branch}\nRepository ID: ${r.id}`).join('\n\n'):'No writable repositories on this page.')+(result.hasMore?"\n\nMore repositories are available. Ask for repositories from installation "+args[0]+', page '+(page+1):'')+"\n\nAsk to prepare an exact saved-source backup review. Public repositories expose the source and included photos to anyone.";}
    if(verb==='/review-backup')return describe(await reviewBackup(db,options.files,user,{id:turnId,versionId:args[0],owner:repo![0],repo:repo![1],repoId:Number(args[2])},options.github,options.githubTransport));
    if(verb==='/check-backup'){const {backups}=await listBackups(db,user),b=backups.find(b=>b.id===args[0]);if(!b)throw new ConnectionError(404,'Backup review not found.');if(['pending','expired','complete','failed'].includes(b.state))return describe(b)+'\nThis check did not authorize a commit.';}
-   return describe(await confirmBackup(db,options.files,user,args[0],options.github,options.githubTransport));
+    // A Chat confirmation echoes the exact saved review turn (review ID = turn ID) that showed its price and digest.
+   const echo=verb==='/confirm-backup'?reviewEchoFromText((await db.prepare("SELECT assistant_text FROM chat_turns WHERE id=? AND user_id=? AND status='completed'").bind(args[0],user).first<{assistant_text:string}>())?.assistant_text):undefined;
+   return describe(await confirmBackup(db,options.files,user,args[0],options.github,options.githubTransport,echo));
   }catch(cause){return (cause instanceof ConnectionError||cause instanceof FeatureInclusionError)?cause.message+"\nAsk to inspect your saved backup reviews.":"The backup result could not be saved. Ask to inspect your saved backup reviews. This Chat request will not be dispatched again.";}
  };
 }

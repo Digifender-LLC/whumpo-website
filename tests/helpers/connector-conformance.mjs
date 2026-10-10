@@ -8,7 +8,9 @@ import assert from 'node:assert/strict';
 //    over a small driver interface, so the same cases run against the reference runtime and the real D1-backed GitHub
 //    backup and Cloudflare DNS handlers (tests/connector-conformance-handlers.mjs). A driver may declare a known gap
 //    for a case; the case then pins the driver's current behaviour instead of the contract's, and fails when that
-//    behaviour changes, so docs/connectors.md must be updated. Synthetic providers and invented identifiers only.
+//    behaviour changes, so docs/connectors.md must be updated. A driver may also declare `observedState: false` when its
+//    table cannot record `observed` (GitHub backups): the reconciliation case then requires the honest mapping instead
+//    (`applied` with `verified-readback` evidence). Synthetic providers and invented identifiers only.
 
 const zone='0123456789abcdef0123456789abcdef';
 const owner=(ownerId='owner-a')=>({kind:'owner',ownerId});
@@ -251,7 +253,8 @@ export function operationOf(entry,documents,request){
  *    `hold()` (delays the next mutation before it applies; returns `{reached, release}`) shape the next mutation.
  *  - `revoke`, `replace`, `expireReview`, `expireCredential` change local authority as the named contract event.
  *  - `stateMap` maps every raw receipt state to a common state; `gaps` maps case keys to declared gap IDs;
- *    `capabilities` lists optional cases the driver supports.
+ *    `capabilities` lists optional cases the driver supports; `observedState: false` with `evidence(view)` declares a
+ *    table that cannot record `observed`.
  * `catalog` and `documents` are the source catalog and registered GraphQL documents; `test(name,fn)` names each check.
  */
 export async function runActionConformance(label,driver,{catalog,documents,test}){
@@ -296,7 +299,11 @@ export async function runActionConformance(label,driver,{catalog,documents,test}
  await t('lostAfter','a reply lost after the provider applied stays held, is never redispatched and reconciles read-only',async(ctx,p)=>{
   const id=await prepared(ctx);p.mode.lose='after';assert.equal(common(await driver.confirm(ctx,id)),'uncertain');p.mode.lose=null;
   const n=p.requests.length,r=await driver.reconcile(ctx,id);
-  if(gap('reconciledState'))assert.equal(common(r),'applied');else assert.equal(common(r),'observed');
+  // A table that cannot record `observed` must say so instead of claiming it (GitHub: every completed backup is a verified
+  // readback, but the row does not record which path completed it).
+  if(gap('reconciledState'))assert.equal(common(r),'applied');
+  else if(driver.observedState===false){assert.equal(common(r),'applied');assert.equal(driver.evidence(r),'verified-readback');}
+  else assert.equal(common(r),'observed');
   for(const op of ops(ctx,n))assert.ok(action.reconcile.includes(op),`reconciliation used ${op}`);
   assert.equal(common(await driver.confirm(ctx,id)),common(r));assert.equal(p.mutations,1);assert.equal(p.effects,1);
  });
@@ -341,7 +348,10 @@ export async function runActionConformance(label,driver,{catalog,documents,test}
    assert.equal(driver.price(v),undefined);assert.equal(common(await driver.confirm(ctx,driver.id(v),{acceptedPrice:null})),'applied');assert.equal(p.mutations,1);return;
   }
   assert.deepEqual(driver.price(v),{...action.price});
-  await refused(driver.confirm(ctx,driver.id(v),{acceptedPrice:null}));assert.equal(p.mutations,0);
+  await refused(driver.confirm(ctx,driver.id(v),{acceptedPrice:null}));
+  await refused(driver.confirm(ctx,driver.id(v),{acceptedPrice:{customerUnits:action.price.customerUnits+1,basis:'quoted'}}));assert.equal(p.mutations,0);
+  // A refused echo does not consume the review: the exact echo still confirms once.
+  assert.equal(common(await driver.confirm(ctx,driver.id(v))),'applied');assert.equal(p.mutations,1);
  });
  await t('reviewDigest','the review carries a digest and confirmation must echo it exactly',async(ctx,p)=>{
   const v=await driver.prepare(ctx);
@@ -350,6 +360,7 @@ export async function runActionConformance(label,driver,{catalog,documents,test}
   }
   assert.match(driver.reviewDigest(v),/^[0-9a-f]{64}$/);
   await refused(driver.confirm(ctx,driver.id(v),{reviewDigest:'0'.repeat(64)}));assert.equal(p.mutations,0);
+  assert.equal(common(await driver.confirm(ctx,driver.id(v))),'applied');assert.equal(p.mutations,1);
  });
  // Runs last: it judges every raw receipt state the earlier cases observed.
  await test(`${label}: receipt states use the frozen common names`,async()=>{
