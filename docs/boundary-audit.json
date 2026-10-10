@@ -118,13 +118,13 @@
    "id": "B4",
    "severity": "low",
    "title": "Hosting recovery tool targets a retired control database",
-   "status": "reproduced (executed, static)",
-   "owner": "Operator tooling maintainers; owner decision before any remote use of the tool",
-   "reproduction": "node tests/boundary-operator-target.mjs (expected to exit 1 until remediated)",
+   "status": "resolved October 9, 2026: the tool reads the control database from wrangler.jsonc (regression test passes)",
+   "owner": "Operator tooling maintainers",
+   "reproduction": "node tests/boundary-operator-target.mjs (regression, exit 0)",
    "evidence": [
     {
      "file": "tools/reconcile-domain-hosting.mjs",
-     "contains": "/d1/database/680f98b9-a769-467f-8b6f-06c10195c263/query"
+     "contains": "/accounts/${account}/d1/database/${database}/query"
     },
     {
      "file": "wrangler.jsonc",
@@ -132,7 +132,7 @@
     },
     {
      "file": "tests/boundary-operator-target.mjs",
-     "contains": "B4 reproduced"
+     "contains": "B4 resolved: reconcile-domain-hosting targets"
     }
    ]
   },
@@ -8411,7 +8411,7 @@
    "privileged": [
     "operator"
    ],
-   "authorityClass": "operator's Wrangler login or explicit CLOUDFLARE_API_TOKEN (Stripe: sk_test_ key file); remote control D1 resolved from wrangler.jsonc except reconcile-domain-hosting (B4)",
+   "authorityClass": "operator's Wrangler login or explicit CLOUDFLARE_API_TOKEN (Stripe: sk_test_ key file); remote control D1 resolved from wrangler.jsonc (reconcile-domain-hosting fixed, B4)",
    "reach": "Operator workstation only; no HTTP route.",
    "entries": [
     {
@@ -8508,7 +8508,7 @@
      "state": "gap",
      "gapKind": "control",
      "finding": "B4",
-     "detail": "Most tools preview by default and apply only an exact digest (--apply DIGEST) or an explicit flag; create-invite writes remotely with no flag (B7, characterization) and reconcile-domain-hosting targets a retired database (B4).",
+     "detail": "Most tools preview by default and apply only an exact digest (--apply DIGEST) or an explicit flag; create-invite writes remotely with no flag (B7, characterization) and reconcile-domain-hosting's retired-database pin was fixed (B4).",
      "enforcedAt": [
       {
        "file": "tools/operator-containment-input.mjs",
@@ -8577,14 +8577,23 @@
      ]
     },
     "tenant": {
-     "state": "gap",
-     "gapKind": "control",
-     "finding": "B4",
-     "detail": "Every tool except reconcile-domain-hosting resolves the control database from wrangler.jsonc; reconcile-domain-hosting hard-codes the retired database 680f98b9 (B4).",
+     "state": "evidenced",
+     "detail": "Every remote operator tool resolves the control database from wrangler.jsonc; reconcile-domain-hosting did not and was fixed (B4, resolved October 9, 2026; tests/boundary-operator-target.mjs asserts that none pins a database id).",
      "enforcedAt": [
       {
        "file": "tools/review-fair-use.mjs",
        "contains": "const db=remoteD1(cloudflareClient(config.account_id),config.d1_databases.find(b=>b.binding==='DB').database_id);"
+      },
+      {
+       "file": "tools/reconcile-domain-hosting.mjs",
+       "contains": "const bound=JSON.parse(await readFile('wrangler.jsonc','utf8')),account=bound.account_id,database=bound.d1_databases?.find(d=>d.binding==='DB')?.database_id;"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/boundary-operator-target.mjs",
+       "contains": "assert.deepEqual(pinned,[],'These operator tools pin a D1 database: '+pinned.join(', '));",
+       "asserts": "no remote operator tool pins a D1 database id"
       }
      ]
     }
