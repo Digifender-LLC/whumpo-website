@@ -1979,7 +1979,14 @@
       "dependsOn": [
         "WH-041",
         "WH-042",
-        "WH-033"
+        "WH-033",
+        "WH-192",
+        "WH-193",
+        "WH-194",
+        "WH-195",
+        "WH-196",
+        "WH-197",
+        "WH-198"
       ],
       "blockers": [],
       "outcome": "The remaining MVP domain purchase contract has authoritative quotes and safe financial fulfillment.",
@@ -2002,7 +2009,283 @@
       "references": [
         "docs/domains.md",
         "docs/payments.md",
-        "docs/plan-lifecycle.md"
+        "docs/plan-lifecycle.md",
+        "docs/domain-purchases.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": [
+        "2026-10-09 UTC: decomposed into WH-192 to WH-198 with the planned contract in docs/domain-purchases.md (WH-192). Planning and offline reference only: no table, route, binding, registrar account, payment flow, availability check, purchase or deployment, and no src/ behavior change. The parent acceptance is unchanged and closes only after every child. No child reaches WH-023, WH-044, WH-045, WH-047, WH-049 or WH-104; only the live acceptance WH-198 waits for WH-041. Existing quote, benefit and hosting source is mapped with exact gaps G-D1 to G-D12; registrar selection is an open owner decision."
+      ]
+    },
+    {
+      "id": "WH-192",
+      "title": "Freeze the domain purchase contract and decompose WH-034",
+      "phase": "F3",
+      "priority": "P1",
+      "readiness": "ready",
+      "kind": "decision",
+      "size": "S",
+      "dependsOn": [
+        "WH-052",
+        "WH-116"
+      ],
+      "blockers": [],
+      "outcome": "Every WH-034 slice builds against one frozen quote, consent, order-state, funding-hold and registrar-adapter model instead of inventing its own.",
+      "scope": [
+        "Freeze the versioned server-computed quote (availability, initial and renewal price, fees, tax, term, expiry, registrar adapter, premium flag, currency, payer, consent text digest), the exact human review binding and the order state machine with idempotency and bounded read-only reconciliation",
+        "Define WH-042/044/045 funding handoffs, renewal opt-in, transfer-out and closure rules and registrant data classification; map src/domain-purchase-quote.ts, src/plans.ts and the domain hosting source with exact gaps",
+        "Evaluate registrar APIs from dated official sources; add an offline reference and mutation-checked conformance harness without Worker imports"
+      ],
+      "acceptance": [
+        "docs/domain-purchases.md states the frozen shapes, states, authority, funding handoffs, lifecycle, data classes, liabilities, registrar evaluation, gap map and child slices, marked planned",
+        "Offline checks reject client/model price, funding and authority, expired or re-priced reviews, stale or foreign authority and unknown versions, and prove duplicate, reordered and timeout results never cause a second purchase",
+        "WH-034 keeps its acceptance and depends on every child; no child reaches WH-023, WH-044, WH-045, WH-047, WH-049 or WH-104, and only WH-198 waits for WH-041",
+        "Open owner decisions are listed with a recommendation rather than assumed"
+      ],
+      "verification": [
+        "node tests/domain-purchase-contract.mjs",
+        "node tools/verify.mjs fast",
+        "node tools/roadmap.mjs validate, alignment and render --check",
+        "git diff --check"
+      ],
+      "references": [
+        "docs/domain-purchases.md",
+        "src/domain-purchase/order.ts",
+        "tests/domain-purchase-contract.mjs",
+        "docs/domains.md",
+        "src/domain-purchase/quote.ts",
+        "docs/job-envelope.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": [
+        "2026-10-09 UTC: contract and offline reference only, first committed on branch claude/wh-034-registrar-purchase-contract and ported onto origin/main d3ebaf2 as claude/wh-034-registrar-purchase-contract-main (PR #236, closed unmerged for merge conflicts), then re-ported the same day as claude/wh-034-registrar-purchase-contract-r2 onto origin/main 4dea09c, where src/domain-purchase-quote.ts, src/plans.ts, src/domain-hosting.ts, src/domains.ts and the domain schema are unchanged and the same checks pass, then rebuilt as claude/wh-034-registrar-purchase-contract-r2-train2 onto origin/main 89fa009 without the WH-193 squash that PR #246 had merged into the r2 branch, where that mapped source is still unchanged and the same checks pass (not merged; issue not created or claimed from this session). Added docs/domain-purchases.md (planned), tools/prototypes/domain-purchase.mjs (imports only node:crypto) and tests/domain-purchase-contract.mjs, registered as pnpm test:domain-purchase-contract and in the fast verification profile. node tests/domain-purchase-contract.mjs passed 20 reference checks and 3 source-agreement/static checks, and caught 26 of 26 deliberate mutants of the reference, each by its intended check. Synthetic registrar, names and prices only; proves the frozen contract and reference, not D1 storage, payment holds, a registrar adapter or any purchase. Registrar facts read from official pages on October 9, 2026 (the OpenSRS register command page returned 404 and is marked unverified); eligibility, pricing and reseller terms require verification. No src/, schema, binding, registrar, payment or deployment change."
+      ]
+    },
+    {
+      "id": "WH-193",
+      "title": "Source domain quote engine and purchase state machine with a synthetic registrar",
+      "phase": "F3",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-192",
+        "WH-122"
+      ],
+      "blockers": [],
+      "outcome": "One server module computes v1 quotes and drives the order state machine against a registrar adapter interface, proven with a synthetic registrar before any schema or provider exists.",
+      "scope": [
+        "Replace the src/domain-purchase-quote.ts shape with the v1 quote, registrable-name check, consent text and digest (gaps G-D1 to G-D6); one adapter interface for check, register and read-only lookup",
+        "Pure state machine for consent, reserve, single dispatch, lease expiry, bounded reconciliation, authenticated registrar events and cancellation, matching the contract transition table",
+        "Point the conformance harness at the source module; no schema, route, Chat binding, provider or customer-visible change"
+      ],
+      "acceptance": [
+        "The conformance harness passes against the source module with every mutant caught",
+        "No client, tool argument or model can supply price, funding, premium, auto-renew or approval fields",
+        "A lost, duplicate or reordered registrar result never produces a second register call"
+      ],
+      "verification": [
+        "node tests/domain-purchase-contract.mjs against the source module",
+        "pnpm test:domain-purchase-quote",
+        "pnpm check"
+      ],
+      "references": [
+        "docs/domain-purchases.md",
+        "src/domain-purchase/quote.ts",
+        "src/domain-purchase/order.ts",
+        "src/plans.ts"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": [
+        "2026-10-09 UTC: source slice on local branch claude/wh-193-domain-quote-state-machine, stacked on the unmerged WH-192 branch claude/wh-034-registrar-purchase-contract-r2 (PR #245, base origin/main 4dea09c), then cherry-picked unchanged as claude/wh-193-domain-quote-state-machine-train2 onto claude/wh-034-registrar-purchase-contract-r2-train2 (base origin/main 89fa009) after PR #246 was squash-merged into the r2 branch instead of main, with the same checks passing; the contract suite moved out of the fast verification profile there because the source version takes about 9 s (esbuild bundles of the four Worker entries), above the 3 s fast-profile budget, and stays runnable as pnpm test:domain-purchase-contract; not merged, issue not created or claimed from this session. Added pure modules src/domain-purchase/quote.ts, order.ts, registrar.ts (one adapter interface: check, register, read-only lookup; synthetic in-memory registrar) and renewal.ts, and deleted src/domain-purchase-quote.ts (no caller existed outside its test) and tools/prototypes/domain-purchase.mjs (the source is now the only implementation). Gaps G-D1 to G-D6 are closed in source. node tests/domain-purchase-contract.mjs runs against the bundled source: 20 source checks and 3 policy/static checks passed, and 26 of 26 source mutants were caught, each by its intended check; an esbuild import-graph check shows src/index.ts, src/site-host.ts, src/app-host.ts and src/runtime/worker.ts do not reach the module. node tests/domain-purchase-quote.mjs passed for the new shape. The three acceptance criteria hold for the source module and synthetic registrar only: no schema, route, Chat binding, persistence, real registrar, payment, provider or customer-visible change, so D1 atomicity, holds and real adapters remain WH-194 to WH-197. Behaviour changes versus the deleted helper are listed in docs/domain-purchases.md; none was reachable by a customer, API or model."
+      ]
+    },
+    {
+      "id": "WH-194",
+      "title": "Current-schema domain orders, reviews, funding holds and registrant data class",
+      "phase": "F3",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-193",
+        "WH-116",
+        "WH-052"
+      ],
+      "blockers": [],
+      "outcome": "Domain quotes, reviews, orders, holds, attempts, reconciliation reads and registrant contacts persist in the complete current schema with atomic transitions and lifecycle/protection registration.",
+      "scope": [
+        "Canonical schema inputs for quotes, reviews, orders (unique idempotency key and one active order per registrable name), funding holds, attempts and registrar events; D1 statements repeat every contract predicate (gap G-D10)",
+        "Register a planned-to-current domain-registrations lifecycle/protection class with registrant contact minimization and no model, log or export exposure of auth codes; funding holds join the billing class (gap G-D11)",
+        "Register the domain-registration job purpose and adapter under WH-052 and the exact Chat review binding under the WH-105 contract"
+      ],
+      "acceptance": [
+        "Concurrent consents, dispatches and sweeps on local D1 never produce two orders or two register calls",
+        "Unknown and unresolved orders retain their hold and block account purge until resolved",
+        "The schema change ships only through a reviewed empty-database cutover the owner authorizes"
+      ],
+      "verification": [
+        "Disposable local D1 concurrency tests against the complete current schema",
+        "node tools/lifecycle-catalog.mjs",
+        "pnpm check"
+      ],
+      "references": [
+        "docs/domain-purchases.md",
+        "docs/data-lifecycle.md",
+        "docs/job-envelope.md",
+        "docs/releases.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-195",
+      "title": "Sandbox registrar adapter for the owner-selected registrar",
+      "phase": "F3",
+      "priority": "P1",
+      "readiness": "blocked",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-194"
+      ],
+      "blockers": [
+        "Owner selection of the registrar and separate approval to open and use its sandbox or test account (no real-money balance or production endpoint)"
+      ],
+      "outcome": "The selected registrar's test environment answers check, register and lookup through the one adapter interface with exact refusal-versus-uncertain classification.",
+      "scope": [
+        "Implement the adapter for the owner-selected registrar's sandbox or test environment; classify definite refusals versus uncertain outcomes; never retry a register call",
+        "Keep credentials in a Worker secret binding only; never in URLs, Chat, model context, logs, fixtures or GitHub",
+        "Record dated provider facts (premium acknowledgement, privacy and auto-renew defaults, async workflow, lookup capability) and calibrate the reconciliation bound"
+      ],
+      "acceptance": [
+        "Sandbox check, register, lookup and a scripted lost response behave as the contract requires with no second register call",
+        "No production registrar endpoint, real-money balance or live domain is used"
+      ],
+      "verification": [
+        "Sandbox adapter contract tests with explicit owner approval for the test account",
+        "pnpm check"
+      ],
+      "references": [
+        "docs/domain-purchases.md",
+        "docs/connectors.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-196",
+      "title": "Domain renewal opt-in, expiry reminders, disconnect and transfer-out lifecycle",
+      "phase": "F3",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-194"
+      ],
+      "blockers": [],
+      "outcome": "Owners control renewal, hosting disconnect and transfer-out of purchased domains with exact reviews, and nothing renews, lapses or leaves silently.",
+      "scope": [
+        "Auto-renew off by default; an exact opt-in review bound to the current renewal price; a renewal price rise stops auto-renew until a new review",
+        "Expiry reminders on the ICANN Expired Registration Recovery Policy schedule, delivered through the WH-068 notification contract once available",
+        "Transfer-out under ICANN Transfer Policy rules (60-day locks, auth code to the owner only) and hosting disconnect through the existing domain hosting source; decide how a purchased name enters hosting (gap G-D8); account closure never cancels or deletes a registration"
+      ],
+      "acceptance": [
+        "No renewal is charged without a current opt-in covering the renewal price",
+        "Transfer-out and disconnect are owner-only, recover from lost responses without repeating provider mutations and never expose the auth code to a model"
+      ],
+      "verification": [
+        "Synthetic registrar lifecycle tests on local D1",
+        "pnpm test:domain-hosting",
+        "pnpm check"
+      ],
+      "references": [
+        "docs/domain-purchases.md",
+        "docs/integrations/domain-hosting.md",
+        "docs/notifications.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-197",
+      "title": "Connected domain purchase acceptance with a sandbox registrar and sandbox payment",
+      "phase": "F3",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "verification",
+      "size": "M",
+      "dependsOn": [
+        "WH-195",
+        "WH-196",
+        "WH-042",
+        "WH-105"
+      ],
+      "blockers": [],
+      "outcome": "An owner journey quotes, reviews, consents, funds with a Stripe sandbox hold and registers a sandbox domain, and every failure path recovers without a second purchase.",
+      "scope": [
+        "Two tenants on local D1 with the sandbox registrar and a Stripe sandbox payment method; maintainer inference unavailable during dispatch and reconciliation",
+        "Duplicate consent, timeout before and after the registrar acts, interrupted worker, price change, expiry, foreign owner, cancellation and premium exclusion",
+        "Chat and Domains present the same server review; no browser success page grants a purchase; operator runbook for unresolved orders and charge mismatches (gap G-D12 consumed from WH-042)"
+      ],
+      "acceptance": [
+        "Exactly one sandbox registration and one captured sandbox charge per consented order; uncertain orders keep their hold",
+        "No real-money charge, production registrar call or live domain",
+        "Evidence distinguishes synthetic, sandbox and live levels"
+      ],
+      "verification": [
+        "Connected local journey with owner-approved sandbox credentials",
+        "pnpm check"
+      ],
+      "references": [
+        "docs/domain-purchases.md",
+        "docs/stripe-sandbox.md",
+        "docs/chat-interactions.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-198",
+      "title": "Live domain purchase canary acceptance",
+      "phase": "F3",
+      "priority": "P1",
+      "readiness": "blocked",
+      "kind": "release",
+      "size": "S",
+      "dependsOn": [
+        "WH-197",
+        "WH-041"
+      ],
+      "blockers": [
+        "Owner approval of real-money activation (WH-041), the production registrar account and its funding or deposit, legal review of registrant/refund/chargeback terms, and an exact domain, price ceiling, registrant and funding source for one canary purchase"
+      ],
+      "outcome": "One owner-approved real registration proves the live adapter, funding capture, reconciliation and transfer-out readiness.",
+      "scope": [
+        "Exact owner review naming the domain, price ceiling, registrant, funding source and registrar account before any live call",
+        "One canary purchase with readback, receipt and recorded evidence; auto-renew off"
+      ],
+      "acceptance": [
+        "No live purchase, deposit or auto-renewal happens without that separate exact authorization",
+        "The canary registration, charge and receipt reconcile exactly; any uncertain outcome is held and reported"
+      ],
+      "verification": [
+        "Owner-approved live canary only",
+        "Readback recorded in docs/domain-purchases.md"
+      ],
+      "references": [
+        "docs/domain-purchases.md",
+        "docs/payments.md"
       ],
       "issue": null,
       "owner": null,

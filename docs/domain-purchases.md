@@ -1,0 +1,207 @@
+# Domain purchases: quotes, consent and safe fulfillment
+
+**WH-034 contract slice (WH-192), October 9, 2026 UTC; source baseline `d3ebaf2`, re-checked on `4dea09c` and `89fa009` the same day (no change to the mapped quote, plan-benefit, hosting or domain source, or to domain schema).** This document freezes one domain purchase contract: a versioned server-computed quote, the exact human review and consent text, the order state machine with idempotency and bounded read-only reconciliation, funding handoffs, renewal, transfer-out and registrant data rules. It maps the existing quote, plan-benefit and hosting source with exact gaps, evaluates registrar APIs from dated official pages, and splits the remaining [WH-034](roadmap/backlog.md#wh-034--build-reviewed-registrar-purchase-and-renewal-reconciliation) work into WH-192–198. It is a **planned contract**. It adds no table, route, binding, registrar account, payment flow or deployment, and performs no availability check or purchase.
+
+**WH-193 status (October 9, 2026 UTC): implemented in source as a pure module, not wired.** [src/domain-purchase/](../src/domain-purchase/quote.ts) replaces the former `src/domain-purchase-quote.ts` helper with the v1 quote, review, consent and order state machine below, against one registrar adapter interface and a synthetic in-memory registrar. No Worker entry, route, Chat binding, table or provider reaches it, and no customer-visible behavior changed. The [conformance harness](../tests/domain-purchase-contract.mjs) now runs against this source; the separate offline prototype was removed (see [source implementation](#source-implementation-wh-193)).
+
+This contract uses these existing contracts and does not replace them: [domain ownership](domains.md), [domain hosting](integrations/domain-hosting.md), [payments](payments.md) and the [Stripe sandbox](stripe-sandbox.md), the [plan and domain benefit policy](pricing-and-model-policy.md), the [WH-052 job envelope](job-envelope.md), [WH-105 Chat interactions](chat-interactions.md), [WH-116 data protection](data-protection.md) with the [lifecycle catalogue](data-lifecycle.md), the [current-version policy](current-version-policy.md) and the [notification contract](notifications.md). Its style follows the [notification](notifications.md) and [connector](connectors.md) contracts.
+
+## Decision
+
+1. **The server prices; nobody else does.** A quote is computed only from an authenticated, read-only registrar check plus server pricing, tax and funding policy. Clients, Chat tools and models can name a project and a hostname. They can never supply a price, fee, tax, currency, premium flag, funding source, benefit, term, auto-renew choice, approval or review identity.
+2. **One exact human consent per order.** The owner accepts a review that binds the quote digest, project and its current revision, hostname, funding source and the SHA-256 digest of the exact consent text shown. A model can prepare a quote and review. Only the signed-in owner can consent.
+3. **At most one purchase call per order, ever.** A lost, late, duplicated or reordered registrar response moves the order to `unknown-outcome`, keeps the funding hold and starts bounded read-only reconciliation. Nothing redispatches a purchase. Registrar idempotency features, where they exist, are defence in depth, not permission to resend.
+4. **Changes need a new review.** An expired quote, a changed price (initial or renewal), changed terms, a changed funding source or a changed project owner/revision refuses consent or cancels the reserved order before the purchase call, releases the hold and requires a new review.
+5. **Purchase is not benefit redemption, hosting or renewal.** v1 orders are paid by the customer's payment method. The annual domain benefit (WH-045) is shown as eligibility only and is never redeemed by this contract. A purchase never connects hosting, changes DNS or turns on auto-renew.
+6. **Nothing is activated by this document.** Registrar selection, sandbox access, live purchases, deposits, tax treatment and real-money charges each need their own owner decision and review (see [activation boundary](#activation-boundary)).
+
+## Quote shape (contract version 1)
+
+`validateQuote` in [quote.ts](../src/domain-purchase/quote.ts) rejects an unknown version, missing or unknown field, invalid amount, inconsistent total, unknown tax, renewal guarantee, auto-renew, premium benefit or non-payment-method funding. There is **no reader for any other version**: a quote, request, review or consent with `contractVersion` other than `1` is refused (`UNSUPPORTED_VERSION`), and stale quotes are never translated.
+
+| Field | Frozen v1 rule |
+| --- | --- |
+| `contractVersion` | Exactly `1`. |
+| `quoteId`, `ownerId`, `projectId` | Server identifiers. The project must belong to the owner at quote time. |
+| `hostname` | A **registrable name** (eTLD+1), lowercase ASCII/Punycode, not a platform domain. v1 source rule (`registrableName`): exactly two labels under a single-label public suffix; implementation uses the registrar's supported-extension list. Subdomains such as `www.example.com` are refused (`INVALID_HOSTNAME`). |
+| `operation`, `termYears`, `currency` | `register`, `1`, `USD`. Multi-year terms, transfers-in and other currencies are not in v1. |
+| `availability` | `available`, from the registrar's real-time check immediately before the quote. Search/suggestion results are never a quote. |
+| `premium` | Registrar-reported boolean. Premium names require the premium sentence in the consent text, an explicit premium acknowledgement to the registrar, and the server policy `allowPremium` (default off: `PREMIUM_NOT_OFFERED`). |
+| `registrar` | `{adapterId, adapterVersion}` of the trusted adapter that produced the check. |
+| `initial`, `renewal` | `{wholesaleCents, retailCents, feeCents, taxCents, totalCents}` in integer cents; `total = retail + fee + tax`. `renewal` adds `guaranteed: false`: renewal prices can change. Wholesale is kept so the WH-045 benefit cap can be computed; it is not shown as the customer price. |
+| `taxStatus` | `computed`. An unknown tax refuses the quote (`TAX_UNKNOWN`); zero is valid only when the tax policy computes zero. |
+| `benefit` | `{eligible, coverableWholesaleCents, redemption: "not-enabled"}`. Eligible only on a verified annual plan with an annual domain allowance and a non-premium name; coverable is at most $20 wholesale. Informational in v1. |
+| `funding` | `{payer: "customer", sourceKind: "payment-method", sourceId, customerChargeCents, benefitCents: 0}`. `customerChargeCents` equals `initial.totalCents`. |
+| `autoRenew`, `privacy` | `false` and `redacted`. Neither is a client choice. |
+| `termsVersion` | The registrar terms version the consent refers to. |
+| `quotedAt`, `expiresAt` | Epoch milliseconds; validity at most **15 minutes** (the existing helper's bound). |
+
+The quote digest is SHA-256 over canonical JSON (key order irrelevant). Any field change produces a new digest.
+
+## Consent text and exact review
+
+`consentText(quote)` renders deterministic plain text: the name and registrar, the all-in amount with price, fees and tax, the payment method, the premium sentence when applicable, that the annual benefit is not applied, the current renewal amount and that it may change, that auto-renew is off, the privacy default, non-refundability and the quote expiry and terms version. The review is:
+
+```json
+{"contractVersion":1,"reviewId":"…","quoteId":"…","quoteDigest":"sha256","ownerId":"…","projectId":"…","projectRevision":1,
+ "hostname":"…","fundingSourceId":"…","consentTextDigest":"sha256","expiresAt":0}
+```
+
+A review lives at most 10 minutes and never beyond the quote. Consent is the closed object `{contractVersion: 1, reviewId, quoteDigest, consentTextDigest, decision: "accept"}`. At consent the server, in order: rejects a model (`MODEL_CANNOT_CONSENT`) or any non-owner principal (`HUMAN_REVIEW_REQUIRED`); rejects another owner (`FOREIGN_OWNER`); replays an existing order for the same idempotency key; rejects a project whose owner or revision changed (`STALE_REVIEW`), an expired review/quote (`QUOTE_EXPIRED`), a digest mismatch (`REVIEW_MISMATCH`, `CONSENT_MISMATCH`), a changed funding source (`FUNDING_CHANGED`), an order already in progress or completed for the name (`ORDER_IN_PROGRESS`, `ALREADY_REGISTERED`); and finally re-runs the read-only registrar check, refusing any price or terms change (`PRICE_CHANGED`). Production consent is a Chat review (WH-105) or the equivalent Domains control over the same handler, inside the database transaction that creates the order.
+
+## Order state machine
+
+| State | Meaning | Allowed next states |
+| --- | --- | --- |
+| `quoted` | Quote and review prepared; no money or registrar effect. | `consented`, `expired`, `cancelled` |
+| `consented` | Exact owner consent recorded under a unique idempotency key. | `reserved`, `expired`, `cancelled` |
+| `reserved` | Funding hold placed for exactly `customerChargeCents` on the bound source. | `dispatching`, `expired`, `cancelled` |
+| `dispatching` | One attempt claimed in the same transaction that records it, immediately before the single registrar call. | `registered`, `failed`, `unknown-outcome` |
+| `registered` | Registrar evidence names this order's reference and the name. Hold captured. | — |
+| `failed` | Definite registrar refusal, or authenticated evidence that this order's workflow failed or the name is held by another registration. Hold released. | — |
+| `unknown-outcome` | Timeout, throw, lost or malformed response, asynchronous workflow still running, or a worker interrupted after the claim (`dispatching` older than the 60-second lease). The purchase may have happened. Hold retained. | `registered`, `failed`, `unresolved` |
+| `unresolved` | Reconciliation bound reached without evidence. Hold retained; restricted operator attention; blocks account purge. | `registered`, `failed` (authenticated evidence only) |
+| `cancelled` | Stopped before the purchase call: owner cancellation, price change before dispatch. Hold released. | — |
+| `expired` | Quote expired before the purchase call. Hold released if one existed. | — |
+
+Rules:
+
+- **No redispatch.** `dispatch` on `dispatching`, `unknown-outcome` or `unresolved` is refused (`NO_REDISPATCH`). Owner cancellation works only before the purchase call (`CANNOT_RECALL` otherwise). There is no bulk retry.
+- **Bounded read-only reconciliation.** An `unknown-outcome` order allows at most 3 registrar lookups within 72 hours (proposed; WH-195 calibrates to the selected registrar's documented workflow timing, and the bound stays finite). A registration naming this order moves it to `registered`; this order's failed workflow, or the name registered to someone else, moves it to `failed`. "Not found" or "in progress" is **not** proof either way. Reconciliation never calls register.
+- **Registrar events** (webhooks or workflow callbacks) are accepted only after the adapter authenticates them (`EVENT_NOT_AUTHENTICATED`), are idempotent by event ID, must name the current attempt (stale attempts are ignored) and apply only allowed transitions, so a late `failed` after `registered` is ignored.
+- **Holds** are released only from `failed`, `cancelled` or `expired`, and captured only on `registered`. A registration whose charged wholesale differs from the quote is recorded with `chargeMismatch` for operator review; the customer is never charged more than the consented total.
+- **Job envelope.** Dispatch runs under the [WH-052 envelope](job-envelope.md) with a new registered purpose (`domain-registration`, implemented by WH-194), `maxAttempts: 1` for the register step and the consenting owner's `workspace-session` actor; an expired session stops *unsent* work (the order expires and the hold is released). Reconciliation reads run as a `platform-obligation` and grant nothing else.
+
+## Idempotency
+
+The order idempotency key is SHA-256 over `{ownerId, projectId, hostname, reviewId, quoteDigest}`. A repeated consent returns the existing order. Separately, at most one non-terminal order may exist per registrable name across the platform, so a second review, another tab or another tenant cannot start a parallel purchase (`ORDER_IN_PROGRESS`). The registrar request carries the order ID as its client reference where the API allows one, so lookups can attribute a registration to exactly one order. None of the evaluated registrar pages documents a purchase idempotency key; the contract assumes none.
+
+## Authority
+
+| Actor | May | May not |
+| --- | --- | --- |
+| Owner (signed-in workspace session) | Prepare, consent, cancel before dispatch, opt in to auto-renew, request transfer-out | Supply price, funding, premium or approval fields |
+| Model / Chat tool | Prepare a quote and review from project + hostname; explain it | Consent, confirm auto-renew, cancel, transfer, read auth codes, set any price/funding/authority field (`CLIENT_AUTHORITY`) |
+| Visitor, site/runtime Worker, webhook, scheduled rule, QuickJS customer code | Nothing | Any domain purchase capability or registrar binding |
+| Operator | Read restricted evidence; apply authenticated reconciliation evidence | Re-send a purchase, change a consented price, consent for an owner |
+
+Registrar credentials exist only in the adapter's Worker secret binding. They never enter Chat, model context, quotes, reviews, logs, fixtures or GitHub. Purchase dispatch and reconciliation never invoke owner-maintenance inference.
+
+## Funding handoffs
+
+- **WH-042 (subscriptions and payments).** v1 funding is the owner's current payment method from the one subscription/payment resolver. The hold and capture are a new one-off payment kind. WH-042's current scope covers subscriptions, invoices and entitlements only, so that scope must be extended (or the item added to it) before WH-197; this contract does not create a second payment path. Browser return pages never mark an order paid or registered. Real-money charges stay disabled until WH-041/WH-198.
+- **WH-044 (premium AI funding).** The premium AI wallet, build/test units and standard-AI accounting are **not** domain funding (`fundingSourceKinds` is `["payment-method"]`). A premium *domain* is unrelated to premium *inference*.
+- **WH-045 (annual domain benefit).** The quote reports eligibility (annual plan, allowance > 0, non-premium, at most $20 wholesale), computed by `quoteDomainBenefit` in [plans.ts](../src/plans.ts) under its `domainBenefit` policy (the source quote calls it directly). `benefitCents` must be `0` and `redemption` must be `not-enabled`. WH-045 owns the benefit ledger, concurrent redemption, and the amended funding shape when it activates; premium names are never covered.
+
+## Renewal and auto-renew
+
+Auto-renew is **off** for every registration. Turning it on is a separate exact review: the server renders the current renewal total and an opt-in text; the owner (never a model) confirms its digest, and a renewal price change between review and confirmation is refused (`PRICE_CHANGED`). At renewal time an opt-in covers only a renewal total at or below the reviewed amount; a higher price turns auto-renew off and requires a new review. Expiry reminders follow the ICANN [Expired Registration Recovery Policy](https://www.icann.org/resources/pages/errp-2013-02-28-en) schedule (approximately one month and one week before expiry and within five days after; compliance required since August 31, 2013) and are sent through the [notification contract](notifications.md) once WH-068 delivers configured notices. The registrar's own reminder obligations remain the registrar's.
+
+Some registrars enroll registrations in auto-renew by default (Cloudflare's [Domain Registration Agreement](https://www.cloudflare.com/domain-registration-agreement/), effective August 20, 2026, says dashboard registrations are enrolled; its [Registrar API](https://developers.cloudflare.com/registrar/registrar-api/) defaults `auto_renew` to `false`). The adapter must set auto-renew off explicitly and read it back.
+
+## Disconnect, transfer-out and closure
+
+- **Hosting disconnect** uses the existing [hosting lifecycle](integrations/domain-hosting.md) and leaves the registration untouched. A purchase never creates a hosting connection or ownership proof by itself.
+- **Transfer-out** follows the ICANN [Transfer Policy](https://www.icann.org/resources/pages/transfer-policy-2016-06-01-en) (updated February 21, 2024): a registrar may deny a transfer within 60 days of creation or a prior transfer; a Change of Registrant imposes a 60-day lock unless the holder opted out; the AuthInfo code and unlock must be provided within five calendar days of the holder's request; an unanswered registry transfer notice auto-approves after five days. Whumpo requests the code only for the owner, delivers it only to the owner (never to Chat history, a model, logs or exports), turns auto-renew off and records the request. The source (`requestTransferOut` in [renewal.ts](../src/domain-purchase/renewal.ts)) refuses transfer-out inside 60 days of registration (`TRANSFER_LOCKED`).
+- **Account closure** never cancels, deletes or lets a paid registration lapse silently. Closure requires the owner to transfer out, or accept a documented expiry with the required notices; the policy is an [owner decision](#open-owner-decisions) consistent with [data lifecycle](data-lifecycle.md) ("Never delete a zone, cancel registration, change renewal/transfer locks or erase unrelated resources as account cleanup").
+
+## Registrant data and classification
+
+The ICANN [Registration Data Policy](https://www.icann.org/resources/pages/registration-data-policy-2024-02-21-en) (effective August 21, 2025; page revised May 12, 2026) requires registrars to collect the registrant name, street, city, state/province and postal code where applicable, country, phone and email, and to redact name, street, postal code, phone and email (and allow redaction of organization and city) in public RDDS output unless the holder consents to publish.
+
+- **Collect** only those required elements, entered by the owner for this purchase (not copied silently from the profile), plus the optional organization. Default to redaction; never request consent to publish in v1.
+- **Classify** as a new planned class `domain-registrations` (orders, reviews, attempts, reconciliation evidence, registrant contact) registered by WH-194 in [data-lifecycle.json](data-lifecycle.json) under the [WH-116 protection contract](data-protection.md): owner-scoped personal data, never in model context or ordinary logs, export includes registration metadata and the owner's own contact, retention while registered plus the finance/dispute period decided under LC-07. Funding holds and charges belong to the existing `billing` class; ownership proofs and hosting stay in `domains-dns`. AuthInfo codes are never stored beyond delivery and never exported.
+- The registrar receives the contact as a processor/registrar of record; its privacy terms are part of registrar selection.
+
+## Refunds, chargebacks and failure liabilities (explicit unknowns)
+
+These are **unknown** and gate live activation; the contract does not decide them:
+
+- Registrations are generally non-refundable once complete (Cloudflare's Registrar API page and Domain Registration Agreement say so); add-grace-period deletion credits, if any, depend on the registrar and registry and **require verification**.
+- A customer refund or card chargeback after a successful registration leaves Whumpo holding the wholesale cost. Whether Whumpo then keeps, locks or lets the name lapse, and the ICANN Transfer Policy permission to deny transfer for non-payment, need legal and owner review.
+- Who is registrant and who is the registrar's account holder determines liability. Under Cloudflare's agreement, an account holder who licenses a name to a third party "remain[s] the holder of record" and is liable for the licensee. Whether Whumpo registers names with the **customer as registrant** in a Whumpo registrar account, acts as a reseller, or uses the customer's own registrar account requires legal review.
+- Sales tax on domain resale, the payment processor's fees, prepaid registrar balance float and minimum deposits are unknown until a registrar and tax approach are chosen.
+- A charge mismatch, an unresolved order or a registrar outage holding customer money needs an operator runbook (WH-197) before live use.
+
+## Registrar adapter selection criteria
+
+A registrar adapter is acceptable only if it provides: a real-time availability and price check including premium status; registration with explicit premium acknowledgement and auto-renew off; a read-only lookup by name (and ideally by client reference) to reconcile lost responses; documented definite-refusal error codes; WHOIS/RDAP redaction by default; transfer-out (unlock and AuthInfo) and auto-renew control by API; a sandbox/test environment; credentials usable from a Worker secret without exposing them in URLs or logs; terms that allow registering for customers with the customer as registrant; and published pricing for registration, renewal and redemption. Cost flags: prepaid balances, minimum deposits, IP allowlisting and reseller fees.
+
+## Registrar API evaluation — checked October 9, 2026 UTC
+
+These are public documentation facts read on October 9, 2026, not verified Whumpo entitlements, quotes or permission to sign up, deposit or purchase. **Eligibility, pricing and reseller terms require verification** for every option.
+
+| Option | What the official pages say | Fit for this contract | Flags (require verification) |
+| --- | --- | --- | --- |
+| [Cloudflare Registrar API](https://developers.cloudflare.com/registrar/registrar-api/) (page last updated September 16, 2026) | **Beta.** Search (cached), real-time Check (up to 20 names; `registrable`, `tier`, `pricing.registration_cost/renewal_cost`, `reason` such as `extension_not_supported_via_api`), and `POST …/registrar/registrations` that waits up to 10 s then returns `201` or `202` (`Prefer: respond-async` forces async); poll registration status (`in_progress`, `succeeded`, `failed`, `action_required`, `blocked`). Successful registrations bill the account's default payment profile and are non-refundable. `auto_renew` defaults to `false`; `privacy_mode` defaults to `redaction` where supported. **Renewals, transfers and contact updates are not yet available through the API**; only a subset of extensions; premium names "will require explicit fee acknowledgement" when supported. No idempotency key is documented. Requires a token with Registrar write, a default payment method, a default registrant contact and acceptance of the Domain Registration Agreement. Changelog entry "Cloudflare Registrar API is now in beta" (URL dated 2026-04-15; the rendered date reads April 15, 2025). [Registrar overview](https://developers.cloudflare.com/registrar/) (April 24, 2026): at-cost registration and renewal, redaction and DNSSEC. [Transfer-out](https://developers.cloudflare.com/registrar/account-options/transfer-out-from-cloudflare/) (April 24, 2026) is a dashboard unlock/auth-code flow. [Domain Registration Agreement](https://www.cloudflare.com/domain-registration-agreement/) (effective August 20, 2026): the registrant may not change nameservers away from Cloudflare without transferring out; holder-of-record liability when licensing to a third party; payments non-refundable. | Strong check/async-status model and safe API defaults on the platform's existing provider. Gaps against the criteria: no sandbox documented, no API renewal/transfer/contact update yet, Cloudflare-only nameservers, and registrations sit in Whumpo's account with holder-of-record terms. | Charges go to Whumpo's Cloudflare billing profile (at cost, no markup per overview). Whether a platform may register names for customers as registrant, and multi-tenant use of the beta, are unverified. |
+| [Namecheap API](https://www.namecheap.com/support/api/intro/) (read October 9, 2026) | XML over HTTP GET with `ApiUser`/`ApiKey` in the query string; free [sandbox](https://www.sandbox.namecheap.com/) at `api.sandbox.namecheap.com`; production requires meeting account requirements and **IPv4 allowlisting**. [`namecheap.domains.create`](https://www.namecheap.com/support/api/methods/domains/create/) needs Registrant/Tech/Admin/AuxBilling contacts; `IsPremiumDomain`, `PremiumPrice`, `EapFee`; free privacy via `AddFreeWhoisguard`/`WGEnabled` (default `no`); returns `Registered`, `ChargedAmount`, `OrderID`, `TransactionID`; error `2515623` when premium status is mismatched. The [API FAQ](https://www.namecheap.com/support/knowledgebase/article.aspx/9739/63/api-faq/) (read via search excerpt only) says production API needs at least 20 domains or at least $50 balance, and API billing uses the account balance only. No idempotency statement. | Sandbox and explicit premium price fields fit. Credentials in URLs conflict with the no-credential-in-logs rule; IP allowlisting from Workers is unverified; four contact sets increase registrant data handling. | Prepaid balance float; reseller pricing only "once you get 50+ domains" (FAQ excerpt). |
+| [Gandi v5 Domain API](https://api.gandi.net/docs/domains/) (page dated September 1, 2026) | `GET /v5/domain/check` returns `status` (`available`, `unavailable_premium`, `pending`, `error_timeout` …) and prices before/after tax, with premium type and periods; `POST /v5/domain/domains` takes `fqdn`, `owner` contact, `duration`, `currency`, **`price`** and `enforce_premium` (required for premium), returns `202` with a `Location` to follow; a **`Dry-Run: 1`** header validates without acting; sandbox at `api.sandbox.gandi.net`; charges a prepaid account; `PATCH …/autorenew`; `POST …/transferout` with `authinfo`; `resellee_id` field present. No idempotency key found. | Best documented fit: bearer credentials in headers, sandbox, dry-run validation, an expected `price` sent with the order (guards a changed price), explicit premium enforcement, auto-renew and transfer-out by API, tax-inclusive prices. | Prepaid balance; reseller terms, pricing and whether `resellee_id` covers registering for customers require verification. |
+| [OpenSRS (Tucows)](https://opensrs.com/api/overview) | Reseller XML API (signed `X-Signature`), live endpoint requires IP allowlisting; [Horizon test environment](https://support.opensrs.com/support/solutions/articles/201000063061-horizon-test-system-accounts) for resellers with $5,000 test credit, test registrations not real. The `SW_REGISTER` command page (`domains.opensrs.guide/docs/sw_register-domain-or-trust_service`) returned **404 — unverified**. | Purpose-built reseller platform with a realistic test system. Command semantics, premium handling and lookup behavior are **unverified**. | Reseller application, deposit and pricing are not on the pages read; MD5-based request signing and IP allowlisting from Workers unverified. |
+| [Dynadot API](https://www.dynadot.com/domain/api-commands) (read October 9, 2026) | `api3.xml` commands with a key from the account control panel; `register` (`domain`, `duration`, contacts, `premium=1`, `currency`, `coupon`), `search` with `show_price`, `renew` with `price_check` and `no_renew_if_late_renew_fee_needed`, `set_renew_option`, `get_transfer_auth_code`, `authorize_transfer_away`; sandbox `api-sandbox.dynadot.com`; orders paid from account balance. No idempotency statement. | Sandbox and renewal price checks fit; key passed as a query parameter (logging risk). | Prepaid balance; terms and pricing not read. |
+
+**Assessment.** No evaluated API documents purchase idempotency, so the no-redispatch and read-only reconciliation rules are required regardless of choice. For a sandbox adapter (WH-195), Gandi v5 meets the most criteria on the pages read; Cloudflare's API matches the platform and has safe defaults, but the pages read document no sandbox and no renewal or transfer endpoints (requires verification). The choice is an [owner decision](#open-owner-decisions).
+
+## Existing source map and gaps
+
+| Contract element | Current source | Gap |
+| --- | --- | --- |
+| Quote shape | [quote.ts](../src/domain-purchase/quote.ts) (WH-193): the closed 21-key v1 quote, `registrableName`, `consentText`, canonical `quoteDigest`, `validateQuoteRequest`/`validateConsent` and `prepareDomainPurchase` (quote plus exact review). It replaced `src/domain-purchase-quote.ts` (a 20-key register/renew quote with a fingerprint and customer ceiling), which is deleted. Not exposed as an API or model tool. | **Resolved in source (WH-193):** **G-D1** `contractVersion: 1`, other versions refused (`validateQuote`). **G-D2** `initial`/`renewal` carry `wholesaleCents` and `retailCents` (`serverPrice`). **G-D3** `registrableName` refuses `www.` and other subdomains (`tests/domain-purchase-quote.mjs`). **G-D4** the review binds `quoteDigest`, `projectRevision`, `fundingSourceId` and `consentTextDigest`; consent checks each (`consentToOrder` in [order.ts](../src/domain-purchase/order.ts)). **G-D5** `funding` (payer, payment-method source, charge, zero benefit) and `registrar.adapterVersion`. **G-D6** `taxStatus: "computed"`; a policy without an approved tax method refuses with `TAX_UNKNOWN`, and zero tax is only a computed result. Renewal is a separate opt-in ([renewal.ts](../src/domain-purchase/renewal.ts)), not a quote operation. |
+| Benefit policy | [plans.ts](../src/plans.ts) `domainBenefit` ($20 wholesale cap, premium excluded, redemption disabled) and `quoteDomainBenefit`, called by `computeQuote`. | Conforms (checked). **G-D7** no ledger, verified-coverage input or redemption (WH-045). |
+| Ownership proof | [domains.ts](../src/domains.ts) claims and DNS TXT proofs; the domain agent rejects purchase/connect authority. | Conforms for authority. **G-D8** how a purchased name enters hosting (proof versus registrar evidence) is undecided (WH-196). |
+| Single-dispatch pattern | [domain-hosting.ts](../src/domain-hosting.ts): a dispatched create is never retried; uncertain outcomes wait for operator reconciliation; read-only recovery helper. [order.ts](../src/domain-purchase/order.ts) applies the same rule to registrar purchases with a claim-before-register dispatch and a bounded read counter; [registrar.ts](../src/domain-purchase/registrar.ts) defines the one adapter interface. | Pattern reused. **G-D9** no real registrar adapter (WH-195) and no stored reconciliation counter (WH-194); hosting activation itself is pending under WH-033. |
+| Persistence | None. | **G-D10** no quote/review/order/hold/attempt/event tables, unique keys or purge blocking (WH-194). |
+| Lifecycle | `domains-dns` and `billing` classes. | **G-D11** no `domain-registrations` class or registrant-contact protection (WH-194). |
+| Payments | Stripe sandbox subscriptions and invoices only. | **G-D12** no one-off hold/capture kind (WH-042 extension consumed by WH-197). |
+
+None of these gaps is a defect in current behavior: purchasing is disabled and unreachable.
+
+## Source implementation (WH-193)
+
+`src/domain-purchase/` holds four pure modules. None stores anything, opens a route, binds Chat or reads a secret, and the harness checks with an esbuild import graph that `src/index.ts`, `src/site-host.ts`, `src/app-host.ts` and `src/runtime/worker.ts` do not reach them.
+
+- [quote.ts](../src/domain-purchase/quote.ts): vocabularies, bounds, the closed quote/request/consent shapes, `registrableName`, `serverPrice`, `computeQuote` (read-only registrar check plus server policy and plan benefit), `pricesUnchanged`, `consentText`, digests and `prepareDomainPurchase`. Owner coverage and the payment method are server-resolved inputs (`OwnerFunding`), never request fields. The pricing policy's `taxBasisPoints: null` stands for "no approved tax method" (owner decision 4) and refuses every quote.
+- [order.ts](../src/domain-purchase/order.ts): the transition table and one function per step (`consentToOrder`, `reserveOrder`, `dispatchOrder`, `expireDispatchLease`, `reconcileOrder`, `applyRegistrarEvent`, `cancelOrder`). Each takes plain records and returns `{order, hold, registration}`; the caller persists them. `dispatchOrder` calls the caller's `claim` with the `dispatching` order and calls `register` only after the claim commits; a lost claim race never calls it. Registrations created from reconciliation or events record `chargeMismatch: null` (charge not reported) and an event without an expiry records `expiresAt: null`, rather than guessing.
+- [registrar.ts](../src/domain-purchase/registrar.ts): the one adapter interface (`check`, `register`, read-only `lookup`, which also reports the current renewal price) and `createSyntheticRegistrar` for tests.
+- [renewal.ts](../src/domain-purchase/renewal.ts): auto-renew opt-in review, confirmation and renewal-time decision, and the 60-day transfer-out lock. The surrounding lifecycle remains WH-196.
+
+WH-194 must repeat every predicate inside its committing D1 statements: the unique idempotency key, one non-terminal order per name, the compare-and-set claim from `reserved` to `dispatching`, the event-ID uniqueness and the read counter.
+
+Behavior changes from the removed helper (none was reachable by a customer, API or model): renewal is no longer a quote `operation`; the customer charge ceiling of `matchesDomainPurchaseReview` is replaced by exact digest binding of the whole quote; subdomains such as `www.` names are refused; amounts are capped at the contract's $1,000 (`maxTotalCents`) instead of $1,000,000; the opaque provider reference is no longer part of the quote; errors carry contract codes instead of one generic message.
+
+## Activation boundary
+
+May be prepared now: source modules against the synthetic registrar, local D1 tests and documentation. Each of the following needs its own explicit owner authorization in the conversation where it happens and is **not** authorized by this contract or by roadmap readiness: opening a registrar account or sandbox, entering registrar credentials, any availability check against a real registrar, any sandbox or live registration, any registrar deposit or balance, enabling real-money payments, the schema cutover, and any change to customer DNS or hosting.
+
+## Delivery slices
+
+WH-034 stays the parent with its acceptance unchanged and closes only when every child below is accepted. No child depends on or delivers WH-023 (finance periods), WH-044 (premium AI funding), WH-045 (benefit redemption) or WH-047/049/104 (commercial and paid-tier launch); WH-045 and WH-049 consume WH-034. Only the live acceptance (WH-198) waits for WH-041 real-money terms. Task scopes live in [backlog.json](roadmap/backlog.json).
+
+| ID | Slice | Depends on |
+| --- | --- | --- |
+| WH-192 | Freeze this contract, the offline reference/conformance harness and the decomposition | WH-052, WH-116 |
+| WH-193 | Source quote engine and order state machine against a registrar adapter interface, proven with the synthetic registrar (G-D1–D6) | WH-192, WH-122 |
+| WH-194 | Current-schema quotes, reviews, orders, holds, attempts and events; `domain-registrations` lifecycle class; job purpose; Chat review binding; reviewed empty-database cutover (G-D10, G-D11) | WH-193, WH-116, WH-052 |
+| WH-195 | Sandbox adapter for the owner-selected registrar (blocked on that selection and sandbox approval) | WH-194 |
+| WH-196 | Renewal opt-in, expiry reminders, disconnect and transfer-out lifecycle (G-D8) | WH-194 |
+| WH-197 | Connected acceptance on local D1 with the sandbox registrar and Stripe sandbox hold/capture: two tenants, duplicates, timeouts, interruption, price change, expiry, premium exclusion, maintainer disabled (G-D12) | WH-195, WH-196, WH-042, WH-105 |
+| WH-198 | Live canary purchase after real-money activation, registrar account/funding and an exact domain/ceiling/registrant review | WH-197, WH-041 |
+
+## Open owner decisions
+
+1. **Registrar.** Recommended: Gandi v5 for the sandbox adapter (WH-195), subject to verifying reseller terms and pricing; re-evaluate Cloudflare Registrar when its API offers a sandbox, renewals and transfers. Alternatives: Cloudflare Registrar API now (no sandbox documented; if none exists acceptance would be live-only, requires verification), Namecheap, OpenSRS or Dynadot.
+2. **Registrant and account model.** Recommended: the customer is the registrant of record, in a Whumpo registrar account, with transfer-out on request, after legal review. Alternatives: Whumpo as registrant licensing to the customer (holder-of-record liability), or registration in the customer's own registrar account through a separately consented connection (optional WH-031-style path, customer pays the registrar directly).
+3. **Retail pricing.** Recommended: pass wholesale through at cost plus a disclosed fixed fee covering payment processing, with no markup during testing. Alternatives: cost plus percentage, or flat retail tiers.
+4. **Tax.** Recommended: no quote until an accountant-approved tax method exists (the contract refuses unknown tax). Alternatives: Stripe Tax calculation, or a reviewed per-jurisdiction rule.
+5. **Premium names.** Recommended: not offered in the first acceptance (`allowPremium` off). Alternative: offer with the premium consent sentence and a per-order ceiling.
+6. **Refunds, chargebacks and closure.** Recommended: no refund after completed registration (disclosed in consent); on chargeback, keep the name locked until resolved; on account closure, require transfer-out or explicit lapse acknowledgement. All need legal review before WH-198.
+7. **Reconciliation bounds and retention.** Recommended: 3 reads in 72 hours, then `unresolved` with restricted retention until resolved; resolved orders retained for the finance period decided under LC-07.
+
+These decisions gate WH-195–198 activation only where named; this contract itself needs none of them.
+
+## Verification
+
+`node tests/domain-purchase-contract.mjs` (also `pnpm test:domain-purchase-contract`; not part of `node tools/verify.mjs fast`, because the source version bundles the four Worker entries with esbuild for its import-graph check and takes about 9 s wall time on the 2-vCPU build host, above the 3 s budget for fast/protection entries) bundles `src/domain-purchase/*.ts` with esbuild and runs 20 source checks through an in-memory driver that only stores the records the source returns: frozen vocabularies and transitions; rejection of unknown/stale versions with no legacy decoder; client/model price, funding and authority fields; owner-only consent; exact consent-text digest binding; expired quotes before consent, reserve and dispatch; changed initial/renewal prices before consent and before dispatch; foreign owner, transferred project, changed funding source and foreign cancellation; the happy path with one register call and a captured hold; duplicate consent/reserve/dispatch, a lost claim race, one active order per name across tenants and already-registered names; lost responses (timeout before/after, pending, malformed) with no redispatch or recall; an interrupted worker; bounded read-only reconciliation (read and time bounds, late success, workflow failure, name registered elsewhere); unauthenticated, stale, duplicate and reordered registrar events; definite rejection; premium exclusion from the benefit and the premium gate; no benefit redemption and payment-method-only funding; auto-renew off with exact opt-in, model refusal and renewal price rise; the 60-day transfer-out lock; and the closed quote shape. Three further checks confirm the benefit comes from the [plans.ts](../src/plans.ts) policy, that the replaced quote shape is gone from `src/` and `frontend/src/`, and that the module imports only its siblings, `plans.ts` and the canonical JSON helper, makes no network or database call and is reached by no Worker entry. Twenty-six deliberately broken copies of the source (mutants of `quote.ts`, `order.ts`, `renewal.ts` and the `plans.ts` premium rule) must each be caught by the check written for that property; `--explain` prints which check caught each. The script runs in about three seconds. `node tests/domain-purchase-quote.mjs` (`pnpm test:domain-purchase-quote`) checks the v1 quote and review shape, gaps G-D1 to G-D6, the registrable-name rule and canonical digests.
+
+The separate offline prototype (`tools/prototypes/domain-purchase.mjs`) was removed with WH-193 rather than kept as a second implementation: the source is now the only implementation, the harness checks are the independent statement of the contract, and the current-version policy rejects duplicate paths.
+
+These checks prove the contract against the source module and synthetic registrar only. They do not prove D1 atomicity, payment holds, a real registrar adapter, registry behavior, tax, refunds or any purchase. No database, network, model, credential, registrar, payment, Cloudflare resource, CMS test or deployment is involved. Roadmap validation, alignment and render checks and `git diff --check` cover the backlog change.

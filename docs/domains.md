@@ -18,7 +18,7 @@ Cloudflare documents 100 included custom hostnames on Free, Pro and Business pla
 
 Provisioning, checks, disconnect, maintenance, public hostname mapping and reviewed operator reconciliation are implemented in [hosting design](integrations/domain-hosting.md), with activation disabled. Local checks cover exact provider IDs, bounded hostname reservations, certificate/DNS requirements, published-only routing, disconnect and uncertain-outcome recovery. Provider enrollment, origin/Worker routing, actual certificate issuance, real scheduled execution and live recovery acceptance remain outstanding. Ownership verification alone must never display Connected.
 
-Domain purchases remain a separate unfinished integration. Stripe sandbox billing does not configure a registrar or authorize a purchase. Customer Cloudflare/GitHub connections retain their own configuration, consent and acceptance gates.
+Domain purchases remain a separate unfinished integration; the planned [domain purchase contract](domain-purchases.md) (WH-034/WH-192, October 9, 2026) defines quotes, consent, orders and registrar selection without enabling any of them. Stripe sandbox billing does not configure a registrar or authorize a purchase. Customer Cloudflare/GitHub connections retain their own configuration, consent and acceptance gates.
 
 References checked September 29, 2026:
 - https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/plans/
@@ -50,6 +50,8 @@ Verification: `pnpm check`, `pnpm test:chat-delivery`, `pnpm test:domains`, `pnp
 Deployed test platform version `5d276f56-f5a9-43ee-8eed-7904b7b4a79f`. All 18 manifest output files matched the tested release; Domains route HTML loaded, health returned 200, and anonymous domain reads returned 401. Existing pricing was preserved and unrelated account-recovery edits were excluded. No schema or customer DNS changes were made.
 
 ## Registrar quote review foundation — September 29, 2026
+
+**Superseded October 9, 2026 (WH-193):** the helper described below was deleted and replaced by the v1 quote and order modules in `src/domain-purchase/`; see the [domain purchase contract](domain-purchases.md#source-implementation-wh-193). This section is the dated record of what was built then.
 
 `src/domain-purchase-quote.ts` now validates a registrar-independent **read-only** purchase review. There is no connected registrar, availability search, payment, order endpoint, registration/renewal dispatch or benefit redemption. Provider selection is awaiting the owner's direction. No registry call or purchase was made for this work.
 
