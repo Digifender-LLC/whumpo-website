@@ -6,6 +6,8 @@
 
 **WH-141 rewiring slice, October 10, 2026 UTC (source, local verification only; not deployed or merged).** The GitHub and Cloudflare adapters now send only catalog operations built by `buildConnectorRequest`: every call site names an operation ID with typed parameters, and the production code can no longer pass a URL, host, path, header or query. Recorded requests from the existing suites are unchanged, and the platform Worker is the only Worker that loads the catalog. See [WH-141 source status](#wh-141-source-status) for details, the catalog changes and the one wording deviation in the acceptance evidence.
 
+**WH-142 verification slices, October 10, 2026 UTC (tests and documentation only; local verification, not deployed or merged).** Discovery replies were found to re-enter later model context; this is registered as known exposure G-C6 and awaits an owner decision. The contract's action cases now run against the real D1-backed GitHub backup and Cloudflare DNS handlers. They pass except for pinned gaps G-C5, G-C7 and the newly found G-C8 and G-C9. Price binding and the receipt-state view remain. See [WH-142 verification status](#wh-142-verification-status).
+
 This contract uses these existing contracts and does not replace them: the [connection vault and key lifecycle](connection-key-lifecycle.md), [GitHub](integrations/github-connection.md) and [Cloudflare](integrations/cloudflare-connection.md) authorization, [Chat connection handoffs](chat-connection-handoffs.md), [WH-122 feature admission](feature-admission.md), the [WH-052 job envelope](job-envelope.md), [WH-116 data protection](data-protection.md) with the [lifecycle catalogue](data-lifecycle.json), the [inference privacy handoff](inference-privacy.md), the [bounded connection contracts](pricing-and-model-policy.md#bounded-connection-contracts) and the [current-version policy](current-version-policy.md). Its style and versioning follow the [shared module contract](shared-modules.md).
 
 ## Decision
@@ -119,7 +121,7 @@ Every operation declares its customer price, and the review binds it. v1 sets al
 | Data | Class | Status |
 | --- | --- | --- |
 | Credentials, OAuth state, revocation work, Chat return links | `connections` | Current. Export is metadata only. |
-| GitHub/Cloudflare discovery metadata (installations, repositories, zones) shown to the owner | `connections` ("selected resource metadata" export policy) | Current. These are server-formatted Chat replies; WH-142 must confirm whether they re-enter later model context and register that exposure. |
+| GitHub/Cloudflare discovery metadata (installations, repositories, zones) shown to the owner | `connections` ("selected resource metadata" export policy) | Current. These are server-formatted Chat replies. **WH-142 verified that they re-enter later model context** (known exposure G-C6, [finding](#wh-142-verification-status)); the owner has not yet decided whether that is acceptable. |
 | GitHub backup receipts and reconcile reads | `github-backups` | Current |
 | Cloudflare DNS reviews/receipts and inventory reads | `domains-dns` | Current |
 | Provider-selected mailbox/calendar/CRM content (owner panel, approved model context) | `connector-content` | **Planned** reservation (`planned-adapter`). WH-143 must admit it with exact tables, readers, the retention window (an owner decision) and deletion/export rules before any adapter persists content. The default is not to persist: show and discard. |
@@ -140,15 +142,17 @@ The existing code already provides credential custody, account binding, feature 
 | Inclusion / configuration / consent / readiness | Implemented separately (`connectionInclusion`, `githubConfig`, saved status, `plan-features` `implementation: private-test`). **Gap G-C2:** readiness lives only in launch packaging, not in an operation-checked catalog. | Same (**G-C2**). |
 | Exact review, atomic claim, durable receipt | Implemented (`github_backups`: `pending → dispatching → complete / uncertain / failed`, claim predicate includes inclusion and active token). | Implemented (`cloudflare_dns_actions`: `review → sending / unchanged → applied / uncertain → observed`). |
 | Unknown-outcome reconciliation without redispatch | Implemented (`backupRecoveryRead`, expected-head precondition, `clientMutationId`). | Implemented (`dnsRecoveryRead`, comment marker). |
-| Explicit price in review | **Gap G-C5.** The review text does not state "included in your plan; no per-use charge", and the price is not bound into the review digest. | Same (**G-C5**). |
-| Lookup/data-use consent | Not needed for current metadata (`owner-control`). **Gap G-C6:** discovery replies' later model-context exposure is unverified (see data table). | Same (**G-C6**). |
+| Explicit price in review | **Gap G-C5.** The review text does not state "included in your plan; no per-use charge", and the price is not bound into the review digest. Confirmed by WH-142: the review view has no price and confirmation accepts none. | Same (**G-C5**). |
+| Lookup/data-use consent | Not needed for current metadata (`owner-control`). **Gap G-C6, verified by WH-142:** discovery replies re-enter later model context, although the catalog declares them `owner-panel`/`chat-reply` only ([finding](#wh-142-verification-status)). | Same (**G-C6**). |
 | Refresh | Refresh custody retained, never used (`retained-unused`); grant revocation is a separate reviewed flow. Conforms. | None requested; unexpected refresh refused. Conforms. |
 | Revocation | Single-token delete with claims plus a reviewed app-grant removal. Conforms. | RFC 7009 with lease. Conforms. |
 | Provider type unions | **Gap G-C4.** `ConnectionProvider`, `isConnectionProvider` and `connectionFeature` accept only `github`/`cloudflare`. | Same |
 | Vault contexts | **Gap G-C3.** The vault context pattern admits only `github`/`cloudflare` token/PKCE and GitHub refresh. New providers need catalog-derived contexts, coordinated with WH-117 key lifecycle. | Same |
-| Common receipt names | **Gap G-C7.** State names differ per table. A shared receipt view or adapter is needed; the existing tables need no rewrite. | Same (**G-C7**). |
+| Common receipt names | **Gap G-C7.** State names differ per table. A shared receipt view or adapter is needed; the existing tables need no rewrite. WH-142 adds: a reconciled backup reads `complete`, so GitHub cannot distinguish `observed` from `applied`. | Same (**G-C7**). Cloudflare uses `sending` for `dispatching`. |
+| Definitive provider rejection | **Gap G-C8 (found by WH-142).** A definitive 4xx reply to the commit leaves the backup `uncertain` for operator review instead of `failed`. Only a 409 conflict found by the backup code itself settles `failed`. This is the cautious direction: nothing is resent. | Same (**G-C8**): any unconfirmed create, including a definitive 4xx, settles `uncertain`. |
+| Review digest echo | **Gap G-C9 (found by WH-142).** The review is an immutable row, but it carries no review or operation digest, and confirmation takes only the review ID. A changed catalog declaration does not make a review stale. | Same (**G-C9**). |
 
-None of these gaps is a known exploitable defect: hosts are fixed and all current callers pass server-built paths. They are places where the contract is only implicit. WH-141/142 close them without new scopes, endpoints or customer-visible behaviour. The table records the gaps as found by WH-140. WH-141 has since closed G-GH-1 and G-CF-1 in the production adapters, and G-C1, G-C2 and G-C4 in source; G-C3 is closed by agreement checks rather than derivation ([status](#wh-141-source-status)).
+Apart from G-C6, which is an unapproved model-context exposure awaiting an owner decision, none of these gaps is a known exploitable defect: hosts are fixed and all current callers pass server-built paths. They are places where the contract is only implicit. WH-141/142 close them without new scopes, endpoints or customer-visible behaviour. The table records the gaps as found by WH-140. WH-141 has since closed G-GH-1 and G-CF-1 in the production adapters, and G-C1, G-C2 and G-C4 in source; G-C3 is closed by agreement checks rather than derivation ([status](#wh-141-source-status)).
 
 ### WH-141 source status
 
@@ -190,6 +194,68 @@ Each edit now names a catalog operation and still asserts the same statuses and 
 
 Nothing remains for WH-141 in source beyond its issue and acceptance records. WH-142–146 remain.
 
+### WH-142 verification status
+
+Verification slices (A) and (B), October 10, 2026 UTC. These are tests and documentation only. No source, schema, route, Chat binding or customer-visible text changed, and nothing is deployed. WH-142 stays open: price binding (G-C5) and the common receipt-state view (G-C7) change what reviews and status show a customer, so they belong to the next slice.
+
+**(A) Finding: discovery metadata re-enters later model context (known exposure G-C6).** Provider discovery replies are saved as ordinary Chat turns that the next AI turn sends back to the model. The path, at source baseline `8bfe162`:
+
+1. Guided discovery (`/github-installations`, `/github-repos`, `/dns-zones`) is inserted with `ai_context_allowed=1`. Only usage reviews and transcript requests get `0` ([`src/chat.ts:323`](../src/chat.ts)). The provider result then becomes the turn's `assistant_text` ([`src/chat.ts:398-402`](../src/chat.ts)). That text holds installation account logins and IDs, repository owners, names, default branches and IDs ([`src/backup-chat.ts:23-25`](../src/backup-chat.ts)), and zone names and IDs ([`src/dns-chat.ts:28`](../src/dns-chat.ts)).
+2. The model can also select the same lookups itself (`backup` `installations`/`repositories`, `dns` `zones`; [`src/site-agent.ts:193-205`](../src/site-agent.ts) and [`215-233`](../src/site-agent.ts)). The AI turn is inserted with `ai_context_allowed=1` outside saved tasks ([`src/ai-chat.ts:101`](../src/ai-chat.ts)). The server-formatted discovery reply becomes its `assistant_text` ([`src/ai-chat.ts:190`](../src/ai-chat.ts), [`200`](../src/ai-chat.ts)).
+3. The next AI turn reads the last four completed turns with `ai_context_allowed=1` ([`src/ai-chat.ts:52`](../src/ai-chat.ts)). It sends each as a user message (first 600 characters) and an assistant message (first 900 characters) ([`src/ai-chat.ts:70`](../src/ai-chat.ts)). Saved-task turns use the task context instead and carry no general history.
+
+The data stays out of the system prompt and the workspace data message. Review and receipt replies that name the repository or zone (`/review-backup`, `/review-dns`, `/backups`, `/dns`) take the same path, but the test does not track them with separate canaries.
+
+Why this is registered as an exposure:
+- The catalog declares `installations.list`, `repositories.list` and `zones.list` as `owner-control` reads with destinations `owner-panel` and `chat-reply` only ([catalog](../src/connector-catalog/catalog.ts)). The contract says such reads "cannot target `model-context`" ([consent](#request-bound-lookup-and-data-use-consent)), but their Chat copy reaches the model anyway.
+- The [inference privacy handoff](inference-privacy.md#reuse-the-lifecycle-inventory) says provider read access does not authorize model sharing for the `connections` class, and the current Contributor route is training-enabled. Real installation, private-repository and zone names would reach that route.
+- A precedent exists: the saved-task connection-status reply is excluded from later model context ([`src/chat-interactions/connection-results.ts:74`](../src/chat-interactions/connection-results.ts), [handoffs](chat-connection-handoffs.md)). Discovery replies have no such exclusion.
+
+This is a **finding for the owner, not fixed here**: excluding these turns would change what the model sees and how it answers follow-up questions. Possible decisions are to exclude discovery and review replies from later model context, as the task-status reply is, to keep only the IDs the model needs for a follow-up review, or to accept the exposure for synthetic testing with a recorded decision. [`tests/connection-discovery-context.mjs`](../tests/connection-discovery-context.mjs) pins the current behaviour on SQLite or local D1 (`--d1`). It sends synthetic canaries (`SYNTHETIC-INSTALL-0101`, `SYNTHETIC-REPO-0201`, `SYNTHETIC-BRANCH-0202`, `synthetic-zone-0301.example`, their IDs, and a model-selected `synthetic-zone-0401.example`) through the real `sendChat`, `sendAIChat` and next-turn prompt builder, with a scripted model. Five named checks:
+- guided discovery canaries appear in assistant history in the next prompt, and only there;
+- a turn saved outside AI context stays out;
+- text after the first 900 characters stays out;
+- a model-selected discovery reply re-enters;
+- after four newer completed turns, no discovery value is sent.
+
+Five history-builder mutants are each caught by their named check. One of them excludes guided discovery turns, which simulates a fix, so a future change must update this test and this section together.
+
+**(B) Conformance against the real handlers.** The WH-140 `runConformance` suite and its synthetic provider moved verbatim to [`tests/helpers/connector-conformance.mjs`](../tests/helpers/connector-conformance.mjs). The contract harness imports it, with the same 86 checks and 36 mutants. The helper adds `runActionConformance`, which states the contract's action and receipt clauses once over a small driver interface (prepare, confirm, reconcile, provider fake, revoke, replace, expire, state map, declared gaps). [`tests/connector-conformance-handlers.mjs`](../tests/connector-conformance-handlers.mjs) runs it against three drivers:
+- the reference runtime, as a control that passes every case with no declared gap;
+- `reviewBackup`/`confirmBackup`;
+- `reviewTXT`/`confirmDNS`.
+
+The handlers run on a disposable current-schema database (SQLite, or local D1 with `--d1`), with synthetic GitHub and Cloudflare providers behind the existing injected transports. Every recorded provider request is mapped to exactly one catalog operation. The real handlers satisfy these cases:
+- A review is prepared without dispatch and reads only `review-receipt` inputs. A repeated review ID returns the same receipt.
+- Confirmation applies once, and a replay returns the same receipt without a new request to the action.
+- Three concurrent confirmations dispatch once.
+- Reordered results: a check that arrives while the dispatch is held only observes (`dispatching`/`uncertain`), and the delayed acknowledgement then settles `applied` once.
+- A reply lost after the provider applied stays `uncertain`, is never redispatched, and reconciles using only the action's declared `reconcile` reads.
+- A request lost before the provider applied keeps the hold through repeated reconciliation, with zero effects.
+- An expired review is refused with no dispatch.
+- A revoked or expired credential, and a review bound to replaced access, are refused before any provider request.
+- Another owner can neither confirm nor reconcile.
+
+Pinned gaps, each asserted as current behaviour so a change fails the test:
+
+| Gap | GitHub backup | Cloudflare DNS |
+| --- | --- | --- |
+| G-C5 explicit price | no price in the review; confirmation accepts none | same |
+| G-C7 common receipt state | raw `pending`/`complete`; a reconciled backup reads `complete`, not `observed` | raw `sending` |
+| G-C8 definitive rejection | a 422 to the commit leaves `uncertain` | a 400 to the create leaves `uncertain` |
+| G-C9 review digest | none; confirmation takes only the ID | same |
+
+The state mapping used is GitHub `pending→review`, `complete→applied`, and Cloudflare `sending→dispatching`; all other names are already common.
+
+Ten handler mutants are bundled from modified source and never written to disk. Each is caught by its named check: the claim without its compare-and-swap (both), an unknown outcome released back to review (both), the expired-review check removed (both), the review not bound to its credential (both), and reconciliation settling without observing the copy or record (both).
+
+Not covered by these driver cases, because they are not action/receipt clauses or the handlers do not implement them:
+- Token admission, refresh, request-bound lookup consent, rule authority and planned providers stay with the reference suite and the existing connection suites.
+- Loss of feature inclusion is covered by `tests/feature-admission.mjs`.
+- Exact request bytes are covered by `tests/connection-sends.mjs`.
+
+**Remaining for WH-142:** bind the explicit plan-inclusion price into backup and DNS reviews and confirmations (G-C5), expose a common receipt-state view over `github_backups` and `cloudflare_dns_actions` (G-C7), decide G-C8 and G-C9, and record the owner's G-C6 decision. WH-031/032 live acceptance remains separate.
+
 ## Planned provider declarations
 
 The table below records the frozen operation **set** and authority for each new provider. Hosts, scopes and paths are planning values taken from the [September 30 bounded connection contracts](pricing-and-model-policy.md#bounded-connection-contracts). They were **not re-verified** in this offline session. Each provider's contract child (WH-096–100) must verify them against current provider documentation, with dates, before registering a client. The planning-only [provider readiness plan](connector-provider-readiness.md) (October 9, 2026) re-reads them against official documentation and lists the differences, external approvals and counsel questions; it changes no declaration.
@@ -210,7 +276,7 @@ WH-056 stays the parent with its acceptance unchanged. It closes only when every
 | --- | --- | --- |
 | WH-140 | Freeze this contract, offline reference/conformance harness and decomposition | WH-004, 009, 052, 105, 116, 122 |
 | WH-141 | Shared source catalog, request builder and operation admission; catalog-derived provider unions and vault contexts (G-GH-1, G-CF-1, G-C1–C4). Catalog and builder in source; GitHub/Cloudflare adapters rewired to operation-ID sends ([status](#wh-141-source-status)) | WH-140, WH-117 |
-| WH-142 | Adapt GitHub/Cloudflare handlers to the catalog: explicit price, receipt view, metadata exposure check; run the conformance suite against the D1 handlers (G-C5–C7) | WH-141 |
+| WH-142 | Adapt GitHub/Cloudflare handlers to the catalog: explicit price, receipt view, metadata exposure check; run the conformance suite against the D1 handlers (G-C5–C7). Verification slices done: discovery exposure registered (G-C6) and handler conformance run, with G-C8/G-C9 found ([status](#wh-142-verification-status)). Remaining: price binding and the receipt-state view | WH-141 |
 | WH-143 | Request-bound lookup consent, common minimized receipts, `connector-content`/`connector-receipts` admission, Chat card bindings, model-route gate | WH-141, WH-009, WH-105, WH-116 |
 | WH-144 | Single-flight refresh custody and local-only/owner-action revocation for refresh-token providers (synthetic) | WH-141, WH-117 |
 | WH-145 | Approved deterministic-rule bridge from the WH-052 envelope to rule-eligible operations | WH-143, WH-052 |
@@ -225,6 +291,6 @@ WH-056 stays the parent with its acceptance unchanged. It closes only when every
 
 ## Verification
 
-`node tests/connectors-contract.mjs` bundles the source module with esbuild and runs 85 offline checks against it, plus one static check (the module imports nothing outside itself, and an esbuild import graph shows that `src/index.ts`, `src/site-host.ts`, `src/app-host.ts` and `src/runtime/worker.ts` reach neither it nor the prototype). It then runs the suite against 34 deliberately broken copies of the source; each must be caught by the check written for that property. It takes about 2 s and is not in a `tools/verify.mjs` profile. It validates the frozen catalog and rejects widened hosts, scopes and paths. It covers typed request construction, planned-provider refusal, and agreement with the existing GitHub/Cloudflare adapter source and pure recovery, vault, handoff, feature-admission and catalogue functions. A reusable `runConformance` suite runs against the synthetic reference runtime with fake providers. Because the source builder refuses planned providers, the runtime runs over a test-only copy of the catalog in which planned declarations are raised to `synthetic-conformant`; a separate check shows that the real catalog refuses them before any transport call. It checks the host allowlist and redirect refusal, scope refusal, revoked, expired and provider-rejected credentials, single-flight refresh, in-flight disconnect, and lost-response reconciliation without a duplicate side effect (lost before or after acceptance, plus concurrent confirmation). It also checks consent binding, the training-route refusal, untrusted external data, owner-request-only operations refused from rule context and other principals, rule destination/limit/readiness gates, the four separate states and price binding.
+`node tests/connectors-contract.mjs` bundles the source module with esbuild and runs 86 offline checks against it, plus one static check (the module imports nothing outside itself, and an esbuild import graph shows that `src/index.ts`, `src/site-host.ts`, `src/app-host.ts` and `src/runtime/worker.ts` reach neither it nor the prototype). It then runs the suite against 36 deliberately broken copies of the source; each must be caught by the check written for that property. It takes about 2 s and is not in a `tools/verify.mjs` profile. It validates the frozen catalog and rejects widened hosts, scopes and paths. It covers typed request construction, planned-provider refusal, and agreement with the existing GitHub/Cloudflare adapter source and pure recovery, vault, handoff, feature-admission and catalogue functions. A reusable `runConformance` suite ([helper](../tests/helpers/connector-conformance.mjs)) runs against the synthetic reference runtime with fake providers. Because the source builder refuses planned providers, the runtime runs over a test-only copy of the catalog in which planned declarations are raised to `synthetic-conformant`; a separate check shows that the real catalog refuses them before any transport call. It checks the host allowlist and redirect refusal, scope refusal, revoked, expired and provider-rejected credentials, single-flight refresh, in-flight disconnect, and lost-response reconciliation without a duplicate side effect (lost before or after acceptance, plus concurrent confirmation). It also checks consent binding, the training-route refusal, untrusted external data, owner-request-only operations refused from rule context and other principals, rule destination/limit/readiness gates, the four separate states and price binding.
 
-These checks prove the frozen contract, the source catalog and builder, and the reference runtime only. They do not prove that the production adapters use the builder (they do not yet), D1 atomicity, real provider behaviour, OAuth consent or acceptance. No database, network, model, credential, Cloudflare resource, CMS test or deployment is involved.
+These checks prove the frozen contract, the source catalog and builder, and the reference runtime only. The production adapters' requests are checked by `tests/connection-sends.mjs`, and their D1 receipts by `tests/connector-conformance-handlers.mjs` ([WH-142](#wh-142-verification-status)). Neither proves real provider behaviour, OAuth consent or acceptance. The contract harness itself uses no database, network, model, credential, Cloudflare resource, CMS test or deployment.
