@@ -9,7 +9,7 @@ Every provider statement cites a row in the dated [Sources](#sources) table. Eac
 - The [common connector contract](connectors.md) (WH-140) froze the operation set, authority classes, request-bound consent, receipts, refresh and revocation rules for these five providers. Its [planned provider declarations](connectors.md#planned-provider-declarations) said the hosts and scopes were "not re-verified"; this plan re-checks them against provider documentation and lists the differences.
 - The [bounded connection contracts](pricing-and-model-policy.md#bounded-connection-contracts) and [provider readiness sequencing](pricing-and-model-policy.md#provider-readiness-costs-and-sequencing) make all seven connections a paid-launch requirement (WH-104). Provider approvals are therefore launch blockers, not reasons to stop isolated synthetic implementation.
 - Connected content stays under [request-bound lookup consent](connectors.md#request-bound-lookup-and-data-use-consent), the [inference privacy handoff](inference-privacy.md#required-admission-record-for-a-future-route) and the [data protection contract](data-protection.md). The `connector-content` class is still a `planned-adapter` reservation in [the lifecycle catalogue](data-lifecycle.json), and the current Muse Contributor route is training-enabled, so no real connected content may reach it.
-- The catalog in [the reference](../tools/prototypes/connectors.mjs) is unchanged by this plan. Where provider documentation disagrees with it, this plan records a required catalog change for the provider's contract child; it does not make the change.
+- The catalog, now in [source](../src/connector-catalog/catalog.ts) (WH-141, same declarations as the WH-140 reference), is unchanged by this plan. Where provider documentation disagrees with it, this plan records a required catalog change for the provider's contract child; it does not make the change.
 
 ## Cross-provider matrix
 
@@ -516,7 +516,7 @@ All rows were retrieved on 2026-10-09 (UTC) from public documentation without si
 
 ## Verification
 
-`node tests/connector-provider-readiness.mjs` (`pnpm test:connector-provider-readiness`) is an offline check of this document. It is not in any `tools/verify.mjs` profile. It imports the frozen catalog from [the reference](../tools/prototypes/connectors.mjs) and checks that:
+`node tests/connector-provider-readiness.mjs` (`pnpm test:connector-provider-readiness`) is an offline check of this document. It is not in any `tools/verify.mjs` profile. It bundles the frozen catalog from [source](../src/connector-catalog/catalog.ts) and checks that:
 
 - the plan is marked Planned with its October 9, 2026 date, and each of the five planned catalog providers has its section, catalog key and all eleven subsections;
 - each provider's scope table and matrix row equal the catalog scopes exactly, and every catalog operation is named in the contract mapping;
