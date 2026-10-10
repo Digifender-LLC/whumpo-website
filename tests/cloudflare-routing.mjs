@@ -27,7 +27,7 @@ function provider(a){const p={records:[],posts:0,lose:false,async send(url,init)
  assert.equal(u.searchParams.get('name.exact'),a.hostname);return Response.json({success:true,result:p.records,result_info:{total_count:p.records.length}});
  }};return p;}
 const review=(a,p,id=crypto.randomUUID(),database=scope(a.user),ready=true)=>reviewCNAME(database,a.user,id,a.connection,zone,config,p.send,ready);
-const confirm=(a,p,id,database=scope(a.user),ready=true)=>confirmDNS(database,a.user,id,config,p.send,ready);
+const echo=async(user,id)=>{const r=(await listDNSActions(scope(user),user)).actions.find(x=>x.id===id)?.receipt;return r?.reviewDigest&&{reviewDigest:r.reviewDigest,acceptedPrice:r.price};},confirm=async(a,p,id,database=scope(a.user),ready=true)=>confirmDNS(database,a.user,id,config,p.send,ready,await echo(a.user,id));
 const beforeDispatch=(a,fn)=>identities.get(a.user).scope(interceptDatabase(db,/UPDATE cloudflare_dns_actions SET state=\?/,fn));
 try{
  await initializeFixtureKeys(db,config.key);

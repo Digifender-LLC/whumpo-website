@@ -8,6 +8,8 @@
 
 **WH-142 verification slices, October 10, 2026 UTC (tests and documentation only; local verification, not deployed or merged).** Discovery replies were found to re-enter later model context; this is registered as known exposure G-C6 and awaits an owner decision. The contract's action cases now run against the real D1-backed GitHub backup and Cloudflare DNS handlers. They pass except for pinned gaps G-C5, G-C7 and the newly found G-C8 and G-C9. Price binding and the receipt-state view remain. See [WH-142 verification status](#wh-142-verification-status).
 
+**WH-142 price binding and receipt view, October 10, 2026 UTC (source, local verification only; not deployed or merged).** GitHub backup and Cloudflare DNS reviews now state the catalog price and carry a review digest derived from the immutable review row. Confirmation must echo both, so a changed price or declaration is refused with a fresh-review error before any provider request. A read-only common receipt view maps both tables onto the frozen receipt states without rewriting them, and it appears in reviews and status without credentials. This closes G-C5, G-C7 and G-C9; G-C8 stays pinned and G-C6 awaits the owner. See [WH-142 price binding and receipt view](#wh-142-price-binding-and-receipt-view).
+
 This contract uses these existing contracts and does not replace them: the [connection vault and key lifecycle](connection-key-lifecycle.md), [GitHub](integrations/github-connection.md) and [Cloudflare](integrations/cloudflare-connection.md) authorization, [Chat connection handoffs](chat-connection-handoffs.md), [WH-122 feature admission](feature-admission.md), the [WH-052 job envelope](job-envelope.md), [WH-116 data protection](data-protection.md) with the [lifecycle catalogue](data-lifecycle.json), the [inference privacy handoff](inference-privacy.md), the [bounded connection contracts](pricing-and-model-policy.md#bounded-connection-contracts) and the [current-version policy](current-version-policy.md). Its style and versioning follow the [shared module contract](shared-modules.md).
 
 ## Decision
@@ -96,7 +98,7 @@ Actions reuse the pattern already proven by [GitHub backups](integrations/github
 
 The idempotency kinds are `precondition-and-mutation-id` (GitHub `expectedHeadOid` with `clientMutationId`), `marker-readback` (Cloudflare record comment, or a message/contact marker property the adapter can search for) and `provider-idempotency-key` (a client-chosen event ID or transaction ID, where the provider documents it). A provider without one of these cannot offer that action.
 
-Receipt states are frozen as `review | dispatching | applied | unchanged | uncertain | observed | failed | expired | cancelled`. Existing tables keep their own names until WH-142: DNS uses `sending` for `dispatching`, and GitHub uses `pending`/`complete` for `review`/`applied`.
+Receipt states are frozen as `review | dispatching | applied | unchanged | uncertain | observed | failed | expired | cancelled`. Existing tables keep their own stored names: DNS uses `sending` for `dispatching`, and GitHub uses `pending`/`complete` for `review`/`applied`. Since WH-142 a read-only receipt view maps them onto the common names without rewriting any row; GitHub records no `observed` state ([mapping](#wh-142-price-binding-and-receipt-view)).
 
 ## Credentials, refresh and revocation
 
@@ -114,7 +116,7 @@ Receipt states are frozen as `review | dispatching | applied | unchanged | uncer
 
 ## Price
 
-Every operation declares its customer price, and the review binds it. v1 sets all seven providers to `{customerUnits: 0, basis: "plan-inclusion"}`: the connection is a Business/Business Pro benefit with no per-use charge. Confirmation must echo the exact reviewed price, and a changed declaration makes the review stale. A future nonzero `quoted` price must appear in the consent or review card and debit through the existing billing ledger with an exact receipt. It is never inferred. Provider-side costs to Whumpo, such as Google restricted-scope assessment, publisher verification or distribution limits, are operator costs tracked in the [pricing contract](pricing-and-model-policy.md#provider-readiness-costs-and-sequencing), not customer prices. This document enables no paid service.
+Every operation declares its customer price, and the review binds it. v1 sets all seven providers to `{customerUnits: 0, basis: "plan-inclusion"}`: the connection is a Business/Business Pro benefit with no per-use charge. Confirmation must echo the exact reviewed price, and a changed declaration makes the review stale. A future nonzero `quoted` price must appear in the consent or review card and debit through the existing billing ledger with an exact receipt. It is never inferred. WH-142 implements the review binding for GitHub backups and Cloudflare DNS; because no ledger debit exists for them, their confirmation refuses any chargeable price before dispatch ([status](#wh-142-price-binding-and-receipt-view)). Provider-side costs to Whumpo, such as Google restricted-scope assessment, publisher verification or distribution limits, are operator costs tracked in the [pricing contract](pricing-and-model-policy.md#provider-readiness-costs-and-sequencing), not customer prices. This document enables no paid service.
 
 ## Data classification (WH-116)
 
@@ -142,17 +144,17 @@ The existing code already provides credential custody, account binding, feature 
 | Inclusion / configuration / consent / readiness | Implemented separately (`connectionInclusion`, `githubConfig`, saved status, `plan-features` `implementation: private-test`). **Gap G-C2:** readiness lives only in launch packaging, not in an operation-checked catalog. | Same (**G-C2**). |
 | Exact review, atomic claim, durable receipt | Implemented (`github_backups`: `pending → dispatching → complete / uncertain / failed`, claim predicate includes inclusion and active token). | Implemented (`cloudflare_dns_actions`: `review → sending / unchanged → applied / uncertain → observed`). |
 | Unknown-outcome reconciliation without redispatch | Implemented (`backupRecoveryRead`, expected-head precondition, `clientMutationId`). | Implemented (`dnsRecoveryRead`, comment marker). |
-| Explicit price in review | **Gap G-C5.** The review text does not state "included in your plan; no per-use charge", and the price is not bound into the review digest. Confirmed by WH-142: the review view has no price and confirmation accepts none. | Same (**G-C5**). |
+| Explicit price in review | **G-C5, closed by WH-142.** Found by WH-140: the review did not state "included in your plan; no per-use charge", and the price was not bound into a review digest. Reviews now state the catalog price, and confirmation must echo it with the review digest ([status](#wh-142-price-binding-and-receipt-view)). | Same (**G-C5**, closed). |
 | Lookup/data-use consent | Not needed for current metadata (`owner-control`). **Gap G-C6, verified by WH-142:** discovery replies re-enter later model context, although the catalog declares them `owner-panel`/`chat-reply` only ([finding](#wh-142-verification-status)). | Same (**G-C6**). |
 | Refresh | Refresh custody retained, never used (`retained-unused`); grant revocation is a separate reviewed flow. Conforms. | None requested; unexpected refresh refused. Conforms. |
 | Revocation | Single-token delete with claims plus a reviewed app-grant removal. Conforms. | RFC 7009 with lease. Conforms. |
 | Provider type unions | **Gap G-C4.** `ConnectionProvider`, `isConnectionProvider` and `connectionFeature` accept only `github`/`cloudflare`. | Same |
 | Vault contexts | **Gap G-C3.** The vault context pattern admits only `github`/`cloudflare` token/PKCE and GitHub refresh. New providers need catalog-derived contexts, coordinated with WH-117 key lifecycle. | Same |
-| Common receipt names | **Gap G-C7.** State names differ per table. A shared receipt view or adapter is needed; the existing tables need no rewrite. WH-142 adds: a reconciled backup reads `complete`, so GitHub cannot distinguish `observed` from `applied`. | Same (**G-C7**). Cloudflare uses `sending` for `dispatching`. |
+| Common receipt names | **G-C7, closed by WH-142** with a read-only receipt view; the tables are not rewritten. GitHub has no `observed`: a reconciled backup reads `applied` with `verified-readback` evidence, because the row does not record which path completed it ([status](#wh-142-price-binding-and-receipt-view)). | Same (**G-C7**, closed). `sending` reads `dispatching`. |
 | Definitive provider rejection | **Gap G-C8 (found by WH-142).** A definitive 4xx reply to the commit leaves the backup `uncertain` for operator review instead of `failed`. Only a 409 conflict found by the backup code itself settles `failed`. This is the cautious direction: nothing is resent. | Same (**G-C8**): any unconfirmed create, including a definitive 4xx, settles `uncertain`. |
-| Review digest echo | **Gap G-C9 (found by WH-142).** The review is an immutable row, but it carries no review or operation digest, and confirmation takes only the review ID. A changed catalog declaration does not make a review stale. | Same (**G-C9**). |
+| Review digest echo | **G-C9, found and closed by WH-142.** The review digest is derived from the immutable review row, its credential ID and the catalog declaration and price, and confirmation must echo it. A changed declaration makes the review stale ([status](#wh-142-price-binding-and-receipt-view)). | Same (**G-C9**, closed). |
 
-Apart from G-C6, which is an unapproved model-context exposure awaiting an owner decision, none of these gaps is a known exploitable defect: hosts are fixed and all current callers pass server-built paths. They are places where the contract is only implicit. WH-141/142 close them without new scopes, endpoints or customer-visible behaviour. The table records the gaps as found by WH-140. WH-141 has since closed G-GH-1 and G-CF-1 in the production adapters, and G-C1, G-C2 and G-C4 in source; G-C3 is closed by agreement checks rather than derivation ([status](#wh-141-source-status)).
+Apart from G-C6, which is an unapproved model-context exposure awaiting an owner decision, none of these gaps is a known exploitable defect: hosts are fixed and all current callers pass server-built paths. They are places where the contract is only implicit. WH-141/142 close them without new scopes, endpoints or customer-visible behaviour. The table records the gaps as found by WH-140. WH-141 has since closed G-GH-1 and G-CF-1 in the production adapters, and G-C1, G-C2 and G-C4 in source; G-C3 is closed by agreement checks rather than derivation ([status](#wh-141-source-status)). WH-142 closed G-C5, G-C7 and G-C9 ([status](#wh-142-price-binding-and-receipt-view)).
 
 ### WH-141 source status
 
@@ -236,25 +238,93 @@ The handlers run on a disposable current-schema database (SQLite, or local D1 wi
 - A revoked or expired credential, and a review bound to replaced access, are refused before any provider request.
 - Another owner can neither confirm nor reconcile.
 
-Pinned gaps, each asserted as current behaviour so a change fails the test:
+Gaps found by this slice, each asserted as the handlers' behaviour so a change fails the test. The price-binding slice [below](#wh-142-price-binding-and-receipt-view) closed three of them; only G-C8 is still pinned:
 
-| Gap | GitHub backup | Cloudflare DNS |
-| --- | --- | --- |
-| G-C5 explicit price | no price in the review; confirmation accepts none | same |
-| G-C7 common receipt state | raw `pending`/`complete`; a reconciled backup reads `complete`, not `observed` | raw `sending` |
-| G-C8 definitive rejection | a 422 to the commit leaves `uncertain` | a 400 to the create leaves `uncertain` |
-| G-C9 review digest | none; confirmation takes only the ID | same |
+| Gap | GitHub backup | Cloudflare DNS | Status |
+| --- | --- | --- | --- |
+| G-C5 explicit price | no price in the review; confirmation accepted none | same | Closed: the review states the price and confirmation must echo it |
+| G-C7 common receipt state | raw `pending`/`complete`; a reconciled backup read `complete`, not `observed` | raw `sending` | Closed: common receipt view; GitHub maps honestly, with no `observed` |
+| G-C8 definitive rejection | a 422 to the commit leaves `uncertain` | a 400 to the create leaves `uncertain` | Still pinned (cautious direction; nothing is resent) |
+| G-C9 review digest | none; confirmation took only the ID | same | Closed: derived digest echoed at confirmation |
 
-The state mapping used is GitHub `pending→review`, `complete→applied`, and Cloudflare `sending→dispatching`; all other names are already common.
+The state mapping used by this slice was GitHub `pending→review`, `complete→applied`, and Cloudflare `sending→dispatching`; the receipt view now applies the same mapping in source.
 
-Ten handler mutants are bundled from modified source and never written to disk. Each is caught by its named check: the claim without its compare-and-swap (both), an unknown outcome released back to review (both), the expired-review check removed (both), the review not bound to its credential (both), and reconciliation settling without observing the copy or record (both).
+Ten handler mutants were bundled from modified source and never written to disk. Each is caught by its named check: the claim without its compare-and-swap (both), an unknown outcome released back to review (both), the expired-review check removed (both), the review not bound to its credential (both), and reconciliation settling without observing the copy or record (both). The price-binding slice keeps all ten and adds sixteen.
 
 Not covered by these driver cases, because they are not action/receipt clauses or the handlers do not implement them:
 - Token admission, refresh, request-bound lookup consent, rule authority and planned providers stay with the reference suite and the existing connection suites.
 - Loss of feature inclusion is covered by `tests/feature-admission.mjs`.
 - Exact request bytes are covered by `tests/connection-sends.mjs`.
 
-**Remaining for WH-142:** bind the explicit plan-inclusion price into backup and DNS reviews and confirmations (G-C5), expose a common receipt-state view over `github_backups` and `cloudflare_dns_actions` (G-C7), decide G-C8 and G-C9, and record the owner's G-C6 decision. WH-031/032 live acceptance remains separate.
+**Remaining for WH-142 after these slices:** see [below](#wh-142-price-binding-and-receipt-view).
+
+### WH-142 price binding and receipt view
+
+Source slice, October 10, 2026 UTC, stacked on the verification slices. This is local verification only: nothing is deployed or merged, and no schema, table, column or trigger changed. It closes G-C5, G-C7 and G-C9 for the GitHub backup and Cloudflare DNS handlers.
+
+**Price in reviews and confirmations (G-C5).** [`src/connector-receipts.ts`](../src/connector-receipts.ts) reads each action's price from the catalog (`backup.commit`, `dnsRecord.create`: `{customerUnits: 0, basis: "plan-inclusion"}`). It is the plan-inclusion price because both connections are Business/Business Pro features ([pricing](pricing-and-model-policy.md#bounded-connection-contracts)); inclusion itself is still checked by WH-122 admission at review, confirmation and claim. Every review and receipt shows it, in JSON as `receipt.price` and `receipt.priceText` and in Chat as "Price: included in your plan; no per-use charge". A quoted price would show as "N customer units per use (quoted)". These actions have no billing-ledger debit, so confirmation refuses any chargeable price before the claim ("… now has a per-use price that Whumpo cannot charge yet. Nothing was sent."). It follows that every receipt past review was confirmed at the plan-inclusion price. The view states that price for settled receipts, so a later catalog change cannot restate their history. Open and expired reviews state the current catalog price, which is the one a confirmation must echo.
+
+**Review and operation digest (G-C9).** Nothing new is stored. The review digest is derived on demand, mirroring the reference runtime: `sha256(canonical{provider, operationId, operationDigest, requestDigest, credentialId, price})`. `operationDigest` is the digest of the catalog declaration (checked equal to the reference runtime's), and `requestDigest` covers every review column that the table's identity triggers keep immutable: owner, project, version or claim, repository or zone identity, record, inventory hash, archive digests, base head, timestamps and expiry. `credentialId` is the review's `token_id`. An open review returns `receipt.reviewDigest`. Confirmation of an open review requires the owner's echo `{reviewDigest, acceptedPrice}` and recomputes the digest:
+- An absent or malformed echo is refused with 400 ("Confirm this exact backup review, including its stated price." / "Confirm this exact DNS review, including its stated price.").
+- A digest or price that differs is refused with 409 ("The backup price or reviewed terms changed. Prepare a fresh review." / "The DNS price or reviewed terms changed. Prepare a fresh review; nothing was changed."). This covers a changed catalog price, a changed declaration with the same price, a digest from another review and a changed credential ID.
+
+Both refusals come before any provider request and leave the review usable with its exact echo. An expired review is not checked against the echo; it keeps its existing expiry refusal, which DNS still reaches after its zone and inventory reads, as before. Rechecks of a dispatched receipt ignore the echo and stay read-only, and replays still return the same receipt.
+
+The echo comes from where the owner saw the review:
+- The Dashboard sends `receipt.reviewDigest` and `receipt.price` from the review it displays, as the JSON body of `POST /api/github/backups/:id/confirm` and `POST /api/cloudflare/dns/:id/confirm`.
+- A Chat confirmation (`/confirm-backup`, `/confirm-dns`) reads the exact saved review turn, whose ID is the review ID, and takes its "Receipt state: review · … · Price: …" and "Review digest: …" lines. The confirmation control is still offered only beside a complete saved review. A Chat confirmation of a review prepared outside Chat has no saved review turn and is refused; confirm it in the Dashboard.
+
+**Common receipt view (G-C7).** `connectorReceiptView` is a pure mapping that reads stored rows and never writes them. Every backup and DNS response carries `receipt: {provider, operationId, state, recordedState, authority: "owner-request", price, priceText, evidence, reviewDigest?}`. This covers list, review, confirm and check, in both the JSON routes and the Chat replies. It never includes credentials, token IDs, ciphertext or provider payloads.
+
+| Stored state | Common state | Evidence |
+| --- | --- | --- |
+| GitHub `pending` (unexpired / expired) | `review` / `expired` | — |
+| GitHub `dispatching`, `uncertain`, `failed` | same name | — |
+| GitHub `complete` | `applied` | `verified-readback` |
+| DNS `review` (unexpired / expired) | `review` / `expired` | — |
+| DNS `sending` | `dispatching` | — |
+| DNS `uncertain` | `uncertain` | — |
+| DNS `applied` / `unchanged` / `observed` | same name | `provider-acknowledged` / `existing-record` / `readback-after-uncertain` |
+
+GitHub has no `observed` (or `unchanged`) state, and the view does not invent one. Every completed backup is verified by reading the exact files back. But the row does not record whether the commit reply, an already-present copy or a later read-only check established the result, so `complete` reads `applied` with `verified-readback` evidence. Recording that distinction needs a schema change that this slice may not make: either widen the `github_backups.state` check to admit `observed` and `unchanged`, or add a settlement column such as `github_backups.settled_by`. That is the one place where the view is less precise than the frozen contract.
+
+**Customer-visible changes.** Strings are additions only; no existing reply line changed.
+- Chat backup and DNS descriptions (review, `/backups`, `/dns`, check and confirm replies) gain the line `Receipt state: <common state> · Authority: owner request · Price: included in your plan; no per-use charge`. It follows `Folder:` for a backup and `Value:` for DNS.
+- Open reviews gain `Review digest: <64 hex>`. It follows `SHA-256:` for a backup and precedes `Review expires:` for DNS.
+- The new refusals are listed above.
+- The Dashboard backup and DNS cards add "Receipt: <state> · Price: <price>", and their confirm buttons send the echo.
+
+**Verification.** [`tests/connector-conformance-handlers.mjs`](../tests/connector-conformance-handlers.mjs) (SQLite and `--d1`) now runs 61 checks. The shared cases' price and digest checks hold for both real handlers with no declared gap. Each check also shows that a refused echo does not consume the review. The GitHub reconciliation case asserts the honest `applied` with `verified-readback` mapping instead of `observed`, and the common-state check sees only frozen names. The only declared gap is G-C8 for both providers. Seven named checks per provider:
+- the documented state map, with no row rewritten by reading the view;
+- a catalog price change between review and confirmation refuses with a fresh-review error and no provider request;
+- a changed declaration with the same price is stale;
+- a quoted price is stated, never dispatched, and never restates settled receipts;
+- a digest from another review is refused;
+- a canary scan of review, confirm, list and Chat status finds no access token, client secret, keyring, token ID, ciphertext, provider-payload canary or `Bearer`;
+- a Chat confirmation is bound to the saved review text, not to a fresh derivation.
+
+Catalog changes are simulated by bundling the same handlers over an edited catalog against the same database, as a deploy between the two requests would be. 26/26 source mutants are caught by their named checks: the ten earlier ones plus sixteen for this slice. The new mutants cover:
+- confirmation without the binding (both providers);
+- the accepted price not compared;
+- the digest not compared;
+- the digest omitting the declaration;
+- the digest omitting the reviewed request;
+- the quoted-price guard removed (both providers);
+- a settled receipt restated at the current price;
+- GitHub completion claimed as `observed`;
+- raw state names exposed;
+- an expired review shown as open;
+- the view leaking the credential ID (both providers);
+- a Chat confirmation re-deriving the binding (both providers).
+
+Existing suites needed only call-form changes: the confirm helpers now pass the echo. `tests/connection-history-ui.mjs` gained the `receipt` field in its fixture rows; it still fails on its earlier, unrelated `Missing Reconnect` assertion, as it does on the unchanged base.
+
+**Remaining for WH-142.** The acceptance is not fully demonstrated, so WH-142 stays open:
+- The G-C8 decision. A definitive 4xx still settles `uncertain`, so the shared rejection case passes only as a declared gap.
+- The owner's G-C6 decision on discovery replies in model context.
+- Optionally, the schema change above, if GitHub must distinguish `observed`.
+
+WH-031/032 live acceptance remains separate.
 
 ## Planned provider declarations
 
@@ -276,7 +346,7 @@ WH-056 stays the parent with its acceptance unchanged. It closes only when every
 | --- | --- | --- |
 | WH-140 | Freeze this contract, offline reference/conformance harness and decomposition | WH-004, 009, 052, 105, 116, 122 |
 | WH-141 | Shared source catalog, request builder and operation admission; catalog-derived provider unions and vault contexts (G-GH-1, G-CF-1, G-C1–C4). Catalog and builder in source; GitHub/Cloudflare adapters rewired to operation-ID sends ([status](#wh-141-source-status)) | WH-140, WH-117 |
-| WH-142 | Adapt GitHub/Cloudflare handlers to the catalog: explicit price, receipt view, metadata exposure check; run the conformance suite against the D1 handlers (G-C5–C7). Verification slices done: discovery exposure registered (G-C6) and handler conformance run, with G-C8/G-C9 found ([status](#wh-142-verification-status)). Remaining: price binding and the receipt-state view | WH-141 |
+| WH-142 | Adapt GitHub/Cloudflare handlers to the catalog: explicit price, receipt view, metadata exposure check; run the conformance suite against the D1 handlers (G-C5–C7). Verification slices done: discovery exposure registered (G-C6) and handler conformance run, with G-C8/G-C9 found ([status](#wh-142-verification-status)). Price binding, review digest and receipt view done (G-C5, G-C7, G-C9 closed; [status](#wh-142-price-binding-and-receipt-view)). Remaining: G-C8 and G-C6 decisions | WH-141 |
 | WH-143 | Request-bound lookup consent, common minimized receipts, `connector-content`/`connector-receipts` admission, Chat card bindings, model-route gate | WH-141, WH-009, WH-105, WH-116 |
 | WH-144 | Single-flight refresh custody and local-only/owner-action revocation for refresh-token providers (synthetic) | WH-141, WH-117 |
 | WH-145 | Approved deterministic-rule bridge from the WH-052 envelope to rule-eligible operations | WH-143, WH-052 |
@@ -293,4 +363,4 @@ WH-056 stays the parent with its acceptance unchanged. It closes only when every
 
 `node tests/connectors-contract.mjs` bundles the source module with esbuild and runs 86 offline checks against it, plus one static check (the module imports nothing outside itself, and an esbuild import graph shows that `src/index.ts`, `src/site-host.ts`, `src/app-host.ts` and `src/runtime/worker.ts` reach neither it nor the prototype). It then runs the suite against 36 deliberately broken copies of the source; each must be caught by the check written for that property. It takes about 2 s and is not in a `tools/verify.mjs` profile. It validates the frozen catalog and rejects widened hosts, scopes and paths. It covers typed request construction, planned-provider refusal, and agreement with the existing GitHub/Cloudflare adapter source and pure recovery, vault, handoff, feature-admission and catalogue functions. A reusable `runConformance` suite ([helper](../tests/helpers/connector-conformance.mjs)) runs against the synthetic reference runtime with fake providers. Because the source builder refuses planned providers, the runtime runs over a test-only copy of the catalog in which planned declarations are raised to `synthetic-conformant`; a separate check shows that the real catalog refuses them before any transport call. It checks the host allowlist and redirect refusal, scope refusal, revoked, expired and provider-rejected credentials, single-flight refresh, in-flight disconnect, and lost-response reconciliation without a duplicate side effect (lost before or after acceptance, plus concurrent confirmation). It also checks consent binding, the training-route refusal, untrusted external data, owner-request-only operations refused from rule context and other principals, rule destination/limit/readiness gates, the four separate states and price binding.
 
-These checks prove the frozen contract, the source catalog and builder, and the reference runtime only. The production adapters' requests are checked by `tests/connection-sends.mjs`, and their D1 receipts by `tests/connector-conformance-handlers.mjs` ([WH-142](#wh-142-verification-status)). Neither proves real provider behaviour, OAuth consent or acceptance. The contract harness itself uses no database, network, model, credential, Cloudflare resource, CMS test or deployment.
+These checks prove the frozen contract, the source catalog and builder, and the reference runtime only. The production adapters' requests are checked by `tests/connection-sends.mjs`, and their D1 receipts, price binding, review digest and receipt view by `tests/connector-conformance-handlers.mjs` ([WH-142](#wh-142-price-binding-and-receipt-view)). Neither proves real provider behaviour, OAuth consent or acceptance. The contract harness itself uses no database, network, model, credential, Cloudflare resource, CMS test or deployment.

@@ -41,7 +41,7 @@ try{
  };
  const input=()=>({id:crypto.randomUUID(),versionId:version,owner:'test',repo:'backup',repoId:17});
  const review=(i=input())=>reviewBackup(scope(user),fixture.env.FILES,user,i,config,transport);
- const confirm=(id,database=scope(user))=>confirmBackup(database,fixture.env.FILES,user,id,config,transport);
+ const echo=async id=>{const r=(await listBackups(scope(user),user)).backups.find(b=>b.id===id)?.receipt;return r?.reviewDigest&&{reviewDigest:r.reviewDigest,acceptedPrice:r.price};},confirm=async(id,database=scope(user))=>confirmBackup(database,fixture.env.FILES,user,id,config,transport,await echo(id));
  const reset=()=>{head='a'.repeat(40);repoPrivate=true;repoId=17;branch='main';remote=false;parentFile=false;malformed=false;mode='ok';};
  assert.equal((await githubRepositories(scope(user),user,config,1,1,transport)).repositories.length,1);await assert.rejects(()=>githubRepositories(scope(user),user,config,2,1,transport));
  await assert.rejects(()=>reviewBackup(scope(other),fixture.env.FILES,other,input(),config,denied));

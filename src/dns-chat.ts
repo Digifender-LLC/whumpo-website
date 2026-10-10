@@ -6,6 +6,7 @@ import type {BackupChatOptions} from './backup-chat';
 import type {HostingChatOptions} from './hosting-chat';
 import {cloudflareZones,type CloudflareConfig} from './cloudflare-connection';
 import {listDNSActions,reviewTXT,reviewCNAME,confirmDNS} from './cloudflare-dns';
+import {receiptLine,reviewDigestLine,reviewEchoFromText} from './connector-receipts';
 import {DomainError} from './domains';
 import {hostingConnections} from './domain-hosting';
 import {ConnectionError} from './github-connection';
@@ -13,8 +14,8 @@ export type DNSChatOptions=HostingChatOptions & BackupChatOptions & HealthOption
 const uuid=/^[0-9a-f-]{36}$/;
 type Receipt=Awaited<ReturnType<typeof reviewTXT>>;
 function describe(a:Receipt){
- const header=`Cloudflare ${a.record.type==='CNAME'?'website routing (CNAME)':'TXT proof'}: ${a.state}\nReview: ${a.id}\nZone: ${a.zoneName}\nName: ${a.record.name}\nValue: ${a.record.value}`;
- if(a.state==='review')return `${header}\n${a.record.type==='CNAME'?'DNS-only CNAME, automatic TTL. Adds routing only if absent; conflicting records are never replaced. This can direct website traffic (including traffic previously using wildcard DNS) to Whumpo. DNS and TLS checks must pass before hosting serves.':'Automatic TTL. Adds this proof only if absent; existing records are preserved. Hosting is unchanged.'}\nReview expires: ${a.expiresAt}\n\nAuthorize this exact addition using its review in Dashboard → Domains.`;
+ const header=`Cloudflare ${a.record.type==='CNAME'?'website routing (CNAME)':'TXT proof'}: ${a.state}\nReview: ${a.id}\nZone: ${a.zoneName}\nName: ${a.record.name}\nValue: ${a.record.value}\n${receiptLine(a.receipt)}`;
+ if(a.state==='review')return `${header}\n${a.record.type==='CNAME'?'DNS-only CNAME, automatic TTL. Adds routing only if absent; conflicting records are never replaced. This can direct website traffic (including traffic previously using wildcard DNS) to Whumpo. DNS and TLS checks must pass before hosting serves.':'Automatic TTL. Adds this proof only if absent; existing records are preserved. Hosting is unchanged.'}\n${a.receipt.reviewDigest?reviewDigestLine(a.receipt.reviewDigest)+'\n':''}Review expires: ${a.expiresAt}\n\nAuthorize this exact addition using its review in Dashboard → Domains.`;
  return `${header}\n${a.detail}\n${['sending','uncertain'].includes(a.state)?"Check the saved DNS review "+a.id+' to observe the result without resending.':a.record.type==='CNAME'?'Use the Domains panel to check hosting status. This receipt is historical, not current DNS or TLS status.':"Ask to check the current domain ownership proof. This receipt is historical, not current DNS status."}`;
 }
 /** Returns a deferred operation. The caller must durably claim the user's chat turn before running it. */
@@ -33,7 +34,9 @@ export function dnsChatCommand(db:D1Database,user:string,turnId:string,command:s
     // A check of a pending review must never become permission to create a record.
     if(action.state==='review')return describe(action)+'\nNo DNS write was authorized by this check.';
    }
-   return describe(await confirmDNS(db,user,args[0],options.config,options.transport,options.hostingReady));
+    // A Chat confirmation echoes the exact saved review turn (review ID = turn ID) that showed its price and digest.
+   const echo=verb==='/confirm-dns'?reviewEchoFromText((await db.prepare("SELECT assistant_text FROM chat_turns WHERE id=? AND user_id=? AND status='completed'").bind(args[0],user).first<{assistant_text:string}>())?.assistant_text):undefined;
+   return describe(await confirmDNS(db,user,args[0],options.config,options.transport,options.hostingReady,echo));
   }catch(cause){return cause instanceof FeatureInclusionError||cause instanceof DomainError||cause instanceof ConnectionError?cause.message+"\nNo automatic retry will be sent. Ask to inspect the saved DNS review.":"The DNS result could not be saved. Ask to inspect the saved review and check its uncertain outcome. This request will not be dispatched again.";}
  };
 }

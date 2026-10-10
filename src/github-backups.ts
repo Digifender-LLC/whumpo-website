@@ -4,6 +4,7 @@ import {ownedExport} from './exports';
 import {hashToken} from './security';
 import {connectionFeature,featurePredicate,requireFeature,assertFeature} from './feature-admission';
 import {backupPathsQuery,backupPathsVariables} from './connection-recovery';
+import {chargeable,connectorReceiptView,reviewBinding,reviewBindingProblem} from './connector-receipts';
 type Access=Awaited<ReturnType<typeof githubAccess>>;
 type Repo={id:number;owner:string;name:string;private:boolean;branch:string;size:number};
 type Backup={id:string;user_id:string;project_id:string;version_id:string;request_hash:string;token_id:string|null;github_user_id:string;repo_id:number;repo_owner:string;repo_name:string;repo_private:number;branch:string;path:string;sha256:string;tree_sha:string;base_head:string;files_json:string;byte_length:number;state:'pending'|'dispatching'|'uncertain'|'complete'|'failed';commit_sha:string|null;detail:string;created_at:string;expires_at:string;dispatched_at:string|null};
@@ -37,9 +38,12 @@ async function sourceTree(archive:Uint8Array){
  return {files,tree:await hashTree(root)};
 }
 function encoded(bytes:Uint8Array){let text='';for(let i=0;i<bytes.length;i+=32768)text+=String.fromCharCode(...bytes.subarray(i,i+32768));return btoa(text);}
-function view(b:Backup){return {id:b.id,projectId:b.project_id,versionId:b.version_id,repository:`${b.repo_owner}/${b.repo_name}`,private:!!b.repo_private,branch:b.branch,path:b.path,sha256:b.sha256,bytes:b.byte_length,files:JSON.parse(b.files_json) as string[],state:b.state==='pending'&&b.expires_at<=new Date().toISOString()?'expired':b.state,detail:b.detail,expiresAt:b.expires_at,url:b.state==='complete'&&b.commit_sha?`https://github.com/${b.repo_owner}/${b.repo_name}/tree/${b.commit_sha}/${b.path}`:null};}
+// WH-142: the review binding is derived from the immutable review columns (github_backup_identity), the credential ID and the
+// catalog declaration and price. It is not stored; confirmation recomputes it and requires the owner's exact echo.
+const reviewed=(b:Backup)=>reviewBinding('github',b.token_id,{id:b.id,userId:b.user_id,projectId:b.project_id,versionId:b.version_id,requestHash:b.request_hash,githubUserId:b.github_user_id,repoId:b.repo_id,repoOwner:b.repo_owner,repoName:b.repo_name,repoPrivate:b.repo_private,branch:b.branch,path:b.path,sha256:b.sha256,treeSha:b.tree_sha,baseHead:b.base_head,files:b.files_json,bytes:b.byte_length,createdAt:b.created_at,expiresAt:b.expires_at});
+async function view(b:Backup){const now=new Date().toISOString(),open=b.state==='pending'&&b.expires_at>now;return {id:b.id,projectId:b.project_id,versionId:b.version_id,repository:`${b.repo_owner}/${b.repo_name}`,private:!!b.repo_private,branch:b.branch,path:b.path,sha256:b.sha256,bytes:b.byte_length,files:JSON.parse(b.files_json) as string[],state:b.state==='pending'&&b.expires_at<=now?'expired':b.state,detail:b.detail,expiresAt:b.expires_at,url:b.state==='complete'&&b.commit_sha?`https://github.com/${b.repo_owner}/${b.repo_name}/tree/${b.commit_sha}/${b.path}`:null,receipt:connectorReceiptView('github',{state:b.state,expiresAt:b.expires_at,reviewDigest:open?(await reviewed(b)).reviewDigest:undefined},now)};}
 async function owned(db:D1Database,userId:string,id:string){const b=await db.prepare('SELECT b.* FROM github_backups b JOIN projects p ON p.id=b.project_id WHERE b.id=? AND b.user_id=? AND p.owner_user_id=?').bind(id,userId,userId).first<Backup>();if(!b)throw new ConnectionError(404,'Backup review not found.');return b;}
-export async function listBackups(db:D1Database,userId:string){const {results}=await db.prepare('SELECT b.* FROM github_backups b JOIN projects p ON p.id=b.project_id WHERE b.user_id=? AND p.owner_user_id=? ORDER BY b.created_at DESC LIMIT 100').bind(userId,userId).all<Backup>();return {backups:results.map(view)};}
+export async function listBackups(db:D1Database,userId:string){const {results}=await db.prepare('SELECT b.* FROM github_backups b JOIN projects p ON p.id=b.project_id WHERE b.user_id=? AND p.owner_user_id=? ORDER BY b.created_at DESC LIMIT 100').bind(userId,userId).all<Backup>();return {backups:await Promise.all(results.map(view))};}
 export async function reviewBackup(db:D1Database,bucket:R2Bucket|undefined,userId:string,input:Record<string,unknown>,config:GitHubConfig|undefined,transport:typeof fetch=fetch){
  if(typeof input.id!=='string'||!uuid.test(input.id)||typeof input.versionId!=='string'||!uuid.test(input.versionId)||typeof input.owner!=='string'||typeof input.repo!=='string'||!validName(input.owner,input.repo)||!Number.isSafeInteger(input.repoId))throw new ConnectionError(400,'Choose a saved version and an authorized repository.');
  const requestHash=await hashToken(JSON.stringify([input.versionId,input.owner,input.repo,input.repoId]));
@@ -72,9 +76,16 @@ async function completeBackup(db:D1Database,userId:string,b:Backup,commit:string
  await db.batch([db.prepare("UPDATE github_backups SET state='complete',commit_sha=?,detail='Readable source files verified in GitHub' WHERE id=? AND user_id=? AND state IN ('dispatching','uncertain')").bind(commit,b.id,userId),db.prepare("INSERT OR IGNORE INTO activity_events(id,user_id,project_id,action,summary,created_at) SELECT ?,user_id,project_id,'github.backup','Backed up a saved website version to GitHub',? FROM github_backups WHERE id=? AND user_id=? AND state='complete'").bind('github-backup:'+b.id,new Date().toISOString(),b.id,userId)]);
  return view(await owned(db,userId,b.id));
 }
-export async function confirmBackup(db:D1Database,bucket:R2Bucket|undefined,userId:string,id:string,config:GitHubConfig|undefined,transport:typeof fetch=fetch){
+/** `echo` is the owner's `{reviewDigest, acceptedPrice}` from the review; a pending review needs it exactly. Checks of a
+ * dispatched receipt ignore it and stay read-only. */
+export async function confirmBackup(db:D1Database,bucket:R2Bucket|undefined,userId:string,id:string,config:GitHubConfig|undefined,transport:typeof fetch=fetch,echo?:unknown){
  const b=await owned(db,userId,id);if(['complete','failed'].includes(b.state))return view(b);
  if(b.state==='pending'&&b.expires_at<=new Date().toISOString())throw new ConnectionError(409,'This backup review expired. Prepare a fresh review.');
+ if(b.state==='pending'){
+  const bound=await reviewed(b),problem=reviewBindingProblem(bound,echo);
+  if(problem)throw new ConnectionError(problem==='missing'?400:409,problem==='missing'?'Confirm this exact backup review, including its stated price.':'The backup price or reviewed terms changed. Prepare a fresh review.');
+  if(chargeable(bound.price))throw new ConnectionError(409,'This backup now has a per-use price that Whumpo cannot charge yet. Nothing was sent.');
+ }
  const scope=connectionFeature(userId,'github',b.project_id,'confirm'),gate=featurePredicate(db,scope),dispatchScope=connectionFeature(userId,'github',b.project_id,'dispatch'),dispatchGate=featurePredicate(db,dispatchScope);
  const access=await githubAccess(db,userId,config,transport,b.state==='pending'?{projectId:b.project_id,operation:'confirm'}:{recoveryId:b.id});if(access.githubUserId!==b.github_user_id||b.state==='pending'&&access.tokenId!==b.token_id)throw new ConnectionError(409,'The GitHub connection changed. Prepare a fresh review.');
  const repo=await repository(access,b.repo_owner,b.repo_name);
