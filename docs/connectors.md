@@ -1,6 +1,8 @@
 # Common bounded connector contract
 
-**WH-056 contract slice (WH-140), October 4, 2026 UTC; source baseline `d6d669a`.** This freezes one capability contract for the seven selected customer connections — GitHub, Cloudflare, Gmail, Google Calendar, Outlook email, Microsoft Calendar and HubSpot — maps the existing GitHub and Cloudflare machinery onto it with exact gaps, and splits the remaining [WH-056](roadmap/backlog.md#wh-056--standardize-bounded-external-lookups-and-reviewed-connector-actions) work into WH-141–146. It is a **planned contract**. It adds no table, route, OAuth client, scope request, provider adapter, binding or deployment. The [offline reference](../tools/prototypes/connectors.mjs) and [conformance harness](../tests/connectors-contract.mjs) exercise the frozen catalog and a synthetic in-memory runtime with fake providers. No Worker imports them.
+**WH-056 contract slice (WH-140), October 4, 2026 UTC; source baseline `d6d669a`.** This freezes one capability contract for the seven selected customer connections — GitHub, Cloudflare, Gmail, Google Calendar, Outlook email, Microsoft Calendar and HubSpot — maps the existing GitHub and Cloudflare machinery onto it with exact gaps, and splits the remaining [WH-056](roadmap/backlog.md#wh-056--standardize-bounded-external-lookups-and-reviewed-connector-actions) work into WH-141–146. It is a **planned contract**. It adds no table, route, OAuth client, scope request, provider adapter, binding or deployment. The [conformance harness](../tests/connectors-contract.mjs) exercises the frozen catalog and a [synthetic in-memory reference runtime](../tools/prototypes/connectors.mjs) with fake providers. No Worker imports them.
+
+**WH-141 first source slice, October 10, 2026 UTC (source only, not wired).** The frozen v1 catalog, its validator and the typed request builder now live in source as a pure module: [`src/connector-catalog/catalog.ts`](../src/connector-catalog/catalog.ts) and [`src/connector-catalog/builder.ts`](../src/connector-catalog/builder.ts). The declarations are unchanged from the WH-140 reference, which now keeps only the synthetic runtime and builds every request through the source builder. No Worker entry reaches the module, and the existing GitHub and Cloudflare adapters still send through their own `send` paths. See [WH-141 source status](#wh-141-source-status) for what this slice closes and what the rewiring slice must still do.
 
 This contract uses these existing contracts and does not replace them: the [connection vault and key lifecycle](connection-key-lifecycle.md), [GitHub](integrations/github-connection.md) and [Cloudflare](integrations/cloudflare-connection.md) authorization, [Chat connection handoffs](chat-connection-handoffs.md), [WH-122 feature admission](feature-admission.md), the [WH-052 job envelope](job-envelope.md), [WH-116 data protection](data-protection.md) with the [lifecycle catalogue](data-lifecycle.json), the [inference privacy handoff](inference-privacy.md), the [bounded connection contracts](pricing-and-model-policy.md#bounded-connection-contracts) and the [current-version policy](current-version-policy.md). Its style and versioning follow the [shared module contract](shared-modules.md).
 
@@ -16,7 +18,7 @@ The contract does not change GitHub/Cloudflare behaviour, enable any planned pro
 
 ## Catalog shape (contract version 1)
 
-The frozen catalog is `connectorCatalog` in the [reference](../tools/prototypes/connectors.mjs). `validateCatalog` rejects an unknown version, field, provider or authority class. It also rejects any widening shown in the table below.
+The frozen catalog is `connectorCatalog` in [source](../src/connector-catalog/catalog.ts). `validateCatalog` rejects an unknown version, field, provider or authority class. It also rejects any widening shown in the table below.
 
 | Element | Frozen v1 rule |
 | --- | --- |
@@ -103,7 +105,7 @@ Receipt states are frozen as `review | dispatching | applied | unchanged | uncer
 ## No arbitrary outbound fetch
 
 - Only catalog adapters in the platform Worker hold provider credentials or call provider origins. The QuickJS customer runtime, visitor/site Workers and generated source get no connector capability, network binding or credential.
-- A request is built only by the server from an operation ID and typed parameters (`buildRequest` in the reference). A provider pagination URL such as Graph `@odata.nextLink` is never followed as a URL. The adapter extracts its opaque token, revalidates it as an `opaque` parameter and rebuilds the request from the same template.
+- A request is built only by the server from an operation ID and typed parameters (`buildConnectorRequest` in [source](../src/connector-catalog/builder.ts)). A provider pagination URL such as Graph `@odata.nextLink` is never followed as a URL. The adapter extracts its opaque token, revalidates it as an `opaque` parameter and rebuilds the request from the same template.
 - There is no continuous sync, polling, mailbox indexing, webhook-driven maintainer call or unattended read-and-reply loop.
 
 ## Price
@@ -144,7 +146,23 @@ The existing code already provides credential custody, account binding, feature 
 | Vault contexts | **Gap G-C3.** The vault context pattern admits only `github`/`cloudflare` token/PKCE and GitHub refresh. New providers need catalog-derived contexts, coordinated with WH-117 key lifecycle. | Same |
 | Common receipt names | **Gap G-C7.** State names differ per table. A shared receipt view or adapter is needed; the existing tables need no rewrite. | Same (**G-C7**). |
 
-None of these gaps is a known exploitable defect: hosts are fixed and all current callers pass server-built paths. They are places where the contract is only implicit. WH-141/142 close them without new scopes, endpoints or customer-visible behaviour.
+None of these gaps is a known exploitable defect: hosts are fixed and all current callers pass server-built paths. They are places where the contract is only implicit. WH-141/142 close them without new scopes, endpoints or customer-visible behaviour. The WH-141 source slice provides the declared form for G-GH-1, G-CF-1 and G-C1–C4 in source; the production adapters do not use it yet ([status](#wh-141-source-status)).
+
+### WH-141 source status
+
+Implemented in source, October 10, 2026 UTC (pure module, not imported by any Worker entry; nothing deployed or wired):
+
+- **Catalog** (`catalog.ts`). The frozen v1 declarations, deep-frozen, with `validateCatalog` (it also refuses a malformed query list, a percent sign in a path template and unbounded range limits). GitHub and Cloudflare declare exactly the operations their adapters send today. Gmail, Google Calendar, Outlook email, Microsoft Calendar and HubSpot stay `planned`.
+- **Typed builder** (`builder.ts`). `buildConnectorRequest({providerId, operationId, params, authority, grantedScopes, body?})` is the only way to form a request. Any other input field (`url`, `host`, `path`, `headers`, `query`, `origin`, `method`) is refused. Parameters must have exactly the declared names and closed types. The result carries `redirect: "manual"`, and the parsed URL must keep the exact origin, path and query (no dot-segment smuggling through an encoded parameter). A GraphQL body must be the registered document with exactly its declared variables. A JSON body is closed to the declared fields and bounded. The builder also refuses an authority class the operation does not list, any rule read, a rule before `live-accepted`, granted scopes outside the catalog and a missing operation scope. `createRequestBuilder(catalog)` validates and snapshots a catalog first, so an unpriced, unreconcilable or widened catalog cannot produce a builder.
+- **Derived identity** (gaps G-C3/G-C4 in source form). `connectableProviders`/`isConnectableProvider`, `connectorFeatureId`, `connectorAuthorization` (OAuth start descriptor) and `connectorVaultContext`/`connectorVaultContextPattern` derive from the catalog. Planned providers are refused (`PROVIDER_PLANNED`): they cannot start OAuth, get a vault context or build a request. The harness checks that these derivations accept exactly what `isConnectionProvider`, `connectionFeature` and the vault context pattern accept today.
+
+The [harness](../tests/connectors-contract.mjs) also checks the catalog against the current adapters' source: hosts, OAuth and revocation endpoints, Cloudflare scopes, the GitHub request paths, the `BackupCommit` mutation text, and the `cloudflareAccess().send` path guards.
+
+Remaining for the WH-141 rewiring slice (WH-141 stays open until it lands):
+
+1. Replace `githubAccess().send(path, options, operation)` (free path, caller-chosen operation) and `cloudflareAccess().send(path, method, body)` (path regex) with operation-ID sends through `buildConnectorRequest`. Keep each adapter's fixed headers, timeout, response bounds, recovery allowlists (`backupRecoveryRead`, `dnsRecoveryRead`) and narrower page limits.
+2. Derive `ConnectionProvider`/`isConnectionProvider`, `connectionFeature`'s provider type and the vault `contextPattern` from the catalog. Coordinate the vault change with the WH-117 key lifecycle.
+3. Acceptance: the existing GitHub/Cloudflare suites (`github-connection`, `github-backups`, `cloudflare-connection`, `connection-handoff`, `connection-vault` and the protection-profile GitHub suites) pass unchanged against the rewired code, with no new scope, endpoint, binding or customer-visible behaviour.
 
 ## Planned provider declarations
 
@@ -165,7 +183,7 @@ WH-056 stays the parent with its acceptance unchanged. It closes only when every
 | ID | Slice | Depends on |
 | --- | --- | --- |
 | WH-140 | Freeze this contract, offline reference/conformance harness and decomposition | WH-004, 009, 052, 105, 116, 122 |
-| WH-141 | Shared source catalog, request builder and operation admission; catalog-derived provider unions and vault contexts (G-GH-1, G-CF-1, G-C1–C4) | WH-140, WH-117 |
+| WH-141 | Shared source catalog, request builder and operation admission; catalog-derived provider unions and vault contexts (G-GH-1, G-CF-1, G-C1–C4). Catalog and builder in source, not wired; adapter rewiring remains ([status](#wh-141-source-status)) | WH-140, WH-117 |
 | WH-142 | Adapt GitHub/Cloudflare handlers to the catalog: explicit price, receipt view, metadata exposure check; run the conformance suite against the D1 handlers (G-C5–C7) | WH-141 |
 | WH-143 | Request-bound lookup consent, common minimized receipts, `connector-content`/`connector-receipts` admission, Chat card bindings, model-route gate | WH-141, WH-009, WH-105, WH-116 |
 | WH-144 | Single-flight refresh custody and local-only/owner-action revocation for refresh-token providers (synthetic) | WH-141, WH-117 |
@@ -181,6 +199,6 @@ WH-056 stays the parent with its acceptance unchanged. It closes only when every
 
 ## Verification
 
-`node tests/connectors-contract.mjs` runs 71 offline checks. It validates the frozen catalog and rejects widened hosts, scopes and paths. It covers typed request construction and agreement with the existing pure GitHub/Cloudflare recovery, vault and catalogue functions. A reusable `runConformance` suite runs against the synthetic reference runtime with fake providers. It checks the host allowlist and redirect refusal, scope refusal, revoked, expired and provider-rejected credentials, single-flight refresh, in-flight disconnect, and lost-response reconciliation without a duplicate side effect (lost before or after acceptance, plus concurrent confirmation). It also checks consent binding, the training-route refusal, untrusted external data, owner-request-only operations refused from rule context and other principals, rule destination/limit/readiness gates, the four separate states and price binding.
+`node tests/connectors-contract.mjs` bundles the source module with esbuild and runs 85 offline checks against it, plus one static check (the module imports nothing outside itself, and an esbuild import graph shows that `src/index.ts`, `src/site-host.ts`, `src/app-host.ts` and `src/runtime/worker.ts` reach neither it nor the prototype). It then runs the suite against 34 deliberately broken copies of the source; each must be caught by the check written for that property. It takes about 2 s and is not in a `tools/verify.mjs` profile. It validates the frozen catalog and rejects widened hosts, scopes and paths. It covers typed request construction, planned-provider refusal, and agreement with the existing GitHub/Cloudflare adapter source and pure recovery, vault, handoff, feature-admission and catalogue functions. A reusable `runConformance` suite runs against the synthetic reference runtime with fake providers. Because the source builder refuses planned providers, the runtime runs over a test-only copy of the catalog in which planned declarations are raised to `synthetic-conformant`; a separate check shows that the real catalog refuses them before any transport call. It checks the host allowlist and redirect refusal, scope refusal, revoked, expired and provider-rejected credentials, single-flight refresh, in-flight disconnect, and lost-response reconciliation without a duplicate side effect (lost before or after acceptance, plus concurrent confirmation). It also checks consent binding, the training-route refusal, untrusted external data, owner-request-only operations refused from rule context and other principals, rule destination/limit/readiness gates, the four separate states and price binding.
 
-These checks prove the frozen contract and the reference only. They do not prove D1 atomicity, real provider behaviour, OAuth consent or acceptance. No database, network, model, credential, Cloudflare resource, CMS test or deployment is involved.
+These checks prove the frozen contract, the source catalog and builder, and the reference runtime only. They do not prove that the production adapters use the builder (they do not yet), D1 atomicity, real provider behaviour, OAuth consent or acceptance. No database, network, model, credential, Cloudflare resource, CMS test or deployment is involved.
