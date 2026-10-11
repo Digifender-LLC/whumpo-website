@@ -25,10 +25,13 @@ export function publicClientSource(request:Request){
 export async function publicClientKey(request:Request,scope:PublicScope,project:string,now=new Date()){
  return hashToken(['public-client',scope,project,now.toISOString().slice(0,10),publicClientSource(request)].join('|'));
 }
-/** Counts one attempt for this client against the project's per-client sub-limit; never refunded. */
-export async function reservePublicClient(db:D1Database,scope:PublicScope,project:string,key:string){
+/** Counts one attempt (or `count` attempts, all or none) for this client against the project's
+ * per-client sub-limit; never refunded. */
+export async function reservePublicClient(db:D1Database,scope:PublicScope,project:string,key:string,count=1){
+ if(!Number.isSafeInteger(count)||count<1||count>4)throw Error('Invalid public client reservation');
+ const attempt=()=>db.prepare("INSERT INTO public_client_usage(scope,project_id,client_key,day,uses) VALUES(?,?,?,strftime('%Y-%m-%d','now'),1) ON CONFLICT(scope,project_id,client_key,day) DO UPDATE SET uses=uses+1").bind(scope,project,key);
  try{
-  await db.prepare("INSERT INTO public_client_usage(scope,project_id,client_key,day,uses) VALUES(?,?,?,strftime('%Y-%m-%d','now'),1) ON CONFLICT(scope,project_id,client_key,day) DO UPDATE SET uses=uses+1").bind(scope,project,key).run();
+  if(count===1)await attempt().run();else await db.batch(Array.from({length:count},attempt));
  }catch(cause){if(String(cause).includes('public_client_quota'))throw new PublicClientLimitError();throw cause;}
 }
 /** Daily with traffic cleanup: client keys older than yesterday, project read counters before last month. */
