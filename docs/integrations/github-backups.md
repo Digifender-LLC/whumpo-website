@@ -26,6 +26,8 @@ If a request fails after dispatch, the result becomes uncertain. Further confirm
 
 Authenticated routes: `GET /api/connections/github/repositories`, `GET /api/github/backups`, `POST /api/github/backups/review`, `POST /api/github/backups/:id/confirm`. Writes retain the normal same-origin protection. Provider addresses and queries are fixed, API responses are bounded, and every request rechecks that the encrypted token remains active. Tokens never enter the browser, model, backup or receipt.
 
+WH-142 (October 10, 2026, local verification only): every backup response carries a common `receipt` view (state, stored state, owner-request authority, catalog price and evidence), and an open review carries a derived `reviewDigest`. Confirming an open review requires the JSON body `{reviewDigest, acceptedPrice}` exactly as reviewed. A Chat confirmation takes both from the saved review turn. A missing echo is refused with 400, and a changed price or reviewed terms with 409 and a fresh-review message, before any GitHub request. Checks of a dispatched backup need no echo. See the [connector contract](../connectors.md#wh-142-price-binding-and-receipt-view).
+
 `node tests/github-backups.mjs` uses disposable D1 and controlled GitHub responses. It compares source-tree hashes against independent `git write-tree`, checks exact committed file bytes and concurrent confirmations, and exercises owner isolation, identity/visibility/head/path conflicts, malformed responses, matching copies, lost provider/database acknowledgements, expiry and immutable review fields. It performs no real GitHub write. This complements connection and export tests; it cannot prove live GitHub App permissions or provider behavior.
 
 References:

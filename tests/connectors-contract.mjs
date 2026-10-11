@@ -3,13 +3,16 @@ import {build} from 'esbuild';
 import {readFileSync} from 'node:fs';
 import {join,relative} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {referenceConformance} from './helpers/connector-conformance.mjs';
 
 // WH-056 / WH-140 / WH-141 offline connector conformance harness, run against the source module
 // src/connector-catalog/{catalog,builder}.ts. Synthetic providers and invented identifiers only: no database, network,
 // OAuth client, credential, model or provider account. It proves the frozen catalog, the typed request builder, exact
-// agreement with the existing GitHub/Cloudflare code, and the synthetic reference runtime in tools/prototypes/connectors.mjs
-// (bundled with the same source). It does not prove the D1-backed adapters, which are not rewired to the catalog yet;
-// WH-142 must run runConformance() against them. Every suite check also runs against deliberately broken copies of the
+// agreement with the GitHub/Cloudflare adapters (which now send only catalog operations through the builder; their
+// request bytes are checked by tests/connection-sends.mjs), and the synthetic reference runtime in
+// tools/prototypes/connectors.mjs (bundled with the same source). runConformance() lives in
+// tests/helpers/connector-conformance.mjs; the D1-backed GitHub/Cloudflare action handlers are checked against its action
+// cases by tests/connector-conformance-handlers.mjs (WH-142). Every suite check also runs against deliberately broken copies of the
 // source (mutants below), each of which must be caught by the check written for that property.
 const root=fileURLToPath(new URL('..',import.meta.url));
 const read=file=>readFileSync(join(root,file),'utf8');
@@ -138,7 +141,14 @@ async function suite(m){
   ['extra parameter',{owner:'org',name:'site',url:'https://evil.example'},'UNKNOWN_FIELD'],
   ['missing parameter',{owner:'org'},'MISSING_FIELD'],
  ])await test(`request refuses ${name}`,()=>throws(()=>req('github','repository.get',params),code));
+ await test('branch parameters accept exactly what the backup adapter accepts as a default branch',()=>{
+  for(const branch of ['main','release/2026+hotfix@x','zweig-ü','a..b','b'.repeat(255)])
+   assert.equal(req('github','branch.head',{owner:'org',name:'site',branch}).path,'/repos/org/site/git/ref/heads/'+encodeURIComponent(branch));
+  for(const branch of ['','b'.repeat(256),'main\u0000x','main\nx','main\u007f',7])throws(()=>req('github','branch.head',{owner:'org',name:'site',branch}),'INVALID_PARAM');
+ });
  await test('encoded parameters cannot change the path',()=>{
+  // A dot-segment branch is a valid string but would be resolved away by the URL parser.
+  for(const branch of ['.','..'])throws(()=>req('github','branch.head',{owner:'org',name:'site',branch}),'INVALID_PATH');
   const c=clone();c.providers.github.operations['repository.get'].params.name='query';
   const loose=m.createRequestBuilder(c);
   assert.equal(req('github','repository.get',{owner:'org',name:'a b'},undefined,{builder:loose}).path,'/repos/org/a%20b');
@@ -189,26 +199,32 @@ async function suite(m){
   assert.equal(g.authorization.revoke,'https://api.github.com/applications/{clientId}/token');assert.ok(gh.includes("request(API+'/applications/'+config.clientId+'/token'"));
   assert.ok(cf.includes(`const scopes=${JSON.stringify(c.scopes).replaceAll('"',"'")};`));
   assert.ok(cf.includes(`new URL('${c.authorization.authorize}')`)&&cf.includes(`request('${c.authorization.token}'`)&&cf.includes(`'${c.authorization.revoke}'`));
-  assert.ok(cf.includes(`request('${c.origins[0]}/client/v4'+path`));
+  // Cloudflare API requests are catalog-built under the fixed /client/v4 prefix; recovery strips exactly that prefix.
+  assert.ok(cf.includes("const apiPrefix='/client/v4';")&&cf.includes('request(built.url,')&&cf.includes('built.path.slice(apiPrefix.length)'));
+  for(const op of Object.values(c.operations))assert.ok(op.origin===c.origins[0]&&op.path.startsWith('/client/v4/'));
   for(const op of [...Object.values(g.operations),...Object.values(c.operations)])assert.ok(src.featureOperations.includes(op.feature));
  });
- await test('catalog-built GitHub requests are the paths the current adapters send',()=>{
-  assert.ok(gh.includes(`access.send('${req('github','installations.list',{}).path}')`));
-  assert.ok(backups.includes('`/user/installations/${installation}/repositories?per_page=20&page=${page}`'));
+ await test('the GitHub adapters send exactly the catalog GitHub operations',()=>{
+  assert.deepEqual(Object.keys(m.connectorCatalog.providers.github.operations),['user.get','installations.list','repositories.list','repository.get','branch.head','backup.paths','backup.commit']);
+  assert.equal(req('github','user.get',{}).url,'https://api.github.com/user');assert.ok(gh.includes("request(githubRequest('user.get',{}).url,{headers:"));
+  assert.ok(gh.includes("access.send('installations.list',{})"));
+  assert.ok(backups.includes("access.send('repositories.list',{installation,page})"));
   assert.equal(req('github','repositories.list',{installation:7,page:3}).path,'/user/installations/7/repositories?per_page=20&page=3');
+  assert.ok(backups.includes("access.send('repository.get',{owner,name})")&&backups.includes("access.send('branch.head',{owner:repo.owner,name:repo.name,branch:repo.branch})"));
   for(const op of ['backup.paths','backup.commit'])assert.equal(req('github',op,{},{query:m.graphqlDocuments[op==='backup.paths'?'BackupPaths':'BackupCommit'],variables:op==='backup.paths'?src.backupPathsVariables('o','n','a/b/c/d','a'.repeat(40)):{input:{}}}).path,'/graphql');
-  assert.ok(backups.includes("access.send('/graphql',{method:'POST'"));
+  assert.ok(backups.includes("access.send('backup.paths',{},{query:backupPathsQuery,")&&backups.includes("access.send('backup.commit',{},{query,variables:{input}})"));
+  assert.ok(gh.includes("buildConnectorRequest({providerId:'github',operationId,params,authority:'owner-request',grantedScopes,"));
  });
- await test('catalog-built Cloudflare requests pass the current Cloudflare send guard',()=>{
-  // The exact guard expressions from cloudflareAccess().send; the source must still contain them verbatim.
-  const list=/^\/zones\?per_page=50&page=(?:[1-9]|[1-9][0-9]|100)$/,zonePath=/^\/zones\/[0-9a-f]{32}(?:\/dns_records(?:\/[0-9a-f]{32})?)?(?:\?[^#]*)?$/,post=/^\/zones\/[0-9a-f]{32}\/dns_records$/;
-  for(const r of [list,zonePath,post])assert.ok(cf.includes(String(r)),String(r));
-  assert.ok(cf.includes("access.send('/zones?per_page=50&page='+page)"));
-  for(const page of [1,50,100])assert.ok(list.test(strip(req('cloudflare','zones.list',{page}).path)));
-  assert.ok(dns.includes("access.send('/zones/'+id)")&&zonePath.test(strip(req('cloudflare','zone.get',{zone}).path)));
-  assert.ok(zonePath.test(strip(req('cloudflare','dnsRecords.findExact',{zone,name:'_whumpo.www.example.com'}).path)));
+ await test('the Cloudflare adapters send exactly the catalog Cloudflare operations',()=>{
+  assert.deepEqual(Object.keys(m.connectorCatalog.providers.cloudflare.operations),['zones.list','zone.get','dnsRecords.findExact','dnsRecord.create']);
+  assert.ok(cf.includes("access.send('zones.list',{page})")&&dns.includes("access.send('zone.get',{zone:id})"));
+  assert.ok(dns.includes("access.send('dnsRecords.findExact',{zone:zoneId,name})")&&dns.includes("access.send('dnsRecord.create',{zone:a.zone_id},{type:"));
+  assert.ok(cf.includes("buildConnectorRequest({providerId:'cloudflare',operationId,params,authority:'owner-request',grantedScopes:scopes,"));
+  // The former path regex guard is gone; the zone list keeps its narrower page and use limits.
+  assert.ok(!/\/\^\\\/zones/.test(cf)&&cf.includes("&&(page as number)<=100"));
+  for(const page of [1,50,100])assert.equal(strip(req('cloudflare','zones.list',{page}).path),'/zones?per_page=50&page='+page);
   const create=req('cloudflare','dnsRecord.create',{zone},{type:'TXT',name:'x.example.com',content:'"v"',ttl:1,comment:'m'});
-  assert.equal(create.method,'POST');assert.ok(post.test(strip(create.path)));assert.ok(dns.includes("access.send('/zones/'+a.zone_id+'/dns_records','POST'"));
+  assert.equal(create.method,'POST');assert.equal(strip(create.path),'/zones/'+zone+'/dns_records');
  });
  await test('Cloudflare dnsRecoveryRead admits exactly the catalog reconcile reads',()=>{
   const a={zone_id:zone,record_name:'_whumpo.www.example.com'};
@@ -258,197 +274,7 @@ async function suite(m){
  });
 
  // ---------- Reusable runtime conformance suite ----------
- const allowedOrigins=new Set(Object.values(m.connectorCatalog.providers).flatMap(e=>[...e.origins,...[e.authorization.token,e.authorization.revoke].filter(Boolean).map(u=>new URL(u).origin)]));
- function fakeProvider(){
-  const s={calls:[],effects:[],mode:{},token:{},revoke:200};
-  async function transport(req){
-   s.calls.push(req);assert.equal(req.redirect,'manual');const u=new URL(req.url);assert.ok(allowedOrigins.has(u.origin),'unexpected host '+u.origin);
-   if(s.mode.beforeReply){const f=s.mode.beforeReply;s.mode.beforeReply=null;await f(req);}
-   if(/\/(token|oauth2\/v2\.0\/token|oauth\/v1\/token)$/.test(u.pathname)){
-    if(s.token.lose)throw Error('connection reset');
-    if(s.token.invalid)return {status:400,json:{error:'invalid_grant'}};
-    s.token.count=(s.token.count??0)+1;return {status:200,json:{access_token:'synthetic-access-'+s.token.count,token_type:'Bearer',expires_in:3600}};
-   }
-   if(/revoke|refresh-tokens|applications/.test(u.pathname))return {status:s.revoke,json:null};
-   if(s.mode.status)return {status:s.mode.status,json:{}};
-   if(s.mode.redirect)return {status:302,json:null};
-   if(req.method==='POST'&&s.mode.action!=='read'&&/send|events$|contacts$|dns_records$/.test(u.pathname)){
-    const marker=JSON.parse(req.body).marker??JSON.parse(req.body).comment??JSON.parse(req.body).properties?.marker;
-    if(s.mode.lose==='before')throw Error('timeout before provider accepted');
-    if(s.mode.reject)return {status:422,json:{error:'invalid'}};
-    s.effects.push(marker);
-    if(s.mode.lose==='after')throw Error('response lost after provider accepted');
-    return {status:200,json:{id:'provider-'+s.effects.length}};
-   }
-   return {status:200,json:{items:s.effects.map(marker=>({marker})),note:s.mode.injected??null}};
-  }
-  return {s,transport};
- }
- const trainingRoute={connectorContent:{trainingUse:true,approvedForConnectorContent:false}},approvedRoute={connectorContent:{trainingUse:false,approvedForConnectorContent:true}};
- const token=(scope,extra={})=>({access_token:'synthetic-access',token_type:'Bearer',expires_in:3600,...(scope?{scope}:{}),...extra});
- const gmailScopes='https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send';
- const send={raw:'c3ludGhldGlj',threadId:'t1'};
-
- /** Conformance cases any adapter runtime must pass. `make` returns {rt, s, clock}. */
- async function runConformance(label,make){
-  const t=(name,fn)=>test(`${label}: ${name}`,fn);
-  // Host/scope allowlist.
-  await t('only allowlisted hosts are contacted and redirects are refused, not followed',async()=>{
-   const {rt,s}=make();rt.connect('owner-a','cloudflare',token('zone.read dns.read dns.write',{expires_in:3600}));
-   s.mode.redirect=true;await rejects(()=>rt.read(owner(),'cloudflare','zones.list',{page:1}),'REDIRECT_REFUSED');assert.equal(s.calls.length,1);
-  });
-  await t('token responses with widened scope, long lifetime, wrong type or unexpected refresh are refused',async()=>{
-   const {rt}=make();
-   throws(()=>rt.connect('owner-a','cloudflare',token('zone.read dns.read dns.write account.write')),'SCOPE_WIDENED');
-   throws(()=>rt.connect('owner-a','cloudflare',token(undefined,{expires_in:86400*30})),'INVALID_TOKEN');
-   throws(()=>rt.connect('owner-a','cloudflare',token(undefined,{token_type:'mac'})),'INVALID_TOKEN');
-   throws(()=>rt.connect('owner-a','cloudflare',token(undefined,{refresh_token:'synthetic-refresh'})),'UNEXPECTED_REFRESH');
-   rt.connect('owner-a','cloudflare',token());throws(()=>rt.connect('owner-a','cloudflare',token()),'DISCONNECT_FIRST');
-  });
-  await t('an operation needing an ungranted scope is refused before dispatch',async()=>{
-   const {rt,s}=make();rt.connect('owner-a','gmail',token('https://www.googleapis.com/auth/gmail.readonly',{refresh_token:'r'}));
-   await rejects(()=>rt.prepareAction(owner(),'gmail','message.send',{},send),'INSUFFICIENT_SCOPE');assert.equal(s.calls.length,0);
-  });
-  // Revoked / expired credentials.
-  await t('disconnect disables local access before revocation; later use never reaches the provider',async()=>{
-   const {rt,s}=make();rt.connect('owner-a','cloudflare',token());s.revoke=500;
-   assert.equal((await rt.disconnect('owner-a','cloudflare')).state,'revocation-pending');const before=s.calls.length;
-   await rejects(()=>rt.read(owner(),'cloudflare','zones.list',{page:1}),'NOT_CONNECTED');assert.equal(s.calls.length,before);
-   assert.equal(rt.status('owner-a','cloudflare').consent,'revocation-pending');
-  });
-  await t('a provider without a revocation endpoint reports owner action, never claims revocation',async()=>{
-   const {rt,s}=make();rt.connect('owner-a','outlook-email',token('offline_access Mail.Read Mail.Send',{refresh_token:'r'}));
-   assert.equal((await rt.disconnect('owner-a','outlook-email')).state,'revocation-owner-action');assert.equal(s.calls.length,0);
-  });
-  await t('expired access without refresh custody is refused with zero provider calls',async()=>{
-   const {rt,s}=make();rt.connect('owner-a','cloudflare',token());rt.expire('owner-a','cloudflare');
-   await rejects(()=>rt.read(owner(),'cloudflare','zones.list',{page:1}),'EXPIRED');assert.equal(s.calls.length,0);
-   assert.equal(rt.status('owner-a','cloudflare').consent,'expired');
-  });
-  await t('refresh is single-flight, bounded and never widens scope',async()=>{
-   const {rt,s}=make();rt.connect('owner-a','google-calendar',token(undefined,{refresh_token:'r'}));rt.expire('owner-a','google-calendar');
-   await Promise.all([rt.read(owner(),'google-calendar','calendars.list',{}),rt.read(owner(),'google-calendar','calendars.list',{})]);
-   assert.equal(s.calls.filter(c=>c.url.endsWith('/token')).length,1);
-  });
-  await t('lost refresh reply fails that use and retries the same custody next time; invalid_grant requires reauthorization',async()=>{
-   const {rt,s}=make();rt.connect('owner-a','google-calendar',token(undefined,{refresh_token:'r'}));rt.expire('owner-a','google-calendar');
-   s.token.lose=true;await rejects(()=>rt.read(owner(),'google-calendar','calendars.list',{}),'REFRESH_UNCERTAIN');
-   s.token.lose=false;s.token.invalid=true;await rejects(()=>rt.read(owner(),'google-calendar','calendars.list',{}),'REAUTHORIZATION_REQUIRED');
-   const before=s.calls.length;await rejects(()=>rt.read(owner(),'google-calendar','calendars.list',{}),'NOT_CONNECTED');assert.equal(s.calls.length,before);
-   assert.equal(rt.status('owner-a','google-calendar').consent,'reauthorization-required');
-  });
-  await t('disconnect during an in-flight read refuses the stale result',async()=>{
-   const {rt,s}=make();rt.connect('owner-a','cloudflare',token());s.mode.beforeReply=()=>rt.disconnect('owner-a','cloudflare');
-   await rejects(()=>rt.read(owner(),'cloudflare','zones.list',{page:1}),'ACCESS_CHANGED');
-  });
-  await t('provider 401 marks access rejected with no retry',async()=>{
-   const {rt,s}=make();rt.connect('owner-a','cloudflare',token());s.mode.status=401;
-   await rejects(()=>rt.read(owner(),'cloudflare','zones.list',{page:1}),'PROVIDER_REJECTED');assert.equal(s.calls.length,1);
-   await rejects(()=>rt.read(owner(),'cloudflare','zones.list',{page:1}),'NOT_CONNECTED');assert.equal(s.calls.length,1);
-  });
-  // Durable dispatch receipts and unknown outcomes.
-  const prepared=async(rt,marker='m-1')=>{rt.connect('owner-a','cloudflare',token());return rt.prepareAction(owner(),'cloudflare','dnsRecord.create',{zone},{type:'TXT',name:'_whumpo.www.example.com',content:'"v"',ttl:1,comment:marker});};
-  const observe=marker=>()=>({operationId:'dnsRecords.findExact',params:{zone,name:'_whumpo.www.example.com'},matches:j=>j.items.some(i=>i.marker===marker)});
-  await t('lost response after the provider applied: uncertain, never redispatched, reconciled by readback',async()=>{
-   const {rt,s}=make(),p=await prepared(rt);s.mode.lose='after';
-   assert.equal((await rt.confirmAction(owner(),p.receiptId,{reviewDigest:p.reviewDigest,acceptedPrice:p.price})).state,'uncertain');
-   s.mode.lose=null;assert.deepEqual(await rt.confirmAction(owner(),p.receiptId,{reviewDigest:p.reviewDigest,acceptedPrice:p.price}),{state:'uncertain',dispatched:false});
-   assert.equal((await rt.reconcile(owner(),p.receiptId,observe('m-1'))).state,'observed');
-   assert.equal(s.effects.length,1);assert.equal(rt.receipt(p.receiptId).dispatches,1);
-  });
-  await t('lost request before the provider applied stays held; reconciliation never resends',async()=>{
-   const {rt,s}=make(),p=await prepared(rt);s.mode.lose='before';
-   await rt.confirmAction(owner(),p.receiptId,{reviewDigest:p.reviewDigest,acceptedPrice:p.price});s.mode.lose=null;
-   assert.equal((await rt.reconcile(owner(),p.receiptId,observe('m-1'))).state,'uncertain');
-   await rt.confirmAction(owner(),p.receiptId,{reviewDigest:p.reviewDigest,acceptedPrice:p.price});
-   assert.equal(s.effects.length,0);assert.equal(rt.receipt(p.receiptId).dispatches,1);
-  });
-  await t('concurrent confirmations dispatch once',async()=>{
-   const {rt,s}=make(),p=await prepared(rt),c={reviewDigest:p.reviewDigest,acceptedPrice:p.price};
-   await Promise.all([rt.confirmAction(owner(),p.receiptId,c),rt.confirmAction(owner(),p.receiptId,c),rt.confirmAction(owner(),p.receiptId,c)]);
-   assert.equal(s.effects.length,1);assert.equal(rt.receipt(p.receiptId).dispatches,1);
-  });
-  await t('a definitive provider rejection fails without retry; it is not uncertain',async()=>{
-   const {rt,s}=make(),p=await prepared(rt);s.mode.reject=true;
-   assert.equal((await rt.confirmAction(owner(),p.receiptId,{reviewDigest:p.reviewDigest,acceptedPrice:p.price})).state,'failed');
-   assert.equal((await rt.confirmAction(owner(),p.receiptId,{reviewDigest:p.reviewDigest,acceptedPrice:p.price})).dispatched,false);
-  });
-  await t('reconciliation is limited to the action\'s declared reads',async()=>{
-   const {rt,s}=make(),p=await prepared(rt);s.mode.lose='before';await rt.confirmAction(owner(),p.receiptId,{reviewDigest:p.reviewDigest,acceptedPrice:p.price});s.mode.lose=null;
-   await rejects(()=>rt.reconcile(owner(),p.receiptId,()=>({operationId:'dnsRecord.create',params:{zone},body:{type:'TXT'},matches:()=>true})),'RECONCILE_NOT_DECLARED');
-   await rejects(()=>rt.reconcile(owner(),p.receiptId,()=>({operationId:'zones.list',params:{page:1},matches:()=>true})),'RECONCILE_NOT_DECLARED');
-   await rejects(()=>rt.reconcile(owner('owner-b'),p.receiptId,observe('m-1')),'NOT_FOUND');
-   assert.equal(s.effects.length,0);
-  });
-  await t('price is explicit and bound into the exact review',async()=>{
-   const {rt,clock}=make(),p=await prepared(rt);
-   assert.deepEqual(p.price,{customerUnits:0,basis:'plan-inclusion'});
-   await rejects(()=>rt.confirmAction(owner(),p.receiptId,{reviewDigest:p.reviewDigest}),'PRICE_NOT_ACCEPTED');
-   await rejects(()=>rt.confirmAction(owner(),p.receiptId,{reviewDigest:'0'.repeat(64),acceptedPrice:p.price}),'STALE_REVIEW');
-   rt.catalog.providers.cloudflare.operations['dnsRecord.create'].price={customerUnits:3,basis:'quoted'};
-   await rejects(()=>rt.confirmAction(owner(),p.receiptId,{reviewDigest:p.reviewDigest,acceptedPrice:p.price}),'STALE_REVIEW');
-   rt.catalog.providers.cloudflare.operations['dnsRecord.create'].price={customerUnits:0,basis:'plan-inclusion'};
-   clock.t+=11*60e3;await rejects(()=>rt.confirmAction(owner(),p.receiptId,{reviewDigest:p.reviewDigest,acceptedPrice:p.price}),'REVIEW_EXPIRED');
-  });
-  await t('a review bound to replaced access is stale',async()=>{
-   const {rt}=make(),p=await prepared(rt);await rt.disconnect('owner-a','cloudflare');rt.connect('owner-a','cloudflare',token());
-   await rejects(()=>rt.confirmAction(owner(),p.receiptId,{reviewDigest:p.reviewDigest,acceptedPrice:p.price}),'STALE_REVIEW');
-  });
-  // Request-bound lookup/data-use consent.
-  const gmail=(rt)=>rt.connect('owner-a','gmail',token(gmailScopes,{refresh_token:'r'}));
-  await t('content reads need confirmed consent bound to owner, credential, exact query and destination',async()=>{
-   const {rt,s}=make();gmail(rt);
-   await rejects(()=>rt.read(owner(),'gmail','messages.search',{q:'invoice'}),'CONSENT_REQUIRED');
-   const c=rt.proposeLookup(owner(),'gmail','messages.search',{q:'invoice'},'owner-panel');
-   await rejects(()=>rt.read(owner(),'gmail','messages.search',{q:'invoice'},{consentId:c.consentId}),'CONSENT_MISMATCH');
-   throws(()=>rt.confirmLookup(owner('owner-b'),c.consentId),'NOT_FOUND');rt.confirmLookup(owner(),c.consentId);
-   await rejects(()=>rt.read(owner(),'gmail','messages.search',{q:'payroll'},{consentId:c.consentId}),'CONSENT_MISMATCH');
-   await rejects(()=>rt.read(owner(),'gmail','messages.search',{q:'invoice'},{consentId:c.consentId,destination:'model-context'}),'CONSENT_REQUIRED');
-   await rejects(()=>rt.read(owner('owner-b'),'gmail','messages.search',{q:'invoice'},{consentId:c.consentId}),'NOT_CONNECTED');
-   const r=await rt.read(owner(),'gmail','messages.search',{q:'invoice'},{consentId:c.consentId});assert.equal(r.provenance,'untrusted-external');assert.equal(r.dataClass,'connector-content');
-   await rejects(()=>rt.read(owner(),'gmail','messages.search',{q:'invoice'},{consentId:c.consentId}),'CONSENT_MISMATCH');
-   assert.equal(s.calls.length,1);
-  });
-  await t('consent expires and does not survive reconnection',async()=>{
-   const {rt,clock}=make();gmail(rt);
-   const a=rt.proposeLookup(owner(),'gmail','messages.search',{q:'x'},'owner-panel');rt.confirmLookup(owner(),a.consentId);clock.t+=16*60e3;
-   await rejects(()=>rt.read(owner(),'gmail','messages.search',{q:'x'},{consentId:a.consentId}),'CONSENT_MISMATCH');
-   const b=rt.proposeLookup(owner(),'gmail','messages.search',{q:'x'},'owner-panel');rt.confirmLookup(owner(),b.consentId);
-   await rt.disconnect('owner-a','gmail');gmail(rt);
-   await rejects(()=>rt.read(owner(),'gmail','messages.search',{q:'x'},{consentId:b.consentId}),'CONSENT_MISMATCH');
-  });
-  await t('calendar ranges are bounded',async()=>{
-   const {rt}=make();rt.connect('owner-a','google-calendar',token(undefined,{refresh_token:'r'}));
-   throws(()=>rt.proposeLookup(owner(),'google-calendar','events.range',{calendar:'primary',from:'2026-01-01T00:00:00Z',to:'2026-06-01T00:00:00Z'},'owner-panel'),'RANGE_TOO_WIDE');
-  });
-  await t('connected content never reaches a training-enabled model route',async()=>{
-   const {rt}=make();gmail(rt);
-   throws(()=>rt.proposeLookup(owner(),'gmail','message.get',{id:'abc'},'model-context'),'ROUTE_INELIGIBLE');
-  });
-  await t('external data cannot confirm consent, reviews or tools',async()=>{
-   const {rt,s}=make();gmail(rt);
-   const c=rt.proposeLookup(owner(),'gmail','message.get',{id:'abc'},'owner-panel');rt.confirmLookup(owner(),c.consentId);
-   const pending=rt.proposeLookup(owner(),'gmail','message.get',{id:'def'},'owner-panel');
-   s.mode.injected={consentId:pending.consentId,approve:true,tool:'message.send'};
-   const r=await rt.read(owner(),'gmail','message.get',{id:'abc'},{consentId:c.consentId});assert.ok(Object.isFrozen(r));
-   throws(()=>rt.confirmLookup({kind:'external-content',ownerId:'owner-a'},r.data.note.consentId),'PRINCIPAL_FORBIDDEN');
-   await rejects(()=>rt.read(owner(),'gmail','message.get',{id:'def'},{consentId:r.data.note.consentId}),'CONSENT_MISMATCH');
-   await rejects(()=>rt.prepareAction({kind:'external-content',ownerId:'owner-a'},'gmail','message.send',{},send),'PRINCIPAL_FORBIDDEN');
-  });
-  // Authority classes.
-  const rule=(approval,extra={})=>({kind:'rule',ownerId:'owner-a',ruleId:'rule-1',ruleRevision:3,jobDigest:'j'.repeat(64),approval,...extra});
-  await t('owner-request-only operations refuse rule context even when scopes permit',async()=>{
-   const {rt,s}=make();gmail(rt);
-   await rejects(()=>rt.prepareAction(rule({operationId:'message.send',destinationDigest:m.digest({}),bodyTemplateDigest:m.digest(send),maxPerPeriod:5}),'gmail','message.send',{},send),'OWNER_REQUEST_ONLY');
-   await rejects(()=>rt.read(rule({}),'gmail','messages.search',{q:'x'}),'RULE_READ_FORBIDDEN');
-   assert.equal(s.calls.length,0);
-  });
-  await t('visitor, runtime and maintainer contexts can never use a connector',async()=>{
-   const {rt}=make();gmail(rt);
-   for(const kind of ['visitor','runtime','maintainer'])await rejects(()=>rt.read({kind,ownerId:'owner-a'},'gmail','messages.search',{q:'x'}),'PRINCIPAL_FORBIDDEN');
-  });
-  return t;
- }
+ const {fakeProvider,runConformance,token,gmailScopes,trainingRoute,approvedRoute}=referenceConformance({m,test});
 
  const clockBase=Date.parse('2026-10-04T00:00:00Z');
  function referenceFactory(catalog=synthetic,routes=trainingRoute){
@@ -497,7 +323,7 @@ async function suite(m){
 suiteCount=await suite(await load());
 
 // ---------- Static checks, run once ----------
-await test('the module is pure and no Worker entry reaches it',async()=>{
+await test('the module is pure; only the platform Worker reaches it',async()=>{
  const allowed={'src/connector-catalog/catalog.ts':[],'src/connector-catalog/builder.ts':['./catalog']};
  for(const file of moduleFiles){
   const text=read(file);
@@ -505,10 +331,12 @@ await test('the module is pure and no Worker entry reaches it',async()=>{
   assert.deepEqual(specifiers,allowed[file],`${file} imports ${specifiers}`);
   assert.ok(!/\bfetch\s*\(|XMLHttpRequest|WebSocket|process\.env|D1Database|\.prepare\(|\benv\.[A-Z_]+|\bunseal\(|\bseal\(/.test(text),file);
  }
- for(const worker of ['src/index.ts','src/site-host.ts','src/app-host.ts','src/runtime/worker.ts']){
+ // The platform Worker sends GitHub/Cloudflare requests through the builder. The sites, apps and runtime Workers never
+ // load the catalog (feature admission and the vault, which the apps Worker reaches, import catalog types only).
+ for(const [worker,reach] of [['src/index.ts',moduleFiles],['src/site-host.ts',[]],['src/app-host.ts',[]],['src/runtime/worker.ts',[]]]){
   const out=await build({entryPoints:[join(root,worker)],bundle:true,format:'esm',platform:'node',write:false,metafile:true,logLevel:'silent',external:['cloudflare:*','*.wasm']});
   const inputs=Object.keys(out.metafile.inputs);assert.ok(inputs.length>5,worker);
-  assert.deepEqual(inputs.filter(p=>/connector-catalog|prototypes\//.test(p)),[],`${worker} reaches the connector catalog`);
+  assert.deepEqual(inputs.filter(p=>/connector-catalog|prototypes\//.test(p)).sort(),[...reach].sort(),`${worker} connector catalog reach`);
  }
 });
 
@@ -533,6 +361,8 @@ const mutants=[
  ['future contract version accepted',C,"check(catalog.contractVersion===contractVersion,'UNSUPPORTED_VERSION','catalog');",''],
  ['planned provider available',C,"check(entry.readiness!=='planned','PROVIDER_PLANNED',providerId);",''],
  ['planned provider connectable',C,"return !!e&&e.readiness!=='planned';","return !!e;"],
+ ['branch parameter admits control characters',C,"v.length<=255&&!/[\\u0000-\\u001f\\u007f]/.test(v)","v.length<=255"],
+ ['branch parameter unbounded',C,"v.length>=1&&v.length<=255&&","v.length>=1&&"],
  ['refresh custody for a no-refresh provider',C,"purpose!=='refresh'||entry.authorization.refresh!=='none'","true"],
  ['caller URL or path field accepted',B,"shape(input,inputKeys,'request',['body']);","shape(input,inputKeys,'request',['body','url','host','path','headers','query','origin','method']);"],
  ['rule may read',B,"check(authority!=='approved-rule'||op.kind==='action','RULE_READ_FORBIDDEN',operationId);",''],
@@ -562,6 +392,7 @@ const killedBy={
  'endpoint query accepted':'revocation endpoint with query','future contract version accepted':'future contract version',
  'planned provider available':'planned providers cannot start OAuth, seal credentials or build a request',
  'planned provider connectable':'catalog-derived providers, feature ids and vault contexts agree with the existing code',
+ 'branch parameter admits control characters':'branch parameters accept exactly what the backup adapter accepts','branch parameter unbounded':'branch parameters accept exactly what the backup adapter accepts',
  'refresh custody for a no-refresh provider':'OAuth descriptors and vault contexts come from the catalog for available providers only',
  'caller URL or path field accepted':'request input has no URL, host, path, header or query field',
  'rule may read':'builder enforces authority classes','owner-request-only operation accepts a rule':'builder enforces authority classes','rule without live acceptance':'builder enforces authority classes',

@@ -2,24 +2,28 @@ import {cloudflareAccess,type CloudflareConfig} from './cloudflare-connection';
 import {DomainError,hostname} from './domains';
 import {hashToken} from './security';
 import {connectionFeature,featurePredicate,requireFeature,assertFeature} from './feature-admission';
+import {chargeable,connectorReceiptView,reviewBinding,reviewBindingProblem} from './connector-receipts';
 type Action={id:string;user_id:string;claim_id:string;project_id:string;token_id:string;zone_id:string;zone_name:string;record_name:string;content:string;inventory_hash:string;created_at:string;expires_at:string;state:string;provider_id:string|null;detail:string;record_type:'TXT'|'CNAME';connection_id:string|null;proof_token:string|null};
 type RecordInfo={id:string;name:string;type:string;content:string;comment:string;ttl:number;proxied?:boolean};
 const proofMatches=(value:string,expected:string)=>value===expected||value===JSON.stringify(expected);
 const uuid=/^[0-9a-f-]{36}$/,zoneID=/^[0-9a-f]{32}$/,stamp=()=>new Date().toISOString();
-const view=(a:Action)=>({id:a.id,connectionId:a.connection_id,claimId:a.claim_id,projectId:a.project_id,zoneId:a.zone_id,zoneName:a.zone_name,record:{type:a.record_type,name:a.record_name,value:a.content,ttl:1,...(a.record_type==='CNAME'?{proxied:false}:{})},state:a.state,providerId:a.provider_id,expiresAt:a.expires_at,detail:a.detail});
+// WH-142: the review binding is derived from the immutable review columns (cloudflare_dns_identity and
+// cloudflare_dns_routing_identity), the credential ID and the catalog declaration and price. Not stored; see confirmDNS.
+const reviewed=(a:Action)=>reviewBinding('cloudflare',a.token_id,{id:a.id,userId:a.user_id,claimId:a.claim_id,projectId:a.project_id,zoneId:a.zone_id,zoneName:a.zone_name,recordName:a.record_name,content:a.content,inventoryHash:a.inventory_hash,createdAt:a.created_at,expiresAt:a.expires_at,recordType:a.record_type,connectionId:a.connection_id,proofToken:a.proof_token});
+async function view(a:Action){const now=stamp(),open=a.state==='review'&&a.expires_at>now;return {id:a.id,connectionId:a.connection_id,claimId:a.claim_id,projectId:a.project_id,zoneId:a.zone_id,zoneName:a.zone_name,record:{type:a.record_type,name:a.record_name,value:a.content,ttl:1,...(a.record_type==='CNAME'?{proxied:false}:{})},state:a.state,providerId:a.provider_id,expiresAt:a.expires_at,detail:a.detail,receipt:connectorReceiptView('cloudflare',{state:a.state,expiresAt:a.expires_at,reviewDigest:open?(await reviewed(a)).reviewDigest:undefined},now)};}
 async function owned(db:D1Database,user:string,id:string){const a=await db.prepare('SELECT a.* FROM cloudflare_dns_actions a JOIN projects p ON p.id=a.project_id WHERE a.id=? AND a.user_id=? AND p.owner_user_id=?').bind(id,user,user).first<Action>();if(!a)throw new DomainError(404,'DNS review not found.');return a;}
 async function proof(db:D1Database,user:string,id:string){const p=await db.prepare('SELECT d.*,p.owner_user_id FROM domain_claims d JOIN projects p ON p.id=d.project_id WHERE d.id=? AND p.owner_user_id=?').bind(id,user).first<{id:string;project_id:string;hostname:string;token:string;expires_at:string}>();if(!p)throw new DomainError(404,'Domain proof not found.');hostname(p.hostname);if(p.expires_at<=stamp())throw new DomainError(409,'Renew the expired domain proof first.');return p;}
-async function zone(access:Awaited<ReturnType<typeof cloudflareAccess>>,id:string,name:string){const d=await access.send('/zones/'+id),z=d.result as Record<string,unknown>|undefined;if(d.success!==true||!z||z.id!==id||typeof z.name!=='string'||z.status!=='active'||!(name===z.name||name.endsWith('.'+z.name)))throw new DomainError(409,'Choose an active authorized Cloudflare zone containing this hostname.');return z.name;}
+async function zone(access:Awaited<ReturnType<typeof cloudflareAccess>>,id:string,name:string){const d=await access.send('zone.get',{zone:id}),z=d.result as Record<string,unknown>|undefined;if(d.success!==true||!z||z.id!==id||typeof z.name!=='string'||z.status!=='active'||!(name===z.name||name.endsWith('.'+z.name)))throw new DomainError(409,'Choose an active authorized Cloudflare zone containing this hostname.');return z.name;}
 function record(raw:unknown,name:string,routing=false):RecordInfo{
  if(!raw||typeof raw!=='object')throw new DomainError(503,'Cloudflare returned an invalid DNS record.');const r=raw as Record<string,unknown>;
  if(typeof r.id!=='string'||!zoneID.test(r.id)||r.name!==name||typeof r.type!=='string'||typeof r.content!=='string'||r.content.length>8192||typeof r.ttl!=='number'||r.comment!==undefined&&r.comment!==null&&typeof r.comment!=='string')throw new DomainError(503,'Cloudflare returned an invalid DNS record.');
  if(routing&&r.type==='CNAME'&&typeof r.proxied!=='boolean')throw new DomainError(503,'Cloudflare did not return the CNAME proxy status.');
  return {id:r.id,name,type:r.type,content:r.content,comment:typeof r.comment==='string'?r.comment:'',ttl:r.ttl,...(routing&&r.type==='CNAME'?{proxied:r.proxied as boolean}:{})};
 }
-async function inventory(access:Awaited<ReturnType<typeof cloudflareAccess>>,zoneId:string,name:string,routing=false){const data=await access.send('/zones/'+zoneId+'/dns_records?'+new URLSearchParams({'name.exact':name,per_page:'100',page:'1'})),info=data.result_info as Record<string,unknown>|undefined;
+async function inventory(access:Awaited<ReturnType<typeof cloudflareAccess>>,zoneId:string,name:string,routing=false){const data=await access.send('dnsRecords.findExact',{zone:zoneId,name}),info=data.result_info as Record<string,unknown>|undefined;
  if(data.success!==true||!Array.isArray(data.result)||data.result.length>100||!info||!Number.isSafeInteger(info.total_count)||info.total_count!==data.result.length)throw new DomainError(409,'Cloudflare could not provide the complete DNS record set. No changes were made.');
  const records=data.result.map(r=>record(r,name,routing)).sort((a,b)=>a.id.localeCompare(b.id));return {records,hash:await hashToken(JSON.stringify(records))};}
-export async function listDNSActions(db:D1Database,user:string){const {results}=await db.prepare('SELECT a.* FROM cloudflare_dns_actions a JOIN projects p ON p.id=a.project_id WHERE a.user_id=? AND p.owner_user_id=? ORDER BY a.created_at DESC,a.id DESC LIMIT 100').bind(user,user).all<Action>();return {actions:results.map(view)};}
+export async function listDNSActions(db:D1Database,user:string){const {results}=await db.prepare('SELECT a.* FROM cloudflare_dns_actions a JOIN projects p ON p.id=a.project_id WHERE a.user_id=? AND p.owner_user_id=? ORDER BY a.created_at DESC,a.id DESC LIMIT 100').bind(user,user).all<Action>();return {actions:await Promise.all(results.map(view))};}
 export async function reviewTXT(db:D1Database,user:string,id:string,claimId:string,zoneId:string,config:CloudflareConfig|undefined,transport:typeof fetch=fetch){
  if(!uuid.test(id)||!uuid.test(claimId)||!zoneID.test(zoneId))throw new DomainError(400,'Choose a domain claim and Cloudflare zone.');
  const old=await db.prepare('SELECT * FROM cloudflare_dns_actions WHERE id=? AND user_id=?').bind(id,user).first<Action>();if(old){if(old.record_type!=='TXT'||old.claim_id!==claimId||old.zone_id!==zoneId)throw new DomainError(409,'DNS review ID already used.');return view(await owned(db,user,old.id));}
@@ -56,11 +60,19 @@ export async function reviewCNAME(db:D1Database,user:string,id:string,connection
  catch(cause){const saved=await db.prepare("SELECT * FROM cloudflare_dns_actions WHERE id=? AND user_id=? AND connection_id=? AND zone_id=? AND record_type='CNAME'").bind(id,user,connectionId,zoneId).first<Action>();if(saved)return view(await owned(db,user,saved.id));if(String(cause).includes('cloudflare_dns_quota'))throw new DomainError(409,'This account reached its 100 DNS-review test limit.');if(String(cause).includes('cloudflare_dns_stale'))throw new DomainError(409,'Hosting connection or ownership changed. Prepare a fresh review.');throw cause;}
  return view(await owned(db,user,id));
 }
-export async function confirmDNS(db:D1Database,user:string,id:string,config:CloudflareConfig|undefined,transport:typeof fetch=fetch,hostingReady=false){
+/** `echo` is the owner's `{reviewDigest, acceptedPrice}` from the review; a review needs it exactly. Checks of a
+ * dispatched receipt ignore it and stay read-only. */
+export async function confirmDNS(db:D1Database,user:string,id:string,config:CloudflareConfig|undefined,transport:typeof fetch=fetch,hostingReady=false,echo?:unknown){
  const a=await owned(db,user,id);if(['applied','unchanged','observed'].includes(a.state))return view(a);
  const routing=a.record_type==='CNAME',marker=(routing?'Whumpo routing ':'Whumpo proof ')+a.id;
  // Configuration gates new writes; observation of a prior uncertain dispatch stays read-only.
  if(routing&&a.state==='review')await routingConnection(db,user,a.connection_id!,hostingReady);
+ // An expired review keeps its existing refusal below; it can never be claimed (cloudflare_dns_dispatch).
+ if(a.state==='review'&&a.expires_at>stamp()){
+  const bound=await reviewed(a),problem=reviewBindingProblem(bound,echo);
+  if(problem)throw new DomainError(problem==='missing'?400:409,problem==='missing'?'Confirm this exact DNS review, including its stated price.':'The DNS price or reviewed terms changed. Prepare a fresh review; nothing was changed.');
+  if(chargeable(bound.price))throw new DomainError(409,'This DNS change now has a per-use price that Whumpo cannot charge yet. Nothing was sent.');
+ }
  const scope=connectionFeature(user,'cloudflare',a.project_id,'confirm'),gate=featurePredicate(db,scope),dispatchScope=connectionFeature(user,'cloudflare',a.project_id,'dispatch'),dispatchGate=featurePredicate(db,dispatchScope);
  const access=await cloudflareAccess(db,user,config,transport,a.state==='review'?{projectId:a.project_id,operation:'confirm'}:{recoveryId:a.id},a.state==='review'?a.token_id:undefined);
  const name=await zone(access,a.zone_id,a.record_name);if(name!==a.zone_name)throw new DomainError(409,'Cloudflare zone identity changed.');
@@ -81,7 +93,7 @@ export async function confirmDNS(db:D1Database,user:string,id:string,config:Clou
  catch(cause){if(/cloudflare_dns_stale|UNIQUE constraint/.test(String(cause)))throw new DomainError(409,'DNS review changed, access expired, or another write is unresolved. Refresh before proceeding.');throw cause;}
  // Once sending is persisted, retries can only observe; they never POST again.
  try{
-  const data=await access.send('/zones/'+a.zone_id+'/dns_records','POST',{type:a.record_type,name:a.record_name,content:routing?a.content:JSON.stringify(a.content),ttl:1,...(routing?{proxied:false}:{}),comment:marker});if(data.success!==true)throw new DomainError(503,'DNS creation could not be confirmed.');
+  const data=await access.send('dnsRecord.create',{zone:a.zone_id},{type:a.record_type,name:a.record_name,content:routing?a.content:JSON.stringify(a.content),ttl:1,...(routing?{proxied:false}:{}),comment:marker});if(data.success!==true)throw new DomainError(503,'DNS creation could not be confirmed.');
   const created=record(data.result,a.record_name,routing);if(!matches(created)||created.comment!==marker)throw new DomainError(503,'DNS creation identity could not be confirmed.');
   await db.prepare("UPDATE cloudflare_dns_actions SET state='applied',provider_id=?,detail=? WHERE id=? AND user_id=? AND state IN ('sending','uncertain')").bind(created.id,'Cloudflare acknowledged the reviewed '+a.record_type+' record. '+(routing?'Check hosting status to verify public DNS and TLS before treating this hostname as live.':'Verify public DNS separately; hosting is unchanged.'),id,user).run();
  }catch{await db.prepare("UPDATE cloudflare_dns_actions SET state='uncertain',detail='The DNS request outcome is uncertain. Check the result; this request will not be sent again. If no exact record can be observed, operator review is required.' WHERE id=? AND user_id=? AND state='sending'").bind(id,user).run();}

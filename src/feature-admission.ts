@@ -1,8 +1,11 @@
 import {assertWorkspace,workspacePredicate} from './workspace-identity/admission';
 import {featureRequest,inclusionPredicate,resolveFeatureInclusion,FeatureInclusionError,type FeatureRequest,type FeatureOperation} from './feature-inclusion';
+// Type-only: the apps Worker reaches this module, so the connector catalog must not load here at runtime.
+import type {ConnectableProviderId} from './connector-catalog/catalog';
 
 export type ConnectionUse={projectId:string|null;operation:Exclude<FeatureOperation,'connect'>}|{recoveryId:string};
-export function connectionFeature(userId:string,provider:'github'|'cloudflare',projectId:string|null,operation:FeatureOperation):FeatureRequest {
+/** The feature id equals the catalog provider's `featureId` (connections.<provider>); checked by tests/connection-sends.mjs. */
+export function connectionFeature(userId:string,provider:ConnectableProviderId,projectId:string|null,operation:FeatureOperation):FeatureRequest {
  return featureRequest({userId,projectId,featureId:`connections.${provider}`,operation});
 }
 /** Current inclusion/ownership predicate, composed into the same SQL statement as a local effect.
@@ -22,7 +25,7 @@ export async function assertFeature(db:Pick<D1Database,'prepare'>,input:FeatureR
  const gate=featurePredicate(db,input);
  if(!await db.prepare(`SELECT 1 WHERE ${gate.sql}`).bind(...gate.params).first())throw new FeatureInclusionError(403,'Feature eligibility or project ownership changed. Refresh the current plan and prepare a new review.');
 }
-export async function connectionInclusion(db:D1Database,userId:string,provider:'github'|'cloudflare'){
+export async function connectionInclusion(db:D1Database,userId:string,provider:ConnectableProviderId){
  await assertWorkspace(db,userId);
  const [connect,read]=await Promise.all(['connect','read'].map(operation=>resolveFeatureInclusion(db,connectionFeature(userId,provider,null,operation as FeatureOperation))));
  return {connect:connect.included,read:read.included,planId:connect.planId,source:connect.source?.kind??null};

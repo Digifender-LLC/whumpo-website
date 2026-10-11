@@ -2,7 +2,7 @@
 
 ## Common connector contract — October 4, 2026 UTC
 
-Cloudflare is mapped onto the planned [common bounded connector contract](../connectors.md) (WH-140), with its exact gaps listed there. That mapping changes no current behaviour, scope or endpoint; WH-141/142 adapt the handlers.
+Cloudflare is mapped onto the planned [common bounded connector contract](../connectors.md) (WH-140), with its exact gaps listed there. That mapping changes no current behaviour, scope or endpoint. Since WH-141 (source, October 10, 2026 UTC), every Cloudflare API request is built from a catalog operation ID and typed parameters, with the same request bytes and the former path regex removed; WH-142 adapts the handlers further.
 
 ## Planned plan eligibility — September 30, 2026
 

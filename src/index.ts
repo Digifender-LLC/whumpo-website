@@ -516,7 +516,7 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
     return json(await reviewCNAME(env.DB,user.id,data.id,data.connectionId,data.zoneId,cloudflareConfig(env),transport,!!hostingConfig(env)));
   }
   const dnsConfirmation=pathname.match(/^\/api\/cloudflare\/dns\/([0-9a-f-]{36})\/confirm$/);
-  if(method==='POST'&&dnsConfirmation)return json(await confirmDNS(env.DB,user.id,dnsConfirmation[1],cloudflareConfig(env),transport,!!hostingConfig(env)));
+  if(method==='POST'&&dnsConfirmation)return json(await confirmDNS(env.DB,user.id,dnsConfirmation[1],cloudflareConfig(env),transport,!!hostingConfig(env),await body(request)));
   const consent=pathname.match(/^\/api\/connections\/(github|cloudflare)\/handoff$/);
   if(method==='GET'&&consent&&isConnectionProvider(consent[1])){
     const params=new URL(request.url).searchParams;
@@ -568,7 +568,7 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
     return json(await reviewBackup(env.DB,env.FILES,user.id,data,githubConfig(env)));
   }
   const backupConfirm=pathname.match(/^\/api\/github\/backups\/([0-9a-f-]{36})\/confirm$/);
-  if(method==='POST'&&backupConfirm)return json(await confirmBackup(env.DB,env.FILES,user.id,backupConfirm[1],githubConfig(env)));
+  if(method==='POST'&&backupConfirm)return json(await confirmBackup(env.DB,env.FILES,user.id,backupConfirm[1],githubConfig(env),undefined,await body(request)));
   if (method === "GET" && pathname === "/api/me") return json({ user });
   const ackMatch=pathname.match(/^\/api\/chat\/([0-9a-f-]{36})\/ack$/);
   if(method==='GET' && ackMatch)return json(await readAcknowledgment(env.DB,user.id,ackMatch[1]));

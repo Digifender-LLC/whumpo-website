@@ -1,8 +1,9 @@
 /** WH-056 / WH-141 common connector catalog (contract version 1, docs/connectors.md).
  * Server-owned provider and operation declarations plus their validator and the identities derived from them
  * (connectable providers, launch feature ids, OAuth endpoints and vault contexts). Pure functions over plain data.
- * No storage, route, Chat binding, credential or Worker import: the existing GitHub/Cloudflare adapters are not yet
- * rewired to it, and every later adapter must repeat its runtime predicates inside its committing statements. */
+ * No storage, route, Chat binding, credential or Worker import. The GitHub/Cloudflare adapters send only operations
+ * declared here (through ./builder); only the platform Worker reaches this module at runtime. Every later adapter must
+ * repeat its runtime predicates inside its committing statements. */
 
 export class ConnectorContractError extends Error {
  constructor(readonly code:string,readonly path='catalog'){super(`${code}: ${path}`);}
@@ -48,7 +49,8 @@ export const paramTypes=Object.freeze({
  hex32:(v:unknown)=>typeof v==='string'&&/^[0-9a-f]{32}$/.test(v),
  login:(v:unknown)=>typeof v==='string'&&/^[A-Za-z0-9-]{1,39}$/.test(v),
  repo:(v:unknown)=>typeof v==='string'&&/^[A-Za-z0-9_.-]{1,100}$/.test(v)&&!['.','..'].includes(v),
- branch:(v:unknown)=>typeof v==='string'&&/^[A-Za-z0-9._/-]{1,200}$/.test(v)&&!v.includes('..')&&!v.startsWith('/'),
+ // Exactly what the backup adapter accepts as a GitHub default branch (parseRepo); one encoded path segment.
+ branch:(v:unknown)=>typeof v==='string'&&v.length>=1&&v.length<=255&&!/[\u0000-\u001f\u007f]/.test(v),
  hostname:(v:unknown)=>typeof v==='string'&&v.length<=253&&/^[a-z0-9_-]+(?:\.[a-z0-9_-]+)+$/.test(v),
  opaque:(v:unknown)=>typeof v==='string'&&/^[A-Za-z0-9_-]{1,512}$/.test(v),
  instant:(v:unknown)=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(v)&&!Number.isNaN(Date.parse(v)),
@@ -103,13 +105,14 @@ export function deepFreeze<T>(value:T):T {
 /** Frozen v1 catalog. GitHub and Cloudflare declare exactly the requests their current adapters send. `planned`
  *  providers are contract declarations only: no client, scope request or adapter exists, and every helper below
  *  refuses them. Planned provider identifiers (hosts/scopes) require re-verification in each provider's contract child. */
-export const connectorCatalog:ConnectorCatalog=deepFreeze({
+export const connectorCatalog=deepFreeze({
  contractVersion:1,
  providers:{
   github:{readiness:'private-test',featureId:'connections.github',
    authorization:{kind:'github-app-user',authorize:'https://github.com/login/oauth/authorize',token:'https://github.com/login/oauth/access_token',revoke:'https://api.github.com/applications/{clientId}/token',revocation:'github-token-delete',refresh:'retained-unused',maxAccessSeconds:28800},
    origins:['https://api.github.com'],scopes:['metadata:read','contents:write'],
    operations:{
+    'user.get':read({origin:'https://api.github.com',path:'/user',params:{},scopes:['metadata:read'],consent:'owner-control',destinations:['owner-panel'],dataClass:'connections',bounds:{maxBytes:524288,maxItems:1}}),
     'installations.list':read({origin:'https://api.github.com',path:'/user/installations',query:[['per_page','100']],params:{},scopes:['metadata:read'],consent:'owner-control',destinations:['owner-panel','chat-reply'],dataClass:'connections',bounds:{maxBytes:524288,maxItems:100}}),
     'repositories.list':read({origin:'https://api.github.com',path:'/user/installations/{installation}/repositories',query:[['per_page','20'],['page','{page}']],params:{installation:'int',page:'int'},scopes:['metadata:read'],consent:'owner-control',destinations:['owner-panel','chat-reply'],dataClass:'connections',bounds:{maxBytes:524288,maxItems:20}}),
     'repository.get':read({origin:'https://api.github.com',path:'/repos/{owner}/{name}',params:{owner:'login',name:'repo'},scopes:['metadata:read'],consent:'owner-control',destinations:['review-receipt'],dataClass:'github-backups',bounds:{maxBytes:524288,maxItems:1}}),
@@ -165,7 +168,11 @@ export const connectorCatalog:ConnectorCatalog=deepFreeze({
     'contact.create':action({origin:'https://api.hubapi.com',path:'/crm/v3/objects/contacts',method:'POST',body:{kind:'json',fields:['properties']},params:{},scopes:['crm.objects.contacts.write'],authority:['owner-request','approved-rule'],dataClass:'connector-receipts',idempotency:'marker-readback',reconcile:['contacts.search'],bounds:{maxBytes:65536,maxItems:1}}),
    }},
  },
-});
+} satisfies ConnectorCatalog);
+type CatalogProviders=typeof connectorCatalog.providers;
+/** Type-level catalog identity: the providers whose declaration is not `planned` ('github' | 'cloudflare' today).
+ * Modules that other Workers reach (feature admission) import this as a type only, never the catalog at runtime. */
+export type ConnectableProviderId={[P in keyof CatalogProviders]:CatalogProviders[P] extends {readiness:'planned'}?never:P}[keyof CatalogProviders];
 
 const operationKeys=['kind','authority','feature','method','origin','path','query','body','params','scopes','consent','destinations','dataClass','review','idempotency','reconcile','price','bounds'];
 const templateName=/\{([a-z][A-Za-z]*)\}/g;
@@ -248,8 +255,8 @@ export function availableProvider(catalog:ConnectorCatalog,providerId:unknown):C
 }
 
 /** Catalog-derived provider identity (gap G-C4): the providers that may connect today, in catalog order. */
-export const connectableProviders:readonly ConnectorProviderId[]=Object.freeze(connectorProviders.filter(p=>{const e=connectorCatalog.providers[p];return !!e&&e.readiness!=='planned';}));
-export const isConnectableProvider=(value:unknown):value is ConnectorProviderId=>typeof value==='string'&&connectableProviders.includes(value as ConnectorProviderId);
+export const connectableProviders=Object.freeze(connectorProviders.filter(p=>{const e=connectorCatalog.providers[p];return !!e&&e.readiness!=='planned';})) as readonly ConnectableProviderId[];
+export const isConnectableProvider=(value:unknown):value is ConnectableProviderId=>typeof value==='string'&&connectableProviders.includes(value as ConnectableProviderId);
 /** The WH-122 launch feature id for a catalog provider (the same id `connectionFeature` requests). */
 export function connectorFeatureId(providerId:unknown){
  check(typeof providerId==='string'&&connectorProviders.includes(providerId as ConnectorProviderId),'UNKNOWN_PROVIDER',String(providerId));
