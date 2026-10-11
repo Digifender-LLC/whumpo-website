@@ -274,12 +274,17 @@ function purposesFor(entry:ConnectorProviderEntry):readonly VaultPurpose[] {
  return vaultPurposes.filter(purpose=>purpose!=='refresh'||entry.authorization.refresh!=='none');
 }
 const vaultSegment=/^[A-Za-z0-9_-]{1,128}$/;
-/** The `whumpo:<provider>:<purpose>:<owner>:<record>` vault context. Planned providers cannot seal credentials. */
-export function connectorVaultContext(providerId:unknown,purpose:unknown,ownerId:unknown,recordId:unknown){
- const entry=availableProvider(connectorCatalog,providerId);
+/** The `whumpo:<provider>:<purpose>:<owner>:<record>` vault context for a given catalog. Planned providers cannot seal
+ * credentials. Catalog-parameterised so that offline suites can supply a catalog in which a synthetic provider is available. */
+export function catalogVaultContext(catalog:ConnectorCatalog,providerId:unknown,purpose:unknown,ownerId:unknown,recordId:unknown){
+ const entry=availableProvider(catalog,providerId);
  check(typeof purpose==='string'&&purposesFor(entry).includes(purpose as VaultPurpose),'VAULT_PURPOSE_NOT_ALLOWED',`${providerId}.${purpose}`);
  check(typeof ownerId==='string'&&vaultSegment.test(ownerId)&&typeof recordId==='string'&&vaultSegment.test(recordId),'INVALID_VAULT_CONTEXT','vault');
  return `whumpo:${providerId}:${purpose}:${ownerId}:${recordId}`;
+}
+/** The vault context for the frozen catalog. Planned providers cannot seal credentials. */
+export function connectorVaultContext(providerId:unknown,purpose:unknown,ownerId:unknown,recordId:unknown){
+ return catalogVaultContext(connectorCatalog,providerId,purpose,ownerId,recordId);
 }
 /** Catalog-derived equivalent of the vault's context pattern; must accept exactly what the vault accepts today. */
 export const connectorVaultContextPattern=new RegExp(`^whumpo:(?:${connectableProviders.flatMap(p=>purposesFor(connectorCatalog.providers[p]!).map(purpose=>`${p}:${purpose}`)).join('|')}):[A-Za-z0-9_-]{1,128}:[A-Za-z0-9_-]{1,128}$`);
