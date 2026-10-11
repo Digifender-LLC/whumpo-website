@@ -2,6 +2,8 @@
 
 October 3, 2026 UTC. [WH-111 / issue #100](https://github.com/zemdregon/whumpo/issues/100) is **in progress** on `codex/identity-admission`. Dependencies WH-109, WH-110 and WH-024 are accepted to their recorded scope. PR #79 remains draft/open. This packet is not WH-112 whole-customer-experience acceptance.
 
+The October 11 [audit and decomposition](chat-daily-workspace.md) maps this file's increments onto the original scope and criteria, records remaining gaps and owner decisions, and splits the rest into WH-206 to WH-213.
+
 ## Current source contract
 
 Routine work belongs in Chat and its maintained panels. Saved pages are optional. Saved state, account/security/sign-out/support and urgent takedown/recovery must remain accessible without inference; generated layouts cannot own or hide those entry points. Server-owned project/task selection, domain handlers, review receipts and current identity admission remain authoritative. Current-only clients and schemas are required; no old-route adapters or data migrations are introduced.

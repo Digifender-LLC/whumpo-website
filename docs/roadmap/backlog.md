@@ -2,7 +2,7 @@
 
 > Generated from `backlog.json` by `node tools/roadmap.mjs render`. Edit the JSON source, then render again.
 
-Reviewed 2026-10-01 against source `db8b740ab2346f55f2985593b1ec531a99027630`. 182 planned tasks.
+Reviewed 2026-10-01 against source `db8b740ab2346f55f2985593b1ec531a99027630`. 190 planned tasks.
 
 Planning readiness and dependencies describe the plan. Current execution, claims, blockers, and completion evidence live in GitHub Issues. A ready task is only a candidate: verify live dependency completion and authorization before work.
 
@@ -3881,7 +3881,7 @@ The workspace opens on the current conversation and needs little navigation, whi
 
 ### Dependencies and blockers
 
-Planning dependencies: WH-109, WH-110, WH-024. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+Planning dependencies: WH-109, WH-110, WH-024, WH-206, WH-207, WH-208, WH-209, WH-210, WH-211, WH-212, WH-213. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
 No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
 
@@ -3902,6 +3902,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [frontend/src/account-help.tsx](../../frontend/src/account-help.tsx)
 - [tests/helpers/account-help-journey.mjs](../../tests/helpers/account-help-journey.mjs)
 - [tests/workspace-identity-browser.mjs](../../tests/workspace-identity-browser.mjs)
+- [docs/chat-daily-workspace.md](../../docs/chat-daily-workspace.md)
 
 ### Execution coordination
 
@@ -3910,6 +3911,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/100. Planning owner: Unassigne
 ### Evidence
 
 - 2026-10-01: accepted planning direction against 628c16f and the existing working tree; implementation and customer acceptance remain open. Live GitHub refresh was blocked by local command approval policy; no issue or claim created.
+- 2026-10-11 UTC: evidence-based audit, contract and decomposition against d948f06; source/local only, not deployed, no remote operation, no issue edit. The delivered continuity increments (navigation essentials and Help sheet, saved-work index/page/On this device, cross-tab identity, account help, site/service safety, reopen locators; docs/chat-workspace-continuity.md, PRs #102, #104, #144) were reread against source and are mapped row by row in docs/chat-daily-workspace.md. Ran on Node 24.21.0: workspace-navigation, chat-location, chat-recovery, chat-delivery, chat-announcements, chat-history, saved-work-client, identity-client-continuity, provider-return, connection-handoff (21 cases), photo-upload-recovery, chat-interaction-client, welcome-delivery, saved-work (11 scenarios, SQLite and --d1), chat-saved-turn --d1 (7), site-safety (7), service-safety --d1 (7), support-access (9) all pass; workspace-identity-browser --navigation, --saved-work, --account-help, --cross-tab and --site-safety pass; --support FAILS at baseline (lockout mailto 44px check, run twice). New tests/chat-inference-outage.mjs: 24 checks pass on SQLite and --d1 (typed text and typed /confirm refused with no model, shortcut and exact confirm succeed, stale/foreign refused, replay idempotent, zero inference calls). Gaps recorded, none closed: direct POST /api/projects completes onboarding without welcome (probe; WH-207); no Orca or axe evidence for the Help sheet, Saved work, Support or Site & app safety and --support is red (WH-208); navigation shape, Profile placement, Dashboard duplicate links, draft retention and eligible direct reviews await owner decisions (WH-209, WH-211, WH-212); github-access saved-work source and project-details locator (WH-210); stale statements in unified-workspace-and-capacity.md, dashboard-pwa.md and resume-handoff.md. Children WH-206 to WH-213 added; no parent criterion is marked complete and WH-112 keeps whole-experience, physical-device, human-listening and customer acceptance.
 
 ## WH-112 — Accept Chat as the primary customer experience
 
@@ -4856,6 +4858,425 @@ Planning dependencies: WH-202, WH-204, WH-005. Verify completion in current issu
 
 - [docs/email-change-and-compromise.md](../../docs/email-change-and-compromise.md)
 - [docs/acceptance.md](../../docs/acceptance.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-206 — Freeze the daily-workspace audit and contract and decompose WH-111
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **ready**. Kind: decision. Size: S.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Every remaining WH-111 slice builds against one dated audit of what already exists, the open owner decisions and a bounded set of children, instead of re-deriving the baseline or re-opening delivered continuity work.
+
+### Scope
+
+- Re-read the current navigation, device-state, saved-work, support, takedown and onboarding source against the five scope items and six acceptance criteria, with file and line anchors
+- Record which suites evidence each criterion, rerun them, and record the failures and contradictions found (first-project bypass, red --support journey, stale contracts, missing evidence record)
+- List owner decisions without choosing, and decompose the remainder into children with scope, acceptance, verification, dependencies and schema/cutover flags
+- Add one standalone regression for the inference-unavailable criterion that source already satisfied but no test asserted over the actual Worker
+
+### Acceptance criteria
+
+- [ ] docs/chat-daily-workspace.md has a row per scope item and criterion with source anchors, the evidence run or not run, and a severity-ranked gap, marked planned/audit
+- [ ] The decisions list names options and does not invent a decision; the existing owner record on the support contact model is cited rather than overridden
+- [ ] WH-111 keeps its original acceptance and depends on every child; no child reaches WH-112, WH-048, WH-049 or WH-104
+- [ ] The new test passes on SQLite and local D1 and fails when a model is configured
+
+### Verification
+
+- node tests/chat-inference-outage.mjs and node tests/chat-inference-outage.mjs --d1
+- node tools/roadmap.mjs validate, alignment and render --check; node tests/roadmap-alignment.mjs
+- node tools/verify.mjs fast; git diff --check
+
+### Dependencies and blockers
+
+Planning dependencies: WH-109, WH-110, WH-024. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/chat-daily-workspace.md](../../docs/chat-daily-workspace.md)
+- [docs/chat-workspace-continuity.md](../../docs/chat-workspace-continuity.md)
+- [docs/roadmap/chat-first-experience.md](../../docs/roadmap/chat-first-experience.md)
+- [tests/chat-inference-outage.mjs](../../tests/chat-inference-outage.mjs)
+- [tests/helpers/navigation-journey.mjs](../../tests/helpers/navigation-journey.mjs)
+- [frontend/src/lib/workspace-navigation.ts](../../frontend/src/lib/workspace-navigation.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-11 UTC: audit, contract and decomposition only; local commit on branch claude/wh-111-daily-workspace-audit against d948f06 (not pushed or merged; issue #100 not edited). Added docs/chat-daily-workspace.md (planned), tests/chat-inference-outage.mjs (24 checks, passes on SQLite and --d1, and a model-configured mutation fails its first guard) and alignment rules for WH-206 to WH-213. Findings: direct POST /api/projects completes onboarding without welcome (probe: 201, no welcome row, onboardingComplete true); node tests/workspace-identity-browser.mjs --support fails at baseline on the lockout mailto link (44px check, run twice); no Orca or axe evidence for the Help sheet, Saved work, Support or Site & app safety. No src/, frontend/, schema, binding, provider or deployment change; no remote operation.
+
+## WH-207 — Require the completed welcome before direct project creation
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: S.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Creating the first project is possible only through the welcome flow, so Chat, saved work and the workspace cannot be reached through a direct route that skips it.
+
+### Scope
+
+- Refuse POST /api/projects with the existing onboarding_required code and status link until welcome completes or the owner already has a project; keep the quota, origin and identity behaviour
+- Convert the five fixtures that create their first project through this route (workspace-admission, smoke, cms-projects-http, backend-http, chat-interaction-storage) to the current completed-welcome fixture
+- Correct the native contract text in docs/android-app.md; whether to remove the route or the project-existence fallback in onboardingComplete is an owner decision and out of this slice
+
+### Acceptance criteria
+
+- [ ] A signed-in account with no welcome and no project receives 409 onboarding_required and no project, welcome or activity row is written
+- [ ] A completed account creates a project exactly as before, including the 20-project quota refusal
+- [ ] Revoked, foreign and cross-origin requests keep their existing refusals; the old direct-creation probe is a test with a negative control
+
+### Verification
+
+- pnpm check
+- node tests/workspace-admission.mjs and --d1; node tests/smoke.mjs; node tests/cms-projects-http.mjs; node tests/backend-http.mjs; node tests/chat-interaction-storage.mjs; node tests/support-access.mjs
+
+### Dependencies and blockers
+
+Planning dependencies: WH-206. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/chat-daily-workspace.md](../../docs/chat-daily-workspace.md)
+- [src/index.ts](../../src/index.ts)
+- [src/onboarding.ts](../../src/onboarding.ts)
+- [tests/workspace-admission.mjs](../../tests/workspace-admission.mjs)
+- [tests/smoke.mjs](../../tests/smoke.mjs)
+- [docs/android-app.md](../../docs/android-app.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-208 — Restore and extend accessibility evidence for the fixed recovery pages
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: verification. Size: S.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Saved work, Support, Site & app safety and Account & security have keyboard, assistive-technology and automated accessibility evidence, and the existing support journey is green again.
+
+### Scope
+
+- Make node tests/workspace-identity-browser.mjs --support pass by the owner-chosen rule for inline text links (enlarge the lockout mailto target or restrict the 44px check to controls)
+- Add isolated-Orca checkpoints for the four pages in tests/chat-screen-reader.mjs (heading entry, filters, result announcement, focus return) and axe states for them through WHUMPO_AXE
+- Fix any finding in frontend source; record incomplete automated checks and leave human listening and physical devices as explicit gaps
+
+### Acceptance criteria
+
+- [ ] The support browser journey passes; each page has a keyboard-only path, announced result and focus return, with axe violations and incomplete checks listed
+- [ ] No claim of physical-device, installed-PWA or human-listening acceptance; no schema, authority or copy change beyond the corrected target
+
+### Verification
+
+- node tests/workspace-identity-browser.mjs --support, --saved-work, --site-safety, --account-help
+- node tests/chat-screen-reader.mjs with the new flag (needs the isolated Orca sink)
+- WHUMPO_AXE=/path/to/@axe-core/playwright node tests/workspace-identity-browser.mjs --accessibility
+- pnpm check; frontend build; inspect 360, 390 and 1280px captures
+
+### Dependencies and blockers
+
+Planning dependencies: WH-206. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/chat-daily-workspace.md](../../docs/chat-daily-workspace.md)
+- [frontend/src/support.tsx](../../frontend/src/support.tsx)
+- [frontend/src/saved-work.tsx](../../frontend/src/saved-work.tsx)
+- [frontend/src/site-safety.tsx](../../frontend/src/site-safety.tsx)
+- [tests/helpers/support-journey.mjs](../../tests/helpers/support-journey.mjs)
+- [tests/chat-screen-reader.mjs](../../tests/chat-screen-reader.mjs)
+- [tests/helpers/accessibility-audit.mjs](../../tests/helpers/accessibility-audit.mjs)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-209 — Apply the approved workspace navigation shape
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **blocked**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Desktop and mobile navigation matches the owner-approved Chat-centred shape with fixed essentials and consistent return points, and superseded routes are gone rather than aliased.
+
+### Scope
+
+- Implement the owner-approved shape for the bar, sidebar, Dashboard fixed links and control-page parents
+- Return to Chat or the originating page from Saved work and Site & app safety instead of always to Dashboard; make the "(your page)" suffix readable
+- Remove approved routes with an explicit not-found; update the stale statements in unified-workspace-and-capacity.md and dashboard-pwa.md
+- Keep every essential reachable without profile, Chat, dashboard or model reads; no alias, adapter or data migration
+
+### Acceptance criteria
+
+- [ ] Saved work, Site & app safety, Support, Account & security and Sign out are reachable in two interactions at 390 and 1280px, with eight generated pages and 200 percent zoom
+- [ ] Removed routes show Page not found and offer a return to Chat; draft, reopened item and selected project survive return from every fixed page
+- [ ] Changed controls have keyboard and Orca checks; no physical-device claim
+
+### Verification
+
+- pnpm check; frontend build
+- node tests/workspace-navigation.mjs; node tests/workspace-identity-browser.mjs --navigation and --cross-tab
+- node tests/frontend-loading.mjs
+
+### Dependencies and blockers
+
+Planning dependencies: WH-206. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+- Owner decisions D-1 to D-3 in docs/chat-daily-workspace.md: how far to remove Dashboard, Settings and the control pages, Profile placement on mobile, and whether Dashboard keeps its duplicate fixed links (issue #100 questions 1 and 2).
+
+### References
+
+- [docs/chat-daily-workspace.md](../../docs/chat-daily-workspace.md)
+- [frontend/src/workspace.tsx](../../frontend/src/workspace.tsx)
+- [frontend/src/mobile-workspace.tsx](../../frontend/src/mobile-workspace.tsx)
+- [frontend/src/lib/workspace-navigation.ts](../../frontend/src/lib/workspace-navigation.ts)
+- [frontend/src/workspace-pages.tsx](../../frontend/src/workspace-pages.tsx)
+- [tests/helpers/navigation-journey.mjs](../../tests/helpers/navigation-journey.mjs)
+- [docs/unified-workspace-and-capacity.md](../../docs/unified-workspace-and-capacity.md)
+- [docs/dashboard-pwa.md](../../docs/dashboard-pwa.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-210 — Uniform project locators and the last saved-work source fixture
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: S.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Every panel that targets a project through the URL applies the same strict owned-project locator, and the saved-work index has a populated fixture for all 30 sources.
+
+### Scope
+
+- Apply selectedProject to the project details panel and decide, with a recorded reason, whether Domains and GitHub backup keep project choice as form state
+- Add an encrypted-custody fixture for the github-access saved-work source so tests/saved-work.mjs asserts every kind
+
+### Acceptance criteria
+
+- [ ] A foreign, malformed or repeated project parameter shows the stale-link notice and sends no project read
+- [ ] tests/saved-work.mjs reports no missing kind on SQLite and local D1; no schema change
+
+### Verification
+
+- node tests/saved-work-client.mjs; node tests/saved-work.mjs and --d1; node tests/workspace-navigation.mjs
+- node tests/workspace-identity-browser.mjs --saved-work
+- pnpm check
+
+### Dependencies and blockers
+
+Planning dependencies: WH-206. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/chat-daily-workspace.md](../../docs/chat-daily-workspace.md)
+- [frontend/src/project-details.tsx](../../frontend/src/project-details.tsx)
+- [frontend/src/workspace-controls.tsx](../../frontend/src/workspace-controls.tsx)
+- [frontend/src/lib/workspace-navigation.ts](../../frontend/src/lib/workspace-navigation.ts)
+- [tests/saved-work.mjs](../../tests/saved-work.mjs)
+- [src/saved-work.ts](../../src/saved-work.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-211 — Composer draft durability
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **blocked**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Unsent Chat text survives the events the owner chooses, without becoming an automatic send or a second source of authority.
+
+### Scope
+
+- Implement D-4: either change device retention in the existing recovery store, or add a server-owned draft with data classification, retention, export and account-closure registration
+- Keep account scoping, clearing on sign-out and account change, and explicit send; a restored draft never submits
+
+### Acceptance criteria
+
+- [ ] The draft survives the chosen events and is gone after sign-out, account change and its retention end
+- [ ] Two tabs and a lost reply create no duplicate turn; stale drafts cannot overwrite newer text silently
+- [ ] If server-owned: complete current schema, lifecycle catalogue entry and empty-database cutover; no legacy reader
+
+### Verification
+
+- pnpm check
+- node tests/chat-recovery.mjs; node tests/chat-delivery.mjs; node tests/lifecycle-catalog.mjs
+- node tests/workspace-identity-browser.mjs --cross-tab and --navigation
+
+### Dependencies and blockers
+
+Planning dependencies: WH-206, WH-116. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+- Owner decision D-4 in docs/chat-daily-workspace.md: keep the per-tab 24-hour device draft, lengthen it, or add server-owned composer drafts with their retention.
+
+### References
+
+- [docs/chat-daily-workspace.md](../../docs/chat-daily-workspace.md)
+- [frontend/src/lib/chat-recovery.ts](../../frontend/src/lib/chat-recovery.ts)
+- [frontend/src/use-chat-recovery.ts](../../frontend/src/use-chat-recovery.ts)
+- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
+- [tests/chat-recovery.mjs](../../tests/chat-recovery.mjs)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-212 — Confirm saved reviews when the conversation read is unavailable
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **blocked**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+An owner can act on an eligible saved review from a fixed page when the Chat conversation or model is unavailable, through the same exact handler and receipt.
+
+### Scope
+
+- Implement D-5 by reusing the existing exact review readers and confirmation handlers, with their identity, revision, expiry and recent-authentication checks
+- Show the control only after a fresh read; hide it on a stale, failed or foreign read; no new authority store
+
+### Acceptance criteria
+
+- [ ] A lost reply replays the receipt and never redispatches; a changed revision, expired or foreign review is refused
+- [ ] No second approval path exists for any review kind and the model is never called
+- [ ] An HTTP outage suite proves each eligible kind with a negative control
+
+### Verification
+
+- pnpm check
+- node tests/chat-inference-outage.mjs; node tests/chat-saved-turn.mjs --d1; node tests/publications.mjs
+- node tests/workspace-identity-browser.mjs --saved-work
+
+### Dependencies and blockers
+
+Planning dependencies: WH-206. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+- Owner decision D-5 in docs/chat-daily-workspace.md: which reviews are eligible for direct confirmation during a conversation-read outage and whether a model-free prepare control is wanted.
+
+### References
+
+- [docs/chat-daily-workspace.md](../../docs/chat-daily-workspace.md)
+- [frontend/src/saved-chat-turn.tsx](../../frontend/src/saved-chat-turn.tsx)
+- [frontend/src/workspace.tsx](../../frontend/src/workspace.tsx)
+- [src/chat.ts](../../src/chat.ts)
+- [src/chat-controls.ts](../../src/chat-controls.ts)
+- [tests/chat-inference-outage.mjs](../../tests/chat-inference-outage.mjs)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+
+## WH-213 — WH-111 original-scope connected acceptance audit
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: verification. Size: S.
+
+Reviewed: 2026-10-01. Source baseline: `db8b740ab2346f55f2985593b1ec531a99027630`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+The parent is judged against its original six criteria with rerun evidence, owner deferrals and explicit device and human gaps.
+
+### Scope
+
+- Rerun the suites in docs/chat-daily-workspace.md and each child, map every scope item and criterion to current source and evidence
+- Record physical-device, installed-PWA, human-listening and customer gaps as WH-112 or owner-deferred items
+
+### Acceptance criteria
+
+- [ ] Every criterion is satisfied, owner-deferred or blocked with its evidence; no parent closure is inferred from synthetic fixtures
+- [ ] The audit changes no runtime source and records exact commands, results and failures
+
+### Verification
+
+- The focused suites listed in docs/chat-daily-workspace.md and the children
+- node tools/roadmap.mjs validate, alignment and render --check; git diff --check
+
+### Dependencies and blockers
+
+Planning dependencies: WH-207, WH-208, WH-209, WH-210, WH-211, WH-212. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/chat-daily-workspace.md](../../docs/chat-daily-workspace.md)
+- [docs/chat-workspace-continuity.md](../../docs/chat-workspace-continuity.md)
+- [docs/roadmap/chat-first-experience.md](../../docs/roadmap/chat-first-experience.md)
+- [tests/workspace-identity-browser.mjs](../../tests/workspace-identity-browser.mjs)
 
 ### Execution coordination
 
