@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import {existsSync,readFileSync} from 'node:fs';
 import {dirname,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {connectorCatalog} from '../tools/prototypes/connectors.mjs';
+import {build} from 'esbuild';
+
+// The frozen catalog is source (src/connector-catalog/catalog.ts, WH-141); bundle it once to read its declarations.
+const bundled=await build({entryPoints:[fileURLToPath(new URL('../src/connector-catalog/catalog.ts',import.meta.url))],bundle:true,format:'esm',platform:'neutral',write:false,logLevel:'silent'});
+const {connectorCatalog}=await import('data:text/javascript;base64,'+Buffer.from(bundled.outputFiles[0].text).toString('base64'));
 
 // WH-096–100 provider readiness plan: offline document check. It reads docs/connector-provider-readiness.md and the
 // frozen connector catalog only. No network, OAuth client, credential, provider account or model is used, and passing
