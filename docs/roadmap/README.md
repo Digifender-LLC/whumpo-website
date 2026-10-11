@@ -1,6 +1,6 @@
 # Whumpo product and delivery roadmap
 
-**Aligned October 2, 2026; 122 current tasks include explicit privacy and feature-admission handoffs.** The [alignment review](alignment.md) records corrected dependencies, shared contract ownership, current issue evidence and remaining launch gates. Stable task IDs and phase labels are preserved; phase and task numbers are not build order. This is a delivery plan, not a release or provider authorization.
+**Aligned October 2, 2026; 122 current tasks include explicit privacy and feature-admission handoffs.** (122 is the count at that alignment; the backlog holds 176 tasks in 7 phases at source `d948f06`, October 11, 2026, per `node tools/roadmap.mjs validate`.) The [alignment review](alignment.md) records corrected dependencies, shared contract ownership, current issue evidence and remaining launch gates. Stable task IDs and phase labels are preserved; phase and task numbers are not build order. This is a delivery plan, not a release or provider authorization.
 
 Whumpo should first become a dependable way for an invited customer to create, improve, publish and recover a useful website or bounded application. The next investment should turn its substantial foundations into operated customer journeys. Broader Cloudflare capabilities follow demonstrated demand and measured economics.
 

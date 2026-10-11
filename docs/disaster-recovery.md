@@ -32,7 +32,7 @@ The source platform uses the actual D1 query adapter over SQLite, with private b
 
 Recovery point A held:
 
-- 79 control rows (679,446 bytes logical) across the complete current schema; admission inventoried 219 tables. The restore ran as 1,131 statements.
+- 79 control rows (679,446 bytes logical) across the complete current schema; admission inventoried 219 tables. The restore ran as 1,131 statements. These are the October 8 run's values. A re-run on source `d948f06` (October 11, 2026, `node tests/recovery-drill.mjs`, passed) inventories 79 control rows, 687,666 bytes, **221 tables** and 1,144 restore statements: the table count follows the composed schema (#186 added two tables); the byte and statement differences were not diagnosed. None of these are deployed-database counts.
 - Credentials: 4 encrypted credential rows (GitHub/Cloudflare token and PKCE) under 1 key ID, with the key backup stored separately.
 - One published site version, one enabled visitor application with an applied page review, and 2 visitor documents written through actual QuickJS transitions.
 - 2 private object bodies (91 bytes) and 4 runtime build files (worker plus Wasm).

@@ -34,7 +34,7 @@ This foundation has no authority issuance API that accepts `verified: true`. [Cr
 
 ## Lifecycle handoff
 
-The complete current identity schema is registered in the 156-table/37-class platform lifecycle inventory and deployed through the current-schema cutover. Account export/redaction/deletion and bounded maintenance use those classifications. See [integration evidence](identity-web.md).
+The complete current identity schema is registered in the platform lifecycle inventory (source `d948f06`, October 11, 2026: 221 tables in 51 current and 6 planned classes; the October 2 identity cutover release recorded 156 tables / 37 classes) and was deployed through the current-schema cutovers recorded in [releases](releases.md) (latest recorded: October 4). The deployed state was not re-read. Account export/redaction/deletion and bounded maintenance use those classifications. See [integration evidence](identity-web.md).
 
 | Data | Prospective lifecycle requirement |
 | --- | --- |

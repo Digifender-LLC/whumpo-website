@@ -49,7 +49,7 @@ The local server sets `ENVIRONMENT=local`; do not expose it publicly. Use `http:
 | Public website host | `src/site-host.ts`, `wrangler.sites.jsonc` |
 | Controlled visitor frontend | `web/visitor.js` → `public-app/visitor.js` |
 | Separate visitor/runtime services | `wrangler.apps.jsonc`, `wrangler.runtime.jsonc` |
-| Database schema | Six current SQL files (`schema/platform.sql`, `src/workspace-identity/canonical-inputs.sql` and `schema.sql`, and the funnel-metrics, guest-previews and shared-modules `schema.sql`) composed by `tools/current-schema.mjs`: 221 tables, 51 current and 6 planned data classes on October 9, 2026 (219 before #186 added the WH-050 operator tables; that schema change awaits an owner-authorized cutover) |
+| Database schema | Six current SQL files (`schema/platform.sql`, `src/workspace-identity/canonical-inputs.sql` and `schema.sql`, and the funnel-metrics, guest-previews and shared-modules `schema.sql`) composed by `tools/current-schema.mjs`: 221 tables, 1,063 objects, 51 current and 6 planned data classes (source `d948f06`, October 11, 2026; 219 tables / 1,050 objects before #186 added the WH-050 operator tables). That schema change needs an owner-authorized empty-D1 cutover, and no cutover after October 4 is recorded in [releases](docs/releases.md); the deployed database's current counts need a fresh read-only readback |
 
 Run `pnpm build` to generate assets. Never hand-edit bundles.
 
