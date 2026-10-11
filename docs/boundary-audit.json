@@ -3,7 +3,7 @@
  "task": "WH-004",
  "auditedCommit": "ca17c6ad3f009b961916be6f4c2053a8eaa531e4",
  "auditedOn": "2026-10-08",
- "scope": "Slice 1: the mounted platform Worker request surface (src/index.ts and its sub-dispatchers) and the typed Chat controls. Slice 2: the whumpo-sites, whumpo-apps and whumpo-runtime Worker dispatchers, Worker reachability from wrangler*.jsonc, the platform public contact form and scheduled jobs, and operator tools under tools/ that can reach remote state. Not provider behaviour, live configuration or deployment state.",
+ "scope": "Slice 1: the mounted platform Worker request surface (src/index.ts and its sub-dispatchers) and the typed Chat controls. Slice 2: the whumpo-sites, whumpo-apps and whumpo-runtime Worker dispatchers, Worker reachability from wrangler*.jsonc, the platform public contact form and scheduled jobs, and operator tools under tools/ that can reach remote state. Not provider behaviour, live configuration or deployment state. Slice 3 adds focused local regressions for evidence gaps (foreign applies and reads, expiry, stale revisions, immutability and cookie separation) without changing the surface.",
  "cellStates": {
   "evidenced": "Enforcing code located and an existing test line asserts the property (negative case for authority, replay and stale state).",
   "gap": "gapKind \"test\": enforced in code but no test asserts it. gapKind \"control\": required by a contract or runbook but not enforced; names a finding.",
@@ -1801,7 +1801,7 @@
    "cells": {
     "authority": {
      "state": "evidenced",
-     "detail": "Every route runs under the admitted session; project rows are filtered by owner_user_id; workspace routes require completed onboarding.",
+     "detail": "Every route runs under the admitted session; project rows are filtered by owner_user_id; workspace routes require completed onboarding. A visitor application session presented to owner routes (in the owner cookie slot, under its own cookie name, or both) is refused with 401 and exposes no project data (slice 3).",
      "enforcedAt": [
       {
        "file": "src/workspace-identity/admission.ts",
@@ -1822,6 +1822,11 @@
        "file": "tests/identity-http.mjs",
        "contains": "for(const path of ['/profile','/projects','/chat','/connections/github/grant-reviews']){assert.equal((await workspaceCall(stillOrdinary,path)).status,401);cases++;}",
        "asserts": "a revoked session cannot read profile or projects"
+      },
+      {
+       "file": "tests/boundary-owner-authority.mjs",
+       "contains": "assert.ok(!text.includes(siteA.project),`${method} ${path} with ${label} exposes no project data`);",
+       "asserts": "a valid visitor session is not an owner credential on six owner routes in three cookie placements; the owner session is authenticated on the same routes"
       }
      ]
     },
@@ -2621,7 +2626,7 @@
     },
     "stale": {
      "state": "evidenced",
-     "detail": "State and publication reviews are revision- and expiry-checked; form review expiry is enforced but untested.",
+     "detail": "State and publication reviews are revision- and expiry-checked; form review expiry is enforced by trigger and tested since slice 3 (an expired form review is refused with the form settings unchanged and its unexpired twin applies).",
      "enforcedAt": [
       {
        "file": "schema/platform.sql",
@@ -2630,6 +2635,10 @@
       {
        "file": "schema/platform.sql",
        "contains": "SELECT RAISE(ABORT,'backend_publication_stale') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') OR NOT EXISTS("
+      },
+      {
+       "file": "schema/platform.sql",
+       "contains": "SELECT RAISE(ABORT,'backend_form_stale') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now')"
       }
      ],
      "tests": [
@@ -2647,6 +2656,11 @@
        "file": "tests/backend-publication.mjs",
        "contains": "await assert.rejects(confirm(scope(a.user),a.user,competing),e=>e.status===409);",
        "asserts": "a competing publication review is refused"
+      },
+      {
+       "file": "tests/boundary-review-lifecycle.mjs",
+       "contains": "await refused(forms.confirmBackendForm(a.scope,a.id,f1),409);",
+       "asserts": "an expired backend-form review is refused with form settings unchanged; the unexpired twin applies"
       }
      ]
     }
@@ -2739,9 +2753,8 @@
      "detail": "The feature contract does not require a recent passkey proof here: ordinary exact reviews rely on ownership, expiry and revision predicates (docs/tenant-authority-audit.md, shared entry boundaries). Recorded so a policy change is visible; see B2 where a runbook claims otherwise."
     },
     "target": {
-     "state": "gap",
-     "detail": "The review row is immutable and a reused ID with a different form is refused, but no test rewrites a page review or reuses its ID.",
-     "gapKind": "test",
+     "state": "evidenced",
+     "detail": "The review row is immutable and a reused ID with a different form is refused (both tested since slice 3: a rewritten or removed form on a reused ID is a 409 and leaves the stored review unchanged, direct column rewrites and applied-to-pending are rejected by the trigger, and the same ID and form replays the same review).",
      "enforcedAt": [
       {
        "file": "schema/platform.sql",
@@ -2750,6 +2763,18 @@
       {
        "file": "src/app-pages.ts",
        "contains": "if(row.project_id!==project||row.config_json!==config"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/boundary-review-lifecycle.mjs",
+       "contains": "await refused(pages.prepareAppPage(a.scope,a.id,app.project,bound,{...third,title:'Rewritten page'}),409);",
+       "asserts": "a reused review ID with a different form is refused and the stored review is unchanged"
+      },
+      {
+       "file": "tests/boundary-review-lifecycle.mjs",
+       "contains": "await assert.rejects(db.prepare(\"UPDATE app_page_reviews SET status='pending' WHERE id=?\").bind(r2).run(),/app_page_immutable/,'an applied review cannot return to pending');",
+       "asserts": "an applied page review cannot be rewritten back to pending; direct rewrites of the form, revisions, expiry and project are rejected"
       }
      ]
     },
@@ -2772,7 +2797,7 @@
     },
     "stale": {
      "state": "evidenced",
-     "detail": "A competing review on the same base revision is refused; expiry is enforced by trigger (expiry itself is untested).",
+     "detail": "A competing review on the same base revision is refused; expiry is enforced by trigger and tested since slice 3 (an expired review is refused with no change to the live page or settings, and its unexpired twin from the same revision then applies).",
      "enforcedAt": [
       {
        "file": "schema/platform.sql",
@@ -2784,6 +2809,11 @@
        "file": "tests/app-auth.mjs",
        "contains": "await denied(pages.confirmAppPage(scope(d.user),d.user,reviewTwo),409);",
        "asserts": "a competing review on a stale base is refused"
+      },
+      {
+       "file": "tests/boundary-review-lifecycle.mjs",
+       "contains": "await refused(pages.confirmAppPage(a.scope,a.id,r1),409);",
+       "asserts": "an expired page review is refused with the live page and page settings unchanged; the unexpired twin applies"
       }
      ]
     }
@@ -3246,7 +3276,7 @@
     },
     "stale": {
      "state": "evidenced",
-     "detail": "Restore rechecks roster/revision and expiry. Upgrade/rollback revision guards exist in SQL but no test changes the revision or expires them (test gap).",
+     "detail": "Restore rechecks roster/revision and expiry. Since slice 3, an upgrade check or program rollback review prepared at an older application revision is refused with no change to the program, version or documents, and an expired upgrade check is refused; each has an admitted current twin. Expiry of a rollback review itself is not exercised (its review row takes the SQL default expiry, and the immutability and expiry guards share one trigger).",
      "enforcedAt": [
       {
        "file": "schema/platform.sql",
@@ -3255,6 +3285,10 @@
       {
        "file": "src/app-program-rollback.ts",
        "contains": "a.enabled=0 AND a.revision=r.base_revision AND a.version_id=r.from_version"
+      },
+      {
+       "file": "schema/platform.sql",
+       "contains": "WHERE a.enabled=0 AND a.version_id=m.from_version AND a.revision=m.base_revision AND roster.roster_json=m.roster_json"
       }
      ],
      "tests": [
@@ -3262,6 +3296,21 @@
        "file": "tests/app-recovery.mjs",
        "contains": "await assert.rejects(recovery.confirmAppRestore(scope(user),user,project,stale,'RESTORE'),e=>e.status===409);",
        "asserts": "a stale restore is refused"
+      },
+      {
+       "file": "tests/boundary-review-lifecycle.mjs",
+       "contains": "await refused(approvals.confirmMigration(a.scope,a.id,u3,'UPGRADE'),409);",
+       "asserts": "an upgrade check prepared before the application revision moved is refused and changes no program or document"
+      },
+      {
+       "file": "tests/boundary-review-lifecycle.mjs",
+       "contains": "await refused(approvals.confirmMigration(a.scope,a.id,u1,'UPGRADE'),409);",
+       "asserts": "an expired upgrade check is refused and changes no program or document; the unexpired twin applies"
+      },
+      {
+       "file": "tests/boundary-review-lifecycle.mjs",
+       "contains": "await refused(rollback.confirmProgramRollback(a.scope,a.id,rb1,'ROLLBACK'),409);",
+       "asserts": "a rollback review prepared before the application revision moved is refused and changes no program or document; a current twin restores"
       }
      ]
     }
@@ -3579,11 +3628,15 @@
     },
     "stale": {
      "state": "evidenced",
-     "detail": "Apply rechecks the expected activation/access revision; review expiry is enforced but untested.",
+     "detail": "Apply rechecks the expected activation/access revision. Review expiry is tested at the apply preflight since slice 3 (a module-activation review applied past its expiry is refused with no change; its identical twin applied in time is admitted); the committing trigger's database-clock expiry guard is not independently exercised.",
      "enforcedAt": [
       {
        "file": "src/shared-modules/activation.ts",
        "contains": "r.expected_activation_revision!==expectedRevision"
+      },
+      {
+       "file": "src/shared-modules/activation.ts",
+       "contains": "if(r.expires_at<=Math.floor(Date.now()/1000)||await reviewDigest(fields)!==review_digest)throw changed();"
       }
      ],
      "tests": [
@@ -3591,6 +3644,11 @@
        "file": "tests/shared-modules-access.mjs",
        "contains": "assert.equal((await control(a,{...applyAction(r),expectedRevision:2})).status,409);",
        "asserts": "a stale expected revision is refused"
+      },
+      {
+       "file": "tests/boundary-review-lifecycle.mjs",
+       "contains": "assert.equal(lapsed.result.status,409,'a module review past its expiry is refused: '+JSON.stringify(lapsed.result));",
+       "asserts": "a module-activation review past its expiry is refused with the module state and apply receipts unchanged; the identical twin applies"
       }
      ]
     }
@@ -3843,9 +3901,8 @@
    ],
    "cells": {
     "authority": {
-     "state": "gap",
-     "detail": "Every operation is owner-joined and the insert trigger rechecks the claim owner. Foreign review and confirm are tested at the domain level; foreign refresh/disconnect and every /api/domain-hosting HTTP route have no test.",
-     "gapKind": "test",
+     "state": "evidenced",
+     "detail": "Every operation is owner-joined and the insert trigger rechecks the claim owner. Foreign review and confirm are tested at the domain level; since slice 3 every /api/domain-hosting HTTP route (list, review, confirm, refresh, disconnect) also refuses an unauthenticated and a foreign caller with no change and no provider or DNS call, while the owner is admitted on each.",
      "enforcedAt": [
       {
        "file": "src/domain-hosting.ts",
@@ -3854,6 +3911,10 @@
       {
        "file": "schema/platform.sql",
        "contains": "SELECT RAISE(ABORT,'domain_connection_owner') WHERE NOT EXISTS(SELECT 1 FROM domain_claims d JOIN projects p ON p.id=d.project_id WHERE d.id=NEW.claim_id"
+      },
+      {
+       "file": "src/index.ts",
+       "contains": "return json(await fn(env.DB,user.id,hostingAction[1],hostingConfig(env)));"
       }
      ],
      "tests": [
@@ -3861,6 +3922,16 @@
        "file": "tests/domain-hosting.mjs",
        "contains": "await assert.rejects(()=>confirmHosting(scope(other),other,r.id,config,transport));",
        "asserts": "another owner cannot confirm hosting"
+      },
+      {
+       "file": "tests/boundary-provider-reviews.mjs",
+       "contains": "else assert.equal(foreign.status,404,`${method} ${path} with a foreign session: ${text}`);",
+       "asserts": "a foreign session gets 404 on review, confirm, refresh and disconnect and an empty list; it leaks neither the review nor the hostname"
+      },
+      {
+       "file": "tests/boundary-provider-reviews.mjs",
+       "contains": "assert.equal(outbound.length,0,'no refused call reached DNS or the provider');",
+       "asserts": "no refused call (anonymous, cross-origin or foreign) reached DNS or the provider, and the connection row is unchanged; the owner's confirm does reach the DNS check"
       }
      ]
     },
@@ -3935,13 +4006,28 @@
      ]
     },
     "stale": {
-     "state": "gap",
-     "detail": "Review expiry and the proof-hash check are enforced in code, but no test confirms an expired hosting review or a proof hash changed before confirm; the proof hash is checked in JavaScript, not in the claim SQL (prior hardening note).",
-     "gapKind": "test",
+     "state": "evidenced",
+     "detail": "Review expiry and the proof-hash check are enforced in code before any DNS or provider call, and tested since slice 3: an expired review and a review whose ownership proof was renewed afterwards are refused with no call and no state change, and an identical unexpired or re-reviewed twin is admitted. The proof hash is checked in JavaScript, not in the claim SQL (prior hardening note).",
      "enforcedAt": [
       {
        "file": "src/domain-hosting.ts",
        "contains": "if(await hashToken(claim.token)!==c.proof_hash)throw new DomainError(409,'Domain proof changed. Prepare a new review.');"
+      },
+      {
+       "file": "src/domain-hosting.ts",
+       "contains": "throw new DomainError(409,'Hosting review expired. Prepare a new review.');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/boundary-provider-reviews.mjs",
+       "contains": "await refused(m.confirmHosting(a.scope,a.id,stale.id,hosting,t.send),409,/Domain proof changed/);",
+       "asserts": "a hosting review made before the ownership proof was renewed is refused with zero DNS/provider calls; a review of the renewed proof provisions"
+      },
+      {
+       "file": "tests/boundary-provider-reviews.mjs",
+       "contains": "await refused(m.confirmHosting(a.scope,a.id,expired.id,hosting,t.send),409,/review expired/);",
+       "asserts": "an expired hosting review is refused with zero DNS/provider calls and stays in review; the unexpired twin provisions"
       }
      ]
     }
@@ -4078,7 +4164,7 @@
     },
     "stale": {
      "state": "evidenced",
-     "detail": "Expired proofs are refused; proof renewal invalidates older removal reviews. Removal-review expiry is enforced by trigger but untested.",
+     "detail": "Expired proofs are refused; proof renewal invalidates older removal reviews. A removal review past its expiry is tested since slice 3: the explicit expiry reply leaves the proof in place and its unexpired twin removes it (the SQL trigger guard behind that reply is not independently exercised).",
      "enforcedAt": [
       {
        "file": "schema/platform.sql",
@@ -4090,6 +4176,11 @@
        "file": "tests/domains.mjs",
        "contains": "await assert.rejects(chat(owner,'/verify-domain '+claim.id),{status:409});",
        "asserts": "an expired proof is refused"
+      },
+      {
+       "file": "tests/boundary-provider-reviews.mjs",
+       "contains": "assert.ok(await c.row(),'the expired removal review left the proof in place');",
+       "asserts": "an expired domain-proof removal review leaves the proof, its pending review and the activity log unchanged; the unexpired twin removes the proof"
       }
      ]
     }
@@ -4297,9 +4388,8 @@
    ],
    "cells": {
     "authority": {
-     "state": "gap",
-     "detail": "Apply requires the review owner and the owner's own typed Chat turn in SQL, and foreign reads are tested, but no test has another owner apply someone else's review.",
-     "gapKind": "test",
+     "state": "evidenced",
+     "detail": "Apply requires the review owner and the owner's own typed Chat turn in SQL. Foreign reads (preview/diff/details) and, since slice 3, a foreign owner's apply of both a specification review and a service-client review are refused and change nothing (the owner's identical request is admitted).",
      "enforcedAt": [
       {
        "file": "src/project-specification/store.ts",
@@ -4308,6 +4398,10 @@
       {
        "file": "schema/platform.sql",
        "contains": "t.mode='guided' AND json_extract(t.action_json,'$.type')='specificationApply'"
+      },
+      {
+       "file": "src/project-specification/service-clients/store.ts",
+       "contains": "JOIN projects p ON p.id=q.project_id AND p.owner_user_id=q.user_id WHERE q.id=? AND q.user_id=?"
       }
      ],
      "tests": [
@@ -4315,6 +4409,16 @@
        "file": "tests/specification-journey.mjs",
        "contains": "assert.equal((await call(foreign,path)).status,404);",
        "asserts": "another owner cannot read the review preview/diff/details"
+      },
+      {
+       "file": "tests/boundary-owner-authority.mjs",
+       "contains": "assert.equal(await specState(),specBefore,'a refused foreign specification apply changed nothing');",
+       "asserts": "owner B applying owner A's specification review is refused with no version, apply, head or Chat turn change; owner A's identical request applies"
+      },
+      {
+       "file": "tests/boundary-owner-authority.mjs",
+       "contains": "assert.equal(await serviceState(),serviceBefore,'a refused foreign service-client apply changed nothing');",
+       "asserts": "owner B applying owner A's service-client review is refused with no version, apply, head or Chat turn change; owner A's identical request applies"
       }
      ]
     },
@@ -4689,7 +4793,7 @@
    "cells": {
     "authority": {
      "state": "evidenced",
-     "detail": "Confirm requires review owner and project owner in the app and again in the commit trigger; preview/export/diff reads are owner-joined. GET /api/projects/:id/versions checks ownership but has no foreign-caller test.",
+     "detail": "Confirm requires review owner and project owner in the app and again in the commit trigger; preview/export/diff reads are owner-joined. GET /api/projects/:id/versions answers a foreign project exactly like a missing one (404, no version metadata; slice 3).",
      "enforcedAt": [
       {
        "file": "src/publications.ts",
@@ -4698,6 +4802,10 @@
       {
        "file": "schema/platform.sql",
        "contains": "s.project_id=NEW.project_id AND p.owner_user_id=NEW.user_id AND s.revision=NEW.expected_revision"
+      },
+      {
+       "file": "src/index.ts",
+       "contains": "SELECT id FROM projects WHERE id = ? AND owner_user_id = ?').bind(versionsMatch[1],user.id)"
       }
      ],
      "tests": [
@@ -4715,6 +4823,11 @@
        "file": "tests/customer-site-journey.mjs",
        "contains": "assert.equal((await call(foreign,path)).status,404);",
        "asserts": "another owner cannot read preview/export/diff"
+      },
+      {
+       "file": "tests/boundary-owner-authority.mjs",
+       "contains": "assert.equal(missing.status,404);assert.equal(await missing.text(),foreignText,'a foreign project is indistinguishable from a missing one');",
+       "asserts": "a foreign caller gets 404 with no version id or digest, identical to a missing project; unauthenticated is 401; the owner lists their versions"
       }
      ]
     },
@@ -5032,11 +5145,15 @@
     },
     "stale": {
      "state": "evidenced",
-     "detail": "A changed record inventory is refused; two reviews from one inventory write once. Review expiry is enforced but untested.",
+     "detail": "A changed record inventory is refused; two reviews from one inventory write once. Review expiry is tested since slice 3 (an expired review is refused with no provider write and its identical twin is applied).",
      "enforcedAt": [
       {
        "file": "src/cloudflare-dns.ts",
        "contains": "if(found.hash!==a.inventory_hash)throw new DomainError(409"
+      },
+      {
+       "file": "src/cloudflare-dns.ts",
+       "contains": "if(a.expires_at<=stamp()||(routing?"
       }
      ],
      "tests": [
@@ -5049,6 +5166,11 @@
        "file": "tests/cloudflare-dns.mjs",
        "contains": "await assert.rejects(delayed,{status:409});assert.equal(race.posts,1);",
        "asserts": "of two reviews from one inventory only one writes"
+      },
+      {
+       "file": "tests/boundary-provider-reviews.mjs",
+       "contains": "await refused(m.confirmDNS(o.scope,o.id,expired.id,config,provider.send),409,/expired or the proof changed/);",
+       "asserts": "an expired DNS review is refused with no provider write and stays in review; the unexpired twin writes the record"
       }
      ]
     }
@@ -5613,7 +5735,7 @@
     },
     "stale": {
      "state": "evidenced",
-     "detail": "The branch head is compared and passed as expectedHeadOid. Review expiry is enforced but untested.",
+     "detail": "The branch head is compared and passed as expectedHeadOid. Review expiry is tested since slice 3 (an expired review is refused with no repository write and its identical twin completes).",
      "enforcedAt": [
       {
        "file": "src/github-backups.ts",
@@ -5622,6 +5744,10 @@
       {
        "file": "src/github-backups.ts",
        "contains": "expectedHeadOid:b.base_head,clientMutationId:b.id"
+      },
+      {
+       "file": "src/github-backups.ts",
+       "contains": "if(b.state==='pending'&&b.expires_at<=new Date().toISOString())throw new ConnectionError(409,'This backup review expired. Prepare a fresh review.');"
       }
      ],
      "tests": [
@@ -5629,6 +5755,11 @@
        "file": "tests/github-backups.mjs",
        "contains": "for(const change of [()=>repoId=18,()=>branch='other',()=>head='d'.repeat(40),()=>parentFile=true,()=>remote='wrong',()=>malformed=true])",
        "asserts": "a changed repository, branch or head is refused"
+      },
+      {
+       "file": "tests/boundary-provider-reviews.mjs",
+       "contains": "await refused(m.confirmBackup(o.scope,files,o.id,expired.id,config,remote.send),409,/review expired/);",
+       "asserts": "an expired GitHub backup review is refused with no repository write and stays pending; the unexpired twin completes"
       }
      ]
     }
@@ -6908,7 +7039,7 @@
    "cells": {
     "authority": {
      "state": "evidenced",
-     "detail": "Only a single, well-formed cookie named for the host project is read; a workspace cookie or another project's cookie name yields no session.",
+     "detail": "Only a single, well-formed cookie named for the host project is read; a workspace cookie or another project's cookie name yields no session. A real owner session presented to the gateway under the owner cookie name or the project's visitor cookie name is refused with 401 (slice 3).",
      "enforcedAt": [
       {
        "file": "src/app-gateway.ts",
@@ -6925,6 +7056,11 @@
        "file": "tests/boundary-visitor-gateway-isolation.mjs",
        "contains": "assert.equal((await request(b.project,'data',{session:v.session,cookieProject:a.project})).status,401);",
        "asserts": "another project's cookie name gets nothing"
+      },
+      {
+       "file": "tests/boundary-owner-authority.mjs",
+       "contains": "assert.equal(await reviews(),0,'a refused credential prepared no deletion review');",
+       "asserts": "an owner session cannot read the export or prepare a deletion review through the gateway; the visitor's own session can"
       }
      ]
     },
@@ -8782,5 +8918,10 @@
   "task": "WH-004 slice 2",
   "baseCommit": "21204da42f39ad2e57947361ffef71c91a48b127",
   "auditedOn": "2026-10-08"
+ },
+ "slice3": {
+  "task": "WH-004 slice 3",
+  "baseCommit": "d948f068a0caa4731f4713e13d80f2c2528ec390",
+  "auditedOn": "2026-10-11"
  }
 }
