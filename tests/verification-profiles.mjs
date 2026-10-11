@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import {existsSync,mkdtempSync,rmSync,writeFileSync} from 'node:fs';
+import {existsSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {fixtureEnvironment,runProfile} from '../tools/verify.mjs';
+import {fixtureEnvironment,profiles,runProfile} from '../tools/verify.mjs';
 const environment=fixtureEnvironment({PATH:'/bin',SITE_AI:'1',RUN_LIVE_MUSE:'1',CLOUDFLARE_API_TOKEN:'secret',AI_API_KEY:'secret',NODE_OPTIONS:'--inspect',HTTPS_PROXY:'secret'},'/tmp/fixture');
 for(const key of ['SITE_AI','RUN_LIVE_MUSE','CLOUDFLARE_API_TOKEN','AI_API_KEY','NODE_OPTIONS','HTTPS_PROXY'])assert.equal(environment[key],undefined);
 const cwd=mkdtempSync(join(tmpdir(),'whumpo-profile-test-'));let calls=0,home;
@@ -20,6 +20,10 @@ try{
  assert.deepEqual(fast,['tests/ai.mjs','tests/prompt-data-boundaries.mjs','tests/ack-timing.mjs','tests/lifecycle-catalog.mjs','tests/connection-vault.mjs','tests/notifications-contract.mjs','tests/passkey-key-wrapping-contract.mjs','tests/email-change-contract.mjs','tests/review-retention-contract.mjs']);
  const protection=[];runProfile('protection',{cwd,run:(_cmd,args)=>{protection.push(args[0]);return {status:0};}});
  assert.deepEqual(protection,['tests/processing-boundaries.mjs','tests/deploy-ci.mjs','tests/secret-custody.mjs','tests/build-snapshot.mjs','tests/release-manifest.mjs','tests/release-provider.mjs','tests/connection-oauth-outcomes.mjs','tests/connection-key-backup.mjs','tests/restore-admission.mjs','tests/restore-inventory.mjs','tests/restore-inventory-freshness.mjs','tests/github-refresh-custody.mjs','tests/github-grant-revocation.mjs','tests/github-grant-chat.mjs','tests/boundary-audit.mjs']);
+ // WH-054 tenant gates are deliberately outside every profile (too slow for the deploy build); keep them reachable as package scripts.
+ const tenantGates=['tests/tenant-classification.mjs','tests/tenant-schema-bodies.mjs','tests/sqlite-authorizer.mjs','tests/tenant-sql-surface.mjs'];
+ assert.ok(Object.values(profiles).flat().every(script=>!tenantGates.includes(script)),'WH-054 tenant gates stay out of the verify profiles');
+ assert.equal(JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8')).scripts['test:tenant-gates'],tenantGates.map(script=>'node '+script).join(' && '));
  writeFileSync(join(cwd,'.dev.vars'),'SYNTHETIC=1');
  assert.throws(()=>runProfile('fast',{cwd,run:()=>assert.fail('Must not launch')}),/Local/);
 }finally{rmSync(cwd,{recursive:true,force:true});}
