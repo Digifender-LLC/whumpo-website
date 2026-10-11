@@ -15,6 +15,7 @@ Whumpo should first become a dependable way for an invited customer to create, i
 - [Shadow cost events](../cost-events.md): WH-022 envelope, dimension registry, reconciliation rules, existing-producer gap map and WH-168–172 slices (planned).
 - [Domain purchases](../domain-purchases.md): WH-034 quote/consent/order/funding contract, registrar evaluation, quote-helper gap map and WH-192–198 slices (planned).
 - [Review and receipt retention](../review-retention.md): WH-061 capacity inventory, retention design, cutover proposal and WH-180–185 slices (planned).
+- [Daily Chat workspace](../chat-daily-workspace.md): WH-111 audit of delivered continuity, remaining gaps, owner decisions and WH-206–213 slices (planned).
 - [Architecture and sequencing alignment](alignment.md): shared contracts, corrected dependency paths, current build order and persistent graph checks.
 - [Full backlog](backlog.md): every task, dependency, acceptance criterion and verification boundary.
 - [Chat as the primary workspace](chat-first-experience.md): interactive forms, agent-managed dashboards/views, continuity and WH-105–112 delivery packets.
