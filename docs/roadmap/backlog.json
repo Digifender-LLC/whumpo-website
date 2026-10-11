@@ -227,6 +227,10 @@
         "2026-10-08 UTC slice 2 at base 21204da (source/local fixtures only; not exhaustive; WH-004 remains open): docs/boundary-audit.md and docs/boundary-audit.json now also register the whumpo-sites, whumpo-apps and whumpo-runtime dispatchers (route, host/origin and method-gate extraction), Worker reachability from wrangler*.jsonc (apps and runtime machine-checked as service-binding-only), the platform contact form and 19 scheduled jobs, and 31 remote-capable operator tools: 51 families with new admission and tenant cells, checked by tests/boundary-audit.mjs (protection) with 19 source/config and 13 registry mutations. Two passing cross-tenant regressions were added as standalone scripts (tests/boundary-site-isolation.mjs, tests/boundary-visitor-gateway-isolation.mjs); not added to the protection gate after one setup flake in the shared visitor fixture. New findings awaiting owner decisions: B4 hosting-recovery tool hard-codes a retired control database (reproduced, static), B5 anonymous visitor login starts exhaust app challenge capacity per project and platform-wide (reproduced, local SQLite), B6 guest-preview views draw only the platform-wide photo read pool (reproduced, local D1/R2), B7 create-invite writes remotely by default (characterization). No src, schema, remote or deployment change; no operator tool was run. Ported onto main 4dea09c on 2026-10-09 UTC (slice 1 already merged as #224): the WH-050 serving-stop guard from #186 is registered as a 52nd family (operator-serving-stop, admission and tenant evidenced by tests/operator-containment.mjs) and one operator-containment anchor follows the current code; the registry check and the slice 2 reproductions re-ran with the same results.",
         "2026-10-09 UTC: finding B3 fixed on main by #178 (guest-preview revoke/delete effect now rides in the revision-checked Chat turn batch; maintained regression tests/guest-preview-chat-atomic.mjs). tests/boundary-guest-preview-race.mjs now passes as a standalone regression, and the registry marks the guest-previews stale cell evidenced with anchors in src/guest-previews/owner.ts, src/chat.ts and both tests. Local evidence only; not deployed by this audit. WH-004 stays open (B1, B4, B5, B6 and the unverified risks remain).",
         "2026-10-09 UTC: finding B4 fixed in source (tool-only, no schema): tools/reconcile-domain-hosting.mjs now reads the account and control database from wrangler.jsonc instead of a hard-coded retired database; tests/boundary-operator-target.mjs is a passing static regression asserting no operator tool pins a D1 database id. The tool was not run against Cloudflare; remote behavior and an ENVIRONMENT pin remain unverified/optional. WH-004 stays open (B1, B5, B6 and the unverified risks remain).",
+        "2026-10-09 UTC finding B6 remediated in source (local only; not deployed; no schema change): anonymous guest-preview views now charge their inlined photos to the link's project with the WH-075 public-photo semantics (src/storage-budget.ts reserveGuestPreviewPhotoReads: per-client 400/day photo sub-limit, then all-or-none the project budget with operator containment, account fair share and platform ceiling), refusing with a 429 per connection or the unchanged generic 503. Owner previews and exports keep the platform-pool accounting (R3). tests/boundary-guest-preview-read-pool.mjs is now a regression that passes on SQLite and fails with the src change reverted (its --d1 mode and the local-D1 guest/photo/fairness suites could not run: shared /tmp quota exhausted); docs/boundary-audit.{md,json} mark B6 resolved and the guest-preview-host admission cell evidenced. Open owner decisions: whether guest views keep sharing the per-connection sub-limit with public photos, and whether operator photo containment should reach guest previews. WH-004 stays open.",
+        "2026-10-09 UTC: after rebasing the WH-004 audit stack onto main (with #178) plus #202 (the D1 fixture honors TMPDIR), the local-D1 runs blocked earlier by the shared /tmp quota passed: tests/boundary-guest-preview-read-pool.mjs --d1 (B6 regression), tests/guest-previews.mjs --d1, tests/guest-preview-photos.mjs (including its project-budget assertion), tests/public-fairness.mjs, tests/photo-versions.mjs and tests/exports.mjs. Local evidence only; not deployed. The two B6 owner decisions stay open; WH-004 stays open.",
+        "2026-10-09 UTC: B6 fix rebuilt as branch claude/wh-004-b6-guest-photo-budget-train4 (replaces closed PR #240), stacked on claude/wh-004-b4-operator-target-main-train2 (11ff52c, PR #261: B4 over the slice 2 rebuild onto main 89fa009), because B6 is registered only in the slice 2 registry. Only the two B6 commits were carried (slice 2 and B4 are already in the base) and they applied without conflict; the registry status now records the passing local D1 run, the generated summary was unchanged and 710 anchors are checked. Re-run: tests/boundary-guest-preview-read-pool.mjs on SQLite and --d1 passed (and failed with the four src files reverted), tests/guest-previews.mjs on SQLite and --d1 (12 groups), tests/guest-preview-photos.mjs, tests/public-fairness.mjs, tests/photo-versions.mjs, tests/exports.mjs and tests/boundary-audit.mjs passed. Local evidence only; not deployed; no schema change. The two B6 owner decisions stay open; WH-004 stays open.",
+        "2026-10-10 UTC: B6 fix rebuilt as branch claude/wh-004-b6-guest-photo-budget-train5 (replaces closed PR #270) directly on main d948f06, which now contains slice 2 and the B4 fix (#260). Only the three B6 commits were carried, and they applied without conflict. The B6 reproduction on main becomes the passing regression, the generated boundary-audit summary is byte-identical and 710 anchors are checked. Re-run with TMPDIR on a home-directory path: tests/boundary-guest-preview-read-pool.mjs on SQLite and --d1 passed (and failed with the four src files reverted to d948f06), tests/guest-previews.mjs on SQLite and --d1 (12 groups), tests/guest-preview-photos.mjs, tests/public-fairness.mjs, tests/photo-versions.mjs, tests/exports.mjs, tests/operator-containment.mjs and tests/boundary-audit.mjs passed. Local evidence only; not deployed; no schema change. The two B6 owner decisions stay open; WH-004 stays open.",
         "2026-10-11 UTC slice 3 at base d948f06 (source/local fixtures only; not deployed; not exhaustive; WH-004 remains open): three standalone passing regressions with negative controls, run on local SQLite and local D1 and kept out of verify profiles and protection: tests/boundary-owner-authority.mjs (foreign owner apply of a specification review and of a service-client review refused with no change; foreign caller of GET /api/projects/:id/versions gets the missing-project 404 and no metadata; a visitor application session is not an owner credential and the owner session is not a visitor credential), tests/boundary-provider-reviews.mjs (every /api/domain-hosting route refuses an anonymous, cross-origin and foreign caller with no DNS or provider call; a hosting review made before a proof renewal is refused; expired hosting, Cloudflare DNS, GitHub backup and domain-proof-removal reviews are refused with no write) and tests/boundary-review-lifecycle.mjs (expired application-page, backend-form, module-activation and upgrade reviews refused; page-review reuse and rewrites refused; upgrade and rollback reviews prepared at an older application revision refused). Registry cells domain-hosting authority and stale, application-page target and specification-service-clients authority moved from gap to evidenced, and the expiry, versions and cookie-separation notes in ten other cells now cite tests; docs/boundary-audit.md records Closed in slice 3 and what stays open (rollback-review expiry, trigger-only expiry guards, route-specific Origin tests, the slice 2 list). No new finding; no src, schema, Worker configuration or frontend change; tests/current-site-fixture.mjs gained three exports."
       ]
     },
@@ -3242,7 +3246,10 @@
       "issue": null,
       "owner": null,
       "evidence": [
-        "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass."
+        "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.",
+        "2026-10-09 UTC: the proposed collaboration contract (docs/workspace-collaboration.md) and packet 1a local gates (docs/tenant-classification.md) from branch claude/wh-054-tenant-registry-review (PR #188, closed for conflicts) were cherry-picked onto main 4dea09c as local branch claude/wh-054-tenant-registry-review-main; not pushed, merged or deployed. The port adds no schema, route or src change. Main's WH-050 schema change (#186) had drifted the registry fingerprint; it was re-reviewed: operator_session_revocations and operator_retention_receipts added as no-tenant-path tables, operator_session_revocations.account_id recorded as an account-typed textual identity, one new cross-type finding (operator_containment_retained) baselined, baseline moved to 221 tables. The four gates follow boundary-audit in the protection profile. The contract stays proposed, not frozen; four owner questions remain open; no issue or claim exists.",
+        "2026-10-09 UTC: that port was pushed as PR #250 and closed; the same ten commits were rebuilt onto main 89fa009 as branch claude/wh-054-tenant-registry-review-train4 (PR replaces #250; not merged or deployed). Main's commits after 4dea09c change no schema input or src file, and all four gates passed with identical figures (221 tables, 49 findings in 45 objects, 41 dynamic SQL sites). The gates were moved out of the protection profile into package scripts (pnpm test:tenant-gates) because they measured 18-35 s per deploy build on this host; the deploy gate therefore does not enforce the registry, and keeping or reversing that is an open owner decision recorded in the PR and docs/verification.md. Still no schema change, issue or claim.",
+        "2026-10-10 UTC: #268 conflicted with main after the WH-004, WH-022/WH-169, WH-034 and WH-200/WH-203 merges, so the eleven commits were cherry-picked onto main d948f06 as branch claude/wh-054-tenant-registry-review-train5 (PR replaces #268; not merged or deployed). Main's new src files (cost events, domain-purchase and email-change modules) contain no .prepare call and no schema input changed; all four gates passed with no edit to the registry, baseline, allowlist or pinned figures (221 tables, 49 findings in 45 objects, 1,311 prepare calls, 41 dynamic SQL sites). The gates stay script-only. Still no schema change, issue or claim."
       ]
     },
     {
@@ -3453,7 +3460,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-10 UTC: first source slice only, not wired, on branch claude/wh-141-connector-catalog (base origin/main d948f06); not merged, issue not created or claimed from this session. Added the pure module src/connector-catalog/catalog.ts (the frozen v1 catalog, unchanged from the WH-140 reference: GitHub and Cloudflare declare exactly the operations their adapters send today, and Gmail, Google Calendar, Outlook email, Microsoft Calendar and HubSpot stay planned; validateCatalog; catalog-derived connectable providers, feature ids, OAuth start descriptor and vault contexts, all refusing planned providers) and src/connector-catalog/builder.ts (buildConnectorRequest forms a request only from provider ID, operation ID, typed parameters, the server-derived authority class and the granted scopes: no caller URL, host, path, header or free-form query or body; redirect manual; exact origin/path/query after URL parsing; registered GraphQL documents with closed variables; closed, bounded JSON bodies; authority, readiness and scope-subset checks; createRequestBuilder refuses unpriced, unreconcilable or widened catalogs). tools/prototypes/connectors.mjs now keeps only the synthetic reference runtime, which builds every request through the source builder; it was kept because docs and the WH-140 to WH-146 references point to it, and tests/connector-provider-readiness.mjs now bundles the source catalog. node tests/connectors-contract.mjs runs against the bundled source in about 2 s (not in a verify profile, as before): 85 source checks (the 71 WH-140 checks plus 14 builder, planned-provider and adapter-agreement checks) and 1 static check passed, and 34 of 34 source mutants were caught, each by its intended check; an esbuild import-graph check shows src/index.ts, src/site-host.ts, src/app-host.ts and src/runtime/worker.ts do not reach the module. The existing GitHub/Cloudflare suites (github-connection, github-token-lifecycle, github-backups, github-grant-revocation, github-refresh-custody, cloudflare-connection, cloudflare-token-refresh, connection-handoff, connection-vault) pass unchanged because the production code is untouched. Gaps G-GH-1, G-CF-1 and G-C1 to G-C4 are closed only in source form: githubAccess().send and cloudflareAccess().send still accept paths, and ConnectionProvider, isConnectionProvider, connectionFeature and the vault context pattern are unchanged. WH-141 acceptance (existing suites passing unchanged against rewired adapters) is therefore not met, and WH-141 stays open for the rewiring slice."
+      ]
     },
     {
       "id": "WH-142",
@@ -3841,7 +3850,12 @@
       "dependsOn": [
         "WH-033",
         "WH-037",
-        "WH-009"
+        "WH-009",
+        "WH-180",
+        "WH-181",
+        "WH-182",
+        "WH-183",
+        "WH-184"
       ],
       "blockers": [],
       "outcome": "Directory owners can maintain a live snapshot on supported domains without eventually hitting an unrecoverable private-test receipt ceiling.",
@@ -3865,7 +3879,249 @@
         "docs/directories.md",
         "docs/version-retention.md",
         "docs/site-health.md",
-        "docs/integrations/domain-hosting.md"
+        "docs/integrations/domain-hosting.md",
+        "docs/review-retention.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": [
+        "2026-10-09 UTC: decomposed into WH-180-184 (WH-185 deferred, not a dependency) with the planned design in docs/review-retention.md: machine-checked inventory of all 88 capped tables from 640 schema triggers at ca17c6a (90 from 648 after the WH-050 operator-retention port onto 4dea09c; 28 ceiling-set review/receipt/operation tables, 22 of them with a platform-wide lifetime cap, the WH-004 B1 class), row states, option D (active-only per-project/per-owner caps under a fair-share ceiling, history window, sealed receipts with a replay horizon, capacity-exempt withdrawals), the exact cutover proposal and the directory publication/export/restore/custom-host/health agreement map. Planning and offline reference only: no schema, trigger, source, route, job or deployment change. Acceptance is unchanged and closes only after every child plus live custom-host acceptance through WH-033; no child reaches WH-033/049/104. Live GitHub issue state was not read from this session."
+      ]
+    },
+    {
+      "id": "WH-180",
+      "title": "Freeze the review and receipt retention contract and decompose WH-061",
+      "phase": "F2",
+      "priority": "P1",
+      "readiness": "ready",
+      "kind": "decision",
+      "size": "S",
+      "dependsOn": [
+        "WH-009"
+      ],
+      "blockers": [],
+      "outcome": "Every review/receipt capacity change builds on one machine-checked inventory, row-state classification and retention policy instead of per-table ceilings that eventually need operator database edits.",
+      "scope": [
+        "Inventory every row-count capacity trigger in the canonical schema inputs with scope, limit, deleter, turnover and WH-009 class, machine-checked against the schema, code and docs/data-lifecycle.json",
+        "Classify row states (pending, uncertain, applied-referenced, held, applied-history, applied-unreferenced, superseded, expired, failed) as active authority, retained evidence or compactable",
+        "Choose between pruning, per-owner caps, sealed-receipt compaction and a combination; state the safety-withdrawal exemption, the exact cutover proposal and the directory snapshot/custom-host/health agreement map",
+        "Add an offline reference model and conformance suite without Worker imports"
+      ],
+      "acceptance": [
+        "docs/review-retention.md states the inventory, decision, cutover proposal, owner decisions and child slices, marked planned",
+        "Offline checks prove per-owner non-starvation under a bounded global ceiling, pruning never removes active/unknown/held/referenced rows, withdrawals are exempt and bounded, replay survives compaction and turnover needs no operator edit",
+        "The documented inventory cannot drift from the schema capacity triggers, and every mutant is caught by a named check",
+        "WH-061 keeps its acceptance and depends on every child; no child reaches WH-033/049/104"
+      ],
+      "verification": [
+        "node tests/review-retention-contract.mjs",
+        "node tools/roadmap.mjs validate, alignment and render --check",
+        "git diff --check"
+      ],
+      "references": [
+        "docs/review-retention.md",
+        "tools/prototypes/review-retention.mjs",
+        "tests/review-retention-contract.mjs",
+        "docs/directories.md",
+        "docs/data-lifecycle.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": [
+        "2026-10-09 UTC: contract and offline reference only, not deployed. Written at ca17c6a and ported on 2026-10-09 UTC as claude/wh-061-review-retention-design-main onto origin/main d3ebaf2 (640 triggers to 88 capped tables, unchanged); closed unmerged (PR #234) and re-ported the same day as claude/wh-061-review-retention-design-r2 onto origin/main 4dea09c, after WH-050 (#186) added reviewed operator retention: --inventory now reports 648 triggers to 90 capped tables (new R5 operator evidence rows operator_retention_receipts and operator_session_revocations; operator_containments now deleted by the operator_retention_apply trigger; ceiling, shared-ceiling and other-lifetime sets unchanged), with the inventory pins and registry updated; rebuilt on 2026-10-10 UTC as claude/wh-061-review-retention-design-train5 onto origin/main d948f06 (no schema input changed since 89fa009; --inventory and the contract test reproduced 648 triggers to 90 capped tables over 221 tables); not merged: docs/review-retention.md (planned), tools/prototypes/review-retention.mjs (node builtins only, no Worker import) and tests/review-retention-contract.mjs (15 reference and 3 static checks; 25/25 mutants caught), added to the fast profile. Proves the documented inventory and the synthetic model only, not D1 triggers, routes or deployment. Open owner decisions OD-1 to OD-8 are listed in the contract."
+      ]
+    },
+    {
+      "id": "WH-181",
+      "title": "Active-only review capacity, sealed receipts and capacity-exempt withdrawals in the current schema",
+      "phase": "F2",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-180"
+      ],
+      "blockers": [],
+      "outcome": "No owner can exhaust a shared review table for other owners, and terminal review rows stop counting against any cap without being lost as replay evidence.",
+      "scope": [
+        "Rewrite the capacity triggers of every ceiling-set family in docs/review-retention.md to count active rows per project and per owner under a fair-share platform ceiling",
+        "Add the review_receipts table, its binding and immutability triggers, and its WH-009 lifecycle classification",
+        "Exempt unpublish/disable/revoke withdrawals (owner and safety) from capacity with same-target supersession; rewrite delete guards to allow only eligible, receipted, unreferenced and unheld deletions",
+        "Add directories.live_review_id/live_digest and site_health_checks.directory_review_id; prepare the owner-run empty-D1 cutover plan"
+      ],
+      "acceptance": [
+        "The WH-004 B1 reproduction passes on local D1: one owner at capacity does not block another owner's review or any withdrawal",
+        "Delete guards refuse referenced, pending, uncertain, held and unreceipted rows, including references added after review",
+        "Current-schema cutover only with explicit owner authorization in the conversation; no data-preservation migration",
+        "Local verification is not live acceptance"
+      ],
+      "verification": [
+        "pnpm check",
+        "pnpm test:directories",
+        "pnpm test:directory-history",
+        "node tests/review-retention-contract.mjs",
+        "node tests/lifecycle-catalog.mjs",
+        "Focused local D1 suites for each changed review family"
+      ],
+      "references": [
+        "docs/review-retention.md",
+        "schema/platform.sql",
+        "src/shared-modules/schema.sql",
+        "docs/releases.md",
+        "docs/data-lifecycle.json"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-182",
+      "title": "Operator-free review turnover at admission and in daily maintenance",
+      "phase": "F2",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-181"
+      ],
+      "blockers": [],
+      "outcome": "Routine review turnover happens automatically inside each admission and in the existing daily maintenance pass, with no raw operator database edits.",
+      "scope": [
+        "Seal and remove eligible rows for the caller's project inside each review admission batch, bounded per call",
+        "Add a bounded daily reviews job to the existing runMaintenance pass for idle projects and evict sealed receipts after the replay horizon",
+        "Add the review families to the maintenance counters and inventory"
+      ],
+      "acceptance": [
+        "A long-lived synthetic owner can keep editing and publishing without refusal or operator action, and storage stays bounded",
+        "Pruning re-evaluates references, holds and unknown outcomes in the deleting statement; held and in-flight rows survive",
+        "Retries within the replay horizon return the original outcome from sealed receipts"
+      ],
+      "verification": [
+        "node tests/maintenance-scheduled.mjs",
+        "node tests/maintenance-inventory.mjs",
+        "node tests/review-retention-contract.mjs",
+        "Focused local D1 turnover suite"
+      ],
+      "references": [
+        "docs/review-retention.md",
+        "docs/maintenance.md",
+        "src/index.ts",
+        "tools/report-maintenance.mjs"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-183",
+      "title": "Directory live-snapshot identity, custom-host directory paths and health wiring",
+      "phase": "F2",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-181"
+      ],
+      "blockers": [],
+      "outcome": "Publication, public page/JSON, export, draft restore, custom-host serving and health all name and verify the same approved directory snapshot.",
+      "scope": [
+        "Serve /directory and /directory.json on active custom-hostname mappings through the existing site-host mapping and publicDirectory, with a live-digest ETag",
+        "Label compacted history entries as digest-only and keep restore/export on retained snapshots",
+        "Add the directory review to the site-health identity and verify the served JSON digest"
+      ],
+      "acceptance": [
+        "Local fixtures with an active domain mapping serve exactly the approved snapshot; foreign hosts and unpublished directories return 404",
+        "Health becomes changed/unhealthy when the directory publication changes or the served digest differs",
+        "No hosting activation, provider call or DNS change; live custom-host acceptance stays with WH-061 through WH-033"
+      ],
+      "verification": [
+        "pnpm check",
+        "pnpm test:directories",
+        "pnpm test:directory-history",
+        "pnpm test:site-health",
+        "pnpm test:domain-hosting"
+      ],
+      "references": [
+        "docs/review-retention.md",
+        "docs/directories.md",
+        "docs/site-health.md",
+        "docs/integrations/domain-hosting.md",
+        "src/site-host.ts",
+        "src/directory.ts"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-184",
+      "title": "Connected local acceptance for sustainable directory and review retention",
+      "phase": "F2",
+      "priority": "P1",
+      "readiness": "planned",
+      "kind": "verification",
+      "size": "S",
+      "dependsOn": [
+        "WH-182",
+        "WH-183"
+      ],
+      "blockers": [],
+      "outcome": "One connected local journey proves a directory owner can edit, publish, restore and export indefinitely while other owners and withdrawals are unaffected.",
+      "scope": [
+        "Long-lived synthetic directory journey past every former ceiling with turnover, restore and export after compaction",
+        "B1 regression across owners and safety withdrawal at capacity",
+        "Custom-host fixture and health agreement on the exact snapshot"
+      ],
+      "acceptance": [
+        "No refusal, operator action or lost replay answer across the journey; storage bounded",
+        "Evidence is local acceptance only and records exact commands and source commit"
+      ],
+      "verification": [
+        "pnpm verify fast",
+        "pnpm test:directories",
+        "pnpm test:directory-history",
+        "Connected local journey script named in the slice"
+      ],
+      "references": [
+        "docs/review-retention.md",
+        "docs/verification.md"
+      ],
+      "issue": null,
+      "owner": null,
+      "evidence": []
+    },
+    {
+      "id": "WH-185",
+      "title": "Bounded directory bulk import and schema expansion with a scoped review",
+      "phase": "F2",
+      "priority": "P2",
+      "readiness": "deferred",
+      "kind": "implementation",
+      "size": "M",
+      "dependsOn": [
+        "WH-184"
+      ],
+      "blockers": [],
+      "outcome": "Owners can import a bounded set of listings or use an expanded directory schema only through a separately scoped, tenant-isolated review.",
+      "scope": [
+        "Import of whumpo-directory v1 files through validateDirectoryExport into a reviewed draft, with size and rate bounds",
+        "Any new field or listing bound gets its own capacity inventory entry, safety screening decision and review"
+      ],
+      "acceptance": [
+        "Imports never bypass review, tenant isolation or capacity; imported text follows the content-safety contract",
+        "Owner decides scope before work starts"
+      ],
+      "verification": [
+        "node tests/review-retention-contract.mjs",
+        "Focused local D1 import suite"
+      ],
+      "references": [
+        "docs/review-retention.md",
+        "docs/directories.md",
+        "docs/safety-coverage.md"
       ],
       "issue": null,
       "owner": null,
@@ -4182,7 +4438,8 @@
       "issue": null,
       "owner": null,
       "evidence": [
-        "2026-10-09 UTC: pure source module only, local branch claude/wh-203-compromise-review stacked on the unmerged WH-200 branch claude/wh-200-email-change-state-machine (PR #262, 79bdca6); not merged, issue not created or claimed from this session. Extended src/email-change/compromise.ts (compromiseBounds, revokedAuthority, closed parsers, prepareCompromiseReview snapshot bound to epoch, credential revision, kit generation and connection set; prepareReviewKit/saveReviewKit with save-before-rotation; commitCompromiseReview: fresh passkey, saved-receipt replay, STALE_REVIEW, emergency removal down to zero keys, epoch advance with revokeAuthorityBefore for sessions, grants, challenges and kit offers, kit activation, pending-change closure, connection disable with the credential held, content-free receipt and security-review notice; admitSignIn and admitRecovery fences) and added src/email-change/revocation.ts (ProviderRevoker interface, claim-before-call dispatch, unknown and interrupted outcomes held as uncertain and never redispatched, authenticated read-only reconciliation bounded at 3 reads or 72 hours, erasure only with a receipt, closureHolds, a synthetic revoker). Deleted tools/prototypes/compromise-review.mjs; tests/email-change-contract.mjs now drives the source through a storage-only driver. It passed 27 checks and 9 agreement/static checks (new pins: the identity engine's removePasskey rows and zero-key stage, kit rotation epoch advance, and the GitHub 204 and Cloudflare 200 receipt rules) and caught 41 of 41 mutants, all in the source, each by its named check (the 33 WH-200 mutants, the 14 former prototype mutants now mutating source, and 8 new), in 1.6 to 2.0 s wall at load average 3.3, so it stays in the fast profile. Gaps G-E7 and G-E8 are resolved in source only. Open for WH-203: ProviderRevoker adapters over the existing GitHub and Cloudflare revocation (a GitHub single-token 204 must not report a retained refresh credential as revoked), the mapping of existing connection states and the closure inventory, and the focused SQLite/local D1 suites with synthetic providers plus tests/github-grant-revocation.mjs and tests/cloudflare-connection.mjs named in its verification; the acceptance is therefore not met against actual handlers and the task stays open. No table, column, route, binding, Chat registration, provider call, sender, real address or credential change; synthetic example.test addresses and SYNTHETIC-* values only."
+        "2026-10-09 UTC: pure source module only, local branch claude/wh-203-compromise-review stacked on the unmerged WH-200 branch claude/wh-200-email-change-state-machine (PR #262, 79bdca6); not merged, issue not created or claimed from this session. Extended src/email-change/compromise.ts (compromiseBounds, revokedAuthority, closed parsers, prepareCompromiseReview snapshot bound to epoch, credential revision, kit generation and connection set; prepareReviewKit/saveReviewKit with save-before-rotation; commitCompromiseReview: fresh passkey, saved-receipt replay, STALE_REVIEW, emergency removal down to zero keys, epoch advance with revokeAuthorityBefore for sessions, grants, challenges and kit offers, kit activation, pending-change closure, connection disable with the credential held, content-free receipt and security-review notice; admitSignIn and admitRecovery fences) and added src/email-change/revocation.ts (ProviderRevoker interface, claim-before-call dispatch, unknown and interrupted outcomes held as uncertain and never redispatched, authenticated read-only reconciliation bounded at 3 reads or 72 hours, erasure only with a receipt, closureHolds, a synthetic revoker). Deleted tools/prototypes/compromise-review.mjs; tests/email-change-contract.mjs now drives the source through a storage-only driver. It passed 27 checks and 9 agreement/static checks (new pins: the identity engine's removePasskey rows and zero-key stage, kit rotation epoch advance, and the GitHub 204 and Cloudflare 200 receipt rules) and caught 41 of 41 mutants, all in the source, each by its named check (the 33 WH-200 mutants, the 14 former prototype mutants now mutating source, and 8 new), in 1.6 to 2.0 s wall at load average 3.3, so it stays in the fast profile. Gaps G-E7 and G-E8 are resolved in source only. Open for WH-203: ProviderRevoker adapters over the existing GitHub and Cloudflare revocation (a GitHub single-token 204 must not report a retained refresh credential as revoked), the mapping of existing connection states and the closure inventory, and the focused SQLite/local D1 suites with synthetic providers plus tests/github-grant-revocation.mjs and tests/cloudflare-connection.mjs named in its verification; the acceptance is therefore not met against actual handlers and the task stays open. No table, column, route, binding, Chat registration, provider call, sender, real address or credential change; synthetic example.test addresses and SYNTHETIC-* values only.",
+        "2026-10-09 UTC: provider adapters and connection-state mapping, source only. Originally branch claude/wh-203-provider-revoker-adapters (closed PR #264, stacked on PR #263); 2026-10-10 UTC rebuilt as claude/wh-203-provider-revoker-adapters-train5 directly on origin/main d948f06, which already contains the WH-200 module and the WH-203 compromise review and revocation sources; the cherry-pick applied without conflicts and no source, test or doc content needed adapting. Not merged. Added src/email-change/provider-revokers.ts: createGitHubRevoker and createCloudflareRevoker implement ProviderRevoker over injected transport, open and observe seams and import nothing outside src/email-change. GitHub reports revoked only for an exact non-redirected 204 to DELETE /applications/{client_id}/token with no refresh credential held; with refresh custody the same 204 is access-revoked-refresh-held and stays held; no call is sent after an observed access revocation or during a pending reviewed grant deletion, and the app-wide grant deletion is never sent. Cloudflare reports revoked only for an exact 200 for every known token. Any other reply, throw or timeout is unknown, held as uncertain and never resent; not-revoked means nothing was sent. githubReconcileEvidence accepts only a saved revoked/204 grant receipt for the same owner, client and token and calls no provider. Added src/email-change/connection-holds.ts: current github_token_vault, github_refresh_custody, github_revocation_claims, github_grant_revocations and cloudflare_token_vault states mapped onto revocation holds (unknown states and foreign rows refused), plus connectionClosureBlockers and closureInventoryConnectionHolds over the existing account-closure inventory metrics. New script-only tests/email-change-revokers.mjs (not in a verify profile): 9 checks and 5 agreement/static checks, including the existing cleanupGitHub and cleanupCloudflare run on the current schema in SQLite through their own injected transport with identical requests and agreeing receipt decisions, and the mapping agreeing with accountClosureInventory; 22 of 22 mutants caught by their named checks. tests/email-change-contract.mjs now lists both files in its purity and Worker import-graph check (27 checks, 9 static, 41 of 41 mutants, unchanged). Still open for WH-203: the focused SQLite/local D1 handler suites over stored reviews and holds, which need the WH-201 tables and wiring (open/unseal, persisting access_revoked_at, claim fencing against the existing cleaners, reconciliation scheduling); the acceptance is not met against actual handlers and the task stays open. No table, column, route, binding, Chat registration, provider call, network access, real credential or verify-profile change; SYNTHETIC-* canaries only."
       ]
     },
     {

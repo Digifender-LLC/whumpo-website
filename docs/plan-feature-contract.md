@@ -68,7 +68,7 @@ A recommendation considers required features as well as sustained usage/cost. A 
 
 ## Delivery and launch gates
 
-Creator tools remain WH-091/092; Business workflows and connections WH-093–100 plus existing WH-031/032/056; team/release/portfolio work WH-054/101–103. Full paid launch still requires the complete selected matrix and all seven providers through WH-104/047/049. The independent bounded free-beta gate WH-048 remains separate. Standard AI is unlimited fair use with Monitor mode default; safety controls remain active. CSAM implementation, CMS testing and Daybreak remain owner-deferred.
+Creator tools remain WH-091/092; Business workflows and connections WH-093–100 plus existing WH-031/032/056; team/release/portfolio work WH-054/101–103 (the proposed [workspace collaboration contract](workspace-collaboration.md) covers WH-054; it is not frozen or implemented). Full paid launch still requires the complete selected matrix and all seven providers through WH-104/047/049. The independent bounded free-beta gate WH-048 remains separate. Standard AI is unlimited fair use with Monitor mode default; safety controls remain active. CSAM implementation, CMS testing and Daybreak remain owner-deferred.
 
 No provider purchase, app registration, customer consent, DNS operation, real checkout, paid feature grant or additional service is authorized by catalogue inclusion. The source changes add no database schema or dependency. Verification and any later test release are recorded below and in issue #44.
 

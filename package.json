@@ -30,6 +30,7 @@
     "test:runtime-ai": "node tests/runtime-ai.mjs",
     "test:directory-history": "node tests/directory-history.mjs",
     "test:directories": "node tests/directories.mjs",
+    "test:review-retention-contract": "node tests/review-retention-contract.mjs",
     "test:site-health": "node tests/site-health.mjs && node tests/site-diagnostics.mjs",
     "test:app-page-design": "node tests/app-page-design.mjs",
     "test:application-build": "node tests/application-build.mjs",
@@ -196,6 +197,7 @@
     "test:identity-recovery": "node tests/identity-recovery.mjs",
     "test:passkey-key-wrapping-contract": "node tests/passkey-key-wrapping-contract.mjs",
     "test:email-change-contract": "node tests/email-change-contract.mjs",
+    "test:email-change-revokers": "node tests/email-change-revokers.mjs",
     "test:identity-http": "node tests/identity-http.mjs",
     "test:identity-browser": "node tests/identity-browser.mjs --d1",
     "test:workspace-admission": "node tests/workspace-admission.mjs",
@@ -204,7 +206,12 @@
     "db:status": "node tools/database.mjs status",
     "test:current-schema": "node tests/current-schema.mjs",
     "test:photo-upload-recovery": "node tests/photo-upload-recovery.mjs",
-    "test:boundary-audit": "node tests/boundary-audit.mjs"
+    "test:boundary-audit": "node tests/boundary-audit.mjs",
+    "test:tenant-classification": "node tests/tenant-classification.mjs",
+    "test:tenant-schema-bodies": "node tests/tenant-schema-bodies.mjs",
+    "test:sqlite-authorizer": "node tests/sqlite-authorizer.mjs",
+    "test:tenant-sql-surface": "node tests/tenant-sql-surface.mjs",
+    "test:tenant-gates": "node tests/tenant-classification.mjs && node tests/tenant-schema-bodies.mjs && node tests/sqlite-authorizer.mjs && node tests/tenant-sql-surface.mjs"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

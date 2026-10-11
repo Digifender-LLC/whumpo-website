@@ -10,7 +10,7 @@ Routine releases are automatic: Cloudflare Workers Builds runs `pnpm run deploy 
 
 ## Prepare before changing anything (owner cutover)
 
-1. Keep one operator and a stable checkout. Review source, service contracts, provider obligations and the current database binding. Run the appropriate feature checks and `pnpm build`.
+1. Keep one operator and a stable checkout. Review source, service contracts, provider obligations and the current database binding. Run the appropriate feature checks and `pnpm build`. For a composed-schema change also run `pnpm test:tenant-gates` (the WH-054 tenant registry drift gates are not in the deploy build; see [verification](verification.md#wh-054-tenant-classification-gates--october-9-2026-utc)).
 2. Write a private review. For an unchanged current database:
 
    ```json
