@@ -1,6 +1,6 @@
 # WH-004 boundary audit: mounted Worker, scheduled and operator-tool registry
 
-**WH-004 slice 1 · October 8, 2026 UTC · source commit `ca17c6a`; slice 2 · October 8, 2026 UTC · base `21204da` · source and local-fixture evidence only.** Slice 1 is a checked, structural inventory of the platform Worker's mounted request surface with an evidence registry and three reproduced findings. Slice 2 extends the same registry to the `whumpo-sites`, `whumpo-apps` and `whumpo-runtime` Workers, Worker reachability declared in `wrangler*.jsonc`, the platform's public contact form and scheduled jobs, and operator tools under `tools/` that can reach remote state, with four more findings (three reproduced defects, one characterization). It is **not an exhaustive security claim**, not live or device acceptance, and does not close WH-004. Old green suites are cited only where a specific assertion line was read; a passing suite is never treated as proof of a scenario it does not exercise.
+**WH-004 slice 1 · October 8, 2026 UTC · source commit `ca17c6a`; slice 2 · October 8, 2026 UTC · base `21204da`; slice 3 · October 11, 2026 UTC · base `d948f06` · source and local-fixture evidence only.** Slice 1 is a checked, structural inventory of the platform Worker's mounted request surface with an evidence registry and three reproduced findings. Slice 2 extends the same registry to the `whumpo-sites`, `whumpo-apps` and `whumpo-runtime` Workers, Worker reachability declared in `wrangler*.jsonc`, the platform's public contact form and scheduled jobs, and operator tools under `tools/` that can reach remote state, with four more findings (three reproduced defects, one characterization). Slice 3 adds no mounted surface and no finding: it closes a bounded set of recorded evidence gaps with three standalone regressions that call the real handlers (see "Closed in slice 3"). It is **not an exhaustive security claim**, not live or device acceptance, and does not close WH-004. Old green suites are cited only where a specific assertion line was read; a passing suite is never treated as proof of a scenario it does not exercise.
 
 It extends the [October 1 source audit](tenant-authority-audit.md) (commit `a34a131`, findings A1–A3, all remediated). That document remains the historical record. This slice re-reviews current code, adds identity/admission, safety withdrawal, shared modules, guest previews and other surfaces added since, and makes the route inventory a regression guard.
 
@@ -18,7 +18,7 @@ Files: [`docs/boundary-audit.json`](boundary-audit.json) (registry), [`tools/bou
    - `gap`: `gapKind: "test"` means enforced but no test asserts it; `gapKind: "control"` means required by a contract or runbook but not enforced, and must name a finding;
    - `n/a`: with the reason (read-only, or not required by the current contract);
    - `unverified`: not established in this slice, with what is needed.
-3. **Anchors instead of line numbers.** Every enforcement and test citation is `{file, contains}`. The test checks that the file exists and still contains that exact text, so a deleted assertion or rewritten guard fails loudly, while unrelated edits do not. 710 anchors are checked (464 from slice 1).
+3. **Anchors instead of line numbers.** Every enforcement and test citation is `{file, contains}`. The test checks that the file exists and still contains that exact text, so a deleted assertion or rewritten guard fails loudly, while unrelated edits do not. 739 anchors are checked (464 from slice 1).
 4. **Review.** Four read-only reviews traced the privileged families end to end (cross-owner/project/visitor access, model-confirmation bypass, Origin, stale/replay, GET side effects). Every candidate finding was then re-checked in source by the auditor; the three reported below were **executed** against disposable fixtures. Candidates that could not be reproduced are listed as unverified risks. Slice 2 used four more read-only reviews (sites, apps, runtime/contact/scheduled, operator tools); the auditor re-checked each candidate in source, executed reproductions for B4–B6 and a characterization for B7, and kept everything not executed as an unverified risk.
 5. **Slice 2 extraction** (same tool, same offline compiler):
    - [`src/site-host.ts`](../src/site-host.ts) (both `fetch` handlers), [`src/app-host.ts`](../src/app-host.ts), [`src/app-gateway.ts`](../src/app-gateway.ts) `applicationGateway` and [`src/runtime/worker.ts`](../src/runtime/worker.ts): path matchers (including `new RegExp(...)` matchers, `[...].includes(pathname)` and the runtime's `if(method!=='POST'||pathname!=='/execute')return` form), **host/origin dispatch** (`customerProject(url.hostname)`, `url.hostname===guestPreviewHost`, `url.origin!==origin`, the custom-domain D1 lookup), and early-return **method refusals** (`if(method!=='GET'&&method!=='HEAD')return 405`, `!['GET','POST'].includes(method)`), which narrow the methods of every matcher they dominate. The platform's own `fetch()` host check is registered too.
@@ -56,12 +56,12 @@ Families: 52 (36 privileged; platform-api 28, visitor 17, service 1, scheduled 3
 
 | Cell | evidenced | gap | n/a | unverified |
 | --- | ---: | ---: | ---: | ---: |
-| authority | 37 | 3 | 12 | 0 |
+| authority | 39 | 1 | 12 | 0 |
 | origin | 42 | 0 | 4 | 0 |
 | freshness | 7 | 6 | 11 | 0 |
-| target | 34 | 1 | 2 | 0 |
+| target | 35 | 0 | 2 | 0 |
 | replay | 34 | 0 | 3 | 0 |
-| stale | 37 | 2 | 1 | 2 |
+| stale | 38 | 1 | 1 | 2 |
 | admission | 10 | 2 | 5 | 1 |
 | tenant | 22 | 0 | 0 | 1 |
 
@@ -80,16 +80,16 @@ Cells not recorded (not required for that family's surface and privilege): 137.
 | service-site-safety | platform-api | publish | 9 / 0 | evidenced | evidenced | gap (control B2) | evidenced | evidenced | evidenced | — | — |
 | cms | platform-api | cms, publish | 15 / 5 | evidenced | evidenced | n/a | evidenced | evidenced | evidenced | — | — |
 | backend | platform-api | publish, data-change | 10 / 3 | evidenced | evidenced | n/a | evidenced | evidenced | evidenced | — | — |
-| application-page | platform-api | publish | 2 / 1 | evidenced | evidenced | n/a | gap (test) | evidenced | evidenced | — | — |
+| application-page | platform-api | publish | 2 / 1 | evidenced | evidenced | n/a | evidenced | evidenced | evidenced | — | — |
 | visitor-access | platform-api | access, deletion | 1 / 0 | evidenced | evidenced | evidenced | evidenced | evidenced | evidenced | — | — |
 | application-activation | platform-api | activation | 2 / 1 | evidenced | evidenced | gap (control B2) | evidenced | evidenced | evidenced | — | — |
 | application-recovery | platform-api | data-change, activation | 0 / 2 | evidenced | evidenced | evidenced | evidenced | evidenced | evidenced | — | — |
 | shared-modules | platform-api | activation, access, deletion | 20 / 7 | evidenced | evidenced | evidenced | evidenced | evidenced | evidenced | — | — |
 | contacts-directory | platform-api | publish, deletion | 6 / 3 | evidenced | evidenced | gap (control B2) | evidenced | evidenced | evidenced | — | — |
-| domain-hosting | platform-api | dns-hosting | 3 / 0 | gap (test) | evidenced | n/a | evidenced | evidenced | gap (test) | — | — |
+| domain-hosting | platform-api | dns-hosting | 3 / 0 | evidenced | evidenced | n/a | evidenced | evidenced | evidenced | — | — |
 | domains | platform-api | dns-hosting, deletion | 1 / 3 | evidenced | evidenced | n/a | evidenced | evidenced | evidenced | — | — |
 | photos-files | platform-api | deletion | 2 / 1 | evidenced | evidenced | n/a | evidenced | evidenced | evidenced | — | — |
-| specification-service-clients | platform-api | publish, activation | 4 / 2 | gap (test) | evidenced | evidenced | evidenced | evidenced | evidenced | — | — |
+| specification-service-clients | platform-api | publish, activation | 4 / 2 | evidenced | evidenced | evidenced | evidenced | evidenced | evidenced | — | — |
 | guest-previews | platform-api | publish, deletion | 3 / 2 | evidenced | evidenced | n/a | evidenced | evidenced | evidenced | — | — |
 | site-publication | platform-api | publish, deletion | 5 / 3 | evidenced | evidenced | gap (control B2) | evidenced | evidenced | evidenced | — | — |
 | site-health | platform-api | no | 2 / 0 | evidenced | evidenced | — | — | — | — | — | — |
@@ -232,7 +232,19 @@ Slice 2 (source and configuration reading; none executed unless stated):
 
 ### Evidence gaps (code enforces, no test asserts)
 
-Recorded per cell in the registry. Notable: foreign-owner apply of a specification/service-client review; foreign-caller `GET /api/projects/:id/versions`; every `/api/domain-hosting` HTTP route and foreign refresh/disconnect; expiry of DNS, hosting, backup, domain-proof-removal, app-page, backend-form and module reviews; hosting proof-hash change before confirm; upgrade/rollback stale revision; page-review immutability; route-specific cross-origin tests for guest previews, contact messages, contact notifications and shared modules (the global gate is evidenced once and its position is machine-checked for every route); visitor cookie presented to owner routes.
+Recorded per cell in the registry. Notable and still open after slice 3: route-specific cross-origin tests for guest previews, contact messages, contact notifications and shared modules (the global gate is evidenced once and its position is machine-checked for every route). The slice 1 and 2 gaps for foreign applies, versions, `/api/domain-hosting`, expiry, hosting proof-hash change, upgrade/rollback stale revision, page-review immutability and the visitor cookie on owner routes are closed below.
+
+**Closed in slice 3** (October 11, 2026 UTC, base `d948f06`) by three standalone regressions, each with a negative control (the legitimate owner, or an identical unexpired review from the same state) so a refusal cannot be explained by anything but the property under test. They are **not** in a verify profile or `protection` (the R7 question is the owner's). Each runs on SQLite by default and on local D1 with `--d1`:
+
+- `tests/boundary-owner-authority.mjs` (through the platform Worker's default export and the typed `/api/chat/actions` control): owner B cannot apply owner A's specification review or service-client review (refused, no version, apply, head or Chat turn change; A's identical request applies); a foreign caller of `GET /api/projects/:id/versions` gets the same 404 as a missing project with no version id or digest, and an anonymous caller 401; a valid visitor application session (in the owner cookie slot, under its own name, or both) is 401 on six owner routes while the owner session is authenticated on the same routes; the owner session under either cookie name is 401 on the visitor gateway's export and deletion-review routes while the visitor's own session is admitted.
+- `tests/boundary-provider-reviews.mjs` (platform Worker for HTTP, domain handlers for the rest, provider and DNS calls recorded by stubs): every `/api/domain-hosting` route (list, review, confirm, refresh, disconnect) refuses an anonymous, cross-origin and foreign caller with the connection row unchanged and no DNS or provider call, while the owner is admitted on each (the owner's confirm reaches the DNS check); a hosting review made before the proof was renewed is refused with zero DNS or provider calls and a review of the renewed proof provisions; expired hosting, Cloudflare DNS, GitHub backup and domain-proof-removal reviews are refused with no provider or repository write and no state change, and each unexpired twin completes.
+- `tests/boundary-review-lifecycle.mjs` (domain handlers, stub runtime service): expired application-page and backend-form reviews are refused with the live page and form settings unchanged, an expired module-activation review is refused at the apply preflight, an expired upgrade check is refused; an application-page review ID reused with a different or removed form is a 409, direct rewrites of a stored page review and applied-to-pending are rejected by its trigger; an upgrade check and a program rollback review prepared before the application revision moved are refused with the program, version and documents unchanged. Each has an admitted current twin.
+
+How expiry was produced (no code under test is mocked): where the handler computes its own expiry in JavaScript (hosting, DNS, GitHub backup, domain-proof removal) the process clock is moved back only while the review is prepared, so the real handler stores an already-expired review; module-activation reviews are rejected at creation unless they are created within a minute of the database clock, so that one is applied with the process clock moved past its expiry (identity freshness uses the database clock and does not confound it); reviews that take the SQL default expiry (application page, backend form, upgrade check) have only their `expires_at` moved by dropping and immediately restoring the row's immutability trigger, as `tests/app-migration-checks.mjs` already does, and the commit-time expiry guard under test is never touched. Temporary local source mutations (one guard removed at a time and reverted; none is part of the change) made the matching check fail for the versions route ownership filter, hosting ownership, proof-hash and expiry checks, the DNS, GitHub backup and proof-removal expiry checks, the application-page expiry trigger and immutability, the backend-form expiry trigger, the module preflight expiry check, the upgrade check's revision and expiry predicates and the rollback revision predicate. The cookie-separation checks were not mutated.
+
+Shown by those mutation experiments, not a defect: a foreign apply is refused in more than one layer. With the application-level owner filters of the specification review read and project head removed, the SQL admission trigger still refused (409 instead of 404), so the regression asserts refusal and no change rather than one status.
+
+Still open after slice 3 (evidence only, no new finding): expiry of a program rollback review itself (its row takes the SQL default expiry, and the immutability and expiry guards share one trigger, so a fixture would have to drop the guard under test); the database-clock expiry guard in the module-activation apply trigger and the `domain_proof_removal_expired` trigger independently of their JavaScript preflight; the hosting proof-hash check inside the claim SQL (it is JavaScript only, prior hardening note); route-specific cross-origin tests listed above; and every item under "Still open (slice 2)". `tests/current-site-fixture.mjs` gained three exports (`serviceClientStore`, `reviewTXT`, `confirmDNS`); no other shared test file and no `src/`, schema, Worker configuration or frontend file changed.
 
 **Closed in slice 2** by two passing regressions, kept **standalone** (not in a verify profile): during the full `protection` run the visitor-gateway regression failed once in its shared `deletionFixture()` setup (`prepareAppPage` swallowed an insert error and returned `409 Page review unavailable`) and then passed three consecutive reruns in the same allowlisted environment, so it is not added to the deploy gate until that fixture flake is understood. The regressions are `tests/boundary-site-isolation.mjs` (through the sites Worker's default export on local D1: another project's published site and directory/CMS paths are not served by path on a project host; its backend and a pinned backend publication are refused there; custom and unmapped hosts never reach a backend; refused requests never reach the runtime) and `tests/boundary-visitor-gateway-isolation.mjs` (through `applicationGateway`: another project's session under either cookie name gets no data, export, receipt or deletion review; another visitor's receipt is 404; query strings, other methods, cross-site `Sec-Fetch-Site`, the API limiter and a foreign host are refused; a stale `pageId` admits no run).
 
@@ -278,6 +290,25 @@ git diff --check
 Port onto `main` `4dea09c` (October 9, 2026 UTC; slice 1 was already on `main` as #224): the registry check reported the #186 serving-stop guard's seven path comparisons and one moved anchor (the operator-containment apply check now also refuses a malformed digest). The guard was registered as the `operator-serving-stop` family, the anchor follows the current code, and the summary above was regenerated (52 families). The same slice 2 commands passed again with the same B1, B4, B5 and B6 exits, plus `node tests/operator-containment.mjs`.
 
 Rebuilt onto `main` `89fa009` (October 9, 2026 UTC) as `claude/wh-004-audit-visitor-workers-main-train2`, carrying only this slice; the B4 fix (#239) had been merged into the previous slice 2 branch instead of `main` and is re-stacked separately. Main's changes since `4dea09c` (WH-050 safety-hold classification, the WH-063 contract, the WH-001 summaries and the WH-073 runtime-Worker proof) moved no registered route, control, job, tool or anchor: `node tools/boundary-audit.mjs` and `node tests/boundary-audit.mjs` passed with the registry and summary unchanged, and the slice 2 suites gave the same B1, B4, B5 and B6 exits (1) and passing characterizations. The B4 fix, re-stacked on that branch as `claude/wh-004-b4-operator-target-main-train2`, applied without conflict: `node tests/boundary-operator-target.mjs` exits 0 and the registry check and `node tests/boundary-audit.mjs` pass.
+
+Slice 3, on Node 24.21.0 at base `d948f06` plus this change (nothing remote; no `src/` or schema file changed):
+
+```sh
+node tests/boundary-owner-authority.mjs              # regression (standalone; SQLite)
+node tests/boundary-owner-authority.mjs --d1         # same on local D1
+node tests/boundary-provider-reviews.mjs             # regression (standalone; SQLite)
+node tests/boundary-provider-reviews.mjs --d1        # same on local D1
+node tests/boundary-review-lifecycle.mjs             # regression (standalone; SQLite)
+node tests/boundary-review-lifecycle.mjs --d1        # same on local D1
+node tests/boundary-audit.mjs
+node tests/roadmap-alignment.mjs
+node tests/verification-profiles.mjs
+corepack pnpm check
+node tools/verify.mjs fast
+node tools/verify.mjs protection
+node tools/roadmap.mjs validate && node tools/roadmap.mjs alignment && node tools/roadmap.mjs render --check
+git diff --check
+```
 
 No remote, Cloudflare, provider or deployment operation was performed; fixtures are synthetic and disposable. No operator tool was run against a real account; the create-invite characterization runs the tool against a recording stub in a temporary directory. No `src/` or schema file changed.
 
@@ -337,6 +368,6 @@ node tests/boundary-audit.mjs                          # passed
 ## Remaining WH-004 work
 
 - Owner decisions and remediation for B1 and B5, the two open B6 policy questions (remediated in source), the B7 guard-rail question (and R2/R4/R8/R14 policy). B2 was resolved by correcting the runbook, B3 was fixed by #178 and B4 was fixed in the tool.
-- Close the remaining evidence gaps above with focused regressions where the owner wants them, and decide whether the ungated evidence suites (R7) should join a verify profile.
+- Close the remaining evidence gaps above with focused regressions where the owner wants them, and decide whether the ungated evidence suites (R7), including the three slice 3 regressions, should join a verify profile.
 - Verify live routing/activation (custom hostnames, contact delivery, `DOMAIN_HOSTING_READY`) with an owner-authorized read-only inspection.
 - Run the security scan workflow named in the packet against the current commit and reconcile with this registry.
