@@ -1,6 +1,6 @@
 # Chat test releases — October 2–3, 2026 UTC
 
-**Latest coordinated test release:** [workspace views, October 3](workspace-view-release.md) deploys source `81a7b9f` with 175 tables/796 objects and verifies the real-Muse saved-view lifecycle. The dated releases below retain their own earlier source/schema and verification scope.
+**Latest coordinated test release as of October 3:** [workspace views, October 3](workspace-view-release.md) deploys source `81a7b9f` with 175 tables/796 objects and verifies the real-Muse saved-view lifecycle. Later recorded deployments (the October 4 cutovers, 219 tables / 1,050 objects at the last initialization) are in [releases](releases.md); source at `d948f06` composes 221 tables / 1,063 objects. The dated releases below retain their own earlier source/schema and verification scope.
 
 **Previous coordinated release:** [bounded task-memory release](#bounded-task-memory-release--october-3-2026-utc), verified October 3 at 02:18 UTC. Earlier sections retain their exact historical verification scope.
 

@@ -326,3 +326,123 @@ node --input-type=module -e '...currentSchemaArtifact()...'   # 221 tables, 1,06
 gh run list --repo zemdregon/whumpo --workflow ci.yml --branch main; gh api repos/zemdregon/whumpo/actions/workflows
 node tests/roadmap-alignment.mjs && node tests/verification-profiles.mjs && corepack pnpm check && node tools/verify.mjs fast
 ```
+
+## Slice 3 (October 11, 2026 UTC, source `d948f06`)
+
+Third slice of [WH-001](backlog.md): reconcile counts and identifiers (tables, objects, classes, migrations, tasks, Workers, assets, verify-profile script counts, control-database name and ID) in README and `docs/*.md` against the source tree. Source commit: `d948f068a0caa4731f4713e13d80f2c2528ec390` (`origin/main`, committed 2026-10-10 04:31:28 -05:00; eight commits after `4dea09c`, the slice 2 re-check base). Branch `claude/wh-001-reconcile-slice3`. Repository-tree measurements and local offline tests only: no Cloudflare read, deployment, provider call, browser journey or device test, and no `gh` query. No `src/`, `schema/`, `frontend/`, Wrangler or test file changed. WH-001 stays open.
+
+Rules applied to every number found by grep over `README.md` and `docs/*.md` (excluding `docs/roadmap/backlog.*`):
+
+- **(a)** it describes the current source tree: updated and given "(source `d948f06`, October 11, 2026)".
+- **(b)** it is a dated statement about a specific release, test or checkpoint: the number is left, and a pointer to the measured current source count was added only where the surrounding text could be read as current (an undated or superseded "current"/"latest"/"deployed" label).
+- **(c)** it cannot be determined from the tree: left, and listed under [claims left unverified](#slice-3-claims-left-unverified).
+
+No source fact below is stated as the deployed state. The last recorded deployed counts are 219 tables / 1,050 objects at the October 4 initialization ([releases](../releases.md#pr-160-shared-modules-and-contact-email-cutover--october-4-2026-utc), digest `68617fbf...6f2742`); the current deployed control database, its inventory digest, Worker versions and asset sets need a fresh read-only readback.
+
+### Slice 3 measurements (tree, October 11, 2026)
+
+| Fact | Result | Command |
+| --- | --- | --- |
+| Source commit | `d948f068a0caa4731f4713e13d80f2c2528ec390`; no commit since `4dea09c` touched the six schema inputs, `tools/current-schema.mjs`, `tools/lifecycle-catalog.mjs`, the four Wrangler configs or `src/maintenance.ts` (the command printed nothing); `tools/verify.mjs` and `tests/verification-profiles.mjs` changed once (`b4453a6`, WH-063 adds `tests/email-change-contract.mjs` to `fast`) | `git rev-parse HEAD`; `git log --oneline 4dea09c..HEAD -- schema src/workspace-identity/canonical-inputs.sql src/workspace-identity/schema.sql src/funnel-metrics/schema.sql src/guest-previews/schema.sql src/shared-modules/schema.sql tools/current-schema.mjs tools/lifecycle-catalog.mjs wrangler.jsonc wrangler.sites.jsonc wrangler.apps.jsonc wrangler.runtime.jsonc src/maintenance.ts`; the same with `tools/verify.mjs tests/verification-profiles.mjs` |
+| Composed schema | **221 tables, 1,063 objects**, SHA-256 `42d5aaa76d22870d0aacbb96590c1e54f7f5c3ad434cbad4cc5ab024f0806388`, six files (identical to the `4dea09c` value) | throwaway script (kept outside the repository) calling `await currentSchemaArtifact()` from `tools/current-schema.mjs`; printed `{"sha256":"42d5aaa7...806388","objects":1063,"tables":221}` and `files` 6 |
+| Data classes | `Lifecycle catalog: 221 tables, 51 current and 6 planned data classes, 6 current schema sources; 25 direct non-cascading account references and 15 explicit unlinked ownership cases.` | `node tools/lifecycle-catalog.mjs` |
+| Catalog test | `Lifecycle catalog passed: 221 tables, 51 current/6 planned classes, 42 rejected contract/reference cases, complete protection/recovery metadata, owner FK blockers, and zero application-data reads.` | `node tests/lifecycle-catalog.mjs` |
+| Schema test | `Current schema passed on SQLite and actual local D1: complete catalog, passkey-only account shape, immutable spent invitations, empty initialization, repeat without writes, drift detection/refusal without data loss.` | `node tests/current-schema.mjs` |
+| Roadmap | **176 tasks, 7 phases**, dependencies acyclic and references exist | `node tools/roadmap.mjs validate` |
+| Verify profiles | `fast` 8 scripts, `protection` 15, `site` **3** (`customer-site-journey`, `standard-service-no-maintainer`, `request-path-inventory`), `app` 1; per-script timeout 300000 ms (five minutes) | throwaway script importing `profiles` from `tools/verify.mjs`; `tools/verify.mjs` |
+| Workers | Four Wrangler configs: `whumpo-platform` (`wrangler.jsonc`), `whumpo-sites`, `whumpo-apps`, `whumpo-runtime`; the first three bind D1 `whumpo-control-2026-10-04` (`dba4c707-a0c0-4084-969b-6c43f6afebde`) and R2 `whumpo-files`; `wrangler.runtime.jsonc` binds neither | `grep -n -E '"name"\|"main"\|database_\|bucket_name' wrangler*.jsonc` |
+| Platform assets | Build snapshot `assets.files` = **39** (38 files under `dist/` including `.vite/manifest.json` and `_headers`, plus `public-app/visitor.js`) | `node tools/build.mjs`, then read `.secrets/build-snapshot.json`; `find dist -type f \| wc -l` printed 38. The build rewrote the tracked `public-app/visitor.js` (13 lines); it was restored with `git checkout public-app/visitor.js` and the ignored `dist/` and `.secrets/` were removed |
+| Maintenance | 41 read-only queues, four receipt families, 14 shared platform counters; `maintenanceJobs` has 14 entries | `node tests/maintenance-inventory.mjs`; `src/maintenance.ts` line 1 |
+| Recovery drill | `inventory`: 79 control rows, 687,666 bytes, 221 tables, 1,144 restore statements, 4 credentials, 1 key ID, 2 objects (91 bytes), 4 runtime files; passed | `node tests/recovery-drill.mjs` |
+
+### Slice 3 claims changed (before -> after)
+
+| File:line (after edit) | Before | After | Cat. | Measured by |
+| --- | --- | --- | --- | --- |
+| `README.md:52` | "221 tables, 51 current and 6 planned data classes on October 9, 2026 (219 before #186 ...; that schema change awaits an owner-authorized cutover)" | adds 1,063 objects and "source `d948f06`, October 11, 2026"; states that no cutover after October 4 is recorded in `releases.md` and that the deployed database needs a fresh readback | a | schema artifact; lifecycle catalog |
+| `docs/capability-matrix.md:11` | no October 11 note | paragraph stating which rows were re-measured on `d948f06` and that nothing deployed was read | a | this section |
+| `docs/capability-matrix.md:15` | Schema row: 221 tables / 1,063 objects "October 9 re-check on `4dea09c`" | adds the October 11 re-check on `d948f06` (unchanged; digest, six files, 51 + 6 classes, 42 rejected cases; no schema/Wrangler/catalog commit since `4dea09c`) | a | schema artifact; both lifecycle commands; `git log` |
+| `docs/capability-matrix.md:16` | control database row: configs bind `whumpo-control-2026-10-04`; "no later cutover is recorded" | adds the October 11 re-check and the last recorded deployed counts (219 / 1,050); current deployed counts unknown | a/c | `grep database_ wrangler*.jsonc`; `releases.md` |
+| `docs/capability-matrix.md:18` | Roadmap size: 144 / 151 / 157 tasks with dates | adds **176 tasks** on `d948f06` | a | `roadmap validate` |
+| `docs/capability-matrix.md:19` | Maintenance: 41 queues, four families, 14 jobs (October 8) | adds the October 11 re-run of `tests/maintenance-inventory.mjs` and `maintenanceJobs` (unchanged) | a | maintenance inventory test |
+| `docs/capability-matrix.md:20` | no Workers/assets row | new row: four Worker configs; build-snapshot 39 asset files; deployed asset sets not re-read and the 39 / 40 figures in October 3 records are not compared (verifier counting rules not reproduced) | a/c | `node tools/build.mjs` |
+| `docs/acceptance.md:1` | top note: 219 -> 221 tables, 144 -> 157 tasks, last dates `4dea09c` | adds October 11 values (221 / 1,063 / 51 + 6; 176 tasks), frames the dated release counts below as those readbacks, gives the last recorded deployed counts | a/b | as above |
+| `docs/data-lifecycle.md:28` | opens with the October 8 WH-050 checkpoint (221 tables) | prefixed by "Re-measured October 11, 2026 on source `d948f06`: 221 tables, 51 current and 6 planned classes, six sources; source inventory only" | a | lifecycle commands |
+| `docs/data-lifecycle.md:49` | heading "Storage outside those 162 control tables" (inbound link already pointed at a nonexistent `...-those-148-...` anchor) | "Storage outside the control tables"; `docs/natural-language-chat.md:17` link retargeted to `#storage-outside-the-control-tables` | a | `docs/data-lifecycle.json` maps 221 tables; link check |
+| `docs/data-lifecycle.md:165` | "applies all 113 control migrations ... verifies 148 classified tables/31 classes, checks the 21 direct non-cascading owner references and two explicit unlinked-ownership cases" in the present tense | complete current schema, no numbered migrations, 221 tables in 51 + 6 classes, 42 rejected cases; the October 1 values kept as dated; current tool reports 25 direct references and 15 unlinked cases | a/b | `tests/lifecycle-catalog.mjs`; `tools/lifecycle-catalog.mjs` |
+| `docs/data-lifecycle.md:173` | "The catalog now covers ... **156 tables / 37 classes**" (under the dated October 1 heading) | adds "(October 1 value; 221 tables / 51 current + 6 planned classes at `d948f06`)" | b | lifecycle catalog |
+| `docs/data-lifecycle.md:180` | "The current catalogue now has **162 tables / 37 current classes**" (October 2 heading) | adds "(October 2 value; 221 tables / 51 + 6 at `d948f06`)" | b | lifecycle catalog |
+| `docs/data-protection.md:84` | "156 tables, 37 current classes, eight planned classes and 42 rejected ... cases" | adds "(October 2 result; ... 221 tables, 51 current and 6 planned classes and 42 rejected cases)" | b | lifecycle catalog |
+| `docs/feature-inclusion.md:80` | "The deployed schema contains 156 tables and 702 catalog objects. The lifecycle inventory classifies 156 tables in 37 classes" (present tense) | framed as the October 2 readback of release `40e45c39-...`, with the 221 / 1,063 source values, the October 4 recorded 219 / 1,050 and a note that the deployed database needs a fresh readback | b | schema artifact; `releases.md` |
+| `docs/identity-authority.md:37` | "registered in the 156-table/37-class platform lifecycle inventory and deployed through the current-schema cutover" | 221 tables in 51 + 6 classes at `d948f06`; October 2 value 156 / 37; deployed through the cutovers recorded in `releases.md` (latest October 4), not re-read | a/b | lifecycle catalog |
+| `docs/identity-web.md:66` | "covers all 156 current tables in 37 classes" ("Current source verification", undated) | adds the October 2 label and the `d948f06` value (221 tables, 51 + 6) | a/b | lifecycle catalog |
+| `docs/disaster-recovery.md:35` | "79 control rows (679,446 bytes logical) ...; admission inventoried 219 tables. The restore ran as 1,131 statements." | kept as the October 8 run; adds the October 11 re-run: 79 rows, 687,666 bytes, 221 tables, 1,144 statements (byte and statement differences not diagnosed) | b | `node tests/recovery-drill.mjs` |
+| `docs/releases.md:3` | "Current schema delivery contract, October 3, 2026 ... the Chat connection handoff/status release is current (... 177 tables/806 objects)" | "was current on October 3"; names the October 4 PR #160 cutover as the latest recorded deployment (219 / 1,050), the `d948f06` source (221 / 1,063) and the need for a readback | b | `releases.md` |
+| `docs/deployment.md:24` | Current resources: D1 `whumpo-control` (`418b20b6-bdba-4ff1-b265-da9da9ad5955`) | D1 `whumpo-control-2026-10-04` (`dba4c707-a0c0-4084-969b-6c43f6afebde`) as bound in the three Wrangler configs at `d948f06`; the earlier `whumpo-control` kept per `releases.md`; live bindings not re-read. This closes slice 2 drift item 3 | a | `grep database_ wrangler*.jsonc` |
+| `docs/deployment.md:27` | October 4 `whumpo-control` cutover paragraph, undated as to being superseded | pointer: the later PR #160 cutover replaced that database | b | `releases.md` |
+| `docs/deployment.md:29` | "**Current release, October 3, 2026:** ... unchanged 176-table/801-object schema" | "October 3, 2026 release (superseded by the October 4 cutovers ...; counts are that readback's)" | b | `releases.md` |
+| `docs/chat-test-release.md:3` | "**Latest coordinated test release:** workspace views, October 3 ... 175 tables/796 objects" | "...as of October 3" plus pointer to the October 4 cutovers (219 / 1,050) and `d948f06` (221 / 1,063) | b | `releases.md`; schema artifact |
+| `docs/docs-code-sync.md:1` | "Recorded test release `ee62cc7e-...` has all 113 migrations applied" (present tense) | "As of October 1 ... had all 113 migrations applied (no numbered migrations exist now; the October 4 cutover initialized the complete current schema)" | b | `current-version-policy.md`; `releases.md` |
+| `docs/cloudflare-capability-roadmap.md:9` | "the October 4 cutover initialized the complete current schema, 219 tables" | adds "source at `d948f06` on October 11 composes 221 tables" | b | schema artifact |
+| `docs/workspace-views-acceptance.md:14` | "The coordinated current source/client/schema cutover uses 175 tables" (undated requirement map) | "used 175 tables (October 3 values; source at `d948f06` on October 11 composes 221)" | b | schema artifact |
+| `docs/feature-acceptance.md:44` | "...is 221 / 1,063 since #186 on October 9" | adds "(re-measured at source `d948f06`, October 11)" | a | schema artifact |
+| `docs/verification.md:15` | `pnpm verify site`: "one script, five-minute ceiling" | "three scripts (`tests/customer-site-journey.mjs`, `tests/standard-service-no-maintainer.mjs` and `tests/request-path-inventory.mjs`) ..., five-minute ceiling each" | a | `profiles` in `tools/verify.mjs`; `tests/verification-profiles.mjs` |
+| `docs/roadmap/README.md:3` | "122 current tasks" (Aligned October 2) | keeps the dated 122 and adds "176 tasks in 7 phases at source `d948f06`" | b | `roadmap validate` |
+
+Re-confirmed with no change needed: `docs/verification.md` rows for `protection` ("Fifteen scripts", 75-minute maximum) and `fast` ("eight scripts", 40 minutes) match `profiles`; `README.md` names the `fast`, `protection`, `site` and `app` profiles; `docs/capability-matrix.md` "14 jobs" and "41 queues" match the maintenance test and `src/maintenance.ts`; the four-Worker count matches the four Wrangler configs.
+
+### Dated historical counts left unchanged (category b)
+
+Every remaining table, object, migration or class count in `docs/*.md` sits under a dated heading or in an entry with its own timestamp, and refers to the release, source checkpoint or test it names. Their words "current", "now" and "latest" mean current at that date. They were left as written; the current source values are above. Lines were found with `grep -n -o -E` over `README.md` and `docs/*.md` for a number followed by `table(s)`, `migration(s)`, `object(s)`, `class(es)` or `catalog objects`, then each hit's nearest heading and paragraph were checked for a date.
+
+| Files | Hits | Framing |
+| --- | --- | --- |
+| `docs/acceptance.md` | 18 | dated release and "Current MVP readiness - October 3" paragraphs (172-177 tables, 796-806 objects; 93-119 migrations); the matrix's October 1 baseline column |
+| `docs/capability-matrix.md` | 7 | October 1 baseline columns and "historical" sections (113 migrations, 148 / 31, 107 migrations, 27 queues, 16 assets) |
+| `docs/chat-connection-handoffs.md`, `docs/chat-interactions.md`, `docs/chat-routine-acceptance.md`, `docs/chat-routine-journeys.md`, `docs/chat-routine-release.md`, `docs/chat-test-release.md`, `docs/chat-workspace-continuity.md`, `docs/owner-usability-audit.md`, `docs/workspace-view-release.md` | 2 / 4 / 1 / 7 / 8 / 10 / 4 / 2 / 1 | October 2-3 checkpoints and release readbacks (165-177 tables, 760-806 objects) |
+| `docs/connection-key-lifecycle.md`, `docs/data-protection.md`, `docs/restore-admission.md`, `docs/verification.md`, `docs/workspace-views.md` | 3 / 5 / 2 / 15 / 8 | entries under "October 2/3, 2026 UTC" headings ("current schema has 163/164/165/172/173/175 tables") |
+| `docs/data-lifecycle.md` | 6 | October 1-4 checkpoints, each dated (148 to 215 tables; 29-51 classes) |
+| `docs/deployment.md`, `docs/releases.md`, `docs/maintenance.md`, `docs/content-safety.md`, `docs/usage-review-requests.md`, `docs/stripe-pricing-tables.md`, `docs/stripe-sandbox.md`, `docs/project-service-clients.md`, `docs/project-specification-storage.md`, `docs/owner-recovery.md`, `docs/workspace-agent.md`, `docs/workspace-refinement-acceptance.md`, `docs/natural-language-chat.md`, `docs/capability-planner.md` | 22 / 9 / 3 / 3 / 2 / 2 / 1 / 1 / 2 / 2 / 1 / 2 / 2 / 1 | release records with their own dates (93-119 migrations) |
+| `docs/protection-candidate.md`, `docs/feature-acceptance.md`, `docs/identity-web.md` (line 137) | 4 / 1 / 1 | already labelled as the October 2 pre-cutover or readback values (156 / 702, 165 / 760) |
+| `docs/emdash.md`, `docs/acceptance.md` (305, 313) | 8 / 2 | "73 tables / 180 rows" is an EmDash fixture database, not the Whumpo control schema |
+| `docs/photos.md`, `docs/connector-provider-readiness.md`, `docs/passkey-encryption-feasibility.md`, `docs/shared-modules.md`, `docs/incident-runbooks.md`, `docs/docs-code-sync.md` (line 12) | 2 / 1 / 1 / 1 / 1 / 1 | not schema counts (R2 bucket objects, provider page limits, "WH-116 data classes" headings, a September 30 resolution note) |
+
+### Slice 3 claims left unverified
+
+| Claim | Where | What would settle it |
+| --- | --- | --- |
+| Deployed control database table/object counts and inventory digest after October 4 | `docs/releases.md` (219 / 1,050 at `ebe32e52-...`), README, matrix | A read-only D1 inventory readback (for example `pnpm run deploy status`) with an owner-authorized, dated record. Source cannot say what is live: #186 changed the composed schema and `deploy ci` refuses a schema change |
+| Whether any automatic `deploy ci` release ran after October 4 and what it released | `docs/deployment.md` | The Workers Builds log or `pnpm run deploy status`; the journal lives only in the build log |
+| Deployed Worker versions, bindings and the four-Worker set | all dated release tables | Cloudflare read of the four Workers |
+| Deployed asset counts (16 on October 1; 39 and 40 on October 3) vs the 39-file build snapshot measured here | `docs/releases.md`, `docs/owner-usability-audit.md`, matrix | The verifier counting rules differ (for example `_headers` excluded, "40 public assets"); an archived release verification output for a current commit and a read of the deployed asset manifest |
+| Table, object and class counts at each past checkpoint (for example 172 / 785, 175 / 798, 177 / 806, classes 39 / 42 / 50) | category (b) table above | Replaying `currentSchemaArtifact()` and `tools/lifecycle-catalog.mjs` on each historical commit; not attempted |
+| Migration counts 93 to 119 in dated readbacks | `docs/deployment.md`, `docs/releases.md` and others | They describe the numbered-migration era (removed); no current source can confirm them |
+| EmDash fixture "73 tables / 180 rows" | `docs/emdash.md`, `docs/acceptance.md` | Re-running the EmDash recovery suites (not run here) |
+| "26/122 tasks complete" and similar | `docs/acceptance.md` | The backlog has no completion field |
+
+### Drift found and not fixed (slice 3)
+
+1. `node tools/build.mjs` regenerates the tracked file `public-app/visitor.js` with a 13-line difference on this toolchain (reverted here). Either the committed file was built with a different esbuild or the build is not byte-reproducible; not diagnosed.
+2. Many chronological logs (`docs/verification.md`, `docs/workspace-views.md` and the Chat release records) repeat "current" counts under dated headings. Only superseded labels were annotated. A shorter authoritative "current counts" generator would stop this drift; that is a tooling change outside this slice.
+3. `docs/deployment.md:86` (re-read here, not edited: not a count or identifier) still says `ci.yml` runs only type-check, build and the roadmap render check, that secret scanning is a GitHub repository setting, and "deploy locally with Wrangler". `.github/workflows/ci.yml` has a `Secret scan` job (gitleaks, `--no-git`), and the top of the same file says merge to `main` deploys and agents must not deploy by hand. This is slice 2 drift item 7, still open.
+4. A throwaway link and anchor check over the 21 edited Markdown files found two dangling anchors in text this slice did not touch: `docs/deployment.md` links `standard-ai-accounting.md#standard-chat-activation-verification--september-30-2026`, and `docs/releases.md` links `project-specification-storage.md#verification-and-deployment`. Neither target heading exists. Not fixed (outside counts and identifiers); the check had no other findings.
+
+### Commands run (slice 3)
+
+```sh
+export TMPDIR=/home/ubuntu/tmp-wh001s3
+git rev-parse HEAD; git log --oneline 4dea09c..HEAD -- <schema, Wrangler and verify paths>
+node tools/lifecycle-catalog.mjs && node tests/lifecycle-catalog.mjs && node tests/current-schema.mjs
+node <throwaway>/schema.mjs      # await currentSchemaArtifact(): 221 tables, 1063 objects
+node <throwaway>/prof.mjs        # profiles: fast 8, protection 15, site 3, app 1
+node tools/roadmap.mjs validate  # 176 tasks, 7 phases
+node tests/maintenance-inventory.mjs
+node tests/recovery-drill.mjs
+node tools/build.mjs             # then .secrets/build-snapshot.json assets.files = 39; reverted public-app/visitor.js
+grep -n -o -E '<number> table|migration|object|class ...' README.md docs/*.md
+node tools/roadmap.mjs render && node tools/roadmap.mjs render --check && node tools/roadmap.mjs validate && node tools/roadmap.mjs alignment
+node tests/connection-discovery-context.mjs && node tests/connector-provider-readiness.mjs && node tests/roadmap-alignment.mjs
+node tests/verification-profiles.mjs && node tests/lifecycle-catalog.mjs
+node tools/verify.mjs fast
+git diff --check
+```

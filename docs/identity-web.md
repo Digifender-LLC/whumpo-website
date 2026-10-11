@@ -63,7 +63,7 @@ The client closes workspace access on current identity refusal, clears cached ac
 - `tests/workspace-admission.mjs` passes 21 checks on both engines, including revocation immediately before real batch admission, no partial commit, actual HTTP project creation, Chat refusal, proof age, epoch and no post-revocation transport send.
 - `tests/feature-admission.mjs` passes 37 refusal cases on both engines. Actual HTTP/Chat/OAuth adapters, feature loss during asynchronous work, exact review/dispatch, read-only recovery, revoked callback custody and scheduled cleanup use synthetic transports only.
 - `tests/workspace-identity-browser.mjs --d1` passes the real mobile app entry with Chromium WebAuthn: two keys, one-time kit, identity-before-profile, first-project welcome, current Chat, draft reload, and workspace closure with no new Chat turn after revocation. This does not establish physical-device acceptance.
-- Lifecycle validation covers all 156 current tables in 37 classes using metadata only. Expired identity records have bounded scheduled cleanup; verified pending enrollment/recovery is retained.
+- Lifecycle validation covers all 156 current tables in 37 classes using metadata only (October 2 result; at source `d948f06` on October 11 it covers 221 tables in 51 current and 6 planned classes, `node tests/lifecycle-catalog.mjs`). Expired identity records have bounded scheduled cleanup; verified pending enrollment/recovery is retained.
 - Service-client compiler **v3** replaces v2 in the current catalog because password utility removal changed a pinned dependency. Its new immutable lock and independent reproduction test pass; old manifests cannot acquire current compiler authority.
 
 ### Connected fixtures and review-page correction — October 2, 2026 UTC
