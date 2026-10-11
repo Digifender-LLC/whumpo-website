@@ -623,6 +623,11 @@ async function suite(m,mode){
   e.prov.onCall=async()=>{e.store.patch(e.id,{state:'revoking',generation:2,refreshClaim:null});};
   await rejects(()=>e.refresh(),'REFRESH_DISCARDED_UNSTASHED');
   assert.equal(e.record().revocationWork.length,e.m.custodyLimits.maxRevocationWork);
+  // A refused response whose issued refresh token cannot be kept is reported as unstashed, not as a plain refusal.
+  const g=await env();full(g);
+  g.prov.tokenReplies.push({json:{access_token:ACCESS(2),token_type:'Bearer',expires_in:0,refresh_token:REFRESH(2)}});
+  await rejects(()=>g.refresh(),'REFRESH_DISCARDED_UNSTASHED');
+  assert.equal(g.record().state,'active');assert.equal(g.record().revocationWork.length,g.m.custodyLimits.maxRevocationWork);
   // A widened response with no room to keep the live retained credential leaves it as custody.
   const f=await env();full(f);
   f.prov.tokenReplies.push({json:{access_token:ACCESS(2),token_type:'Bearer',expires_in:3600,scope:`${googleScopes[0]} https://www.googleapis.com/auth/drive`}});
@@ -813,6 +818,7 @@ const mutants=[
  ['refresh request follows redirects',"body:form(fields),redirect:'manual',signal:AbortSignal.timeout(custodyLimits.timeoutMs)});","body:form(fields),redirect:'follow',signal:AbortSignal.timeout(custodyLimits.timeoutMs)});"],
  ['GitHub access delete settles refresh custody',"const everything=kind==='local-only-owner-removal'||complete&&(kind==='rfc7009'","const everything=kind==='local-only-owner-removal'||complete&&(kind==='github-token-delete'||kind==='rfc7009'"],
  ['competing revocation claim ignored',"if(!await store.claimRevocation(record.id,{claimId,expiresAt:clock()+custodyLimits.revocationLeaseMs,now:clock()})){","await store.claimRevocation(record.id,{claimId,expiresAt:clock()+custodyLimits.revocationLeaseMs,now:clock()});if(false){"],
+ ['refused response with an unkeepable refresh token reported as a plain refusal',"issuedKept?grant.code:'REFRESH_DISCARDED_UNSTASHED'","grant.code"],
  ['none and retained-unused providers may refresh',"check(entry.authorization.refresh==='single-flight','REFRESH_NOT_ALLOWED',record.providerId);",""],
 ];
 const killedBy={
@@ -834,6 +840,7 @@ const killedBy={
  'refresh request follows redirects':'the token request is the fixed catalog endpoint',
  'GitHub access delete settles refresh custody':'GitHub token delete: an access-token delete does not settle the retained refresh credential',
  'competing revocation claim ignored':'competing disconnects make at most one provider call',
+ 'refused response with an unkeepable refresh token reported as a plain refusal':'a credential that cannot be preserved as revocation work is reported, and a live credential is not cleared without it',
  'none and retained-unused providers may refresh':'providers with refresh kind none or retained-unused never refresh',
 };
 let killed=0;

@@ -220,7 +220,7 @@ export function createCredentialCustody(options:CustodyOptions){
    check(body!==undefined,'REFRESH_UNCERTAIN',record.providerId);
    const grant=admitGrant(body,record.scopes,entry);
    if('code' in grant){
-    await stash(record,claimId,grant.issuedRefresh);
+    const issuedKept=await stash(record,claimId,grant.issuedRefresh);
     if(grant.code==='SCOPE_WIDENED'){
      // Store nothing from the widened response. The grant that was refused is still live at the provider, so the
      // retained refresh credential also becomes revocation work before reauthorization is required.
@@ -228,7 +228,8 @@ export function createCredentialCustody(options:CustodyOptions){
      // Cleared only once the live credential is preserved as work; if the work list is full it stays custody.
      if(kept)finished=await store.markReauthorizationRequired(record.id,claimId);
     }
-    throw new ConnectorContractError(grant.code,record.providerId);
+    // An issued refresh credential that could be neither used nor kept as work is reported, never dropped quietly.
+    throw new ConnectorContractError(issuedKept?grant.code:'REFRESH_DISCARDED_UNSTASHED',record.providerId);
    }
    const next=record.generation+1;
    let candidate:CustodyNext;
