@@ -198,6 +198,7 @@
     "test:email-change-contract": "node tests/email-change-contract.mjs",
     "test:connector-credential-custody": "node tests/connector-credential-custody.mjs",
     "test:connector-lookup-consent": "node tests/connector-lookup-consent.mjs",
+    "test:connector-rule-authority": "node tests/connector-rule-authority.mjs",
     "test:identity-http": "node tests/identity-http.mjs",
     "test:identity-browser": "node tests/identity-browser.mjs --d1",
     "test:workspace-admission": "node tests/workspace-admission.mjs",
