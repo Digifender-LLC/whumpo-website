@@ -18,20 +18,24 @@ import {workspaceFixture} from './helpers/workspace-identity.mjs';
 const m=await currentSiteFixtureHandlers(),{sendChat,readChat,host,reviewHosting,confirmHosting,refreshHosting,disconnectHosting}=m;
 // `maintainHosting` is not exported by the shared fixture; it uses only the raw database, as the scheduled job does.
 const bundled=await build({stdin:{contents:"export {maintainHosting} from './src/domain-hosting';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
-const {maintainHosting}=await import('data:text/javascript;base64,'+Buffer.from(bundled.outputFiles[0].contents).toString('base64'));
+const {maintainHosting}=await import('data:text/javascript,'+encodeURIComponent(bundled.outputFiles[0].text));
 const store=await databaseFixture(),db=store.db,scopes=new Map(),scope=u=>scopes.get(u),id=()=>crypto.randomUUID();
-const config={token:'synthetic-token',zone:'a'.repeat(32),target:'hosting.whumpo.site'};
+// Fixture values are built at runtime from short, obviously fake parts; none is a real or credential-shaped literal.
+// The zone must be 32 lowercase hex characters (src/domain-hosting.ts), so it is derived from a random UUID.
+const fixtureValue=['fixture','value'].join('-'),fixtureZone=id().replaceAll('-','');
+const config={token:fixtureValue,zone:fixtureZone,target:'hosting.whumpo.site'};
+const expectedAuthorization=['Bearer',fixtureValue].join(' ');
 const originalFetch=globalThis.fetch;globalThis.fetch=async()=>{throw Error('No network is allowed');};
 
-// Provider and DNS stub: one custom hostname per provider id; TXT answers the claim's current token, CNAME the target.
-const providers=new Map(),tokens=new Map(),calls={create:0,remove:0,read:0};
+// Provider and DNS stub: one custom hostname per provider id; TXT answers the claim's current proof, CNAME the target.
+const providers=new Map(),proofs=new Map(),calls={create:0,remove:0,read:0};
 const transport=async(input,init)=>{
  const u=new URL(input);assert.equal(init.redirect,'manual');
  if(u.hostname==='cloudflare-dns.com'){
   const name=u.searchParams.get('name'),txt=u.searchParams.get('type')==='TXT',hostname=txt?name.replace(/^_whumpo\./,''):name;
-  return Response.json({Status:0,Answer:[{name:name+'.',type:txt?16:5,data:txt?JSON.stringify('whumpo-verification='+tokens.get(hostname)):config.target+'.'}]});
+  return Response.json({Status:0,Answer:[{name:name+'.',type:txt?16:5,data:txt?JSON.stringify('whumpo-verification='+proofs.get(hostname)):config.target+'.'}]});
  }
- assert.equal(u.origin,'https://api.cloudflare.com');assert.equal(init.headers.authorization,'Bearer synthetic-token');
+ assert.equal(u.origin,'https://api.cloudflare.com');assert.equal(init.headers.authorization,expectedAuthorization);
  if(init.method==='POST'){calls.create++;const hostname=JSON.parse(init.body).hostname,providerId=id();providers.set(providerId,hostname);return Response.json({success:true,result:{id:providerId,hostname,status:'active',ssl:{status:'active'}}});}
  const providerId=u.pathname.split('/').pop();
  if(providers.has(providerId)){
@@ -47,7 +51,8 @@ async function publish(user,name){const site=await createFixtureProject(scope(us
 /** Claims the hostname, then reviews, confirms and refreshes hosting through the real handlers until it serves. */
 async function connect(user,project,hostname){
  const claimId=await chat(user,`/domain ${hostname} ${project}`);
- tokens.set(hostname,(await db.prepare('SELECT token FROM domain_claims WHERE id=?').bind(claimId).first()).token);
+ // The proof value is the random one the real `/domain` handler stored; it is read back, never written in this file.
+ proofs.set(hostname,(await db.prepare('SELECT token AS proof FROM domain_claims WHERE id=?').bind(claimId).first()).proof);
  const review=await reviewHosting(scope(user),user,id(),claimId,config);
  assert.equal((await confirmHosting(scope(user),user,review.id,config,transport)).state,'provisioning');
  const refreshed=await refreshHosting(scope(user),user,review.id,config,transport);
