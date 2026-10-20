@@ -352,7 +352,7 @@ process.exitCode=problems.length?1:0;
 | WH-140 [connector contract](connectors.md) | Merged (#116) | Connectors guide: revocation lifecycle, no token export, planned providers unavailable. |
 | WH-068 [notification contract](notifications.md) | Merged (#180) | Notifications guide: platform sender only, no customer-domain sender, consent not portable. |
 | WH-070 presentation contract (`docs/customer-presentation.md`) | Unmerged; re-ported onto `main` as branch `claude/wh-070-presentation-contract-main`, not linked here | Its planned deterministic composition export (WH-167) is labelled as needing Whumpo module APIs. That matches the frozen rule that `frontend/<id>/` is never runnable. Re-check when it merges. |
-| WH-061 review retention design (`docs/review-retention.md`) | Unmerged branch `claude/wh-061-review-retention-design-rb` | Proposes digest-only directory snapshots outside a history window. That affects history restore inside Whumpo, not the one snapshot in the bundle. |
+| WH-061 review retention design (`docs/review-retention.md`) | Now on `main` as a design and offline reference (`docs/review-retention.md`, `tools/prototypes/review-retention.mjs`, `tests/review-retention-contract.mjs`; merged as #275); formerly branch `claude/wh-061-review-retention-design-rb` | Proposes digest-only directory snapshots outside a history window. That affects history restore inside Whumpo, not the one snapshot in the bundle. |
 | WH-018 account export | Unmerged (PR #170) | Chat history and the contact inbox omission. |
 
 ## Sources (retrieved October 9, 2026 UTC)
@@ -397,7 +397,7 @@ Fetched with Firecrawl scrape (live fetch), WebFetch or the Cloudflare documenta
 
 - **Contact inbox download.** The contract no longer claims an inbox export: the only path is the owner's private inbox read (up to 100 unexpired messages), with no file download. The exclusion keeps its frozen v1 name `contact-inbox-separate-export`. Open decision: add an owner download of unexpired messages, or keep the inbox out of every export.
 - **No adapter evidence.** Every replacement here is customer-chosen standard software, so these guides make no adapter claim. Any future WH-188 runner or loader must update its guide only with WH-189 evidence.
-- **Unmerged inputs.** WH-187, WH-070, WH-061 and WH-018 are unmerged (the WH-186 contract merged as #225). Recheck every "unmerged" label when each one merges, especially WH-070's composition export and WH-187's bounds.
+- **Unmerged inputs.** WH-187, WH-070 and WH-018 are unmerged; WH-061's design is now on `main` (#275), and the WH-186 contract merged as #225. Recheck every "unmerged" label when each one merges, especially WH-070's composition export and WH-187's bounds.
 - **Not re-verified here:** registry-specific transfer rules, email provider pricing, identity provider pricing, and whether Cron Triggers are on Workers Free. All of these require verification.
 - The [open owner decisions](portable-exports.md#open-owner-decisions) of the contract (first runnable subset, allowance, visitor data and hold disclosure, one static path, signatures, adapter license and prepared-bundle retention) are unchanged.
 
