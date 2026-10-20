@@ -143,7 +143,7 @@ Dedupe and current-operation recovery continue: a redelivery or later revision w
 
 ## Source adapters (WH-169)
 
-Status: **implemented as local source, not wired, not merged.** Evidence level: source library plus connected local fixtures on the current schema. It is not a ledger, an emission path or live acceptance.
+Status: **implemented as source on main (`src/cost-events.ts`, `src/cost-event-adapters.ts`, `tests/cost-event-adapters.mjs`), not wired.** Previously recorded as "local source, not merged". Evidence level: source library plus connected local fixtures on the current schema. It is not a ledger, an emission path or live acceptance.
 
 **What it is.** `validateCostEvent(input)` enforces every rule of the *Envelope* table and returns a private snapshot, throwing `CostEventError` with the specific code at the first broken rule. The registries (`dimensions`, `workloads`, `sources`, `tariffs`, the reason/class/outcome/basis/pool/tier lists) are deeply frozen at runtime, arrays included (TypeScript `readonly` alone does not stop a JavaScript caller pushing a value, so a `push`, `splice`, `sort` or index write throws `TypeError` and cannot change a later admission decision), and are module constants: there is no runtime registration and no registry argument, so a later packet registers its dimension, workload, tariff and adapter in one reviewed change to this module. `idempotencyKey({source, sourceEventId, dimension})` is the SHA-256 of the canonical (sorted-key) JSON of those three fields. The pinned tariff `pool-proposal@1` is the planning tariff of [`resourceTariff`](../src/resource-economics.ts), effective from September 30, 2026 (a Whumpo proposal, not an invoice).
 
