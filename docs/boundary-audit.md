@@ -386,3 +386,19 @@ What it covers: the confirming statement is the one the real `domainProofRemoval
 Every refusal also checks that the proof, the pending review, the activity log and the atomically batched confirm turn are unchanged. Each refusal has a passing twin that differs only in the property under test.
 
 What it does not prove: the Chat routing and conversation-revision check (covered by `tests/domain-proof-removal.mjs`); the HTTP/Origin path; trigger behaviour on remote D1; that the test fails under a mutation (no guard was removed). **Not run when written:** shell access was unavailable in this session, so neither `node tests/boundary-domain-proof-removal-sql.mjs` nor `--d1` has been executed. It is standalone and outside verify profiles (R7).
+
+## Registry sync note (October 21, 2026 UTC)
+
+Docs-only. `boundary-audit.json` now cites, in the `detail` text of the cell each covers, the merged tests that earlier notes said the registry did not yet cite. The "Still open" lists above are historical. Status is as recorded by each slice's note, not re-run here:
+
+- `billing-owner` `authority`: `tests/boundary-billing-portal-customer.mjs` (not run when written).
+- `operator-safety-cases` `freshness`: `tests/boundary-operator-freshness.mjs` (not run when written).
+- `public-contact-form` `admission`: `tests/boundary-contact-admission.mjs` (passed on SQLite; `--d1` not run).
+- `site-backend` `target`: `tests/boundary-backend-digest.mjs` (passed on SQLite and `--d1`).
+- custom-domain serving `tenant`: `tests/boundary-custom-domain-owner.mjs` (not run when written).
+- visitor application gateway `stale`: `tests/boundary-visitor-deletion-hold.mjs` (passes).
+- contact messages/notifications `origin` and visitor-modules `origin`: `tests/boundary-origin-routes.mjs` (run result not recorded).
+- `domains` `stale`: `tests/boundary-domain-proof-removal-sql.mjs` (not run when written).
+- visitor-modules `tenant`: `tests/boundary-module-file-read.mjs` (added, not yet verified locally; it stopped at fixture setup because python3 has no Pillow).
+
+`tests/boundary-photo-route-held.mjs` is only in open PR #321, not on main, so no cell cites it. The photo-route held specification and host-level 429 gaps stay open.
