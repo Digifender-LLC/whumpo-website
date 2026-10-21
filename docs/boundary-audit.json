@@ -830,7 +830,7 @@
     },
     "freshness": {
      "state": "evidenced",
-     "detail": "Passkey proof under ten minutes, checked before the action and again in the committing SQL (the in-SQL recheck path itself is untested).",
+     "detail": "Passkey proof under ten minutes, checked before the action and again in the committing SQL (the in-SQL recheck path is covered by tests/boundary-operator-freshness.mjs: test added; not run when written, not yet verified locally).",
      "enforcedAt": [
       {
        "file": "src/safety-cases.ts",
@@ -1060,7 +1060,7 @@
    "cells": {
     "authority": {
      "state": "evidenced",
-     "detail": "Checkout, refresh and portal key on the owner's order and stripe_customers row. No test calls the portal for an owner without a customer (code returns 409).",
+     "detail": "Checkout, refresh and portal key on the owner's order and stripe_customers row. The portal for an owner without a customer (code returns 409) is covered by tests/boundary-billing-portal-customer.mjs (test added; not run when written, not yet verified locally).",
      "enforcedAt": [
       {
        "file": "src/stripe-billing.ts",
@@ -3767,7 +3767,7 @@
     },
     "origin": {
      "state": "evidenced",
-     "detail": "Mutating methods pass the global exact-Origin gate (position machine-checked). The typed-control path has a cross-origin test; the contact-notification PUT/DELETE/POST and message DELETE routes rely on the gate without a route-specific test.",
+     "detail": "Mutating methods pass the global exact-Origin gate (position machine-checked). The typed-control path has a cross-origin test; the contact-notification PUT/DELETE/POST and message DELETE routes have route-specific cross-origin tests in tests/boundary-origin-routes.mjs (test added; run result not recorded here).",
      "enforcedAt": [
       {
        "file": "src/index.ts",
@@ -4168,7 +4168,7 @@
     },
     "stale": {
      "state": "evidenced",
-     "detail": "Expired proofs are refused; proof renewal invalidates older removal reviews. A removal review past its expiry is tested since slice 3: the explicit expiry reply leaves the proof in place and its unexpired twin removes it (the SQL trigger guard behind that reply is not independently exercised).",
+     "detail": "Expired proofs are refused; proof renewal invalidates older removal reviews. A removal review past its expiry is tested since slice 3: the explicit expiry reply leaves the proof in place and its unexpired twin removes it (the SQL trigger guard behind that reply is exercised independently by tests/boundary-domain-proof-removal-sql.mjs: test added; not run when written, not yet verified locally).",
      "enforcedAt": [
       {
        "file": "schema/platform.sql",
@@ -5813,7 +5813,7 @@
     },
     "admission": {
      "state": "evidenced",
-     "detail": "Per-IP API_LIMITER, fail-closed Turnstile (secret and site key required outside local; hostname/action/cdata bound), per-client daily allowance (10, counted before verification), hourly and retained caps in the commit trigger. The per-IP 429 and missing-token branches are untested.",
+     "detail": "Per-IP API_LIMITER, fail-closed Turnstile (secret and site key required outside local; hostname/action/cdata bound), per-client daily allowance (10, counted before verification), hourly and retained caps in the commit trigger. The per-IP 429 and missing-token branches are covered by tests/boundary-contact-admission.mjs (passed on local SQLite when written; --d1 not yet run).",
      "enforcedAt": [
       {
        "file": "src/contact-page.ts",
@@ -6411,7 +6411,7 @@
     },
     "target": {
      "state": "evidenced",
-     "detail": "Immutable source digest-checked at serve time (the 503 branch is untested); prepared-but-unconfirmed publications do not run.",
+     "detail": "Immutable source digest-checked at serve time (the 503 branch is covered by tests/boundary-backend-digest.mjs, passed on local SQLite and local D1); prepared-but-unconfirmed publications do not run.",
      "enforcedAt": [
       {
        "file": "src/backend-publication.ts",
@@ -6508,7 +6508,7 @@
     },
     "tenant": {
      "state": "evidenced",
-     "detail": "Mapping requires state active, unexpired serving window, provider id and the connection owner still owning the project (owner-join refusal itself is untested; only an operator can change ownership).",
+     "detail": "Mapping requires state active, unexpired serving window, provider id and the connection owner still owning the project (owner-join refusal is covered by tests/boundary-custom-domain-owner.mjs: test added; not run when written, not yet verified locally; only an operator can change ownership).",
      "enforcedAt": [
       {
        "file": "src/site-host.ts",
@@ -7488,7 +7488,7 @@
     },
     "stale": {
      "state": "evidenced",
-     "detail": "Stale, expired or changed-actor reviews are refused. A safety hold refusal surfaces as a generic 503 (untested through the gateway).",
+     "detail": "Stale, expired or changed-actor reviews are refused. A safety hold refusal surfaces as a generic 503 (covered through the gateway by tests/boundary-visitor-deletion-hold.mjs, which passes).",
      "enforcedAt": [
       {
        "file": "src/app-lifecycle.ts",
@@ -7738,7 +7738,7 @@
     },
     "origin": {
      "state": "evidenced",
-     "detail": "Shared gateway gate (route-specific upload test missing).",
+     "detail": "Shared gateway gate; the route-specific modules/upload test is tests/boundary-origin-routes.mjs (test added; run result not recorded here; its negative control proves the request reaches the upload handler, not a real write).",
      "enforcedAt": [
       {
        "file": "src/app-gateway.ts",
@@ -7777,7 +7777,7 @@
     },
     "tenant": {
      "state": "evidenced",
-     "detail": "Resources resolve only within the host project; A's resources on B's host are not_found, including uploads.",
+     "detail": "Resources resolve only within the host project; A's resources on B's host are not_found, including uploads. files.read naming a foreign file id by authorized staff is covered by tests/boundary-module-file-read.mjs (test added, not yet verified locally: it stopped at fixture setup because python3 has no Pillow).",
      "enforcedAt": [
       {
        "file": "src/shared-modules/registry.ts",
