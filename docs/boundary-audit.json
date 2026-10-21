@@ -6994,13 +6994,19 @@
      ]
     },
     "admission": {
-     "state": "gap",
-     "gapKind": "test",
-     "detail": "Per-IP API_LIMITER on the page shell; no test asserts its 429.",
+     "state": "evidenced",
+     "detail": "Per-IP API_LIMITER on the page shell; tests/boundary-visitor-shell-admission.mjs asserts the 429 (keyed page:<cf-connecting-ip>, before the live-page lookup and the shell asset) and that an admitted request still gets the shell (not run when written).",
      "enforcedAt": [
       {
        "file": "src/app-host.ts",
        "contains": "if(!(await env.API_LIMITER.limit({key:'page:'+(request.headers.get('cf-connecting-ip')??'unknown')})).success)"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/boundary-visitor-shell-admission.mjs",
+       "contains": "assert.equal(response.status,429,`limited shell GET (${ip??'no cf-connecting-ip'})`);",
+       "asserts": "a denying limiter answers the page shell with 429 before any page lookup or asset fetch"
       }
      ]
     },
