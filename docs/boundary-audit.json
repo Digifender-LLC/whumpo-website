@@ -5955,11 +5955,15 @@
     },
     "tenant": {
      "state": "evidenced",
-     "detail": "On a project host the path is rewritten under /s/<that project>, so another project's /s/<id> path never matches a route. The `local` alias is derived from the request host name (localhost/127.0.0.1), which the *.whumpo.site route cannot deliver; not verified live (R10).",
+     "detail": "On a project host the path is rewritten under /s/<that project>, so another project's /s/<id> path never matches a route. The `local` alias is derived from the request host name (localhost/127.0.0.1), which the *.whumpo.site route cannot deliver; not verified live (R10). A visitor-application host (app-<uuid>.whumpo.site) is handed to APP_HOST before any site route, and fails closed with a 503 when the binding is absent, so the project's published site never runs on the origin that holds its visitors' sessions; asserted by tests/boundary-apps-host-forwarding.mjs (passes on local SQLite and --d1; standalone). The live service binding is not verified (R10).",
      "enforcedAt": [
       {
        "file": "src/site-host.ts",
        "contains": "if(project)url.pathname='/s/'+project+url.pathname;"
+      },
+      {
+       "file": "src/site-host.ts",
+       "contains": "if(visitorProject(url.hostname))return env.APP_HOST?env.APP_HOST.fetch(request):new Response('Application unavailable',{status:503,headers});"
       }
      ],
      "tests": [
@@ -5967,6 +5971,16 @@
        "file": "tests/boundary-site-isolation.mjs",
        "contains": "assert.equal((await fetchHost(`https://${a.project}.whumpo.site${path}`)).status,404,path);",
        "asserts": "another project's published site is not served by path on a project host (slice-2 regression, standalone)"
+      },
+      {
+       "file": "tests/boundary-apps-host-forwarding.mjs",
+       "contains": "assert.equal(apps.seen[i],sent,sent.method+' '+sent.url+' is forwarded as the same Request object');",
+       "asserts": "GET, HEAD, POST and PUT on the visitor host reach APP_HOST as the same Request with no runtime call or traffic; the project host, local alias, preview host and look-alike hosts are not forwarded (slice-12 regression, standalone)"
+      },
+      {
+       "file": "tests/boundary-apps-host-forwarding.mjs",
+       "contains": "if(method!=='HEAD')assert.equal(text,'Application unavailable',method+' '+path);",
+       "asserts": "without the APP_HOST binding every visitor-host path and method is a 503 with no site HTML, runtime call or traffic"
       }
      ]
     }
@@ -8292,13 +8306,38 @@
      ]
     },
     "stale": {
-     "state": "gap",
-     "gapKind": "test",
-     "detail": "maintainHosting itself has no test; per-record refreshHosting is tested.",
+     "state": "evidenced",
+     "detail": "maintainHosting re-checks due records stalest first; a lapsed window is renewed, a withdrawn proof or missing provider hostname is demoted with no serving window, a pending cleanup removes its exact provider hostname and is not selected again, and a review is untouched; without configuration it makes no call and changes no row (tests/boundary-hosting-maintenance-stale.mjs, SQLite and --d1, outside profiles).",
      "enforcedAt": [
       {
        "file": "src/domain-hosting.ts",
        "contains": "export async function maintainHosting("
+      },
+      {
+       "file": "src/domain-hosting.ts",
+       "contains": "WHERE state IN ('active','provisioning','disconnecting') ORDER BY checked_at ASC LIMIT 80"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/boundary-hosting-maintenance-stale.mjs",
+       "contains": "assert.deepEqual(new Set(reads.slice(0,4)),new Set([ids.leaving,ids.lapsed,ids.proof,ids.gone]),'the first batch is the four stalest records');",
+       "asserts": "the sweep re-checks the stalest records first"
+      },
+      {
+       "file": "tests/boundary-hosting-maintenance-stale.mjs",
+       "contains": "assert.equal((await serve('https://'+names.proof+'/')).status,404,'a withdrawn proof stops serving after the sweep');",
+       "asserts": "a stale active record whose proof was withdrawn is demoted and stops serving"
+      },
+      {
+       "file": "tests/boundary-hosting-maintenance-stale.mjs",
+       "contains": "assert.ok(!again.some(([,providerId])=>providerId===ids.leaving),'the closed record is not selected again');",
+       "asserts": "a completed cleanup is not acted on again"
+      },
+      {
+       "file": "tests/boundary-hosting-maintenance-stale.mjs",
+       "contains": "assert.equal(await rows(everything),before,'negative control: no row changes without configuration');",
+       "asserts": "without configuration the sweep changes nothing"
       }
      ]
     }
