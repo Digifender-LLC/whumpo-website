@@ -371,3 +371,18 @@ node tests/boundary-audit.mjs                          # passed
 - Close the remaining evidence gaps above with focused regressions where the owner wants them, and decide whether the ungated evidence suites (R7), including the three slice 3 regressions, should join a verify profile.
 - Verify live routing/activation (custom hostnames, contact delivery, `DOMAIN_HOSTING_READY`) with an owner-authorized read-only inspection.
 - Run the security scan workflow named in the packet against the current commit and reconcile with this registry.
+
+## Slice 9 evidence note (October 21, 2026 UTC, base `c20ba59`)
+
+**Add-only; no finding.** Adds [`tests/boundary-domain-proof-removal-sql.mjs`](../tests/boundary-domain-proof-removal-sql.mjs) for the `domains` family (`dns-hosting, deletion`). It addresses the slice 3 open item "the `domain_proof_removal_expired` trigger independently of their JavaScript preflight". No `src/`, schema, registry, backlog or existing test changed. `boundary-audit.json` does not cite the test yet.
+
+What it covers: the confirming statement is the one the real `domainProofRemoval` builds once its preflight admits the review. The state then changes before the batch commits, or a raw UPDATE skips the preflight. Fixtures are synthetic rows; no network. The test asserts:
+
+- **Stale state:** a review that expires between preflight and commit is refused with `domain_proof_removal_expired`. So are a proof expiry or project-owner change made after the review (`_changed`).
+- **Authority:** refused (`_changed`) are a plain guided message, an AI turn, a control for another review or of another kind, and another account's well-formed control.
+- **Immutable target:** extending the expiry or retargeting the review at the changed proof while applying is refused (`_immutable`).
+- **Replay:** an applied review cannot be re-applied or reopened, and its committed statement matches no row on replay. The removed claim id cannot be re-inserted (`_replay`).
+
+Every refusal also checks that the proof, the pending review, the activity log and the atomically batched confirm turn are unchanged. Each refusal has a passing twin that differs only in the property under test.
+
+What it does not prove: the Chat routing and conversation-revision check (covered by `tests/domain-proof-removal.mjs`); the HTTP/Origin path; trigger behaviour on remote D1; that the test fails under a mutation (no guard was removed). **Not run when written:** shell access was unavailable in this session, so neither `node tests/boundary-domain-proof-removal-sql.mjs` nor `--d1` has been executed. It is standalone and outside verify profiles (R7).
