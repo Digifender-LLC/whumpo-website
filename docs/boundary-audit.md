@@ -402,3 +402,19 @@ Docs-only. `boundary-audit.json` now cites, in the `detail` text of the cell eac
 - visitor-modules `tenant`: `tests/boundary-module-file-read.mjs` (added, not yet verified locally; it stopped at fixture setup because python3 has no Pillow).
 
 `tests/boundary-photo-route-held.mjs` is only in open PR #321, not on main, so no cell cites it. The photo-route held specification and host-level 429 gaps stay open.
+
+## Slice 12 evidence note (October 21, 2026 UTC)
+
+**Add-only; no finding.** Adds [`tests/boundary-apps-host-forwarding.mjs`](../tests/boundary-apps-host-forwarding.mjs) (`pnpm run test:boundary-apps-host-forwarding`) for `site-host-dispatch` `tenant`. That cell stays `evidenced` and now also cites this test and the forwarding line in `src/site-host.ts`. This closes "the site-host → `APP_HOST` forwarding" under "Still open (slice 2)". No `src/`, schema or existing test changed.
+
+Why this item: the cells still marked gap or unverified are B2/B4/B5 control gaps (the code does not enforce them, so an add-only test cannot evidence them), the owner-deferred `site-cms` cells, `scheduled-contact-delivery` `stale` (already characterized), and `visitor-app-shell` `admission` (open PR #325). Of the two residuals earlier slices named, this one decides which Worker answers on the origin that holds visitor sessions. A published site can run backend-form scripts, so it must never be served there.
+
+The test drives the sites Worker's real default export on local SQLite and `--d1`, with a counting runtime stub and no network. It asserts:
+
+- **Forwarding:** GET, HEAD, POST (visitor cookie and body) and PUT on `app-<uuid>.whumpo.site` reach `APP_HOST` as the same `Request` object, and the reply comes back unchanged.
+- **No side effects:** a forwarded `/backend` POST makes no runtime call, and a forwarded 200 `text/html` reply records no site traffic.
+- **Real apps Worker:** with `src/app-host.ts` behind the binding, the forwarded shell is that Worker's 404 with its security headers, never the project's published site.
+- **Fail closed:** without the binding, the site root, `/s/<id>/`, assets, CMS, directory, `/backend` and gateway paths on any method are a 503 `Application unavailable`. None carries site HTML, calls the runtime or records traffic.
+- **Negative controls:** the same project's own host serves the site (200) and counts traffic. The local alias and the preview host are not forwarded, and neither are look-alike hosts (suffixed, prefixed, nested, another domain, a malformed id), which get a 404.
+
+What it does not prove: the live service binding and routes in `wrangler.sites.jsonc` (R10), or that the test fails under a mutation (no guard was removed). Standalone and outside verify profiles (R7). The photo-route host-level 429 mapping in `site-assets` `admission` is still open.
