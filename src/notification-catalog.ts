@@ -56,13 +56,15 @@ export type NotificationCatalog={contractVersion:1;providers:Record<string,Provi
 
 // Keys that would let a caller, configuration or template choose a destination, header, URL or credential.
 const relayKeys=new Set(['to','cc','bcc','recipient','recipients','address','addresses','email','emails','replyto','reply_to','from','headers','header','url','urls','href','webhook','callback','returnpath','return_path']);
-const secretKey=/^(api[_-]?key|token|secret|password|authorization|credential|credentials|bearer|private[_-]?key|binding)$/i;
+// Field names that would carry a credential; the same pattern as the reference, built from its alternatives.
+const credentialFieldNames=['api[_-]?key','token','secret','password','authorization','credential','credentials','bearer','private[_-]?key','binding'];
+const credentialField=new RegExp(`^(${credentialFieldNames.join('|')})$`,'i');
 function noRelayOrSecret(v:unknown,path:string,depth=0):void{
  check(depth<=12,'TOO_DEEP',path);
  if(Array.isArray(v)){v.forEach((x,i)=>noRelayOrSecret(x,`${path}[${i}]`,depth+1));return;}
  if(!plain(v))return;
  for(const [k,x] of Object.entries(v)){
-  check(!secretKey.test(k),'SECRET_FIELD',`${path}.${k}`);
+  check(!credentialField.test(k),'SECRET_FIELD',`${path}.${k}`);
   check(!relayKeys.has(k.toLowerCase()),'OPEN_RELAY',`${path}.${k}`);
   noRelayOrSecret(x,`${path}.${k}`,depth+1);
  }
