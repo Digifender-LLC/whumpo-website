@@ -9876,6 +9876,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [tools/prototypes/notifications.mjs](../../tools/prototypes/notifications.mjs)
 - [src/contact-email.ts](../../src/contact-email.ts)
 - [src/contact-notifications.ts](../../src/contact-notifications.ts)
+- [src/notification-catalog.ts](../../src/notification-catalog.ts)
 
 ### Execution coordination
 
@@ -9883,7 +9884,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-22 UTC: source slice on the session branch from main 8699937, local verification only. Not merged, deployed or accepted. No mapped issue exists, so nothing was claimed. Added src/notification-catalog.ts, a frozen v1 catalog that matches the reference value for value, holding four templates, the verified whumpo-notify sender with its DNS review reference, and the cloudflare-email provider facts. It also has closed template, catalog and configuration validators, a plain-text segment renderer and provider error classification, and imports nothing. src/contact-email.ts now renders both contact notices through the catalog and takes the sender, display name and error classes from it. src/contact-notifications.ts takes the 14,285-call ceiling from the catalog, bounded by the $5 contactMonthlyCeilingCents (the lower applies on drift; the harness asserts they agree). This closes G-N1 to G-N3 in source. tests/notifications-contract.mjs now compares both notices with golden literals of the pre-WH-155 text, so the baseline no longer reads the source. The source catalog must equal the reference, with identical digests and renders and the same refusal codes for 24 template, 8 catalog and 36 configuration cases (open relay, secret fields, URLs, header and template-syntax injection, content in notices, stale, withdrawn or platform pins, unverified senders, unpriced providers). A static check confirms contact-email.ts no longer hard-codes notice text or provider facts. 10 of 10 source mutants were caught. Ran: node tests/notifications-contract.mjs (31 reference and 14 source-agreement/static checks, 20 of 20 reference and 10 of 10 source mutants caught); node tests/contacts.mjs and node tests/contact-notifications.mjs, both passing unchanged; node tools/verify.mjs fast, passing. pnpm check ran as its constituent commands, all passing (the four generator --check tools, tsc --noEmit and tsc -p tsconfig.frontend.json --noEmit), because pnpm's dependency-status check attempted a reinstall that aborted without a TTY. No schema, table, binding, provider, sender, DNS, cron or customer-visible change.
 
 ## WH-156 — Shared notification outbox, receipt states and bounded reconciliation
 
