@@ -418,3 +418,16 @@ The test drives the sites Worker's real default export on local SQLite and `--d1
 - **Negative controls:** the same project's own host serves the site (200) and counts traffic. The local alias and the preview host are not forwarded, and neither are look-alike hosts (suffixed, prefixed, nested, another domain, a malformed id), which get a 404.
 
 What it does not prove: the live service binding and routes in `wrangler.sites.jsonc` (R10), or that the test fails under a mutation (no guard was removed). Standalone and outside verify profiles (R7). The photo-route host-level 429 mapping in `site-assets` `admission` is still open.
+
+## Slice 13 evidence note (October 22, 2026 UTC, base `ad6bae9`)
+
+**Add-only; no finding.** Adds [`tests/boundary-photo-route-admission.mjs`](../tests/boundary-photo-route-admission.mjs) (`pnpm run test:boundary-photo-route-admission`) for `site-assets` `admission`. The cell stays `evidenced`; it now also cites this test and the 429 mapping in `src/site-host.ts`, and its detail no longer says the host-level mapping is untested. This closes the item the slice 12 note left open. No `src/`, schema or existing test changed.
+
+The test drives the sites Worker's real default export on local SQLite (in-memory R2 stand-in) and `--d1` (local D1 + local R2), with synthetic photo clearance and no network. Through GET and HEAD on the project host and the local alias, it asserts:
+
+- **Client allowance:** one client's 400 photo reads of a project are served; the next is 429 `Too many photo requests from this connection today`, `no-store`, with no image bytes, no object read and no client, project or platform read charged.
+- **Project budget:** at 10,000 project reads a fresh client gets 503 `Photo allowance temporarily exhausted` with no bytes, no object read and no project or platform read charged. The client attempt is still counted, because the client sub-limit runs before the project batch (characterized, not a finding).
+- **Platform ceiling:** at 100,000 platform reads another account's project gets the same 503 with nothing charged.
+- **Negative controls:** the limited client keeps reading another project; another client keeps reading the limited project; the other account's project serves under its own budget; the same read is served once the platform counter is back below the ceiling.
+
+Run on October 22, 2026 UTC: passed on SQLite and `--d1`. With the 429 branch removed from `src/site-host.ts` the test fails (status 503, expected 429); the source was restored. Not covered: IPv6 /64 grouping and the shared `unknown` bucket at host level, the custom-domain `/assets/<id>.jpg` path, operator photo containment allowances, remote D1. Standalone and outside verify profiles (R7).

@@ -209,6 +209,7 @@
     "test:boundary-audit": "node tests/boundary-audit.mjs",
     "test:boundary-hosting-maintenance-stale": "node tests/boundary-hosting-maintenance-stale.mjs && node tests/boundary-hosting-maintenance-stale.mjs --d1",
     "test:boundary-apps-host-forwarding": "node tests/boundary-apps-host-forwarding.mjs && node tests/boundary-apps-host-forwarding.mjs --d1",
+    "test:boundary-photo-route-admission": "node tests/boundary-photo-route-admission.mjs && node tests/boundary-photo-route-admission.mjs --d1",
     "test:tenant-classification": "node tests/tenant-classification.mjs",
     "test:tenant-schema-bodies": "node tests/tenant-schema-bodies.mjs",
     "test:sqlite-authorizer": "node tests/sqlite-authorizer.mjs",
