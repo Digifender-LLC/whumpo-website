@@ -180,7 +180,6 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [tests/customer-site-journey.mjs](../../tests/customer-site-journey.mjs)
 - [tests/customer-app-journey.mjs](../../tests/customer-app-journey.mjs)
 - [docs/acceptance.md](../../docs/acceptance.md)
-- [AGENTS.md](../../AGENTS.md)
 - [docs/verification.md](../../docs/verification.md)
 - [tools/verify.mjs](../../tools/verify.mjs)
 - [tests/verification-profiles.mjs](../../tests/verification-profiles.mjs)
@@ -8149,7 +8148,6 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 
 - [docs/cloudflare-capability-roadmap.md](../../docs/cloudflare-capability-roadmap.md)
 - [docs/resource-pool-economics.md](../../docs/resource-pool-economics.md)
-- [AGENTS.md](../../AGENTS.md)
 
 ### Execution coordination
 
@@ -10616,7 +10614,6 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/android-app.md](../../docs/android-app.md)
 - [docs/brand/whumpo-identity.md](../../docs/brand/whumpo-identity.md)
 - [docs/verification.md](../../docs/verification.md)
-- [AGENTS.md](../../AGENTS.md)
 
 ### Execution coordination
 
