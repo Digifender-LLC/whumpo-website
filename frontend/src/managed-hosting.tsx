@@ -1,6 +1,7 @@
 import {useEffect} from 'react';
 import {Link} from '@tanstack/react-router';
 import {Brand} from './components/brand';
+import {Button} from './components/ui/button';
 import {LegalLinks} from './legal-links';
 
 // Owner content still to supply is marked PLACEHOLDER on the page itself; tests/managed-hosting.mjs fails if a price or currency amount appears.
@@ -128,6 +129,7 @@ export function ManagedHosting(){
     <p className={eyebrow}>Managed hosting</p>
     <h1 id="hosting-heading" className="mt-4 text-4xl font-bold sm:text-5xl max-w-3xl">We host your website, so you do not have to.</h1>
     <p className="mt-5 text-lg text-ink-muted max-w-2xl">Managed hosting means we run the place your website lives and look after it for you. Your sales rep is your point of contact. Ask them anything on this page.</p>
+    <p className="mt-4 max-w-2xl font-semibold">Currently serving Val Verde, TX.</p>
     <p className="mt-4 max-w-2xl text-ink-muted">This page goes with your conversation with your rep. It lists what we offer so your rep can point to it.</p>
    </section>
 
@@ -191,7 +193,11 @@ export function ManagedHosting(){
     <div className="rounded-xl bg-surface-inverse text-ink-inverse p-8 sm:p-12">
      <h2 id="contact-heading" className="text-3xl font-bold sm:text-4xl">Talk to your rep</h2>
      <p className="mt-3 max-w-2xl">Ask your sales rep about managed hosting, add-ons, or a premium site. They will quote any extra costs in person.</p>
-     <p className="mt-4 font-semibold">PLACEHOLDER: contact details (phone, email) to be supplied by the owner.</p>
+     <div className="mt-6 flex flex-wrap items-center gap-4">
+      <Button asChild variant="secondary" size="lg" className="min-h-11"><a href="tel:+18336339838">Call Digifender</a></Button>
+      <span className="font-semibold">(833) 633-9838</span>
+     </div>
+     <p className="mt-4 font-semibold">PLACEHOLDER: contact details (email, address) to be supplied by the owner.</p>
     </div>
    </section>
   </main>
