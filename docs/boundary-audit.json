@@ -6118,7 +6118,7 @@
     },
     "admission": {
      "state": "evidenced",
-     "detail": "Per-client daily photo allowance (400), per-project monthly budget (10,000) with account fair share, platform ceiling (100,000). The host maps a client refusal to 429 and a project-budget or platform-ceiling refusal to 503 with no bytes, object read or project/platform charge (tests/boundary-photo-route-admission.mjs, SQLite and --d1). Guest-preview views charge the same budget since B6 was resolved.",
+     "detail": "Per-client daily photo allowance (400), per-project monthly budget (10,000) with account fair share, platform ceiling (100,000). The host maps a client refusal to 429 and a project-budget or platform-ceiling refusal to 503 with no bytes, object read or project/platform charge (tests/boundary-photo-route-admission.mjs, SQLite and --d1). The same mapping, the path allowlist and the charges on a connected custom domain's /assets/<id>.jpg are asserted by tests/boundary-custom-domain-photo-route.mjs (SQLite and --d1). Guest-preview views charge the same budget since B6 was resolved.",
      "enforcedAt": [
       {
        "file": "src/site-host.ts",
@@ -6139,6 +6139,11 @@
        "file": "tests/boundary-photo-route-admission.mjs",
        "contains": "await refused(limited,flood,'client allowance on the project host',429,clientText);",
        "asserts": "the sites Worker answers the 401st photo read from one client with 429 and no bytes, object read or charge"
+      },
+      {
+       "file": "tests/boundary-custom-domain-photo-route.mjs",
+       "contains": "await refused(limited,photoURL(limited),flood,'client allowance on the custom host',429,clientText);",
+       "asserts": "a connected custom host answers the 401st photo read from one client with 429, and its project-budget and platform-ceiling refusals with 503, with no bytes, object read or charge; non-allowlisted paths are refused uncharged"
       }
      ]
     },
