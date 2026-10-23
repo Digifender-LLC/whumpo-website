@@ -15,6 +15,7 @@
     "test:chat-fields": "node tests/chat-interaction-fields.mjs && node tests/chat-interaction-fields-browser.mjs",
     "test:chat-screen-reader": "node tests/chat-screen-reader.mjs",
     "test:chat-resources": "node tests/chat-resource-options.mjs && node tests/chat-interaction-intake.mjs",
+    "test:managed-hosting": "node tests/managed-hosting.mjs",
     "test:smoke": "node tests/identity-http.mjs --d1 && node tests/smoke.mjs",
     "test:ai": "node tests/ai.mjs",
     "test:ai-gateway": "node tests/ai-gateway.mjs",
