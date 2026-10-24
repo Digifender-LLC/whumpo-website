@@ -431,3 +431,17 @@ The test drives the sites Worker's real default export on local SQLite (in-memor
 - **Negative controls:** the limited client keeps reading another project; another client keeps reading the limited project; the other account's project serves under its own budget; the same read is served once the platform counter is back below the ceiling.
 
 Run on October 22, 2026 UTC: passed on SQLite and `--d1`. With the 429 branch removed from `src/site-host.ts` the test fails (status 503, expected 429); the source was restored. Not covered: IPv6 /64 grouping and the shared `unknown` bucket at host level, the custom-domain `/assets/<id>.jpg` path, operator photo containment allowances, remote D1. Standalone and outside verify profiles (R7).
+
+
+## Slice 14 evidence note (October 23, 2026 UTC, base `3a12d53`)
+
+**Add-only; no finding.** Adds [`tests/boundary-custom-domain-photo-route.mjs`](../tests/boundary-custom-domain-photo-route.mjs) (`pnpm run test:boundary-custom-domain-photo-route`) for `site-assets` `admission`. The cell stays `evidenced` and now also cites this test. This closes the "custom-domain `/assets/<id>.jpg` path" item that the slice 13 note left open. No `src/`, schema or existing test changed.
+
+The test connects two published projects to custom hostnames through the real domain-hosting handlers (Cloudflare and DNS go to a recording stub) and drives the sites Worker's real default export on local SQLite (in-memory R2 stand-in) and `--d1` (local D1 + local R2), with synthetic photo clearance and no network. Through GET and HEAD on the custom host it asserts:
+
+- **Serving:** the exact approved photo is served and charges one client, project and platform read per request.
+- **Path allowlist:** the project-prefixed path, a trailing slash, another extension, a nested path, a photo id not on the publication and another project's photo are 404, and POST is 405, each with no bytes, no object read and no charge.
+- **Admission:** the 401st read from one client is 429; a project at 10,000 reads and a platform at 100,000 reads are 503 with no bytes, object read or project/platform charge.
+- **Negative controls:** another client, another connected project, and the same read once the platform counter is restored keep serving.
+
+Run on October 23, 2026 UTC: passed on SQLite and `--d1`. With the `reservePublicPhotoRead` call removed from `src/site-host.ts` the test fails (reads not charged); the source was restored. Loosening the custom-host path regex alone does not fail the test, because the widened paths still miss every later route, so the allowlist is defense in depth here. Not covered: IPv6 /64 grouping and the shared `unknown` bucket at host level, operator photo containment allowances, remote D1. Standalone and outside verify profiles (R7).
