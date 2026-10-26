@@ -51,7 +51,7 @@ Migrations 0001–0093 are present except 0075/0076. Monitor mode is persisted. 
 - Human passkey/Turnstile and physical-device journeys, whole-account lifecycle, automated retention and production disaster-recovery drills.
 - Reuse synthetic candidates, privacy/license/security review, publication and security-update handling.
 
-Enhanced owner recovery is **implemented in the existing local working tree, undeployed**. The local source/docs/tests were preserved and not merged into the test deployment as a side effect of this audit. The pricing UI's unavailable trial/contact controls are proposals, not working trial admission or an Enterprise sales handoff.
+Enhanced owner recovery was recorded here as **implemented in the local working tree, undeployed**; that is superseded. Its source is on main (merged with the identity foundation in #102), and the reconciliation note at the top of this file records it as deployed to the recorded test release as of October 1. This audit itself did not deploy it. The pricing UI's unavailable trial/contact controls are proposals, not working trial admission or an Enterprise sales handoff.
 
 ## Scope and verification
 
