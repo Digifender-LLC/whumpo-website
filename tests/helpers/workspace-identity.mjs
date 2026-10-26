@@ -28,3 +28,9 @@ export function interceptDatabase(db,pattern,hook,after){
  }
  return {prepare,batch:async statements=>{const rows=statements.map(s=>originals.get(s)),matched=rows.some(r=>pattern.test(r.query));if(matched)await hook();const result=await db.batch(rows.map(r=>r.original));if(matched)await after?.();return result;}};
 }
+/** WH-207: the completed-welcome state, written through the schema's own review-then-complete guard. */
+export async function completeWelcome(db,account){
+ await db.prepare("INSERT INTO user_profiles(user_id,name) VALUES(?,'Synthetic owner') ON CONFLICT(user_id) DO UPDATE SET name='Synthetic owner'").bind(account).run();
+ await db.prepare("INSERT INTO welcome_onboarding(user_id,project_id,stage,prompt,project_name,idea,revision) VALUES(?,?,'review','review','Synthetic welcome','A synthetic project',0)").bind(account,crypto.randomUUID()).run();
+ await db.prepare("UPDATE welcome_onboarding SET revision=1,stage='complete',completed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE user_id=?").bind(account).run();
+}

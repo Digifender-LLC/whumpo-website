@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 import {databaseFixture} from './helpers/current-database.mjs';
-import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.mjs';
+import {workspaceFixture,interceptDatabase,completeWelcome} from './helpers/workspace-identity.mjs';
 const built=await build({stdin:{resolveDir:process.cwd(),contents:"export * from './src/workspace-identity/admission';export * from './src/workspace-identity/authority';export * from './src/security';export {sendConversation,sendChatControl} from './src/chat';export {default as worker} from './src/index';"},bundle:true,format:'esm',platform:'node',write:false});
 const m=await import('data:text/javascript;base64,'+Buffer.from(built.outputFiles[0].text).toString('base64'));
 const fixture=await databaseFixture(),{db}=fixture,id=()=>crypto.randomUUID();let checks=0;
@@ -32,11 +32,16 @@ try{
  const aged=await workspaceFixture(db,m,undefined,-601),old=await aged.scope();await m.assertWorkspace(old,aged.account);await refused(()=>m.requireFreshWorkspace(old,aged.account),'proof_required');await refused(()=>effect(old,aged.account).run());
  const epoch=await workspaceFixture(db,m),held=await epoch.scope();await db.prepare('UPDATE identity_accounts SET auth_epoch=auth_epoch+1 WHERE account_id=?').bind(epoch.account).run();await refused(()=>effect(held,epoch.account).run());
  // The actual HTTP root cannot outlive revocation while reading an asynchronous request body.
- const http=await workspaceFixture(db,m);let writes=0;
+ const http=await workspaceFixture(db,m);await completeWelcome(db,http.account);let writes=0;
  const workerDB=interceptDatabase(db,/INSERT INTO projects/,async()=>{writes++;await http.revoke()});
  const env={DB:workerDB,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})}};
  const response=await m.worker.fetch(new Request('https://whumpo.com/api/projects',{method:'POST',headers:{origin:'https://whumpo.com','content-type':'application/json',cookie:'__Host-whumpo_session='+http.token},body:JSON.stringify({name:'Held HTTP request',purpose:'A landscaping site'})}),env,{waitUntil:()=>{}});
- assert.equal(response.status,409);assert.equal((await response.json()).code,'identity_changed');assert.equal(writes,1);assert.equal(await db.prepare('SELECT id FROM projects WHERE owner_user_id=?').bind(http.account).first(),null);checks++;
+ assert.equal(response.status,409);assert.equal((await response.json()).code,'identity_changed');assert.equal(writes,1);assert.equal(await db.prepare('SELECT id FROM projects WHERE owner_user_id=? AND name=?').bind(http.account,'Held HTTP request').first(),null);checks++;
+ // WH-207: a fresh account is refused before any write; the negative control (finished welcome) succeeds.
+ const gated=await workspaceFixture(db,m),post=owner=>m.worker.fetch(new Request('https://whumpo.com/api/projects',{method:'POST',headers:{origin:'https://whumpo.com','content-type':'application/json',cookie:'__Host-whumpo_session='+owner.token},body:JSON.stringify({name:'Gated project'})}),{DB:db,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})}},{waitUntil:()=>{}});
+ const count=async()=>Object.values(await db.prepare("SELECT (SELECT count(*) FROM projects WHERE owner_user_id=?1)+(SELECT count(*) FROM welcome_onboarding WHERE user_id=?1)+(SELECT count(*) FROM activity_events WHERE user_id=?1) n").bind(gated.account).first())[0];
+ const refusal=await post(gated);assert.equal(refusal.status,409);const refused409=await refusal.json();assert.equal(refused409.code,'onboarding_required');assert.ok(refused409.support);assert.equal(await count(),0);
+ await completeWelcome(db,gated.account);const welcomeRows=await count();assert.equal((await post(gated)).status,201);assert.equal(await count(),welcomeRows+2);checks++;
  assert.equal((await db.prepare('SELECT count(*) n FROM identity_admission_checks').first()).n,0);
  assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
  console.log(`Workspace admission: ${checks} checks, atomic HTTP/Chat revocation, proof age, epoch, batch rollback and provider dispatch (${process.argv.includes('--d1')?'local D1':'SQLite'}).`);

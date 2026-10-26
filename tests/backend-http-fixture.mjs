@@ -6,7 +6,7 @@ import {createRequire} from 'node:module';
 import {mkdtemp,rm,readdir} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {databaseFixture} from './helpers/current-database.mjs';
-import {workspaceFixture} from './helpers/workspace-identity.mjs';
+import {workspaceFixture,completeWelcome} from './helpers/workspace-identity.mjs';
 export async function backendHttpFixture(){
  const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-backend-http-');let store,runtime,server;
  const dispose=async()=>{if(server){server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}await runtime?.dispose();await store?.close();await rm(dir,{recursive:true,force:true});};
@@ -54,6 +54,8 @@ export async function backendHttpFixture(){
   async function seedVisitorAccess(cookie,project){const owner=ownerFor(cookie);return enableFixtureVisitorAccess(await owner.scope(),owner.account,project);}
   async function assertNoInference(){assert.equal((await db.prepare('SELECT count(*) n FROM inference_calls').first()).n,0);}
 
-  return {base,account,assertNoInference,seedBackend,firstProject,seedChat,seedWebsite,seedVisitorAccess,dispose};
+  const welcome=cookie=>completeWelcome(db,ownerFor(cookie).account);
+
+  return {base,account,welcome,assertNoInference,seedBackend,firstProject,seedChat,seedWebsite,seedVisitorAccess,dispose};
  }catch(error){await dispose();throw error;}
 }

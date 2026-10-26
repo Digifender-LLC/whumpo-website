@@ -8,6 +8,7 @@ const headers={origin:base,'content-type':'application/json'};
 const account=()=>fixture.account();
 const cookie=await account(),other=await account();
 const post=(path,data,session=cookie,origin=base)=>fetch(base+path,{method:'POST',headers:{...headers,origin,cookie:session},body:JSON.stringify(data)});
+await fixture.welcome(cookie);
 const project=await (await post('/api/projects',{name:'Backend HTTP fixture'})).json(),pid=project.project.id;
 const path='/api/projects/'+pid+'/backends',version=crypto.randomUUID(),rid=crypto.randomUUID();
 await fixture.seedBackend(pid,version,'export default input=>({total:input.values.reduce((a,b)=>a+b,0)})',cookie);
