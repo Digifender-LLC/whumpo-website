@@ -642,3 +642,20 @@ Consequence: the deploy build does not stop a change that drifts the registry. A
 ## WH-111 Chat outage regression — October 11, 2026 UTC
 
 `node tests/chat-inference-outage.mjs` (and `--d1`) drives the actual Worker with no model binding and a current-schema fixture. It asserts that saved Chat state reads, typed text and a typed `/confirm` are refused with the `chat_unavailable` support link, a Dashboard shortcut control and the exact review confirmation succeed, stale and foreign confirmations publish nothing, replay creates no second turn or publication, and `inference_calls` does not change. A model-configured variant fails its first guard. It is synthetic and local: it is not registered in a verification profile, deploys nothing and does not establish device, human-listening or customer acceptance. See the [audit](chat-daily-workspace.md).
+
+## Node 24 profile run — October 2026
+
+Run October 25, 2026 on commit `2e74dc7317f7c53587a55aee751a11e0f8eceb5e` (`origin/main`), Node 24.21.0 (`.node-version` confirmed) and pnpm 11.19.0, each command under `mise exec node@24.21.0 pnpm@11.19.0 --` after `pnpm install --frozen-lockfile`. One run per profile, sequential, wall time from the shell `time` builtin; no live flags, secrets, `.env`/`.dev.vars` files or deploys.
+
+| Command | Exit code | Wall time | Result |
+| --- | --- | --- | --- |
+| `node tests/verification-profiles.mjs` | 0 | 0.045 s | Passed |
+| `node tools/verify.mjs fast` | 0 | 3.4 s | Passed |
+| `node tools/verify.mjs protection` | 0 | 142.1 s | Passed |
+| `node tools/verify.mjs site` | 1 | 32.0 s | **Failed** |
+| `node tools/verify.mjs app` | 0 | 114.8 s | Passed |
+| `pnpm check` | 0 | 2.7 s | Passed |
+
+Failure: `site`, first failing step `tests/request-path-inventory.mjs` (third of three; `customer-site-journey.mjs` and `standard-service-no-maintainer.mjs` ran before it and passed). Output: `AssertionError ... Expected values to be strictly deep-equal` with actual `['docs/request-path-inventory.json differs from the measured inventory', 'docs/workload-placement.md table differs from the measured inventory']` and expected `[]`, then `tests/request-path-inventory.mjs failed (1).` This is committed documentation drift against the measured inventory, not a missing tool or port conflict. It was not fixed here because the run was limited to editing this file; the inventory and table need regeneration in a separate change. The failing script is not a key, deploy, secret, connection or release script, so no escalation applies.
+
+Time assumptions: the profile table states only per-script ceilings (five minutes each), not expected durations. Observed totals are far below them (the longest single profile, `protection`, took about 2.4 minutes for fifteen scripts), so no table entry was changed. The first row's 0.045 s is as measured; it is fast because the runner test makes no network or build calls.
