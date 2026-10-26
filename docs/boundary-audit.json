@@ -7023,7 +7023,7 @@
     },
     "admission": {
      "state": "evidenced",
-     "detail": "Per-IP API_LIMITER on the page shell; tests/boundary-visitor-shell-admission.mjs asserts the 429 (keyed page:<cf-connecting-ip>, before the live-page lookup and the shell asset) and that an admitted request still gets the shell (not run when written).",
+     "detail": "Per-IP API_LIMITER on the page shell; tests/boundary-visitor-shell-admission.mjs asserts the 429 (keyed page:<cf-connecting-ip>, before the live-page lookup and the shell asset) and that an admitted request still gets the shell (run: passes; fails 200 !== 429 with the limiter removed).",
      "enforcedAt": [
       {
        "file": "src/app-host.ts",
