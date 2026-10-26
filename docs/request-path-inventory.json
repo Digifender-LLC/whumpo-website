@@ -127,10 +127,10 @@
      "whumpo-sites"
     ],
     "d1": {
-     "calls": 5,
+     "calls": 6,
      "batches": 0,
-     "statements": 5,
-     "reads": 4,
+     "statements": 6,
+     "reads": 5,
      "writes": 1
     },
     "r2": {},
@@ -142,6 +142,7 @@
     "tables": [
      "backend_live_forms",
      "contact_settings",
+     "operator_serving_stopped",
      "project_spec_held",
      "project_spec_versions",
      "projects",
@@ -190,10 +191,10 @@
      "whumpo-sites"
     ],
     "d1": {
-     "calls": 4,
+     "calls": 5,
      "batches": 0,
-     "statements": 4,
-     "reads": 4,
+     "statements": 5,
+     "reads": 5,
      "writes": 0
     },
     "r2": {},
@@ -205,6 +206,7 @@
     "tables": [
      "backend_live_forms",
      "contact_settings",
+     "operator_serving_stopped",
      "project_spec_held",
      "project_spec_versions",
      "publications",
@@ -251,10 +253,10 @@
      "whumpo-sites"
     ],
     "d1": {
-     "calls": 4,
+     "calls": 5,
      "batches": 1,
-     "statements": 6,
-     "reads": 3,
+     "statements": 7,
+     "reads": 4,
      "writes": 3
     },
     "r2": {
@@ -267,6 +269,7 @@
     "waitUntil": 0,
     "tables": [
      "approved_project_photos",
+     "operator_serving_stopped",
      "project_files",
      "project_spec_held",
      "project_spec_versions",
@@ -315,10 +318,10 @@
      "whumpo-sites"
     ],
     "d1": {
-     "calls": 1,
+     "calls": 2,
      "batches": 0,
-     "statements": 1,
-     "reads": 1,
+     "statements": 2,
+     "reads": 2,
      "writes": 0
     },
     "r2": {},
@@ -329,6 +332,7 @@
     "waitUntil": 0,
     "tables": [
      "approved_project_photos",
+     "operator_serving_stopped",
      "project_files",
      "publications",
      "version_photos"
@@ -370,10 +374,10 @@
      "whumpo-sites"
     ],
     "d1": {
-     "calls": 1,
+     "calls": 2,
      "batches": 0,
-     "statements": 1,
-     "reads": 1,
+     "statements": 2,
+     "reads": 2,
      "writes": 0
     },
     "r2": {},
@@ -384,6 +388,7 @@
     "waitUntil": 0,
     "tables": [
      "directories",
+     "operator_serving_stopped",
      "projects",
      "publications"
     ]
@@ -421,10 +426,10 @@
      "whumpo-sites"
     ],
     "d1": {
-     "calls": 1,
+     "calls": 2,
      "batches": 0,
-     "statements": 1,
-     "reads": 1,
+     "statements": 2,
+     "reads": 2,
      "writes": 0
     },
     "r2": {},
@@ -435,6 +440,7 @@
     "waitUntil": 0,
     "tables": [
      "directories",
+     "operator_serving_stopped",
      "projects",
      "publications"
     ]
@@ -472,10 +478,10 @@
      "whumpo-sites"
     ],
     "d1": {
-     "calls": 1,
+     "calls": 2,
      "batches": 0,
-     "statements": 1,
-     "reads": 1,
+     "statements": 2,
+     "reads": 2,
      "writes": 0
     },
     "r2": {},
@@ -485,7 +491,8 @@
     "subrequests": [],
     "waitUntil": 0,
     "tables": [
-     "cms_live_articles"
+     "cms_live_articles",
+     "operator_serving_stopped"
     ]
    },
    "repeatRequest": {
@@ -521,10 +528,10 @@
      "whumpo-sites"
     ],
     "d1": {
-     "calls": 0,
+     "calls": 1,
      "batches": 0,
-     "statements": 0,
-     "reads": 0,
+     "statements": 1,
+     "reads": 1,
      "writes": 0
     },
     "r2": {},
@@ -533,7 +540,9 @@
     "rateLimiter": {},
     "subrequests": [],
     "waitUntil": 0,
-    "tables": []
+    "tables": [
+     "operator_serving_stopped"
+    ]
    },
    "repeatRequest": {
     "sameWork": true,
@@ -611,10 +620,10 @@
      "whumpo-sites"
     ],
     "d1": {
-     "calls": 1,
+     "calls": 2,
      "batches": 0,
-     "statements": 1,
-     "reads": 1,
+     "statements": 2,
+     "reads": 2,
      "writes": 0
     },
     "r2": {},
@@ -625,6 +634,7 @@
     "waitUntil": 0,
     "tables": [
      "contact_settings",
+     "operator_serving_stopped",
      "publications",
      "service_client_blocked_contacts",
      "site_versions"
@@ -716,10 +726,10 @@
      "whumpo-sites"
     ],
     "d1": {
-     "calls": 7,
+     "calls": 8,
      "batches": 0,
-     "statements": 7,
-     "reads": 6,
+     "statements": 8,
+     "reads": 7,
      "writes": 1
     },
     "r2": {},
@@ -732,6 +742,7 @@
      "backend_live_forms",
      "contact_settings",
      "domain_connections",
+     "operator_serving_stopped",
      "project_spec_held",
      "project_spec_versions",
      "projects",
@@ -781,10 +792,10 @@
      "whumpo-sites"
     ],
     "d1": {
-     "calls": 5,
+     "calls": 6,
      "batches": 1,
-     "statements": 7,
-     "reads": 4,
+     "statements": 8,
+     "reads": 5,
      "writes": 3
     },
     "r2": {
@@ -798,6 +809,7 @@
     "tables": [
      "approved_project_photos",
      "domain_connections",
+     "operator_serving_stopped",
      "project_files",
      "project_spec_held",
      "project_spec_versions",
@@ -1063,10 +1075,10 @@
      "whumpo-apps"
     ],
     "d1": {
-     "calls": 0,
+     "calls": 1,
      "batches": 0,
-     "statements": 0,
-     "reads": 0,
+     "statements": 1,
+     "reads": 1,
      "writes": 0
     },
     "r2": {},
@@ -1079,7 +1091,9 @@
     },
     "subrequests": [],
     "waitUntil": 0,
-    "tables": []
+    "tables": [
+     "operator_serving_stopped"
+    ]
    },
    "repeatRequest": {
     "sameWork": true,
@@ -1112,10 +1126,10 @@
      "whumpo-platform"
     ],
     "d1": {
-     "calls": 1,
+     "calls": 2,
      "batches": 0,
-     "statements": 1,
-     "reads": 1,
+     "statements": 2,
+     "reads": 2,
      "writes": 0
     },
     "r2": {},
@@ -1128,6 +1142,7 @@
     "waitUntil": 0,
     "tables": [
      "contact_settings",
+     "operator_serving_stopped",
      "projects",
      "publications",
      "service_client_blocked_contacts"
@@ -1168,10 +1183,10 @@
      "whumpo-platform"
     ],
     "d1": {
-     "calls": 5,
+     "calls": 6,
      "batches": 0,
-     "statements": 5,
-     "reads": 3,
+     "statements": 6,
+     "reads": 4,
      "writes": 2
     },
     "r2": {},
@@ -1188,6 +1203,7 @@
      "contact_receipts",
      "contact_settings",
      "contact_submissions",
+     "operator_serving_stopped",
      "projects",
      "public_client_usage",
      "publications",
