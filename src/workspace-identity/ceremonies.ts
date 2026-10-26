@@ -45,7 +45,8 @@ async function turnstile(request:Request,env:Environment,token:unknown,origin:st
  try{
   const response=await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify',{method:'POST',redirect:'error',
    headers:{'content-type':'application/json'},body:JSON.stringify({secret:env.TURNSTILE_SECRET,response:token,remoteip:request.headers.get('cf-connecting-ip')}),signal:AbortSignal.timeout(10000)});
-  if(!response.ok||!response.body)throw unavailable();
+  // DEBUG-TEMP turnstile-log: remove after diagnosis.
+  if(!response.ok||!response.body){console.error("DEBUG-TEMP turnstile status",response.status,"hasBody",!!response.body,"secretLen",String(env.TURNSTILE_SECRET).length);throw unavailable();}
   const reader=response.body.getReader(),chunks:Uint8Array[]=[];let size=0;
   try{while(true){const next=await reader.read();if(next.done)break;size+=next.value.length;if(size>8192)throw unavailable();chunks.push(next.value);}}
   finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
