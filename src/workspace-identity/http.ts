@@ -145,6 +145,8 @@ export async function handleIdentityRequest(request:Request,env:Environment):Pro
   }
  }catch(error){
   // Unexpected errors may contain SQL/provider details. They are never serialized or logged here.
+  // DEBUG-TEMP identity-error-log: remove after the signup outage is diagnosed.
+  if(!(error instanceof IdentityError))console.error('DEBUG-TEMP identity',String((error as Error)?.name),String((error as Error)?.message).slice(0,300),String((error as Error)?.stack??'').split('\n').slice(0,3).join(' | ').slice(0,400));
   const failure=error instanceof IdentityError?error:identityUnavailable();return respond({error:failure.message,code:failure.code},failure.status);
  }
 }
