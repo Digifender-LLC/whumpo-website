@@ -14,7 +14,8 @@ const transport=async(url,init)=>{
  const path=new URL(url).pathname.replace('/v1/',''),q=new URL(url).searchParams,f=init.body;let value;
  if(init.method==='POST'){
   writes++;const key=init.headers['Idempotency-Key'];if(keys.has(key))return Response.json(keys.get(key));
-  if(path==='customers'){value={id:'cus_'+crypto.randomUUID().replaceAll('-',''),livemode:false,metadata:{app,owner:f.get('metadata[owner]')}};customers.set(value.id,value);}
+  if(path.startsWith('customers/')){value=customers.get(path.split('/').at(-1));assert(value,'Missing customer fixture');assert(/^[^\s@]+@[^\s@]+$/.test(f.get('email')),'Checkout must send the account email');value.email=f.get('email');}
+  else if(path==='customers'){value={id:'cus_'+crypto.randomUUID().replaceAll('-',''),livemode:false,metadata:{app,owner:f.get('metadata[owner]')}};customers.set(value.id,value);}
   else if(path==='checkout/sessions'){
    assert.equal(f.get('mode'),'subscription');assert.equal(f.get('line_items[0][quantity]'),'1');assert.equal(f.get('success_url'),'https://whumpo.com/workspace/?checkout=returned');assert(!f.has('trial_period_days'));
    const price=priceMap.get(f.get('line_items[0][price]'));value={id:'cs_test_'+crypto.randomUUID().replaceAll('-',''),livemode:false,customer:f.get('customer'),mode:'subscription',status:'open',subscription:null,client_reference_id:f.get('client_reference_id'),metadata:{app,order:f.get('metadata[order]')},url:'https://checkout.stripe.com/c/pay/synthetic',currency:'usd',amount_total:price.unit_amount,line_items:{has_more:false,data:[{quantity:1,price}]}};sessions.set(value.id,value);

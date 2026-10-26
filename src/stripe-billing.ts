@@ -1,6 +1,7 @@
 import {BillingError} from './billing';
 import {boundedText,stripeTestConfigured,readStripeEvent} from './stripe-common';
 import {plans} from './plans';
+import {hashToken} from './security';
 
 export const stripeVersion='2025-02-24.acacia';
 export const stripeApp='whumpo-sandbox-v1';
@@ -126,6 +127,9 @@ export async function startSubscription(db:D1Database,env:Config,user:string,inp
  const id=input.id,interval=input.interval as 'month'|'year',amount=interval==='month'?plan.monthlyCents:plan.annualCents;
  return withCustomer(db,user,async customer=>{
   const customerID=await customerId(db,env,customer,transport);customer.customer_id=customerID;
+  // Stripe Checkout asks for an email unless the customer already has one. Send the account email on file.
+  const email=(await db.prepare('SELECT email FROM users WHERE id=?').bind(user).first<{email:string}>())?.email;
+  if(email)await stripe<{id:string}>(env,'customers/'+customerID,transport,new URLSearchParams({email}),'whumpo-customer-email-'+customerID+'-'+(await hashToken(email)).slice(0,32));
   await syncCustomer(db,env,customer,transport);
   let order=await db.prepare('SELECT * FROM stripe_subscription_orders WHERE id=? AND user_id=?').bind(id,user).first<Order>();
   if(order)requireMatch(order.plan_id===plan.id&&order.interval===interval);
