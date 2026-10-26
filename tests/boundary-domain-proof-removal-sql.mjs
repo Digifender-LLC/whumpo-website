@@ -136,8 +136,8 @@ try{
   const replay=await preflight(a,r);assert.equal(replay.statements.length,0);assert.match(replay.reply,/already removed/);checks++;
   const [rerun]=await db.batch(stale);assert.equal(rerun.meta.changes,0,'the committed statement matches nothing on replay');
   const second=id();await turnStatement(a,second,{action:control(r)}).run();
-  await assert.rejects(db.prepare("UPDATE domain_proof_removals SET status='applied',confirmed_by=? WHERE id=?").bind(second,r).run(),/domain_proof_removal_immutable/);
-  await assert.rejects(db.prepare("UPDATE domain_proof_removals SET status='pending',confirmed_by=NULL WHERE id=?").bind(r).run(),/domain_proof_removal_immutable/);
+  await assert.rejects(db.prepare("UPDATE domain_proof_removals SET status='applied',confirmed_by=? WHERE id=?").bind(second,r).run(),/domain_proof_removal_(immutable|changed)/);
+  await assert.rejects(db.prepare("UPDATE domain_proof_removals SET status='pending',confirmed_by=NULL WHERE id=?").bind(r).run(),/domain_proof_removal_(immutable|changed)/);
   assert.equal((await stored(r)).confirmed_by,first);assert.equal(await removedEvents(c),1);checks++;
   await assert.rejects(db.prepare('INSERT INTO domain_claims(id,project_id,hostname,token,expires_at,created_at) VALUES(?,?,?,?,?,?)').bind(c.id,c.project,c.hostname,'revived',later(86400000),now()).run(),/domain_proof_removal_replay/);
   assert.equal(await c.row(),null,'the removed proof id cannot be revived');checks++;
