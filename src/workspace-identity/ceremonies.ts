@@ -53,7 +53,7 @@ async function turnstile(request:Request,env:Environment,token:unknown,origin:st
   const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
   const result=JSON.parse(new TextDecoder().decode(bytes));
   if(result?.success!==true||result.hostname!==new URL(origin).hostname||result.action!=='register')throw proof();
- }catch(error){if(error instanceof IdentityError)throw error;throw unavailable();}
+ }catch(error){if(error instanceof IdentityError)throw error;console.error("DEBUG-TEMP turnstile catch",String((error as Error)?.name),String((error as Error)?.message).slice(0,200),String((error as Error)?.stack??"").split("\n").slice(0,3).join(" | ").slice(0,400));throw unavailable();}
 }
 export async function consumeIdentityChallenge(db:D1Database,token:unknown,kind:Kind,rp:ReturnType<typeof context>){
  if(typeof token!=='string'||!/^[0-9a-f]{64}$/.test(token))throw proof();
