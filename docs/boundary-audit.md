@@ -62,7 +62,7 @@ Families: 52 (36 privileged; platform-api 28, visitor 17, service 1, scheduled 3
 | target | 35 | 0 | 2 | 0 |
 | replay | 34 | 0 | 3 | 0 |
 | stale | 39 | 0 | 1 | 2 |
-| admission | 10 | 2 | 5 | 1 |
+| admission | 11 | 1 | 5 | 1 |
 | tenant | 22 | 0 | 0 | 1 |
 
 Cells not recorded (not required for that family's surface and privilege): 137.
@@ -108,7 +108,7 @@ Cells not recorded (not required for that family's surface and privilege): 137.
 | site-traffic | visitor | no | 4 / 0 | n/a | n/a | — | — | — | — | n/a | evidenced |
 | operator-serving-stop | visitor | no | 7 / 0 | n/a | n/a | — | — | — | — | evidenced | evidenced |
 | guest-preview-host | visitor | visitor-data | 3 / 0 | evidenced | evidenced | — | evidenced | evidenced | evidenced | evidenced | evidenced |
-| visitor-app-shell | visitor | no | 5 / 0 | n/a | evidenced | — | — | — | — | gap (test) | evidenced |
+| visitor-app-shell | visitor | no | 5 / 0 | n/a | evidenced | — | — | — | — | evidenced | evidenced |
 | visitor-gateway-dispatch | visitor | no | 3 / 0 | evidenced | evidenced | — | — | — | — | evidenced | evidenced |
 | visitor-auth | visitor | credential | 4 / 0 | evidenced | evidenced | — | evidenced | evidenced | evidenced | gap (control B5) | evidenced |
 | visitor-account-lifecycle | visitor | deletion, visitor-data | 4 / 0 | evidenced | evidenced | — | evidenced | evidenced | evidenced | evidenced | evidenced |
@@ -398,6 +398,7 @@ Docs-only. `boundary-audit.json` now cites, in the `detail` text of the cell eac
 - custom-domain serving `tenant`: `tests/boundary-custom-domain-owner.mjs` (not run when written).
 - visitor application gateway `stale`: `tests/boundary-visitor-deletion-hold.mjs` (passes).
 - contact messages/notifications `origin` and visitor-modules `origin`: `tests/boundary-origin-routes.mjs` (run result not recorded).
+- `visitor-app-shell` `admission` (was `gap (test)`, now `evidenced`): `tests/boundary-visitor-shell-admission.mjs` (`pnpm test:boundary-visitor-shell-admission`) drives the `whumpo-apps` handler with a denying stub limiter and asserts the 429, the `page:<ip>` key, that no live-page lookup or asset fetch happens, and that an admitting limiter still serves the shell (not run when written).
 - `domains` `stale`: `tests/boundary-domain-proof-removal-sql.mjs` (not run when written).
 - visitor-modules `tenant`: `tests/boundary-module-file-read.mjs` (added, not yet verified locally; it stopped at fixture setup because python3 has no Pillow).
 
