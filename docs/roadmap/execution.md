@@ -1,10 +1,10 @@
 # Executing the Whumpo roadmap
 
-This guide supplements [AGENTS.md](../../AGENTS.md). Feature contracts remain authoritative for behavior. The [roadmap](README.md) sets outcomes and [backlog.json](backlog.json) owns task specifications/dependencies. GitHub Issues owns live execution state for mapped tasks. No roadmap task authorizes payments, new paid services, customer DNS changes, customer code deployment or deferred provider activation by itself.
+This guide is the roadmap execution guide. Feature contracts remain authoritative for behavior. The [roadmap](README.md) sets outcomes and [backlog.json](backlog.json) owns task specifications/dependencies. GitHub Issues owns live execution state for mapped tasks. No roadmap task authorizes payments, new paid services, customer DNS changes, customer code deployment or deferred provider activation by itself.
 
 ## Select and claim a task
 
-1. Read `README.md`, `AGENTS.md`, `docs/roadmap/README.md` and the task's referenced feature contracts. Inspect `git status`, current commit and any concurrent changes. The roadmap source commit is a review baseline, not a requirement to work on stale code.
+1. Read `README.md`, `docs/roadmap/README.md` and the task's referenced feature contracts. Inspect `git status`, current commit and any concurrent changes. The roadmap source commit is a review baseline, not a requirement to work on stale code.
 2. Run `node tools/roadmap.mjs validate`, `node tools/roadmap.mjs alignment` and `node tools/roadmap.mjs next`. Use `show WH-001` to read one complete packet without loading the entire backlog. `ready` only means sufficiently specified; it is neither an execution lock nor a completion claim.
 3. Refresh the mapped issue, assignee, comments, dependencies and linked PRs. Search by permanent `WH-xxx` before creating anything. Check for an implementation already delivered since the review. A dependency is satisfied by its specified deliverable and evidence, not merely by a closed issue (especially one closed as not planned).
 4. Have one coordinator allocate parallel work. A claim records agent/chat identifier, branch/worktree, scope and expected handoff in the issue; assign only the actual responsible user/agent if supported. Re-read after claiming to catch collisions. Issue comments are coordination records, not atomic locks. Do not auto-assign paid agents or send unrelated messages.

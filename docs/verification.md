@@ -37,6 +37,15 @@ GitHub documents included quotas for private repositories and paid usage beyond 
 
 No workflow was added or dispatched, so workflow syntax and hosted execution are not accepted. A future minimal workflow would use one standard Ubuntu job, read-only repository permissions, Node/pnpm pins above, a frozen install, runner checks and the chosen local profiles. Require cancellation of superseded runs, a 30-minute job ceiling (including installation), no uploaded artifacts or persistent cache initially, and no provider credentials, deployments or live tests. Before activation, verify current account allowance and enforceable no-overage controls, then review the exact workflow. These bounds limit one run, not total monthly consumption. The local profiles remain the default without GitHub consumption.
 
+### Current CI workflows — updated October 21, 2026 UTC
+
+The decision above is historical: `.github/workflows/ci.yml` was added on October 3 and no longer matches "no workflow was added". It runs on pull requests, pushes to `main` and manual dispatch, with read-only (`contents: read`) permissions, cancellation of superseded pull-request runs and two jobs:
+
+- **Type-check and build** (15-minute limit): frozen install on the Node version from `.node-version`, `pnpm check`, `pnpm build`, and `node tools/roadmap.mjs validate` plus `render --check`.
+- **Secret scan** (5-minute limit): a pinned, checksum-verified gitleaks scan of the working tree with `.gitleaks.toml`.
+
+Both jobs run on the repository's self-hosted Linux ARM64 runner by default, so they do not use GitHub-hosted minutes; setting the repository variable `CI_RUNNER=github` moves them to GitHub-hosted `ubuntu-latest`. `ci.yml` does not run `tools/verify.mjs` profiles. `.github/workflows/android.yml` is separate, runs only for `android/` or its own workflow changes, and uses `ubuntu-latest` (see [Android build](android-build.md)). These workflows are not profile acceptance. The local profiles above remain the primary verification, and the Workers Builds deploy gate runs `fast` and `protection` ([deployment](deployment.md)).
+
 ## Verification evidence — September 30, 2026
 
 `node tests/verification-profiles.mjs`, all three profiles (`fast`, `site`, `app`), `pnpm check` and `git diff --check` passed in the repository checkout on Node 24.21.0. Each connected journey created its own disposable local state with all current migrations. The site journey observed two synthetic main-model calls and two acknowledgments, with zero customer units charged. The app journey passed actual QuickJS execution plus signed fixture passkeys, task-list transitions, owner erasure and visitor data isolation. No provider credentials, CMS functional acceptance, remote deployment or physical-device test was used. This is source/tooling acceptance; no Worker deployment is needed for this change.

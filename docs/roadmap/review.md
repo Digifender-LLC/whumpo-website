@@ -18,7 +18,7 @@ Feature documents contain valuable append-only implementation history, including
 
 - [Owner recovery](../owner-recovery.md) records deployment and connected local browser acceptance; older [security risk actions](../security-risk-actions.md) must not cause that completed implementation to be rebuilt. Physical devices and authenticated live recovery remain open.
 - [Photos](../photos.md) still contains earlier references to a future saved-version deletion policy and a direct “Use in website” control; [version retention](../version-retention.md) and the later photo safety section supersede those statements.
-- The [acceptance priorities](../acceptance.md#delivery-priorities) still call for local CMS media/import work whose connected native/browser acceptance is recorded later in [EmDash](../emdash.md). First live provisioning remains open, and CMS testing is currently owner-deferred.
+- The [acceptance priorities](../acceptance.md#current-delivery-priorities) still call for local CMS media/import work whose connected native/browser acceptance is recorded later in [EmDash](../emdash.md). First live provisioning remains open, and CMS testing is currently owner-deferred.
 - Historical metered-AI wording remains in several feature documents. [Standard AI accounting](../standard-ai-accounting.md) and the current [pricing/model policy](../pricing-and-model-policy.md) govern new standard Chat; historical receipts retain their original semantics.
 
 A single current capability/evidence index should point to the detailed contracts and dated records. Preserve old evidence as history; do not silently rewrite its original test scope or numbers.

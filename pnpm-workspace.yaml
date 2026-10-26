@@ -9,3 +9,5 @@ minimumReleaseAgeExclude:
 onlyBuiltDependencies:
   - esbuild
   - workerd
+overrides:
+  ip-address: 10.7.4
