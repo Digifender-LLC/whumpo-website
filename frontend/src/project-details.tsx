@@ -1,6 +1,8 @@
 import {useState} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import {useRouterState} from '@tanstack/react-router';
+import {selectedProject} from './lib/workspace-navigation';
+import {StaleProject} from './workspace-controls';
 import {api,send,message,queryClient} from './lib/api';
 import {Section,Field} from './workspace-pages';
 import {useWorkspace} from './workspace';
@@ -10,8 +12,10 @@ import {Textarea} from './components/ui/textarea';
 import {Button} from './components/ui/button';
 type Details={id:string;name:string;purpose:string;audience:string;style_notes:string;preferred_theme:string;revision:number};
 export function ProjectDetailsPanel(){
- const search=useRouterState({select:s=>s.location.searchStr}),project=new URLSearchParams(search).get('project')??'';
+ const search=useRouterState({select:s=>s.location.searchStr}),{dashboard}=useWorkspace(),{project,stale}=selectedProject(search,dashboard?.projects);
  const data=useQuery({queryKey:['project-details',project],queryFn:()=>api<Details>('/projects/'+project+'/details'),enabled:!!project,refetchOnWindowFocus:false,refetchOnReconnect:false});
+ if(stale)return <StaleProject stale/>;
+ if(!project&&!dashboard&&search.includes('project'))return <p>Opening project details…</p>;
  if(!project)return <p>Select a project’s Details button in your dashboard.</p>;
  if(data.isPending)return <p>Opening project details…</p>;
  if(data.error)return <p role="alert">{message(data.error)}</p>;
