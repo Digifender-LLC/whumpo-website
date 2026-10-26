@@ -45,7 +45,7 @@
     root.replaceChildren(render(value));
   }
 
-  // ../../../node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/bufferToBase64URLString.js
+  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/bufferToBase64URLString.js
   function bufferToBase64URLString(buffer) {
     const bytes = new Uint8Array(buffer);
     let str = "";
@@ -56,7 +56,7 @@
     return base64String.replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
   }
 
-  // ../../../node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/base64URLStringToBuffer.js
+  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/base64URLStringToBuffer.js
   function base64URLStringToBuffer(base64URLString) {
     const base64 = base64URLString.replace(/-/g, "+").replace(/_/g, "/");
     const padLength = (4 - base64.length % 4) % 4;
@@ -70,7 +70,7 @@
     return buffer;
   }
 
-  // ../../../node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/browserSupportsWebAuthn.js
+  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/browserSupportsWebAuthn.js
   function browserSupportsWebAuthn() {
     return _browserSupportsWebAuthnInternals.stubThis(globalThis?.PublicKeyCredential !== void 0 && typeof globalThis.PublicKeyCredential === "function");
   }
@@ -78,7 +78,7 @@
     stubThis: (value) => value
   };
 
-  // ../../../node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/toPublicKeyCredentialDescriptor.js
+  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/toPublicKeyCredentialDescriptor.js
   function toPublicKeyCredentialDescriptor(descriptor) {
     const { id } = descriptor;
     return {
@@ -89,7 +89,7 @@
     };
   }
 
-  // ../../../node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/isValidDomain.js
+  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/isValidDomain.js
   function isValidDomain(hostname) {
     return (
       // Consider localhost valid as well since it's okay wrt Secure Contexts
@@ -98,7 +98,7 @@
     );
   }
 
-  // ../../../node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/webAuthnError.js
+  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/webAuthnError.js
   var WebAuthnError = class extends Error {
     constructor({ message: message2, code, cause, name }) {
       super(message2, { cause });
@@ -113,7 +113,7 @@
     }
   };
 
-  // ../../../node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/identifyRegistrationError.js
+  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/identifyRegistrationError.js
   function identifyRegistrationError({ error, options }) {
     const { publicKey } = options;
     if (!publicKey) {
@@ -209,7 +209,7 @@
     return error;
   }
 
-  // ../../../node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/webAuthnAbortService.js
+  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/webAuthnAbortService.js
   var BaseWebAuthnAbortService = class {
     constructor() {
       Object.defineProperty(this, "controller", {
@@ -240,7 +240,7 @@
   };
   var WebAuthnAbortService = new BaseWebAuthnAbortService();
 
-  // ../../../node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/toAuthenticatorAttachment.js
+  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/toAuthenticatorAttachment.js
   var attachments = ["cross-platform", "platform"];
   function toAuthenticatorAttachment(attachment) {
     if (!attachment) {
@@ -252,7 +252,7 @@
     return attachment;
   }
 
-  // ../../../node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/methods/startRegistration.js
+  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/methods/startRegistration.js
   async function startRegistration(options) {
     if (!options.optionsJSON && options.challenge) {
       console.warn("startRegistration() was not called correctly. It will try to continue with the provided options, but this call should be refactored to use the expected call structure instead. See https://simplewebauthn.dev/docs/packages/browser#typeerror-cannot-read-properties-of-undefined-reading-challenge for more information.");
@@ -342,7 +342,7 @@
 `, cause);
   }
 
-  // ../../../node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/browserSupportsWebAuthnAutofill.js
+  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/browserSupportsWebAuthnAutofill.js
   function browserSupportsWebAuthnAutofill() {
     if (!browserSupportsWebAuthn()) {
       return _browserSupportsWebAuthnAutofillInternals.stubThis(new Promise((resolve) => resolve(false)));
@@ -357,7 +357,7 @@
     stubThis: (value) => value
   };
 
-  // ../../../node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/identifyAuthenticationError.js
+  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/helpers/identifyAuthenticationError.js
   function identifyAuthenticationError({ error, options }) {
     const { publicKey } = options;
     if (!publicKey) {
@@ -402,7 +402,7 @@
     return error;
   }
 
-  // ../../../node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/methods/startAuthentication.js
+  // node_modules/.pnpm/@simplewebauthn+browser@14.0.0/node_modules/@simplewebauthn/browser/esm/methods/startAuthentication.js
   async function startAuthentication(options) {
     if (!options.optionsJSON && options.challenge) {
       console.warn("startAuthentication() was not called correctly. It will try to continue with the provided options, but this call should be refactored to use the expected call structure instead. See https://simplewebauthn.dev/docs/packages/browser#typeerror-cannot-read-properties-of-undefined-reading-challenge for more information.");

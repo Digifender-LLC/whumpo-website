@@ -61,8 +61,8 @@ Families: 52 (36 privileged; platform-api 28, visitor 17, service 1, scheduled 3
 | freshness | 7 | 6 | 11 | 0 |
 | target | 35 | 0 | 2 | 0 |
 | replay | 34 | 0 | 3 | 0 |
-| stale | 38 | 1 | 1 | 2 |
-| admission | 10 | 2 | 5 | 1 |
+| stale | 39 | 0 | 1 | 2 |
+| admission | 11 | 1 | 5 | 1 |
 | tenant | 22 | 0 | 0 | 1 |
 
 Cells not recorded (not required for that family's surface and privilege): 137.
@@ -108,7 +108,7 @@ Cells not recorded (not required for that family's surface and privilege): 137.
 | site-traffic | visitor | no | 4 / 0 | n/a | n/a | — | — | — | — | n/a | evidenced |
 | operator-serving-stop | visitor | no | 7 / 0 | n/a | n/a | — | — | — | — | evidenced | evidenced |
 | guest-preview-host | visitor | visitor-data | 3 / 0 | evidenced | evidenced | — | evidenced | evidenced | evidenced | evidenced | evidenced |
-| visitor-app-shell | visitor | no | 5 / 0 | n/a | evidenced | — | — | — | — | gap (test) | evidenced |
+| visitor-app-shell | visitor | no | 5 / 0 | n/a | evidenced | — | — | — | — | evidenced | evidenced |
 | visitor-gateway-dispatch | visitor | no | 3 / 0 | evidenced | evidenced | — | — | — | — | evidenced | evidenced |
 | visitor-auth | visitor | credential | 4 / 0 | evidenced | evidenced | — | evidenced | evidenced | evidenced | gap (control B5) | evidenced |
 | visitor-account-lifecycle | visitor | deletion, visitor-data | 4 / 0 | evidenced | evidenced | — | evidenced | evidenced | evidenced | evidenced | evidenced |
@@ -116,7 +116,7 @@ Cells not recorded (not required for that family's surface and privilege): 137.
 | visitor-modules | visitor | visitor-data | 2 / 0 | evidenced | evidenced | — | evidenced | evidenced | evidenced | evidenced | evidenced |
 | runtime-execute | service | execution | 1 / 0 | evidenced | evidenced | — | evidenced | n/a | n/a | evidenced | evidenced |
 | scheduled-maintenance | scheduled | deletion | 15 / 0 | evidenced | — | — | n/a | n/a | evidenced | — | evidenced |
-| scheduled-provider-cleanup | scheduled | connection, dns-hosting | 3 / 0 | evidenced | — | — | evidenced | evidenced | gap (test) | — | evidenced |
+| scheduled-provider-cleanup | scheduled | connection, dns-hosting | 3 / 0 | evidenced | — | — | evidenced | evidenced | evidenced | — | evidenced |
 | scheduled-contact-delivery | scheduled | notification | 1 / 0 | evidenced | — | — | n/a | evidenced | unverified | — | evidenced |
 | operator-release | operator-tool | release | 9 / 0 | evidenced | — | — | evidenced | evidenced | evidenced | — | evidenced |
 | operator-mutation | operator-tool | operator | 11 / 0 | gap (control B4) | — | — | evidenced | evidenced | evidenced | — | evidenced |
@@ -224,7 +224,7 @@ Slice 2 (source and configuration reading; none executed unless stated):
 - **R9 Platform-wide visitor ceilings (same class as B1, owner-driven).** `app_visitors` and `app_invitations` (100 per project, 1,000 platform), `app_sessions` (5,000) and `app_runs` (10,000, removed only on erasure) can be filled by one owner across their own projects. Partly documented in [app-data.md](app-data.md); not executed.
 - **R10 Local-mode switches.** `site-host` derives its local alias from the request host name (`localhost`/`127.0.0.1`), which the `*.whumpo.site/*` route cannot deliver; `contactPage` skips Turnstile when `ENVIRONMENT==='local'`, which the release tooling refuses for deployment (`Only the test platform may be released`). Neither was verified live.
 - **R11 Public read paths without per-client limits.** Site HTML, directory, CMS articles/listing and the guest link-status endpoint rely on the Cloudflare edge; every 200 HTML GET increments the traffic counter, so a project's traffic figure can be inflated. Contact attempts are counted before Turnstile and not refunded, so a source can exhaust a shared IP's daily contact allowance (documented abuse brake).
-- **R12 Custom-domain serving unverified.** Whether Cloudflare for SaaS custom-hostname traffic reaches the `*.whumpo.site/*` route is unverified (hosting is inactive behind `DOMAIN_HOSTING_READY`). The hourly hosting refresh demotes an active domain before re-checking it (fail-closed availability trade-off); `maintainHosting` has no direct test.
+- **R12 Custom-domain serving unverified.** Whether Cloudflare for SaaS custom-hostname traffic reaches the `*.whumpo.site/*` route is unverified (hosting is inactive behind `DOMAIN_HOSTING_READY`). The hourly hosting refresh demotes an active domain before re-checking it (fail-closed availability trade-off); `maintainHosting`'s stale-record handling is asserted by `tests/boundary-hosting-maintenance-stale.mjs` (SQLite and `--d1`, outside profiles).
 - **R13 Runtime fairness is advisory and per isolate.** Any Worker with the binding chooses the lane; the two-slot gate holds per isolate only. The heap-limit and body-cap tests do not discriminate the specific limit that fired.
 - **R14 Operator tools acting on invocation.** `deploy-platform.mjs` (the documented hotfix path) and `provision-cms.mjs` deploy without a manifest, journal, reviewed input or `ENVIRONMENT` check (the deployment lease still applies); `stripe-sandbox.mjs` checks `livemode` but not the expected Stripe account; only `prepare-release` and `feature-preview` pin `ENVIRONMENT=test`; journals live under ignored `.secrets/` and no tool writes the run record AGENTS.md asks for. No tool prints a secret or deletes a remote database, bucket, Worker, DNS record or secret. `stripe-sandbox` and `create-invite` have no tests.
 - **R15 Read-only operator reports are read-only by convention.** They use the same remote D1 client that can run any SQL; no test asserts SELECT-only use.
@@ -248,7 +248,7 @@ Still open after slice 3 (evidence only, no new finding): expiry of a program ro
 
 **Closed in slice 2** by two passing regressions, kept **standalone** (not in a verify profile): during the full `protection` run the visitor-gateway regression failed once in its shared `deletionFixture()` setup (`prepareAppPage` swallowed an insert error and returned `409 Page review unavailable`) and then passed three consecutive reruns in the same allowlisted environment, so it is not added to the deploy gate until that fixture flake is understood. The regressions are `tests/boundary-site-isolation.mjs` (through the sites Worker's default export on local D1: another project's published site and directory/CMS paths are not served by path on a project host; its backend and a pinned backend publication are refused there; custom and unmapped hosts never reach a backend; refused requests never reach the runtime) and `tests/boundary-visitor-gateway-isolation.mjs` (through `applicationGateway`: another project's session under either cookie name gets no data, export, receipt or deletion review; another visitor's receipt is 404; query strings, other methods, cross-site `Sec-Fetch-Site`, the API limiter and a foreign host are refused; a stale `pageId` admits no run).
 
-**Still open (slice 2):** held specification on the photo route; the host-level photo 429 mapping; serve-time digest mismatch for CMS and backend; the custom-domain owner-join refusal; guest comment caps (200 per link, 2,000 per owner); contact page per-IP 429, missing/oversize token, 405, 415 and page-level stale revision; visitor self-deletion under a safety hold; `files.read` naming a foreign file id by authorized staff; route-specific Origin test for `modules/upload`; the site-host → `APP_HOST` forwarding; the app shell's limiter; `maintainHosting`; the runtime's global two-slot refusal; operator CLI wrappers (argument/apply gating) for every tool except `deploy ci` and `configure-github-app` dry-run.
+**Still open (slice 2):** held specification on the photo route; the host-level photo 429 mapping; serve-time digest mismatch for CMS and backend; the custom-domain owner-join refusal; guest comment caps (200 per link, 2,000 per owner); contact page per-IP 429, missing/oversize token, 405, 415 and page-level stale revision; visitor self-deletion under a safety hold; `files.read` naming a foreign file id by authorized staff; route-specific Origin test for `modules/upload`; the site-host → `APP_HOST` forwarding; the app shell's limiter; the runtime's global two-slot refusal; operator CLI wrappers (argument/apply gating) for every tool except `deploy ci` and `configure-github-app` dry-run.
 
 ## Verification
 
@@ -371,3 +371,78 @@ node tests/boundary-audit.mjs                          # passed
 - Close the remaining evidence gaps above with focused regressions where the owner wants them, and decide whether the ungated evidence suites (R7), including the three slice 3 regressions, should join a verify profile.
 - Verify live routing/activation (custom hostnames, contact delivery, `DOMAIN_HOSTING_READY`) with an owner-authorized read-only inspection.
 - Run the security scan workflow named in the packet against the current commit and reconcile with this registry.
+
+## Slice 9 evidence note (October 21, 2026 UTC, base `c20ba59`)
+
+**Add-only; no finding.** Adds [`tests/boundary-domain-proof-removal-sql.mjs`](../tests/boundary-domain-proof-removal-sql.mjs) for the `domains` family (`dns-hosting, deletion`). It addresses the slice 3 open item "the `domain_proof_removal_expired` trigger independently of their JavaScript preflight". No `src/`, schema, registry, backlog or existing test changed. `boundary-audit.json` does not cite the test yet.
+
+What it covers: the confirming statement is the one the real `domainProofRemoval` builds once its preflight admits the review. The state then changes before the batch commits, or a raw UPDATE skips the preflight. Fixtures are synthetic rows; no network. The test asserts:
+
+- **Stale state:** a review that expires between preflight and commit is refused with `domain_proof_removal_expired`. So are a proof expiry or project-owner change made after the review (`_changed`).
+- **Authority:** refused (`_changed`) are a plain guided message, an AI turn, a control for another review or of another kind, and another account's well-formed control.
+- **Immutable target:** extending the expiry or retargeting the review at the changed proof while applying is refused (`_immutable`).
+- **Replay:** an applied review cannot be re-applied or reopened, and its committed statement matches no row on replay. The removed claim id cannot be re-inserted (`_replay`).
+
+Every refusal also checks that the proof, the pending review, the activity log and the atomically batched confirm turn are unchanged. Each refusal has a passing twin that differs only in the property under test.
+
+What it does not prove: the Chat routing and conversation-revision check (covered by `tests/domain-proof-removal.mjs`); the HTTP/Origin path; trigger behaviour on remote D1; that the test fails under a mutation (no guard was removed). **Not run when written:** shell access was unavailable in this session, so neither `node tests/boundary-domain-proof-removal-sql.mjs` nor `--d1` has been executed. It is standalone and outside verify profiles (R7).
+
+## Registry sync note (October 21, 2026 UTC)
+
+Docs-only. `boundary-audit.json` now cites, in the `detail` text of the cell each covers, the merged tests that earlier notes said the registry did not yet cite. The "Still open" lists above are historical. Status is as recorded by each slice's note, not re-run here:
+
+- `billing-owner` `authority`: `tests/boundary-billing-portal-customer.mjs` (not run when written).
+- `operator-safety-cases` `freshness`: `tests/boundary-operator-freshness.mjs` (not run when written).
+- `public-contact-form` `admission`: `tests/boundary-contact-admission.mjs` (passed on SQLite; `--d1` not run).
+- `site-backend` `target`: `tests/boundary-backend-digest.mjs` (passed on SQLite and `--d1`).
+- custom-domain serving `tenant`: `tests/boundary-custom-domain-owner.mjs` (not run when written).
+- visitor application gateway `stale`: `tests/boundary-visitor-deletion-hold.mjs` (passes).
+- contact messages/notifications `origin` and visitor-modules `origin`: `tests/boundary-origin-routes.mjs` (run result not recorded).
+- `visitor-app-shell` `admission` (was `gap (test)`, now `evidenced`): `tests/boundary-visitor-shell-admission.mjs` (`pnpm test:boundary-visitor-shell-admission`) drives the `whumpo-apps` handler with a denying stub limiter and asserts the 429, the `page:<ip>` key, that no live-page lookup or asset fetch happens, and that an admitting limiter still serves the shell (not run when written).
+- `domains` `stale`: `tests/boundary-domain-proof-removal-sql.mjs` (not run when written).
+- visitor-modules `tenant`: `tests/boundary-module-file-read.mjs` (added, not yet verified locally; it stopped at fixture setup because python3 has no Pillow).
+
+`tests/boundary-photo-route-held.mjs` is only in open PR #321, not on main, so no cell cites it. The photo-route held specification and host-level 429 gaps stay open.
+
+## Slice 12 evidence note (October 21, 2026 UTC)
+
+**Add-only; no finding.** Adds [`tests/boundary-apps-host-forwarding.mjs`](../tests/boundary-apps-host-forwarding.mjs) (`pnpm run test:boundary-apps-host-forwarding`) for `site-host-dispatch` `tenant`. That cell stays `evidenced` and now also cites this test and the forwarding line in `src/site-host.ts`. This closes "the site-host → `APP_HOST` forwarding" under "Still open (slice 2)". No `src/`, schema or existing test changed.
+
+Why this item: the cells still marked gap or unverified are B2/B4/B5 control gaps (the code does not enforce them, so an add-only test cannot evidence them), the owner-deferred `site-cms` cells, `scheduled-contact-delivery` `stale` (already characterized), and `visitor-app-shell` `admission` (open PR #325). Of the two residuals earlier slices named, this one decides which Worker answers on the origin that holds visitor sessions. A published site can run backend-form scripts, so it must never be served there.
+
+The test drives the sites Worker's real default export on local SQLite and `--d1`, with a counting runtime stub and no network. It asserts:
+
+- **Forwarding:** GET, HEAD, POST (visitor cookie and body) and PUT on `app-<uuid>.whumpo.site` reach `APP_HOST` as the same `Request` object, and the reply comes back unchanged.
+- **No side effects:** a forwarded `/backend` POST makes no runtime call, and a forwarded 200 `text/html` reply records no site traffic.
+- **Real apps Worker:** with `src/app-host.ts` behind the binding, the forwarded shell is that Worker's 404 with its security headers, never the project's published site.
+- **Fail closed:** without the binding, the site root, `/s/<id>/`, assets, CMS, directory, `/backend` and gateway paths on any method are a 503 `Application unavailable`. None carries site HTML, calls the runtime or records traffic.
+- **Negative controls:** the same project's own host serves the site (200) and counts traffic. The local alias and the preview host are not forwarded, and neither are look-alike hosts (suffixed, prefixed, nested, another domain, a malformed id), which get a 404.
+
+What it does not prove: the live service binding and routes in `wrangler.sites.jsonc` (R10), or that the test fails under a mutation (no guard was removed). Standalone and outside verify profiles (R7). The photo-route host-level 429 mapping in `site-assets` `admission` is still open.
+
+## Slice 13 evidence note (October 22, 2026 UTC, base `ad6bae9`)
+
+**Add-only; no finding.** Adds [`tests/boundary-photo-route-admission.mjs`](../tests/boundary-photo-route-admission.mjs) (`pnpm run test:boundary-photo-route-admission`) for `site-assets` `admission`. The cell stays `evidenced`; it now also cites this test and the 429 mapping in `src/site-host.ts`, and its detail no longer says the host-level mapping is untested. This closes the item the slice 12 note left open. No `src/`, schema or existing test changed.
+
+The test drives the sites Worker's real default export on local SQLite (in-memory R2 stand-in) and `--d1` (local D1 + local R2), with synthetic photo clearance and no network. Through GET and HEAD on the project host and the local alias, it asserts:
+
+- **Client allowance:** one client's 400 photo reads of a project are served; the next is 429 `Too many photo requests from this connection today`, `no-store`, with no image bytes, no object read and no client, project or platform read charged.
+- **Project budget:** at 10,000 project reads a fresh client gets 503 `Photo allowance temporarily exhausted` with no bytes, no object read and no project or platform read charged. The client attempt is still counted, because the client sub-limit runs before the project batch (characterized, not a finding).
+- **Platform ceiling:** at 100,000 platform reads another account's project gets the same 503 with nothing charged.
+- **Negative controls:** the limited client keeps reading another project; another client keeps reading the limited project; the other account's project serves under its own budget; the same read is served once the platform counter is back below the ceiling.
+
+Run on October 22, 2026 UTC: passed on SQLite and `--d1`. With the 429 branch removed from `src/site-host.ts` the test fails (status 503, expected 429); the source was restored. Not covered: IPv6 /64 grouping and the shared `unknown` bucket at host level, the custom-domain `/assets/<id>.jpg` path, operator photo containment allowances, remote D1. Standalone and outside verify profiles (R7).
+
+
+## Slice 14 evidence note (October 23, 2026 UTC, base `3a12d53`)
+
+**Add-only; no finding.** Adds [`tests/boundary-custom-domain-photo-route.mjs`](../tests/boundary-custom-domain-photo-route.mjs) (`pnpm run test:boundary-custom-domain-photo-route`) for `site-assets` `admission`. The cell stays `evidenced` and now also cites this test. This closes the "custom-domain `/assets/<id>.jpg` path" item that the slice 13 note left open. No `src/`, schema or existing test changed.
+
+The test connects two published projects to custom hostnames through the real domain-hosting handlers (Cloudflare and DNS go to a recording stub) and drives the sites Worker's real default export on local SQLite (in-memory R2 stand-in) and `--d1` (local D1 + local R2), with synthetic photo clearance and no network. Through GET and HEAD on the custom host it asserts:
+
+- **Serving:** the exact approved photo is served and charges one client, project and platform read per request.
+- **Path allowlist:** the project-prefixed path, a trailing slash, another extension, a nested path, a photo id not on the publication and another project's photo are 404, and POST is 405, each with no bytes, no object read and no charge.
+- **Admission:** the 401st read from one client is 429; a project at 10,000 reads and a platform at 100,000 reads are 503 with no bytes, object read or project/platform charge.
+- **Negative controls:** another client, another connected project, and the same read once the platform counter is restored keep serving.
+
+Run on October 23, 2026 UTC: passed on SQLite and `--d1`. With the `reservePublicPhotoRead` call removed from `src/site-host.ts` the test fails (reads not charged); the source was restored. Loosening the custom-host path regex alone does not fail the test, because the widened paths still miss every later route, so the allowlist is defense in depth here. Not covered: IPv6 /64 grouping and the shared `unknown` bucket at host level, operator photo containment allowances, remote D1. Standalone and outside verify profiles (R7).

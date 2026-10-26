@@ -8,7 +8,7 @@
 
 ## Checklist
 
-- [ ] Current-version only: no legacy readers, aliases, fallbacks or data-preservation migrations (see `AGENTS.md`)
+- [ ] Current-version only: no legacy readers, aliases, fallbacks or data-preservation migrations
 - [ ] Docs updated, with planned, implemented and configured/accepted kept distinct
 - [ ] No credentials, customer content or secrets in code, logs, fixtures or model context
 - [ ] No paid Cloudflare service, plan change, customer DNS change or deploy without explicit authorization

@@ -59,7 +59,7 @@ Provider-key patterns were checked in the 336 snapshot inputs, including DOCX XM
 
 ## Resume setup and boundaries
 
-Clone/fetch `codex/identity-admission`; use Node.js 24 and pnpm 11 (`package.json` pins pnpm). Install with `pnpm install --frozen-lockfile`, read `AGENTS.md`, then check live issue #100, source, remote release and `docs/roadmap/{README,execution,alignment}.md`. Run focused checks appropriate to the next actual changes. Some fixtures require Playwright/browser/accessibility tools; see `docs/verification.md`. Do not run a production asset build while a frontend fixture HTML is active. No task-owned fixture or deployment process needs to remain running at this pause.
+Clone/fetch `codex/identity-admission`; use Node.js 24 and pnpm 11 (`package.json` pins pnpm). Install with `pnpm install --frozen-lockfile`, then check live issue #100, source, remote release and `docs/roadmap/{README,execution,alignment}.md`. Run focused checks appropriate to the next actual changes. Some fixtures require Playwright/browser/accessibility tools; see `docs/verification.md`. Do not run a production asset build while a frontend fixture HTML is active. No task-owned fixture or deployment process needs to remain running at this pause.
 
 - All environments are **testing**, with current-version-only schemas/protocols. No legacy readers, compatibility adapters or numbered migrations. Disposable current-schema cutovers are authorized when needed.
 - **CSAM implementation, Daybreak and CMS functional testing stay deferred.**

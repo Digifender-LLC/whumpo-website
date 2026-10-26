@@ -302,11 +302,20 @@ const suiteCount=await suite(real);total+=suiteCount;
 
 // ---------- Agreement with the existing WH-036 source (read-only) ----------
 await checkOnce('bundle the existing contact notification source',async()=>{
- const bundled=await build({stdin:{contents:"export {contactEmailMessage,cloudflareEmailOutcome,contactNotificationSender,cloudflareEmailProvider} from './src/contact-email';export {implementedContactNotificationProviders,maxContactDeliveryAttempts} from './src/contact-notifications';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'neutral',write:false,logLevel:'silent'});
+ const bundled=await build({stdin:{contents:"export {contactEmailMessage,cloudflareEmailOutcome,contactNotificationSender,cloudflareEmailProvider} from './src/contact-email';export {implementedContactNotificationProviders,maxContactDeliveryAttempts,contactMonthlyCeilingCents} from './src/contact-notifications';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'neutral',write:false,logLevel:'silent'});
  src=await import('data:text/javascript;base64,'+Buffer.from(bundled.outputFiles[0].text).toString('base64'));
 });
+// The WH-036 contact notice text as it was hard-coded before WH-155 (src/contact-email.ts at ad6bae9). Since WH-155 the source
+// renders it from the catalog, so these literals, not the source, are the byte-for-byte baseline.
+const inbox='https://whumpo.com/workspace/inbox';
+const goldenNewMessage={subject:'New contact-form message in Whumpo',text:`A visitor sent a new message through a contact form on one of your Whumpo websites.\n\nRead it in your private inbox: ${inbox}\n\nThis notice does not include the message.\n\nYou receive this because this address was added and verified for contact-form notices in Whumpo. To stop them, remove the address in Dashboard → Contact inbox (${inbox}).`};
+const goldenVerification=code=>({subject:'Your Whumpo verification code',text:`Your Whumpo verification code is ${code}\n\nEnter it in Dashboard → Contact inbox within one hour to receive contact-form notices at this address. If you did not ask for this, ignore this email; nothing will be sent unless the code is entered.`});
 await checkOnce('the catalog re-expresses the existing contact notices byte for byte',()=>{
  const t=real.notificationCatalog.templates;
+ assert.deepEqual(real.render(t['contact.new-message@1'].template,{}),goldenNewMessage);
+ assert.deepEqual(real.render(t['owner.destination-verification@1'].template,{code:'ABCD2345'}),goldenVerification('ABCD2345'));
+ assert.deepEqual(src.contactEmailMessage({outboxId:'o',idempotencyKey:'k',kind:'new_message',projectId:'p',recipient:'owner@example.test'}),goldenNewMessage);
+ assert.deepEqual(src.contactEmailMessage({outboxId:'o',idempotencyKey:'k',kind:'verification',projectId:'p',recipient:'owner@example.test',verificationCode:'Z9Y8X7W6'}),goldenVerification('Z9Y8X7W6'));
  assert.deepEqual(real.render(t['contact.new-message@1'].template,{}),src.contactEmailMessage({outboxId:'o',idempotencyKey:'k',kind:'new_message',projectId:'p',recipient:'owner@example.test'}));
  assert.deepEqual(real.render(t['owner.destination-verification@1'].template,{code:'ABCD2345'}),src.contactEmailMessage({outboxId:'o',idempotencyKey:'k',kind:'verification',projectId:'p',recipient:'owner@example.test',verificationCode:'ABCD2345'}));
 });
@@ -314,6 +323,7 @@ await checkOnce('sender, provider ceiling, attempt bound and error classes agree
  const p=real.notificationCatalog.providers[src.cloudflareEmailProvider];assert.ok(p);
  assert.equal(real.notificationCatalog.senders['whumpo-notify'].address,src.contactNotificationSender);
  assert.equal(p.ceiling.callsPer32Days,src.implementedContactNotificationProviders[src.cloudflareEmailProvider].sendCeiling);
+ assert.equal(p.ceiling.callsPer32Days,Math.floor(src.contactMonthlyCeilingCents*1000/35),'the $5 owner ceiling at $0.35 per 1,000');
  assert.equal(real.bounds.maxAttempts,src.maxContactDeliveryAttempts);
  const codes=[...p.errorClasses.notTaken,...p.errorClasses.rejected,...p.errorClasses.suppressed,'E_INTERNAL_SERVER_ERROR','E_NOT_DOCUMENTED',''];
  for(const code of codes){
@@ -336,7 +346,7 @@ await checkOnce('every existing contact outbox state maps to a contract receipt 
 });
 await checkOnce('the existing contact notification source cannot reach owner-maintenance inference',async()=>{
  const inference=/^src\/(ai|ai-chat|ai-gateway|acknowledgment|site-agent|agent-[a-z-]+|standard-ai[a-z-]*|chat|backend-chat|app-upgrade-chat|app-recovery-chat|app-page-design)\.ts$|^src\/chat-interactions\/(agent|agent-request|model-continuation|continuation)\.ts$/;
- for(const entry of ['src/contact-notifications.ts','src/contact-email.ts']){
+ for(const entry of ['src/contact-notifications.ts','src/contact-email.ts','src/notification-catalog.ts']){
   const out=await build({entryPoints:[entry],bundle:true,format:'esm',platform:'node',write:false,metafile:true,logLevel:'silent'});
   const inputs=Object.keys(out.metafile.inputs);assert.ok(inputs.length>0);
   assert.deepEqual(inputs.filter(p=>inference.test(p)),[],entry);
@@ -348,6 +358,146 @@ await checkOnce('the reference imports only node builtins and performs no networ
  assert.deepEqual(specifiers,['node:crypto']);
  assert.ok(!/\bfetch\s*\(|XMLHttpRequest|WebSocket|process\.env/.test(prototypeSource));
 });
+
+// ---------- WH-155 source catalog agreement ----------
+// The source catalog (src/notification-catalog.ts) must equal the frozen reference value for value, produce the same digests
+// and renders, and refuse the same inputs with the same codes. Source mutants below must each be caught here.
+const catalogURL=new URL('../src/notification-catalog.ts',import.meta.url);
+const catalogSource=readFileSync(catalogURL,'utf8');
+const bundleCatalog=async contents=>{
+ const out=await build({stdin:{contents,loader:'ts',resolveDir:process.cwd(),sourcefile:'notification-catalog.ts'},bundle:true,format:'esm',platform:'neutral',write:false,logLevel:'silent'});
+ return import('data:text/javascript;base64,'+Buffer.from(out.outputFiles[0].text).toString('base64'));
+};
+async function sourceSuite(S){
+ let count=0;
+ const test=async(name,fn)=>{try{await fn();count++;}catch(error){throw new Error(name,{cause:error});}};
+ const code=async(fn,expected)=>{let got;try{await fn();}catch(e){got=e.code??e.message;}assert.equal(got,expected);};
+ const refCode=async fn=>{try{await fn();return 'ok';}catch(e){return e.code??e.message;}};
+ const C=()=>structuredClone(real.notificationCatalog);
+ const pin=key=>{const t=real.notificationCatalog.templates[key].template;return {id:t.id,version:t.version,digest:real.templateDigest(t)};};
+ const R='44444444-4444-4444-8444-444444444444';
+ const staff=(o={})=>({contractVersion:1,id:'appointment-staff',template:pin('appointment.staff-notice@1'),trigger:{event:'form.accepted',resourceId:R,formId:'booking'},recipientScope:'project-staff',sender:'whumpo-notify',values:{businessName:'Shine Detailing'},fields:{},limits:{perRecipientHour:10,perRecipientDay:50},...o});
+ const receipt=(o={})=>({...staff(),id:'appointment-receipt',template:pin('appointment.request-receipt@1'),recipientScope:'submitter',fields:{service:'service',day:'day'},limits:{perRecipientHour:3,perRecipientDay:10},...o});
+ await test('source catalog equals the frozen reference catalog and validates',()=>{
+  assert.deepEqual(JSON.parse(JSON.stringify(S.notificationCatalog)),JSON.parse(JSON.stringify(real.notificationCatalog)));
+  assert.equal(S.validateNotificationCatalog(S.notificationCatalog),true);
+  assert.ok(Object.isFrozen(S.notificationCatalog.templates['contact.new-message@1'].template.body),'the source catalog is deeply frozen');
+  assert.deepEqual({...S.platformLinks},{...real.platformLinks});
+  assert.deepEqual([...S.recipientScopes],[...real.recipientScopes]);assert.deepEqual([...S.notificationTriggers],[...real.triggers]);
+ });
+ await test('source digests equal reference digests for every template and the catalog',async()=>{
+  for(const [key,e] of Object.entries(S.notificationCatalog.templates))assert.equal(await S.notificationTemplateDigest(e.template),real.templateDigest(real.notificationCatalog.templates[key].template),key);
+  assert.equal(await S.notificationDigest(S.notificationCatalog),real.digest(real.notificationCatalog));
+ });
+ await test('source renders every template exactly as the reference',()=>{
+  const f={service:{options:['Exterior wash','Full detail']},day:{options:['Monday','Tuesday']}};
+  const cases={'contact.new-message@1':{},'owner.destination-verification@1':{code:'ABCD2345'},'appointment.staff-notice@1':{businessName:'Shine Detailing'},'appointment.request-receipt@1':{businessName:'Shine Detailing',reference:'ABCDEF12',service:'Full detail',day:'Tuesday'}};
+  for(const [key,values] of Object.entries(cases))assert.deepEqual(S.renderCatalogNotification(key,values,f),real.render(real.notificationCatalog.templates[key].template,values,f),key);
+  assert.deepEqual(S.renderCatalogNotification('contact.new-message@1'),goldenNewMessage);
+  assert.equal(S.renderCatalogNotification('appointment.staff-notice@1',{businessName:'{{x}} ${y}'}).subject,'New appointment request for {{x}} ${y}','values are data, never template syntax');
+ });
+ await test('source renderer refuses invalid values, unknown and withdrawn templates',async()=>{
+  for(const values of [{},{code:'abcd2345'},{code:'ABCD2345\r\nBcc: x'},{code:'ABCD234'}])await code(()=>S.renderCatalogNotification('owner.destination-verification@1',values),'INVALID_VARIABLE');
+  for(const businessName of ['Shine\r\nBcc: victim@example.test','<script>x</script>','Visit https://evil.example','help@evil.example','x'.repeat(81)])
+   await code(()=>S.renderCatalogNotification('appointment.staff-notice@1',{businessName}),'INVALID_VARIABLE');
+  await code(()=>S.renderCatalogNotification('appointment.request-receipt@1',{businessName:'Shine',reference:'ABCDEF12',service:'Valet',day:'Monday'},{service:{options:['Full detail']},day:{options:['Monday']}}),'INVALID_VARIABLE');
+  await code(()=>S.renderCatalogNotification('contact.new-message@2'),'UNKNOWN_TEMPLATE');
+  await code(()=>S.renderCatalogNotification('__proto__'),'UNKNOWN_TEMPLATE');
+  const w=C();w.templates['contact.new-message@1'].state='withdrawn';await code(()=>S.renderCatalogNotification('contact.new-message@1',{},{},w),'TEMPLATE_WITHDRAWN');
+ });
+ await test('source template and catalog validators refuse what the reference refuses, with the same codes',async()=>{
+  const mut=(key,f)=>{const t=C().templates[key].template;f(t);return t;};
+  const templates=[
+   mut('appointment.staff-notice@1',t=>{t.contractVersion=2;}),mut('appointment.staff-notice@1',t=>{t.html='<b>x</b>';}),
+   mut('appointment.staff-notice@1',t=>{t.purpose='marketing';}),mut('appointment.staff-notice@1',t=>{t.audiences=['everyone'];}),
+   mut('appointment.staff-notice@1',t=>{t.body.push({link:'https://evil.example'});}),mut('appointment.staff-notice@1',t=>{t.subject.push({link:'workspace-inbox'});}),
+   mut('appointment.staff-notice@1',t=>{t.variables.target={source:'request',type:'url'};t.body.push({var:'target'});}),
+   mut('appointment.staff-notice@1',t=>{t.subject[0].text='Hi\r\nBcc: victim@example.test';}),mut('appointment.staff-notice@1',t=>{t.body[0].text='Hello {{owner.email}}';}),
+   mut('appointment.staff-notice@1',t=>{t.body[0].text='Hello ${owner}';}),mut('appointment.staff-notice@1',t=>{t.subject[0].text='a'+String.fromCharCode(0x2028);}),
+   mut('appointment.staff-notice@1',t=>{t.variables.vehicle={source:'record',type:'choice'};t.body.push({var:'vehicle'});}),
+   mut('appointment.staff-notice@1',t=>{t.variables.unused={source:'config',type:'text-line'};}),mut('appointment.staff-notice@1',t=>{t.body.push({var:'missing'});}),
+   mut('appointment.staff-notice@1',t=>{t.body.push({text:'x',var:'businessName'});}),mut('appointment.staff-notice@1',t=>{t.body.push({text:'x'.repeat(4000)});}),
+   mut('appointment.staff-notice@1',t=>{t.subject.push({text:'x'.repeat(100)});}),mut('appointment.staff-notice@1',t=>{t.headers={'X-A':'1'};}),
+   mut('contact.new-message@1',t=>{t.trigger='form.accepted';}),mut('contact.new-message@1',t=>{t.audiences=['owner-destination','submitter'];}),
+   mut('appointment.staff-notice@1',t=>{t.trigger='contact.accepted';}),mut('owner.destination-verification@1',t=>{t.trigger='contact.accepted';}),
+   mut('appointment.staff-notice@1',t=>{t.id='Bad Id';}),mut('appointment.staff-notice@1',t=>{t.version=0;}),
+  ];
+  for(const [i,t] of templates.entries()){
+   const expected=await refCode(()=>real.validateTemplate(structuredClone(t)));
+   assert.notEqual(expected,'ok',`case ${i} must be refused by the reference`);
+   await code(()=>S.validateNotificationTemplate(t),expected);
+  }
+  const catalogs=[c=>{c.contractVersion=0;},c=>{c.senders['whumpo-notify'].displayName='Whumpo\r\nBcc: x';},c=>{c.senders['whumpo-notify'].dnsReview=null;},
+   c=>{c.senders['whumpo-notify'].provider='nobody';},c=>{c.providers['cloudflare-email'].idempotency='maybe';},c=>{c.providers['cloudflare-email'].ceiling={callsPer32Days:0};},
+   c=>{c.templates['contact.new-message@1'].readiness='done';},c=>{const e=c.templates['contact.new-message@1'];delete c.templates['contact.new-message@1'];c.templates['contact.new-message@2']=e;}];
+  for(const [i,f] of catalogs.entries()){
+   const c=C();f(c);const expected=await refCode(()=>real.validateCatalog(structuredClone(c)));
+   assert.notEqual(expected,'ok',`catalog case ${i} must be refused by the reference`);
+   await code(()=>S.validateNotificationCatalog(c),expected);
+  }
+ });
+ await test('source configuration validator agrees with the reference on accepted and refused configurations',async()=>{
+  for(const cfg of [staff(),staff({recipientScope:'owner-destination',id:'appointment-owner'}),receipt()]){
+   const r=real.validateConfiguration(structuredClone(cfg)),v=await S.validateNotificationConfiguration(cfg);
+   assert.equal(v.configurationDigest,r.configurationDigest);assert.deepEqual(v.price,r.price);assert.equal(v.sender.address,'notify@whumpo.com');
+  }
+  const contact=pin('contact.new-message@1');
+  const unverified=C();unverified.senders['whumpo-notify'].state='unverified';
+  const withdrawn=C();withdrawn.templates['appointment.staff-notice@1'].state='withdrawn';
+  const cases=[
+   ...[{to:'victim@example.test'},{cc:['a@example.test']},{bcc:'b@example.test'},{recipients:['x@example.test']},{replyTo:'x@example.test'},{headers:{'X-A':'1'}},{url:'https://evil.example'},{from:'ceo@example.test'},{apiKey:'x'},{priority:'high'}].map(extra=>[staff(extra)]),
+   [staff({values:{email:'x@example.test'}})],[staff({values:{token:'x'}})],[staff({trigger:{event:'form.accepted',resourceId:R,formId:'booking',webhook:'https://evil.example'}})],
+   [staff({values:{businessName:'Visit https://evil.example now'}})],[staff({values:{businessName:'Write to help@evil.example'}})],[staff({values:{businessName:'Shine\nBcc: x'}})],
+   [staff({values:{businessName:'<b>Shine</b>'}})],[staff({values:{businessName:'Shine',extra:'x'}})],[staff({recipientScope:'anyone@example.test'})],[receipt({recipientScope:'project-staff'})],
+   [receipt({fields:{service:'Service Name',day:'day'}})],[staff({contractVersion:2})],[staff({template:{id:contact.id,version:1,digest:contact.digest}})],
+   [staff({template:{...pin('appointment.staff-notice@1'),digest:'0'.repeat(64)}})],[staff({template:{id:'appointment.staff-notice',version:2,digest:'0'.repeat(64)}})],
+   [staff({trigger:{event:'contact.accepted',resourceId:R,formId:'booking'}})],[staff({trigger:{event:'form.accepted',resourceId:'not-a-uuid',formId:'booking'}})],
+   [staff({limits:{perRecipientHour:11,perRecipientDay:50}})],[staff({limits:{perRecipientHour:10,perRecipientDay:51}})],[staff({limits:{perRecipientHour:5,perRecipientDay:4}})],
+   [staff({sender:'nobody'})],[staff(),unverified],[staff(),withdrawn],
+   ...['price','review','ceiling'].map(field=>{const c=C();c.providers['cloudflare-email'][field]=null;return [staff(),c];}),
+  ];
+  for(const [i,[cfg,catalog]] of cases.entries()){
+   const expected=await refCode(()=>real.validateConfiguration(structuredClone(cfg),catalog?structuredClone(catalog):undefined));
+   assert.notEqual(expected,'ok',`configuration case ${i} must be refused by the reference`);
+   await code(()=>S.validateNotificationConfiguration(cfg,catalog),expected);
+  }
+ });
+ await test('source provider error classes agree with the reference for every documented and unknown code',()=>{
+  const p=real.notificationCatalog.providers['cloudflare-email'].errorClasses;
+  for(const c of [...p.notTaken,...p.rejected,...p.suppressed,'E_INTERNAL_SERVER_ERROR','E_NOT_DOCUMENTED','','__proto__'])
+   assert.equal(S.classifyProviderError('cloudflare-email',c),real.classifyProviderError(real.notificationCatalog,'cloudflare-email',c),c);
+  assert.equal(S.classifyProviderError('unknown-provider','E_RATE_LIMIT_EXCEEDED'),'uncertain');
+  assert.equal(S.classifyProviderError('__proto__','E_RATE_LIMIT_EXCEEDED'),'uncertain');
+ });
+ return count;
+}
+let sourceCount=0;
+await checkOnce('the source catalog agrees with the frozen reference',async()=>{sourceCount=await sourceSuite(await bundleCatalog(catalogSource));});
+total+=sourceCount-1;
+await checkOnce('the source catalog imports nothing and the contact adapter no longer hard-codes notice text or provider facts',()=>{
+ assert.ok(!/\bimport\b/.test(catalogSource.replace(/\/\*[\s\S]*?\*\//g,'')),'notification-catalog.ts must not import');
+ assert.ok(!/\bfetch\s*\(|process\.env|\benv\./.test(catalogSource));
+ const adapter=readFileSync(new URL('../src/contact-email.ts',import.meta.url),'utf8');
+ for(const literal of ['A visitor sent a new message','Your Whumpo verification code','notify@whumpo.com','E_RATE_LIMIT_EXCEEDED','workspace/inbox'])assert.ok(!adapter.includes(literal),`contact-email.ts still contains ${literal}`);
+});
+const sourceMutants=[
+ ['source open relay keys accepted',"check(!relayKeys.has(k.toLowerCase()),'OPEN_RELAY'","check(true,'OPEN_RELAY'"],
+ ['source content allowed in owner/staff notices',"if(v.source==='record')check(","if(false)check("],
+ ['source template syntax accepted',"check(!/\\{\\{|\\}\\}|\\$\\{/.test(text as string),'TEMPLATE_SYNTAX',p);","check(true,'TEMPLATE_SYNTAX',p);"],
+ ['source render does not validate values',"check(spec&&variableTypes[spec.type](v,","check(spec||variableTypes[spec.type](v,"],
+ ['source unverified sender accepted',"check(sender.state==='verified','SENDER_NOT_VERIFIED'","check(true,'SENDER_NOT_VERIFIED'"],
+ ['source stale template digest accepted',"check(pin.digest===await notificationTemplateDigest(t),'STALE_TEMPLATE'","check(true,'STALE_TEMPLATE'"],
+ ['source contact text drifted',"This notice does not include the message.","This notice does not include the message"],
+ ['source withdrawn template rendered',"check(entry.state==='available','TEMPLATE_WITHDRAWN',key);",""],
+ ['source error class widened',"if(e.notTaken.includes(code))return 'not-taken';","if(e.notTaken.includes(code)||code==='E_INTERNAL_SERVER_ERROR')return 'not-taken';"],
+ ['source subject length unbounded',"segments(t.subject,'subject',false,notificationBounds.subjectChars);","segments(t.subject,'subject',false,1e9);"],
+];
+let sourceKilled=0;
+for(const [name,find,replace] of sourceMutants){
+ assert.equal(catalogSource.split(find).length,2,`source mutant "${name}" must match src/notification-catalog.ts exactly once`);
+ const mutant=await bundleCatalog(catalogSource.replace(find,()=>replace));
+ await assert.rejects(sourceSuite(mutant),e=>{if(process.argv.includes('--explain'))console.log(`${name} => ${e.message}`);return true;},`source mutant survived: ${name}`);sourceKilled++;
+}
 
 // ---------- Mutation check: each deliberately broken reference must fail the suite ----------
 const mutants=[
@@ -393,4 +543,4 @@ for(const [name,find,replace] of mutants){
  },`mutant survived: ${name}`);killed++;
 }
 assert.equal(killed,mutants.length);
-console.log(`notifications-contract: ${suiteCount} reference checks and ${total-suiteCount} source-agreement/static checks passed; ${killed}/${mutants.length} mutants caught (synthetic providers; no database, network, credential or model).`);
+console.log(`notifications-contract: ${suiteCount} reference checks and ${total-suiteCount} source-agreement/static checks passed; ${killed}/${mutants.length} reference mutants and ${sourceKilled}/${sourceMutants.length} source mutants caught (synthetic providers; no database, network, credential or model).`);

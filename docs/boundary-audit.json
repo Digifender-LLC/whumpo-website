@@ -830,7 +830,7 @@
     },
     "freshness": {
      "state": "evidenced",
-     "detail": "Passkey proof under ten minutes, checked before the action and again in the committing SQL (the in-SQL recheck path itself is untested).",
+     "detail": "Passkey proof under ten minutes, checked before the action and again in the committing SQL (the in-SQL recheck path is covered by tests/boundary-operator-freshness.mjs: test added; not run when written, not yet verified locally).",
      "enforcedAt": [
       {
        "file": "src/safety-cases.ts",
@@ -1060,7 +1060,7 @@
    "cells": {
     "authority": {
      "state": "evidenced",
-     "detail": "Checkout, refresh and portal key on the owner's order and stripe_customers row. No test calls the portal for an owner without a customer (code returns 409).",
+     "detail": "Checkout, refresh and portal key on the owner's order and stripe_customers row. The portal for an owner without a customer (code returns 409) is covered by tests/boundary-billing-portal-customer.mjs (test added; not run when written, not yet verified locally).",
      "enforcedAt": [
       {
        "file": "src/stripe-billing.ts",
@@ -3767,7 +3767,7 @@
     },
     "origin": {
      "state": "evidenced",
-     "detail": "Mutating methods pass the global exact-Origin gate (position machine-checked). The typed-control path has a cross-origin test; the contact-notification PUT/DELETE/POST and message DELETE routes rely on the gate without a route-specific test.",
+     "detail": "Mutating methods pass the global exact-Origin gate (position machine-checked). The typed-control path has a cross-origin test; the contact-notification PUT/DELETE/POST and message DELETE routes have route-specific cross-origin tests in tests/boundary-origin-routes.mjs (test added; run result not recorded here).",
      "enforcedAt": [
       {
        "file": "src/index.ts",
@@ -4168,7 +4168,7 @@
     },
     "stale": {
      "state": "evidenced",
-     "detail": "Expired proofs are refused; proof renewal invalidates older removal reviews. A removal review past its expiry is tested since slice 3: the explicit expiry reply leaves the proof in place and its unexpired twin removes it (the SQL trigger guard behind that reply is not independently exercised).",
+     "detail": "Expired proofs are refused; proof renewal invalidates older removal reviews. A removal review past its expiry is tested since slice 3: the explicit expiry reply leaves the proof in place and its unexpired twin removes it (the SQL trigger guard behind that reply is exercised independently by tests/boundary-domain-proof-removal-sql.mjs: test added; not run when written, not yet verified locally).",
      "enforcedAt": [
       {
        "file": "schema/platform.sql",
@@ -5813,7 +5813,7 @@
     },
     "admission": {
      "state": "evidenced",
-     "detail": "Per-IP API_LIMITER, fail-closed Turnstile (secret and site key required outside local; hostname/action/cdata bound), per-client daily allowance (10, counted before verification), hourly and retained caps in the commit trigger. The per-IP 429 and missing-token branches are untested.",
+     "detail": "Per-IP API_LIMITER, fail-closed Turnstile (secret and site key required outside local; hostname/action/cdata bound), per-client daily allowance (10, counted before verification), hourly and retained caps in the commit trigger. The per-IP 429 and missing-token branches are covered by tests/boundary-contact-admission.mjs (passed on local SQLite when written; --d1 not yet run).",
      "enforcedAt": [
       {
        "file": "src/contact-page.ts",
@@ -5955,11 +5955,15 @@
     },
     "tenant": {
      "state": "evidenced",
-     "detail": "On a project host the path is rewritten under /s/<that project>, so another project's /s/<id> path never matches a route. The `local` alias is derived from the request host name (localhost/127.0.0.1), which the *.whumpo.site route cannot deliver; not verified live (R10).",
+     "detail": "On a project host the path is rewritten under /s/<that project>, so another project's /s/<id> path never matches a route. The `local` alias is derived from the request host name (localhost/127.0.0.1), which the *.whumpo.site route cannot deliver; not verified live (R10). A visitor-application host (app-<uuid>.whumpo.site) is handed to APP_HOST before any site route, and fails closed with a 503 when the binding is absent, so the project's published site never runs on the origin that holds its visitors' sessions; asserted by tests/boundary-apps-host-forwarding.mjs (passes on local SQLite and --d1; standalone). The live service binding is not verified (R10).",
      "enforcedAt": [
       {
        "file": "src/site-host.ts",
        "contains": "if(project)url.pathname='/s/'+project+url.pathname;"
+      },
+      {
+       "file": "src/site-host.ts",
+       "contains": "if(visitorProject(url.hostname))return env.APP_HOST?env.APP_HOST.fetch(request):new Response('Application unavailable',{status:503,headers});"
       }
      ],
      "tests": [
@@ -5967,6 +5971,16 @@
        "file": "tests/boundary-site-isolation.mjs",
        "contains": "assert.equal((await fetchHost(`https://${a.project}.whumpo.site${path}`)).status,404,path);",
        "asserts": "another project's published site is not served by path on a project host (slice-2 regression, standalone)"
+      },
+      {
+       "file": "tests/boundary-apps-host-forwarding.mjs",
+       "contains": "assert.equal(apps.seen[i],sent,sent.method+' '+sent.url+' is forwarded as the same Request object');",
+       "asserts": "GET, HEAD, POST and PUT on the visitor host reach APP_HOST as the same Request with no runtime call or traffic; the project host, local alias, preview host and look-alike hosts are not forwarded (slice-12 regression, standalone)"
+      },
+      {
+       "file": "tests/boundary-apps-host-forwarding.mjs",
+       "contains": "if(method!=='HEAD')assert.equal(text,'Application unavailable',method+' '+path);",
+       "asserts": "without the APP_HOST binding every visitor-host path and method is a 503 with no site HTML, runtime call or traffic"
       }
      ]
     }
@@ -6104,11 +6118,15 @@
     },
     "admission": {
      "state": "evidenced",
-     "detail": "Per-client daily photo allowance (400), per-project monthly budget (10,000) with account fair share, platform ceiling (100,000). The host-level 429 mapping is untested (function-level only). Guest-preview views charge the same budget since B6 was resolved.",
+     "detail": "Per-client daily photo allowance (400), per-project monthly budget (10,000) with account fair share, platform ceiling (100,000). The host maps a client refusal to 429 and a project-budget or platform-ceiling refusal to 503 with no bytes, object read or project/platform charge (tests/boundary-photo-route-admission.mjs, SQLite and --d1). The same mapping, the path allowlist and the charges on a connected custom domain's /assets/<id>.jpg are asserted by tests/boundary-custom-domain-photo-route.mjs (SQLite and --d1). Guest-preview views charge the same budget since B6 was resolved.",
      "enforcedAt": [
       {
        "file": "src/site-host.ts",
        "contains": "await reservePublicPhotoRead(env.DB,request,asset[1]);"
+      },
+      {
+       "file": "src/site-host.ts",
+       "contains": "if(cause instanceof PublicClientLimitError)return new Response('Too many photo requests from this connection today',{status:429,headers});"
       }
      ],
      "tests": [
@@ -6116,6 +6134,16 @@
        "file": "tests/public-fairness.mjs",
        "contains": "await assert.rejects(read(ph,'203.0.113.77'),e=>e instanceof fair.PublicClientLimitError&&e.status===429);",
        "asserts": "one client is limited per day"
+      },
+      {
+       "file": "tests/boundary-photo-route-admission.mjs",
+       "contains": "await refused(limited,flood,'client allowance on the project host',429,clientText);",
+       "asserts": "the sites Worker answers the 401st photo read from one client with 429 and no bytes, object read or charge"
+      },
+      {
+       "file": "tests/boundary-custom-domain-photo-route.mjs",
+       "contains": "await refused(limited,photoURL(limited),flood,'client allowance on the custom host',429,clientText);",
+       "asserts": "a connected custom host answers the 401st photo read from one client with 429, and its project-budget and platform-ceiling refusals with 503, with no bytes, object read or charge; non-allowlisted paths are refused uncharged"
       }
      ]
     },
@@ -6411,7 +6439,7 @@
     },
     "target": {
      "state": "evidenced",
-     "detail": "Immutable source digest-checked at serve time (the 503 branch is untested); prepared-but-unconfirmed publications do not run.",
+     "detail": "Immutable source digest-checked at serve time (the 503 branch is covered by tests/boundary-backend-digest.mjs, passed on local SQLite and local D1); prepared-but-unconfirmed publications do not run.",
      "enforcedAt": [
       {
        "file": "src/backend-publication.ts",
@@ -6508,7 +6536,7 @@
     },
     "tenant": {
      "state": "evidenced",
-     "detail": "Mapping requires state active, unexpired serving window, provider id and the connection owner still owning the project (owner-join refusal itself is untested; only an operator can change ownership).",
+     "detail": "Mapping requires state active, unexpired serving window, provider id and the connection owner still owning the project (owner-join refusal is covered by tests/boundary-custom-domain-owner.mjs: test added; not run when written, not yet verified locally; only an operator can change ownership).",
      "enforcedAt": [
       {
        "file": "src/site-host.ts",
@@ -6994,13 +7022,19 @@
      ]
     },
     "admission": {
-     "state": "gap",
-     "gapKind": "test",
-     "detail": "Per-IP API_LIMITER on the page shell; no test asserts its 429.",
+     "state": "evidenced",
+     "detail": "Per-IP API_LIMITER on the page shell; tests/boundary-visitor-shell-admission.mjs asserts the 429 (keyed page:<cf-connecting-ip>, before the live-page lookup and the shell asset) and that an admitted request still gets the shell (not run when written).",
      "enforcedAt": [
       {
        "file": "src/app-host.ts",
        "contains": "if(!(await env.API_LIMITER.limit({key:'page:'+(request.headers.get('cf-connecting-ip')??'unknown')})).success)"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/boundary-visitor-shell-admission.mjs",
+       "contains": "assert.equal(response.status,429,`limited shell GET (${ip??'no cf-connecting-ip'})`);",
+       "asserts": "a denying limiter answers the page shell with 429 before any page lookup or asset fetch"
       }
      ]
     },
@@ -7488,7 +7522,7 @@
     },
     "stale": {
      "state": "evidenced",
-     "detail": "Stale, expired or changed-actor reviews are refused. A safety hold refusal surfaces as a generic 503 (untested through the gateway).",
+     "detail": "Stale, expired or changed-actor reviews are refused. A safety hold refusal surfaces as a generic 503 (covered through the gateway by tests/boundary-visitor-deletion-hold.mjs, which passes).",
      "enforcedAt": [
       {
        "file": "src/app-lifecycle.ts",
@@ -7738,7 +7772,7 @@
     },
     "origin": {
      "state": "evidenced",
-     "detail": "Shared gateway gate (route-specific upload test missing).",
+     "detail": "Shared gateway gate; the route-specific modules/upload test is tests/boundary-origin-routes.mjs (test added; run result not recorded here; its negative control proves the request reaches the upload handler, not a real write).",
      "enforcedAt": [
       {
        "file": "src/app-gateway.ts",
@@ -7777,7 +7811,7 @@
     },
     "tenant": {
      "state": "evidenced",
-     "detail": "Resources resolve only within the host project; A's resources on B's host are not_found, including uploads.",
+     "detail": "Resources resolve only within the host project; A's resources on B's host are not_found, including uploads. files.read naming a foreign file id by authorized staff is covered by tests/boundary-module-file-read.mjs (test added, not yet verified locally: it stopped at fixture setup because python3 has no Pillow).",
      "enforcedAt": [
       {
        "file": "src/shared-modules/registry.ts",
@@ -8292,13 +8326,38 @@
      ]
     },
     "stale": {
-     "state": "gap",
-     "gapKind": "test",
-     "detail": "maintainHosting itself has no test; per-record refreshHosting is tested.",
+     "state": "evidenced",
+     "detail": "maintainHosting re-checks due records stalest first; a lapsed window is renewed, a withdrawn proof or missing provider hostname is demoted with no serving window, a pending cleanup removes its exact provider hostname and is not selected again, and a review is untouched; without configuration it makes no call and changes no row (tests/boundary-hosting-maintenance-stale.mjs, SQLite and --d1, outside profiles).",
      "enforcedAt": [
       {
        "file": "src/domain-hosting.ts",
        "contains": "export async function maintainHosting("
+      },
+      {
+       "file": "src/domain-hosting.ts",
+       "contains": "WHERE state IN ('active','provisioning','disconnecting') ORDER BY checked_at ASC LIMIT 80"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/boundary-hosting-maintenance-stale.mjs",
+       "contains": "assert.deepEqual(new Set(reads.slice(0,4)),new Set([ids.leaving,ids.lapsed,ids.proof,ids.gone]),'the first batch is the four stalest records');",
+       "asserts": "the sweep re-checks the stalest records first"
+      },
+      {
+       "file": "tests/boundary-hosting-maintenance-stale.mjs",
+       "contains": "assert.equal((await serve('https://'+names.proof+'/')).status,404,'a withdrawn proof stops serving after the sweep');",
+       "asserts": "a stale active record whose proof was withdrawn is demoted and stops serving"
+      },
+      {
+       "file": "tests/boundary-hosting-maintenance-stale.mjs",
+       "contains": "assert.ok(!again.some(([,providerId])=>providerId===ids.leaving),'the closed record is not selected again');",
+       "asserts": "a completed cleanup is not acted on again"
+      },
+      {
+       "file": "tests/boundary-hosting-maintenance-stale.mjs",
+       "contains": "assert.equal(await rows(everything),before,'negative control: no row changes without configuration');",
+       "asserts": "without configuration the sweep changes nothing"
       }
      ]
     }

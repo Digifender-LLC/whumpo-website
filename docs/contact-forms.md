@@ -106,7 +106,7 @@ Activation is a deploy and a recurring charge, so it needs explicit owner action
    "triggers": { "crons": ["17 3 * * *", "47 * * * *", "* * * * *"] }
    ```
    Merge the vars into the existing `vars` object. `CONTACT_NOTIFICATION_REVIEW` is a reference to the owner's recorded approval. The Worker drains notices only when the `* * * * *` cron fires **and** `contactDelivery(env)` finds the reviewed provider and binding. Removing any one of the three settings deactivates delivery.
-4. The $5 ceiling is enforced in code (`contactMonthlyCeilingCents` and the ledger trigger), not by Cloudflare. To lower it, change the constant through a reviewed PR; the day's stored ceiling can only decrease. Optionally add a Cloudflare budget alert as a notification.
+4. The $5 ceiling is enforced in code (`contactMonthlyCeilingCents`, the `cloudflare-email` ceiling in the [notification catalog](notifications.md#source-catalog-wh-155) and the ledger trigger), not by Cloudflare. To lower it, change the constant and the catalog ceiling together through a reviewed PR (the lower of the two applies and `tests/notifications-contract.mjs` fails if they disagree); the day's stored ceiling can only decrease. Optionally add a Cloudflare budget alert as a notification.
 5. Update the customer-facing disclosure where needed (the Dashboard panel already says delivery is inactive until activation), then run a live canary only to explicitly approved addresses: verify one address, submit one test message, and check the outbox state and the Email Sending logs.
 
 ## Transactional email provider research
