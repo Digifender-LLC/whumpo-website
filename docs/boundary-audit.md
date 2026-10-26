@@ -391,15 +391,15 @@ What it does not prove: the Chat routing and conversation-revision check (covere
 
 Docs-only. `boundary-audit.json` now cites, in the `detail` text of the cell each covers, the merged tests that earlier notes said the registry did not yet cite. The "Still open" lists above are historical. Status is as recorded by each slice's note, not re-run here:
 
-- `billing-owner` `authority`: `tests/boundary-billing-portal-customer.mjs` (not run when written).
-- `operator-safety-cases` `freshness`: `tests/boundary-operator-freshness.mjs` (not run when written).
+- `billing-owner` `authority`: `tests/boundary-billing-portal-customer.mjs` (run: passes, exit 0; with the limiter check removed from src/app-host.ts it fails with `200 !== 429`; source restored).
+- `operator-safety-cases` `freshness`: `tests/boundary-operator-freshness.mjs` (run: passes, exit 0; with the limiter check removed from src/app-host.ts it fails with `200 !== 429`; source restored).
 - `public-contact-form` `admission`: `tests/boundary-contact-admission.mjs` (passed on SQLite; `--d1` not run).
 - `site-backend` `target`: `tests/boundary-backend-digest.mjs` (passed on SQLite and `--d1`).
-- custom-domain serving `tenant`: `tests/boundary-custom-domain-owner.mjs` (not run when written).
+- custom-domain serving `tenant`: `tests/boundary-custom-domain-owner.mjs` (run: passes, exit 0; with the limiter check removed from src/app-host.ts it fails with `200 !== 429`; source restored).
 - visitor application gateway `stale`: `tests/boundary-visitor-deletion-hold.mjs` (passes).
 - contact messages/notifications `origin` and visitor-modules `origin`: `tests/boundary-origin-routes.mjs` (run result not recorded).
-- `visitor-app-shell` `admission` (was `gap (test)`, now `evidenced`): `tests/boundary-visitor-shell-admission.mjs` (`pnpm test:boundary-visitor-shell-admission`) drives the `whumpo-apps` handler with a denying stub limiter and asserts the 429, the `page:<ip>` key, that no live-page lookup or asset fetch happens, and that an admitting limiter still serves the shell (not run when written).
-- `domains` `stale`: `tests/boundary-domain-proof-removal-sql.mjs` (not run when written).
+- `visitor-app-shell` `admission` (was `gap (test)`, now `evidenced`): `tests/boundary-visitor-shell-admission.mjs` (`pnpm test:boundary-visitor-shell-admission`) drives the `whumpo-apps` handler with a denying stub limiter and asserts the 429, the `page:<ip>` key, that no live-page lookup or asset fetch happens, and that an admitting limiter still serves the shell (run: passes, exit 0; with the limiter check removed from src/app-host.ts it fails with `200 !== 429`; source restored).
+- `domains` `stale`: `tests/boundary-domain-proof-removal-sql.mjs` (run: passes, exit 0; with the limiter check removed from src/app-host.ts it fails with `200 !== 429`; source restored).
 - visitor-modules `tenant`: `tests/boundary-module-file-read.mjs` (added, not yet verified locally; it stopped at fixture setup because python3 has no Pillow).
 
 `tests/boundary-photo-route-held.mjs` is only in open PR #321, not on main, so no cell cites it. The photo-route held specification and host-level 429 gaps stay open.
