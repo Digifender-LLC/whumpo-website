@@ -10,7 +10,7 @@
 --shadow-sm:var(--shadow-sm);--shadow-md:var(--shadow-md);--shadow-lg:var(--shadow-lg);--font-sans:'Inter Variable',var(--font-ui-family);--font-display:var(--font-display-family);}
 :root{color-scheme:light}
 .dark{color-scheme:dark}
-@layer base{*{@apply border-border}body{@apply m-0 bg-background text-foreground font-sans antialiased}button,a,input,textarea,select{-webkit-tap-highlight-color:transparent}button{cursor:pointer}button:disabled{cursor:not-allowed}h1,h2,h3{font-family:var(--font-display-family);letter-spacing:-.01em}p{line-height:1.65}button:focus-visible,a:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}input,textarea,select{font:inherit}::selection{background:var(--action-soft);color:var(--ink)}}
+@layer base{*{@apply border-border}body{@apply m-0 bg-background text-foreground font-sans antialiased}button,a,input,textarea,select{-webkit-tap-highlight-color:transparent}button{cursor:pointer}button:disabled{cursor:not-allowed}h1,h2,h3{font-family:var(--font-display-family);letter-spacing:-.01em}p{line-height:1.65}button:focus-visible,a:focus-visible,summary:focus-visible,select:focus-visible,input[type=checkbox]:focus-visible,input[type=radio]:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}input,textarea,select{font:inherit}input[type=checkbox],input[type=radio],progress{accent-color:var(--link)}h1,h2,h3{text-wrap:balance}p{text-wrap:pretty}::selection{background:var(--action-soft);color:var(--ink)}:is(h1,h2,h3,main,section)[tabindex="-1"]:focus{outline:none}}
 .wordmark{font-family:var(--font-display-family);font-weight:700;letter-spacing:-.01em;line-height:1.15}.landing-container{width:min(1160px,calc(100% - 48px));margin-inline:auto}.hero-sky{background:radial-gradient(ellipse at 78% 43%,#cce9ff 0,transparent 52%),radial-gradient(ellipse at 96% 96%,#e1f7ed 0,transparent 33%),#f8fafc}.cloud-orbit{border:1px solid #fff9;border-radius:50%;position:absolute;inset:8%;transform:rotate(-25deg)}.workspace-grid{display:grid;grid-template-columns:250px minmax(0,1fr);height:100dvh;overflow:hidden}.page-pad{padding:clamp(24px,4vw,56px);max-width:1220px;margin:auto}.message-content{white-space:pre-wrap;overflow-wrap:anywhere}.chat-scroll{scrollbar-gutter:stable}.sidebar-nav a[data-status=active],.sidebar-essentials a[data-status=active]{background:var(--action-soft);color:var(--ink);font-weight:650}.subtle-grid{background-image:radial-gradient(#90b4d233 1px,transparent 1px);background-size:20px 20px}@media(max-width:760px){.workspace-grid{grid-template-columns:76px minmax(0,1fr)}.sidebar-label,.sidebar-brand-name,.sidebar-extra{display:none}.sidebar-nav a{justify-content:center}.sidebar-footer{flex-direction:column!important}.landing-container{width:calc(100% - 36px)}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
 .pricing-switch{position:relative;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));min-width:210px;border:1px solid var(--line);border-radius:999px;background:var(--surface-raised);padding:4px;box-shadow:var(--shadow-sm)}
 .pricing-switch-indicator{position:absolute;top:4px;bottom:4px;left:4px;width:calc((100% - 8px)/2);border-radius:999px;background:var(--surface-inverse);transition:transform .2s ease}
@@ -63,12 +63,12 @@
  .hero-layout{padding-top:30px;padding-bottom:32px;gap:22px;min-height:0}
  .hero-layout h1{font-size:52px;margin-top:24px;line-height:1.02}
  .hero-layout p.text-lg{font-size:17px;line-height:1.65}
- .hero-layout>div>div.flex{display:grid;grid-template-columns:1fr}
- .hero-layout>div>div.flex a{width:100%;min-height:52px}
+ .hero-layout>div:first-child>div.flex{display:grid;grid-template-columns:1fr}
+ .hero-layout>div:first-child>div.flex a{width:100%;min-height:52px}
  .hero-art{min-height:260px;max-height:330px}.hero-art>img{max-height:300px}
  .hero-art>div:last-child{padding:14px;bottom:0}
  .landing section.py-24,.landing section.py-20,.landing section.py-18{padding-top:52px;padding-bottom:52px}
- .landing footer{padding-bottom:max(24px,env(safe-area-inset-bottom))}
+ .landing footer{padding-bottom:max(24px,env(safe-area-inset-bottom));flex-direction:column;align-items:flex-start;gap:12px}
 }
 @media(max-width:760px){
  .workspace-dialog{translate:none!important}
@@ -116,4 +116,9 @@
 @media(max-width:760px){
  .chat-composer{padding-bottom:max(12px,env(safe-area-inset-bottom))}
  .chat-scroll{overflow-anchor:none}
+}
+
+/* Phone inputs outside the workspace shell (account security, identity) keep the same 48px touch height. */
+@media(max-width:760px){
+ main input:not([type=checkbox]):not([type=radio]):not([type=file]),main select{min-height:48px}
 }
