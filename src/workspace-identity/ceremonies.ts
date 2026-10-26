@@ -43,17 +43,16 @@ async function turnstile(request:Request,env:Environment,token:unknown,origin:st
  if(!env.TURNSTILE_SECRET)throw unavailable();
  if(typeof token!=='string'||token.length<1||token.length>2048)throw invalid();
  try{
-  const response=await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify',{method:'POST',redirect:'error',
+  const response=await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify',{method:'POST',redirect:'manual',
    headers:{'content-type':'application/json'},body:JSON.stringify({secret:env.TURNSTILE_SECRET,response:token,remoteip:request.headers.get('cf-connecting-ip')}),signal:AbortSignal.timeout(10000)});
-  // DEBUG-TEMP turnstile-log: remove after diagnosis.
-  if(!response.ok||!response.body){console.error("DEBUG-TEMP turnstile status",response.status,"hasBody",!!response.body,"secretLen",String(env.TURNSTILE_SECRET).length);throw unavailable();}
+  if(!response.ok||!response.body)throw unavailable();
   const reader=response.body.getReader(),chunks:Uint8Array[]=[];let size=0;
   try{while(true){const next=await reader.read();if(next.done)break;size+=next.value.length;if(size>8192)throw unavailable();chunks.push(next.value);}}
   finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
   const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
   const result=JSON.parse(new TextDecoder().decode(bytes));
   if(result?.success!==true||result.hostname!==new URL(origin).hostname||result.action!=='register')throw proof();
- }catch(error){if(error instanceof IdentityError)throw error;console.error("DEBUG-TEMP turnstile catch",String((error as Error)?.name),String((error as Error)?.message).slice(0,200),String((error as Error)?.stack??"").split("\n").slice(0,3).join(" | ").slice(0,400));throw unavailable();}
+ }catch(error){if(error instanceof IdentityError)throw error;throw unavailable();}
 }
 export async function consumeIdentityChallenge(db:D1Database,token:unknown,kind:Kind,rp:ReturnType<typeof context>){
  if(typeof token!=='string'||!/^[0-9a-f]{64}$/.test(token))throw proof();
