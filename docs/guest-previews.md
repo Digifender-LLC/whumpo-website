@@ -1,6 +1,8 @@
 # Expiring guest preview links and feedback (WH-092)
 
-## Status — October 4, 2026 UTC
+## Status — last reviewed October 25, 2026 UTC (first written October 4)
+
+The WH-150 source merged to `main` in PR #123; WH-151 in #131. The paragraph below is the October 4 statement, kept as written. For the current test results and the line-by-line acceptance mapping see [WH-150 acceptance mapping](#wh-150-acceptance-mapping--october-25-2026-utc).
 
 **WH-150, WH-151 and the local part of WH-152 implemented; verified only with local SQLite, local D1 and local R2 fixtures and local Chromium.** Not deployed, no live data read, no customer acceptance. Owners manage links from the shared view component `guest-previews` (Chat temporary views and saved pages), direct Chat controls for revoke and delete, and the HTTP API below. See [Owner Chat and view bindings](#owner-chat-and-view-bindings--wh-151). No model-facing way to read comments exists yet. The `creator.guest-feedback` catalogue entry stays `planned` until the remaining children pass (see [Decomposition](#decomposition)). Parent [WH-092](roadmap/backlog.md) stays open.
 
@@ -155,3 +157,87 @@ Node 22 in this environment (repository target is Node 24).
 - `node tests/guest-preview-browser.mjs` (Chromium at 390×844 over the actual local sites handler) passed: the exact preview opens in the sandboxed frame, the token never appears in a request path or query, a keyboard-only comment is stored, and a reload after revocation shows the unavailable state with no page errors. It first exposed the `Origin: null` behaviour above. The WH-152 section above supersedes this smoke check.
 - `node tests/guest-preview-photos.mjs` (local D1 + R2) passed: a photo version's private bytes are inlined exactly as in the owner preview, no asset URL exists on the guest or project host, and tampered bytes are refused. The photo clearance is explicitly synthetic.
 - Related suites passed after the change: account-closure-inventory, current-interfaces, current-schema, current-website-specifications, customer-site-journey, exports, feature-identity, feature-inclusion, funnel-metrics, photo-versions, publications, safety-cases, site-traffic, site-safety, specification-journey, version-diff, version-removal, lifecycle-catalog, maintenance, maintenance-scheduled, maintenance-inventory, release-manifest and roadmap-alignment, plus the type checks and compiler pins. `feature-admission`, `feature-retention` and `plan-catalogue` fail identically on the unmodified base commit (connection-control and pricing-page expectations unrelated to this work).
+
+## WH-150 acceptance mapping — October 25, 2026 UTC
+
+Docs-only check against `origin/main`; no source, test or schema change. Node 24.21.0 and pnpm 11.19.0 through mise, local SQLite and local D1/R2 only. Not deployed, no live read.
+
+**Merging PR.** `git log origin/main -- src/guest-previews/owner.ts` shows the file was added by `5861fa4` "[WH-092/WH-150] Expiring guest preview links and bounded guest feedback (#123)". Later commits on the file: #131 (WH-151) and #178 (WH-004 B3). PR numbers are taken from commit subjects; GitHub was not read.
+
+### Results
+
+| Command | Result |
+| --- | --- |
+| `node tests/guest-previews.mjs` | pass, 12 groups (SQLite) |
+| `node tests/guest-previews.mjs --d1` | pass, 12 groups (local D1) |
+| `node tests/boundary-guest-preview-race.mjs` | pass, 1 check (B3: a guest-preview delete refused with 409 leaves the link unchanged) |
+| `node tests/boundary-guest-preview-read-pool.mjs` | pass, 1 check (B6: guest photo reads charge the link's project budget, fair share and per-client limit) |
+| `node tests/guest-preview-photos.mjs` | pass, 1 check (local D1/R2, synthetic clearance) |
+| `node tests/guest-preview-browser.mjs` | **unverified**: Playwright is not in `main`, so it cannot run. The October 4 browser results above are not re-confirmed. |
+
+The two D1-backed commands first failed with `Cannot find module .../node_modules/wrangler/bin/wrangler.js` because the fresh worktree had no `node_modules`. After `pnpm install --frozen-lockfile` both passed. The failure was environmental, not a test failure.
+
+### Acceptance lines to tests and enforcing source
+
+Group names are the `check(...)` titles in `tests/guest-previews.mjs`. The link gate is `guestLinkCurrent` in `src/guest-previews/policy.ts` plus `current()` in `src/guest-previews/guest.ts`, which adds the operator serving stop and `guestInclusion`, all in the same SQL statement as the read or insert. `stillCurrent()` repeats the gate after rendering.
+
+**1. Forged, replayed, expired, revoked, removed, held and no-longer-included links stop reads and comments, including an in-flight view.**
+
+| Case | Test | Source |
+| --- | --- | --- |
+| Forged / malformed | "forged, malformed and replayed tokens": random, short, extended, upper-cased, empty and hash-of-token all 404 on status, view and comment | `guestTokenHash` (43-char base64url check) and `findLink` return null, then `unavailable()` |
+| Replayed | Same group; "feedback bounds, inert markup and idempotency" (same `requestId` returns the original receipt, different text 409); "immediate revocation and in-flight race" (comment refused after revoke) | `feedback()` receipt logic, answered only after the `current()` check |
+| Expired | "expiry, version removal and safety holds" | `guestLinkCurrent` (`expires_at>unixepoch()`) |
+| Revoked | "immediate revocation and in-flight race"; idempotent revoke; revoke cannot be undone | `revokeGuestPreview` in `owner.ts`, `guestLinkCurrent` (`revoked_at IS NULL`), immutability trigger |
+| Removed | "expiry, version removal and safety holds" removes the version through the real command; link state becomes `removed` and feedback is kept | `guestLinkCurrent` (`version_id IS NOT NULL`, digest match), FK clears `version_id` |
+| Held | Same group: a content-screening decision stops view, status and comment and issuance returns 423; "preservation hold, retention..." covers deletion of held comments | `guestLinkCurrent` (`project_spec_held`), `requireSpecificationAvailable` in `createGuestPreview` |
+| Operator serving stop | "operator serving stop withdraws guest previews..." | `current()` (`operator_serving_stopped`) |
+| No longer included | "tier and identity admission": revoking the exact project grant gives 404 on view, status and comment, while listing and revoke still work | `current()` composes `guestInclusion` (`creator.guest-feedback`, `dispatch`) |
+| In-flight view | "immediate revocation and in-flight race": a revoke is injected between admission and the version read; the response is 404 with no content | `view()` then `stillCurrent()` |
+
+**2. Guests see only the exact bound version through the shared isolated preview rendering.**
+
+| Test | Source |
+| --- | --- |
+| "guest shell, exact version and isolation headers": bytes equal the owner preview of the bound version, not the newer head; `&version=` 400; query token 400; path token and `/assets/`, `/s/`, `/cms/`, `/directory.json` 404; GET `/view` 405; missing or project-host `Origin` 403; CSP `sandbox`, no `script-src`, `frame-ancestors`, `noindex`, `no-store`, no cookie | `view()` (reads `admitted.version_id` only), `savedVersionHTML`, `frameHeaders`, `guestPreviewRequest` routing and origin checks |
+| `guest-preview-photos.mjs`: owner bytes inlined after digest check, no asset URL or alias, tampered bytes refused | `savedVersionHTML` with the photo reservation callback |
+| `boundary-guest-preview-read-pool.mjs`: photo reads charged to the link's project | `reserveGuestPreviewPhotoReads` in `src/storage-budget.ts` |
+
+**3. Raw tokens are never stored, listed, exported or logged; comment markup and instructions stay inert and never reach Chat or a model.**
+
+| Test | Source |
+| --- | --- |
+| "issuance bounds, idempotency and hashed token": stored hash equals SHA-256 of the token; the row and the list do not contain the token or hash; a replay returns `token:null` | `createGuestPreview` stores only `tokenHash`; `describe()` omits token and hash |
+| "no token or guest content in logs": no token, token hash, comment text or name in captured logs; zero network calls | no logging in `guest.ts` or `owner.ts` |
+| "feedback bounds, inert markup and idempotency": a script tag and a "publish, invite, spend" instruction are stored verbatim; `chat_turns`, `inference_calls`, `publications` and `activity_events` are unchanged | `feedbackInput` (plain text only) and `feedback()`; no Chat or model code is called |
+
+**4. Owner identity loss and foreign owners are refused; rate, size and capacity limits hold on SQLite and local D1.**
+
+| Case | Test | Source |
+| --- | --- | --- |
+| Owner identity loss | "tier and identity admission": after `revoke()` every owner route returns 401 and no row is added | `assertWorkspace` in `createGuestPreview`; session check in the HTTP routes |
+| Foreign owners | "issuance bounds..." and "forged, malformed and replayed tokens": 404 for foreign project, link, feedback, revoke and delete, with nothing changed; "owner resolution and deletion" for comments | `ownedProject`, `ownedLink` |
+| Issuance bounds | "issuance bounds...": hours 0, 169 and 1.5, non-boolean `feedback`, 81-char and multi-line labels, extra keys: all 400 | `issuance()` |
+| Comment size | "feedback bounds...": empty, blank, 2,001 chars, control char, 61-char name, multi-line name, wrong types: 400; 2,000 chars accepted | `feedbackInput` |
+| Comment rate | "rate limits": 10 per window, the 11th is 429 | trigger `guest_feedback_rate` |
+| View rate | "rate limits": 60 views then 429; another link is unaffected | `admitView` |
+| Active links | "rate limits": 20 active per project, the 21st is 409, revoking frees a slot | trigger `guest_preview_capacity` |
+| Photo read limits | `boundary-guest-preview-read-pool.mjs` | `reserveGuestPreviewPhotoReads` |
+
+Pass counts in the Results table were observed. The per-assertion descriptions above come from reading the test and source files, not from instrumenting the runs.
+
+### Gaps (limits or acceptance cases with no test)
+
+1. **Comment cap of 200 per link.** The trigger exists (`src/guest-previews/schema.sql`, `guest_feedback_rate`); no test reaches 200 comments on one link.
+2. **Stored comments, 2,000 per owner and 100,000 platform.** The trigger exists (`guest_preview_capacity`); not tested.
+3. **Retained links, 200 per project and 20,000 platform.** The trigger exists; the tests cover only the 20 active links per project.
+4. **In-flight cases other than revocation.** The race test injects only a revoke during a view. Expiry, version removal, a content hold, lost inclusion and an operator serving stop during a view rely on the same `stillCurrent()` re-check but have no test of their own.
+5. **In-flight comment.** No test races a comment against revocation. The insert is gated by the same `current()` predicate in one statement, so the race is closed by construction, but nothing exercises it.
+6. **Comment replay after expiry, removal or a hold.** Replay after revocation is tested; the other states are not.
+7. **Raw token in exports.** There is no account-wide export (planned). The owner listing is tested for token and hash absence; no test checks the closure inventory or any export JSON for tokens.
+
+### Unverified
+
+- `tests/guest-preview-browser.mjs` and the WH-152 browser journey (Playwright absent from `main`).
+- `preview.whumpo.site` routing, deployment and real devices (WH-153).
+- PR #123 as the merging PR is inferred from `git log` subjects, not from GitHub.
