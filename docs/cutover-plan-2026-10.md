@@ -1,6 +1,6 @@
 # Schema cutover plan — October 2026
 
-**PLAN — NOT EXECUTED. Prepared October 9, 2026 (UTC) from the repository and GitHub metadata only.** Nothing in this document has been run against Cloudflare. No Wrangler, D1, R2, Workers or `pnpm run deploy` command of any kind was used to write it, and no live state was read. Every remote operation in [section 6](#6-operations-that-need-explicit-owner-authorization) needs the owner's explicit authorization **in the conversation where it runs, naming that operation** ([AGENTS.md, Deployment](../AGENTS.md)). Approving this plan, or a bundle choice, authorizes none of them.
+**PLAN — NOT EXECUTED. Prepared October 9, 2026 (UTC) from the repository and GitHub metadata only.** Nothing in this document has been run against Cloudflare. No Wrangler, D1, R2, Workers or `pnpm run deploy` command of any kind was used to write it, and no live state was read. Every remote operation in [section 6](#6-operations-that-need-explicit-owner-authorization) needs the owner's explicit authorization **in the conversation where it runs, naming that operation** (the owner operating rules (AGENTS.md, removed from this repository)). Approving this plan, or a bundle choice, authorizes none of them.
 
 Facts below are labelled **established** (computed from Git, read from the repo or from GitHub check-run metadata) or **UNVERIFIED** (needs a live read; how to verify is given). Do not treat inferences about live state as readback.
 
@@ -173,7 +173,7 @@ Run by the owner, or by an agent the owner has authorized for each named item. R
 ### 4.3 The cutover itself
 
 1. **Create the new empty D1** (A2), for example `whumpo-control-2026-10-DD`. Record its ID. Confirm it is empty and bound to no Worker.
-2. **Binding PR (docs and config only, no merge yet):** change `database_name`/`database_id` for the `DB` binding in `wrangler.jsonc`, `wrangler.apps.jsonc` and `wrangler.sites.jsonc` (all three must be identical, `tools/prepare-release.mjs:54`). The PR description must say: schema change, owner cutover required, do not merge before the cutover ([AGENTS.md](../AGENTS.md); [deployment](deployment.md)).
+2. **Binding PR (docs and config only, no merge yet):** change `database_name`/`database_id` for the `DB` binding in `wrangler.jsonc`, `wrangler.apps.jsonc` and `wrangler.sites.jsonc` (all three must be identical, `tools/prepare-release.mjs:54`). The PR description must say: schema change, owner cutover required, do not merge before the cutover (the owner operating rules (AGENTS.md, removed from this repository); [deployment](deployment.md)).
 3. On that branch, rerun 4.1. Write the private review `.secrets/release-review-2026-10-DD.json` (exact format from `tools/release-manifest.mjs:48-55`; retired fields `migrations`, `previousWorkersCompatible`, `restoreReview` and `restoreEvidence` are rejected):
 
    ```json
@@ -262,7 +262,7 @@ The CI archives of earlier releases live only on the Workers Builds machine ([de
 
 ## 6. Operations that need explicit owner authorization
 
-Each line is a separate authorization. Authorizing one does not authorize the next ([AGENTS.md](../AGENTS.md): "Authorization covers only the operation asked for").
+Each line is a separate authorization. Authorizing one does not authorize the next (the owner operating rules (AGENTS.md, removed from this repository): "Authorization covers only the operation asked for").
 
 | ID | Operation | Remote effect | Blast radius |
 | --- | --- | --- | --- |
@@ -277,7 +277,7 @@ Each line is a separate authorization. Authorizing one does not authorize the ne
 | A9 | `node tools/safety-case-bootstrap.mjs --grant ID --account UUID --apply` | Grants the first safety-case role administrator | Role authority over restricted cases; only while no administrator exists |
 | A10 | Opt-in live suites (`RUN_LIVE_*=1 node tests/*-live.mjs`) | Synthetic rows in the remote database; real model calls | Model spend; leftover fixtures if cleanup fails |
 | A11 | Merge the binding PR to `main` (the owner merges; agents do not push or merge to `main`) | Workers Builds runs `deploy ci` and redeploys four Workers | Same code redeployed onto the new database |
-| A12 | `wrangler d1 delete NAME` for an old database | Deletes a database | **Destructive and irreversible.** Needs a separate explicit confirmation naming the resource ([AGENTS.md](../AGENTS.md)); only after the journal completes and every Worker binding is checked (the October 3 practice checked all account Workers); removes the emergency rollback path |
+| A12 | `wrangler d1 delete NAME` for an old database | Deletes a database | **Destructive and irreversible.** Needs a separate explicit confirmation naming the resource (the owner operating rules (AGENTS.md, removed from this repository)); only after the journal completes and every Worker binding is checked (the October 3 practice checked all account Workers); removes the emergency rollback path |
 | A13 | Stripe sandbox subscription cancellation, provider grant revocation or hostname retirement (if D7 requires) | Provider writes | Per resource; sandbox only for Stripe |
 | A14 | `wrangler rollback` of any Worker (emergency only, section 4.5) | Reactivates an older version and its bindings | Out of protocol; requires journal reconciliation afterwards |
 
