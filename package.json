@@ -17,6 +17,7 @@
     "test:chat-resources": "node tests/chat-resource-options.mjs && node tests/chat-interaction-intake.mjs",
     "test:smoke": "node tests/identity-http.mjs --d1 && node tests/smoke.mjs",
     "test:ai": "node tests/ai.mjs",
+    "test:workers-fetch-compat": "node tests/workers-fetch-compat.mjs",
     "test:ai-gateway": "node tests/ai-gateway.mjs",
     "test:gateway-inference": "node tests/gateway-inference.mjs",
     "report:gateway": "node tools/report-gateway.mjs",
