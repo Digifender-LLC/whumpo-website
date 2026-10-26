@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 // Owner-deferred CMS acceptance. Current Worker HTTP routes over disposable local D1.
 import {databaseFixture} from './helpers/current-database.mjs';
-import {workspaceFixture} from './helpers/workspace-identity.mjs';
+import {workspaceFixture,completeWelcome} from './helpers/workspace-identity.mjs';
 import {currentFixtureModules} from './helpers/current-modules.mjs';
 const {module,identity}=await currentFixtureModules(['src/index.ts']),{default:platform}=await module('src/index.ts');
 const store=await databaseFixture({d1:true}),db=store.db,base='https://whumpo.com';
 const env={DB:db,ENVIRONMENT:'test',AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})}};
 const call=(url,options)=>platform.fetch(new Request(url,options),env,{waitUntil(){throw Error('No background work expected');}});
-async function account(){return '__Host-whumpo_session='+(await workspaceFixture(db,identity)).token;}
+async function account(){const owner=await workspaceFixture(db,identity);await completeWelcome(db,owner.account);return '__Host-whumpo_session='+owner.token;}
 try{
 const cookie=await account(),other=await account();
 async function post(path,data,session=cookie,origin=base){return call(base+path,{method:'POST',headers:{origin,'content-type':'application/json',cookie:session},body:JSON.stringify(data)});}

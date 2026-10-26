@@ -601,6 +601,7 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
     return json({ projects: results });
   }
   if (method === "POST" && pathname === "/api/projects") {
+    if(!await onboardingComplete(env.DB,user.id))return json({error:'Start your first project in welcome before creating a project.',code:'onboarding_required',support:supportLink('onboarding_required')},409);
     const data = await body(request);
     const name = typeof data?.name === "string" ? data.name.trim() : "";
     const purpose = typeof data?.purpose === "string" ? data.purpose.trim() : "";
