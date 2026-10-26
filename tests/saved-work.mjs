@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.mjs';
 import {currentFixtureModules} from './helpers/current-modules.mjs';
+import {paidPlan} from './helpers/paid-plan.mjs';
+import {fixtureKeyring} from './helpers/connection-keyring.mjs';
 import {enableFixtureVisitorAccess} from './current-site-fixture.mjs';
 Error.stackTraceLimit=0;
-const modules=await currentFixtureModules(['src/index.ts','src/saved-work.ts','src/saved-work-shape.ts','src/project-specification/store.ts','src/project-specification/service-clients/store.ts','src/project-specification/service-clients/activation.ts','src/chat-interactions/store.ts','src/chat-interactions/protocol.ts','src/project-specification/v2/json.ts','src/chat.ts','src/project-specification/catalog.ts']);
+const modules=await currentFixtureModules(['src/index.ts','src/saved-work.ts','src/saved-work-shape.ts','src/project-specification/store.ts','src/project-specification/service-clients/store.ts','src/project-specification/service-clients/activation.ts','src/chat-interactions/store.ts','src/chat-interactions/protocol.ts','src/project-specification/v2/json.ts','src/chat.ts','src/project-specification/catalog.ts','src/github-connection.ts','src/github-grant-revocation.ts','src/connection-rotation.ts']);
 const worker=(await modules.module('src/index.ts')).default,saved=await modules.module('src/saved-work.ts'),shape=await modules.module('src/saved-work-shape.ts');
 const site=await modules.module('src/project-specification/store.ts'),services=await modules.module('src/project-specification/service-clients/store.ts'),activation=await modules.module('src/project-specification/service-clients/activation.ts');
 const chat=await modules.module('src/chat.ts'),catalog=await modules.module('src/project-specification/catalog.ts');
@@ -123,6 +125,12 @@ try{
  seeded.hosting=id();await run(`INSERT INTO domain_connections(id,user_id,claim_id,project_id,hostname,zone_id,target,proof_hash,state,created_at,expires_at) VALUES(?,?,?,?,'example.com',?,'t',?,'review',${now},${past})`,seeded.hosting,a.user,claim,a.project,'c'.repeat(32),h);
  await run("UPDATE domain_connections SET state='creating' WHERE id=?",seeded.hosting);
  seeded.sourceImport=id();await run("INSERT INTO backend_imports(id,user_id,project_id,source,digest,policy_version) VALUES(?,?,?,'PRIVATE_CODE_CANARY',?,'2026-09-30')",seeded.sourceImport,a.user,a.project,h);
+ // GitHub access review: sealed synthetic custody through the real connect flow, no provider dispatch.
+ {const gh=await modules.module('src/github-connection.ts'),grant=await modules.module('src/github-grant-revocation.ts'),keys=await modules.module('src/connection-rotation.ts'),key=fixtureKeyring(),config={clientId:'saved-work-'+id(),clientSecret:'synthetic-secret',appId:123,slug:'fixture',key};
+  await keys.initializeConnectionKeys(db,key,'saved-work-fixture');await paidPlan(db,a.user,'business');
+  const start=await gh.startGitHub(a.scope,a.user,config);
+  await gh.finishGitHub(a.scope,a.user,new URL(start.url).searchParams.get('state'),'synthetic-code',config,async url=>url.endsWith('/access_token')?Response.json({access_token:'ghu_SYNTHETIC_'+id().replaceAll('-',''),expires_in:3600,refresh_token:'ghr_SYNTHETIC_'+id().replaceAll('-',''),refresh_token_expires_in:15897600}):url.endsWith('/user')?Response.json({id:123,login:'fixture'}):assert.fail('No provider dispatch permitted'));
+  seeded.githubAccess=id();await grant.reviewGitHubGrant(a.scope,a.user,seeded.githubAccess,config);}
  // Photos: unconfirmed upload, unscanned ready file, stale approval and a current approval.
  const photo=async(status)=>{const f=id();await run(`INSERT INTO project_files(id,project_id,name,object_key,digest,size,width,height,status,created_at) VALUES(?,?,'PRIVATE_PHOTO_NAME.jpg',?,?,1,1,1,?,${now})`,f,a.project,'photos/'+a.project+'/'+f+'.jpg',h,status);return f;};
  seeded.photoUpload=await photo('pending');seeded.photoPending=await photo('ready');seeded.photoStale=await photo('ready');seeded.photoApproved=await photo('ready');seeded.photoBlocked=await photo('ready');
@@ -140,8 +148,7 @@ try{
  await test('every saved-work source compiles and runs on the populated current schema',async()=>{
   for(const kind of Object.keys(shape.savedWorkKinds)){const page=await list(a,`kind=${kind}&view=all`);assert.equal(page.version,1);assert(page.items.every(i=>i.kind===kind));}
   const items=await all(a,'view=all'),kinds=new Set(items.map(i=>i.kind)),missing=Object.keys(shape.savedWorkKinds).filter(k=>!kinds.has(k));
-  // GitHub grant revocation needs encrypted provider custody; it is covered by the compile/run pass only.
-  assert.deepEqual(missing,['github-access']);
+  assert.deepEqual(missing,[]);
   for(const i of items)assert.deepEqual(Object.keys(i).sort(),['expiresAt','id','interactionId','key','kind','phase','projectId','projectName','safety','state','turnId']);
  });
  await test('truthful phases: expiry only ends unapproved reviews and open forms',async()=>{
