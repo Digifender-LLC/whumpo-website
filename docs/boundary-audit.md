@@ -391,16 +391,16 @@ What it does not prove: the Chat routing and conversation-revision check (covere
 
 Docs-only. `boundary-audit.json` now cites, in the `detail` text of the cell each covers, the merged tests that earlier notes said the registry did not yet cite. The "Still open" lists above are historical. Status is as recorded by each slice's note, not re-run here:
 
-- `billing-owner` `authority`: `tests/boundary-billing-portal-customer.mjs` (run: passes, exit 0; with the limiter check removed from src/app-host.ts it fails with `200 !== 429`; source restored).
-- `operator-safety-cases` `freshness`: `tests/boundary-operator-freshness.mjs` (run: passes, exit 0; with the limiter check removed from src/app-host.ts it fails with `200 !== 429`; source restored).
-- `public-contact-form` `admission`: `tests/boundary-contact-admission.mjs` (passed on SQLite; `--d1` not run).
+- `billing-owner` `authority`: `tests/boundary-billing-portal-customer.mjs` (slice 16: passes on SQLite and `--d1`, exit 0; the limiter-mutation result previously copied here belongs to the visitor-shell test and was not observed for this one; mutation unrun).
+- `operator-safety-cases` `freshness`: `tests/boundary-operator-freshness.mjs` (slice 16: passes on SQLite and `--d1`, exit 0, after a test-only syntax fix; before it the file did not load, so the earlier "passes" was not true of main; mutation unrun).
+- `public-contact-form` `admission`: `tests/boundary-contact-admission.mjs` (passed on SQLite and `--d1`, slice 16).
 - `site-backend` `target`: `tests/boundary-backend-digest.mjs` (passed on SQLite and `--d1`).
-- custom-domain serving `tenant`: `tests/boundary-custom-domain-owner.mjs` (run: passes, exit 0; with the limiter check removed from src/app-host.ts it fails with `200 !== 429`; source restored).
+- custom-domain serving `tenant`: `tests/boundary-custom-domain-owner.mjs` (slice 16: passes on SQLite and `--d1`, exit 0; the limiter-mutation result was not observed for this test; mutation unrun).
 - visitor application gateway `stale`: `tests/boundary-visitor-deletion-hold.mjs` (passes).
-- contact messages/notifications `origin` and visitor-modules `origin`: `tests/boundary-origin-routes.mjs` (run result not recorded).
+- contact messages/notifications `origin` and visitor-modules `origin`: `tests/boundary-origin-routes.mjs` (slice 16: passed on SQLite and `--d1`).
 - `visitor-app-shell` `admission` (was `gap (test)`, now `evidenced`): `tests/boundary-visitor-shell-admission.mjs` (`pnpm test:boundary-visitor-shell-admission`) drives the `whumpo-apps` handler with a denying stub limiter and asserts the 429, the `page:<ip>` key, that no live-page lookup or asset fetch happens, and that an admitting limiter still serves the shell (run: passes, exit 0; with the limiter check removed from src/app-host.ts it fails with `200 !== 429`; source restored).
-- `domains` `stale`: `tests/boundary-domain-proof-removal-sql.mjs` (run: passes, exit 0; with the limiter check removed from src/app-host.ts it fails with `200 !== 429`; source restored).
-- visitor-modules `tenant`: `tests/boundary-module-file-read.mjs` (added, not yet verified locally; it stopped at fixture setup because python3 has no Pillow).
+- `domains` `stale`: `tests/boundary-domain-proof-removal-sql.mjs` (slice 16: 21 checks pass on SQLite and `--d1` after a test-only fix; limiter-mutation result not observed, mutation unrun).
+- visitor-modules `tenant`: `tests/boundary-module-file-read.mjs` (slice 16: passed on SQLite and `--d1`).
 
 `tests/boundary-photo-route-held.mjs` is only in open PR #321, not on main, so no cell cites it. The photo-route held specification and host-level 429 gaps stay open.
 
@@ -446,3 +446,21 @@ The test connects two published projects to custom hostnames through the real do
 - **Negative controls:** another client, another connected project, and the same read once the platform counter is restored keep serving.
 
 Run on October 23, 2026 UTC: passed on SQLite and `--d1`. With the `reservePublicPhotoRead` call removed from `src/site-host.ts` the test fails (reads not charged); the source was restored. Loosening the custom-host path regex alone does not fail the test, because the widened paths still miss every later route, so the allowlist is defense in depth here. Not covered: IPv6 /64 grouping and the shared `unknown` bucket at host level, operator photo containment allowances, remote D1. Standalone and outside verify profiles (R7).
+
+## Slice 16 evidence note (October 25, 2026 UTC)
+
+Ran, on local SQLite and `--d1` (Node 24.21.0, no network, no `src/` or schema change), the merged boundary tests that had never been run or never on D1. Only the domain-proof test prints a check count; the others print a summary line and exit 0.
+
+| Test | SQLite | `--d1` |
+| --- | --- | --- |
+| `boundary-module-file-read.mjs` | pass, exit 0 | pass, exit 0 |
+| `boundary-origin-routes.mjs` | pass, exit 0 | pass, exit 0 |
+| `boundary-contact-admission.mjs` (supports `--d1`) | pass, exit 0 | pass, exit 0 |
+| `boundary-domain-proof-removal-sql.mjs` | pass, 21 checks (after test fix) | pass, 21 checks (after test fix) |
+| `boundary-billing-portal-customer.mjs` (registry-note check) | pass, exit 0 | pass, exit 0 |
+| `boundary-operator-freshness.mjs` (registry-note check) | pass, exit 0 (after test fix) | pass, exit 0 (after test fix) |
+| `boundary-custom-domain-owner.mjs` (registry-note check) | pass, exit 0 | pass, exit 0 |
+
+Test bugs fixed (tests only): `boundary-domain-proof-removal-sql.mjs` expected `domain_proof_removal_immutable` on a replay UPDATE, but `domain_proof_removal_guard` (`BEFORE UPDATE`) fires first and raises `domain_proof_removal_changed` because the removed claim no longer exists; the refusal and the unchanged-row assertions after it are intact, so the regex now accepts either name. `boundary-operator-freshness.mjs` used `await` inside a non-async arrow and failed to parse (`SyntaxError: Unexpected reserved word`); it is now `async`. Observation, not a defect: `domain_proof_removal_identity` is shadowed by the guard on that path, so this test does not isolate it.
+
+Registry sync note correction: the identical "limiter check removed ... `200 !== 429`" mutation result was copied onto four unrelated tests. It is true only of `boundary-visitor-shell-admission.mjs`. No limiter mutation was run for the other four in this slice; they are marked unrun. Not verified: any mutation check, remote D1, and whether the earlier "passes" claim for operator-freshness was ever true (the file did not parse on main). No findings against `src/`.

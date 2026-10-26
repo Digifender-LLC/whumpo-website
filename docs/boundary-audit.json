@@ -830,7 +830,7 @@
     },
     "freshness": {
      "state": "evidenced",
-     "detail": "Passkey proof under ten minutes, checked before the action and again in the committing SQL (the in-SQL recheck path is covered by tests/boundary-operator-freshness.mjs: test added; not run when written, not yet verified locally).",
+     "detail": "Passkey proof under ten minutes, checked before the action and again in the committing SQL (the in-SQL recheck path is covered by tests/boundary-operator-freshness.mjs: slice 16, 2026-10-25: passed on local SQLite and local D1 after a test-syntax fix, since an await inside a non-async arrow stopped the file loading before; mutation check unrun).",
      "enforcedAt": [
       {
        "file": "src/safety-cases.ts",
@@ -1060,7 +1060,7 @@
    "cells": {
     "authority": {
      "state": "evidenced",
-     "detail": "Checkout, refresh and portal key on the owner's order and stripe_customers row. The portal for an owner without a customer (code returns 409) is covered by tests/boundary-billing-portal-customer.mjs (test added; not run when written, not yet verified locally).",
+     "detail": "Checkout, refresh and portal key on the owner's order and stripe_customers row. The portal for an owner without a customer (code returns 409) is covered by tests/boundary-billing-portal-customer.mjs (slice 16, 2026-10-25: passed on local SQLite and local D1, exit 0; the earlier limiter-mutation claim was not observed and is unrun).",
      "enforcedAt": [
       {
        "file": "src/stripe-billing.ts",
@@ -3767,7 +3767,7 @@
     },
     "origin": {
      "state": "evidenced",
-     "detail": "Mutating methods pass the global exact-Origin gate (position machine-checked). The typed-control path has a cross-origin test; the contact-notification PUT/DELETE/POST and message DELETE routes have route-specific cross-origin tests in tests/boundary-origin-routes.mjs (test added; run result not recorded here).",
+     "detail": "Mutating methods pass the global exact-Origin gate (position machine-checked). The typed-control path has a cross-origin test; the contact-notification PUT/DELETE/POST and message DELETE routes have route-specific cross-origin tests in tests/boundary-origin-routes.mjs (slice 16, 2026-10-25: passed on local SQLite and local D1, exit 0).",
      "enforcedAt": [
       {
        "file": "src/index.ts",
@@ -4168,7 +4168,7 @@
     },
     "stale": {
      "state": "evidenced",
-     "detail": "Expired proofs are refused; proof renewal invalidates older removal reviews. A removal review past its expiry is tested since slice 3: the explicit expiry reply leaves the proof in place and its unexpired twin removes it (the SQL trigger guard behind that reply is exercised independently by tests/boundary-domain-proof-removal-sql.mjs: test added; not run when written, not yet verified locally).",
+     "detail": "Expired proofs are refused; proof renewal invalidates older removal reviews. A removal review past its expiry is tested since slice 3: the explicit expiry reply leaves the proof in place and its unexpired twin removes it (the SQL trigger guard behind that reply is exercised independently by tests/boundary-domain-proof-removal-sql.mjs: slice 16, 2026-10-25: 21 checks passed on local SQLite and local D1 after a test fix, since the replay UPDATE is refused by domain_proof_removal_changed, which fires before domain_proof_removal_immutable, so the test accepts either; mutation check unrun).",
      "enforcedAt": [
       {
        "file": "schema/platform.sql",
@@ -5813,7 +5813,7 @@
     },
     "admission": {
      "state": "evidenced",
-     "detail": "Per-IP API_LIMITER, fail-closed Turnstile (secret and site key required outside local; hostname/action/cdata bound), per-client daily allowance (10, counted before verification), hourly and retained caps in the commit trigger. The per-IP 429 and missing-token branches are covered by tests/boundary-contact-admission.mjs (passed on local SQLite when written; --d1 not yet run).",
+     "detail": "Per-IP API_LIMITER, fail-closed Turnstile (secret and site key required outside local; hostname/action/cdata bound), per-client daily allowance (10, counted before verification), hourly and retained caps in the commit trigger. The per-IP 429 and missing-token branches are covered by tests/boundary-contact-admission.mjs (passed on local SQLite and local D1, slice 16, 2026-10-25).",
      "enforcedAt": [
       {
        "file": "src/contact-page.ts",
@@ -6536,7 +6536,7 @@
     },
     "tenant": {
      "state": "evidenced",
-     "detail": "Mapping requires state active, unexpired serving window, provider id and the connection owner still owning the project (owner-join refusal is covered by tests/boundary-custom-domain-owner.mjs: test added; not run when written, not yet verified locally; only an operator can change ownership).",
+     "detail": "Mapping requires state active, unexpired serving window, provider id and the connection owner still owning the project (owner-join refusal is covered by tests/boundary-custom-domain-owner.mjs: slice 16, 2026-10-25: passed on local SQLite and local D1, exit 0; mutation check unrun; only an operator can change ownership).",
      "enforcedAt": [
       {
        "file": "src/site-host.ts",
@@ -7772,7 +7772,7 @@
     },
     "origin": {
      "state": "evidenced",
-     "detail": "Shared gateway gate; the route-specific modules/upload test is tests/boundary-origin-routes.mjs (test added; run result not recorded here; its negative control proves the request reaches the upload handler, not a real write).",
+     "detail": "Shared gateway gate; the route-specific modules/upload test is tests/boundary-origin-routes.mjs (slice 16, 2026-10-25: passed on local SQLite and local D1, exit 0; its negative control proves the request reaches the upload handler, not a real write).",
      "enforcedAt": [
       {
        "file": "src/app-gateway.ts",
@@ -7811,7 +7811,7 @@
     },
     "tenant": {
      "state": "evidenced",
-     "detail": "Resources resolve only within the host project; A's resources on B's host are not_found, including uploads. files.read naming a foreign file id by authorized staff is covered by tests/boundary-module-file-read.mjs (test added, not yet verified locally: it stopped at fixture setup because python3 has no Pillow).",
+     "detail": "Resources resolve only within the host project; A's resources on B's host are not_found, including uploads. files.read naming a foreign file id by authorized staff is covered by tests/boundary-module-file-read.mjs (slice 16, 2026-10-25: passed on local SQLite and local D1, exit 0).",
      "enforcedAt": [
       {
        "file": "src/shared-modules/registry.ts",

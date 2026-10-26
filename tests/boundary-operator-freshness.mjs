@@ -36,7 +36,7 @@ try{
   const session=await workspaceSession(db,m,{account:reviewer.account,credential:reviewer.credential});
   let reached=0;
   const gated=interceptDatabase(db,commit,async()=>{reached++;await session.revoke();});
-  await assert.rejects(()=>open(gated,await principal(gated,session.token),'case-revoked'),changed,'a session revoked after admission cannot commit');
+  await assert.rejects(async()=>open(gated,await principal(gated,session.token),'case-revoked'),changed,'a session revoked after admission cannot commit');
   assert.equal(reached,1,'the pre-check admitted the request and the commit was reached');
   assert.deepEqual(await committed('case-revoked'),{cases:0,findings:0},'nothing was committed');
   assert.deepEqual(await lastAudit(),{actor:ref,action:'open_case',caseId:'case-revoked',outcome:'denied',reason:'unauthenticated'});
