@@ -145,7 +145,6 @@ export async function handleIdentityRequest(request:Request,env:Environment):Pro
   }
  }catch(error){
   // Unexpected errors may contain SQL/provider details. They are never serialized or logged here.
-  console.error('DEBUG-TEMP identity',String((error as Error)?.name),(error as {code?:string})?.code??'',String((error as Error)?.message).slice(0,200),String((error as Error)?.stack??'').split('\n').slice(0,6).join(' | ').slice(0,700));
   const failure=error instanceof IdentityError?error:identityUnavailable();return respond({error:failure.message,code:failure.code},failure.status);
  }
 }

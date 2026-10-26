@@ -13,7 +13,7 @@ const input=credential=>({version:1,credential}),current=a=>resolveIdentity(db,{
 const workspace={purpose:'workspace',freshPasskey:false,bindIdentityRevision:false};
 const originalFetch=globalThis.fetch;let turnstileResult={success:true,hostname:'whumpo.com',action:'register'},turnstileCalls=0;
 globalThis.fetch=async(url,options)=>{
- assert.equal(String(url),'https://challenges.cloudflare.com/turnstile/v0/siteverify');assert.equal(options.redirect,'error');
+ assert.equal(String(url),'https://challenges.cloudflare.com/turnstile/v0/siteverify');assert.equal(options.redirect,'manual');
  const sent=JSON.parse(options.body);assert.equal(sent.secret,env.TURNSTILE_SECRET);assert(sent.response);turnstileCalls++;
  return typeof turnstileResult==='string'?new Response(turnstileResult):Response.json(turnstileResult);
 };
