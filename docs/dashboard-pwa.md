@@ -57,3 +57,28 @@ Corrected release `e6edca89-4021-494c-a4b0-0875531e3132`, archived source `aa8b2
 Readback matched all 20 selected deployed HTML/JS/CSS/brand/PWA assets byte-for-byte to the archive. The canonical offline page returns 200 without redirect; worker/manifest MIME and revalidation headers are correct. Fresh-profile Chromium at whumpo.com reports no manifest/installability errors, activates the worker, and stores exactly four public cache entries. Offline reload displays the branded screen; reconnect returns to the actual sign-in page. Health returns 200 and an anonymous session read returns 401 with no-store. Private evidence: .secrets/pwa-release-verification.json and .secrets/pwa-live-offline-mobile.png.
 
 The earlier `01c93c6d-d69e-49ce-94b8-42a13c44720d` release did not pass offline activation because of the documented HTML redirect; this corrected release supersedes it. OS-level installation on physical iPhone/Android and mobile credential enrollment remain unverified; no browser-emulation result is labeled as device acceptance.
+
+### Local revalidation — October 2026
+
+Re-run on 2026-10-25 against `origin/main` commit `2e74dc7317f7c53587a55aee751a11e0f8eceb5e` (WH-119 re-acceptance, Node 24.21.0 / pnpm 11.19.0, installed Chromium from `~/.cache/ms-playwright`). No source, test or deploy file changed.
+
+| Command | Result |
+| --- | --- |
+| `node tests/dashboard-pwa.mjs` | Exit 0 (needs `dist/` from `pnpm build`; the first run before any build failed with `ENOENT dist/manifest.webmanifest`, a missing prerequisite, not a defect). Prints one summary line; no per-assertion count is emitted (the file contains 21 `assert` call sites). |
+| `node tests/dashboard-pwa-browser.mjs` | Exit 0. Prints one summary line; no per-assertion count is emitted. |
+| `pnpm check` | Exit 0 |
+| `pnpm build` | Exit 0 (existing chunk-size and ineffective-dynamic-import warnings only) |
+
+What the browser test asserts, by item:
+
+- **Manifest and installability:** Chromium's `Page.getAppManifest` URL is `/manifest.webmanifest` with zero manifest errors, and `Page.getInstallabilityErrors` is empty. The install prompt is a synthetic `beforeinstallprompt` event; only the explicit dismiss path is checked. No installation happens.
+- **Offline and reconnect:** with the context offline, a reload shows the branded offline heading; going online and pressing Try again returns to Settings. After server-side revocation, an offline reload then reconnect lands on the passkey sign-in gate with no Chat textbox and no new chat turn.
+- **Worker update keeps an unsent draft:** a draft is typed in Chat, the served worker bytes are changed, `registration.update()` is awaited until `controllerchange`, then the document marker, the draft text and the exact four-entry cache set are unchanged. The update is a synthetic byte append to the served worker, not a real new release.
+- Also asserted: 390px width has no horizontal overflow, theme-color follows Day/Night, no page errors, and zero inference, publication or paid-invoice rows.
+
+Not covered by these local runs:
+
+- Deployed or test-domain checks (whumpo.com, Cloudflare redirect/header behavior beyond the local 307 mirror).
+- Physical iPhone/Android devices and OS-level installation.
+- Installed-PWA (standalone window) behavior; the installed state, launch URL and OS app-switcher behavior are not exercised.
+- The browser test does not assert screenshots (they are written to ignored `.secrets/` and were not inspected in this run), the manifest field values (name, icons, scope) beyond zero errors, or the real Safari/Firefox engines.
