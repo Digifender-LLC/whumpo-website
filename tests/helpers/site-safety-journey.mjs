@@ -14,6 +14,13 @@ export async function siteSafetyJourney({page,context,db,state,requests,origin,a
  await hearOrca('dashboard outage opens website safety',()=>activate(page.getByRole('link',{name:'Site & app safety',exact:true})),[/Site & app safety/i,/heading/i]);
  await page.getByRole('article',{name:'Garden care',exact:true}).waitFor();
  const directStart=requests.length;state.failProfile=true;await page.reload();await page.getByRole('article',{name:'Garden care',exact:true}).waitFor();await page.waitForLoadState('networkidle');
+ const dark=()=>page.evaluate(()=>document.documentElement.classList.contains('dark'));
+ for(const [scheme,saved,expected] of [['light','dark',true],['dark','light',false]]){
+  await page.emulateMedia({colorScheme:scheme});await page.evaluate(t=>localStorage.setItem('whumpo.theme',t),saved);
+  await page.reload();await page.getByRole('article',{name:'Garden care',exact:true}).waitFor();await page.waitForLoadState('networkidle');
+  assert.equal(await dark(),expected,`Direct safety follows saved ${saved} theme on a ${scheme} device`);
+ }
+ await page.emulateMedia({colorScheme:null});await page.evaluate(()=>localStorage.removeItem('whumpo.theme'));
  assert(requests.slice(directStart).filter(r=>r.path.startsWith('/api/')).every(r=>r.path.startsWith('/api/auth/identity/v1/')||r.path.startsWith('/api/workspace/site-safety')),'Direct safety never reads profile, Chat, billing or dashboard');
  phase('lost review reply recovers without a second prepare');
  state.loseSafetyPrepare=true;await activate(page.getByRole('button',{name:'Review taking website offline',exact:true}));

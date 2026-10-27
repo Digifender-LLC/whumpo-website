@@ -243,6 +243,8 @@ Anonymous live Chromium checks pass responsive landing/entry focus, direct secur
 
 Private receipts: `.secrets/wh111-service-safety-release-before.json`, `.secrets/wh111-service-safety-release-verified.json`, `.secrets/verify-wh111-service-safety-release.mjs`, `.secrets/wh111-service-safety-deploy.log` and `.secrets/wh111-service-safety-live-verification.log`. WH-111/#100 remains open for consolidated pending work, selected-project/return continuity, human support and navigation simplification; WH-112 retains whole-owner acceptance. CMS functional testing, CSAM implementation and Daybreak remain deferred. No parent completion is claimed from this increment.
 
+The `whumpo.theme` localStorage preference is cleared at sign-out with the other device records.
+
 ### Unsent Chat text: per-tab, 24 hours (WH-211, decision D-4) — October 27, 2026 UTC
 
 Decision D-4 (`docs/roadmap/owner-decisions-2026-10-26.md`, "Agent decisions") keeps unsent Chat text as it is: a per-tab draft with a 24-hour life and no server copy. Nothing in the product changed; this section records the limit and the tests that hold it.
