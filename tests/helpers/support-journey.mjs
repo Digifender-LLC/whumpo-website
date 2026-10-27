@@ -15,7 +15,7 @@ export async function supportJourney({page,db,state,requests,origin,activate,ent
  await page.getByRole('heading',{name:'Support',level:1}).waitFor();await page.waitForFunction(()=>document.activeElement?.textContent==='Support');
  await page.getByRole('heading',{name:'Chat is unavailable',level:3}).waitFor();await page.waitForLoadState('networkidle');
  assert(requests.slice(start).filter(r=>r.path.startsWith('/api/')).every(r=>r.path.startsWith('/api/auth/identity/v1/')||r.path.startsWith('/api/support/v1')),'Support never reads profile, Chat, billing or the dashboard');
- assert.match(await page.locator('main').innerText(),/Support hours have not been set by the platform owner/);assert.match(await page.locator('main').innerText(),/Locked out of your account\? Email hello@whumpo\.com\. That address is only for sign-in lockouts/);assert.equal(await page.locator('main a[href="mailto:hello@whumpo.com"]').count(),1);assert.match(await page.locator('main').innerText(),/External notifications are not configured/);
+ assert.match(await page.locator('main').innerText(),/Support hours have not been set by the platform owner/);assert.match(await page.locator('main').innerText(),/Email hello@whumpo\.com for help, including sign-in lockouts\. We reply on business days\. Never send your recovery key\./);assert.equal(await page.locator('main a[href="mailto:hello@whumpo.com"]').count(),1);assert.match(await page.locator('main').innerText(),/External notifications are not configured/);
  assert.match(await page.getByText(/^Related to:/).innerText(),/Chat is unavailable/);
 
  phase('stuck operation prefills a related request; keyboard only');
