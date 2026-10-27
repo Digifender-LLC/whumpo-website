@@ -1,6 +1,7 @@
+import {ReturnLink} from './navigation-links';
 import {createContext,useContext,useEffect,useRef,useState,type ReactNode} from 'react';
 import {Link} from '@tanstack/react-router';
-import {ArrowLeft,LifeBuoy,LogOut} from 'lucide-react';
+import {LifeBuoy,LogOut} from 'lucide-react';
 import {Brand} from './components/brand';
 import {Button} from './components/ui/button';
 import {Dialog,DialogContent,DialogDescription,DialogHeader,DialogTitle} from './components/ui/dialog';
@@ -44,7 +45,7 @@ export function AccountSecurityPage(){
  useEffect(()=>{document.title='Account security — Whumpo';if(document.activeElement===document.body)content.current?.querySelector<HTMLElement>('[data-identity-step]')?.focus();},[]);
  return <main className="min-h-dvh bg-background px-5 py-6 sm:px-8 sm:py-9"><div className="mx-auto max-w-xl space-y-7">
   <Brand/>
-  <Button variant="quiet" asChild className="min-h-11"><Link to="/workspace" search={{signup:false}}><ArrowLeft className="size-4"/>Back to Whumpo</Link></Button>
+  <ReturnLink/>
   <div ref={content}><IdentitySecurity/></div>
  </div></main>;
 }

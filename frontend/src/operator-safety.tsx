@@ -1,6 +1,5 @@
+import {ReturnLink} from './navigation-links';
 import {useEffect,useRef,useState} from 'react';
-import {Link} from '@tanstack/react-router';
-import {ArrowLeft} from 'lucide-react';
 import {Brand} from './components/brand';
 import {Button} from './components/ui/button';
 import {Input} from './components/ui/input';
@@ -43,7 +42,7 @@ export function OperatorSafetyPage(){
   setInputError('');setCaseId(id);setAudit(null);setDisclosure(null);void read('cases/read',{caseId:id},setCaseResult);
  }
  return <main className="min-h-dvh bg-background px-5 py-6 sm:px-8 sm:py-9"><div className="mx-auto max-w-4xl space-y-8">
-  <Brand/><Button asChild variant="quiet" className={wrap}><Link to="/workspace" search={{signup:false}}><ArrowLeft className="size-4"/>Back to Whumpo</Link></Button>
+  <Brand/><ReturnLink/>
   <header><h1 ref={heading} tabIndex={-1} className="text-3xl font-bold">Restricted case review</h1>
    <p className="mt-3 text-muted-foreground">Read-only. Only named safety-case operators can read here; each read needs a recent passkey check and is written to the case audit. Identifiers and digests only: no evidence bytes, messages or customer content are shown.</p></header>
   <section aria-labelledby="op-holds" className="space-y-3"><h2 id="op-holds" className="text-xl font-bold">Active preservation holds</h2>

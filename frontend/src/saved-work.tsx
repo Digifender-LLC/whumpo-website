@@ -1,7 +1,8 @@
+import {ReturnLink} from './navigation-links';
 import {useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {Link} from '@tanstack/react-router';
 import {useInfiniteQuery,useQueries,type InfiniteData} from '@tanstack/react-query';
-import {ArrowLeft,History} from 'lucide-react';
+import {History} from 'lucide-react';
 import {savedWorkKinds,type SavedWorkItem,type SavedWorkKind,type SavedWorkList} from '../../src/saved-work-shape';
 import {api,APIError,message} from './lib/api';
 import {identityGeneration} from './lib/identity-invalidation';
@@ -51,7 +52,7 @@ export function SavedWorkPage(){
  }
  const viewLabel=view==='open'?'Open work':'All saved work';
  return <main className="min-h-dvh bg-background px-5 py-6 sm:px-8 sm:py-9"><div className="mx-auto max-w-3xl space-y-7">
-  <Brand/><div className="flex flex-wrap items-center justify-between gap-3"><Button asChild variant="quiet" className={wrap}><Link to="/workspace/$view" params={{view:'dashboard'}} search={{}}><ArrowLeft className="size-4"/>Back to Dashboard</Link></Button><AccountHelp/></div>
+  <Brand/><div className="flex flex-wrap items-center justify-between gap-3"><ReturnLink/><AccountHelp/></div>
   <header><h1 ref={heading} tabIndex={-1} className="text-3xl font-bold">Saved work</h1><p className="mt-3 text-muted-foreground">Find requests, reviews and forms Whumpo saved for you, then open each one in its exact place.</p><p className="mt-3 text-sm text-muted-foreground">This page only reads saved records. It never approves, retries or sends anything. The page you open shows the current state, which can differ from the saved status here.</p></header>
   {owner&&<LocalRecoverySection key={owner} owner={owner} revision={localRevision}/>}
   <section aria-label="Saved work filters" className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-4">
