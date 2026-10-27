@@ -39,6 +39,8 @@ async function ready(db:D1Database,user:string,row:Review){
 export async function requireServiceClientActivation(db:D1Database,user:string,service:Service,review:string){
  try{const linked=await db.prepare('SELECT service FROM service_client_activation_reviews WHERE id=?').bind(review).first<{service:Service}>();if(!linked)return;if(linked.service!==service)throw changed();const row=await ownedReview(db,user,review);if(row.status==='applied')return;await ready(db,user,row);}catch(error){return safe(error);}
 }
+/** Website-tool confirms need the shared review receipt (digest of the exact reply) as well as this module's own link. */
+function receipt(db:D1Database,user:string,turn:string,review:string,hash:string){return db.prepare("INSERT OR IGNORE INTO chat_review_receipts(turn_id,user_id,kind,review_id,reply_digest) SELECT id,user_id,'backendForm',?,? FROM chat_turns WHERE id=? AND user_id=?").bind(review,hash,turn,user);}
 function link(db:D1Database,user:string,turn:string,review:string,hash:string){return db.prepare('INSERT INTO service_client_activation_links(turn_id,review_id,reply_digest) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(turn,review,hash,turn,user);}
 export async function prepareServiceClientActivation(db:D1Database,user:string,turn:string,request:Record<string,unknown>){
  try{
@@ -56,7 +58,7 @@ export async function prepareServiceClientActivation(db:D1Database,user:string,t
    db.prepare('INSERT OR IGNORE INTO backend_form_settings(project_id) SELECT ? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(row.project_id,turn,user),
    db.prepare('INSERT INTO backend_form_reviews(id,user_id,project_id,enabled,config_json,site_revision,backend_publication_id,base_revision,expires_at) VALUES(?,?,?,?,?,?,?,?,?)').bind(turn,user,row.project_id,enabled,enabled?canonicalJSON(compiled.specification.statelessForm!.config,4096):null,enabled?target.publication.revision:-1,enabled?target.backend!.reviewId:null,target.form.revision,row.expires_at)
   ];
-  return {reply,statements:[...statements,db.prepare(`INSERT INTO service_client_activation_reviews(${keys.join(',')}) VALUES(${keys.map(()=>'?').join(',')})`).bind(...keys.map(key=>values[key])),link(db,user,turn,turn,await sha256(reply))]};
+  return {reply,statements:[...statements,db.prepare(`INSERT INTO service_client_activation_reviews(${keys.join(',')}) VALUES(${keys.map(()=>'?').join(',')})`).bind(...keys.map(key=>values[key])),link(db,user,turn,turn,await sha256(reply)),...(service==='statelessForm'?[receipt(db,user,turn,turn,await sha256(reply))]:[])]};
  }catch(error){return safe(error);}
 }
 export async function serviceClientActivationAction(db:D1Database,user:string,turn:string,request:Record<string,unknown>){
@@ -68,7 +70,7 @@ export async function serviceClientActivationAction(db:D1Database,user:string,tu
    return {reply:results.length?'Found saved service reviews. Ask to inspect one before continuing.':'No service activation reviews yet.',inspection:JSON.stringify({type:'website_service_reviews',projectId:request.projectId,reviews:results}),statements:[] as D1PreparedStatement[]};
   }
   shape(request,['kind','operation','reviewId']);if(request.operation!=='activationReview')throw new BackendError(400,'Choose a supported service review operation.');id(request.reviewId);const row=await ownedReview(db,user,request.reviewId),result=row.status==='pending'?await ready(db,user,row):null,reply=description(row,result?.compiled.specification);
-  return {reply,statements:row.status==='pending'?[link(db,user,turn,row.id,await sha256(reply))]:[] as D1PreparedStatement[]};
+  return {reply,statements:row.status==='pending'?[link(db,user,turn,row.id,await sha256(reply)),...(row.service==='statelessForm'?[receipt(db,user,turn,row.id,await sha256(reply))]:[])]:[] as D1PreparedStatement[]};
  }catch(error){return safe(error);}
 }
 export async function serviceClientActivationChatLinks(db:D1Database,user:string,turns:Record<string,unknown>[]){
