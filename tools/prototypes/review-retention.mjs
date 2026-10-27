@@ -110,61 +110,62 @@ export const lifecycleTable=table=>({app_migration_current:'app_migration_checks
 // turnover: how rows stop counting today. lifetime (terminal rows count until project/account cleanup) · pending-only
 //           (cap excludes applied/expired rows) · expiring (a sweep deletes expired rows) · window (time-window counter)
 //           · owner-removable (live rows the owner can remove) · restricted (WH-015 retention decisions or WH-050 reviewed operator cleanup)
+//           · active-only (WH-181: caps count only pending/in-flight non-withdrawal rows; terminal rows never count)
 // withdrawal: the rows that withdraw/disable/revoke and must be exempt from capacity (proposal).
 const R=(cls,lane,turnover,lifecycle,withdrawal=null)=>Object.freeze({class:cls,lane,turnover,lifecycle,withdrawal});
 export const capRegistry=Object.freeze({
- app_activation_reviews:R('review','R1','lifetime','visitor-app-data','enabled=0'),
+ app_activation_reviews:R('review','R1','active-only','visitor-app-data','enabled=0'),
  app_auth_challenges:R('inventory','R6','expiring','visitor-identity'),
  app_daily_usage:R('rate','R6','window','visitor-app-data'),
  app_deletion_receipts:R('receipt','R2','expiring','visitor-identity'),
  app_deletion_reviews:R('review','R1','expiring','visitor-identity'),
  app_invitations:R('inventory','R6','expiring','visitor-identity'),
- app_migration_checks:R('review','R1','lifetime','application-recovery'),
+ app_migration_checks:R('review','R1','active-only','application-recovery'),
  app_migration_current:R('review','R1','pending-only','application-recovery'),
  app_owner_erasures:R('receipt','R2','expiring','visitor-identity'),
- app_page_reviews:R('review','R1','lifetime','visitor-app-data','config_json IS NULL'),
+ app_page_reviews:R('review','R1','active-only','visitor-app-data','config_json IS NULL'),
  app_passkeys:R('inventory','R6','owner-removable','visitor-identity'),
  app_recovery_points:R('version','R4','lifetime','application-recovery'),
- app_restore_reviews:R('review','R1','lifetime','application-recovery'),
+ app_restore_reviews:R('review','R1','active-only','application-recovery'),
  app_runs:R('receipt','R2','lifetime','visitor-app-data'),
  app_sessions:R('inventory','R6','expiring','visitor-identity'),
  app_visitors:R('inventory','R6','owner-removable','visitor-identity'),
- backend_form_reviews:R('review','R1','lifetime','backend-artifacts','enabled=0'),
+ backend_form_reviews:R('review','R1','active-only','backend-artifacts','enabled=0'),
  backend_imports:R('inventory','R6','lifetime','import-quarantine'),
- backend_nominations:R('review','R1','lifetime','shared-reuse'),
+ backend_nominations:R('review','R1','active-only','shared-reuse'),
  backend_public_usage:R('rate','R6','window','backend-artifacts'),
- backend_publication_reviews:R('review','R1','lifetime','backend-artifacts',"operation='unpublish'"),
+ backend_publication_reviews:R('review','R1','active-only','backend-artifacts',"operation='unpublish'"),
  backend_runs:R('receipt','R2','lifetime','backend-artifacts'),
- backend_state_reviews:R('review','R1','lifetime','backend-artifacts'),
+ backend_state_reviews:R('review','R1','active-only','backend-artifacts'),
  backend_versions:R('version','R4','lifetime','backend-artifacts'),
  build_jobs:R('operation','R3','pending-only','pooled-build-jobs'),
- cloudflare_dns_actions:R('operation','R3','lifetime','domains-dns'),
+ cloudflare_dns_actions:R('operation','R3','active-only','domains-dns'),
  cloudflare_token_vault:R('inventory','R6','owner-removable','connections'),
- cms_discard_reviews:R('review','R1','lifetime','cms-content'),
+ cms_discard_reviews:R('review','R1','active-only','cms-content'),
  cms_draft_requests:R('review','R1','lifetime','cms-content'),
  'cms_draft_requests+cms_edit_requests':R('review','R1','lifetime','cms-content'),
  cms_export_links:R('receipt','R2','lifetime','cms-content'),
- cms_import_reviews:R('review','R1','lifetime','cms-media-imports'),
+ cms_import_reviews:R('review','R1','active-only','cms-media-imports'),
  cms_instances:R('inventory','R6','lifetime','cms-resources'),
  cms_media_uploads:R('inventory','R6','lifetime','cms-media-imports'),
  cms_preview_links:R('receipt','R2','lifetime','cms-content'),
  cms_publication_media:R('version','R4','lifetime','cms-media-imports'),
- cms_publication_reviews:R('review','R1','lifetime','cms-content'),
- cms_setup_reviews:R('review','R1','lifetime','cms-resources'),
- cms_unpublish_reviews:R('review','R1','lifetime','cms-content','every row'),
+ cms_publication_reviews:R('review','R1','active-only','cms-content'),
+ cms_setup_reviews:R('review','R1','active-only','cms-resources'),
+ cms_unpublish_reviews:R('review','R1','active-only','cms-content','every row'),
  cms_wordpress_sources:R('inventory','R6','lifetime','cms-media-imports'),
- composition_plans:R('review','R1','lifetime','backend-artifacts'),
+ composition_plans:R('review','R1','active-only','backend-artifacts'),
  contact_notification_outbox:R('operation','R3','window','contact-notifications'),
  contact_receipts:R('receipt','R2','expiring','contacts'),
  content_risk_evidence:R('evidence','R5','restricted','safety-cases'),
  content_screening_decisions:R('evidence','R5','restricted','safety-checks'),
  directories:R('version','R4','owner-removable','directories'),
- directory_reviews:R('review','R1','lifetime','directories',"kind='unpublish'"),
+ directory_reviews:R('review','R1','active-only','directories',"kind='unpublish'"),
  domain_claims:R('inventory','R6','owner-removable','domains-dns'),
- domain_connections:R('operation','R3','lifetime','domains-dns','disconnect'),
+ domain_connections:R('operation','R3','active-only','domains-dns','disconnect'),
  feature_preview_grants:R('inventory','R6','lifetime','feature-preview-authority'),
- github_backups:R('operation','R3','lifetime','github-backups'),
- github_grant_revocations:R('operation','R3','lifetime','connections','every row'),
+ github_backups:R('operation','R3','active-only','github-backups'),
+ github_grant_revocations:R('operation','R3','active-only','connections','every row'),
  github_token_vault:R('inventory','R6','owner-removable','connections'),
  guest_preview_feedback:R('inventory','R6','owner-removable','guest-feedback'),
  guest_preview_links:R('inventory','R6','owner-removable','guest-feedback'),
@@ -173,8 +174,8 @@ export const capRegistry=Object.freeze({
  identity_credentials:R('inventory','R6','owner-removable','owner-identity-progress'),
  identity_effect_receipts:R('receipt','R2','expiring','owner-identity-receipts'),
  identity_grants:R('inventory','R6','expiring','owner-identity-admission'),
- module_access_role_reviews:R('review','R1','pending-only','project-roles',"action='revoke'"),
- module_activation_reviews:R('review','R1','pending-only','module-registry',"action='disable'"),
+ module_access_role_reviews:R('review','R1','active-only','project-roles',"action='revoke'"),
+ module_activation_reviews:R('review','R1','active-only','module-registry',"action='disable'"),
  module_files:R('inventory','R6','window','module-files'),
  module_records:R('inventory','R6','expiring','module-records'),
  module_request_receipts:R('receipt','R2','window','module-registry'),
@@ -205,10 +206,14 @@ export const capRegistry=Object.freeze({
  users:R('inventory','R6','owner-removable','owner-identity'),
 });
 export const retentionClasses=Object.freeze(['review','receipt','operation']);
-/** Rows the WH-061 design must change: retention-class tables whose terminal rows count against a cap forever. */
-export const ceilingSet=rows=>rows.filter(r=>retentionClasses.includes(capRegistry[r.table]?.class)&&capRegistry[r.table].turnover==='lifetime').map(r=>r.table);
-/** The B1 class: those that also have a platform-wide lifetime cap, so one owner can exhaust it for everyone. */
-export const sharedCeilingSet=rows=>rows.filter(r=>r.platformLifetime&&ceilingSet([r]).length).map(r=>r.table);
+/** The WH-061 design set: retention-class families whose terminal rows counted against a cap forever (`lifetime`), or whose
+ * caps WH-181 turned into active-only counts (`active-only`). Read from the registry, because a family whose every row is a
+ * withdrawal (github_grant_revocations, cms_unpublish_reviews) has no count cap and so no inventory row. */
+export const ceilingSet=()=>Object.keys(capRegistry).filter(t=>retentionClasses.includes(capRegistry[t].class)&&['lifetime','active-only'].includes(capRegistry[t].turnover)).sort((a,b)=>a.localeCompare(b));
+/** Design-set families converted by WH-181 to active-only counts. */
+export const convertedSet=()=>ceilingSet().filter(t=>capRegistry[t].turnover==='active-only');
+/** The B1 class: design-set families that still have a platform-wide lifetime cap, so one owner can exhaust it for everyone. */
+export const sharedCeilingSet=rows=>rows.filter(r=>r.platformLifetime&&ceilingSet().includes(r.table)).map(r=>r.table);
 /** Other lifetime platform-wide caps (versions, inventory, evidence) that are routed to their owners, not pruned here. */
 export const otherPlatformCeilings=rows=>rows.filter(r=>r.platformLifetime&&!retentionClasses.includes(capRegistry[r.table]?.class)&&capRegistry[r.table]?.turnover==='lifetime').map(r=>r.table);
 /** Inventory markdown rows exactly as docs/review-retention.md must contain them. */
@@ -381,10 +386,10 @@ export function loadRepository(root,schemaFiles=schemaInputList(root)){
 }
 export function inventoryReport(repo){
  const rows=capInventory(schemaCaps(repo.facts));
- return {rows,lines:inventoryRows(rows,deleters(repo.facts,repo.appDeletes),t=>repo.lifecycle.get(t)),ceiling:ceilingSet(rows),shared:sharedCeilingSet(rows),other:otherPlatformCeilings(rows)};
+ return {rows,lines:inventoryRows(rows,deleters(repo.facts,repo.appDeletes),t=>repo.lifecycle.get(t)),ceiling:ceilingSet(),converted:convertedSet(),shared:sharedCeilingSet(rows),other:otherPlatformCeilings(rows)};
 }
 if(import.meta.url.startsWith('file:')&&fileURLToPath(import.meta.url)===process.argv[1]&&process.argv[2]==='--inventory'){
  const report=inventoryReport(loadRepository(join(fileURLToPath(new URL('.',import.meta.url)),'../..')));
  console.log(report.lines.join('\n'));
- for(const name of ['ceiling','shared','other'])console.log(`\n${name}: ${report[name].map(t=>'`'+t+'`').join(', ')}`);
+ for(const name of ['ceiling','converted','shared','other'])console.log(`\n${name}: ${report[name].map(t=>'`'+t+'`').join(', ')}`);
 }

@@ -148,6 +148,8 @@ Severity reflects the current private, invitation-only test with a sole tester. 
 
 ### B1 Platform-wide review capacity can be exhausted by one owner (low; availability, cross-tenant)
 
+**Resolution (WH-181, [review retention](review-retention.md)):** review capacity now counts only pending, unexpired, non-withdrawal rows, per project (25), per owner (100) and platform-wide (5,000, with fair share from 2,500 rows), and withdrawals are exempt, so one owner at a cap no longer blocks another and a full table no longer blocks a safety withdrawal. `tests/boundary-review-capacity.mjs` is now a regression test (exit 0 on SQLite and `--d1`). The schema change takes effect at the owner-run empty-D1 cutover. The finding as audited follows.
+
 Each owner review table has a per-project cap of 100 **and a platform-wide cap of 1,000** (for example `backend_form_reviews`, `app_page_reviews`, `app_activation_reviews`, `backend_publication_reviews`, `backend_state_reviews`, `app_restore_reviews` in [`schema/platform.sql`](../schema/platform.sql)). Rows are never deleted while the project exists (delete guards; no cleanup in `src/`, `tools/` or the schema), and `tools/report-maintenance.mjs --counters` does not monitor these tables. An enrolled owner needs only their own projects (20 allowed) to fill a table; reviews need not be confirmed.
 
 - **Reproduction (executed):** `node tests/boundary-review-capacity.mjs` (SQLite) and `--d1` (local D1). Owner A prepares 999 "form off" reviews across 10 of their own projects; owner B's next form review then fails with `409 Form review unavailable: ... review storage is full`. Expected: B unaffected.
@@ -260,8 +262,8 @@ node tests/verification-profiles.mjs
 corepack pnpm check
 node tools/verify.mjs fast
 node tools/verify.mjs protection
-node tests/boundary-review-capacity.mjs        # B1, expected exit 1
-node tests/boundary-review-capacity.mjs --d1   # B1 on local D1, expected exit 1
+node tests/boundary-review-capacity.mjs        # B1, regression (exit 0; fixed by WH-181)
+node tests/boundary-review-capacity.mjs --d1   # B1 on local D1, regression (exit 0)
 node tests/boundary-recent-auth.mjs            # B2, characterization (exit 0)
 node tests/boundary-guest-preview-race.mjs     # B3, regression (exit 0; fixed by #178)
 node tools/roadmap.mjs validate && node tools/roadmap.mjs render --check
