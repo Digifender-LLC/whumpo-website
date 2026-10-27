@@ -13,8 +13,8 @@ const server=createServer((req,res)=>{
  if(url.pathname==='/manifest.webmanifest')return send('application/manifest+json','{"name":"Stub"}');
  if(url.pathname==='/turnstile-stub')return send('text/html',page('<p>stub</p>'));
  if(url.pathname==='/'||url.pathname==='/workspace/'){
-  const extra=mode==='external'?'<script src="http://203.0.113.9/x.js"></script>':mode==='state'?'<script>fetch("/api/auth/identity/v1/state",{method:"POST",body:"{}"}).catch(()=>{})</script>':mode==='console'?'<script>console.error("boom")</script>':'';
-  return send('text/html',page('<h1>Stub</h1><iframe title="Widget containing a Cloudflare security challenge" src="/turnstile-stub"></iframe><script>const post=(p,b)=>fetch(p,{method:"POST",headers:{"content-type":"application/json"},body:b}).catch(()=>{});post("/api/auth/identity/v1/config",JSON.stringify({version:1}));</script>'+extra));
+  const extra=mode==='external'?'<script src="http://203.0.113.9/x.js"></script>':mode==='state'?'<script>fetch("/api/auth/identity/v1/login/options",{method:"POST",headers:{"content-type":"application/json"},body:"{\\"version\\":1}"}).catch(()=>{})</script>':mode==='badstate'?'<script>fetch("/api/auth/identity/v1/state",{method:"POST",body:"{\\"version\\":2}"}).catch(()=>{})</script>':mode==='stripe'?'<script>fetch("https://js.stripe.com/v3/pricing-table.js").catch(()=>{})</script>':mode==='console'?'<script>console.error("boom")</script>':'';
+  return send('text/html',page('<h1>Stub</h1><iframe title="Widget containing a Cloudflare security challenge" src="/turnstile-stub"></iframe><script>const post=(p,b)=>fetch(p,{method:"POST",headers:{"content-type":"application/json"},body:b}).catch(()=>{});post("/api/auth/identity/v1/config",JSON.stringify({version:1}));post("/api/auth/identity/v1/state",JSON.stringify({version:1}));</script>'+extra));
  }
  send('text/plain','nf',404);
 });
@@ -28,10 +28,15 @@ try{
  const ok=JSON.parse(r.stdout);assert.equal(ok.attention,false);assert.deepEqual(ok.blocked,[]);
  for(const n of ['heading_visible@390','heading_visible@1280','no_horizontal_scroll@390','no_horizontal_scroll@1280','turnstile_iframe','console_errors','csp_violations','health','manifest'])assert.ok(ok.checks.some(c=>c.check===n&&c.state==='ok'),n);
  assert.ok(seen.includes('POST /api/auth/identity/v1/config'),'config POST reaches the origin');
- assert.ok(seen.every(s=>s.startsWith('GET ')||s==='POST /api/auth/identity/v1/config'),'only GETs and the config POST reach the origin');
+ assert.ok(seen.includes('POST /api/auth/identity/v1/state'),'state POST reaches the origin');
+ assert.ok(seen.every(s=>s.startsWith('GET ')||s==='POST /api/auth/identity/v1/config'||s==='POST /api/auth/identity/v1/state'),'only GETs and the two read POSTs reach the origin');
  mode='state';r=await probe('--live',origin);assert.equal(r.code,2);
- assert.ok(JSON.parse(r.stdout).blocked.some(b=>b.reason==='api_write'&&b.url.endsWith('/api/auth/identity/v1/state')));
- assert.ok(!seen.includes('POST /api/auth/identity/v1/state'),'state POST is aborted');
+ assert.ok(JSON.parse(r.stdout).blocked.some(b=>b.reason==='api_write'&&b.url.endsWith('/api/auth/identity/v1/login/options')));
+ assert.ok(!seen.includes('POST /api/auth/identity/v1/login/options'),'other identity POSTs are aborted');
+ mode='badstate';r=await probe('--live',origin);assert.equal(r.code,2);
+ assert.ok(JSON.parse(r.stdout).blocked.some(b=>b.reason==='api_write'&&b.url.endsWith('/v1/state')),'state POST with a different body is aborted');
+ mode='stripe';r=await probe('--live',origin);const st=JSON.parse(r.stdout);
+ assert.deepEqual(st.blocked,[]);assert.ok(st.knownBlocked.some(b=>b.url==='https://js.stripe.com/v3/pricing-table.js'));assert.ok(st.checks.some(c=>c.check==='no_blocked_requests'&&c.state==='ok'));
  mode='external';r=await probe('--live',origin);assert.equal(r.code,2);
  const ext=JSON.parse(r.stdout);assert.ok(ext.blocked.some(b=>b.reason==='foreign_host'));assert.ok(ext.checks.some(c=>c.check==='no_blocked_requests'&&c.state==='failed'));
  mode='console';r=await probe('--live',origin);assert.equal(r.code,2);

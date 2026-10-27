@@ -8,12 +8,16 @@ const pages=[{name:'landing',path:'/'},{name:'signup-entry',path:'/workspace/?si
 const viewports=[390,1280];
 // The signup page's own CSP permits Turnstile; its script and frame are GET-only loads from this one host.
 const allowedExternal='https://challenges.cloudflare.com';
-const isConfigPost=(request,url,origin)=>{
- if(request.method()!=='POST'||url.origin!==origin||url.pathname!=='/api/auth/identity/v1/config')return false;
+// Both routes only read (config returns the public site key, state reads the session); anything else stays aborted.
+const allowedPosts=new Set(['/api/auth/identity/v1/config','/api/auth/identity/v1/state']);
+// Known, accepted block: the Stripe pricing-table script is never loaded by a read-only probe.
+const knownForeign='https://js.stripe.com';
+const isAllowedPost=(request,url,origin)=>{
+ if(request.method()!=='POST'||url.origin!==origin||!allowedPosts.has(url.pathname))return false;
  try{const b=JSON.parse(request.postData()??'');return Object.keys(b).length===1&&b.version===1;}catch{return false;}
 };
 export async function probeBrowser(target,{timeoutMs=15000}={}){
- const origin=probeTarget(target),checks=[],blocked=[];
+ const origin=probeTarget(target),checks=[],blocked=[],knownBlocked=[];
  const add=(check,path,ok,failure,extra={})=>checks.push({check,path,state:ok?'ok':'failed',...extra,...(ok?{}:{failure})});
  const browser=await chromium.launch();
  try{
@@ -22,7 +26,8 @@ export async function probeBrowser(target,{timeoutMs=15000}={}){
    const request=route.request(),url=new URL(request.url());
    if(!/^https?:$/.test(url.protocol))return route.continue();
    const sameOrigin=url.origin===origin,external=origin.startsWith('https:')&&url.origin===allowedExternal;
-   if(isConfigPost(request,url,origin))return route.continue();
+   if(isAllowedPost(request,url,origin))return route.continue();
+   if(request.method()==='GET'&&url.origin===knownForeign){knownBlocked.push({method:'GET',url:url.origin+url.pathname,reason:'expected_foreign_host'});return route.abort();}
    if(request.method()!=='GET'||!(sameOrigin||external)){blocked.push({method:request.method(),url:url.origin+url.pathname,reason:request.method()!=='GET'?(url.pathname.startsWith('/api/')?'api_write':'non_get'):'foreign_host'});return route.abort();}
    return route.continue();
   });
@@ -62,7 +67,7 @@ export async function probeBrowser(target,{timeoutMs=15000}={}){
   }catch{add('manifest','/manifest.webmanifest',false,'unreachable');}
  }finally{await browser.close();}
  add('no_blocked_requests','*',!blocked.length,'blocked_requests',{count:blocked.length});
- return {target:origin,observedAt:new Date().toISOString(),checks,blocked,attention:checks.some(c=>c.state!=='ok'),scope:'Read-only headless Chromium GETs of the landing and signup entry pages, plus the one POST {"version":1} to /api/auth/identity/v1/config that the signup page makes to fetch the public Turnstile site key (every other non-GET is aborted). Proves render, console/CSP cleanliness, Turnstile iframe presence, health, manifest and no horizontal scroll at 390px and 1280px. Does not sign up, enrol passkeys, solve Turnstile, call Stripe or write anything.'};
+ return {target:origin,observedAt:new Date().toISOString(),checks,blocked,knownBlocked,attention:checks.some(c=>c.state!=='ok'),scope:'Read-only headless Chromium GETs of the landing and signup entry pages, plus two POSTs of {"version":1}, to /api/auth/identity/v1/config (public Turnstile site key) and /api/auth/identity/v1/state (session read), both made by the signup page; every other non-GET is aborted. The js.stripe.com pricing-table script is an expected block, listed in knownBlocked and not a failure. Proves render, console/CSP cleanliness, Turnstile iframe presence, health, manifest and no horizontal scroll at 390px and 1280px. Does not sign up, enrol passkeys, solve Turnstile, call Stripe or write anything.'};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  const args=process.argv.slice(2);

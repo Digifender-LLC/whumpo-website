@@ -4,7 +4,7 @@ A person runs this in a real browser against the deployed site. It covers what `
 
 ## Before you start
 
-- Run the read-only probe first: `pnpm exec node tools/live-browser-probe.mjs --live https://<origin>`. It must exit 0. It only loads pages with GET, plus the one config POST (`{"version":1}` to `/api/auth/identity/v1/config`) the signup page makes to fetch the public Turnstile site key; every other write is aborted.
+- Run the read-only probe first: `pnpm exec node tools/live-browser-probe.mjs --live https://<origin>`. It must exit 0. It only loads pages with GET, plus two read-only POSTs of `{"version":1}` the signup page makes, to `/api/auth/identity/v1/config` (public Turnstile site key) and `/api/auth/identity/v1/state` (session read); every other write is aborted. The `js.stripe.com` pricing-table script is an expected block, listed under `knownBlocked`, not a failure.
 - Use a normal browser profile on a device with a platform passkey, plus a second, different passkey provider or a security key. Two distinct passkeys are required to finish signup.
 - Have your own invitation code and an email address you control.
 - Stripe: use the SANDBOX (test mode) only. Never enter a real card number. Never use live-mode Stripe. If the Checkout page does not show a test-mode banner, stop and cancel.
