@@ -57,6 +57,8 @@ export async function inspectChatViewport(page,context){
  }
 }
 
+// scrollIntoView lands on device pixels while layout uses 1/16px units, so allow 1px of rounding.
+const inFrame=v=>v.heading.top>=v.frame.top-1&&v.heading.bottom<=v.frame.bottom+1&&v.selection.top>=v.frame.top-1&&v.selection.bottom<=v.frame.bottom+1;
 /** Put a saved picker into a deliberate reading position after phone reflow. */
 export async function captureSelectedChatProject(page,{interactionId,projectName,path}){
  const card=page.locator('[data-interaction-id="'+interactionId+'"]');
@@ -71,10 +73,10 @@ export async function captureSelectedChatProject(page,{interactionId,projectName
  let view;
  for(let n=0;n<60;n++){
   view=await geometry();
-  if(view&&view.heading.top>=view.frame.top&&view.heading.bottom<=view.frame.bottom&&view.selection.top>=view.frame.top&&view.selection.bottom<=view.frame.bottom&&view.name===projectName)break;
+  if(view&&inFrame(view)&&view.name===projectName)break;
   await page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
  }
- assert(view&&view.heading.top>=view.frame.top&&view.heading.bottom<=view.frame.bottom&&view.selection.top>=view.frame.top&&view.selection.bottom<=view.frame.bottom&&view.name===projectName,JSON.stringify({message:'Saved picker must be readable inside the Chat scroll area',view}));
+ assert(view&&inFrame(view)&&view.name===projectName,JSON.stringify({message:'Saved picker must be readable inside the Chat scroll area',view}));
  assert(view.selection.height>=44);assert.equal(view.overflow,false);
  await page.screenshot({path});return view;
 }
