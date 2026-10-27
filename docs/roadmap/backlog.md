@@ -4988,7 +4988,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-26 UTC, source and docs only, nothing re-run (reconciliation against origin/main): delivered by PR #343 (merged 2026-10-26T02:22:04Z, merge commit 630bac5). It changed src/index.ts, docs/android-app.md and the fixtures tests/backend-http-fixture.mjs, backend-http, cms-projects-http, helpers/workspace-identity, smoke and workspace-admission, so POST /api/projects answers 409 onboarding_required until welcome completes. Read from git log origin/main and gh pr view; the PR's test results were not rerun here. Readiness stays planned because the schema has no completion value. WH-111 and WH-208, WH-209, WH-211, WH-212, WH-213 stay open.
 
 ## WH-208 — Restore and extend accessibility evidence for the fixed recovery pages
 
@@ -5149,7 +5149,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-26 UTC, source and docs only, nothing re-run (reconciliation against origin/main): delivered by PR #342 (merged 2026-10-26T02:22:00Z, merge commit fc4db5d). It changed frontend/src/project-details.tsx (one project locator), tests/saved-work.mjs (github-access fixture) and docs/chat-daily-workspace.md. Read from git log origin/main and gh pr view; the PR's test results and the browser --saved-work journey were not rerun here. Readiness stays planned because the schema has no completion value. WH-111 and WH-208, WH-209, WH-211, WH-212, WH-213 stay open.
 
 ## WH-211 — Composer draft durability
 
