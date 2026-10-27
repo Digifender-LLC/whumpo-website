@@ -56,8 +56,7 @@ export async function prepareAccessRoleCommand(db:D1Database,user:string,turn:st
   request_hash:await jsonDigest({kind:'accessRoleReview',projectId:project,instanceId:localId,visitorId:visitor,action}),created_at:now,expires_at:now+600};
  const saved:SavedReview={...review,review_digest:await reviewDigest(review)},keys=Object.keys(saved) as (keyof SavedReview)[],reply=describe(review);
  return {reply,statements:[
-  // Expired unapplied reviews are disposable; applied receipts keep their review.
-  db.prepare('DELETE FROM module_access_role_reviews WHERE id IN(SELECT r.id FROM module_access_role_reviews r WHERE r.expires_at<=unixepoch() AND NOT EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=r.id) ORDER BY r.expires_at LIMIT 100)'),
+  // Expired unapplied reviews no longer count against capacity; WH-182 compacts them into sealed receipts.
   db.prepare(`INSERT INTO module_access_role_reviews(${keys.join(',')}) VALUES(${keys.map(()=>'?').join(',')})`).bind(...keys.map(k=>saved[k])),
   db.prepare('INSERT INTO module_access_role_links(turn_id,review_id,reply_digest) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(turn,turn,await sha256(reply),turn,user)
  ]};

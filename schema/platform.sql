@@ -427,7 +427,7 @@ CREATE TABLE site_health_checks (
  detail TEXT NOT NULL DEFAULT 'Checking the published page and photo responses',
  started_at TEXT NOT NULL,
  finished_at TEXT
-, form_review_id TEXT);
+, form_review_id TEXT, directory_review_id TEXT);
 
 CREATE TABLE site_health_budget(day TEXT PRIMARY KEY,checks INTEGER NOT NULL CHECK(checks BETWEEN 1 AND 500));
 
@@ -437,7 +437,10 @@ CREATE TABLE directories (
  draft_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(draft_json) AND json_type(draft_json)='array' AND json_array_length(draft_json)<=25 AND length(CAST(draft_json AS BLOB))<=24576),
  live_json TEXT CHECK(live_json IS NULL OR (json_valid(live_json) AND json_type(live_json)='array' AND json_array_length(live_json)<=25 AND length(CAST(live_json AS BLOB))<=24576)),
  publication_revision INTEGER NOT NULL DEFAULT -1,
- published_at TEXT
+ published_at TEXT,
+ live_review_id TEXT REFERENCES directory_reviews(id),
+ live_digest TEXT CHECK(live_digest IS NULL OR (length(live_digest)=64 AND live_digest NOT GLOB '*[^0-9a-f]*')),
+ CHECK((live_json IS NULL AND live_review_id IS NULL AND live_digest IS NULL) OR (live_json IS NOT NULL AND (live_review_id IS NULL)=(live_digest IS NULL)))
 );
 
 CREATE TABLE directory_reviews (
@@ -458,6 +461,78 @@ CREATE TABLE directory_exports (
  turn_id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
  review_id TEXT NOT NULL REFERENCES directory_reviews(id) ON DELETE CASCADE
 );
+
+CREATE TABLE review_receipts (
+ family TEXT NOT NULL CHECK(family IN ('directory_reviews','backend_form_reviews','module_activation_reviews','module_access_role_reviews')),
+ id TEXT NOT NULL CHECK(length(id) BETWEEN 1 AND 128),
+ owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+ kind TEXT NOT NULL CHECK(kind IN ('change','withdrawal')),
+ target TEXT NOT NULL CHECK(length(target) BETWEEN 1 AND 256),
+ outcome TEXT NOT NULL CHECK(outcome IN ('applied','withdrawn','expired','superseded','failed')),
+ payload_digest TEXT NOT NULL CHECK(length(payload_digest)=64 AND payload_digest NOT GLOB '*[^0-9a-f]*'),
+ request_hash TEXT NOT NULL CHECK(length(request_hash)=64 AND request_hash NOT GLOB '*[^0-9a-f]*'),
+ confirmed_by TEXT CHECK(confirmed_by IS NULL OR length(confirmed_by) BETWEEN 1 AND 128),
+ applied_at TEXT,
+ lifecycle_class TEXT NOT NULL CHECK(length(lifecycle_class) BETWEEN 1 AND 64),
+ sealed_at TEXT NOT NULL,
+ seal TEXT NOT NULL CHECK(length(seal)=64 AND seal NOT GLOB '*[^0-9a-f]*'),
+ PRIMARY KEY(family,id),
+ CHECK(outcome<>'withdrawn' OR kind='withdrawal'),
+ CHECK(outcome<>'applied' OR kind='change')
+);
+CREATE INDEX review_receipts_project ON review_receipts(project_id,family,sealed_at);
+CREATE INDEX review_receipts_owner ON review_receipts(owner_user_id);
+
+-- A sealed receipt is written in the batch that compacts its source row, and binds every field the still-present source
+-- row carries (owner, project, kind, target, outcome, confirming turn, and the digest or request hash where the source
+-- has one). Sealing time cannot be backdated, because the replay horizon runs from it. The Worker computes and verifies
+-- the SHA-256 seal; SQLite cannot, so the seal, the applied time and a digest the source row does not carry are only
+-- checked for shape here.
+CREATE TRIGGER review_receipt_bind BEFORE INSERT ON review_receipts BEGIN
+ SELECT RAISE(ABORT,'review_receipt_bind') WHERE NEW.sealed_at NOT GLOB '????-??-??T??:??:??*Z' OR NEW.sealed_at<strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 minute') OR NEW.sealed_at>strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 minute');
+ SELECT RAISE(ABORT,'review_receipt_bind') WHERE NEW.family='directory_reviews' AND (NEW.lifecycle_class<>'directories' OR NOT EXISTS(SELECT 1 FROM directory_reviews r WHERE r.id=NEW.id
+  AND r.user_id=NEW.owner_user_id
+  AND r.project_id=NEW.project_id
+  AND NEW.kind=(CASE WHEN r.kind='unpublish' THEN 'withdrawal' ELSE 'change' END)
+  AND NEW.target IS r.project_id
+  AND NEW.payload_digest=r.digest
+  AND NEW.confirmed_by IS r.confirmed_by
+  AND (NEW.outcome=(CASE WHEN r.status='applied' THEN (CASE WHEN r.kind='unpublish' THEN 'withdrawn' ELSE 'applied' END) WHEN (r.status='pending' AND r.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) THEN 'expired' END) OR (NEW.outcome='superseded' AND (r.kind='unpublish' AND NOT (r.status='applied') AND EXISTS(SELECT 1 FROM directory_reviews x WHERE x.rowid>r.rowid AND x.kind='unpublish' AND x.project_id=r.project_id))))));
+ SELECT RAISE(ABORT,'review_receipt_bind') WHERE NEW.family='backend_form_reviews' AND (NEW.lifecycle_class<>'backend-artifacts' OR NOT EXISTS(SELECT 1 FROM backend_form_reviews r WHERE r.id=NEW.id
+  AND r.user_id=NEW.owner_user_id
+  AND r.project_id=NEW.project_id
+  AND NEW.kind=(CASE WHEN r.enabled=0 THEN 'withdrawal' ELSE 'change' END)
+  AND NEW.target IS r.project_id
+  AND (NEW.outcome=(CASE WHEN r.status='applied' THEN (CASE WHEN r.enabled=0 THEN 'withdrawn' ELSE 'applied' END) WHEN (r.status='pending' AND r.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) THEN 'expired' END) OR (NEW.outcome='superseded' AND (r.enabled=0 AND NOT (r.status='applied') AND EXISTS(SELECT 1 FROM backend_form_reviews x WHERE x.rowid>r.rowid AND x.enabled=0 AND x.project_id=r.project_id))))));
+ SELECT RAISE(ABORT,'review_receipt_bind') WHERE NEW.family='module_activation_reviews' AND (NEW.lifecycle_class<>'module-registry' OR NOT EXISTS(SELECT 1 FROM module_activation_reviews r WHERE r.id=NEW.id
+  AND r.user_id=NEW.owner_user_id
+  AND r.project_id=NEW.project_id
+  AND NEW.kind=(CASE WHEN r.action='disable' THEN 'withdrawal' ELSE 'change' END)
+  AND NEW.target IS r.resource_id
+  AND NEW.payload_digest=r.review_digest
+  AND NEW.request_hash=r.request_hash
+  AND NEW.confirmed_by IS (SELECT a.id FROM module_activation_applies a WHERE a.review_id=r.id)
+  AND (NEW.outcome=(CASE WHEN EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=r.id) THEN (CASE WHEN r.action='disable' THEN 'withdrawn' ELSE 'applied' END) WHEN (NOT EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=r.id) AND r.expires_at<=unixepoch()-3600) THEN 'expired' END) OR (NEW.outcome='superseded' AND (r.action='disable' AND NOT (EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=r.id)) AND EXISTS(SELECT 1 FROM module_activation_reviews x WHERE x.rowid>r.rowid AND x.action='disable' AND x.resource_id=r.resource_id))))));
+ SELECT RAISE(ABORT,'review_receipt_bind') WHERE NEW.family='module_access_role_reviews' AND (NEW.lifecycle_class<>'project-roles' OR NOT EXISTS(SELECT 1 FROM module_access_role_reviews r WHERE r.id=NEW.id
+  AND r.user_id=NEW.owner_user_id
+  AND r.project_id=NEW.project_id
+  AND NEW.kind=(CASE WHEN r.action='revoke' THEN 'withdrawal' ELSE 'change' END)
+  AND NEW.target IS r.instance_id||':'||r.visitor_id
+  AND NEW.payload_digest=r.review_digest
+  AND NEW.request_hash=r.request_hash
+  AND NEW.confirmed_by IS (SELECT a.id FROM module_access_role_applies a WHERE a.review_id=r.id)
+  AND (NEW.outcome=(CASE WHEN EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=r.id) THEN (CASE WHEN r.action='revoke' THEN 'withdrawn' ELSE 'applied' END) WHEN (NOT EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=r.id) AND r.expires_at<=unixepoch()-3600) THEN 'expired' END) OR (NEW.outcome='superseded' AND (r.action='revoke' AND NOT (EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=r.id)) AND EXISTS(SELECT 1 FROM module_access_role_reviews x WHERE x.rowid>r.rowid AND x.action='revoke' AND x.instance_id||':'||x.visitor_id=r.instance_id||':'||r.visitor_id))))));
+END;
+CREATE TRIGGER review_receipt_immutable BEFORE UPDATE ON review_receipts BEGIN SELECT RAISE(ABORT,'review_receipt_immutable'); END;
+-- Receipts leave with project or account cleanup, or after the 30-day replay horizon and never inside a safety hold.
+CREATE TRIGGER review_receipt_retained BEFORE DELETE ON review_receipts
+WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.owner_user_id) AND (OLD.project_id IS NULL OR EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id))
+BEGIN
+ SELECT RAISE(ABORT,'review_receipt_retained') WHERE OLD.sealed_at>strftime('%Y-%m-%dT%H:%M:%fZ','now','-30 days')
+  OR EXISTS(SELECT 1 FROM safety_preservation_holds WHERE released_at IS NULL AND scope='account' AND subject_user_id=OLD.owner_user_id)
+  OR (OLD.project_id IS NOT NULL AND EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id));
+END;
 
 CREATE TABLE backend_versions (
  id TEXT PRIMARY KEY,
@@ -2519,14 +2594,22 @@ CREATE TRIGGER directory_review_identity BEFORE UPDATE ON directory_reviews
 WHEN NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.project_id!=OLD.project_id OR NEW.kind!=OLD.kind OR NEW.snapshot_json!=OLD.snapshot_json OR NEW.digest!=OLD.digest OR NEW.expected_revision!=OLD.expected_revision OR NEW.publication_revision!=OLD.publication_revision OR NEW.expires_at!=OLD.expires_at OR OLD.status!='pending' OR NEW.status!='applied' OR NEW.confirmed_by IS NULL
 BEGIN SELECT RAISE(ABORT,'directory_changed'); END;
 
+-- Listing slots (draft plus live) are bounded per owner (250) under a platform ceiling (2000). Once the platform holds
+-- 1000 slots, an owner already holding 62 may not add more. Only growth is refused, so edits that remove listings and
+-- withdrawals (which only clear the live copy) are never refused for capacity.
 CREATE TRIGGER directory_capacity BEFORE UPDATE ON directories
+WHEN json_array_length(NEW.draft_json)+COALESCE(json_array_length(NEW.live_json),0)>json_array_length(OLD.draft_json)+COALESCE(json_array_length(OLD.live_json),0)
 BEGIN
- SELECT RAISE(ABORT,'directory_capacity') WHERE (SELECT COALESCE(SUM(json_array_length(draft_json)+COALESCE(json_array_length(live_json),0)),0) FROM directories WHERE project_id!=NEW.project_id)+json_array_length(NEW.draft_json)+COALESCE(json_array_length(NEW.live_json),0)>2000;
+ SELECT RAISE(ABORT,'directory_capacity') WHERE
+  (SELECT COALESCE(SUM(json_array_length(d.draft_json)+COALESCE(json_array_length(d.live_json),0)),0) FROM directories d JOIN projects p ON p.id=d.project_id WHERE d.project_id!=NEW.project_id AND p.owner_user_id=(SELECT owner_user_id FROM projects WHERE id=NEW.project_id))+json_array_length(NEW.draft_json)+COALESCE(json_array_length(NEW.live_json),0)>250
+  OR (SELECT COALESCE(SUM(json_array_length(draft_json)+COALESCE(json_array_length(live_json),0)),0) FROM directories WHERE project_id!=NEW.project_id)+json_array_length(NEW.draft_json)+COALESCE(json_array_length(NEW.live_json),0)>2000
+  OR ((SELECT COALESCE(SUM(json_array_length(draft_json)+COALESCE(json_array_length(live_json),0)),0) FROM directories WHERE project_id!=NEW.project_id)+json_array_length(NEW.draft_json)+COALESCE(json_array_length(NEW.live_json),0)>1000
+   AND (SELECT COALESCE(SUM(json_array_length(d.draft_json)+COALESCE(json_array_length(d.live_json),0)),0) FROM directories d JOIN projects p ON p.id=d.project_id WHERE d.project_id!=NEW.project_id AND p.owner_user_id=(SELECT owner_user_id FROM projects WHERE id=NEW.project_id))+json_array_length(NEW.draft_json)+COALESCE(json_array_length(NEW.live_json),0)>62);
 END;
 
 CREATE TRIGGER directory_review_apply AFTER UPDATE ON directory_reviews
 BEGIN
- UPDATE directories SET revision=revision+1,draft_json=CASE WHEN NEW.kind='edit' THEN NEW.snapshot_json ELSE draft_json END,live_json=CASE NEW.kind WHEN 'publish' THEN NEW.snapshot_json WHEN 'unpublish' THEN NULL ELSE live_json END,publication_revision=CASE WHEN NEW.kind='publish' THEN NEW.publication_revision ELSE publication_revision END,published_at=CASE WHEN NEW.kind='publish' THEN strftime('%Y-%m-%dT%H:%M:%fZ','now') ELSE published_at END WHERE project_id=NEW.project_id;
+ UPDATE directories SET revision=revision+1,draft_json=CASE WHEN NEW.kind='edit' THEN NEW.snapshot_json ELSE draft_json END,live_json=CASE NEW.kind WHEN 'publish' THEN NEW.snapshot_json WHEN 'unpublish' THEN NULL ELSE live_json END,live_review_id=CASE NEW.kind WHEN 'publish' THEN NEW.id WHEN 'unpublish' THEN NULL ELSE live_review_id END,live_digest=CASE NEW.kind WHEN 'publish' THEN NEW.digest WHEN 'unpublish' THEN NULL ELSE live_digest END,publication_revision=CASE WHEN NEW.kind='publish' THEN NEW.publication_revision ELSE publication_revision END,published_at=CASE WHEN NEW.kind='publish' THEN strftime('%Y-%m-%dT%H:%M:%fZ','now') ELSE published_at END WHERE project_id=NEW.project_id;
  INSERT INTO activity_events(id,user_id,project_id,action,summary,created_at) VALUES('directory:'||NEW.id,NEW.user_id,NEW.project_id,'directory.'||NEW.kind,CASE NEW.kind WHEN 'edit' THEN 'Updated private directory draft' WHEN 'publish' THEN 'Published reviewed directory snapshot' ELSE 'Took directory offline' END,strftime('%Y-%m-%dT%H:%M:%fZ','now'));
 END;
 
@@ -2551,7 +2634,22 @@ BEGIN SELECT RAISE(ABORT,'directory_changed'); END;
 CREATE TRIGGER directory_review_insert BEFORE INSERT ON directory_reviews
 BEGIN
  SELECT RAISE(ABORT,'directory_changed') WHERE NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id AND owner_user_id=NEW.user_id);
- SELECT RAISE(ABORT,'directory_capacity') WHERE NEW.kind!='unpublish' AND (SELECT COUNT(*) FROM directory_reviews WHERE project_id=NEW.project_id AND kind!='unpublish')>=100;
+ SELECT RAISE(ABORT,'directory_capacity') WHERE NOT (NEW.kind='unpublish') AND ((SELECT count(*) FROM directory_reviews t WHERE t.project_id=NEW.project_id AND t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.kind='unpublish'))>=25
+  OR (SELECT count(*) FROM directory_reviews t WHERE t.user_id=NEW.user_id AND t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.kind='unpublish'))>=100
+  OR (SELECT count(*) FROM directory_reviews t WHERE t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.kind='unpublish'))>=5000
+  OR ((SELECT count(*) FROM directory_reviews t WHERE t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.kind='unpublish'))>=2500 AND (SELECT count(*) FROM directory_reviews t WHERE t.user_id=NEW.user_id AND t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.kind='unpublish'))>=25));
+END;
+
+CREATE TRIGGER directory_review_retained BEFORE DELETE ON directory_reviews
+WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+BEGIN
+ -- Only a terminal, unreferenced, unheld row outside the history window may leave, and only with its sealed receipt.
+ SELECT RAISE(ABORT,'directory_retained') WHERE NOT (OLD.status='applied' OR (OLD.status='pending' AND OLD.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) OR (OLD.kind='unpublish' AND NOT (OLD.status='applied') AND EXISTS(SELECT 1 FROM directory_reviews x WHERE x.rowid>OLD.rowid AND x.kind='unpublish' AND x.project_id=OLD.project_id)))
+  OR (EXISTS(SELECT 1 FROM directories WHERE live_review_id=OLD.id)
+   OR EXISTS(SELECT 1 FROM directory_exports WHERE review_id=OLD.id))
+  OR EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
+  OR NOT (NOT (OLD.status='applied') OR (OLD.kind='unpublish') OR OLD.id NOT IN (SELECT t.id FROM directory_reviews t WHERE t.project_id=OLD.project_id AND t.status='applied' AND NOT (t.kind='unpublish') ORDER BY t.expected_revision DESC LIMIT 25))
+  OR NOT EXISTS(SELECT 1 FROM review_receipts WHERE family='directory_reviews' AND id=OLD.id AND (OLD.status='applied')=(outcome IN ('applied','withdrawn')));
 END;
 
 CREATE TRIGGER backend_versions_immutable BEFORE UPDATE ON backend_versions BEGIN SELECT RAISE(ABORT,'backend_immutable'); END;
@@ -2881,8 +2979,24 @@ BEGIN SELECT RAISE(ABORT,'operator_retention_immutable'); END;
 CREATE TRIGGER backend_form_admit BEFORE INSERT ON backend_form_reviews BEGIN
  SELECT RAISE(ABORT,'backend_form_owner') WHERE NOT EXISTS(SELECT 1 FROM projects p JOIN backend_form_settings s ON s.project_id=p.id WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.user_id AND s.revision=NEW.base_revision);
  SELECT RAISE(ABORT,'backend_form_targets') WHERE NEW.enabled=1 AND NOT EXISTS(SELECT 1 FROM publications s JOIN backend_publications b ON b.project_id=s.project_id JOIN backend_publication_reviews r ON r.id=b.review_id WHERE s.project_id=NEW.project_id AND s.version_id IS NOT NULL AND s.revision=NEW.site_revision AND b.review_id=NEW.backend_publication_id AND r.user_id=NEW.user_id AND r.status='applied');
- SELECT RAISE(ABORT,'backend_form_capacity') WHERE (SELECT count(*) FROM backend_form_reviews WHERE project_id=NEW.project_id)>=100 OR (SELECT count(*) FROM backend_form_reviews)>=1000;
+ SELECT RAISE(ABORT,'backend_form_capacity') WHERE NOT (NEW.enabled=0) AND ((SELECT count(*) FROM backend_form_reviews t WHERE t.project_id=NEW.project_id AND t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.enabled=0))>=25
+  OR (SELECT count(*) FROM backend_form_reviews t WHERE t.user_id=NEW.user_id AND t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.enabled=0))>=100
+  OR (SELECT count(*) FROM backend_form_reviews t WHERE t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.enabled=0))>=5000
+  OR ((SELECT count(*) FROM backend_form_reviews t WHERE t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.enabled=0))>=2500 AND (SELECT count(*) FROM backend_form_reviews t WHERE t.user_id=NEW.user_id AND t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.enabled=0))>=25));
  SELECT RAISE(ABORT,'backend_form_initial') WHERE NEW.status<>'pending';
+END;
+
+CREATE TRIGGER backend_form_review_retained BEFORE DELETE ON backend_form_reviews
+WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+BEGIN
+ -- Only a terminal, unreferenced, unheld row outside the history window may leave, and only with its sealed receipt.
+ SELECT RAISE(ABORT,'backend_form_retained') WHERE NOT (OLD.status='applied' OR (OLD.status='pending' AND OLD.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) OR (OLD.enabled=0 AND NOT (OLD.status='applied') AND EXISTS(SELECT 1 FROM backend_form_reviews x WHERE x.rowid>OLD.rowid AND x.enabled=0 AND x.project_id=OLD.project_id)))
+  OR (EXISTS(SELECT 1 FROM backend_form_settings WHERE review_id=OLD.id)
+   OR EXISTS(SELECT 1 FROM site_health_checks WHERE form_review_id=OLD.id)
+   OR EXISTS(SELECT 1 FROM service_client_activation_reviews WHERE id=OLD.id))
+  OR EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
+  OR NOT (NOT (OLD.status='applied') OR (OLD.enabled=0) OR OLD.id NOT IN (SELECT t.id FROM backend_form_reviews t WHERE t.project_id=OLD.project_id AND t.status='applied' AND NOT (t.enabled=0) ORDER BY t.rowid DESC LIMIT 25))
+  OR NOT EXISTS(SELECT 1 FROM review_receipts WHERE family='backend_form_reviews' AND id=OLD.id AND (OLD.status='applied')=(outcome IN ('applied','withdrawn')));
 END;
 
 CREATE TRIGGER backend_form_immutable BEFORE UPDATE ON backend_form_reviews WHEN NEW.id<>OLD.id OR NEW.user_id<>OLD.user_id OR NEW.project_id<>OLD.project_id OR NEW.enabled<>OLD.enabled OR NEW.config_json IS NOT OLD.config_json OR NEW.site_revision<>OLD.site_revision OR NEW.backend_publication_id IS NOT OLD.backend_publication_id OR NEW.base_revision<>OLD.base_revision OR NEW.expires_at<>OLD.expires_at OR OLD.status<>'pending' OR NEW.status<>'applied'
