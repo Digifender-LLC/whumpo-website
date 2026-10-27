@@ -312,6 +312,8 @@ It does not prove D1 trigger behavior, the real deleting statements, Worker rout
 
 ## Open owner decisions
 
+**2026-10-27:** OD-1 to OD-7 are adopted as recommended, as agent decisions delegated by the owner. OD-8 is reserved for the owner because it adds R2 storage spend. See `docs/roadmap/owner-decisions-2026-10-26.md`, section "Agent decisions — 2026-10-27 (delegated by owner)".
+
 | ID | Decision | Recommendation |
 | --- | --- | --- |
 | OD-1 | Retention option | D (combination) |
