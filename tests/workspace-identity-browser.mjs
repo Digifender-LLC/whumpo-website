@@ -8,6 +8,7 @@ import {accountHelpJourney} from './helpers/account-help-journey.mjs';
 import {accessibilityAudit} from './helpers/accessibility-audit.mjs';
 import {ownerUsabilityJourney} from './helpers/owner-usability-journey.mjs';
 import {keyboardJourney} from './helpers/keyboard-journey.mjs';
+import {recoveryPagesAxe} from './recovery-pages-axe.mjs';
 import {hearOrca} from './helpers/orca-output.mjs';
 // Opt-in mobile browser acceptance with real signed WebAuthn and actual current HTTP/D1.
 // Turnstile is synthetic. No remote bindings or external inference/provider calls; isolated current schema only.
@@ -23,9 +24,9 @@ import {databaseFixture} from './helpers/current-database.mjs';
 import {paidPlan} from './helpers/paid-plan.mjs';
 import {fixtureKeyring} from './helpers/connection-keyring.mjs';
 const accessibility=process.argv.includes('--accessibility'),accountHelp=process.argv.includes('--account-help'),a11y=accessibilityAudit();
-const siteSafety=process.argv.includes('--site-safety'),savedWork=process.argv.includes('--saved-work'),support=process.argv.includes('--support'),navigation=process.argv.includes('--navigation');
+const siteSafety=process.argv.includes('--site-safety'),savedWork=process.argv.includes('--saved-work'),support=process.argv.includes('--support'),navigation=process.argv.includes('--navigation'),recoveryAxe=process.argv.includes('--recovery-axe');
 const grantJourney=process.argv.includes('--github-grant'),crossTab=process.argv.includes('--cross-tab');
-if([accessibility,grantJourney,crossTab,accountHelp,siteSafety,savedWork,support,navigation].filter(Boolean).length>1)throw Error('Run the owner accessibility and GitHub grant journeys separately.');
+if([accessibility,grantJourney,crossTab,accountHelp,siteSafety,savedWork,support,navigation,recoveryAxe].filter(Boolean).length>1)throw Error('Run the owner accessibility and GitHub grant journeys separately.');
 let providerCalls=0,modelCalls=0;
 const require=createRequire(import.meta.url),{chromium}=require(process.env.WHUMPO_PLAYWRIGHT||'@playwright/test');
 const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-identity-browser-'),html=`frontend/identity-fixture-${process.pid}.html`,origin='http://localhost:8787';
@@ -40,7 +41,7 @@ try{
  const {saveBackend,testBackend,prepareBackendPublication,confirmBackendPublication,prepareApplication,confirmApplication,prepareAppPage,confirmAppPage,createWebsite,publicationCommand,worker,hashToken,admitWorkspace,resolveIdentity,sendConversation,readChat,startGitHub,finishGitHub,initializeConnectionKeys}=bundle;
  // WH-126 visitor access fixture helpers run on this same bundle (admission capabilities are bundle-private).
  const accessHandlers={readChat:bundle.readChat,sendChatControl:bundle.sendChatControl,createWebsite:bundle.createWebsite,prepareSpecification:bundle.prepareSpecification,readSpecificationProposal:bundle.readSpecificationProposal,jsonDigest:bundle.jsonDigest,moduleCatalog:bundle.moduleCatalog};
- fixture=await databaseFixture({allowedArguments:['--github-grant','--accessibility','--account-help','--cross-tab','--site-safety','--saved-work','--support','--navigation']});const db=fixture.db;
+ fixture=await databaseFixture({allowedArguments:['--github-grant','--accessibility','--account-help','--cross-tab','--site-safety','--saved-work','--support','--navigation','--recovery-axe']});const db=fixture.db;
  const code=crypto.randomUUID();await db.prepare("INSERT INTO invitations VALUES(?,strftime('%Y-%m-%dT%H:%M:%fZ','now'),strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 hour'),NULL,NULL)").bind(await hashToken(code)).run();
  crypto.subtle.timingSafeEqual=(a,b)=>timingSafeEqual(Buffer.from(a),Buffer.from(b));
  globalThis.fetch=async(url,...args)=>{if(accessibility&&String(url)==='https://opencode.ai/zen/go/v1/responses'){const body=JSON.parse(args[0].body),ack=body.max_output_tokens===256;if(!ack){audit.calls++;assert(audit.steps.length,'Unexpected inference request');}return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(ack?{intent:'editing'}:{reply:'Scripted owner request prepared.',action:audit.steps.shift()})}]}],usage:{input_tokens:100,output_tokens:100}});}if(grantJourney&&String(url)==='https://opencode.ai/zen/go/v1/responses'){modelCalls++;return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({reply:'Prepared.',action:{kind:'githubAccess',operation:'review'}})}]}],usage:{input_tokens:200,output_tokens:80}});}if(grantJourney&&String(url)==='https://api.github.com/applications/browser-grant/grant'){providerCalls++;return new Response(null,{status:204});}if(String(url)==='https://challenges.cloudflare.com/turnstile/v0/siteverify')return Response.json({success:true,hostname:'localhost',action:'register'});throw Error('Unexpected external request');};
@@ -83,7 +84,7 @@ try{
   const append=Element.prototype.append;Element.prototype.append=function(...nodes){const result=append.apply(this,nodes);for(const node of nodes)if(node instanceof HTMLIFrameElement&&node.title==='Recovery kit print view')node.contentWindow.print=()=>{window.__printedKit=node.contentDocument.body.textContent;node.contentWindow.dispatchEvent(new Event('afterprint'));};return result;};
  });
  page=await context.newPage();page.setDefaultTimeout(15000);page.on('pageerror',e=>errors.push(e.message));
- const {reach,activate,enter}=keyboardJourney(page,accessibility||accountHelp||crossTab||siteSafety||savedWork||support||navigation);
+ const {reach,activate,enter}=keyboardJourney(page,accessibility||accountHelp||recoveryAxe||crossTab||siteSafety||savedWork||support||navigation);
  async function focusHeading(text){if(accessibility||crossTab){await page.getByRole('heading',{name:text,exact:true}).waitFor();await page.waitForFunction(t=>document.activeElement?.textContent===t,text);}}
  const cdp=await context.newCDPSession(page);await cdp.send('WebAuthn.enable');
  async function authenticator(){return (await cdp.send('WebAuthn.addVirtualAuthenticator',{options:{protocol:'ctap2',transport:'internal',hasResidentKey:true,hasUserVerification:true,isUserVerified:true,automaticPresenceSimulation:true}})).authenticatorId}
@@ -132,7 +133,7 @@ try{
  await page.reload();await page.getByRole('heading',{name:'Your kit is saved'}).waitFor();await hearOrca('setup enters first welcome question',()=>activate(page.getByRole('button',{name:'Verify a passkey and finish setup'})),[/What should I call you/i,/heading/i]);await page.getByLabel('Your name',{exact:true}).waitFor();
  assert.equal(await page.evaluate(()=>localStorage.length+sessionStorage.length),0);assert.equal(await page.evaluate(()=>document.cookie),'');
  const cookies=await context.cookies();assert.equal(cookies.filter(c=>c.name==='__Host-whumpo_session').length,1);assert(cookies.every(c=>c.secure&&c.httpOnly&&c.sameSite===(c.name==='__Host-whumpo_session'?'Lax':'Strict')));
- if(accountHelp)await accountHelpJourney({page,context,db,state:audit,requests,origin,activate,enter,phase:value=>{phase=value;},holdWelcomeSave:()=>{holdWelcomeReply=true;return {pending:()=>!!releaseWelcomeReply,release:()=>{releaseWelcomeReply?.();releaseWelcomeReply=null;}};}});
+ if(accountHelp||recoveryAxe)await accountHelpJourney({page,context,db,state:audit,requests,origin,activate,enter,phase:value=>{phase=value;},holdWelcomeSave:()=>{holdWelcomeReply=true;return {pending:()=>!!releaseWelcomeReply,release:()=>{releaseWelcomeReply?.();releaseWelcomeReply=null;}};}});
  phase='first-project welcome';
  assert.equal(await page.getByRole('navigation',{name:'Workspace',exact:true}).count(),0);
  await enter(page.getByLabel('Your name',{exact:true}),'Garden owner');await hearOrca('welcome picture question',()=>activate(page.getByRole('button',{name:'Continue',exact:true})),[/Pick a face for your space/i,/heading/i]);
@@ -183,7 +184,7 @@ try{
   await page.setViewportSize({width:1280,height:900});await page.getByRole('region',{name:'GitHub access review'}).last().scrollIntoViewIfNeeded();await page.screenshot({path:'/tmp/whumpo-github-grant-desktop.png',fullPage:true});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
  }
- if(siteSafety)await siteSafetyJourney({page,context,db,origin,requests,state:audit,activate,phase:value=>{phase=value;},seedWebsite:async()=>{
+ if(siteSafety||recoveryAxe)await siteSafetyJourney({page,context,db,origin,requests,state:audit,activate,phase:value=>{phase=value;},seedWebsite:async()=>{
   const token=(await context.cookies()).find(c=>c.name==='__Host-whumpo_session').value,principal=await resolveIdentity(db,{version:1,client:'web',kind:'session',token}),scope=admitWorkspace(db,principal),user=principal.accountId;
   const project=(await db.prepare('SELECT id FROM projects WHERE owner_user_id=?').bind(user).first()).id;
   async function command(prepare){const id=crypto.randomUUID(),revision=(await db.prepare('SELECT revision FROM workspace_state WHERE user_id=?').bind(user).first()).revision+1,r=await prepare(id);await scope.batch([scope.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,?,'Synthetic website setup',?,datetime('now'),'ai','pending')").bind(id,user,revision,r.reply),...r.statements,scope.prepare("UPDATE chat_turns SET status='completed' WHERE id=?").bind(id),scope.prepare('UPDATE workspace_state SET revision=? WHERE user_id=?').bind(revision,user)]);return id;}
@@ -197,9 +198,10 @@ try{
   await prepareAppPage(scope,user,project,appPage,{title:'Garden notebook',description:'Synthetic notes',buttonLabel:'Save',fields:[{key:'note',label:'Note',type:'text'}]});await confirmAppPage(scope,user,appPage);
   return {project,version};
  }});
- if(savedWork)await savedWorkJourney({page,db,origin,requests,state:audit,activate,enter,phase:value=>{phase=value;}});
+ if(savedWork||recoveryAxe)await savedWorkJourney({page,db,origin,requests,state:audit,activate,enter,phase:value=>{phase=value;}});
  if(navigation)await navigationJourney({page,db,origin,requests,state:audit,activate,enter,phase:value=>{phase=value;}});
- if(support)await supportJourney({page,db,origin,requests,state:audit,activate,enter,phase:value=>{phase=value;}});
+ if(support||recoveryAxe)await supportJourney({page,db,origin,requests,state:audit,activate,enter,phase:value=>{phase=value;}});
+ if(recoveryAxe)await recoveryPagesAxe({page,origin,phase:value=>{phase=value;}});
  if(crossTab)await crossTabIdentityJourney({page,context,db,origin,requests,cdp,auth,state:audit,phase:value=>{phase=value;}});
  if(accessibility)await ownerUsabilityJourney({page,context,db,env,state:audit,origin,activate,enter,reach,phase:value=>{phase=value;},audit:a11y.check});
  if(accountHelp){await page.goto(origin+'/workspace/settings');await activate(page.getByRole('button',{name:'Account help',exact:true}));await page.getByRole('dialog',{name:'Account help',exact:true}).getByRole('heading',{name:'Account security',exact:true}).waitFor();await page.getByRole('dialog',{name:'Account help',exact:true}).getByRole('button',{name:'Close',exact:true}).click();await page.goto(origin+'/workspace');await page.getByRole('textbox',{name:'Message Whumpo'}).waitFor();}
