@@ -12,12 +12,22 @@ const allowedExternal='https://challenges.cloudflare.com';
 const allowedPosts=new Set(['/api/auth/identity/v1/config','/api/auth/identity/v1/state']);
 // Known, accepted block: the Stripe pricing-table script is never loaded by a read-only probe.
 const knownForeign='https://js.stripe.com';
-// Turnstile's own challenge POSTs: https origins only, this one host, this one path prefix.
-export const isChallengePost=(method,url,origin)=>method==='POST'&&origin.startsWith('https:')&&url.origin===allowedExternal&&url.pathname.startsWith('/cdn-cgi/challenge-platform/');
-const isAllowedPost=(request,url,origin)=>{
- if(request.method()!=='POST'||url.origin!==origin||!allowedPosts.has(url.pathname))return false;
- try{const b=JSON.parse(request.postData()??'');return Object.keys(b).length===1&&b.version===1;}catch{return false;}
+const challengePath='/cdn-cgi/challenge-platform/';
+// Turnstile's own challenge traffic: https targets only; POST on the one host, GET also on its subdomains, only under the challenge path.
+export const isChallengePost=(method,url,origin)=>method==='POST'&&origin.startsWith('https:')&&url.origin===allowedExternal&&url.pathname.startsWith(challengePath);
+const isChallengeSubdomainGet=(method,url,origin)=>method==='GET'&&origin.startsWith('https:')&&url.protocol==='https:'&&url.hostname.endsWith('.challenges.cloudflare.com')&&url.pathname.startsWith(challengePath);
+const isAllowedPost=(method,url,origin,postData)=>{
+ if(method!=='POST'||url.origin!==origin||!allowedPosts.has(url.pathname))return false;
+ try{const b=JSON.parse(postData??'');return Object.keys(b).length===1&&b.version===1;}catch{return false;}
 };
+// The single routing decision: {allow:true}, or {allow:false,reason,known?}.
+export function decideRequest(method,url,origin,postData){
+ if(isAllowedPost(method,url,origin,postData)||isChallengePost(method,url,origin)||isChallengeSubdomainGet(method,url,origin))return {allow:true};
+ if(method==='GET'&&url.origin===knownForeign)return {allow:false,known:true,reason:'expected_foreign_host'};
+ const sameOrigin=url.origin===origin,external=origin.startsWith('https:')&&url.origin===allowedExternal;
+ if(method==='GET'&&(sameOrigin||external))return {allow:true};
+ return {allow:false,reason:method!=='GET'?(url.pathname.startsWith('/api/')?'api_write':'non_get'):'foreign_host'};
+}
 export async function probeBrowser(target,{timeoutMs=15000}={}){
  const origin=probeTarget(target),checks=[],blocked=[],knownBlocked=[];
  const add=(check,path,ok,failure,extra={})=>checks.push({check,path,state:ok?'ok':'failed',...extra,...(ok?{}:{failure})});
@@ -27,10 +37,8 @@ export async function probeBrowser(target,{timeoutMs=15000}={}){
   await context.route('**/*',route=>{
    const request=route.request(),url=new URL(request.url());
    if(!/^https?:$/.test(url.protocol))return route.continue();
-   const sameOrigin=url.origin===origin,external=origin.startsWith('https:')&&url.origin===allowedExternal;
-   if(isAllowedPost(request,url,origin)||isChallengePost(request.method(),url,origin))return route.continue();
-   if(request.method()==='GET'&&url.origin===knownForeign){knownBlocked.push({method:'GET',url:url.origin+url.pathname,reason:'expected_foreign_host'});return route.abort();}
-   if(request.method()!=='GET'||!(sameOrigin||external)){blocked.push({method:request.method(),url:url.origin+url.pathname,reason:request.method()!=='GET'?(url.pathname.startsWith('/api/')?'api_write':'non_get'):'foreign_host'});return route.abort();}
+   const d=decideRequest(request.method(),url,origin,request.postData());
+   if(!d.allow){(d.known?knownBlocked:blocked).push({method:request.method(),url:url.origin+url.pathname,reason:d.reason});return route.abort();}
    return route.continue();
   });
   await context.addInitScript(()=>{window.__csp=[];addEventListener('securitypolicyviolation',e=>window.__csp.push(e.violatedDirective+' '+e.blockedURI));});
@@ -48,7 +56,8 @@ export async function probeBrowser(target,{timeoutMs=15000}={}){
      const overflow=await page.evaluate(()=>document.documentElement.scrollWidth-innerWidth);
      add('no_horizontal_scroll@'+width,spec.path,overflow<=0,'overflow_'+overflow+'px');
      if(spec.turnstile&&width===1280){
-      const frame=await page.locator('iframe[src^="'+allowedExternal+'/"],iframe[title*="Cloudflare security challenge"]').first().waitFor({state:'attached',timeout:timeoutMs}).then(()=>true,()=>false);
+      // Turnstile keeps its iframe in a closed shadow root, so its hidden response input is the visible proof that the widget mounted.
+      const frame=await page.locator('iframe[src^="'+allowedExternal+'/"],iframe[title*="Cloudflare security challenge"],input[name="cf-turnstile-response"]').first().waitFor({state:'attached',timeout:timeoutMs}).then(()=>true,()=>false);
       add('turnstile_iframe',spec.path,frame,'iframe_missing');
      }
     }catch(error){add('page_load@'+width,spec.path,false,error?.name==='TimeoutError'?'timeout':'unreachable',{status,latencyMs:Date.now()-started});}
@@ -69,7 +78,7 @@ export async function probeBrowser(target,{timeoutMs=15000}={}){
   }catch{add('manifest','/manifest.webmanifest',false,'unreachable');}
  }finally{await browser.close();}
  add('no_blocked_requests','*',!blocked.length,'blocked_requests',{count:blocked.length});
- return {target:origin,observedAt:new Date().toISOString(),checks,blocked,knownBlocked,attention:checks.some(c=>c.state!=='ok'),scope:'Read-only headless Chromium GETs of the landing and signup entry pages, plus two POSTs of {"version":1}, to /api/auth/identity/v1/config (public Turnstile site key) and /api/auth/identity/v1/state (session read), both made by the signup page; plus the Turnstile widget POSTs under https://challenges.cloudflare.com/cdn-cgi/challenge-platform/ (https targets only); every other non-GET is aborted. The js.stripe.com pricing-table script is an expected block, listed in knownBlocked and not a failure. Proves render, console/CSP cleanliness, Turnstile iframe presence, health, manifest and no horizontal scroll at 390px and 1280px. Does not sign up, enrol passkeys, solve Turnstile, call Stripe or write anything.'};
+ return {target:origin,observedAt:new Date().toISOString(),checks,blocked,knownBlocked,attention:checks.some(c=>c.state!=='ok'),scope:'Read-only headless Chromium GETs of the landing and signup entry pages, plus two POSTs of {"version":1}, to /api/auth/identity/v1/config (public Turnstile site key) and /api/auth/identity/v1/state (session read), both made by the signup page; plus Turnstile widget traffic under /cdn-cgi/challenge-platform/ (POST on challenges.cloudflare.com, GET also on its subdomains; https targets only); every other non-GET is aborted. The js.stripe.com pricing-table script is an expected block, listed in knownBlocked and not a failure. Proves render, console/CSP cleanliness, Turnstile iframe presence, health, manifest and no horizontal scroll at 390px and 1280px. Does not sign up, enrol passkeys, solve Turnstile, call Stripe or write anything.'};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  const args=process.argv.slice(2);
