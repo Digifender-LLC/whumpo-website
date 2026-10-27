@@ -5,6 +5,7 @@ import {assertWorkspace} from '../workspace-identity/admission';
 import {chatTurnGroups} from '../chat-turn-groups';
 import {ModuleError} from './policy';
 import {registeredInstances} from './registry';
+import {linkedReviewedReply,reviewedReplyGuard} from '../chat-review-receipts';
 
 /** WH-126 exact owner staff role reviews. Both steps are typed owner Chat controls whose statements commit with the
  * Chat turn: `accessRoleReview` prepares, `accessRoleApply` (recent sign-in) applies. Granting composes current
@@ -89,13 +90,14 @@ export async function applyAccessRoleCommand(db:D1Database,user:string,turn:stri
  const r=await pendingReview(db,user,review);
  if(r.review_digest!==digest||r.expected_access_revision!==expectedRevision)throw changed();
  const grant=r.action==='grant';
- const gate=grant?featurePredicate(db,featureRequest({userId:user,projectId:r.project_id,featureId:'core.editing',operation:'confirm'})):{sql:'1',params:[] as unknown[]};
+ const reviewed=await linkedReviewedReply(db,user,'module_access_role_links',review);if(!reviewed)throw changed();
+ const gate=grant?featurePredicate(db,featureRequest({userId:user,projectId:r.project_id,featureId:'core.editing',operation:'confirm'})):{sql:'1',params:[] as unknown[]},guard=reviewedReplyGuard(user,reviewed);
  return {reply:grant?`Granted the staff role to visitor ${short(r.visitor_id)} in the “${r.local_id}” visitor access module. It applies from their next request; removing it stays available at any time.`
   :`Removed the staff role from visitor ${short(r.visitor_id)} in the “${r.local_id}” visitor access module. Their next request, and any change already in progress, no longer has staff access.`,
  statements:[
   db.prepare(`INSERT INTO module_access_role_applies(id,user_id,review_id,review_digest,request_hash,admitted,access_revision,created_at)
-   SELECT ?,?,?,?,?,(SELECT 1 WHERE ${gate.sql}),?,unixepoch() FROM chat_turns WHERE id=? AND user_id=?`)
-   .bind(turn,user,review,digest,requestHash,...gate.params,expectedRevision+1,turn,user)
+   SELECT ?,?,?,?,?,(SELECT 1 WHERE ${gate.sql}${guard.sql}),?,unixepoch() FROM chat_turns WHERE id=? AND user_id=?`)
+   .bind(turn,user,review,digest,requestHash,...gate.params,...guard.params,expectedRevision+1,turn,user)
  ]};
 }
 

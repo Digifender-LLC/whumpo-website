@@ -11,6 +11,7 @@ import {requireSpecificationPhotos,inlineSpecificationPhotos} from '../specifica
 import {assertFeature} from '../feature-admission';
 import {readSpecificationReviewDisplay} from './review-display';
 import {chatTurnGroups} from '../chat-turn-groups';
+import {linkedReviewedReply,reviewedReplyGuard} from '../chat-review-receipts';
 
 const policy=contentPolicyVersion+':'+contentRiskPolicyVersion;
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
@@ -168,8 +169,10 @@ export async function applySpecificationCommand(db:D1Database,user:string,turn:s
  if(applied){if(applied.request_hash!==requestHash)throw changed();return {reply:'This website review was already saved. Read your saved versions for its current availability.',statements:[] as D1PreparedStatement[]};}
  const q=await readSpecificationProposal(db,user,review);
  if(q.proposal_digest!==hash||q.expected_revision!==expectedRevision)throw changed();
+ const reviewed=await linkedReviewedReply(db,user,'project_spec_chat_links',review);if(!reviewed)throw changed();
+ const guard=reviewedReplyGuard(user,reviewed);
  return {reply:`Saved private website revision ${expectedRevision+1}. Open the preview below. Your live website changes only after a separate publication review.`,statements:[
-  db.prepare("INSERT INTO site_versions(id,project_id,component_id,config_json,html,digest,created_at,source,base_version_id) SELECT ?,project_id,json_extract(manifest_json,'$.artifacts[0].component'),config_json,html,html_digest,?,'guided',base_version_id FROM project_spec_proposals WHERE id=? AND user_id=? AND EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)").bind(turn,new Date().toISOString(),review,user,turn,user),
+  db.prepare("INSERT INTO site_versions(id,project_id,component_id,config_json,html,digest,created_at,source,base_version_id) SELECT ?,project_id,json_extract(manifest_json,'$.artifacts[0].component'),config_json,html,html_digest,?,'guided',base_version_id FROM project_spec_proposals WHERE id=? AND user_id=? AND EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)"+guard.sql).bind(turn,new Date().toISOString(),review,user,turn,user,...guard.params),
   ...projectPage(JSON.parse(q.spec_json),'home').photos.map((photo,n)=>db.prepare('INSERT INTO version_photos(version_id,file_id,position,alt) VALUES(?,?,?,?)').bind(turn,photo.id,n,photo.alt)),
   db.prepare('INSERT INTO project_spec_versions(version_id,project_id,revision,proposal_id,spec_json,spec_digest,lock_json,manifest_json,manifest_digest) SELECT ?,project_id,expected_revision+1,id,spec_json,spec_digest,lock_json,manifest_json,manifest_digest FROM project_spec_proposals WHERE id=? AND user_id=? AND EXISTS(SELECT 1 FROM site_versions WHERE id=?)').bind(turn,review,user,turn),
   // Attempt the receipt whenever this confirmation turn exists. A candidate removed

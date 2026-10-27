@@ -1,5 +1,6 @@
 import {BackendError} from '../../backend-error';
 import {chatTurnGroups} from '../../chat-turn-groups';
+import {linkedReviewedReply,reviewedReplyGuard} from '../../chat-review-receipts';
 import {contentPolicyVersion} from '../../content-policy';
 import {contentRiskPolicyVersion} from '../../content-risk';
 import {previewHeaders,photoConfig} from '../../components';
@@ -101,9 +102,11 @@ export async function applyServiceClientsCommand(db:D1Database,user:string,turn:
  const receipt=await db.prepare('SELECT a.request_hash FROM service_client_applies a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.user_id WHERE a.proposal_id=? AND a.user_id=?').bind(review,user).first<{request_hash:string}>();
  if(receipt){if(receipt.request_hash!==requestHash)throw changed();return {reply:'These service settings were already saved. Read the project’s service history for their current availability.',statements:[] as D1PreparedStatement[]};}
  const q=await readServiceClientProposal(db,user,review);if(q.proposal_digest!==hash||q.expected_revision!==expectedRevision)throw changed();
+ const reviewed=await linkedReviewedReply(db,user,'service_client_chat_links',review);if(!reviewed)throw changed();
+ const guard=reviewedReplyGuard(user,reviewed);
  const fields=['website_version_id','spec_json','spec_digest','target_json','target_digest','lock_json','manifest_json','manifest_digest','preview_html','preview_digest','candidate_html','candidate_digest'];
  return {reply:`Saved private service settings revision ${expectedRevision+1}. Your website and services have not been activated or changed. Their separate publication and activation reviews are still required.`,statements:[
-  db.prepare(`INSERT INTO service_client_versions(id,project_id,revision,proposal_id,${fields.join(',')}) SELECT ?,project_id,expected_revision+1,id,${fields.join(',')} FROM service_client_proposals WHERE id=? AND user_id=? AND EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)`).bind(turn,review,user,turn,user),
+  db.prepare(`INSERT INTO service_client_versions(id,project_id,revision,proposal_id,${fields.join(',')}) SELECT ?,project_id,expected_revision+1,id,${fields.join(',')} FROM service_client_proposals WHERE id=? AND user_id=? AND EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)${guard.sql}`).bind(turn,review,user,turn,user,...guard.params),
   // Missing proposal after preflight must abort, not commit a success-only chat turn.
   db.prepare('INSERT INTO service_client_applies(id,user_id,project_id,proposal_id,proposal_digest,request_hash,version_id,revision) SELECT ?,?,?,?,?,?,?,? FROM chat_turns WHERE id=? AND user_id=?').bind(turn,user,q.project_id,review,hash,requestHash,turn,expectedRevision+1,turn,user)
  ]};
