@@ -10,6 +10,16 @@ const viewports=[390,1280];
 const allowedExternal='https://challenges.cloudflare.com';
 // Both routes only read (config returns the public site key, state reads the session); anything else stays aborted.
 const allowedPosts=new Set(['/api/auth/identity/v1/config','/api/auth/identity/v1/state']);
+// Third-party console noise that is not an app error. Each rule is narrow; everything else stays a console error.
+// ERR_FAILED counts only for a URL the probe itself aborted as a known block (correlated via the console message location).
+// Turnstile's feature check fetches data:, which our strict CSP refuses by design; only exact data:, refusals, and only once api.js loaded with a 2xx response.
+export function classifyConsole({text,url},{knownUrls,scriptLoaded}){
+ if(text==='Failed to load resource: net::ERR_FAILED'&&url&&knownUrls.has(url.split(/[?#]/)[0]))return 'probe_aborted_known_block';
+ if(scriptLoaded&&(/^Connecting to 'data:,' violates the following Content Security Policy directive: /.test(text)||text==="Fetch API cannot load data:,. Refused to connect because it violates the document's Content Security Policy."))return 'turnstile_data_uri_feature_check';
+ // Turnstile's own scripts log noise (e.g. styled %c%d lines); trusted only by source URL, never by text.
+ if(scriptLoaded&&url.startsWith('https://challenges.cloudflare.com/'))return 'turnstile_internal_log';
+ return null;
+}
 // Known, accepted block: the Stripe pricing-table script is never loaded by a read-only probe.
 const knownForeign='https://js.stripe.com';
 const challengePath='/cdn-cgi/challenge-platform/';
@@ -34,7 +44,7 @@ export function decideRequest(method,url,origin,postData){
  return {allow:false,reason:method!=='GET'?(url.pathname.startsWith('/api/')?'api_write':'non_get'):'foreign_host'};
 }
 export async function probeBrowser(target,{timeoutMs=15000}={}){
- const origin=probeTarget(target),checks=[],blocked=[],knownBlocked=[];
+ const origin=probeTarget(target),checks=[],blocked=[],knownBlocked=[],knownConsole=[];
  const add=(check,path,ok,failure,extra={})=>checks.push({check,path,state:ok?'ok':'failed',...extra,...(ok?{}:{failure})});
  const browser=await chromium.launch();
  try{
@@ -48,10 +58,12 @@ export async function probeBrowser(target,{timeoutMs=15000}={}){
   });
   await context.addInitScript(()=>{window.__csp=[];addEventListener('securitypolicyviolation',e=>window.__csp.push(e.violatedDirective+' '+e.blockedURI));});
   for(const spec of pages){
-   const page=await context.newPage(),consoleErrors=[];
+   const page=await context.newPage(),consoleErrors=[],rawConsole=[];
    let scriptLoaded=false;
-   page.on('request',r=>{if(r.url().split(/[?#]/)[0]===turnstileScript)scriptLoaded=true;});
-   page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text().slice(0,200));});
+   // Loaded means a 2xx response, not merely a request: a failed or aborted api.js exempts nothing.
+   // api.js 302s to a versioned URL, so follow the redirect chain back to the original request; only the final response must be 2xx.
+   page.on('response',r=>{let q=r.request();while(q.redirectedFrom())q=q.redirectedFrom();if(q.url().split(/[?#]/)[0]===turnstileScript&&r.ok())scriptLoaded=true;});
+   page.on('console',m=>{if(m.type()==='error')rawConsole.push({text:m.text(),url:m.location().url});});
    page.on('pageerror',e=>consoleErrors.push(String(e.message).slice(0,200)));
    for(const width of viewports){
     await page.setViewportSize({width,height:900});
@@ -73,6 +85,8 @@ export async function probeBrowser(target,{timeoutMs=15000}={}){
     }catch(error){add('page_load@'+width,spec.path,false,error?.name==='TimeoutError'?'timeout':'unreachable',{status,latencyMs:Date.now()-started});}
    }
    const csp=await page.evaluate(()=>window.__csp).catch(()=>[]);
+   const knownUrls=new Set(knownBlocked.map(b=>b.url));
+   for(const m of rawConsole){const reason=classifyConsole(m,{knownUrls,scriptLoaded});if(reason)knownConsole.push({path:spec.path,text:m.text.slice(0,200),reason});else consoleErrors.push(m.text.slice(0,200));}
    add('console_errors',spec.path,!consoleErrors.length,'console_errors',{count:consoleErrors.length,sample:consoleErrors.slice(0,3)});
    add('csp_violations',spec.path,!csp.length,'csp_violations',{count:csp.length,sample:csp.slice(0,3)});
    await page.close();
@@ -88,7 +102,7 @@ export async function probeBrowser(target,{timeoutMs=15000}={}){
   }catch{add('manifest','/manifest.webmanifest',false,'unreachable');}
  }finally{await browser.close();}
  add('no_blocked_requests','*',!blocked.length,'blocked_requests',{count:blocked.length});
- return {target:origin,observedAt:new Date().toISOString(),checks,blocked,knownBlocked,attention:checks.some(c=>c.state!=='ok'),scope:'Read-only headless Chromium GETs of the landing and signup entry pages, plus two POSTs of {"version":1}, to /api/auth/identity/v1/config (public Turnstile site key) and /api/auth/identity/v1/state (session read), both made by the signup page; plus Turnstile widget traffic under /cdn-cgi/challenge-platform/ (POST on challenges.cloudflare.com, GET also on its subdomains; https targets only); every other non-GET is aborted. The js.stripe.com pricing-table script is an expected block, listed in knownBlocked and not a failure. Proves render, console/CSP cleanliness, Turnstile iframe presence, health, manifest and no horizontal scroll at 390px and 1280px. Does not sign up, enrol passkeys, solve Turnstile, call Stripe or write anything.'};
+ return {target:origin,observedAt:new Date().toISOString(),checks,blocked,knownBlocked,knownConsole,attention:checks.some(c=>c.state!=='ok'),scope:'Read-only headless Chromium GETs of the landing and signup entry pages, plus two POSTs of {"version":1}, to /api/auth/identity/v1/config (public Turnstile site key) and /api/auth/identity/v1/state (session read), both made by the signup page; plus Turnstile widget traffic under /cdn-cgi/challenge-platform/ (POST on challenges.cloudflare.com, GET also on its subdomains; https targets only); every other non-GET is aborted. The js.stripe.com pricing-table script is an expected block, listed in knownBlocked and not a failure; the console noise it causes, and the Turnstile data:, CSP feature check, are listed in knownConsole with a reason and not counted as console errors. Proves render, console/CSP cleanliness, Turnstile iframe presence, health, manifest and no horizontal scroll at 390px and 1280px. Does not sign up, enrol passkeys, solve Turnstile, call Stripe or write anything.'};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  const args=process.argv.slice(2);
