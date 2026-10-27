@@ -59,6 +59,28 @@ try{
   }
   await context.close();
  }
+ // Theme switch (PR #364/#402 regression): Night must apply, survive reload and a direct load, Day must undo it, Device restores the default. Changes only this synthetic profile.
+ {
+  const context=await chrome.newContext({viewport:{width:1280,height:900},colorScheme:'light'});
+  await context.addCookies([{name:'__Host-whumpo_session',value:sessionValue,url:base,httpOnly:true,secure:true,sameSite:'Lax'}]);
+  const page=await context.newPage();page.setDefaultTimeout(30000);
+  const applied=dark=>page.waitForFunction(d=>document.documentElement.classList.contains('dark')===d&&document.querySelector('meta[name="theme-color"]')?.content===(d?'#0b172a':'#F8FAFC'),dark,{timeout:30000});
+  const choose=async name=>{const b=page.getByRole('button',{name,exact:true});await b.click();await page.locator('button[aria-pressed=true]').filter({hasText:name}).waitFor();};
+  const open=async path=>{await page.goto(base+path,{waitUntil:'domcontentloaded',timeout:60000});await page.locator('h1:visible,h2:visible,h3:visible').first().waitFor();};
+  try{
+   await open('/workspace/settings');await applied(false);
+   await choose('Night');await applied(true);
+   await open('/workspace');await applied(true);
+   await open('/workspace/support');await applied(true);
+   await open('/workspace/settings');await choose('Day');await applied(false);
+   await choose('Device');await applied(false);
+   results.push({page:'Theme switch',ok:true});
+  }catch(e){failures.push('Theme switch: '+e.message);results.push({page:'Theme switch',ok:false});}
+  // Device is the default, so nothing may stay in this device's storage.
+  const store=await page.evaluate(()=>({theme:localStorage.getItem('whumpo.theme'),local:Object.keys(localStorage),session:Object.keys(sessionStorage)}));
+  if(store.theme!==null||store.local.length||store.session.length)failures.push('Device storage not empty after restoring Device: '+JSON.stringify(store));
+  await context.close();
+ }
  await browser.logout();success=true;
 }catch(error){originalFailure=error;throw error;}finally{
  await chrome?.close().catch(()=>{});
