@@ -10,9 +10,9 @@ Answers from the owner to the decisions in the static-site paid beta plan (PR #3
 | D4 | Legal and DMCA | Adopt Terms, AUP and Privacy drafts after counsel review; file DMCA agent | Counsel review not yet done |
 | D5 | Schema cutover | Authorized, main bundle (cutover plan section 6) | Execution not yet run |
 | D6 | Sales tax | Stripe Tax, register where required | Accountant confirmation |
-| D7 | Support promise | Named email, business-day response, owner sole operator | Support address |
-| D8 | Inference ceiling | Fixed monthly provider limit plus per-account daily cap | Dollar amount |
+| D7 | Support promise | Named email `hello@whumpo.com`, business-day response, owner sole operator | — |
+| D8 | Inference ceiling | $50/month fixed provider limit plus per-account daily cap | — |
 
 Unblocked by these answers: plan Weeks 1–2 inference and payments setup. Still blocked: any live Checkout until D6 accountant confirmation, and any invitation until D4 and D7 are complete.
 
-Related: WH-111 (support destination) and WH-020 (paid benchmark budget) remain open and are not answered here.
+Related: WH-111 (support destination, now answered by D7 as hello@whumpo.com) and WH-020 (paid benchmark budget) remain open and are not answered here.
