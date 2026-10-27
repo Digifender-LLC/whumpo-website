@@ -1,7 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {Link,useRouterState} from '@tanstack/react-router';
 import {useQuery} from '@tanstack/react-query';
-import {ArrowLeft,LifeBuoy} from 'lucide-react';
+import {LifeBuoy} from 'lucide-react';
 import {deliveryLabel,lockoutContact,parseSupportReference,type SupportKind,type SupportOverview,type SupportRequest} from '../../src/support-shape';
 import {api,send,message,queryClient} from './lib/api';
 import {identityGeneration} from './lib/identity-invalidation';
@@ -9,6 +9,7 @@ import {Brand} from './components/brand';
 import {Button} from './components/ui/button';
 import {Textarea} from './components/ui/textarea';
 import {AccountHelp} from './account-help';
+import {ReturnLink} from './navigation-links';
 
 const wrap='min-h-11 h-auto whitespace-normal text-left',key=['support'];
 export function SupportLink({onNavigate}:{onNavigate?:()=>void}){return <Button asChild variant="secondary" className={wrap}><Link to="/workspace/$view" params={{view:'support'}} search={{}} onClick={onNavigate}><LifeBuoy className="size-4 shrink-0"/>Support</Link></Button>;}
@@ -47,7 +48,7 @@ export function SupportPage(){
  const status=ref&&parseSupportReference(ref),statusCard=status&&status.kind==='status'?data?.statusLinks.find(l=>l.code===status.code):undefined;
  const operation=status&&status.kind==='operation'?data?.operations.find(o=>o.id===status.id):undefined;
  return <main className="min-h-dvh bg-background px-5 py-6 sm:px-8 sm:py-9"><div className="mx-auto max-w-3xl space-y-8">
-  <Brand/><div className="flex flex-wrap items-center justify-between gap-3"><Button asChild variant="quiet" className={wrap}><Link to="/workspace" search={{signup:false}}><ArrowLeft className="size-4"/>Back to Whumpo</Link></Button><AccountHelp/></div>
+  <Brand/><div className="flex flex-wrap items-center justify-between gap-3"><ReturnLink/><AccountHelp/></div>
   <header><h1 ref={heading} tabIndex={-1} className="text-3xl font-bold">Support</h1>
    <p className="mt-3 text-muted-foreground">Ask for help, look at operations that may be stuck, or ask an operator to review a usage decision. This page works even when Chat, the AI assistant or your welcome questions are unavailable.</p>
    <p className="mt-3 text-sm text-muted-foreground">Requests are read by platform operators. We reply on business days, and nothing here changes your limits, billing or account by itself. Never include passwords, keys or your recovery kit.</p></header>
