@@ -7,13 +7,32 @@ export const version='2025-02-24.acacia',app='whumpo-sandbox-v1';
 export async function stripeClient(directory){
  const key=(await readFile(join(directory,'stripe-test.key'),'utf8')).trim();
  if(!/^sk_test_[A-Za-z0-9]+$/.test(key))throw Error('Only a Stripe sk_test_ sandbox key is accepted.');
- return async(path,form,keyId)=>{
-  const response=await fetch('https://api.stripe.com/v1/'+path,{method:form?'POST':'GET',headers:{authorization:'Bearer '+key,'Stripe-Version':version,...(form?{'content-type':'application/x-www-form-urlencoded','Idempotency-Key':keyId}:{})},body:form?new URLSearchParams(form):undefined,redirect:'error',signal:AbortSignal.timeout(20000)});
+ return async(path,form,keyId,method)=>{
+  const response=await fetch('https://api.stripe.com/v1/'+path,{method:method??(form?'POST':'GET'),headers:{authorization:'Bearer '+key,'Stripe-Version':version,...(form?{'content-type':'application/x-www-form-urlencoded','Idempotency-Key':keyId}:{})},body:form?new URLSearchParams(form):undefined,redirect:'error',signal:AbortSignal.timeout(20000)});
   const body=await response.json();
   if(!response.ok)throw Error('Stripe sandbox request failed: '+response.status+' '+String(body.error?.code??body.error?.type??'unknown')+' ('+path.split('?')[0]+')');
   if(body.livemode===true||body.data?.some(row=>row.livemode===true))throw Error('Live Stripe object refused.');
   return body;
  };
+}
+// Only synthetic checkout-fixture customers may ever be deleted by these helpers.
+export const fixtureEmail=/^checkout-fixture-[0-9a-f-]{36}@example\.test$/;
+export async function deleteFixtureCustomer(api,customerId,email){
+ if(!fixtureEmail.test(email))throw Error('Refusing to delete a customer for a non-fixture email.');
+ const customer=await api('customers/'+encodeURIComponent(customerId));
+ if(customer.deleted||customer.email!==email)return false;
+ return (await api('customers/'+encodeURIComponent(customerId),undefined,undefined,'DELETE')).deleted===true;
+}
+// Dry run unless apply. Returns the fixture customers found (with `deleted` when applied).
+export async function sweepFixtureCustomers(api,apply=false){
+ const found=[];let after;
+ for(;;){
+  const page=await api('customers?limit=100'+(after?'&starting_after='+after:''));
+  for(const c of page.data)if(typeof c.email==='string'&&fixtureEmail.test(c.email))found.push({id:c.id,email:c.email});
+  if(!page.has_more)break;after=page.data.at(-1).id;
+ }
+ if(apply)for(const c of found)c.deleted=await deleteFixtureCustomer(api,c.id,c.email);
+ return found;
 }
 export async function configure(directory,apply=false){
  const api=await stripeClient(directory),balance=await api('balance');
