@@ -47,8 +47,10 @@ export function ciPreflight(driver,observed,artifact){
  if(observed.cms.length)throw ciRefusal('CMS registrations exist and their master key is not available to CI.');
 }
 
-// A concurrent merge can deploy between this run's prepare and its apply, so reconcile refuses
-// before any step starts. Only that refusal, with every journal step still pending, is retried.
+// A concurrent merge can deploy while this run prepares or between prepare and apply. Both
+// refuse before any step starts: prepare with the first message below, reconcile with the
+// second. Each is retried once; the apply one only while every journal step is still pending.
+export const prepareBaselineMoved=error=>error?.message==='Build or remote baseline changed during preparation';
 export const baselineMoved=(error,journal)=>{
  const steps=Object.values(journal?.steps??{});
  return error?.message==='Worker changed outside this release'&&steps.length>0&&steps.every(step=>step.status==='pending');
@@ -60,17 +62,24 @@ export async function ciRelease(root,driver,{env=process.env,log=console.log,com
  const source=commit(env),snapshot=await snap(root),artifact=await schema(root);
  ciPreflight(driver,await driver.observe(),artifact);
  const review=ciReview(snapshot,artifact,source);
- for(let attempt=0;;attempt++){
-  const {directory,manifest}=await prepare(root,driver,review,{git:()=>({commit:source.commit,dirty:source.dirty})});
+ for(let retried=false;;){
+  let prepared;
+  try{prepared=await prepare(root,driver,review,{git:()=>({commit:source.commit,dirty:source.dirty})});}
+  catch(error){
+   if(retried||!prepareBaselineMoved(error))throw error;
+   log('Retrying once: the live Workers or build changed while the release was being prepared and nothing was applied. Checking and preparing again from live state.');
+   retried=true;ciPreflight(driver,await driver.observe(),artifact);continue;
+  }
+  const {directory,manifest}=prepared;
   if(manifest.schema.mode!=='none')throw ciRefusal('the prepared release is not a schema-unchanged release.');
   log('Prepared release '+manifest.id+' for commit '+source.commit);
   let failure;
   try{await apply(directory,driver);}catch(error){failure=error;}
   let journal=null;try{journal=await readJSON(join(directory,'journal.json'));}catch(e){if(e.code==='ENOENT')journal=newJournal(manifest);}
   log(JSON.stringify({release:manifest.id,commit:source.commit,journal},null,2));
-  if(failure&&attempt===0&&baselineMoved(failure,journal)){
-   log('Retrying once: another release changed the live Workers after release '+manifest.id+' was prepared and no step had started. Preparing again from live state.');
-   continue;
+  if(failure&&!retried&&baselineMoved(failure,journal)){
+   log('Retrying once: another release changed the live Workers after release '+manifest.id+' was prepared and no step had started. Checking and preparing again from live state.');
+   retried=true;ciPreflight(driver,await driver.observe(),artifact);continue;
   }
   if(failure)throw failure;
   return {manifest,journal};
