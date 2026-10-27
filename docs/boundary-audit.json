@@ -24,21 +24,21 @@
    "id": "B1",
    "severity": "low",
    "title": "One owner can exhaust platform-wide review tables and block every other owner, including safety withdrawals",
-   "status": "reproduced (executed)",
+   "status": "resolved October 27, 2026 in source by WH-181 (executed regression on local SQLite and local D1; takes effect at the owner-run empty-D1 cutover)",
    "owner": "Platform schema/capacity maintainers; owner decision (schema change needs a coordinated cutover)",
-   "reproduction": "node tests/boundary-review-capacity.mjs (expected to exit 1 until remediated)",
+   "reproduction": "node tests/boundary-review-capacity.mjs (regression, exit 0)",
    "evidence": [
     {
      "file": "schema/platform.sql",
-     "contains": "SELECT RAISE(ABORT,'backend_form_capacity') WHERE (SELECT count(*) FROM backend_form_reviews WHERE project_id=NEW.project_id)>=100 OR (SELECT count(*) FROM backend_form_reviews)>=1000;"
+     "contains": "SELECT RAISE(ABORT,'backend_form_capacity') WHERE NOT (NEW.enabled=0) AND ((SELECT count(*) FROM backend_form_reviews t WHERE t.project_id=NEW.project_id AND t.status='pending'"
     },
     {
      "file": "schema/platform.sql",
-     "contains": "SELECT RAISE(ABORT,'app_page_capacity') WHERE (SELECT count(*) FROM app_page_reviews WHERE project_id=NEW.project_id)>=100 OR (SELECT count(*) FROM app_page_reviews)>=1000;"
+     "contains": "SELECT RAISE(ABORT,'app_page_capacity') WHERE NOT (NEW.config_json IS NULL) AND ((SELECT count(*) FROM app_page_reviews t WHERE t.project_id=NEW.project_id AND t.status='pending'"
     },
     {
      "file": "schema/platform.sql",
-     "contains": "CREATE TRIGGER app_activation_delete_guard BEFORE DELETE ON app_activation_reviews WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id)"
+     "contains": "CREATE TRIGGER app_activation_delete_guard BEFORE DELETE ON app_activation_reviews"
     },
     {
      "file": "src/service-safety.ts",
@@ -46,7 +46,7 @@
     },
     {
      "file": "tests/boundary-review-capacity.mjs",
-     "contains": "B1 reproduced"
+     "contains": "B1 not reproduced"
     }
    ]
   },

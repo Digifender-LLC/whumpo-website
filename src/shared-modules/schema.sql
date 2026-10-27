@@ -216,10 +216,10 @@ CREATE TRIGGER module_activation_review_retained BEFORE DELETE ON module_activat
 WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
 BEGIN
  -- Only a terminal, unreferenced, unheld row outside the history window may leave, and only with its sealed receipt.
- SELECT RAISE(ABORT,'module_activation_receipt_retained') WHERE NOT (EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=OLD.id) OR (NOT EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=OLD.id) AND OLD.expires_at<=unixepoch()-3600) OR (OLD.action='disable' AND NOT (EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=OLD.id)) AND EXISTS(SELECT 1 FROM module_activation_reviews x WHERE x.rowid>OLD.rowid AND x.action='disable' AND x.resource_id=OLD.resource_id)))
+ SELECT RAISE(ABORT,'module_activation_receipt_retained') WHERE NOT (EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=OLD.id) OR (NOT EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=OLD.id) AND OLD.expires_at<=unixepoch()-3600) OR (OLD.action='disable' AND NOT (EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=OLD.id)) AND EXISTS(SELECT 1 FROM module_activation_reviews x WHERE x.expires_at>OLD.expires_at AND x.action='disable' AND x.resource_id=OLD.resource_id)))
   OR (EXISTS(SELECT 1 FROM module_activations WHERE review_id=OLD.id))
   OR EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
-  OR NOT (NOT (EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=OLD.id)) OR (OLD.action='disable') OR OLD.id NOT IN (SELECT t.id FROM module_activation_reviews t WHERE t.project_id=OLD.project_id AND EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=t.id) AND NOT (t.action='disable') ORDER BY t.rowid DESC LIMIT 25))
+  OR NOT (NOT (EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=OLD.id)) OR (OLD.action='disable') OR OLD.id NOT IN (SELECT t.id FROM module_activation_reviews t WHERE t.project_id=OLD.project_id AND EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=t.id) AND NOT (t.action='disable') ORDER BY t.expires_at DESC,t.id DESC LIMIT 25))
   OR NOT EXISTS(SELECT 1 FROM review_receipts WHERE family='module_activation_reviews' AND id=OLD.id AND (EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=OLD.id))=(outcome IN ('applied','withdrawn')));
 END;
 
@@ -410,10 +410,10 @@ CREATE TRIGGER module_access_role_review_retained BEFORE DELETE ON module_access
 WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) AND EXISTS(SELECT 1 FROM app_visitors WHERE id=OLD.visitor_id) AND EXISTS(SELECT 1 FROM module_instances WHERE id=OLD.instance_id)
 BEGIN
  -- Only a terminal, unreferenced, unheld row outside the history window may leave, and only with its sealed receipt.
- SELECT RAISE(ABORT,'module_access_receipt_retained') WHERE NOT (EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=OLD.id) OR (NOT EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=OLD.id) AND OLD.expires_at<=unixepoch()-3600) OR (OLD.action='revoke' AND NOT (EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=OLD.id)) AND EXISTS(SELECT 1 FROM module_access_role_reviews x WHERE x.rowid>OLD.rowid AND x.action='revoke' AND x.instance_id||':'||x.visitor_id=OLD.instance_id||':'||OLD.visitor_id)))
+ SELECT RAISE(ABORT,'module_access_receipt_retained') WHERE NOT (EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=OLD.id) OR (NOT EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=OLD.id) AND OLD.expires_at<=unixepoch()-3600) OR (OLD.action='revoke' AND NOT (EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=OLD.id)) AND EXISTS(SELECT 1 FROM module_access_role_reviews x WHERE x.expires_at>OLD.expires_at AND x.action='revoke' AND x.instance_id||':'||x.visitor_id=OLD.instance_id||':'||OLD.visitor_id)))
   OR (EXISTS(SELECT 1 FROM module_access_roles WHERE review_id=OLD.id))
   OR EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
-  OR NOT (NOT (EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=OLD.id)) OR (OLD.action='revoke') OR OLD.id NOT IN (SELECT t.id FROM module_access_role_reviews t WHERE t.project_id=OLD.project_id AND EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=t.id) AND NOT (t.action='revoke') ORDER BY t.rowid DESC LIMIT 25))
+  OR NOT (NOT (EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=OLD.id)) OR (OLD.action='revoke') OR OLD.id NOT IN (SELECT t.id FROM module_access_role_reviews t WHERE t.project_id=OLD.project_id AND EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=t.id) AND NOT (t.action='revoke') ORDER BY t.expires_at DESC,t.id DESC LIMIT 25))
   OR NOT EXISTS(SELECT 1 FROM review_receipts WHERE family='module_access_role_reviews' AND id=OLD.id AND (EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=OLD.id))=(outcome IN ('applied','withdrawn')));
 END;
 

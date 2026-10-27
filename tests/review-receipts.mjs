@@ -78,7 +78,7 @@ try{
  await del(pub);assert.equal(await exists(pub),false);
  await receipt(off);await del(off);assert.equal(await exists(off),false);
  // a newer pending withdrawal for the same target supersedes the older one; the newest cannot be sealed as superseded.
- const w1=await review(a,pa,'unpublish',{status:'pending'}),w2=await review(a,pa,'unpublish',{status:'pending'});
+ const w1=await review(a,pa,'unpublish',{status:'pending',expires:new Date(Date.now()+590000).toISOString()}),w2=await review(a,pa,'unpublish',{status:'pending'});
  await assert.rejects(()=>receipt(w2,{outcome:'superseded'}),/review_receipt_bind/);
  await receipt(w1,{outcome:'superseded'});await del(w1);assert.equal(await exists(w1),false);
  await assert.rejects(()=>del(w2),retained);
@@ -121,6 +121,34 @@ try{
  await setDraft(smallProjects[0],25);await setDraft(smallProjects[1],25);await setDraft(smallProjects[2],12);
  await assert.rejects(()=>setDraft(smallProjects[2],13),/directory_capacity/);
  await setDraft(smallProjects[2],0);                                 // removing listings is never refused
+
+ // Every family the receipt table admits is bound by review_receipt_bind and guarded against deletion without a receipt.
+ {
+  const families=[...(await one("SELECT sql FROM sqlite_master WHERE name='review_receipts'")).sql.match(/CHECK\(family IN \(([^)]*)\)\)/)[1].matchAll(/'(\w+)'/g)].map(x=>x[1]);
+  const bindSql=(await one("SELECT sql FROM sqlite_master WHERE name='review_receipt_bind'")).sql;
+  assert.ok(families.length>=21);
+  for(const f of families){
+   assert.ok(bindSql.includes(`NEW.family='${f}'`),`${f} is bound`);
+   const guards=(await raw.prepare("SELECT sql FROM sqlite_master WHERE type='trigger' AND tbl_name=? AND sql LIKE '%BEFORE DELETE%'").bind(f).all()).results;
+   assert.ok(guards.some(g=>g.sql.includes('review_receipts')),`${f} has a receipt-requiring delete guard`);
+  }
+ }
+
+ // Nominations (no project): the owner's open limit is 5, expired rows never count, and an expired row leaves only with its receipt.
+ {
+  const u=await owner(),p=await project(u),target=id();
+  const nomination=async expires=>{const nid=id(),version=nid;await run("INSERT INTO backend_versions(id,project_id,source,digest,created_at) VALUES(?,?,'export default x=>x',?,?)",version,p,hex('a'),now());await run('INSERT INTO backend_nominations(id,user_id,version_id,digest,created_at,expires_at) VALUES(?,?,?,?,?,?)',nid,u,version,hex('a'),now(),expires);return nid;};
+  const seal=(nid,outcome)=>run('INSERT INTO review_receipts(family,id,owner_user_id,project_id,kind,target,outcome,payload_digest,request_hash,confirmed_by,applied_at,lifecycle_class,sealed_at,seal) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)','backend_nominations',nid,u,null,'change',nid,outcome,hex('a'),hex('b'),null,outcome==='applied'?now():null,'shared-reuse',now(),hex('c'));
+  const present=async nid=>(await count('SELECT count(*) n FROM backend_nominations WHERE id=?',nid))===1;
+  const stale=await nomination(past);
+  const opened=[];for(let n=0;n<5;n++)opened.push(await nomination(future()));
+  await assert.rejects(()=>nomination(future()),/nomination_capacity/);
+  await assert.rejects(()=>run('DELETE FROM backend_nominations WHERE id=?',stale),/nomination_retained/);
+  await assert.rejects(()=>seal(stale,'applied'),/review_receipt_bind/);
+  await assert.rejects(()=>seal(opened[0],'expired'),/review_receipt_bind/);
+  await seal(stale,'expired');await run('DELETE FROM backend_nominations WHERE id=?',stale);assert.equal(await present(stale),false);
+  await assert.rejects(()=>run('DELETE FROM backend_nominations WHERE id=?',opened[0]),/nomination_retained/);
+ }
 
  // Project cleanup removes rows and receipts; no receipt is needed.
  await run('DELETE FROM projects WHERE id=?',pa);

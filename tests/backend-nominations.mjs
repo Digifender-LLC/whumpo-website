@@ -29,10 +29,10 @@ try{
  const competing=await Promise.allSettled(candidates.slice(4).map(v=>prepareNomination(scope(other),other,id(),v)));
  assert.equal(competing.filter(x=>x.status==='fulfilled').length,1);
  assert.equal(competing.filter(x=>x.status==='rejected'&&x.reason.status===409).length,1);
- // Retained-record bound also applies to closed/expired reviews.
+ // WH-181: closed and expired reviews no longer count against capacity (only open reviews and active consents do).
  let retained=(await db.prepare('SELECT COUNT(*) n FROM backend_nominations WHERE user_id=?').bind(owner).first()).n;
  while(retained++<20)await db.prepare('INSERT INTO backend_nominations(id,user_id,version_id,digest,created_at,expires_at) VALUES(?,?,?,?,?,?)').bind(id(),owner,version,prepared.digest,'1999-01-01T00:00:00.000Z','2000-01-01T00:00:00.000Z').run();
- await assert.rejects(prepareNomination(scope(owner),owner,id(),version),e=>e.status===409);
+ assert.ok(retained>20);await prepareNomination(scope(owner),owner,id(),version);
  assert.equal((await db.prepare('SELECT source FROM backend_versions WHERE id=?').bind(version).first()).source,source);assert.equal((await db.prepare('SELECT COUNT(*) n FROM backend_runs').first()).n,0);assert.equal(await db.prepare("SELECT name FROM sqlite_schema WHERE name='usage_operations'").first(),null);
  await db.prepare('DELETE FROM projects WHERE id=?').bind(project).run();assert.equal((await db.prepare('SELECT COUNT(*) n FROM backend_nominations WHERE user_id=?').bind(owner).first()).n,0);
  console.log('Private nominations passed: exact-version consent, tenant refusal, immutable digest, expiry, concurrent consent/capacity, lost write acknowledgments, withdrawal/replay, guided Chat privacy, model denial, no execution/spend and deletion cascade.');
