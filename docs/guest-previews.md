@@ -4,7 +4,7 @@
 
 The WH-150 source merged to `main` in PR #123; WH-151 in #131. The paragraph below is the October 4 statement, kept as written. For the current test results and the line-by-line acceptance mapping see [WH-150 acceptance mapping](#wh-150-acceptance-mapping--october-25-2026-utc).
 
-**WH-150, WH-151 and the local part of WH-152 implemented; verified only with local SQLite, local D1 and local R2 fixtures and local Chromium.** Not deployed, no live data read, no customer acceptance. Owners manage links from the shared view component `guest-previews` (Chat temporary views and saved pages), direct Chat controls for revoke and delete, and the HTTP API below. See [Owner Chat and view bindings](#owner-chat-and-view-bindings--wh-151). No model-facing way to read comments exists yet. The `creator.guest-feedback` catalogue entry stays `planned` until the remaining children pass (see [Decomposition](#decomposition)). Parent [WH-092](roadmap/backlog.md) stays open.
+**WH-150, WH-151 and the local part of WH-152 implemented; verified only with local SQLite, local D1 and local R2 fixtures and local Chromium.** Not deployed, no live data read, no customer acceptance. Owners manage links from the shared view component `guest-previews` (Chat temporary views and saved pages), direct Chat controls for revoke and delete, and the HTTP API below. See [Owner Chat and view bindings](#owner-chat-and-view-bindings--wh-151). No model-facing way to read comments exists yet. The `creator.guest-feedback` catalogue entry moved to `private-test` on October 27, 2026 after the live acceptance below (see [Decomposition](#decomposition)). Parent [WH-092](roadmap/backlog.md) stays open.
 
 No new Cloudflare product, plan or paid service is used. Links and comments live in the existing private control [D1](https://developers.cloudflare.com/d1/) database. Guest pages are served by the existing `whumpo-sites` Worker through its existing `*.whumpo.site/*` [route](https://developers.cloudflare.com/workers/configuration/routing/routes/); retention runs in the existing daily [Cron Trigger](https://developers.cloudflare.com/workers/configuration/cron-triggers/). D1 reads/writes and Worker requests count against existing account allowances. **Requires verification before activation:** that `preview.whumpo.site` resolves through Cloudflare to that route (an existing wildcard DNS record is assumed, not verified). No DNS change was made.
 
@@ -130,7 +130,7 @@ Registered as the current `guest-feedback` class in the [data lifecycle catalogu
 | WH-150 | Link authority, isolated guest delivery, bounded feedback, owner API, lifecycle/closure registration (this page) | Source and local tests |
 | WH-151 | Register owner list/issue/revoke/resolve/delete through WH-105 bindings and WH-107/109/110 Chat/view adapters; issuance needs exact owner confirmation; comments stay out of model context | Source and local tests; model-prepared issuance and comment hand-off route not built |
 | WH-152 | Accountless mobile/keyboard browser journey (preview, comment, revoke) plus owner-surface journey with synthetic approved assets | Local Chromium journey passes; live and real-device acceptance remain WH-153 |
-| WH-153 | Verify `preview.whumpo.site` routing, reviewed test deployment and live synthetic acceptance; then mark the catalogue entry `private-test` | Planned |
+| WH-153 | Verify `preview.whumpo.site` routing, reviewed test deployment and live synthetic acceptance; then mark the catalogue entry `private-test` | Live synthetic acceptance passed October 27, 2026; catalogue entry is `private-test`; devices and human guests unverified |
 
 ## WH-151 verification — October 4, 2026 UTC
 
@@ -241,3 +241,23 @@ Pass counts in the Results table were observed. The per-assertion descriptions a
 - `tests/guest-preview-browser.mjs` and the WH-152 browser journey (Playwright absent from `main`).
 - `preview.whumpo.site` routing, deployment and real devices (WH-153).
 - PR #123 as the merging PR is inferred from `git log` subjects, not from GitHub.
+
+## WH-153 live acceptance — October 27, 2026 UTC
+
+Run by the orchestrator against https://whumpo.com on `main` at commit `054da5c` (all merged work deployed). No hand deploy, no DNS write, no secrets change.
+
+`RUN_LIVE_GUEST_PREVIEW=1 node tests/guest-preview-live.mjs` exited 0 at 2026-10-27T06:44:06.895Z:
+
+```json
+{"success":true,"steps":{"dns":4,"issued":true,"viewed":true,"commented":true,"revokedRefused":true},"dnsCloudflare":["172.67.180.73","104.21.56.76","2606:4700:3030::6815:384c","2606:4700:3032::ac43:b449"],"cleanupVerified":true}
+```
+
+The same day `RUN_LIVE_WORKSPACE_SMOKE=1 node tests/workspace-smoke-live.mjs` exited 0 at 2026-10-27T06:43:37.602Z: 36 of 36 page checks (9 signed-in pages at 390 and 1280 px, light and dark, including D-9 target sizes after #387), `cleanupVerified` true.
+
+**Decision (orchestrator, delegated authority; no money involved):** `creator.guest-feedback` implementation moves from `planned` to `private-test` in `src/plan-features.ts`. Access still requires current inclusion: an explicit project-scoped [preview grant](feature-inclusion.md) or invoice coverage. Nothing becomes public.
+
+### Still not verified
+
+- Physical phones and tablets (the live and local journeys use headless Chromium only).
+- Real human guests and owners; all identities were synthetic `example.test` rows, deleted and verified gone.
+- Customer acceptance; the catalogue entry means bounded foundation only, not launch acceptance.
