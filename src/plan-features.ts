@@ -21,7 +21,7 @@ const creator = [
   {id:'creator.brand-kits',name:'Versioned brand kits',implementation:'planned'},
   {id:'creator.saved-sections',name:'Saved reusable page sections',implementation:'planned'},
   {id:'creator.shared-styles',name:'Shared styles with reviewed project updates',implementation:'planned'},
-  {id:'creator.guest-feedback',name:'Private guest feedback without an account',implementation:'planned'}
+  {id:'creator.guest-feedback',name:'Private guest feedback without an account',implementation:'private-test'}
 ] as const satisfies readonly FeatureDefinition[];
 const business = [
   {id:'connections.github',name:'GitHub connection',implementation:'private-test',connection:'github'},
