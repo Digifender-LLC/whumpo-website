@@ -21,8 +21,8 @@ let sessionValue;
 const transport=async(url,init)=>{const r=await fetch(url,init);for(const c of r.headers.getSetCookie()){const m=/^__Host-whumpo_session=([^;]*)/.exec(c);if(m)sessionValue=m[1];}return r;};
 const browser=liveWorkspaceBrowser(base,transport);
 const results=[],failures=[];let success=false,originalFailure,chrome;
-// Standalone controls only: links that flow inside a sentence (computed display inline) are exempt per D-9.
-const smallControls=()=>[...document.querySelectorAll('button,a[href],select,textarea,summary,[role=button],input:not([type=hidden],[type=checkbox],[type=radio])')].filter(e=>e.checkVisibility()&&!e.closest('.sr-only')&&!(e.tagName==='A'&&getComputedStyle(e).display==='inline')).map(e=>{const r=e.getBoundingClientRect();return {t:e.tagName.toLowerCase(),n:(e.getAttribute('aria-label')||e.innerText||e.id||'').trim().slice(0,40),w:Math.round(r.width),h:Math.round(r.height)};}).filter(c=>c.w>0&&c.h>0&&(c.w<44||c.h<44));
+// D-9: standalone controls are at least 44x44 at phone width (390) and at least 24x24 at desktop width (1280, fine pointer), per WCAG 2.2 SC 2.5.5 and 2.5.8 (AA). Links that flow inside a sentence (computed display inline) are exempt.
+const smallControls=min=>[...document.querySelectorAll('button,a[href],select,textarea,summary,[role=button],input:not([type=hidden],[type=checkbox],[type=radio])')].filter(e=>e.checkVisibility()&&!e.closest('.sr-only')&&!(e.tagName==='A'&&getComputedStyle(e).display==='inline')).map(e=>{const r=e.getBoundingClientRect();return {t:e.tagName.toLowerCase(),n:(e.getAttribute('aria-label')||e.innerText||e.id||'').trim().slice(0,40),w:Math.round(r.width),h:Math.round(r.height)};}).filter(c=>c.w>0&&c.h>0&&(c.w<min||c.h<min));
 try{
  const [key]=await seedCurrentProbeIdentity(db,id,email);
  // Completed onboarding without creating a project: the workspace gate only needs a completed welcome row.
@@ -51,8 +51,8 @@ try{
     if(bad.length)fails.push('blocked writes: '+bad.join(', '));
     if(name==='Support'){if(!m.text.includes('We reply on business days.'))fails.push('missing "We reply on business days."');if(m.text.includes('No response time is promised'))fails.push('contains "No response time is promised"');}
     if(name==='Billing'&&!/sandbox|test mode|test-mode/i.test(m.text))fails.push('no sandbox/test-mode label');
-    const small=await page.evaluate(smallControls);
-    if(small.length)fails.push('controls under 44px: '+small.map(c=>c.t+' "'+c.n+'" '+c.w+'x'+c.h).join('; '));
+    const small=await page.evaluate(smallControls,width===390?44:24);
+    if(small.length)fails.push('controls under '+(width===390?44:24)+'px: '+small.map(c=>c.t+' "'+c.n+'" '+c.w+'x'+c.h).join('; '));
    }catch(e){fails.push('error: '+e.message);}
    results.push({page:name,width,scheme,ok:!fails.length});for(const f of fails)failures.push(name+' '+width+' '+scheme+': '+f);
    await page.close();
