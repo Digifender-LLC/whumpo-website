@@ -46,6 +46,10 @@ export const reviewChangedMessage='The reply you reviewed no longer matches this
 export async function requireReviewedReply(db:D1Database,user:string,kind:Kind,review:string){
  const reviewed=await reviewedReply(db,user,kind,review);if(!reviewed)throw new BackendError(409,reviewChangedMessage);return reviewed;
 }
+/** Fail closed for link-table kinds in BackendError modules. */
+export async function requireLinkedReply(db:D1Database,user:string,table:Parameters<typeof linkedReviewedReply>[2],review:string){
+ const reviewed=await linkedReviewedReply(db,user,table,review);if(!reviewed)throw new BackendError(409,reviewChangedMessage);return reviewed;
+}
 /** Appended to a confirm's guarded UPDATE so the reviewed text cannot change between check and effect. */
 export function reviewedReplyGuard(user:string,reviewed?:ReviewedReply){
  return reviewed?{sql:' AND EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=? AND assistant_text=?)',params:[reviewed.turn,user,reviewed.text]}:{sql:'',params:[] as string[]};

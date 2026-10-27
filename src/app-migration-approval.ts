@@ -1,3 +1,4 @@
+import {reviewedReplyGuard,type ReviewedReply} from './chat-review-receipts';
 import {BackendError} from './backend-versions';
 import {hashToken} from './security';
 import {readMigrationCheck} from './app-migration-checks';
@@ -15,11 +16,12 @@ export async function readMigrationReview(db:D1Database,user:string,id:string){
  return {...progress,projectName:row.name,baseRevision:row.base_revision,changedDocuments:row.changed_documents,original:{source:row.old_source,digest:row.old_digest},target:{source:row.target_source,digest:row.target_digest},transform:{source:row.transform_source,digest:row.transform_digest}};
 }
 /** Applies only after explicit customer confirmation; Chat enforces a fresh session. Never callable by a model. */
-export async function confirmMigration(db:D1Database,user:string,id:string,confirmation:unknown){
+export async function confirmMigration(db:D1Database,user:string,id:string,confirmation:unknown,reviewed?:ReviewedReply){
  if(confirmation!=='UPGRADE')throw new BackendError(400,'Type UPGRADE to confirm the reviewed program and data replacement');
  const review=await readMigrationReview(db,user,id);if(review.state==='applied')return review;
  if(review.state!=='ready')throw new BackendError(409,'Every document must pass its current migration check before approval');
- try{await db.prepare("INSERT INTO app_migration_approvals(id,user_id,changed_documents) SELECT ?,?,count(*) FROM app_migration_documents d JOIN app_recovery_documents b ON b.point_id=d.migration_id AND b.visitor_id=d.visitor_id WHERE d.migration_id=? AND d.state='ready' AND d.next_json!=b.state_json").bind(id,user,id).run();}
+ // The outer SELECT filters the single aggregate row, so a failed guard inserts nothing (not a zero-document approval).
+ try{const g=reviewedReplyGuard(user,reviewed);await db.prepare("INSERT INTO app_migration_approvals(id,user_id,changed_documents) SELECT i,u,n FROM(SELECT ? i,? u,count(*) n FROM app_migration_documents d JOIN app_recovery_documents b ON b.point_id=d.migration_id AND b.visitor_id=d.visitor_id WHERE d.migration_id=? AND d.state='ready' AND d.next_json!=b.state_json) WHERE 1=1"+g.sql).bind(id,user,id,...g.params).run();}
  catch{const saved=await readMigrationReview(db,user,id);if(saved.state==='applied')return saved;throw new BackendError(409,'Upgrade was not confirmed. Check whether the app, visitor data or recovery point changed; retry this exact review to recover an uncertain response');}
  const saved=await readMigrationReview(db,user,id);if(saved.state!=='applied')throw new BackendError(503,'Upgrade result unavailable. Retry the same review');return saved;
 }
