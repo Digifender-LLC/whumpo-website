@@ -50,13 +50,13 @@ export function SupportPage(){
   <Brand/><div className="flex flex-wrap items-center justify-between gap-3"><Button asChild variant="quiet" className={wrap}><Link to="/workspace" search={{signup:false}}><ArrowLeft className="size-4"/>Back to Whumpo</Link></Button><AccountHelp/></div>
   <header><h1 ref={heading} tabIndex={-1} className="text-3xl font-bold">Support</h1>
    <p className="mt-3 text-muted-foreground">Ask for help, look at operations that may be stuck, or ask an operator to review a usage decision. This page works even when Chat, the AI assistant or your welcome questions are unavailable.</p>
-   <p className="mt-3 text-sm text-muted-foreground">Requests are read by platform operators. No response time is promised, and nothing here changes your limits, billing or account by itself. Never include passwords, keys or your recovery kit.</p></header>
+   <p className="mt-3 text-sm text-muted-foreground">Requests are read by platform operators. We reply on business days, and nothing here changes your limits, billing or account by itself. Never include passwords, keys or your recovery kit.</p></header>
   {overview.isFetching&&!data&&<p role="status">Checking support…</p>}{overview.error&&<div role="alert" className="rounded-md border p-4 text-sm space-y-3"><p>{message(overview.error)}</p><Button variant="secondary" className={wrap} onClick={()=>void overview.refetch()}>Try again</Button></div>}
   {data&&<>
    <section aria-labelledby="support-hours" className="rounded-lg border bg-card p-5 space-y-2"><h2 id="support-hours" className="text-xl font-bold">Hours and contact</h2>
     {data.config.hours?<p>Support hours: {data.config.hours}</p>:<p>Support hours have not been set by the platform owner. Do not assume anyone is available at a particular time.</p>}
     <p>Start with your Whumpo agent in Chat. When Chat is unavailable, use the request form below; responses appear on this page.</p>
-    <p>Locked out of your account? Email <a className="underline" href={'mailto:'+lockoutContact}>{lockoutContact}</a>. That address is only for sign-in lockouts; email does not replace your passkeys or recovery kit. Never send your recovery key.</p>
+    <p>Email <a className="underline" href={'mailto:'+lockoutContact}>{lockoutContact}</a> for help, including sign-in lockouts. We reply on business days. Never send your recovery key.</p>
     <p className="text-sm text-muted-foreground">{data.config.notifications.enabled?'An external notification may tell you a response exists. Its content stays here.':'External notifications are not configured. Check this page for a response.'}</p></section>
    <section aria-labelledby="support-status" className="space-y-4"><h2 id="support-status" className="text-xl font-bold">Status and error help</h2>
     {statusCard&&<div role="status" className="rounded-lg border bg-card p-5 space-y-2"><h3 className="font-bold">{statusCard.title}</h3><p>{statusCard.meaning}</p><p className="text-sm text-muted-foreground">{statusCard.next}</p></div>}
