@@ -1,3 +1,4 @@
+import {reviewedReplyGuard,type ReviewedReply} from './chat-review-receipts';
 import {BackendError} from './backend-versions';
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 async function owner(db:D1Database,user:string,project:string){
@@ -33,10 +34,10 @@ export async function prepareAppRestore(db:D1Database,user:string,project:string
  let row:Review;try{row=await readReview(db,user,project,id);}catch{throw new BackendError(409,'Disable the app first and choose a recovery point for the current program containing every active visitor');}
  if(row.point_id!==point)throw new BackendError(409,'Restore request ID already used');return summary(row);
 }
-export async function confirmAppRestore(db:D1Database,user:string,project:string,id:string,confirmation:unknown){
+export async function confirmAppRestore(db:D1Database,user:string,project:string,id:string,confirmation:unknown,reviewed?:ReviewedReply){
  if(!uuid.test(id)||confirmation!=='RESTORE')throw new BackendError(400,'Type RESTORE to confirm the reviewed replacement');
  let row=await readReview(db,user,project,id);if(row.status==='applied')return summary(row);
- try{await db.prepare("UPDATE app_restore_reviews SET status='applied' WHERE id=? AND user_id=? AND project_id=? AND status='pending'").bind(id,user,project).run();}catch{row=await readReview(db,user,project,id);if(row.status!=='applied')throw new BackendError(409,'Restore review expired or app/visitor data changed. Prepare a new review');}
+ try{const g=reviewedReplyGuard(user,reviewed);if(!(await db.prepare("UPDATE app_restore_reviews SET status='applied' WHERE id=? AND user_id=? AND project_id=? AND status='pending'"+g.sql).bind(id,user,project,...g.params).run()).meta.changes)throw 0;}catch{row=await readReview(db,user,project,id);if(row.status!=='applied')throw new BackendError(409,'Restore review expired or app/visitor data changed. Prepare a new review');}
  row=await readReview(db,user,project,id);if(row.status!=='applied')throw new BackendError(503,'Restore result unavailable; retry the same review');return summary(row);
 }
 

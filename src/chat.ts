@@ -3,6 +3,7 @@ import {assertWorkspace,workspaceTransport,requireFreshWorkspace} from './worksp
 import {serviceClientActivationChatLinks} from './project-specification/service-clients/activation';
 import {linkChatReviewReply,readChatReviewReceipts,backendReviewChatActions} from './chat-review-receipts';
 import {chatControl} from './chat-controls';
+import {controlReceipt,reviewedReply,reviewChangedMessage} from './chat-review-receipts';
 import {transcriptRequests,transcriptReply,isTranscriptRequest} from './chat-transcript';
 import {usageReviewCommand,prepareUsageReviewChat} from './usage-review-requests';
 import {readStandardAIHistory,readStandardAIRequest,describeStandardAIHistory,describeStandardAIRequest} from './standard-ai-history';
@@ -144,6 +145,7 @@ export async function sendChatControl(db:D1Database,userId:string,input:Record<s
   await assertWorkspace(db,userId);
   const control=chatControl(input.action);
   if(!control||Object.keys(input).some(k=>!['id','revision','action'].includes(k)))return Promise.resolve({status:400,error:'Choose a valid reviewed action.'});
+  const receipt=controlReceipt(control.action);if(receipt&&!await reviewedReply(db,userId,receipt.kind,receipt.reviewId))return {status:409,error:reviewChangedMessage};
   if(control.recentAuth)await requireFreshWorkspace(db,userId);
   return sendChat(db,userId,{id:input.id,revision:input.revision,content:control.command},ai,options,false,control);
 }

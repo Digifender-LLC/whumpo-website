@@ -1,3 +1,4 @@
+import {reviewedReplyGuard,type ReviewedReply} from './chat-review-receipts';
 import {projectRuntime} from './runtime-lane';
 import {publicClientKey,reservePublicClient,PublicClientLimitError} from './public-admission';
 import {BackendError,listBackends,callBackend} from './backend-versions';
@@ -32,9 +33,9 @@ export async function prepareBackendPublication(db:D1Database,user:string,projec
  return row;
 }
 // Only the authenticated human confirmation route/command may call this.
-export async function confirmBackendPublication(db:D1Database,user:string,id:string){
+export async function confirmBackendPublication(db:D1Database,user:string,id:string,reviewed?:ReviewedReply){
  const row=await readBackendPublicationReview(db,user,id);if(row.status==='applied')return row;
- try{await db.prepare("UPDATE backend_publication_reviews SET status='applied' WHERE id=? AND user_id=? AND status='pending'").bind(id,user).run();}catch{
+ try{const g=reviewedReplyGuard(user,reviewed);if(!(await db.prepare("UPDATE backend_publication_reviews SET status='applied' WHERE id=? AND user_id=? AND status='pending'"+g.sql).bind(id,user,...g.params).run()).meta.changes)throw 0;}catch{
   const saved=await readBackendPublicationReview(db,user,id);if(saved.status==='applied')return saved;
   throw new BackendError(409,'Publication review expired or the endpoint changed; prepare a new review');
  }
