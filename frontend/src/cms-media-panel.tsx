@@ -4,7 +4,7 @@ import {cmsPreviewTypes,cmsPreviewLimit} from '../../src/cms-media-preview-shape
 import {useState} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import {api,message} from './lib/api';
-import {Section} from './workspace-pages';
+import {Section} from './workspace-layout';
 import {Button} from './components/ui/button';
 type Media={page:number;total:number;hasMore:boolean;limitReached:boolean;items:{id:string;filename:string;mimeType:string;size:number|null;width:number|null;height:number|null;alt:string;safety:'approved'|'pending'|'blocked'}[]};
 export function CMSMediaPanel({project}:{project:string}){

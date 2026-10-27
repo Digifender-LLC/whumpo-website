@@ -4,7 +4,7 @@ import {useRouterState} from '@tanstack/react-router';
 import {selectedProject} from './lib/workspace-navigation';
 import {StaleProject} from './workspace-controls';
 import {api,send,message,queryClient} from './lib/api';
-import {Section,Field} from './workspace-pages';
+import {Section,Field} from './workspace-layout';
 import {useWorkspace} from './workspace';
 import {CMSEditGuard,useCMSEditGuard,useCMSProtection} from './cms-edit-guard';
 import {Input} from './components/ui/input';

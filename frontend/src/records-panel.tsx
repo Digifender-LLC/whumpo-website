@@ -4,7 +4,7 @@ import {Link} from '@tanstack/react-router';
 import type {RecordsSummaryFacts} from '../../src/shared-modules/shape';
 import {api,message} from './lib/api';
 import {Button} from './components/ui/button';
-import {Section} from './workspace-pages';
+import {Section} from './workspace-layout';
 import {ConfirmButton,ProjectSelect,QueryStatus,StaleProject,useProjectSelection} from './workspace-controls';
 
 type Item=RecordsSummaryFacts['items'][number];
