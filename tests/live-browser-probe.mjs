@@ -42,6 +42,11 @@ assert.equal(classifyConsole({text:N,url:CF},K),'turnstile_internal_log');
 assert.equal(classifyConsole({text:N,url:CF},{...K,scriptLoaded:false}),null);
 assert.equal(classifyConsole({text:N,url:'http://127.0.0.1:1/app.js'},K),null);
 assert.equal(classifyConsole({text:N,url:''},K),null);
+// failed or aborted api.js load (scriptLoaded false): its own ERR_FAILED and the Turnstile noise stay real errors
+const FL={...K,scriptLoaded:false};
+assert.equal(classifyConsole({text:F,url:'https://challenges.cloudflare.com/turnstile/v0/api.js'},FL),null);
+assert.equal(classifyConsole({text:"Fetch API cannot load data:,. Refused to connect because it violates the document's Content Security Policy.",url:CF},FL),null);
+assert.equal(turnstileProof({iframe:false,input:true,scriptLoaded:false}).ok,false);
 assert.equal(classifyConsole({text:N,url:'https://challenges.cloudflare.com.evil.example/x.js'},K),null);
 assert.equal(classifyConsole({text:N,url:'https://other.challenges.cloudflare.com/x.js'},K),null);
 let mode='ok';const seen=[];
@@ -92,9 +97,10 @@ try{
  assert.ok(consoleCheck(j).some(c=>c.state==='failed'),'same-origin 404 still fails');assert.deepEqual(j.knownConsole,[]);
  mode='datacsp';r=await probe('--live',origin);j=JSON.parse(r.stdout);
  assert.ok(consoleCheck(j).some(c=>c.state==='failed'),'data:, refusal without Turnstile script still fails');assert.deepEqual(j.knownConsole,[]);
+ // Loopback cannot serve a 2xx api.js from challenges.cloudflare.com, so the success path is covered by the pure-function tests and the live run.
+ // Here api.js is requested but aborted: not loaded, so the data:, refusal is NOT exempt and the check fails.
  mode='datacspts';r=await probe('--live',origin);j=JSON.parse(r.stdout);
- // The stub's aborted api.js request itself logs ERR_FAILED (correctly still an error); the data:, refusal must be the only message classified away.
- assert.ok(consoleCheck(j).every(c=>c.sample.every(t=>t===F)),'data:, refusal not counted');assert.ok(j.knownConsole.some(k=>k.reason==='turnstile_data_uri_feature_check'),'data:, refusal with Turnstile script observed is known');
+ assert.ok(consoleCheck(j).some(c=>c.state==='failed'&&c.sample.some(t=>t.startsWith('Fetch API cannot load data:,'))),'requested-but-failed api.js does not exempt data:, refusal');assert.deepEqual(j.knownConsole,[]);
  mode='decoy';r=await probe('--live',origin);
  assert.ok(JSON.parse(r.stdout).checks.some(c=>c.check==='turnstile_iframe'&&c.state==='failed'&&c.failure==='iframe_missing'),'decoy input without script fails');
  console.log('live-browser-probe tests passed');
