@@ -14,7 +14,8 @@ import {hearOrca} from './helpers/orca-output.mjs';
 // Turnstile is synthetic. No remote bindings or external inference/provider calls; isolated current schema only.
 import assert from 'node:assert/strict';
 import {timingSafeEqual} from 'node:crypto';
-import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
+import {mkdir,mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
+await mkdir('.secrets',{recursive:true,mode:0o700}); // journeys write private reports here; absent on a fresh checkout
 import {createServer} from 'node:http';
 import {resolve,sep} from 'node:path';
 import {createRequire} from 'node:module';
