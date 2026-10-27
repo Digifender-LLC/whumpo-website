@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
-import {isChallengePost,decideRequest} from '../tools/live-browser-probe.mjs';
+import {isChallengePost,decideRequest,turnstileProof} from '../tools/live-browser-probe.mjs';
 const run=promisify(execFile);
 // The route handler calls decideRequest for every request; real https targets are out of reach offline, so it is exercised directly.
 const H='https://whumpo.com',u=x=>new URL(x);
@@ -22,6 +22,10 @@ assert.ok(!isChallengePost('POST',cf('/cdn-cgi/challenge-platform'),'https://whu
 assert.ok(!isChallengePost('POST',new URL('https://evil.example/cdn-cgi/challenge-platform/x'),'https://whumpo.com'));
 assert.ok(!isChallengePost('POST',cf('/cdn-cgi/challenge-platform/x'),'http://127.0.0.1:1'));
 assert.ok(!isChallengePost('PUT',cf('/cdn-cgi/challenge-platform/x'),'https://whumpo.com'));
+assert.deepEqual(turnstileProof({iframe:true,input:false,scriptLoaded:false}),{ok:true,via:'iframe'});
+assert.deepEqual(turnstileProof({iframe:false,input:true,scriptLoaded:true}),{ok:true,via:'response_input'});
+assert.equal(turnstileProof({iframe:false,input:true,scriptLoaded:false}).ok,false);
+assert.equal(turnstileProof({iframe:false,input:false,scriptLoaded:true}).ok,false);
 let mode='ok';const seen=[];
 const page=(body,head='')=>`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><link rel="manifest" href="/manifest.webmanifest">${head}</head><body>${body}</body></html>`;
 const server=createServer((req,res)=>{
@@ -33,7 +37,7 @@ const server=createServer((req,res)=>{
  if(url.pathname==='/turnstile-stub')return send('text/html',page('<p>stub</p>'));
  if(url.pathname==='/'||url.pathname==='/workspace/'){
   const extra=mode==='external'?'<script src="http://203.0.113.9/x.js"></script>':mode==='state'?'<script>fetch("/api/auth/identity/v1/login/options",{method:"POST",headers:{"content-type":"application/json"},body:"{\\"version\\":1}"}).catch(()=>{})</script>':mode==='badstate'?'<script>fetch("/api/auth/identity/v1/state",{method:"POST",body:"{\\"version\\":2}"}).catch(()=>{})</script>':mode==='stripe'?'<script>fetch("https://js.stripe.com/v3/pricing-table.js").catch(()=>{})</script>':mode==='console'?'<script>console.error("boom")</script>':'';
-  return send('text/html',page('<h1>Stub</h1><iframe title="Widget containing a Cloudflare security challenge" src="/turnstile-stub"></iframe><script>const post=(p,b)=>fetch(p,{method:"POST",headers:{"content-type":"application/json"},body:b}).catch(()=>{});post("/api/auth/identity/v1/config",JSON.stringify({version:1}));post("/api/auth/identity/v1/state",JSON.stringify({version:1}));</script>'+extra));
+  return send('text/html',page('<h1>Stub</h1>'+(mode==='decoy'?'<input type="hidden" name="cf-turnstile-response">':'<iframe title="Widget containing a Cloudflare security challenge" src="/turnstile-stub"></iframe>')+'<script>const post=(p,b)=>fetch(p,{method:"POST",headers:{"content-type":"application/json"},body:b}).catch(()=>{});post("/api/auth/identity/v1/config",JSON.stringify({version:1}));post("/api/auth/identity/v1/state",JSON.stringify({version:1}));</script>'+extra));
  }
  send('text/plain','nf',404);
 });
@@ -60,5 +64,7 @@ try{
  const ext=JSON.parse(r.stdout);assert.ok(ext.blocked.some(b=>b.reason==='foreign_host'));assert.ok(ext.checks.some(c=>c.check==='no_blocked_requests'&&c.state==='failed'));
  mode='console';r=await probe('--live',origin);assert.equal(r.code,2);
  assert.ok(JSON.parse(r.stdout).checks.some(c=>c.check==='console_errors'&&c.state==='failed'));
+ mode='decoy';r=await probe('--live',origin);
+ assert.ok(JSON.parse(r.stdout).checks.some(c=>c.check==='turnstile_iframe'&&c.state==='failed'&&c.failure==='iframe_missing'),'decoy input without script fails');
  console.log('live-browser-probe tests passed');
 }finally{server.close();}

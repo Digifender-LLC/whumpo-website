@@ -144,6 +144,7 @@ export async function navigationJourney({page,db,state,requests,origin,activate,
  await activate(helpButton());await activate(help().getByRole('button',{name:'Sign out',exact:true}));
  await page.getByRole('button',{name:'Sign in with a passkey',exact:true}).waitFor();
  assert.equal(await page.evaluate(()=>Object.keys(sessionStorage).filter(key=>key.startsWith('whumpo.')).length),0,'Sign-out clears drafts, locators and pending records');
+ assert.equal(await page.evaluate(()=>JSON.stringify([...Object.entries(sessionStorage),...Object.entries(localStorage)]).includes('My unsent garden idea')),false,'Sign-out leaves no copy of the unsent draft in this browser');
  await page.goBack();await page.getByRole('button',{name:'Sign in with a passkey',exact:true}).waitFor();
  assert.equal(await composer().count(),0);assert.doesNotMatch(await page.locator('body').innerText(),/My unsent garden idea|Synthetic saved result/);
  await page.evaluate(()=>window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true})));await page.waitForLoadState('networkidle');assert.equal(await composer().count(),0,'A restored page needs fresh identity');

@@ -13,7 +13,7 @@ A person runs this in a real browser against the deployed site. It covers what `
 ## 1. Signup with an invitation
 
 1. Open `/workspace/?signup=true`.
-2. Confirm the heading is visible and the Turnstile challenge loads.
+2. Confirm the heading is visible and the Turnstile challenge loads (the probe accepts its iframe, or the response input only when it also saw the `challenges.cloudflare.com/turnstile/v0/api.js` request, and reports which as `via`).
 3. Enter your email, then your own invitation code, and confirm US eligibility. Complete Turnstile yourself.
 4. Continue and note any error message verbatim.
 
@@ -36,6 +36,8 @@ A person runs this in a real browser against the deployed site. It covers what `
 2. Start a checkout from the billing screen.
 3. On the Stripe page, confirm the email field is prefilled with your account email.
 4. Do not pay. Use the back or cancel link and confirm you return to Whumpo with no charge and no plan change.
+
+Automated: `RUN_LIVE_CHECKOUT=1 node tests/checkout-prefill-live.mjs` (opt-in) seeds a synthetic `example.test` account, starts a sandbox checkout through the app API, opens the Checkout page headless and confirms the email is prefilled and the session is `cs_test_`. It never enters card details or pays, and deletes the synthetic account, customer link and order rows afterwards. It covers step 3 above; the Stripe sandbox customer it creates is not deleted.
 
 ## 5. Record afterwards
 

@@ -218,3 +218,7 @@ Managed release `ebe32e52-6b71-4977-b56e-8976d1cf26c5` completed schema initiali
 | platform | `cff0db50-216f-4e52-ad0c-63bff524e246` |
 
 Independent readback verified: homepage 200, anonymous Chat API 401 (proof required), health endpoint 200, all bindings match new database. CMS registry unchanged (empty). Schema SHA256: `68617fbf7b3757411247514411e3a7beb637df9ce1d1b090a22fc03c1c6f2742`. Owner invitation file: `.secrets/invitation-dde54bea1f61.txt` (private). Test data reset authorized and executed per PR #160 authorization on 2026-10-04. Baseline database 418b20b6-bdba-4ff1-b265-da9da9ad5955 remains (not deleted). No paid services, CMS functional testing or customer publication. Deployment complete; ready for PR merge to main.
+
+## After CI supersedes an owner-applied release
+
+Workers Builds redeploys main through `deploy ci` after an owner `apply`, so the Worker tags change. `status` then reports `reconciliation.result: "superseded by a later release"` with the live version IDs and tags (only when the journal is `deployed` and every step is confirmed; otherwise the original error stays). That journal is now historical: do not reconcile it. Start a new `prepare` for the next owner release.

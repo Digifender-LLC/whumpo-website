@@ -113,6 +113,17 @@ export function reconcileRelease(manifest,journal,observed){
  return journal;
 }
 
+// Read-only status text. A fully confirmed, deployed journal whose live tags moved on was
+// superseded by a later release (e.g. the CI redeploy); anything else keeps the strict error.
+export function statusReconciliation(manifest,journal,observed){
+ try{reconcileRelease(manifest,structuredClone(journal),observed);return 'ready';}catch(error){
+  const done=journal.status==='deployed'&&Object.values(journal.steps).every(step=>step.status==='confirmed');
+  const moved=workerOrder.filter(role=>observed.workers[role]?.tag!==manifest.workers[role].tag);
+  if(error.message!=='Candidate Worker version was not confirmed'||!done||!moved.length)return error.message;
+  return {result:'superseded by a later release',live:Object.fromEntries(workerOrder.map(role=>[role,{id:observed.workers[role]?.id,tag:observed.workers[role]?.tag}]))};
+ }
+}
+
 export async function applyRelease(directory,driver){
  const manifest=await verifyRelease(directory);
  await driver.verifyToolchain(manifest,directory);

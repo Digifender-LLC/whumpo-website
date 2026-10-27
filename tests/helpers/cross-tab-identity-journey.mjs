@@ -29,6 +29,12 @@ export async function crossTabIdentityJourney({page,context,db,origin,requests,p
   await composer(page).fill('First tab private garden draft');await composer(peer).fill('Second tab private garden draft');
   for(const p of [page,peer]){await p.waitForLoadState('networkidle');const before=stateCalls(),checked=p.waitForResponse(response=>new URL(response.url()).pathname.endsWith('/identity/v1/state'));await foreground(p);await checked;await p.waitForLoadState('networkidle');assert(stateCalls()>before,'A settled visible tab performs its foreground check');}
   assert.equal(await composer(page).inputValue(),'First tab private garden draft');assert.equal(await composer(peer).inputValue(),'Second tab private garden draft');
+  // WH-211 / D-4: unsent text is per tab. A third tab and the other tabs' storage never hold it.
+  const third=await page.context().newPage();await third.goto(origin+'/workspace');await composer(third).waitFor();
+  assert.equal(await composer(third).inputValue(),'','A new tab starts without any unsent draft');
+  for(const [p,other] of [[page,'Second tab private garden draft'],[peer,'First tab private garden draft'],[third,'private garden draft']])assert.equal(await p.evaluate(text=>JSON.stringify([...Object.entries(sessionStorage),...Object.entries(localStorage)]).includes(text),other),false,'A tab never stores another tab’s draft');
+  assert.equal(await page.evaluate(()=>JSON.stringify(Object.entries(localStorage)).includes('private garden draft')),false,'Drafts are never written to localStorage');
+  await third.close();
   // The only cross-tab message contains this exact signal, never account/state data.
   await peer.evaluate(()=>{window.identitySignals=[];window.identityProbe=new BroadcastChannel('whumpo.identity');window.identityProbe.onmessage=event=>window.identitySignals.push(event.data);});
   const invalidBefore=stateCalls();await page.evaluate(()=>{const c=new BroadcastChannel('whumpo.identity');for(const value of [null,{version:0,type:'identity-changed'},{version:1,type:'identity-changed',accountId:'untrusted'},{version:1,type:'sign-in'}])c.postMessage(value);c.close();});

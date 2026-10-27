@@ -244,3 +244,14 @@ Anonymous live Chromium checks pass responsive landing/entry focus, direct secur
 Private receipts: `.secrets/wh111-service-safety-release-before.json`, `.secrets/wh111-service-safety-release-verified.json`, `.secrets/verify-wh111-service-safety-release.mjs`, `.secrets/wh111-service-safety-deploy.log` and `.secrets/wh111-service-safety-live-verification.log`. WH-111/#100 remains open for consolidated pending work, selected-project/return continuity, human support and navigation simplification; WH-112 retains whole-owner acceptance. CMS functional testing, CSAM implementation and Daybreak remain deferred. No parent completion is claimed from this increment.
 
 The `whumpo.theme` localStorage preference is cleared at sign-out with the other device records.
+
+### Unsent Chat text: per-tab, 24 hours (WH-211, decision D-4) — October 27, 2026 UTC
+
+Decision D-4 (`docs/roadmap/owner-decisions-2026-10-26.md`, "Agent decisions") keeps unsent Chat text as it is: a per-tab draft with a 24-hour life and no server copy. Nothing in the product changed; this section records the limit and the tests that hold it.
+
+- Where: `sessionStorage` key `whumpo.chat-recovery` (`frontend/src/lib/chat-recovery.ts`, written by `use-chat-recovery.ts`), scoped to the signed-in account and refreshed on each edit. It is never written to `localStorage`, a cookie or the server.
+- Kept: page reload, Back/forward and in-app navigation away from and back to Chat, and provider/checkout returns in the same tab, for 24 hours after the last edit. A restored draft is only text in the box and never sends.
+- Not kept: a new tab or window, a closed tab or installed app, another device or browser, 24 hours after the last edit (`draftLifetime`, enforced on read), and sign-out or account change (all `whumpo.*` records are cleared). Two tabs therefore hold separate drafts and neither copies the other's text.
+- Unresolved sends are different: an unconfirmed pending request outlives an expired draft so a lost reply is retried with the same ID, not duplicated.
+- Unverified: whether an installed PWA keeps `sessionStorage` across OS suspension (no physical device). Server drafts are revisited only if beta users report lost drafts.
+- Tests: `tests/chat-recovery.mjs` (24-hour boundary, new-tab store is empty), `--navigation` (reload, Back, provider/checkout return keep the draft; sign-out leaves no copy in either browser store) and `--cross-tab` (a third tab starts empty; no tab holds another tab's text; no `localStorage` copy).

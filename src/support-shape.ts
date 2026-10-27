@@ -7,7 +7,7 @@ export type SupportRequest={id:string;kind:SupportKind;reference:string|null;sta
 export type SupportOperation={id:string;family:'chat'|'standard_ai'|'hosting'|'backup'|'dns';label:string;state:string;since:string;ageMinutes:number|null;needsAttention:boolean;reference:string;next:string};
 export type SupportConfigView={hours:string|null;notifications:{enabled:boolean}};
 /** Owner decision (WH-035, 2026-10-04): customer contact starts with the customer's Whumpo agent, which also
- * carries responses back. This public address is only for people locked out of their account; it is not a general channel. */
+ * carries responses back. Owner decision D7 (2026-10-26): this public address is also the support email, answered on business days. */
 export const lockoutContact='hello@whumpo.com';
 export type SupportOverview={version:1;config:SupportConfigView;requests:SupportRequest[];operations:SupportOperation[];statusLinks:SupportStatusLink[]};
 export type SupportStatusLink={code:StatusCode;title:string;meaning:string;next:string;href:string};
@@ -17,7 +17,7 @@ export const operationFamilies=['chat','standard_ai','hosting','backup','dns'] a
 const copy:Record<StatusCode,{title:string;meaning:string;next:string}>={
  onboarding_required:{title:'Finish the first-project welcome',meaning:'Chat and the workspace stay closed until your first project is started.',next:'Finish the welcome questions, or ask for help here. Support, recovery and export do not need it.'},
  chat_unavailable:{title:'Chat is unavailable',meaning:'The AI provider, platform testing capacity or a previous reply may be holding Chat.',next:'Your saved work, exports and this support page still work. Try Chat later, or ask for help below.'},
- usage_limit:{title:'A usage limit was reached',meaning:'A request-rate or testing-capacity limit stopped this action. It does not delete saved work.',next:'You can ask an operator to review a usage decision below. No response time is promised.'}
+ usage_limit:{title:'A usage limit was reached',meaning:'A request-rate or testing-capacity limit stopped this action. It does not delete saved work.',next:'You can ask an operator to review a usage decision below. We reply on business days.'}
 };
 /** Stable, content-free link to the support page for an error or status code. */
 export const supportLink=(code:StatusCode)=>'/workspace/support?ref='+encodeURIComponent('status:'+code);
