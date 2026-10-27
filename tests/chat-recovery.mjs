@@ -11,6 +11,11 @@ assert.equal(readRecovery(store,other,now),null);assert.equal(values.size,0,'Dif
 writeRecovery(store,owner,{...value,pending:null});assert.equal(readRecovery(store,owner,now+draftLifetime),null);assert.equal(values.size,0);
 writeRecovery(store,owner,value);assert.deepEqual(readRecovery(store,owner,now+draftLifetime),{...value,draft:''},'Unresolved identity outlives the unsent draft');assert.equal(JSON.parse(store.getItem(recoveryKey)).draft,'','Expired draft bytes are removed while the receipt remains');
 assert.deepEqual(readRecovery(store,owner,now-1),{...value,draft:''},'Clock rollback does not forget an unresolved request');
+// WH-211 / D-4: the unsent draft lives 24 hours in one tab's store (sessionStorage); a new tab starts with an empty store.
+writeRecovery(store,owner,{...value,pending:null});assert.equal(readRecovery(store,owner,now+draftLifetime-1).draft,value.draft,'Draft survives until 24 hours');
+assert.equal(readRecovery(store,owner,now+draftLifetime),null,'Draft is gone at 24 hours');assert.equal(values.size,0);
+const freshTab=new Map(),newTab={getItem:k=>freshTab.get(k)??null,setItem:(k,v)=>freshTab.set(k,v),removeItem:k=>freshTab.delete(k)};
+writeRecovery(store,owner,{...value,pending:null});assert.equal(readRecovery(newTab,owner,now),null,'A new tab does not see another tab’s draft');store.removeItem(recoveryKey);
 const action={type:'confirm',kind:'site',reviewId:other},approval={id:crypto.randomUUID(),revision:9,action,content:'Confirm the reviewed website change.'};
 writeRecovery(store,owner,{...value,pending:approval});assert.deepEqual(readRecovery(store,owner,now).pending,approval);
 for(const bad of [{...pending,id:'bad'},{...pending,revision:-1},{...pending,content:' '},{...pending,secret:'unexpected'},{...approval,content:'Different label'},{...approval,content:'/confirm '+other},{...approval,action:{...action,override:true}},{...approval,action:{type:'deleteEverything'}}]){
