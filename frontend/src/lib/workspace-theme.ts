@@ -8,6 +8,7 @@ const stored=()=>{try{const v=localStorage.getItem(KEY);return valid(v)?v:undefi
 // A display preference kept in localStorage covers direct loads where the session cache is empty; cleared with other device records at sign-out.
 export function useWorkspaceTheme(){
  const client=useQueryClient(),saved=useSyncExternalStore(notify=>client.getQueryCache().subscribe(notify),()=>client.getQueryData<Profile>(['session'])?.theme),theme=valid(saved)?saved:stored()??'system';
- useEffect(()=>{if(valid(saved))try{localStorage.setItem(KEY,saved);}catch{}},[saved]);
+ useEffect(()=>{if(valid(saved))try{// 'system' is the fallback, so only an explicit light/dark is stored; a new profile's default leaves storage empty.
+  if(saved==='system')localStorage.removeItem(KEY);else localStorage.setItem(KEY,saved);}catch{}},[saved]);
  useEffect(()=>{const media=matchMedia('(prefers-color-scheme: dark)'),apply=()=>document.documentElement.classList.toggle('dark',theme==='dark'||theme==='system'&&media.matches);apply();media.addEventListener('change',apply);return()=>media.removeEventListener('change',apply);},[theme]);
 }
