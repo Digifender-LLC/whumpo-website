@@ -3998,7 +3998,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-27 UTC, docs only, nothing re-run: OD-1 to OD-7 in docs/review-retention.md adopted as recommended, as agent decisions in docs/roadmap/owner-decisions-2026-10-26.md (section \"Agent decisions\", 2026-10-27, delegated by owner). OD-8 (run receipts to R2) is reserved for the owner because it adds storage spend. Readiness unchanged; nothing implemented."
+      ]
     },
     {
       "id": "WH-182",
@@ -7866,7 +7868,8 @@
       "owner": null,
       "evidence": [
         "2026-10-01: accepted planning direction against 628c16f and the existing working tree; implementation and customer acceptance remain open. Live GitHub refresh was blocked by local command approval policy; no issue or claim created.",
-        "2026-10-11 UTC: evidence-based audit, contract and decomposition against d948f06; source/local only, not deployed, no remote operation, no issue edit. The delivered continuity increments (navigation essentials and Help sheet, saved-work index/page/On this device, cross-tab identity, account help, site/service safety, reopen locators; docs/chat-workspace-continuity.md, PRs #102, #104, #144) were reread against source and are mapped row by row in docs/chat-daily-workspace.md. Ran on Node 24.21.0: workspace-navigation, chat-location, chat-recovery, chat-delivery, chat-announcements, chat-history, saved-work-client, identity-client-continuity, provider-return, connection-handoff (21 cases), photo-upload-recovery, chat-interaction-client, welcome-delivery, saved-work (11 scenarios, SQLite and --d1), chat-saved-turn --d1 (7), site-safety (7), service-safety --d1 (7), support-access (9) all pass; workspace-identity-browser --navigation, --saved-work, --account-help, --cross-tab and --site-safety pass; --support FAILS at baseline (lockout mailto 44px check, run twice). New tests/chat-inference-outage.mjs: 24 checks pass on SQLite and --d1 (typed text and typed /confirm refused with no model, shortcut and exact confirm succeed, stale/foreign refused, replay idempotent, zero inference calls). Gaps recorded, none closed: direct POST /api/projects completes onboarding without welcome (probe; WH-207); no Orca or axe evidence for the Help sheet, Saved work, Support or Site & app safety and --support is red (WH-208); navigation shape, Profile placement, Dashboard duplicate links, draft retention and eligible direct reviews await owner decisions (WH-209, WH-211, WH-212); github-access saved-work source and project-details locator (WH-210); stale statements in unified-workspace-and-capacity.md, dashboard-pwa.md and resume-handoff.md. Children WH-206 to WH-213 added; no parent criterion is marked complete and WH-112 keeps whole-experience, physical-device, human-listening and customer acceptance."
+        "2026-10-11 UTC: evidence-based audit, contract and decomposition against d948f06; source/local only, not deployed, no remote operation, no issue edit. The delivered continuity increments (navigation essentials and Help sheet, saved-work index/page/On this device, cross-tab identity, account help, site/service safety, reopen locators; docs/chat-workspace-continuity.md, PRs #102, #104, #144) were reread against source and are mapped row by row in docs/chat-daily-workspace.md. Ran on Node 24.21.0: workspace-navigation, chat-location, chat-recovery, chat-delivery, chat-announcements, chat-history, saved-work-client, identity-client-continuity, provider-return, connection-handoff (21 cases), photo-upload-recovery, chat-interaction-client, welcome-delivery, saved-work (11 scenarios, SQLite and --d1), chat-saved-turn --d1 (7), site-safety (7), service-safety --d1 (7), support-access (9) all pass; workspace-identity-browser --navigation, --saved-work, --account-help, --cross-tab and --site-safety pass; --support FAILS at baseline (lockout mailto 44px check, run twice). New tests/chat-inference-outage.mjs: 24 checks pass on SQLite and --d1 (typed text and typed /confirm refused with no model, shortcut and exact confirm succeed, stale/foreign refused, replay idempotent, zero inference calls). Gaps recorded, none closed: direct POST /api/projects completes onboarding without welcome (probe; WH-207); no Orca or axe evidence for the Help sheet, Saved work, Support or Site & app safety and --support is red (WH-208); navigation shape, Profile placement, Dashboard duplicate links, draft retention and eligible direct reviews await owner decisions (WH-209, WH-211, WH-212); github-access saved-work source and project-details locator (WH-210); stale statements in unified-workspace-and-capacity.md, dashboard-pwa.md and resume-handoff.md. Children WH-206 to WH-213 added; no parent criterion is marked complete and WH-112 keeps whole-experience, physical-device, human-listening and customer acceptance.",
+        "2026-10-27 UTC, docs only, nothing re-run: every open decision in docs/chat-daily-workspace.md (D-1 to D-6, D-8, D-9; D-7 was answered 2026-10-26) is answered as an agent decision in docs/roadmap/owner-decisions-2026-10-26.md (section \"Agent decisions\", 2026-10-27, delegated by owner) and the answered rows in docs/chat-daily-workspace.md. WH-209, WH-211 and WH-212 move from blocked to planned. Readiness and acceptance unchanged; nothing implemented."
       ]
     },
     {
@@ -7996,22 +7999,22 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-27 UTC, docs only, nothing re-run: D-9 answered as an agent decision in docs/roadmap/owner-decisions-2026-10-26.md (section \"Agent decisions\", 2026-10-27, delegated by owner) and the answered rows in docs/chat-daily-workspace.md. The 44px check applies to controls (buttons, radios, standalone links); links inside a sentence are exempt under the WCAG 2.2 SC 2.5.8 inline exception. This slice makes tests/helpers/support-journey.mjs apply that rule so node tests/workspace-identity-browser.mjs --support passes; no source or test was changed by this record. Readiness stays planned."
+      ]
     },
     {
       "id": "WH-209",
       "title": "Apply the approved workspace navigation shape",
       "phase": "F2",
       "priority": "P1",
-      "readiness": "blocked",
+      "readiness": "planned",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [
         "WH-206"
       ],
-      "blockers": [
-        "Owner decisions D-1 to D-3 in docs/chat-daily-workspace.md: how far to remove Dashboard, Settings and the control pages, Profile placement on mobile, and whether Dashboard keeps its duplicate fixed links (issue #100 questions 1 and 2)."
-      ],
+      "blockers": [],
       "outcome": "Desktop and mobile navigation matches the owner-approved Chat-centred shape with fixed essentials and consistent return points, and superseded routes are gone rather than aliased.",
       "scope": [
         "Implement the owner-approved shape for the bar, sidebar, Dashboard fixed links and control-page parents",
@@ -8041,7 +8044,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-27 UTC, docs only, nothing re-run: D-1 to D-3 answered as agent decisions in docs/roadmap/owner-decisions-2026-10-26.md (section \"Agent decisions\", 2026-10-27, delegated by owner) and the answered rows in docs/chat-daily-workspace.md: keep Dashboard, Settings and every control page as optional pages under Dashboard and remove no route this round (D-1 option a); accept Profile in the mobile Help sheet with Settings in the bar (D-2); keep the Dashboard fixed links as an outage entry point (D-3). The slice reduces to consistent return links, a readable \"(your page)\" suffix and the stale-doc corrections. Readiness moves from blocked to planned and the blocker is removed; nothing implemented."
+      ]
     },
     {
       "id": "WH-210",
@@ -8088,16 +8093,14 @@
       "title": "Composer draft durability",
       "phase": "F2",
       "priority": "P1",
-      "readiness": "blocked",
+      "readiness": "planned",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [
         "WH-206",
         "WH-116"
       ],
-      "blockers": [
-        "Owner decision D-4 in docs/chat-daily-workspace.md: keep the per-tab 24-hour device draft, lengthen it, or add server-owned composer drafts with their retention."
-      ],
+      "blockers": [],
       "outcome": "Unsent Chat text survives the events the owner chooses, without becoming an automatic send or a second source of authority.",
       "scope": [
         "Implement D-4: either change device retention in the existing recovery store, or add a server-owned draft with data classification, retention, export and account-closure registration",
@@ -8122,22 +8125,22 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-27 UTC, docs only, nothing re-run: D-4 answered as an agent decision in docs/roadmap/owner-decisions-2026-10-26.md (section \"Agent decisions\", 2026-10-27, delegated by owner) and the answered rows in docs/chat-daily-workspace.md: keep the per-tab sessionStorage composer draft at 24 hours, with no server-owned draft and no schema or cutover. The slice is the device-only variant: prove reload, in-tab navigation and provider/checkout return keep the draft and correct the docs on the per-tab limit. Readiness moves from blocked to planned and the blocker is removed; nothing implemented."
+      ]
     },
     {
       "id": "WH-212",
       "title": "Confirm saved reviews when the conversation read is unavailable",
       "phase": "F2",
       "priority": "P1",
-      "readiness": "blocked",
+      "readiness": "planned",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [
         "WH-206"
       ],
-      "blockers": [
-        "Owner decision D-5 in docs/chat-daily-workspace.md: which reviews are eligible for direct confirmation during a conversation-read outage and whether a model-free prepare control is wanted."
-      ],
+      "blockers": [],
       "outcome": "An owner can act on an eligible saved review from a fixed page when the Chat conversation or model is unavailable, through the same exact handler and receipt.",
       "scope": [
         "Implement D-5 by reusing the existing exact review readers and confirmation handlers, with their identity, revision, expiry and recent-authentication checks",
@@ -8163,7 +8166,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-27 UTC, docs only, nothing re-run: D-5 answered as an agent decision in docs/roadmap/owner-decisions-2026-10-26.md (section \"Agent decisions\", 2026-10-27, delegated by owner) and the answered rows in docs/chat-daily-workspace.md: every saved review kind whose existing exact confirmation handler runs without the model may be confirmed from Saved work after a fresh exact read of that saved turn; no model-free prepare control in the beta. Readiness moves from blocked to planned and the blocker is removed; nothing implemented."
+      ]
     },
     {
       "id": "WH-213",
@@ -8203,7 +8208,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-27 UTC, docs only, nothing re-run: D-8 answered as an agent decision in docs/roadmap/owner-decisions-2026-10-26.md (section \"Agent decisions\", 2026-10-27, delegated by owner) and the answered rows in docs/chat-daily-workspace.md: agent-run Orca and axe plus simulated viewports are the closure bar for WH-111; physical devices and human listening stay at WH-112. D-1 to D-5 and D-9 are answered, so no child of WH-111 waits on an owner decision. Readiness stays planned."
+      ]
     },
     {
       "id": "WH-112",
