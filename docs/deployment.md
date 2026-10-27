@@ -12,6 +12,8 @@
 
 `deploy ci` (`tools/deploy-ci.mjs`) refuses to run outside Workers Builds. It verifies the build snapshot, generates its own version-3 review record from the commit SHA with `schemaChange: "none"`, refuses if the live control database is not exactly the current schema in that commit, if the configured database differs from the live platform's, or if CMS registrations exist, then runs the ordinary prepare/apply release (runtime → apps → sites → platform) under the D1 deployment lease and prints the journal to the build log. The archive lives only in the build machine; the build log is the record.
 
+If a CI release is refused because a concurrent merge moved the Workers, it retries once; if it still fails, re-run the Workers Builds build for the latest `main` commit ([releases](releases.md#automatic-releases-merge-to-main)).
+
 Do not deploy by hand: no `wrangler deploy`, `wrangler versions`, `pnpm run deploy prepare/apply` or `--remote` commands from agent machines. (`pnpm deploy` is pnpm's built-in; use `pnpm run deploy`.) Schema changes, control-database replacement and CMS retirement remain **owner cutovers**: create a new empty D1 database, point the three `DB` bindings at it in a PR, then the owner runs `pnpm run deploy prepare` with a `schemaChange: "initialize"` review and `pnpm run deploy apply` (see [releases](releases.md)). Merge the PR only together with that cutover, because the automatic deploy refuses it.
 
 Runtime secrets are set by the owner with `wrangler secret put --name whumpo-platform` and persist across deploys.

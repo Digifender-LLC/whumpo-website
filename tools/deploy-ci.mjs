@@ -2,7 +2,7 @@ import {execFileSync} from 'node:child_process';
 import {join} from 'node:path';
 import {verifyBuildSnapshot} from './build-snapshot.mjs';
 import {currentSchemaArtifact} from './current-schema.mjs';
-import {applyRelease,readJSON,same} from './release-manifest.mjs';
+import {applyRelease,newJournal,readJSON,same} from './release-manifest.mjs';
 import {prepareRelease} from './prepare-release.mjs';
 
 // Merge-to-main release (Cloudflare Workers Builds). It writes its own review
@@ -47,19 +47,32 @@ export function ciPreflight(driver,observed,artifact){
  if(observed.cms.length)throw ciRefusal('CMS registrations exist and their master key is not available to CI.');
 }
 
-export async function ciRelease(root,driver,{env=process.env,log=console.log,commit=ciCommit}={}){
+// A concurrent merge can deploy between this run's prepare and its apply, so reconcile refuses
+// before any step starts. Only that refusal, with every journal step still pending, is retried.
+export const baselineMoved=(error,journal)=>{
+ const steps=Object.values(journal?.steps??{});
+ return error?.message==='Worker changed outside this release'&&steps.length>0&&steps.every(step=>step.status==='pending');
+};
+
+export async function ciRelease(root,driver,{env=process.env,log=console.log,commit=ciCommit,snapshot:snap=verifyBuildSnapshot,schema=currentSchemaArtifact,prepare=prepareRelease,apply=applyRelease}={}){
  if(env.WORKERS_CI!=='1')throw Error('The ci release runs only in Cloudflare Workers Builds after a merge to main. Do not deploy by hand.');
  scrubCIOverrides(process.env);
- const source=commit(env),snapshot=await verifyBuildSnapshot(root),artifact=await currentSchemaArtifact(root);
+ const source=commit(env),snapshot=await snap(root),artifact=await schema(root);
  ciPreflight(driver,await driver.observe(),artifact);
  const review=ciReview(snapshot,artifact,source);
- const {directory,manifest}=await prepareRelease(root,driver,review,{git:()=>({commit:source.commit,dirty:source.dirty})});
- if(manifest.schema.mode!=='none')throw ciRefusal('the prepared release is not a schema-unchanged release.');
- log('Prepared release '+manifest.id+' for commit '+source.commit);
- let failure;
- try{await applyRelease(directory,driver);}catch(error){failure=error;}
- let journal=null;try{journal=await readJSON(join(directory,'journal.json'));}catch{}
- log(JSON.stringify({release:manifest.id,commit:source.commit,journal},null,2));
- if(failure)throw failure;
- return {manifest,journal};
+ for(let attempt=0;;attempt++){
+  const {directory,manifest}=await prepare(root,driver,review,{git:()=>({commit:source.commit,dirty:source.dirty})});
+  if(manifest.schema.mode!=='none')throw ciRefusal('the prepared release is not a schema-unchanged release.');
+  log('Prepared release '+manifest.id+' for commit '+source.commit);
+  let failure;
+  try{await apply(directory,driver);}catch(error){failure=error;}
+  let journal=null;try{journal=await readJSON(join(directory,'journal.json'));}catch(e){if(e.code==='ENOENT')journal=newJournal(manifest);}
+  log(JSON.stringify({release:manifest.id,commit:source.commit,journal},null,2));
+  if(failure&&attempt===0&&baselineMoved(failure,journal)){
+   log('Retrying once: another release changed the live Workers after release '+manifest.id+' was prepared and no step had started. Preparing again from live state.');
+   continue;
+  }
+  if(failure)throw failure;
+  return {manifest,journal};
+ }
 }

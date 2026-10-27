@@ -303,6 +303,7 @@ Authoritative contract: [releases](releases.md#recovery-decisions). Summary of r
 | Worker step done, readback interrupted | Confirm tag, version, service/database bindings and secret names with `pnpm run deploy status`; resume only remaining steps. |
 | CLI outcome uncertain | Do not reset the step to pending. Inspect routing, settings and assets as well as code; review a forward repair. No automatic repeat. |
 | Out-of-band change (including C1/C6/C8) | `prepare` again against the real state. |
+| CI release refused with `Worker changed outside this release` (concurrent merge) | CI retries once itself; if still refused, re-run the Workers Builds build for the latest `main` commit ([releases](releases.md#automatic-releases-merge-to-main)). |
 
 - **Rollback is not a repository control.** A [Cloudflare Worker rollback](https://developers.cloudflare.com/workers/configuration/versions-and-deployments/rollbacks/) is an out-of-band provider action that the lease and journal do not cover, schemas are forward-only, and "release rollback rehearsal" is open work (WH-059). Treat it as an owner decision requiring a fresh `status` read afterward, not a documented step.
 - Preserve the full archive and original logs; `.secrets/` is not a backup.
