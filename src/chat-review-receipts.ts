@@ -33,6 +33,8 @@ export function controlReceipt(a:{type:string;kind?:string;operation?:string;rev
 export async function reviewedReply(db:D1Database,user:string,kind:Kind,review:string):Promise<ReviewedReply|undefined>{
  const {results}=await db.prepare("SELECT r.turn_id,r.reply_digest,t.assistant_text FROM chat_review_receipts r JOIN chat_turns t ON t.id=r.turn_id AND t.user_id=r.user_id WHERE r.user_id=? AND r.kind=? AND r.review_id=? AND t.status='completed' AND COALESCE(json_extract(t.action_json,'$.type'),'')!='confirm' ORDER BY t.revision DESC LIMIT 20").bind(user,kind,review).all<{turn_id:string;reply_digest:string;assistant_text:string}>();
  for(const r of results)if(typeof r.assistant_text==='string'&&await hashToken(r.assistant_text)===r.reply_digest)return {turn:r.turn_id,text:r.assistant_text};
+ // A website tool review prepared from saved service settings has no receipt row; its link row carries the digest.
+ if(kind==='backendForm')return linkedReviewedReply(db,user,'service_client_activation_links',review);
 }
 /** Link tables that store the digest of the reply a review was shown in (column holding the review id). */
 const linkTables={module_activation_links:'review_id',module_access_role_links:'review_id',project_spec_chat_links:'proposal_id',service_client_chat_links:'proposal_id',service_client_activation_links:'review_id',app_maintenance_chat_links:'review_id'} as const;

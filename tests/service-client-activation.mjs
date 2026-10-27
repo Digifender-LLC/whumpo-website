@@ -62,6 +62,11 @@ try{
  async function activationReview(a,version,service){const r=await chat(a,activation(a,version,service));assert.ok(r.turn.service_client_activation,r.turn.assistant_text);assert.equal(r.turn.service_client_activation.id,r.input.id);return r;}
  async function confirmActivation(a,r){return confirm(a,r.turn.service_client_activation.service==='contact'?'contact':'backendForm',r.input.id);}
  const status=async r=>(await db.prepare('SELECT status FROM service_client_activation_state WHERE id=?').bind(r).first()).status;
+ // Digest gap: the reviewed reply is altered, so confirming is refused with nothing applied; the restored reply confirms normally.
+ async function alteredRefused(a,kind,r){const review=r.input.id,links=(await db.prepare('SELECT t.id,t.assistant_text text FROM service_client_activation_links l JOIN chat_turns t ON t.id=l.turn_id WHERE l.review_id=?').bind(review).all()).results,set=f=>Promise.all(links.map(t=>db.prepare('UPDATE chat_turns SET assistant_text=? WHERE id=?').bind(f(t.text),t.id).run()));
+  assert.ok(links.length);await set(t=>t+' (altered)');
+  assert.equal((await call(a,'/api/chat/actions','POST',await input(a,{type:'confirm',kind,reviewId:review}))).status,409,kind+' confirm must refuse an altered reply');assert.equal(await status(review),'pending',kind+' altered reply applied nothing');
+  await set(t=>t);}
  async function preparedActivation(a,version,service){const db=await a.scope(),turn=id(),state=(await json(a,'/api/chat')).state.revision,result=await m.prepareServiceClientActivation(db,a.id,turn,activation(a,version,service));return {db,turn,statements:[db.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,mode,status,created_at) VALUES(?,?,?,'Prepare service activation','','ai','pending',?)").bind(turn,a.id,state+1,now()),...result.statements,db.prepare("UPDATE chat_turns SET status='completed',assistant_text=? WHERE id=?").bind(result.reply,turn),db.prepare('UPDATE workspace_state SET revision=revision+1 WHERE user_id=?').bind(a.id)]};}
  if(process.env.WHUMPO_SERVICE_ACTIVATION_BROWSER!=='1'){
  owner.site=await website(owner);await backend(owner);const saved=await save(owner,0),v1=saved.version;
@@ -86,6 +91,7 @@ try{
  const restore=await chat(owner,sc(owner,'restore',{expectedRevision:2,versionId:v1})),restored=await approve(owner,restore.turn.service_client_review),v3=restored.version;
  const staleVersion=await chat(owner,activation(owner,v1,'contact'));assert.equal(staleVersion.turn.service_client_activation,undefined);assert.match(staleVersion.turn.assistant_text,/Restore those settings/);
  const contactReview=await activationReview(owner,v3,'contact'),tooEarlyForm=await activationReview(owner,v3,'statelessForm');
+ await alteredRefused(owner,'contact',contactReview);
  await confirmActivation(owner,contactReview);assert.ok(await m.activeContact(db,owner.project));
  assert.equal((await call(owner,`/api/backend-form-reviews/${tooEarlyForm.input.id}/confirm`,'POST',{})).status,409);assert.equal(await status(tooEarlyForm.input.id),'pending');assert.equal(await m.activeBackendForm(db,owner.project),null);
  // Listing and reopening finds an existing review; there is no duplicated preparation.
@@ -96,6 +102,7 @@ try{
  await assert.rejects(m.prepareServiceClientActivation(await owner.scope(),owner.id,formReview.input.id,activation(owner,v3,'contact')),e=>e.status===409);
  // Lost acknowledgement from the underlying approved form update recovers its saved receipt.
  let lose=true,lostReplies=0;const losing=await owner.scope(interceptDatabase(db,/UPDATE backend_form_reviews SET status='applied'/,async()=>{},async()=>{if(lose){lose=false;lostReplies++;throw Error('Synthetic lost form acknowledgement');}}));
+ await alteredRefused(owner,'backendForm',formReview);
  const beforeCalls=calls;assert.equal((await m.confirmBackendForm(losing,owner.id,formReview.input.id)).status,'applied');assert.equal(calls,beforeCalls);assert.equal(lostReplies,1);await confirmActivation(owner,formReview);assert.ok(await m.activeBackendForm(db,owner.project));
  const candidate=(await db.prepare('SELECT candidate_html FROM service_client_versions WHERE id=?').bind(v3).first()).candidate_html;assert.equal(await(await served(owner)).text(),candidate);
  inference=false;const publicCall=await m.host.fetch(new Request(`https://${owner.project}.whumpo.site/backend/${owner.backendReview}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({hours:3,extra:true})}),env);assert.equal(publicCall.status,200);assert.deepEqual(await publicCall.json(),{ok:true,value:{estimate:100}});inference=true;
