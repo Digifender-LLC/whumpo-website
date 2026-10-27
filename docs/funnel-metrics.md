@@ -140,3 +140,9 @@ Answers given by the owner on October 8, 2026 UTC. Each authorizes only the deci
 
 1. Decide whether pre-welcome identity steps should get anonymous, unlinked aggregate counters.
 2. Authorize any operator report run against the test database, and any sending of the feedback request (recipients, channel, timing).
+
+## Decision: Cloudflare Web Analytics beacon is off for whumpo.com (2026-10-26)
+
+Funnel metrics are opt-in and off by default (decision of 2026-10-08, above), and `docs/legal/cookies.md` says Whumpo adds no third-party analytics SDK. The live Content Security Policy blocks `static.cloudflareinsights.com`, which is the zone-level Web Analytics injection, so the beacon cannot run and must not be allowed. The fix is a Cloudflare dashboard setting (turn Web Analytics off for the whumpo.com zone), not a repo change.
+
+**Owner action still to do:** switch off Web Analytics for the whumpo.com zone in the Cloudflare dashboard. Not done or verified here.
