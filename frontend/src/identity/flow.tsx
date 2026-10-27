@@ -11,7 +11,7 @@ import {Brand} from '../components/brand';
 import {LegalLinks} from '../legal-links';
 import {IdentityKit} from './kit';
 import {lockoutContact} from '../../../src/support-shape';
-import {IdentityClientError,identityChanged,identityRequest,identityState,identityIntent,identityCeremony,sameIdentityReview,type IdentityState,type PreparedIdentityKit} from '../lib/identity';
+import {IdentityClientError,identityChanged,isOwnLostReply,identityRequest,identityState,identityIntent,identityCeremony,sameIdentityReview,type IdentityState,type PreparedIdentityKit} from '../lib/identity';
 
 function useIdentity(){
  const [state,setState]=useState<IdentityState|null>(null),[loaded,setLoaded]=useState(false),[verified,setVerified]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
@@ -58,6 +58,8 @@ function useIdentity(){
  useEffect(()=>{
   active.current=true;
   const changed=()=>{
+   // The caller's own lost reply: keep its uncertain alert and screen; run() blocks replay.
+   if(isOwnLostReply())return;
    sequence.current++;actionSequence.current++;locked.current=false;uncertain.current=false;
    resetWorkspaceClient();clearChatRecovery();setState(null);setLoaded(false);setVerified(false);setBusy(false);setError('');
    void reload().catch(()=>{});

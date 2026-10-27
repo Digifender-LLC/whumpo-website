@@ -27,15 +27,24 @@ export async function identityRequest<T>(action:string,data:Record<string,unknow
   return identityFetch<T>(action,data,action==='logout'?identityGeneration():generation);
  });
 }
+// True only while a lost reply on this caller's own access-changing request invalidates identity.
+let ownLostReply=false;
+export const isOwnLostReply=()=>ownLostReply;
+// Returns true when the lost reply belongs to the caller's own still-current request. Logout passes -1: sign-out always clears the screen.
+function loseReply(generation:number,broadcast:boolean){
+ const own=generation===identityGeneration();ownLostReply=own;
+ try{invalidateIdentity(broadcast);}finally{ownLostReply=false;}
+ return own;
+}
 async function identityFetch<T>(action:string,data:Record<string,unknown>,generation:number):Promise<T>{
  const changesAccess=accessChanges.has(action);
  let response:Response;
  try{response=await fetch('/api/auth/identity/v1/'+action,{method:'POST',credentials:'same-origin',cache:'no-store',redirect:'error',...(action==='state'||cookieChanges.has(action)?{signal:AbortSignal.timeout(15000)}:{}),headers:{'content-type':'application/json'},body:JSON.stringify({version:1,...data})});}
- catch{if(changesAccess)invalidateIdentity(true);if(generation!==identityGeneration())throw identityChanged();throw new IdentityClientError('The reply did not arrive. Check saved progress before trying again.','uncertain',0);}
+ catch{if(changesAccess?!loseReply(action!=='logout'?generation:-1,true):generation!==identityGeneration())throw identityChanged();throw new IdentityClientError('The reply did not arrive. Check saved progress before trying again.','uncertain',0);}
  // Cookies may already have changed even if the response body is lost or this
  // request belongs to a discarded view. Never replay the mutation automatically.
  if(changesAccess)announceIdentityChange();
- let result;try{result=await response.json();}catch{if(changesAccess)invalidateIdentity();if(generation!==identityGeneration())throw identityChanged();throw new IdentityClientError('Whumpo could not confirm the result. Check saved progress.','uncertain',response.status);}
+ let result;try{result=await response.json();}catch{if(changesAccess?!loseReply(action!=='logout'?generation:-1,false):generation!==identityGeneration())throw identityChanged();throw new IdentityClientError('Whumpo could not confirm the result. Check saved progress.','uncertain',response.status);}
  if(generation!==identityGeneration()){if(changesAccess)invalidateIdentity();throw identityChanged();}
  if(!response.ok)throw new IdentityClientError(result.error??'This identity action could not finish.',result.code??'unavailable',response.status);
  if(result.version!==1)throw new IdentityClientError('Refresh Whumpo to use its current account flow.','client_upgrade_required',409);
