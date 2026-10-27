@@ -10,6 +10,7 @@ import {isSavedWorkKind,readSavedTurn,readSavedWorkList,savedWorkDestination,sav
 import {Brand} from './components/brand';
 import {Button} from './components/ui/button';
 import {AccountHelp} from './account-help';
+import {SavedReviewConfirm} from './saved-review-confirm';
 import {useWorkspaceAccount} from './identity/flow';
 import {checkChatRequest,checkFormRequest,checkPhotoUpload,localRecoveryCopy,localRecoveryDestination,localRecoveryNeedsCheck,readLocalRecovery,type LocalCheck,type LocalRecoveryItem} from './lib/local-recovery';
 import {readPhotoUploadStatus} from '../../src/photo-upload-shape';
@@ -53,7 +54,7 @@ export function SavedWorkPage(){
  const viewLabel=view==='open'?'Open work':'All saved work';
  return <main className="min-h-dvh bg-background px-5 py-6 sm:px-8 sm:py-9"><div className="mx-auto max-w-3xl space-y-7">
   <Brand/><div className="flex flex-wrap items-center justify-between gap-3"><ReturnLink/><AccountHelp/></div>
-  <header><h1 ref={heading} tabIndex={-1} className="text-3xl font-bold">Saved work</h1><p className="mt-3 text-muted-foreground">Find requests, reviews and forms Whumpo saved for you, then open each one in its exact place.</p><p className="mt-3 text-sm text-muted-foreground">This page only reads saved records. It never approves, retries or sends anything. The page you open shows the current state, which can differ from the saved status here.</p></header>
+  <header><h1 ref={heading} tabIndex={-1} className="text-3xl font-bold">Saved work</h1><p className="mt-3 text-muted-foreground">Find requests, reviews and forms Whumpo saved for you, then open each one in its exact place.</p><p className="mt-3 text-sm text-muted-foreground">This page never approves, retries or sends anything by itself. A review that Chat prepared can be confirmed here only after Whumpo reads it again and you choose the button. Whumpo cannot prepare a new review here. The page you open shows the current state, which can differ from the saved status here.</p></header>
   {owner&&<LocalRecoverySection key={owner} owner={owner} revision={localRevision}/>}
   <section aria-label="Saved work filters" className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-4">
    <div role="group" aria-label="Which saved work to show" className="flex flex-wrap gap-2">{(['open','all'] as const).map(value=><Button key={value} type="button" variant={view===value?'primary':'secondary'} aria-pressed={view===value} className={wrap} onClick={()=>{focusIndex.current=null;setView(value);}}>{value==='open'?'Open work':'All saved work'}</Button>)}</div>
@@ -68,7 +69,7 @@ export function SavedWorkPage(){
    {visible&&<>
     <p role="status" className="text-sm text-muted-foreground">{items.length?`Showing ${items.length} saved ${items.length===1?'item':'items'}${list.hasNextPage?'. More are available.':'.'}`:view==='open'?'No open saved work. Choose All saved work to include finished and expired items.':'No saved work matches this filter.'}</p>
     {groups.map(group=><section key={group.kind} aria-labelledby={'saved-work-group-'+group.kind} className="space-y-3"><h3 id={'saved-work-group-'+group.kind} className="text-lg font-bold break-words">{savedWorkKinds[group.kind]}</h3>
-     <ul className="space-y-3">{group.items.map(item=><li key={item.key}><SavedWorkEntry item={item}/></li>)}</ul>
+     <ul className="space-y-3">{group.items.map(item=><li key={item.key}><SavedWorkEntry item={item} owner={owner??''}/></li>)}</ul>
     </section>)}
     {list.isFetchNextPageError&&<p role="alert" className="rounded-md border bg-card p-4 text-sm">{message(list.error)} The items above are from the last completed check.</p>}
     {list.hasNextPage&&<Button data-saved-work-more variant="secondary" className={wrap} disabled={list.isFetchingNextPage} onClick={()=>void showMore()}>{list.isFetchingNextPage?'Loading more…':'Show more'}</Button>}
@@ -78,7 +79,7 @@ export function SavedWorkPage(){
 }
 // Status colour follows the design system; the phase word stays the signal.
 const phaseStatus:Record<SavedWorkItem['phase'],Status>={review:'attention',form:'attention',working:'working',uncertain:'working',attention:'attention',finished:'ready',expired:'idle'};
-function SavedWorkEntry({item}:{item:SavedWorkItem}){
+function SavedWorkEntry({item,owner}:{item:SavedWorkItem;owner:string}){
  const status=savedWorkStatus(item),expiry=savedWorkExpiry(item),destination=savedWorkDestination(item),place=item.projectName??'Your account',id='saved-work-'+item.kind+'-'+item.id;
  return <article data-saved-work-key={item.key} tabIndex={-1} aria-labelledby={id} className="rounded-lg border bg-card p-4 sm:p-5 space-y-2 min-w-0">
   <h4 id={id} className="font-semibold break-words">{place}<span className="sr-only">, {savedWorkKinds[item.kind]}</span></h4>
@@ -89,6 +90,7 @@ function SavedWorkEntry({item}:{item:SavedWorkItem}){
    ?<Link to="/workspace/$view" params={{view:'safety'}} search={destination.search}>{destination.label}<span className="sr-only"> for {savedWorkKinds[item.kind]}, {place}</span></Link>
    :<Link to="/workspace" search={destination.search}>{destination.label}<span className="sr-only"> for {savedWorkKinds[item.kind]}, {place}</span></Link>}</Button>
   :<p className="text-sm text-muted-foreground">No linked Chat message or review page. This status is shown for reference.</p>}
+  {owner&&item.phase==='review'&&item.turnId&&!item.safety&&<SavedReviewConfirm key={owner} owner={owner} turnId={item.turnId}/>}
  </article>;
 }
 
