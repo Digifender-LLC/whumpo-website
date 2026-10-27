@@ -82,3 +82,17 @@ Not covered by these local runs:
 - Physical iPhone/Android devices and OS-level installation.
 - Installed-PWA (standalone window) behavior; the installed state, launch URL and OS app-switcher behavior are not exercised.
 - The browser test does not assert screenshots (they are written to ignored `.secrets/` and were not inspected in this run), the manifest field values (name, icons, scope) beyond zero errors, or the real Safari/Firefox engines.
+
+### Live check — 2026-10-27
+
+Opt-in, anonymous and read-only (no sign-in, no model calls, no writes). Closes the live gap above: the earlier live probe blocks service workers and only parsed the manifest.
+
+```
+RUN_LIVE_DASHBOARD_PWA=1 mise exec node@24.21.0 pnpm@11.19.0 -- node tests/dashboard-pwa-live.mjs
+```
+
+Without the variable it refuses to run. Real run against https://whumpo.com (Node 24.21.0, Playwright Chromium): exit 0, `Live PWA passed: https://whumpo.com manifest/icons/worker headers, scope https://whumpo.com/workspace activated, 4 public cache entries, offline page and anonymous reconnect to sign-in.` The first attempts failed on two flaws in the test itself, since fixed: it read the worker state while still `activating`, and it counted the sign-in gate's anonymous `POST /api/auth/identity/v1/state` as a write (it is the only non-GET allowed).
+
+Asserted: `/manifest.webmanifest` 200, `application/manifest+json`, `no-cache`, id/start_url/scope `/workspace`, standalone, both 192/512 icons return 200 `image/png` with PNG bytes; `/workspace-sw.js` 200, `text/javascript; charset=utf-8`, `no-cache` (as in `frontend/public/_headers`); registration scope ends in `/workspace`, script is `/workspace-sw.js`, worker reaches `activated`; after a reload the page is controlled and Cache Storage holds exactly the four public entries; offline reload shows the branded offline heading, and going online plus Try again returns to the passkey sign-in gate; no page errors.
+
+Not verified: physical iPhone/Android devices, install prompts or OS installation, standalone-window behaviour, signed-in flows, worker update behaviour on a real release, and Safari/Firefox engines.
