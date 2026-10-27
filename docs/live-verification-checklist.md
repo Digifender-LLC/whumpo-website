@@ -49,3 +49,4 @@ Write these in a private place (not the repo):
 - Result of each section above: pass, fail or not run.
 - Screenshots, kept private (they may show your email or kit). Do not attach them to public issues.
 - Anything odd: slow steps, wording errors, layout glitches, unexpected redirects, console warnings.
+- The signed-in workspace pages (Chat load, Dashboard, Settings, Profile, Support, Saved work, Site safety, Account security, Billing) are checked automatically at 390px and 1280px, light and dark, by `RUN_LIVE_WORKSPACE_SMOKE=1 node tests/workspace-smoke-live.mjs` (no AI, checkout or publishing), so the visual pass need not be repeated by hand.
