@@ -145,4 +145,4 @@ Answers given by the owner on October 8, 2026 UTC. Each authorizes only the deci
 
 Funnel metrics are opt-in and off by default (decision of 2026-10-08, above), and `docs/legal/cookies.md` says Whumpo adds no third-party analytics SDK. The live Content Security Policy blocks `static.cloudflareinsights.com`, which is the zone-level Web Analytics injection, so the beacon cannot run and must not be allowed. The fix is a Cloudflare dashboard setting (turn Web Analytics off for the whumpo.com zone), not a repo change.
 
-**Owner action still to do:** switch off Web Analytics for the whumpo.com zone in the Cloudflare dashboard. Not done or verified here.
+**Done 2026-10-27:** Web Analytics automatic injection (`auto_install`) was set to `false` through the Cloudflare API for both the `whumpo.com` and `whumpo.site` zones, so customer sites do not get the beacon either. Other zones on the account were left unchanged. Verified the same day: the live HTML of `/` and `/workspace/?signup=true` contains no `cloudflareinsights` reference. To reverse it, set `auto_install` back to `true` on the two Web Analytics sites.
