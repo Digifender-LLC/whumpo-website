@@ -1,13 +1,17 @@
 import {createRequire} from 'node:module';
 import {pathToFileURL} from 'node:url';
 import {probeTarget} from './probe-health.mjs';
-// Read-only live browser probe. Opt-in via `--live <origin>`. GET only: no forms, no Turnstile interaction, no /api writes,
+// Read-only live browser probe. Opt-in via `--live <origin>`. GET only, except one same-origin POST of {"version":1} to the identity config route (public Turnstile site key): no forms, no Turnstile interaction, no /api writes,
 // no cookies or storage kept (fresh context, service workers blocked), no Stripe, no account. Fails closed on any other host.
 const require=createRequire(import.meta.url),{chromium}=require('@playwright/test');
 const pages=[{name:'landing',path:'/'},{name:'signup-entry',path:'/workspace/?signup=true',turnstile:true}];
 const viewports=[390,1280];
 // The signup page's own CSP permits Turnstile; its script and frame are GET-only loads from this one host.
 const allowedExternal='https://challenges.cloudflare.com';
+const isConfigPost=(request,url,origin)=>{
+ if(request.method()!=='POST'||url.origin!==origin||url.pathname!=='/api/auth/identity/v1/config')return false;
+ try{const b=JSON.parse(request.postData()??'');return Object.keys(b).length===1&&b.version===1;}catch{return false;}
+};
 export async function probeBrowser(target,{timeoutMs=15000}={}){
  const origin=probeTarget(target),checks=[],blocked=[];
  const add=(check,path,ok,failure,extra={})=>checks.push({check,path,state:ok?'ok':'failed',...extra,...(ok?{}:{failure})});
@@ -18,6 +22,7 @@ export async function probeBrowser(target,{timeoutMs=15000}={}){
    const request=route.request(),url=new URL(request.url());
    if(!/^https?:$/.test(url.protocol))return route.continue();
    const sameOrigin=url.origin===origin,external=origin.startsWith('https:')&&url.origin===allowedExternal;
+   if(isConfigPost(request,url,origin))return route.continue();
    if(request.method()!=='GET'||!(sameOrigin||external)){blocked.push({method:request.method(),url:url.origin+url.pathname,reason:request.method()!=='GET'?(url.pathname.startsWith('/api/')?'api_write':'non_get'):'foreign_host'});return route.abort();}
    return route.continue();
   });
@@ -57,7 +62,7 @@ export async function probeBrowser(target,{timeoutMs=15000}={}){
   }catch{add('manifest','/manifest.webmanifest',false,'unreachable');}
  }finally{await browser.close();}
  add('no_blocked_requests','*',!blocked.length,'blocked_requests',{count:blocked.length});
- return {target:origin,observedAt:new Date().toISOString(),checks,blocked,attention:checks.some(c=>c.state!=='ok'),scope:'Read-only headless Chromium GETs of the landing and signup entry pages. Proves render, console/CSP cleanliness, Turnstile iframe presence, health, manifest and no horizontal scroll at 390px and 1280px. Does not sign up, enrol passkeys, solve Turnstile, call Stripe or write anything.'};
+ return {target:origin,observedAt:new Date().toISOString(),checks,blocked,attention:checks.some(c=>c.state!=='ok'),scope:'Read-only headless Chromium GETs of the landing and signup entry pages, plus the one POST {"version":1} to /api/auth/identity/v1/config that the signup page makes to fetch the public Turnstile site key (every other non-GET is aborted). Proves render, console/CSP cleanliness, Turnstile iframe presence, health, manifest and no horizontal scroll at 390px and 1280px. Does not sign up, enrol passkeys, solve Turnstile, call Stripe or write anything.'};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  const args=process.argv.slice(2);
