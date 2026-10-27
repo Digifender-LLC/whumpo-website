@@ -1,6 +1,6 @@
 import {resolve,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {readJSON,verifyRelease,applyRelease,reconcileRelease,newJournal} from './release-manifest.mjs';
+import {readJSON,verifyRelease,applyRelease,statusReconciliation,newJournal} from './release-manifest.mjs';
 import {prepareRelease} from './prepare-release.mjs';
 import {releaseProvider} from './release-provider.mjs';
 import {ciRelease} from './deploy-ci.mjs';
@@ -25,8 +25,7 @@ async function main(args){
   const result=await applyRelease(directory,driver);console.log('Release '+value+': '+result.status+'. Verify application behavior separately.');return;
  }
  let journal;try{journal=await readJSON(join(directory,'journal.json'));}catch(e){if(e.code!=='ENOENT')throw e;journal=newJournal(manifest);}
- const observed=await driver.observe(manifest);let reconciliation='ready';
- try{reconcileRelease(manifest,structuredClone(journal),observed);}catch(error){reconciliation=error.message;}
+ const observed=await driver.observe(manifest),reconciliation=statusReconciliation(manifest,journal,observed);
  console.log(JSON.stringify({release:value,status:journal.status,reconciliation,workers:Object.fromEntries(Object.entries(observed.workers).map(([role,w])=>[role,{before:manifest.before.workers[role].id,live:w.id,candidateTagMatches:w.tag===manifest.workers[role].tag,step:journal.steps[role]}])),schema:{observed:observed.schema,target:manifest.schema.expected,step:journal.steps.schema},cmsRegistryMatches:JSON.stringify(manifest.cms)===JSON.stringify(observed.cms)},null,2));
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))main(process.argv.slice(2)).catch(error=>{console.error(error.message);process.exitCode=1;});
