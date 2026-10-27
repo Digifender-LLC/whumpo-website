@@ -243,4 +243,4 @@ Anonymous live Chromium checks pass responsive landing/entry focus, direct secur
 
 Private receipts: `.secrets/wh111-service-safety-release-before.json`, `.secrets/wh111-service-safety-release-verified.json`, `.secrets/verify-wh111-service-safety-release.mjs`, `.secrets/wh111-service-safety-deploy.log` and `.secrets/wh111-service-safety-live-verification.log`. WH-111/#100 remains open for consolidated pending work, selected-project/return continuity, human support and navigation simplification; WH-112 retains whole-owner acceptance. CMS functional testing, CSAM implementation and Daybreak remain deferred. No parent completion is claimed from this increment.
 
-Sign-out leaves the `whumpo.theme` localStorage value in place: it is a display preference, not account data.
+The `whumpo.theme` localStorage preference is cleared at sign-out with the other device records.
