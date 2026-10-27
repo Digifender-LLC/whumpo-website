@@ -2,7 +2,15 @@ import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
+import {isChallengePost} from '../tools/live-browser-probe.mjs';
 const run=promisify(execFile);
+const cf=p=>new URL('https://challenges.cloudflare.com'+p);
+assert.ok(isChallengePost('POST',cf('/cdn-cgi/challenge-platform/h/b/fo/x'),'https://whumpo.com'));
+assert.ok(!isChallengePost('POST',cf('/turnstile/v0/api.js'),'https://whumpo.com'));
+assert.ok(!isChallengePost('POST',cf('/cdn-cgi/challenge-platform'),'https://whumpo.com'));
+assert.ok(!isChallengePost('POST',new URL('https://evil.example/cdn-cgi/challenge-platform/x'),'https://whumpo.com'));
+assert.ok(!isChallengePost('POST',cf('/cdn-cgi/challenge-platform/x'),'http://127.0.0.1:1'));
+assert.ok(!isChallengePost('PUT',cf('/cdn-cgi/challenge-platform/x'),'https://whumpo.com'));
 let mode='ok';const seen=[];
 const page=(body,head='')=>`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><link rel="manifest" href="/manifest.webmanifest">${head}</head><body>${body}</body></html>`;
 const server=createServer((req,res)=>{
