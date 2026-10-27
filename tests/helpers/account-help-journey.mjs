@@ -48,7 +48,7 @@ export async function accountHelpJourney({page,context,db,state,requests,origin,
  assert.equal(await page.getByRole('textbox',{name:'Message Whumpo'}).count(),0);assert.equal(await page.getByLabel('Your name',{exact:true}).count(),0);
  await page.reload();await page.getByRole('heading',{name:'Account security',exact:true}).waitFor();
  phase('finishing a profile read preserves open account help');
- state.failProfile=false;state.holdProfile=true;await activate(page.getByRole('link',{name:'Back to Whumpo',exact:true}));await page.getByLabel('Opening your workspace').waitFor();await open();
+ state.failProfile=false;state.holdProfile=true;await activate(page.getByRole('link',{name:'Back to Dashboard',exact:true}));await page.getByLabel('Opening your workspace').waitFor();await open();
  await enter(dialog().getByLabel('Name your next passkey'),'Keep this unsubmitted label');
  for(let i=0;!state.releaseProfile&&i<300;i++)await new Promise(done=>setTimeout(done,20));assert(state.releaseProfile);state.releaseProfile();state.releaseProfile=null;
  await page.waitForLoadState('networkidle');assert.equal(await dialog().getByLabel('Name your next passkey').inputValue(),'Keep this unsubmitted label');await close();
