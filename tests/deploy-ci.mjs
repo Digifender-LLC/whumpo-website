@@ -37,13 +37,14 @@ await assert.rejects(()=>ciRelease(process.cwd(),{observe:async()=>{touched=true
 assert.equal(touched,false);
 // Race guard: synthetic prepare/apply, real ciRelease control flow.
 const raceError=()=>Error('Worker changed outside this release');
-const race=async outcomes=>{
- const prepares=[],logs=[];let n=0;
+const prepareError=()=>Error('Build or remote baseline changed during preparation');
+const race=async(outcomes,prepareErrors=[])=>{
+ const prepares=[],logs=[];let n=0,p=0,observes=0;
  const deps={env:{WORKERS_CI:'1'},log:m=>logs.push(m),commit:()=>source,snapshot:async()=>({inputs:{sha256:'b'.repeat(64)}}),schema:async()=>artifact,
-  prepare:async()=>{const directory=mkdtempSync(join(tmpdir(),'ci-race-'));prepares.push(directory);return {directory,manifest:{id:'r'+prepares.length,schema:{mode:'none'}}};},
+  prepare:async()=>{const e=prepareErrors[p++];if(e)throw e;const directory=mkdtempSync(join(tmpdir(),'ci-race-'));prepares.push(directory);return {directory,manifest:{id:'r'+prepares.length,schema:{mode:'none'}}};},
   apply:async directory=>{const o=outcomes[n++];if(o.journal)writeFileSync(join(directory,'journal.json'),JSON.stringify({steps:o.journal}));if(o.error)throw o.error;}};
- const result=await ciRelease(process.cwd(),{observe:async()=>observed(),configs:driver.configs},deps).then(r=>({r}),error=>({error}));
- return {...result,prepares,logs,applies:n};
+ const result=await ciRelease(process.cwd(),{observe:async()=>{observes++;return observed();},configs:driver.configs},deps).then(r=>({r}),error=>({error}));
+ return {...result,prepares,logs,applies:n,observes,prepareCalls:p};
 };
 const pending={schema:{status:'pending'},runtime:{status:'pending'}};
 let out=await race([{error:raceError(),journal:pending},{}]);
@@ -60,4 +61,16 @@ out=await race([{error:Error('Release stopped at apps.'),journal:pending},{}]);
 assert.match(out.error.message,/Release stopped/);assert.equal(out.applies,1);
 out=await race([{error:raceError(),journal:pending},{error:raceError(),journal:pending},{}]);
 assert.equal(out.error?.message,'Worker changed outside this release');assert.equal(out.applies,2);
-console.log('CI release: commit identity, generated schema-unchanged review, schema/database/CMS refusals and Workers Builds name-override removal, the Workers Builds-only guard and the single pending-only retry after a concurrent merge passed. No provider calls.');
+// Prepare-time baseline refusal: one retry in total, whichever phase triggered it.
+out=await race([{}],[prepareError()]);
+assert.ok(out.r&&out.prepareCalls===2&&out.applies===1&&out.observes===2); // preflight reran before the retry
+assert.ok(out.logs.some(m=>m.startsWith('Retrying once')));
+out=await race([],[prepareError(),prepareError()]);
+assert.equal(out.error?.message,'Build or remote baseline changed during preparation');assert.equal(out.prepareCalls,2);assert.equal(out.applies,0);
+out=await race([],[Error('Release source changed during preparation')]);
+assert.match(out.error.message,/Release source changed/);assert.equal(out.prepareCalls,1);
+out=await race([{error:raceError(),journal:pending},{}]);
+assert.ok(out.r&&out.applies===2&&out.observes===2);
+out=await race([{error:raceError(),journal:pending}],[prepareError()]);
+assert.equal(out.error?.message,'Worker changed outside this release');assert.equal(out.prepareCalls,2);assert.equal(out.applies,1);
+console.log('CI release: commit identity, generated schema-unchanged review, schema/database/CMS refusals and Workers Builds name-override removal, the Workers Builds-only guard and the single retry (prepare baseline or pending-only apply) after a concurrent merge passed. No provider calls.');
