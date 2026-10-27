@@ -5,7 +5,7 @@ import {prepareCMSImage,cmsImageFilename} from './lib/prepare-cms-image';
 import {useCMSEditGuard} from './cms-edit-guard';
 import {Button} from './components/ui/button';
 import {Input} from './components/ui/input';
-import {Field} from './workspace-pages';
+import {Field} from './workspace-layout';
 type Receipt={requestId:string;filename:string;status:'saved'|'unresolved';createdAt:string};
 type Inventory={uploadEnabled:boolean;uploads:Receipt[]};
 type Prepared={id:string;name:string;blob:Blob|null};

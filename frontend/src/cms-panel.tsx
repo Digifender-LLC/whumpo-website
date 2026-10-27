@@ -10,7 +10,7 @@ import {useQuery} from '@tanstack/react-query';
 import {useRouterState} from '@tanstack/react-router';
 import {api,send,message,APIError,queryClient} from './lib/api';
 import {useWorkspace} from './workspace';
-import {Section,Field} from './workspace-pages';
+import {Section,Field} from './workspace-layout';
 import {Button} from './components/ui/button';
 import {Input} from './components/ui/input';
 import {Textarea} from './components/ui/textarea';

@@ -17,7 +17,7 @@ import {Button} from './components/ui/button';
 import {Input} from './components/ui/input';
 import {Card,CardHeader,CardDescription,CardContent} from './components/ui/card';
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription,DialogFooter} from './components/ui/dialog';
-import {Section,Field} from './workspace-pages';
+import {Section,Field} from './workspace-layout';
 import {VisitorAccessSetup,type AccessSetup} from './visitor-access-setup';
 import {CollectionGalleries,PhotoCollectionControl,PhotoCollectionSetup} from './photo-collections';
 import {ownerCollectionsPath} from './lib/photo-collections';

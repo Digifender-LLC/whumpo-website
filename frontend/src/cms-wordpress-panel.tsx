@@ -6,7 +6,7 @@ import {useCMSEditGuard} from './cms-edit-guard';
 import {useWorkspace} from './workspace';
 import {Button} from './components/ui/button';
 import {Input} from './components/ui/input';
-import {Section,Field} from './workspace-pages';
+import {Section,Field} from './workspace-layout';
 
 type Source={id:string;filename:string;digest:string;size:number;state:'pending'|'ready'};
 type Review={id:string;title:string;status:string;expires_at:string};

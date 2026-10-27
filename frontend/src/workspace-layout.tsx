@@ -1,0 +1,5 @@
+import type {ReactNode} from 'react';
+import {Card,CardHeader,CardDescription,CardContent} from './components/ui/card';
+export function Page({title,description,children}:{title:string;description?:string;children:ReactNode}){return <div className="page-pad workspace-page"><p className="text-xs font-semibold tracking-[.16em] uppercase text-ink-muted mb-3">Your workspace</p><h1 className="text-[28px] leading-9 font-bold tracking-[-.01em]">{title}</h1>{description&&<p className="text-muted-foreground mt-3 mb-8">{description}</p>}<div className="space-y-6 mt-8">{children}</div></div>}
+export function Section({title,description,children}:{title:string;description?:string;children:ReactNode}){return <Card className="workspace-card"><CardHeader><h2 className="font-sans text-lg leading-[26px] font-semibold">{title}</h2>{description&&<CardDescription>{description}</CardDescription>}</CardHeader><CardContent>{children}</CardContent></Card>}
+export function Field({label,children}:{label:string;children:ReactNode}){return <label className="grid gap-2 text-sm font-medium">{label}{children}</label>}
