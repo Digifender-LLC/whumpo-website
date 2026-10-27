@@ -122,3 +122,9 @@
 @media(max-width:760px){
  main input:not([type=checkbox]):not([type=radio]):not([type=file]),main select{min-height:48px}
 }
+
+/* D-9: standalone controls are 44px at phone width; desktop keeps 24px+ (WCAG 2.5.8). */
+@media(max-width:760px){
+ .security-content button,.sidebar-extra button{min-height:44px}
+ .security-content summary{padding-block:12px}
+}
