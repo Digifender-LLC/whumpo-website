@@ -36,6 +36,14 @@ assert.ok(classifyConsole({text:"Fetch API cannot load data:,. Refused to connec
 assert.equal(classifyConsole({text:"Connecting to 'data:,' violates the following Content Security Policy directive: x",url:''},{...K,scriptLoaded:false}),null);
 assert.equal(classifyConsole({text:"Connecting to 'data:text/html,x' violates the following Content Security Policy directive: x",url:''},K),null);
 assert.equal(classifyConsole({text:"Fetch API cannot load data:image/png;base64,AA. Refused to connect because it violates the document's Content Security Policy.",url:''},K),null);
+// Loopback cannot fake a challenges.cloudflare.com console location, so the turnstile_internal_log rule is tested as a pure function.
+const N='%c%d font-size:0;color:transparent NaN',CF='https://challenges.cloudflare.com/turnstile/v0/g/abc/api.js';
+assert.equal(classifyConsole({text:N,url:CF},K),'turnstile_internal_log');
+assert.equal(classifyConsole({text:N,url:CF},{...K,scriptLoaded:false}),null);
+assert.equal(classifyConsole({text:N,url:'http://127.0.0.1:1/app.js'},K),null);
+assert.equal(classifyConsole({text:N,url:''},K),null);
+assert.equal(classifyConsole({text:N,url:'https://challenges.cloudflare.com.evil.example/x.js'},K),null);
+assert.equal(classifyConsole({text:N,url:'https://other.challenges.cloudflare.com/x.js'},K),null);
 let mode='ok';const seen=[];
 const page=(body,head='')=>`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><link rel="manifest" href="/manifest.webmanifest">${head}</head><body>${body}</body></html>`;
 const server=createServer((req,res)=>{

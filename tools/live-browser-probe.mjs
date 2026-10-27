@@ -16,6 +16,8 @@ const allowedPosts=new Set(['/api/auth/identity/v1/config','/api/auth/identity/v
 export function classifyConsole({text,url},{knownUrls,scriptLoaded}){
  if(text==='Failed to load resource: net::ERR_FAILED'&&url&&knownUrls.has(url.split(/[?#]/)[0]))return 'probe_aborted_known_block';
  if(scriptLoaded&&(/^Connecting to 'data:,' violates the following Content Security Policy directive: /.test(text)||text==="Fetch API cannot load data:,. Refused to connect because it violates the document's Content Security Policy."))return 'turnstile_data_uri_feature_check';
+ // Turnstile's own scripts log noise (e.g. styled %c%d lines); trusted only by source URL, never by text.
+ if(scriptLoaded&&url.startsWith('https://challenges.cloudflare.com/'))return 'turnstile_internal_log';
  return null;
 }
 // Known, accepted block: the Stripe pricing-table script is never loaded by a read-only probe.
