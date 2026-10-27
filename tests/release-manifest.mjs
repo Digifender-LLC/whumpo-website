@@ -4,7 +4,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {saveBuildSnapshot,verifyBuildSnapshot,readBuildInputs} from '../tools/build-snapshot.mjs';
 import {prepareRelease,archivedConfig,expectedServiceBindings} from '../tools/prepare-release.mjs';
-import {workerOrder,configFiles,readJSON,verifyRelease,applyRelease,fileInventory,validateCompatibility,digest,copyTree,assertWorker} from '../tools/release-manifest.mjs';
+import {workerOrder,configFiles,readJSON,verifyRelease,applyRelease,fileInventory,validateCompatibility,digest,copyTree,assertWorker,statusReconciliation} from '../tools/release-manifest.mjs';
 import {currentSchemaArtifact,schemaSummary,currentSchemaPlan} from '../tools/current-schema.mjs';
 import {bindingSummary} from '../tools/release-provider.mjs';
 
@@ -148,5 +148,15 @@ try{
  await mkdir(join(recovered,'.secrets'));await writeFile(join(recovered,'.secrets/build-snapshot.json'),JSON.stringify(manifest.build));
  assert.deepEqual(await readBuildInputs(recovered),manifest.build.inputs);
  assert.deepEqual(await verifyBuildSnapshot(recovered),manifest.build);
+ // Read-only status: a finished release whose tags moved on is superseded; incomplete ones keep the error.
+ {reset();const release=await prepare();await applyRelease(release.directory,driver);
+  const done=await readJSON(join(release.directory,'journal.json')),m=await verifyRelease(release.directory);
+  assert.equal(statusReconciliation(m,done,live),'ready');
+  live.workers.platform={...live.workers.platform,id:'ci-platform',tag:'ci-tag'};
+  const out=statusReconciliation(m,done,live);
+  assert.equal(out.result,'superseded by a later release');assert.deepEqual(out.live.platform,{id:'ci-platform',tag:'ci-tag'});
+  assert.equal(statusReconciliation(m,{...done,status:'needs-reconciliation'},live),'Candidate Worker version was not confirmed');
+  for(const step of [{status:'pending'},{status:'unknown',operationConfirmed:true}])assert.equal(typeof statusReconciliation(m,{...done,steps:{...done.steps,platform:step}},live),'string');
+ }
  console.log('Current-schema release manifests passed: immutable four-Worker artifacts/assets/SQL, no secret copies, exact current schema, empty unbound initialization, active DB/reset refusals, drift refusal, persisted intent, partial failures at all four steps, reconciliation without duplicate deployment, uncertain-command holds, nonempty CMS registration/binding preservation and recovered build inputs including compiler locks.');
 }finally{await rm(root,{recursive:true,force:true});}
