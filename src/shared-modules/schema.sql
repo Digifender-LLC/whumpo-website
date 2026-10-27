@@ -139,8 +139,10 @@ CREATE TRIGGER module_activation_review_admit BEFORE INSERT ON module_activation
  SELECT RAISE(ABORT,'module_activation_access_single') WHERE NEW.kind='access' AND NEW.expected_config_revision=0 AND EXISTS(SELECT 1 FROM module_instances WHERE project_id=NEW.project_id AND kind='access');
  -- Capacity bounds pending (unapplied) reviews only: applied reviews are retained history and never block a later
  -- activation, configuration change or disable.
- SELECT RAISE(ABORT,'module_activation_capacity') WHERE (SELECT count(*) FROM module_activation_reviews r WHERE r.project_id=NEW.project_id AND NOT EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=r.id))>=500
-  OR (SELECT count(*) FROM module_activation_reviews r WHERE NOT EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=r.id))>=50000;
+ SELECT RAISE(ABORT,'module_activation_capacity') WHERE NOT (NEW.action='disable') AND ((SELECT count(*) FROM module_activation_reviews t WHERE t.project_id=NEW.project_id AND NOT EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=t.id) AND t.expires_at>unixepoch() AND NOT (t.action='disable'))>=25
+  OR (SELECT count(*) FROM module_activation_reviews t WHERE t.user_id=NEW.user_id AND NOT EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=t.id) AND t.expires_at>unixepoch() AND NOT (t.action='disable'))>=100
+  OR (SELECT count(*) FROM module_activation_reviews t WHERE NOT EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=t.id) AND t.expires_at>unixepoch() AND NOT (t.action='disable'))>=5000
+  OR ((SELECT count(*) FROM module_activation_reviews t WHERE NOT EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=t.id) AND t.expires_at>unixepoch() AND NOT (t.action='disable'))>=2500 AND (SELECT count(*) FROM module_activation_reviews t WHERE t.user_id=NEW.user_id AND NOT EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=t.id) AND t.expires_at>unixepoch() AND NOT (t.action='disable'))>=25));
 END;
 CREATE TRIGGER module_activation_review_immutable BEFORE UPDATE ON module_activation_reviews BEGIN SELECT RAISE(ABORT,'module_activation_immutable'); END;
 CREATE TRIGGER module_activation_link_admit BEFORE INSERT ON module_activation_links BEGIN
@@ -210,10 +212,16 @@ CREATE TRIGGER module_activation_apply AFTER INSERT ON module_activation_applies
  DELETE FROM app_auth_challenges WHERE NEW.state='inactive' AND access_id=(SELECT resource_id FROM module_activation_reviews WHERE id=NEW.review_id AND kind='access');
 END;
 CREATE TRIGGER module_activation_apply_immutable BEFORE UPDATE ON module_activation_applies BEGIN SELECT RAISE(ABORT,'module_activation_immutable'); END;
--- Applied receipts keep their review: a review with a receipt is never pruned.
 CREATE TRIGGER module_activation_review_retained BEFORE DELETE ON module_activation_reviews
-WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) AND EXISTS(SELECT 1 FROM module_activation_applies WHERE review_id=OLD.id)
-BEGIN SELECT RAISE(ABORT,'module_activation_receipt_retained'); END;
+WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+BEGIN
+ -- Only a terminal, unreferenced, unheld row outside the history window may leave, and only with its sealed receipt.
+ SELECT RAISE(ABORT,'module_activation_receipt_retained') WHERE NOT (EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=OLD.id) OR (NOT EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=OLD.id) AND OLD.expires_at<=unixepoch()-3600) OR (OLD.action='disable' AND NOT (EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=OLD.id)) AND EXISTS(SELECT 1 FROM module_activation_reviews x WHERE x.rowid>OLD.rowid AND x.action='disable' AND x.resource_id=OLD.resource_id)))
+  OR (EXISTS(SELECT 1 FROM module_activations WHERE review_id=OLD.id))
+  OR EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
+  OR NOT (NOT (EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=OLD.id)) OR (OLD.action='disable') OR OLD.id NOT IN (SELECT t.id FROM module_activation_reviews t WHERE t.project_id=OLD.project_id AND EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=t.id) AND NOT (t.action='disable') ORDER BY t.rowid DESC LIMIT 25))
+  OR NOT EXISTS(SELECT 1 FROM review_receipts WHERE family='module_activation_reviews' AND id=OLD.id AND (EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=OLD.id))=(outcome IN ('applied','withdrawn')));
+END;
 
 -- Identity, project, local id and kind never change; configuration revisions only advance.
 CREATE TRIGGER module_instance_update BEFORE UPDATE ON module_instances
@@ -356,8 +364,10 @@ CREATE TRIGGER module_access_role_review_admit BEFORE INSERT ON module_access_ro
   WHERE i.id=NEW.instance_id AND i.project_id=NEW.project_id AND i.local_id=NEW.local_id AND i.kind='access' AND i.config_revision=NEW.config_revision AND s.revision=NEW.expected_access_revision);
  SELECT RAISE(ABORT,'module_access_changed') WHERE NEW.action='revoke' AND NOT EXISTS(SELECT 1 FROM module_access_roles WHERE instance_id=NEW.instance_id AND visitor_id=NEW.visitor_id AND role=NEW.role AND state='granted');
  -- Capacity bounds pending (unapplied) reviews only: applied role reviews are retained history and never block a later grant or revoke.
- SELECT RAISE(ABORT,'module_access_capacity') WHERE (SELECT count(*) FROM module_access_role_reviews r WHERE r.project_id=NEW.project_id AND NOT EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=r.id))>=500
-  OR (SELECT count(*) FROM module_access_role_reviews r WHERE NOT EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=r.id))>=50000;
+ SELECT RAISE(ABORT,'module_access_capacity') WHERE NOT (NEW.action='revoke') AND ((SELECT count(*) FROM module_access_role_reviews t WHERE t.project_id=NEW.project_id AND NOT EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=t.id) AND t.expires_at>unixepoch() AND NOT (t.action='revoke'))>=25
+  OR (SELECT count(*) FROM module_access_role_reviews t WHERE t.user_id=NEW.user_id AND NOT EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=t.id) AND t.expires_at>unixepoch() AND NOT (t.action='revoke'))>=100
+  OR (SELECT count(*) FROM module_access_role_reviews t WHERE NOT EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=t.id) AND t.expires_at>unixepoch() AND NOT (t.action='revoke'))>=5000
+  OR ((SELECT count(*) FROM module_access_role_reviews t WHERE NOT EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=t.id) AND t.expires_at>unixepoch() AND NOT (t.action='revoke'))>=2500 AND (SELECT count(*) FROM module_access_role_reviews t WHERE t.user_id=NEW.user_id AND NOT EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=t.id) AND t.expires_at>unixepoch() AND NOT (t.action='revoke'))>=25));
 END;
 CREATE TRIGGER module_access_role_review_immutable BEFORE UPDATE ON module_access_role_reviews BEGIN SELECT RAISE(ABORT,'module_access_immutable'); END;
 CREATE TRIGGER module_access_role_link_admit BEFORE INSERT ON module_access_role_links BEGIN
@@ -397,9 +407,15 @@ CREATE TRIGGER module_access_role_apply AFTER INSERT ON module_access_role_appli
 END;
 CREATE TRIGGER module_access_role_apply_immutable BEFORE UPDATE ON module_access_role_applies BEGIN SELECT RAISE(ABORT,'module_access_immutable'); END;
 CREATE TRIGGER module_access_role_review_retained BEFORE DELETE ON module_access_role_reviews
-WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) AND EXISTS(SELECT 1 FROM app_visitors WHERE id=OLD.visitor_id)
- AND EXISTS(SELECT 1 FROM module_instances WHERE id=OLD.instance_id) AND EXISTS(SELECT 1 FROM module_access_role_applies WHERE review_id=OLD.id)
-BEGIN SELECT RAISE(ABORT,'module_access_receipt_retained'); END;
+WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) AND EXISTS(SELECT 1 FROM app_visitors WHERE id=OLD.visitor_id) AND EXISTS(SELECT 1 FROM module_instances WHERE id=OLD.instance_id)
+BEGIN
+ -- Only a terminal, unreferenced, unheld row outside the history window may leave, and only with its sealed receipt.
+ SELECT RAISE(ABORT,'module_access_receipt_retained') WHERE NOT (EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=OLD.id) OR (NOT EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=OLD.id) AND OLD.expires_at<=unixepoch()-3600) OR (OLD.action='revoke' AND NOT (EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=OLD.id)) AND EXISTS(SELECT 1 FROM module_access_role_reviews x WHERE x.rowid>OLD.rowid AND x.action='revoke' AND x.instance_id||':'||x.visitor_id=OLD.instance_id||':'||OLD.visitor_id)))
+  OR (EXISTS(SELECT 1 FROM module_access_roles WHERE review_id=OLD.id))
+  OR EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
+  OR NOT (NOT (EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=OLD.id)) OR (OLD.action='revoke') OR OLD.id NOT IN (SELECT t.id FROM module_access_role_reviews t WHERE t.project_id=OLD.project_id AND EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=t.id) AND NOT (t.action='revoke') ORDER BY t.rowid DESC LIMIT 25))
+  OR NOT EXISTS(SELECT 1 FROM review_receipts WHERE family='module_access_role_reviews' AND id=OLD.id AND (EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=OLD.id))=(outcome IN ('applied','withdrawn')));
+END;
 
 -- Revoking or erasing a visitor suppresses their grants and advances their access instance's revision, so
 -- decisions and writes bound to the earlier principal fail at their next check or inside their commit.

@@ -326,11 +326,14 @@ try{
   // The owner can still disable and re-activate: applied history does not count.
   const off=await review(starter,'members','disable');assert.equal((await apply(starter,off)).status,200);
   assert.equal((await instance(starter,'members')).state,'inactive');
-  // 500 pending (unapplied, unexpired) reviews still refuse another until they expire or are removed.
-  const admit=lifted.find(t=>t.name==='module_activation_review_admit');
-  await run('DROP TRIGGER module_activation_review_admit');try{await copies('c',500,true);}finally{await run(admit.sql);}
+  // WH-181: 25 pending (unapplied, unexpired) reviews refuse another activation (disable is exempt).
+  const admit=lifted.find(t=>t.name==='module_activation_review_admit'),immutable=(await rows("SELECT sql FROM sqlite_master WHERE name='module_activation_review_immutable'"))[0].sql;
+  await run('DROP TRIGGER module_activation_review_admit');try{await copies('c',25,true);}finally{await run(admit.sql);}
   assert.notEqual((await control(starter,{type:'moduleActivationReview',projectId:starter.project,instanceId:'members',action:'activate'})).status,200);
-  await run("DELETE FROM module_activation_reviews WHERE id LIKE 'c%-0000-4000-8000-%'");
+  // Expired pending reviews stop counting and need no deletion (a retained row leaves only with its sealed receipt).
+  await assert.rejects(()=>run("DELETE FROM module_activation_reviews WHERE id LIKE 'c%-0000-4000-8000-%'"),/module_activation_receipt_retained/);
+  await run('DROP TRIGGER module_activation_review_immutable');
+  try{await run("UPDATE module_activation_reviews SET created_at=unixepoch()-7300,expires_at=unixepoch()-7000 WHERE id LIKE 'c%-0000-4000-8000-%'");}finally{await run(immutable);}
   await activate(starter,'members');assert.equal((await instance(starter,'members')).state,'active');
  });
 

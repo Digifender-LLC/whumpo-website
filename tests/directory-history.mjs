@@ -29,9 +29,15 @@ try{
  const ai=await prepareSiteAction(scope(a.user),a.user,crypto.randomUUID(),JSON.stringify({reply:'Restored',action:{kind:'directory',operation:'restore',projectId:a.project,snapshotId:first}}));assert.match(ai.reply,/Nothing changes/);assert.equal((await draft(a)).draft.length,0);
  const aiHistory=await prepareSiteAction(scope(a.user),a.user,crypto.randomUUID(),JSON.stringify({reply:'History',action:{kind:'directory',operation:'history',projectId:a.project}}));assert.match(aiHistory.reply,new RegExp(first));
  const extra=await prepareSiteAction(scope(a.user),a.user,crypto.randomUUID(),JSON.stringify({reply:'History',action:{kind:'directory',operation:'history',projectId:a.project,snapshotId:first}}));assert.match(extra.reply,/Unexpected/);
- // At capacity new mutations fail, but the public endpoint can still be taken offline.
- const currentCount=(await db.prepare("SELECT COUNT(*) AS n FROM directory_reviews WHERE project_id=? AND kind!='unpublish'").bind(a.project).first()).n;
- for(let i=currentCount;i<100;i++)await db.prepare("INSERT INTO directory_reviews(id,user_id,project_id,kind,snapshot_json,digest,expected_revision,publication_revision,expires_at) VALUES(?,?,?,'edit','[]','unused',0,0,'2000-01-01T00:00:00.000Z')").bind(crypto.randomUUID(),a.user,a.project).run();
+ // WH-181: only pending, unexpired, non-withdrawal reviews count. Applied and expired history never blocks, even past 100 rows.
+ const insertReview=(expires)=>db.prepare("INSERT INTO directory_reviews(id,user_id,project_id,kind,snapshot_json,digest,expected_revision,publication_revision,expires_at) VALUES(?,?,?,'edit','[]','unused',0,0,?)").bind(crypto.randomUUID(),a.user,a.project,expires).run();
+ const active=async()=>(await db.prepare("SELECT COUNT(*) AS n FROM directory_reviews WHERE project_id=? AND kind!='unpublish' AND status='pending' AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')").bind(a.project).first()).n;
+ for(let i=0;i<100;i++)await insertReview('2000-01-01T00:00:00.000Z');
+ assert.ok((await db.prepare('SELECT COUNT(*) AS n FROM directory_reviews WHERE project_id=?').bind(a.project).first()).n>100);
+ await chat(a.user,`/directory-restore ${a.project} ${first}`);
+ // At 25 active reviews new mutations fail, but the public endpoint can still be taken offline.
+ for(let n=await active();n<25;n++)await insertReview(new Date(Date.now()+600000).toISOString());
+ await assert.rejects(()=>insertReview(new Date(Date.now()+600000).toISOString()),/directory_capacity/);
  const capState=(await readChat(scope(a.user),a.user)).state.revision;assert.equal((await sendChat(scope(a.user),a.user,{id:crypto.randomUUID(),revision:capState,content:`/directory-restore ${a.project} ${first}`})).status,409);
  const off=await chat(a.user,'/directory-off '+a.project);await confirm(a.user,off);assert.equal((await pub(a)).status,404);assert.equal((await exportDirectory(scope(a.user),a.user,a.project,first)).listings[0].title,'Garden Club');
  await db.prepare('DELETE FROM users WHERE id=?').bind(a.user).run();assert.equal(await db.prepare('SELECT turn_id FROM directory_exports WHERE turn_id=?').bind(exportTurn).first(),null);

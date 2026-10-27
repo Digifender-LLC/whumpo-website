@@ -89,8 +89,7 @@ export async function prepareModuleActivationCommand(db:D1Database,user:string,t
  review.request_hash=await jsonDigest({kind:'moduleActivationReview',projectId:project,instanceId:localId,action});
  const saved:SavedReview={...review,review_digest:await reviewDigest(review)},keys=Object.keys(saved) as (keyof SavedReview)[],reply=describe(review,dependencies);
  return {reply,statements:[
-  // Expired unapplied reviews are disposable; applied receipts keep their review.
-  db.prepare('DELETE FROM module_activation_reviews WHERE id IN(SELECT r.id FROM module_activation_reviews r WHERE r.expires_at<=unixepoch() AND NOT EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=r.id) ORDER BY r.expires_at LIMIT 100)'),
+  // Expired unapplied reviews no longer count against capacity; WH-182 compacts them into sealed receipts.
   db.prepare(`INSERT INTO module_activation_reviews(${keys.join(',')}) VALUES(${keys.map(()=>'?').join(',')})`).bind(...keys.map(k=>saved[k])),
   link(db,user,turn,turn,await sha256(reply))
  ]};

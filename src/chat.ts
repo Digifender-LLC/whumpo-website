@@ -373,7 +373,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     if(String(cause).includes('photo_safety_required'))return {status:423,error:'A photo is held for safety checks. It cannot be attached or published until approved.'};
     if(String(cause).includes('usage_review_requests.user_id'))return {status:409,error:'Another usage review was opened. Ask “show my usage reviews” to read it.'};
     if(String(cause).includes('directory_changed'))return {status:409,error:'The directory review changed or expired. Read the current directory and prepare a new review.'};
-    if(String(cause).includes('directory_capacity'))return {status:409,error:'The test directory capacity or review-history limit has been reached.'};
+    if(String(cause).includes('directory_capacity'))return {status:409,error:'The test directory listing limit or the limit of unconfirmed directory reviews has been reached. Confirm, wait for or let pending reviews expire, or remove listings.'};
     if(String(cause).includes('comparison_changed'))return {status:409,error:'A compared version changed or was removed. Request the comparison again.'};
     if(String(cause).includes('contact_review_changed'))return {status:409,error:'The contact form review changed or expired. Request a fresh review.'};
     if(String(cause).includes('contact_destination_review_changed'))return {status:409,error:'The contact notification review changed or expired. Request a fresh review.'};
