@@ -13,7 +13,7 @@ A person runs this in a real browser against the deployed site. It covers what `
 ## 1. Signup with an invitation
 
 1. Open `/workspace/?signup=true`.
-2. Confirm the heading is visible and the Turnstile challenge loads.
+2. Confirm the heading is visible and the Turnstile challenge loads (the probe accepts its iframe, or the response input only when it also saw the `challenges.cloudflare.com/turnstile/v0/api.js` request, and reports which as `via`).
 3. Enter your email, then your own invitation code, and confirm US eligibility. Complete Turnstile yourself.
 4. Continue and note any error message verbatim.
 

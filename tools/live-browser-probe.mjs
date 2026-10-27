@@ -20,6 +20,11 @@ const isAllowedPost=(method,url,origin,postData)=>{
  if(method!=='POST'||url.origin!==origin||!allowedPosts.has(url.pathname))return false;
  try{const b=JSON.parse(postData??'');return Object.keys(b).length===1&&b.version===1;}catch{return false;}
 };
+const turnstileScript='https://challenges.cloudflare.com/turnstile/v0/api.js';
+export function turnstileProof({iframe,input,scriptLoaded}){
+ if(iframe)return {ok:true,via:'iframe'};
+ return input&&scriptLoaded?{ok:true,via:'response_input'}:{ok:false};
+}
 // The single routing decision: {allow:true}, or {allow:false,reason,known?}.
 export function decideRequest(method,url,origin,postData){
  if(isAllowedPost(method,url,origin,postData)||isChallengePost(method,url,origin)||isChallengeSubdomainGet(method,url,origin))return {allow:true};
@@ -44,6 +49,8 @@ export async function probeBrowser(target,{timeoutMs=15000}={}){
   await context.addInitScript(()=>{window.__csp=[];addEventListener('securitypolicyviolation',e=>window.__csp.push(e.violatedDirective+' '+e.blockedURI));});
   for(const spec of pages){
    const page=await context.newPage(),consoleErrors=[];
+   let scriptLoaded=false;
+   page.on('request',r=>{if(r.url().split(/[?#]/)[0]===turnstileScript)scriptLoaded=true;});
    page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text().slice(0,200));});
    page.on('pageerror',e=>consoleErrors.push(String(e.message).slice(0,200)));
    for(const width of viewports){
@@ -56,9 +63,12 @@ export async function probeBrowser(target,{timeoutMs=15000}={}){
      const overflow=await page.evaluate(()=>document.documentElement.scrollWidth-innerWidth);
      add('no_horizontal_scroll@'+width,spec.path,overflow<=0,'overflow_'+overflow+'px');
      if(spec.turnstile&&width===1280){
-      // Turnstile keeps its iframe in a closed shadow root, so its hidden response input is the visible proof that the widget mounted.
-      const frame=await page.locator('iframe[src^="'+allowedExternal+'/"],iframe[title*="Cloudflare security challenge"],input[name="cf-turnstile-response"]').first().waitFor({state:'attached',timeout:timeoutMs}).then(()=>true,()=>false);
-      add('turnstile_iframe',spec.path,frame,'iframe_missing');
+      // Turnstile keeps its iframe in a closed shadow root; the response input only counts with a real api.js request, since the app could render a decoy input.
+      const w=sel=>page.locator(sel).first().waitFor({state:'attached',timeout:timeoutMs}).then(()=>true,()=>false);
+      const iframe=await w('iframe[src^="'+allowedExternal+'/"],iframe[title*="Cloudflare security challenge"]');
+      const input=iframe||await w('input[name="cf-turnstile-response"]');
+      const proof=turnstileProof({iframe,input,scriptLoaded});
+      add('turnstile_iframe',spec.path,proof.ok,'iframe_missing',proof.ok?{via:proof.via}:{});
      }
     }catch(error){add('page_load@'+width,spec.path,false,error?.name==='TimeoutError'?'timeout':'unreachable',{status,latencyMs:Date.now()-started});}
    }
