@@ -2,6 +2,8 @@
 
 A person runs this in a real browser against the deployed site. It covers what `tools/live-browser-probe.mjs` cannot: passkeys, the recovery kit, a signed-in session and Stripe Checkout. Nothing here is automated, and no agent should perform these steps.
 
+Phones, screen readers, the installed PWA and the real soft keyboard: [wh-112-device-acceptance.md](wh-112-device-acceptance.md).
+
 ## Before you start
 
 - Run the read-only probe first: `pnpm exec node tools/live-browser-probe.mjs --live https://<origin>`. It must exit 0. It only loads pages with GET, plus two read-only POSTs of `{"version":1}` the signup page makes, to `/api/auth/identity/v1/config` (public Turnstile site key) and `/api/auth/identity/v1/state` (session read); plus Turnstile's own traffic under `/cdn-cgi/challenge-platform/` (POST on `challenges.cloudflare.com`, GET also on its subdomains; https targets only); every other write is aborted. The `js.stripe.com` pricing-table script is an expected block, listed under `knownBlocked`, not a failure; the matching console noise (its aborted-request `ERR_FAILED`, and Turnstile's exact `data:,` CSP refusal) is listed under `knownConsole` with a reason, and every other console error still fails.

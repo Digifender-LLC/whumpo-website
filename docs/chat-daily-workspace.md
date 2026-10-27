@@ -224,6 +224,8 @@ F-1 closed by #343 (`src/index.ts` now refuses `POST /api/projects` before welco
 
 ### Gaps carried to WH-112 or explicit
 
+The manual steps for these are in [wh-112-device-acceptance.md](wh-112-device-acceptance.md).
+
 1. Orca / any screen reader: not run (not installed, needs sudo). Open under D-8; owner WH-112.
 2. Physical devices, real mobile soft keyboard, installed PWA across OS suspension: WH-112.
 3. Human listening and customer acceptance (including navigation without coaching): WH-112.
