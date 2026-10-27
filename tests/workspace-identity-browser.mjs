@@ -198,7 +198,16 @@ try{
   await prepareAppPage(scope,user,project,appPage,{title:'Garden notebook',description:'Synthetic notes',buttonLabel:'Save',fields:[{key:'note',label:'Note',type:'text'}]});await confirmAppPage(scope,user,appPage);
   return {project,version};
  }});
- if(savedWork||recoveryAxe)await savedWorkJourney({page,db,origin,requests,state:audit,activate,enter,phase:value=>{phase=value;}});
+ // A saved site-publish review for Saved work, written the way Chat does (turn, statements, revision) without a model.
+ const seedPublishReview=async()=>{
+  const token=(await context.cookies()).find(c=>c.name==='__Host-whumpo_session').value,principal=await resolveIdentity(db,{version:1,client:'web',kind:'session',token}),scope=admitWorkspace(db,principal),user=principal.accountId;
+  // Each review gets its own project: a project holds one website.
+  const project=crypto.randomUUID(),now=new Date().toISOString();await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Review site','','draft',?,?)").bind(project,user,now,now).run();
+  async function command(prepare){const id=crypto.randomUUID(),revision=(await db.prepare('SELECT revision FROM workspace_state WHERE user_id=?').bind(user).first()).revision+1,r=await prepare(id);await scope.batch([scope.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,?,'Synthetic website setup',?,datetime('now'),'ai','pending')").bind(id,user,revision,r.reply),...r.statements,scope.prepare("UPDATE chat_turns SET status='completed' WHERE id=?").bind(id),scope.prepare('UPDATE workspace_state SET revision=? WHERE user_id=?').bind(revision,user)]);return id;}
+  const version=await command(id=>createWebsite(scope,user,id,project,{name:'Garden care',headline:'Gardens',description:'Garden care',theme:'ocean',aboutTitle:'About',aboutText:'Synthetic garden',sections:[],photos:[]}));
+  return {project,version,user,review:await command(id=>publicationCommand(scope,user,id,'/publish '+version))};
+ };
+ if(savedWork||recoveryAxe)await savedWorkJourney({page,db,origin,requests,state:audit,activate,enter,reach,seedPublishReview,phase:value=>{phase=value;}});
  if(navigation)await navigationJourney({page,db,origin,requests,state:audit,activate,enter,phase:value=>{phase=value;}});
  if(support||recoveryAxe)await supportJourney({page,db,origin,requests,state:audit,activate,enter,phase:value=>{phase=value;}});
  if(recoveryAxe)await recoveryPagesAxe({page,origin,phase:value=>{phase=value;}});
