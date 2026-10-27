@@ -1,3 +1,4 @@
+import {reviewedReplyGuard,type ReviewedReply} from './chat-review-receipts';
 import {requireServiceClientActivation} from './project-specification/service-clients/activation';
 import {BackendError,listBackends} from './backend-versions';
 import {backendFormConfig} from './backend-form-render';
@@ -24,10 +25,10 @@ export async function prepareBackendForm(db:D1Database,user:string,project:strin
  let row:FormReview;try{row=await readBackendFormReview(db,user,id);}catch{throw new BackendError(409,'Form review unavailable: the website/backend changed or review storage is full');}
  if(row.project_id!==project||row.config_json!==config)throw new BackendError(409,'Review ID already used');return row;
 }
-export async function confirmBackendForm(db:D1Database,user:string,id:string){
+export async function confirmBackendForm(db:D1Database,user:string,id:string,reviewed?:ReviewedReply){
  const row=await readBackendFormReview(db,user,id);if(row.status==='applied')return row;
  await requireServiceClientActivation(db,user,'statelessForm',id);
- try{await db.prepare("UPDATE backend_form_reviews SET status='applied' WHERE id=? AND user_id=? AND status='pending'").bind(id,user).run();}catch{const saved=await readBackendFormReview(db,user,id);if(saved.status==='applied')return saved;throw new BackendError(409,'Form review expired or the website, backend or settings changed; prepare a new review');}
+ try{const g=reviewedReplyGuard(user,reviewed);if(!(await db.prepare("UPDATE backend_form_reviews SET status='applied' WHERE id=? AND user_id=? AND status='pending'"+g.sql).bind(id,user,...g.params).run()).meta.changes)throw 0;}catch{const saved=await readBackendFormReview(db,user,id);if(saved.status==='applied')return saved;throw new BackendError(409,'Form review expired or the website, backend or settings changed; prepare a new review');}
  return readBackendFormReview(db,user,id);
 }
 export function describeBackendForm(row:FormReview){return `Website tool review ${row.id}\nStatus: ${row.status}\nProject: ${row.project_id}\n${row.enabled?'Enable this form on website revision '+row.site_revision+' using backend publication '+row.backend_publication_id+'?\nFields and labels: '+row.config_json+'\nVisitor inputs go to this public stateless function; results are shown as text. The gateway does not save inputs or results. Existing backend daily limits apply. Changing the website or backend hides this form until reviewed again. Static source exports do not include this hosted tool.':"Hide the form from the website. The public backend endpoint remains available; ask for a separate review to take it offline."}\nExpires: ${row.expires_at}\n${row.status==='pending'?"Only you can apply this exact review using its confirmation button. Review: "+row.id:"This review was applied. Ask for the current status of project "+row.project_id+'.'}`;}

@@ -1,3 +1,4 @@
+import {requireReviewedReply} from './chat-review-receipts';
 import {BackendError} from './backend-versions';
 import {createRecoveryPoint,listRecoveryPoints,prepareAppRestore,readAppRestore,confirmAppRestore,removeRecoveryPoint} from './app-document-recovery';
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
@@ -17,7 +18,7 @@ export function appRecoveryCommand(db:D1Database,user:string,turn:string,content
   if(verb==='/save-app-recovery'){const p=await createRecoveryPoint(db,user,project,turn);return p.removed?'This recovery request was already removed. It will not create another copy.':`Saved private application recovery point ${p.id}\nCreated: ${p.created_at}\nProgram: ${p.version_id}\nOnly currently active visitors’ committed documents were captured. Credentials, usage and operation history were not copied. No app state or publication changed.\nAsk to see this application’s saved recovery points.`;}
   if(verb==='/review-app-restore')return describeAppRestore(await prepareAppRestore(db,user,project,target,turn));
   if(verb==='/app-restore-review')return describeAppRestore(await readAppRestore(db,user,project,target));
-  if(verb==='/confirm-app-restore')return describeAppRestore(await confirmAppRestore(db,user,project,target,confirmation));
+  if(verb==='/confirm-app-restore')return describeAppRestore(await confirmAppRestore(db,user,project,target,confirmation,await requireReviewedReply(db,user,'appRestore',target)));
   await removeRecoveryPoint(db,user,project,target,confirmation);return `Recovery point ${target} removed. Its saved documents are gone; current visitor documents and usage are unchanged. Provider backups are outside this operation.`;
  }catch(e){return e instanceof BackendError?e.message:'Recovery result unavailable. Retry the same request; do not assume a new copy or restore succeeded.';}};
 }

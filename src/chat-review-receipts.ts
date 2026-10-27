@@ -1,4 +1,5 @@
 import {hashToken} from './security';
+import {BackendError} from './backend-error';
 import {describeBackendPublication,readBackendPublicationReview,readBackendPublication} from './backend-publication';
 import {describeBackendForm,readBackendFormReview} from './backend-forms';
 type Turn=Record<string,unknown>;
@@ -20,6 +21,27 @@ export async function readChatReviewReceipts(db:D1Database,user:string,turns:Tur
   for(const r of results){const t=group.find(t=>t.id===r.turn_id);if(t&&typeof t.assistant_text==='string'&&await hashToken(t.assistant_text)===r.reply_digest)valid.set(r.turn_id,r);}
  }
  return valid;
+}
+/** The exact reply a customer reviewed, as stored (turn id and text). */
+export type ReviewedReply={turn:string;text:string};
+/** The receipt kind and review a UI confirm control targets, or undefined for kinds with no receipt row. */
+export function controlReceipt(a:{type:string;kind?:string;operation?:string;reviewId?:string}):{kind:Kind;reviewId:string}|undefined{
+ const kind=a.type==='confirm'&&['application','appPage','backendPublication','backendForm'].includes(String(a.kind))?a.kind as Kind:a.type==='githubGrant'&&a.operation==='confirm'?'githubGrant':a.type==='appRestore'?'appRestore':undefined;
+ return kind&&a.reviewId?{kind,reviewId:a.reviewId}:undefined;
+}
+/** Same rule as readChatReviewReceipts: a non-confirm turn whose stored text still hashes to its receipt digest. */
+export async function reviewedReply(db:D1Database,user:string,kind:Kind,review:string):Promise<ReviewedReply|undefined>{
+ const {results}=await db.prepare("SELECT r.turn_id,r.reply_digest,t.assistant_text FROM chat_review_receipts r JOIN chat_turns t ON t.id=r.turn_id AND t.user_id=r.user_id WHERE r.user_id=? AND r.kind=? AND r.review_id=? AND t.status='completed' AND COALESCE(json_extract(t.action_json,'$.type'),'')!='confirm' ORDER BY t.revision DESC LIMIT 20").bind(user,kind,review).all<{turn_id:string;reply_digest:string;assistant_text:string}>();
+ for(const r of results)if(typeof r.assistant_text==='string'&&await hashToken(r.assistant_text)===r.reply_digest)return {turn:r.turn_id,text:r.assistant_text};
+}
+export const reviewChangedMessage='The reply you reviewed no longer matches this review. Request a fresh review before confirming.';
+/** Fail closed: a confirm needs the reviewed reply, which its effect statement then re-checks atomically. */
+export async function requireReviewedReply(db:D1Database,user:string,kind:Kind,review:string){
+ const reviewed=await reviewedReply(db,user,kind,review);if(!reviewed)throw new BackendError(409,reviewChangedMessage);return reviewed;
+}
+/** Appended to a confirm's guarded UPDATE so the reviewed text cannot change between check and effect. */
+export function reviewedReplyGuard(user:string,reviewed?:ReviewedReply){
+ return reviewed?{sql:' AND EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=? AND assistant_text=?)',params:[reviewed.turn,user,reviewed.text]}:{sql:'',params:[] as string[]};
 }
 /** Backend publication/form approvals previously had only a command interface. */
 export async function backendReviewChatActions(db:D1Database,user:string,turns:Turn[],receipts:Map<string,Receipt>){

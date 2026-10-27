@@ -91,14 +91,10 @@ try{
  await db.prepare('UPDATE chat_turns SET assistant_text=? WHERE id=?').bind(original+' (altered)',appId).run();
  const altered=await read(owner,appId);equal(altered.status,200,'Altered turn still reads');
  equal(altered.turn.application_confirmation_id??null,null,'Digest mismatch offers no confirm control');
- // KNOWN DEFECT: POST /api/chat/actions does not re-check chat_review_receipts.reply_digest, so it confirms (and enables
- // the application) although GET offers no control. The fix is in src/chat*.ts (WH-181 files). Skipped until fixed:
- // WH_DIGEST_POST_GATE=1 shows the failure; drop the guard once the server refuses.
- if(process.env.WH_DIGEST_POST_GATE){
-  const refused=await http(owner,'/api/chat/actions','POST',{id:crypto.randomUUID(),revision:altered.turn.revision,action:appControl(appId)});
-  assert.notEqual(refused.status,200,'Digest mismatch must not confirm');checks++;
-  equal(await enabled(),0,'Digest mismatch enabled nothing');
- }
+ // POST /api/chat/actions re-checks chat_review_receipts.reply_digest, so an altered reply confirms nothing.
+ const refused=await http(owner,'/api/chat/actions','POST',{id:crypto.randomUUID(),revision:altered.turn.revision,action:appControl(appId)});
+ equal(refused.status,409,'Digest mismatch must not confirm');
+ equal(await enabled(),0,'Digest mismatch enabled nothing');
  await db.prepare('UPDATE chat_turns SET assistant_text=? WHERE id=?').bind(original,appId).run();
  equal((await read(owner,appId)).turn.application_confirmation_id,appId,'Restored reply offers the control again');
  equal((await http(owner,'/api/chat/actions','POST',appBody)).status,200,'Application confirm succeeds without the model');equal(await enabled(),1,'Application is enabled');

@@ -1,6 +1,6 @@
 import {ConnectionError} from './github-connection';
 import {githubGrantReviews,readGitHubGrant,reviewGitHubGrant,confirmGitHubGrant,cancelGitHubGrant,type GitHubGrantReview} from './github-grant-revocation';
-import {linkChatReviewReply} from './chat-review-receipts';
+import {linkChatReviewReply,requireReviewedReply} from './chat-review-receipts';
 import type {BackupChatOptions} from './backup-chat';
 
 const id=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(v);
@@ -25,7 +25,7 @@ export function githubGrantChatControl(db:D1Database,user:string,command:string,
  const match=/^\/github-grant-(confirm|cancel) ([0-9a-f-]{36})$/.exec(command);
  if(!match||!id(match[2]))return;
  return async()=>{
-  try{return describeGitHubGrant(match[1]==='confirm'?await confirmGitHubGrant(db,user,match[2],'REVOKE_APP_ACCESS',options.github,options.githubTransport):await cancelGitHubGrant(db,user,match[2]));}
+  try{return describeGitHubGrant(match[1]==='confirm'?await confirmGitHubGrant(db,user,match[2],'REVOKE_APP_ACCESS',options.github,options.githubTransport,await requireReviewedReply(db,user,'githubGrant',match[2])):await cancelGitHubGrant(db,user,match[2]));}
   catch(error){return (error instanceof ConnectionError?error.message:'The access removal result could not be confirmed.')+' Open the saved review in Settings → External connections to check its current state. This Chat request will not be sent again.';}
  };
 }

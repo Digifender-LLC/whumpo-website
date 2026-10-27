@@ -1,3 +1,4 @@
+import {reviewedReplyGuard,type ReviewedReply} from './chat-review-receipts';
 import {ConnectionError,type GitHubConfig} from './github-connection';
 import type {GitHubGrantReview} from './github-grant-shape';
 export type {GitHubGrantReview} from './github-grant-shape';
@@ -33,16 +34,16 @@ export async function cancelGitHubGrant(db:D1Database,user:string,id:string){
  const review=await owned(db,user,id);if(review.state!=='review')return view(review);
  await db.prepare("UPDATE github_grant_revocations SET state='cancelled' WHERE id=? AND user_id=? AND state='review'").bind(id,user).run();return view(await owned(db,user,id));
 }
-export async function confirmGitHubGrant(db:D1Database,user:string,id:string,confirmation:string,config:GitHubConfig|undefined,transport:typeof fetch=fetch){
+export async function confirmGitHubGrant(db:D1Database,user:string,id:string,confirmation:string,config:GitHubConfig|undefined,transport:typeof fetch=fetch,reviewed?:ReviewedReply){
  const review=await owned(db,user,id);if(review.state!=='review')return view(review);
  if(confirmation!=='REVOKE_APP_ACCESS')throw new ConnectionError(400,'Explicitly confirm the reviewed app-wide GitHub access removal.');
  if(!config||config.clientId!==review.client_id)throw changed();
  await requireFreshWorkspace(db,user);
  const token=await db.prepare("SELECT ciphertext FROM github_token_vault WHERE id=? AND user_id=? AND state='active' AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')").bind(review.token_id,user).first<{ciphertext:string}>();if(!token)throw changed();
  const access=await unseal(config.key,`whumpo:github:token:${user}:${review.token_id}`,token.ciphertext),custody=await githubGrantCustody(db,user,id);
- let claimed;
+ let claimed;const guard=reviewedReplyGuard(user,reviewed);
  try{const results=await db.batch([
-  db.prepare("UPDATE github_grant_revocations SET state='dispatching',dispatched_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND user_id=? AND state='review'").bind(id,user),
+  db.prepare("UPDATE github_grant_revocations SET state='dispatching',dispatched_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND user_id=? AND state='review'"+guard.sql).bind(id,user,...guard.params),
   db.prepare("UPDATE github_connections SET active_token_id=NULL WHERE user_id=? AND active_token_id IN (SELECT value FROM github_grant_revocations a,json_each(a.token_ids) WHERE a.id=? AND a.state='dispatching')").bind(user,id),
   db.prepare("UPDATE github_token_vault SET state='revoking' WHERE user_id=? AND id IN (SELECT value FROM github_grant_revocations a,json_each(a.token_ids) WHERE a.id=? AND a.state='dispatching')").bind(user,id),
  ]);claimed=results[0].meta.changes===1;}

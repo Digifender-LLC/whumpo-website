@@ -13,6 +13,7 @@ import {buildApplication,readApplicationBuild} from './application-build';
 import {cancelBuildJob} from './build-jobs';
 import {backendLibraryCommand,describeBackendLibrary,describeBackendComponent,installBackendComponent} from './backend-library';
 import {compareBackends,describeBackendComparison} from './backend-diff';
+import {requireReviewedReply} from './chat-review-receipts';
 import {readAppPage,readAppPageReview,prepareAppPage,confirmAppPage,describeAppPage} from './app-pages';
 import {readApplication,readApplicationReview,prepareApplication,confirmApplication,describeApplicationReview} from './app-activation';
 import {readBackendForm,readBackendFormReview,prepareBackendForm,confirmBackendForm,describeBackendForm} from './backend-forms';
@@ -67,11 +68,11 @@ export function backendChatCommand(db:D1Database,user:string,turnId:string,conte
    if(verb==='app-status')return describeAppStatus(await readAppStatus(db,user,id));
    if(verb==='app-page')return JSON.stringify(await readAppPage(db,user,id));
    if(verb==='app-page-review')return describeAppPage(await readAppPageReview(db,user,id));
-   if(verb==='confirm-app-page')return describeAppPage(await confirmAppPage(db,user,id));
+   if(verb==='confirm-app-page')return describeAppPage(await confirmAppPage(db,user,id,await requireReviewedReply(db,user,'appPage',id)));
    if(verb==='configure-app-page'||verb==='disable-app-page'){if(verb==='configure-app-page'&&input===null)throw new BackendError(400,'Provide form JSON');return describeAppPage(await prepareAppPage(db,user,id,turnId,verb==='disable-app-page'?null:input));}
    if(verb==='application')return JSON.stringify(await readApplication(db,user,id));
    if(verb==='application-review')return describeApplicationReview(await readApplicationReview(db,user,id));
-   if(verb==='confirm-application')return describeApplicationReview(await confirmApplication(db,user,id));
+   if(verb==='confirm-application')return describeApplicationReview(await confirmApplication(db,user,id,await requireReviewedReply(db,user,'application',id)));
    if(verb==='disable-application')return describeApplicationReview(await prepareApplication(db,user,id,turnId,'disable',null,null));
    if(verb==='enable-application'){
     if(!rest||!uuid.test(rest))throw new BackendError(400,"Choose a saved version and its successful transition test for the activation review.");
@@ -79,11 +80,11 @@ export function backendChatCommand(db:D1Database,user:string,turnId:string,conte
    }
    if(verb==='backend-form')return 'Website tool: '+JSON.stringify(await readBackendForm(db,user,id));
    if(verb==='backend-form-review')return describeBackendForm(await readBackendFormReview(db,user,id));
-   if(verb==='confirm-backend-form'){const row=await confirmBackendForm(db,user,id);return await serviceClientActivationReceipt(db,user,id)??describeBackendForm(row);}
+   if(verb==='confirm-backend-form'){const row=await confirmBackendForm(db,user,id,await requireReviewedReply(db,user,'backendForm',id));return await serviceClientActivationReceipt(db,user,id)??describeBackendForm(row);}
    if(verb==='configure-backend-form'||verb==='disable-backend-form'){if(verb==='configure-backend-form'&&input===null)throw new BackendError(400,"Provide the form settings, or ask to review taking the form offline.");return describeBackendForm(await prepareBackendForm(db,user,id,turnId,verb==='disable-backend-form'?null:input));}
    if(verb==='backend-publication')return 'Current public endpoint: '+JSON.stringify(await readBackendPublication(db,user,id));
    if(verb==='backend-publication-review')return describeBackendPublication(await readBackendPublicationReview(db,user,id));
-   if(verb==='confirm-backend-publication')return describeBackendPublication(await confirmBackendPublication(db,user,id));
+   if(verb==='confirm-backend-publication')return describeBackendPublication(await confirmBackendPublication(db,user,id,await requireReviewedReply(db,user,'backendPublication',id)));
    if(verb==='publish-backend'){
     if(!rest||!uuid.test(rest))throw new BackendError(400,"Choose the saved version and its successful test receipt for the publication review.");
     const version=await ownedBackend(db,user,id);
