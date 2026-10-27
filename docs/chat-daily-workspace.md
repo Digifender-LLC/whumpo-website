@@ -161,3 +161,74 @@ Commands and results are recorded in the WH-111 and WH-206 evidence entries in `
 | `node tools/verify.mjs fast` | pass (3 s, nine scripts) |
 | `node tools/roadmap.mjs validate`, `alignment`, `render --check`; `node tests/roadmap-alignment.mjs` | pass (184 tasks; 59 handoff regressions refused) |
 | `git diff --check` | clean |
+
+## WH-213 acceptance audit — 2026-10-27 UTC
+
+**Status: audit only. Dated 2026-10-27 UTC.** Baseline `054da5c` (origin/main after #391; the suites ran on `78055ea` and `pnpm test:saved-work-browser` was rerun on `054da5c` after #391 landed, pass). This section changes no runtime source, test, schema or deployment, makes no remote call and does not complete WH-111 by itself; completion is recorded in backlog evidence because the roadmap schema has no completion field ([readiness-reconciliation-2026-10-20.md](roadmap/readiness-reconciliation-2026-10-20.md)). Bar: D-8 (agent-run Orca and axe plus simulated viewports close WH-111; physical devices, the installed PWA and human listening go to WH-112). Everything ran headless Chromium against a built client, the real Worker and disposable current-schema fixtures on Node 24.21.0, pnpm 11.19.0. None of it is physical-device, installed-PWA, human-listening or customer evidence.
+
+**Orca was not run.** It is not installed on this host (it needs sudo), so there is no screen-reader evidence of any kind in this audit. That is an explicit gap against the D-8 bar, not a pass. Accessible names were checked through Playwright's accessibility tree (PR #382) and axe only.
+
+Children delivered: WH-207 (#343), WH-208 (#374 touch-target rule, #386 axe, #387 touch targets), WH-209 (#382, #384), WH-210 (#342), WH-211 (#373), WH-212 (#389). Related: #385 (main browser suites), #390 (identity lost-reply alert).
+
+### Suite results (this audit)
+
+| Command | Result |
+| --- | --- |
+| `node tests/workspace-identity-browser.mjs --support` | pass (one EADDRINUSE on 8787 first; waited 30 s and reran) |
+| `... --saved-work` | pass |
+| `... --site-safety` | pass |
+| `... --account-help` | pass |
+| `... --navigation` | pass |
+| `... --cross-tab` | pass |
+| `... --accessibility` (as asked, no `WHUMPO_AXE`, fresh worktree) | **FAIL, exit 1**: `Current workspace browser failed during landing keyboard entry: ENOENT: no such file or directory, open '.secrets/usability-landing-observations.json'`. The journey writes private reports to `.secrets/`, which does not exist in a fresh worktree. Not fixed; no source or test changed. |
+| `... --accessibility` supplemental: `mkdir .secrets` (gitignored) and `WHUMPO_AXE=<this repo>/node_modules/@axe-core/playwright` | pass: "Optional axe audit passed 9 synthetic page states; incomplete/manual checks remain in the private report", "Owner usability journey passed: keyboard draft/retry, private comparison/preview/save, Dashboard outage and newer focus, unavailable billing/connections, 360/390/1280px and night mode" (five EADDRINUSE waits first). |
+| `pnpm test:recovery-axe` | pass: 16 page states (Support, Saved work, Site safety, Account security at 390 and 1280 px, light and dark), 0 finding groups, 388 passing rule checks, 0 incomplete |
+| `node tests/identity-browser.mjs` | pass (SQLite) |
+| `node tests/chat-inference-outage.mjs` | pass, 24 checks, SQLite |
+| `node tests/chat-recovery.mjs` | pass |
+| `node tests/saved-review-confirm-outage.mjs` | pass, 23 checks, SQLite |
+| `pnpm test:saved-work-browser` | pass (two EADDRINUSE waits first); rerun on `054da5c` after #391 (new saved-review confirm steps): pass |
+| `node tools/roadmap.mjs validate` | pass, 190 tasks, 7 phases |
+| `node tools/roadmap.mjs alignment` | pass |
+| `node tools/roadmap.mjs render --check` | pass, before and after the evidence edits and `render` |
+| `git diff --check` | clean |
+
+Premise corrected: `--accessibility` is the owner usability journey and uses the optional `WHUMPO_AXE` helper (`tests/helpers/accessibility-audit.mjs`); it is a no-op for axe without it. The axe pinned in this repo by #386 (`@axe-core/playwright` 4.13.0) is what `--recovery-axe` / `pnpm test:recovery-axe` uses with no external path. Not rerun: `--d1` variants, `tests/chat-screen-reader.mjs`, `tests/chat-interaction-browser.mjs`, `pnpm check`, any live or model suite.
+
+### WH-111 acceptance criteria against current source
+
+Criteria are WH-111's six `acceptance` lines, labelled A1 to A6 as in the 2026-10-11 audit above.
+
+| # | Criterion | Current source | Evidence (test, result) | Status | Gap and owner |
+| --- | --- | --- | --- | --- | --- |
+| A1 | Routine journeys stay in Chat and agent panels; optional saved views are not a mandatory directory | `workspaceView`, `essentialDestinations`, `pageNavigationLabel` in `frontend/src/lib/workspace-navigation.ts`; Help sheet and sidebar in `frontend/src/mobile-workspace.tsx`; control pages kept as optional pages under Dashboard per D-1 (`frontend/src/workspace-pages.tsx`) | `--navigation` pass (eight generated pages, five named like controls, one Chat route, `/workspace/chat` not found) | **Met with a gap** | WH-110 routine-journey suites were not rerun here. Whether customers finish routine work without navigation coaching is WH-112 (customer acceptance). |
+| A2 | Navigation, reload, multi-tab and lost responses keep the right account/project task with no duplicate effect | `readRecovery`/`writeRecovery`/`draftLifetime` in `frontend/src/lib/chat-recovery.ts`; `selectedProject` in `workspace-navigation.ts` (now also used by `project-details.tsx`); `ReturnLink` in `frontend/src/navigation-links.tsx` and `returnTarget`; same-ID retry in `SavedReviewConfirm` (`frontend/src/saved-review-confirm.tsx`) | `chat-recovery` pass (draft survives to 24 h minus 1 ms, gone at 24 h, fresh tab reads null); `--cross-tab` pass (isolated drafts, lost logout reply, late refresh, account switch); `--saved-work` pass (lost reply, interrupted request, no automatic POST); `saved-review-confirm-outage` pass (same-ID retry creates no duplicate turn or effect, new ID after commit 409) | **Met with a gap** | Installed-PWA `sessionStorage` across OS suspension and physical multi-tab behaviour: WH-112. Draft is per tab by decision D-4 (no cross-tab or cross-device draft). Expiry is unit-level only, no browser clock test. |
+| A3 | Logout and account change clear private device state; stale or revoked actions cannot regain authority from a cached view | `useIdentity` in `frontend/src/identity/flow.tsx` (`clearChatRecovery`); `frontend/src/lib/identity-invalidation.ts`; `clearChatRecovery` in `chat-recovery.ts`; `SavedChatTurn` (`frontend/src/saved-chat-turn.tsx`) hides controls while reading or on error; server re-verifies identity in `src/index.ts` and `src/chat.ts` | `--navigation` pass (sign-out clears `whumpo.*` keys, Back/`pageshow` cannot show the private view); `--cross-tab` pass; `--account-help` pass (sign-out during held save, late-response fencing); `identity-browser` pass (private cookies, no persistent browser data); `saved-review-confirm-outage` pass (stale revision 409, cross-owner 404 with no effect) | **Met with a gap** | bfcache restore is exercised by a synthetic `pageshow` event, not a real restore; real devices: WH-112. |
+| A4 | With inference unavailable, inspect saved state and use eligible direct recovery/review controls with no model round trip | `SavedReviewConfirm` in `saved-review-confirm.tsx` over `TurnActions` (`frontend/src/chat-turn-actions.tsx`) and `sendChatControl` via `POST /api/chat/actions` (`src/chat.ts`, `src/index.ts`); takedown in `site-safety.tsx`/`service-safety.tsx`; saved-work index `frontend/src/saved-work.tsx` / `src/saved-work.ts` | `chat-inference-outage` pass (24 checks: shortcut and exact confirm work, typed text and typed `/confirm` refused, replay idempotent, zero inference calls); `saved-review-confirm-outage` pass (23 checks: exactly-once confirm, stale 409, foreign 404, no prepare control, typed prepare 503, zero inference calls); `--saved-work` and `--site-safety` pass | **Met with a gap** | D-5 deliberately offers no model-free prepare control, so typed preparation of a new review still needs the model. #391 added the browser click-through (`--saved-work`, rerun on `054da5c`: pass): during a Chat and model outage a seeded site-publish review is read fresh in its panel, confirmed once by keyboard at 390 px with exactly one effect, offers nothing after reload, and a stale review is refused with its message. Only the site-publish kind is clicked through in a browser, and digest-mismatch at HTTP level is not tested; other review kinds rest on the shared `TurnActions` handler and the HTTP suite. Remaining cross-kind and device coverage: WH-112. |
+| A5 | Onboarding failure does not strand support/recovery; a generated layout cannot hide essential controls | `src/index.ts` (support routed before the onboarding gate; gate on Chat and `/api/workspace/*`; `POST /api/projects` now refused until welcome, #343); `onboardingComplete` in `src/onboarding.ts`; `AccountHelp` in `frontend/src/account-help.tsx` mounted on onboarding states (`frontend/src/onboarding.tsx`); `essentialDestinations` outside any layout | `--account-help` pass (profile and welcome outages, independent security route and reload, sign-out during held save, first-project admission); `--support` pass (identity-before-profile gate, Support reachable, 44 px rule for controls per D-9); `--navigation` pass (generated layout cannot hide or impersonate essentials). #343 test results (`workspace-admission`, `smoke`, `cms-projects-http`, `backend-http`, `chat-interaction-storage`) are from the PR, not rerun here | **Met** | None for this criterion. `onboardingComplete` still treats any existing project row as complete; kept by D-6. |
+| A6 | Keyboard, screen reader, zoom, reduced motion and mobile soft-keyboard continuity have evidence beyond screenshots | Keyboard/zoom/reduced-motion/soft-keyboard in `tests/helpers/navigation-journey.mjs`; axe in `tests/recovery-pages-axe.mjs` and `tests/helpers/accessibility-audit.mjs`; 44 px rule in `smallTargets()` in `tests/helpers/support-journey.mjs`; accessible name `pageAccessibleName` in `workspace-navigation.ts`; touch targets (#387) | `--navigation` pass (keyboard-only opening of each essential, focus return, 640 px (200%) and large-text fit, reduced-motion Help sheet, simulated 430 px visual viewport); `pnpm test:recovery-axe` pass (16 states, 0 findings, 0 incomplete); `--accessibility` fail as asked (ENOENT `.secrets`), pass with `.secrets` and repo axe (9 states); `--support`, `--site-safety`, `--account-help` pass | **Met with a gap** | **Orca / screen reader: not run, not installed (needs sudo); no screen-reader evidence in this audit.** Under D-8 the Orca checkpoints (`tests/chat-screen-reader.mjs`) are part of the agent-run closure bar and still need a host with Orca; owner WH-112. Physical phones, real soft keyboard, human listening and the installed PWA: WH-112. axe covers a fraction of WCAG: 0 violations is not conformance. |
+
+### WH-111 scope items against current source
+
+| # | Scope item | Current source | Evidence | Status |
+| --- | --- | --- | --- | --- |
+| S1 | Simplify navigation around Chat and optional views | `workspace-navigation.ts`, `mobile-workspace.tsx`, `workspace-pages.tsx`, `ReturnLink` (#382, Support included by #384) | `--navigation`, `--saved-work`, `--site-safety` pass | Met by D-1 to D-3 (no route removed this round) |
+| S2 | Preserve drafts, selected project, open interactions, review/result links | `chat-recovery.ts`, `chat-location.ts`, `selectedProject`, `providerReturn` | `chat-recovery`, `--cross-tab`, `--navigation` pass | Met with a gap (per-tab draft by D-4; PWA suspension to WH-112) |
+| S3 | Bounded account-scoped recovery of saved work without auto inference/submit/approval | `saved-work.tsx`, `src/saved-work.ts`, `SavedReviewConfirm` (explicit click, fresh read) | `--saved-work`, `saved-review-confirm-outage` pass | Met |
+| S4 | Deterministic paths for account/security/sign-out/support, takedown, pending state | `account-help.tsx`, `support.tsx`, `site-safety.tsx`, `service-safety.tsx`, `essentialDestinations` | `--account-help`, `--support`, `--site-safety` pass | Met |
+| S5 | Remove superseded routes/adapters; current return points | `/workspace/chat` alias gone (`workspaceView`); `POST /api/projects` gated (#343); `ReturnLink` | `--navigation` pass | Met (D-1 keeps control pages; D-6 keeps the route behind welcome) |
+
+### Earlier findings F-1 to F-9, current state
+
+F-1 closed by #343 (`src/index.ts` now refuses `POST /api/projects` before welcome). F-2 closed: `--support` passes after #374 and #387. F-3 axe half closed by #386 (16 states, 0 findings); Orca half open (WH-112). F-4 kept by D-4. F-5 closed by D-5 and #389 (no prepare control by decision). F-6 closed by #382/#384 (one shared `ReturnLink`). F-7 and F-8 closed by #342. F-9: stale navigation statements corrected by #382 per its description; not re-read here.
+
+### Gaps carried to WH-112 or explicit
+
+1. Orca / any screen reader: not run (not installed, needs sudo). Open under D-8; owner WH-112.
+2. Physical devices, real mobile soft keyboard, installed PWA across OS suspension: WH-112.
+3. Human listening and customer acceptance (including navigation without coaching): WH-112.
+4. Saved-work "Read this review here" panel: browser-tested for the site-publish kind only (#391); other kinds and HTTP digest-mismatch are untested. Owner WH-112.
+5. `--accessibility` as invoked needs a `.secrets/` directory and `WHUMPO_AXE`; the first fails on a fresh checkout. Unfixed here by rule.
+6. Port 8787 contention with other agents' browser tests (EADDRINUSE) forced waits and reruns; no result was taken from a failed start.
+
+Conclusion: A5 is met and A1 to A4 and A6 are met with a gap that D-8 assigns to WH-112 (for A4, the untested review kinds and digest-mismatch); none is not met. Because Orca could not run, the D-8 agent-run bar is not fully satisfied by this audit; that one item must be run on an Orca host before WH-111 can be called closed under D-8.
