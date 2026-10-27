@@ -37,6 +37,8 @@ A person runs this in a real browser against the deployed site. It covers what `
 3. On the Stripe page, confirm the email field is prefilled with your account email.
 4. Do not pay. Use the back or cancel link and confirm you return to Whumpo with no charge and no plan change.
 
+Automated: `RUN_LIVE_CHECKOUT=1 node tests/checkout-prefill-live.mjs` (opt-in) seeds a synthetic `example.test` account, starts a sandbox checkout through the app API, opens the Checkout page headless and confirms the email is prefilled and the session is `cs_test_`. It never enters card details or pays, and deletes the synthetic account, customer link and order rows afterwards. It covers step 3 above; the Stripe sandbox customer it creates is not deleted.
+
 ## 5. Record afterwards
 
 Write these in a private place (not the repo):
