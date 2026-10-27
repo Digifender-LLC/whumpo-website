@@ -23,6 +23,7 @@ export async function savedWorkJourney({page,db,state,requests,origin,activate,e
  await items.first().waitFor();
  const directStart=requests.length;state.failProfile=true;await page.reload();await items.first().waitFor();await page.waitForLoadState('networkidle');
  assert(requests.slice(directStart).filter(r=>r.path.startsWith('/api/')).every(r=>r.path.startsWith('/api/auth/identity/v1/')||r.path==='/api/workspace/saved-work'),'Saved work never reads profile, Chat or dashboard');
+ await page.emulateMedia({colorScheme:'dark'});await page.waitForFunction(()=>document.documentElement.classList.contains('dark'));
 
  phase('open view groups truthful phases');
  assert.equal(await items.count(),2);assert.equal(await page.getByRole('heading',{name:'Chat request',level:3}).count(),1);

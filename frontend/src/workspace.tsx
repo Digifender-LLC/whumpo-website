@@ -42,6 +42,7 @@ import {providerReturn,chatLocationTarget,workspaceView,pageNavigationLabel} fro
 import {DeferredArea} from './deferred-area';
 import {QueryRecovery} from './query-recovery';
 import {updatedReplies} from './lib/chat-announcements';
+import {useWorkspaceTheme} from './lib/workspace-theme';
 const DashboardPage=lazy(()=>import('./workspace-pages').then(module=>({default:module.DashboardPage})));
 const SettingsPage=lazy(()=>import('./workspace-pages').then(module=>({default:module.SettingsPage})));
 const ProfilePage=lazy(()=>import('./workspace-pages').then(module=>({default:module.ProfilePage})));
@@ -49,7 +50,7 @@ const ControlPage=lazy(()=>import('./workspace-pages').then(module=>({default:mo
 const Context=createContext<{profile:Profile;dashboard?:Dashboard;dashboardRead:{error:unknown;fetching:boolean;retry:()=>Promise<boolean>};sendMessage:(content:string)=>Promise<void>;runAction:(action:ChatControl)=>Promise<void>;runDomainAction:(action:ChatControl)=>Promise<string|undefined>;commandBusy:boolean;notify:(message:string)=>void}>({profile:null!,dashboardRead:{error:null,fetching:false,retry:async()=>false},sendMessage:async()=>{},runAction:async()=>{},runDomainAction:async()=>undefined,commandBusy:false,notify:()=>{}});
 export const useWorkspace=()=>useContext(Context);
 export function Workspace(){
- useMobileViewport();
+ useMobileViewport();useWorkspaceTheme();
  const location=useRouterState({select:s=>s.location});
  return <IdentityGate signup={['1','true'].includes(new URLSearchParams(location.searchStr).get('signup')??'')}><AccountHelpProvider>{location.pathname==='/workspace/security'?<AccountSecurityPage/>:location.pathname==='/workspace/safety'?<SiteSafetyPage/>:location.pathname==='/workspace/saved-work'?<SavedWorkPage/>:location.pathname==='/workspace/support'?<SupportPage/>:location.pathname==='/workspace/operator-safety'?<OperatorSafetyPage/>:<WorkspaceProfile/>}</AccountHelpProvider></IdentityGate>;
 }
@@ -59,7 +60,6 @@ function WorkspaceProfile(){
   if(previous&&previous.accountId!==next.accountId)queryClient.removeQueries({predicate:q=>q.queryKey[0]!=='session'});
   return next;
  }});
- useEffect(()=>{const theme=profile.data?.theme??'system',media=matchMedia('(prefers-color-scheme: dark)'),apply=()=>document.documentElement.classList.toggle('dark',theme==='dark'||theme==='system'&&media.matches);apply();media.addEventListener('change',apply);return()=>media.removeEventListener('change',apply);},[profile.data?.theme]);
  useEffect(()=>{if(profile.data&&!profile.data.onboardingComplete)document.title="Welcome — Whumpo";},[profile.data?.onboardingComplete]);
  if(profile.isPending)return <main className="min-h-dvh grid place-content-center justify-items-center gap-5"><LoaderCircle className="animate-spin size-6" aria-label="Opening your workspace"/><AccountHelp/></main>;
  if(profile.error)return <main className="page-pad space-y-4"><h1 className="text-2xl font-bold">Couldn’t open your workspace</h1><p role="alert">{message(profile.error)}</p><div className="flex flex-wrap gap-3"><Button onClick={()=>profile.refetch()}>Try again</Button><AccountHelp/></div></main>;
