@@ -40,7 +40,7 @@ export function SupportPage(){
   const generation=identityGeneration(),present=()=>mounted.current&&generation===identityGeneration();lock.current=true;setBusy(true);setError('');setDone('');
   try{
    const saved=await send<Receipt>('/support/v1/requests',{version:1,id:draftId.current,kind,statement,...(ref?{reference:ref}:{})});
-   if(!present())return;draftId.current=crypto.randomUUID();setStatement('');setRef(null);setOpenId(saved.request.id);setDone('Your request is saved for a platform operator. No response time is promised.');
+   if(!present())return;draftId.current=crypto.randomUUID();setStatement('');setRef(null);setOpenId(saved.request.id);setDone('Your request is saved for a platform operator. We reply on business days.');
   }catch(e){if(!present())return;setError(message(e)+' If you are unsure whether it saved, check “Your requests” before sending again; the same draft is never saved twice.');}
   finally{lock.current=false;if(present()){setBusy(false);void queryClient.invalidateQueries({queryKey:key});}}
  }
