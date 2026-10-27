@@ -1,3 +1,4 @@
+import {reviewedReplyGuard,type ReviewedReply} from './chat-review-receipts';
 import {BackendError} from './backend-versions';
 import {hashToken} from './security';
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
@@ -27,11 +28,11 @@ export async function prepareProgramRollback(db:D1Database,user:string,project:s
  let review;try{review=await readProgramRollback(db,user,id);}catch{throw new BackendError(409,'Rollback review unavailable. Choose a retained point for another program containing every active visitor, and check recovery capacity');}
  if(review.projectId!==project||review.pointId!==point)throw new BackendError(409,'Review ID already used');return review;
 }
-export async function confirmProgramRollback(db:D1Database,user:string,id:string,confirmation:unknown){
+export async function confirmProgramRollback(db:D1Database,user:string,id:string,confirmation:unknown,reviewed?:ReviewedReply){
  if(confirmation!=='ROLLBACK')throw new BackendError(400,'Type ROLLBACK to restore the reviewed program and documents');
  const review=await readProgramRollback(db,user,id);if(review.state==='applied')return review;
  if(review.state!=='ready')throw new BackendError(409,'Rollback review expired or app/visitor data changed');
- try{await db.prepare("UPDATE app_restore_reviews SET status='applied' WHERE id=? AND user_id=? AND restore_program=1 AND status='pending'").bind(id,user).run();}
+ try{const g=reviewedReplyGuard(user,reviewed);await db.prepare("UPDATE app_restore_reviews SET status='applied' WHERE id=? AND user_id=? AND restore_program=1 AND status='pending'"+g.sql).bind(id,user,...g.params).run();}
  catch{const saved=await readProgramRollback(db,user,id);if(saved.state==='applied')return saved;throw new BackendError(409,'Rollback not confirmed. Retry this exact review to recover an uncertain response, or prepare a new review if data changed');}
  const saved=await readProgramRollback(db,user,id);if(saved.state!=='applied')throw new BackendError(503,'Rollback result unavailable. Retry the same review');return saved;
 }

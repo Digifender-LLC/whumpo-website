@@ -1,3 +1,4 @@
+import {requireLinkedReply} from './chat-review-receipts';
 import {linkMaintenanceReply} from './app-maintenance-chat-actions';
 import {BackendError} from './backend-versions';
 import {beginMigrationCheck,advanceMigrationCheck,cancelMigrationCheck} from './app-migration-checks';
@@ -22,10 +23,10 @@ export function appUpgradeCommand(db:D1Database,user:string,turn:string,content:
   if(verb==='/review-app-upgrade'){await beginMigrationCheck(db,user,parts[1],turn,parts[2],parts[3],parts[4]);return describeUpgrade(await readMigrationReview(db,user,turn));}
   if(verb==='/check-app-upgrade'){if(!service)throw new BackendError(503,'Application runtime is unavailable. No migration check was run.');await advanceMigrationCheck(db,service,user,parts[1]);return describeUpgrade(await readMigrationReview(db,user,parts[1]));}
   if(verb==='/app-upgrade')return describeUpgrade(await readMigrationReview(db,user,parts[1]));
-  if(verb==='/confirm-app-upgrade')return describeUpgrade(await confirmMigration(db,user,parts[1],parts[2]));
+  if(verb==='/confirm-app-upgrade')return describeUpgrade(await confirmMigration(db,user,parts[1],parts[2],await requireLinkedReply(db,user,'app_maintenance_chat_links',parts[1])));
   if(verb==='/review-app-rollback')return describeRollback(await prepareProgramRollback(db,user,parts[1],parts[2],turn));
   if(verb==='/app-rollback')return describeRollback(await readProgramRollback(db,user,parts[1]));
-  return describeRollback(await confirmProgramRollback(db,user,parts[1],parts[2]));
+  return describeRollback(await confirmProgramRollback(db,user,parts[1],parts[2],await requireLinkedReply(db,user,'app_maintenance_chat_links',parts[1])));
  }catch(e){return e instanceof BackendError?e.message:'Application maintenance result unavailable. Retry the same request to recover its receipt; do not assume a change succeeded.';}})();
  const kind=verb.includes('rollback')?'rollback':'upgrade',id=verb.startsWith('/review-')?turn:parts[1];
  await linkMaintenanceReply(db,user,turn,kind,id,reply);return reply;};

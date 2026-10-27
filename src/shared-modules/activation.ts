@@ -5,6 +5,7 @@ import {FeatureInclusionError,featureRequest} from '../feature-inclusion';
 import {assertWorkspace} from '../workspace-identity/admission';
 import {chatTurnGroups} from '../chat-turn-groups';
 import {ModuleError} from './policy';
+import {linkedReviewedReply,reviewedReplyGuard} from '../chat-review-receipts';
 import {catalogState,currentSpecification,instanceOf,moduleDescriptor,moduleFeature,pin,registeredInstances,type RegistryRow} from './registry';
 
 /** WH-125 exact owner activation/disable reviews. Both steps are typed owner Chat controls whose statements
@@ -135,13 +136,14 @@ export async function applyModuleActivationCommand(db:D1Database,user:string,tur
  const r=await pendingReview(db,user,review);
  if(r.review_digest!==digest||r.expected_activation_revision!==expectedRevision)throw changed();
  const activate=r.action==='activate',state=activate?'active':'inactive';
- const gate=activate?featurePredicate(db,featureRequest({userId:user,projectId:r.project_id,featureId:r.feature_id,operation:'confirm'})):{sql:'1',params:[] as unknown[]};
+ const reviewed=await linkedReviewedReply(db,user,'module_activation_links',review);if(!reviewed)throw changed();
+ const gate=activate?featurePredicate(db,featureRequest({userId:user,projectId:r.project_id,featureId:r.feature_id,operation:'confirm'})):{sql:'1',params:[] as unknown[]},guard=reviewedReplyGuard(user,reviewed);
  return {reply:activate?`Activated the “${r.local_id}” ${kindNames[r.kind]} module at configuration revision ${r.next_config_revision}. It serves only through its own checks while active; disabling stays available at any time.`
   :`Disabled the “${r.local_id}” ${kindNames[r.kind]} module. Visitor, staff and public requests now stop; saved configuration, owner reads and export stay available.`,
  statements:[
   db.prepare(`INSERT INTO module_activation_applies(id,user_id,review_id,review_digest,request_hash,admitted,state,activation_revision,created_at)
-   SELECT ?,?,?,?,?,(SELECT 1 WHERE ${gate.sql}),?,?,unixepoch() FROM chat_turns WHERE id=? AND user_id=?`)
-   .bind(turn,user,review,digest,requestHash,...gate.params,state,expectedRevision+1,turn,user)
+   SELECT ?,?,?,?,?,(SELECT 1 WHERE ${gate.sql}${guard.sql}),?,?,unixepoch() FROM chat_turns WHERE id=? AND user_id=?`)
+   .bind(turn,user,review,digest,requestHash,...gate.params,...guard.params,state,expectedRevision+1,turn,user)
  ]};
 }
 

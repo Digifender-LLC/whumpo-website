@@ -7,6 +7,7 @@ import {canonicalJSON,jsonDigest,sha256,shape,SpecificationError} from '../v2/js
 import {compileOwnedServiceClients} from './owned';
 import type {ServiceClientSpecification,ServiceClientTarget} from './compiler';
 import {readSavedServiceClientVersion,readServiceClientHead} from './store';
+import {requireLinkedReply,type ReviewedReply} from '../../chat-review-receipts';
 const policy=contentPolicyVersion+':'+contentRiskPolicyVersion;
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 const changed=()=>new BackendError(409,'The saved settings or live services changed. Ask for a fresh activation review.');
@@ -36,8 +37,8 @@ async function ready(db:D1Database,user:string,row:Review){
  if(!await db.prepare('SELECT id FROM service_client_activation_valid WHERE id=?').bind(row.id).first())throw changed();return result;
 }
 /** Additional checks only for linked reviews. Ordinary critical disable reviews keep their own guards. */
-export async function requireServiceClientActivation(db:D1Database,user:string,service:Service,review:string){
- try{const linked=await db.prepare('SELECT service FROM service_client_activation_reviews WHERE id=?').bind(review).first<{service:Service}>();if(!linked)return;if(linked.service!==service)throw changed();const row=await ownedReview(db,user,review);if(row.status==='applied')return;await ready(db,user,row);}catch(error){return safe(error);}
+export async function requireServiceClientActivation(db:D1Database,user:string,service:Service,review:string):Promise<ReviewedReply|undefined>{
+ try{const linked=await db.prepare('SELECT service FROM service_client_activation_reviews WHERE id=?').bind(review).first<{service:Service}>();if(!linked)return;if(linked.service!==service)throw changed();const row=await ownedReview(db,user,review);if(row.status==='applied')return;await ready(db,user,row);return await requireLinkedReply(db,user,'service_client_activation_links',review);}catch(error){return safe(error);}
 }
 /** Website-tool confirms need the shared review receipt (digest of the exact reply) as well as this module's own link. */
 function receipt(db:D1Database,user:string,turn:string,review:string,hash:string){return db.prepare("INSERT OR IGNORE INTO chat_review_receipts(turn_id,user_id,kind,review_id,reply_digest) SELECT id,user_id,'backendForm',?,? FROM chat_turns WHERE id=? AND user_id=?").bind(review,hash,turn,user);}

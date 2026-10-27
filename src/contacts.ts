@@ -1,5 +1,6 @@
 import {requireServiceClientActivation} from './project-specification/service-clients/activation';
 import {hashToken} from './security';
+import {reviewedReplyGuard} from './chat-review-receipts';
 export class ContactError extends Error {constructor(public status:number,message:string){super(message);}}
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export async function contactCommand(db:D1Database,userId:string,turnId:string,command:string){
@@ -12,9 +13,9 @@ export async function contactCommand(db:D1Database,userId:string,turnId:string,c
   if(!r)return result('Contact form review not found.');
   if(r.status==='applied')return result("That contact form review was already applied. Open Dashboard → Contact inbox for current status.");
   if(r.expires_at<=new Date().toISOString())return result('That review expired. Request a fresh contact form review.');
-  await requireServiceClientActivation(db,userId,'contact',id);
+  const reviewed=await requireServiceClientActivation(db,userId,'contact',id),g=reviewedReplyGuard(userId,reviewed);
   return result(r.enabled?"Contact form enabled for this published version. Visitors can use the Contact link on your live site. Open Dashboard → Contact inbox to read messages privately. Publishing or restoring another version will disable the form until you review it again.":'Contact form disabled. Existing messages remain private and expire after 30 days.',[
-   db.prepare("UPDATE contact_reviews SET status='applied',confirmed_by=? WHERE id=? AND user_id=? AND status='pending'").bind(turnId,id,userId)
+   db.prepare("UPDATE contact_reviews SET status='applied',confirmed_by=? WHERE id=? AND user_id=? AND status='pending'"+g.sql).bind(turnId,id,userId,...g.params)
   ]);
  }
  const p=await db.prepare('SELECT p.name,s.version_id,s.revision AS publication_revision,COALESCE(c.revision,0) AS revision FROM projects p LEFT JOIN publications s ON s.project_id=p.id LEFT JOIN contact_settings c ON c.project_id=p.id WHERE p.id=? AND p.owner_user_id=?').bind(id,userId).first<{name:string;version_id:string|null;publication_revision:number|null;revision:number}>();
