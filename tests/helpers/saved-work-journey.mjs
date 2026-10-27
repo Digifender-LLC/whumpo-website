@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 /** Actual built UI/Worker/current D1. The fixed Saved work page needs identity
  * only: profile, Chat and generated-dashboard outages cannot hide it. It reads
  * metadata and opens existing exact destinations without sending anything. */
-export async function savedWorkJourney({page,db,state,requests,origin,activate,enter,phase}){
+export async function savedWorkJourney({page,db,state,requests,origin,activate,enter,reach,seedPublishReview,phase}){
  phase('saved work fixture');
  const user=(await db.prepare('SELECT owner_user_id id FROM projects').first()).id,start=(await db.prepare('SELECT revision FROM workspace_state WHERE user_id=?').bind(user).first()).revision;
  const turns=[],add=async(status,text)=>{const id=crypto.randomUUID(),revision=start+turns.length+1;turns.push(id);
@@ -146,5 +146,48 @@ export async function savedWorkJourney({page,db,state,requests,origin,activate,e
  assert.equal(mutations(),beforeMutations+chatPosts()-firstPost,'Saved work sends no workspace mutation; only the two explicit Chat sends occurred');assert.equal(await savedTurns(),beforeTurns+1);
  assert.equal((await db.prepare('SELECT count(*) n FROM inference_calls').first()).n,beforeInference);
  await page.goto(origin+'/workspace');await page.getByRole('textbox',{name:'Message Whumpo'}).waitFor();
- console.log('Saved work browser passed: signed owner, fixed Dashboard link during Chat/dashboard outage, direct reload with profile/Chat/dashboard outages, open/all views, kind filter, Show more pagination beyond 30 items with focus on the first new item, failed-refresh row hiding, 360/390/1280px and 200% text, exact uncertain Chat message reopened, Account help link and late read after sign-out. Tab-local Chat draft/request, form draft and photo records show unsaved, saved-receipt and not-found states without message text or answers; opening Chat resolves a confirmed request and never resends; the Photos project locator survives reload and refuses a foreign project; sign-out clears device records. No automatic mutation, inference or provider call.');
+ phase('saved site-publish review confirms during a Chat and model outage');
+ const actions=()=>requests.filter(r=>r.path==='/api/chat/actions'&&r.method==='POST').length,sendCount=()=>requests.filter(r=>r.path==='/api/chat'&&r.method==='POST').length,modelRows=async()=>(await db.prepare('SELECT count(*) n FROM inference_calls').first()).n;
+ const published=async project=>(await db.prepare('SELECT version_id FROM publications WHERE project_id=?').bind(project).first())?.version_id??null;
+ const a=await seedPublishReview(),readBtn=item=>item.getByRole('button',{name:'Read this review here',exact:true}),confirmName="Confirm reviewed change";
+ state.failChat=true;const sends=sendCount(),models=await modelRows(),acted=actions(),mutated=mutations();
+ await page.setViewportSize({width:390,height:844});await page.goto(origin+'/workspace/saved-work');
+ const reviewItem=page.locator(`[data-saved-work-key$="${a.review}"]`);await reviewItem.waitFor();
+ assert.equal(await published(a.project),null,'Nothing is live before the click');
+ assert.equal(await reviewItem.locator('[data-saved-review-confirm]').count(),0,'No controls before the panel is opened');
+ await reach(readBtn(reviewItem));assert.equal(await readBtn(reviewItem).getAttribute('aria-expanded'),'false');await page.keyboard.press('Enter');
+ const panel=reviewItem.locator('[data-saved-review-confirm]');await panel.waitFor();assert.equal(await page.getByRole('button',{name:'Hide review',exact:true}).getAttribute('aria-expanded'),'true');
+ await panel.getByText('This is a fresh read.',{exact:false}).waitFor();
+ assert.equal(await reviewItem.locator('[data-saved-turn-id]').getAttribute('data-saved-turn-id'),a.review,'The panel reads this exact saved turn');
+ assert(requests.some(r=>r.path==='/api/chat/turns/'+a.review&&r.method==='GET'),'Fresh read of the saved turn');
+ const confirmButton=panel.getByRole("button",{name:confirmName,exact:true});await confirmButton.waitFor();assert.equal(await confirmButton.count(),1);
+ assert.equal(await published(a.project),null,'Reading approves nothing');assert.equal(actions(),acted);
+ for(const button of await reviewItem.getByRole('button').all())assert((await button.evaluate(e=>(e.getAttribute('aria-label')||e.textContent).trim())).length>0,'Every panel button has an accessible name');
+ assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Panel fits 390px');
+ await reach(confirmButton);assert(await confirmButton.evaluate(e=>e===document.activeElement),'Keyboard reaches the confirm button');
+ await page.screenshot({path:'/tmp/whumpo-saved-review-390.png',fullPage:true});
+ await page.keyboard.press('Enter');
+ await reviewItem.getByRole('status').filter({hasText:'Confirmed. Open Chat to see the result.'}).waitFor();
+ assert.equal(actions(),acted+1,'Exactly one confirm request');assert.equal(await published(a.project),a.version,'Exactly the reviewed version is live');
+ assert.equal((await db.prepare('SELECT count(*) n FROM publications WHERE project_id=?').bind(a.project).first()).n,1);
+ await confirmButton.waitFor({state:'detached'});
+ phase('reload replays nothing');
+ await page.reload();await page.getByRole('heading',{name:'Saved work',level:1}).waitFor();await page.waitForLoadState('networkidle');
+ assert.equal(await page.getByRole("button",{name:confirmName,exact:true}).count(),0,'Reload offers no confirm control');
+ assert.equal(actions(),acted+1,'Reload sent no confirm');assert.equal(await published(a.project),a.version);
+ phase('stale review refuses with its message');
+ const b=await seedPublishReview(),staleItem=page.locator(`[data-saved-work-key$="${b.review}"]`);
+ await page.reload();await staleItem.waitFor();await activate(readBtn(staleItem));
+ const staleConfirm=staleItem.getByRole("button",{name:confirmName,exact:true});await staleConfirm.waitFor();
+ // The conversation moves on after the fresh read: the review is no longer the latest message.
+ const next=(await db.prepare('SELECT revision FROM workspace_state WHERE user_id=?').bind(b.user).first()).revision+1;
+ await db.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,?,'Synthetic later question','Synthetic later reply',strftime('%Y-%m-%dT%H:%M:%fZ','now'),'guided','completed')").bind(crypto.randomUUID(),b.user,next).run();
+ await db.prepare('UPDATE workspace_state SET revision=? WHERE user_id=?').bind(next,b.user).run();
+ await activate(staleConfirm);
+ await staleItem.getByRole('alert').filter({hasText:'This review is no longer the latest message in Chat, so it cannot be confirmed from here. Open it in Chat.'}).waitFor();
+ assert.equal(actions(),acted+2,'The stale click is the only further request');assert.equal(await published(b.project),null,'The stale review published nothing');assert.equal(await published(a.project),a.version);
+ assert.equal(await staleItem.getByRole('status').filter({hasText:'Confirmed.'}).count(),0);
+ assert.equal(sendCount(),sends,'No Chat send');assert.equal(await modelRows(),models,'No model call');assert.equal(mutations(),mutated+2,'Only the two explicit confirm requests mutated');
+ state.failChat=false;await page.setViewportSize({width:1280,height:844});await page.goto(origin+'/workspace');await page.getByRole('textbox',{name:'Message Whumpo'}).waitFor();
+ console.log('Saved work browser passed: signed owner, fixed Dashboard link during Chat/dashboard outage, direct reload with profile/Chat/dashboard outages, open/all views, kind filter, Show more pagination beyond 30 items with focus on the first new item, failed-refresh row hiding, 360/390/1280px and 200% text, exact uncertain Chat message reopened, Account help link and late read after sign-out. Tab-local Chat draft/request, form draft and photo records show unsaved, saved-receipt and not-found states without message text or answers; opening Chat resolves a confirmed request and never resends; the Photos project locator survives reload and refuses a foreign project; sign-out clears device records. During a Chat and model outage a saved site-publish review is read fresh in its panel, confirmed once from the keyboard at 390px with exactly one effect, offers nothing after reload, and a stale review is refused with its message. No automatic mutation, inference or provider call.');
 }
