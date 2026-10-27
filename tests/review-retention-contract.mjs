@@ -6,8 +6,9 @@ import {currentSchemaFiles} from '../tools/current-schema.mjs';
 // WH-061 / WH-180 offline review-retention conformance. Synthetic owners, projects and identifiers only: no D1,
 // Worker, network, credential or model. Part 1 proves docs/review-retention.md agrees with the real capacity
 // triggers (composed canonical schema inputs), code deleters and WH-009 classes, so the inventory cannot drift.
-// Part 2 proves the proposed policy on the in-memory model. It does not prove D1 triggers, deleting statements,
-// routes, custom-host serving or deployment (WH-181–184). Every suite check also runs against deliberately broken
+// Part 2 proves the proposed policy on the in-memory model. WH-181 put the active-only caps, sealed receipts and delete guards
+// in the schema (tests/review-receipts.mjs proves their behaviour); this suite checks that the schema's caps match the policy
+// constants. It does not prove deleting statements, routes, custom-host serving or deployment (WH-182–184). Every suite check also runs against deliberately broken
 // copies of the reference (mutants below); each must be caught by the check written for that property.
 const root=fileURLToPath(new URL('..',import.meta.url));
 const prototypeURL=new URL('../tools/prototypes/review-retention.mjs',import.meta.url);
@@ -44,7 +45,10 @@ async function suite(m){
  await test('every capped table is classified consistently',()=>{
   const lanes={review:'R1',receipt:'R2',operation:'R3',version:'R4',evidence:'R5',inventory:'R6',rate:'R6'};
   const del=m.deleters(repo.facts,repo.appDeletes);
-  assert.deepEqual(Object.keys(m.capRegistry).sort(),report.rows.map(r=>r.table).sort(),'no unregistered or stale registry entries');
+  // A family whose every row is a withdrawal has no count cap, so no inventory row.
+  const exemptOnly=Object.keys(m.capRegistry).filter(t=>m.capRegistry[t].withdrawal==='every row');
+  assert.deepEqual(exemptOnly,['cms_unpublish_reviews','github_grant_revocations']);
+  assert.deepEqual(Object.keys(m.capRegistry).filter(t=>!exemptOnly.includes(t)).sort(),report.rows.map(r=>r.table).sort(),'no unregistered or stale registry entries');
   for(const r of report.rows){
    const g=m.capRegistry[r.table],d=del(r.table);
    assert.equal(g.lane,lanes[g.class],r.table);
@@ -52,14 +56,20 @@ async function suite(m){
    if(g.turnover==='lifetime')assert.ok(!d.includes('app'),`${r.table} has an application sweep; it is not lifetime`);
    if(g.turnover==='expiring')assert.ok(d.includes('app'),`${r.table} has no sweep`);
    if(g.turnover==='window')assert.ok(r.caps.includes('(window)'),r.table);
+   const capList=r.caps.split(' · ');
+   if(g.turnover==='lifetime')assert.ok(capList.some(c=>!c.includes('(filtered)')&&!c.includes('(window)')),`${r.table} has no lifetime cap; it is not lifetime`);
+   if(g.turnover==='active-only')assert.ok(capList.every(c=>c.includes('(filtered)')||c.includes('(window)')),`${r.table} still has a lifetime cap`);
    if(g.turnover==='pending-only')assert.ok(r.caps.includes('(filtered)')||repo.facts.views.has(r.table),r.table);
    if(g.turnover==='restricted')assert.equal(g.class,'evidence',r.table);
   }
  });
  await test('derived sets agree with the document',()=>{
   const sets=section('sets'),list=label=>[...sets.split('\n').find(l=>l.startsWith(`- **${label}`)).matchAll(/`([^`]+)`/g)].map(x=>x[1]);
-  assert.deepEqual(list('Ceiling set'),report.ceiling);assert.deepEqual(list('Shared ceiling set'),report.shared);assert.deepEqual(list('Other lifetime'),report.other);
-  for(const t of ['backend_form_reviews','app_page_reviews','backend_publication_reviews','backend_state_reviews','app_restore_reviews','app_activation_reviews'])assert.ok(report.shared.includes(t),`B1 table ${t}`);
+  assert.deepEqual(list('Ceiling set'),report.ceiling);assert.deepEqual(list('Converted set'),report.converted);assert.deepEqual(list('Shared ceiling set'),report.shared);assert.deepEqual(list('Other lifetime'),report.other);
+  // WH-181 fixed B1 for these; what is left in the shared set is exactly the families it stopped on.
+  for(const t of ['backend_form_reviews','app_page_reviews','backend_publication_reviews','backend_state_reviews','app_restore_reviews','app_activation_reviews'])assert.ok(report.converted.includes(t)&&!report.shared.includes(t),`B1 table ${t}`);
+  assert.deepEqual(report.shared,['app_runs','backend_runs','cms_draft_requests','cms_draft_requests+cms_edit_requests','cms_export_links','cms_preview_links','project_spec_applies','service_client_activation_reviews','service_client_applies']);
+  assert.deepEqual([...report.converted,...report.shared].sort((a,b)=>a.localeCompare(b)),report.ceiling.filter(t=>report.converted.includes(t)||report.shared.includes(t)));
   assert.ok(report.ceiling.includes(D)&&!report.shared.includes(D),'the directory ceiling is per project');
  });
  await test('policy and state tables agree with the reference',()=>{
@@ -83,9 +93,28 @@ async function suite(m){
   for(const t of ['backend_publication_reviews','app_page_reviews','cms_unpublish_reviews','github_grant_revocations',D])assert.ok(m.capRegistry[t].withdrawal,`${t} withdrawals must be exempt`);
  });
 
+ await test('converted families count active rows at the policy limits',()=>{
+  const P=m.proposedPolicy,at=(scope,limit)=>`${scope} ${limit} (filtered)`;
+  const standard=[at('project',P.activePerProject),at('owner',P.fairSharePerOwner),at('owner',P.activePerOwner),at('platform',P.fairShareFrom),at('platform',P.activeGlobal)];
+  // Deliberate variations (docs/review-retention.md, "Schema and trigger changes"), each stricter than or outside the policy.
+  const expected={
+   backend_nominations:[at('owner',5),at('owner',P.fairSharePerOwner),at('platform',P.fairShareFrom),at('platform',P.activeGlobal)],
+   app_migration_checks:[at('project',5)],
+   cms_discard_reviews:standard.filter(c=>!c.startsWith('project')),
+   domain_connections:[...standard,at('platform',80)],
+  };
+  const withdrawalOnly=new Set(['cms_unpublish_reviews','github_grant_revocations']);
+  for(const t of report.converted){
+   if(withdrawalOnly.has(t)){assert.ok(!report.rows.some(r=>r.table===t),`${t}: every row is a withdrawal, so nothing is counted`);continue;}
+   const row=report.rows.find(r=>r.table===t);assert.ok(row,t);
+   assert.deepEqual(row.caps.split(' · ').sort(),(expected[t]??standard).sort(),`${t} caps`);
+  }
+  for(const t of ['app_migration_current'])assert.equal(report.rows.find(r=>r.table===t).caps,'platform 50','migration current keeps its existing platform limit');
+ });
+
  // ---------- Part 2: the proposed policy on the synthetic model ----------
  // Characterizes today's triggers; no mutant touches the current-policy branch, so it runs for the reference only.
- if(m===reference)await test('current lifetime policy reproduces the ceiling and B1',()=>{
+ if(m===reference)await test('the former lifetime policy (before WH-181) reproduces the ceiling and B1',()=>{
   const s=m.createStore({policy:'current'});
   for(let i=0;i<100;i++){const id=next();prep(s,{id,ownerId:'a',projectId:'p0'});m.confirm(s,{family:F,id,turn:'t'+id});s.now+=3_600_000;}
   code(()=>prep(s,{id:next(),ownerId:'a',projectId:'p0'}),'REVIEW_CAPACITY','project');
@@ -204,7 +233,7 @@ await once('the reference imports only node builtins and touches no network or D
  assert.ok(!/\bfetch\s*\(|env\.DB|D1Database|process\.env/.test(prototypeSource));
 });
 await once('the document is marked planned and keeps WH-033 with the parent',()=>{
- assert.match(doc,/\*\*Status: planned\./);assert.ok(!/<!-- (INVENTORY|CEILING|SHARED|OTHER) -->/.test(doc));
+ assert.match(doc,/\*\*Status: WH-181 .* implemented the schema in source; nothing is deployed\.\*\*/);assert.ok(!/<!-- (INVENTORY|CEILING|SHARED|OTHER) -->/.test(doc));
  assert.match(doc,/No child reaches WH-033, WH-049 or WH-104 acceptance/);
 });
 
@@ -213,8 +242,8 @@ const mutants=[
  ['platform-wide caps dropped from the inventory','if(cmp&&real.length){',"if(cmp&&real.length&&real.some(t=>subjectScope(t.where)!=='platform')){"],
  ['time windows read as lifetime',"const qualifier=where=>windowed.test(where)?'window':","const qualifier=where=>false?'window':"],
  ['application deletes ignored',"if(appDeletes.has(part))kinds.add('app');",''],
- ['directory reviews declared pending-only',"directory_reviews:R('review','R1','lifetime'","directory_reviews:R('review','R1','pending-only'"],
- ['backend unpublish not exempt',"backend_publication_reviews:R('review','R1','lifetime','backend-artifacts',\"operation='unpublish'\")","backend_publication_reviews:R('review','R1','lifetime','backend-artifacts')"],
+ ['directory reviews declared lifetime',"directory_reviews:R('review','R1','active-only'","directory_reviews:R('review','R1','lifetime'"],
+ ['backend unpublish not exempt',"backend_publication_reviews:R('review','R1','active-only','backend-artifacts',\"operation='unpublish'\")","backend_publication_reviews:R('review','R1','active-only','backend-artifacts')"],
  ['terminal rows counted against capacity','&&pred(r)&&isActive(s,r)).length;','&&pred(r)).length;'],
  ['no per-owner cap',"check(mine<L.activePerOwner,'REVIEW_CAPACITY','owner');",''],
  ['no fair share',"check(all<L.fairShareFrom||mine<L.fairSharePerOwner,'REVIEW_CAPACITY','fair-share');",''],
@@ -238,7 +267,7 @@ const mutants=[
 ];
 const killedBy={
  'platform-wide caps dropped from the inventory':'inventory agrees','time windows read as lifetime':'inventory agrees','application deletes ignored':'inventory agrees',
- 'directory reviews declared pending-only':'inventory agrees','backend unpublish not exempt':'references table',
+ 'directory reviews declared lifetime':'inventory agrees','backend unpublish not exempt':'references table',
  'terminal rows counted against capacity':'one owner at their cap','no per-owner cap':'one owner at their cap','no fair share':'the global ceiling',
  'no global ceiling':'the global ceiling','declared dispositions drift from the document':'policy and state tables',
  'active authority compacted':'pruning never removes','unknown outcomes treated as expired':'pruning never removes',

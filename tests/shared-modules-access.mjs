@@ -396,11 +396,14 @@ try{
   }finally{for(const t of lifted)await run(t.sql);}
   assert.ok((await row('SELECT count(*) n FROM module_access_role_reviews WHERE project_id=?',b.project)).n>500);
   await setRole(b,bv.visitorId,'revoke');assert.deepEqual((await me(b,theirs,bv)).body.result.roles,[]);
-  // 500 pending (unapplied, unexpired) reviews still refuse another until they expire or are removed.
-  const admit=lifted.find(t=>t.name==='module_access_role_review_admit');
-  await run('DROP TRIGGER module_access_role_review_admit');try{await copies('c',500,true);}finally{await run(admit.sql);}
+  // WH-181: 25 pending (unapplied, unexpired) reviews refuse another grant (revoke is exempt).
+  const admit=lifted.find(t=>t.name==='module_access_role_review_admit'),immutable=(await rows("SELECT sql FROM sqlite_master WHERE name='module_access_role_review_immutable'"))[0].sql;
+  await run('DROP TRIGGER module_access_role_review_admit');try{await copies('c',25,true);}finally{await run(admit.sql);}
   assert.notEqual((await control(b,roleAction(b,bv.visitorId,'grant'))).status,200);
-  await run("DELETE FROM module_access_role_reviews WHERE id LIKE 'c%-0000-4000-8000-%'");
+  // Expired pending reviews stop counting and need no deletion (a retained row leaves only with its sealed receipt).
+  await assert.rejects(()=>run("DELETE FROM module_access_role_reviews WHERE id LIKE 'c%-0000-4000-8000-%'"),/module_access_receipt_retained/);
+  await run('DROP TRIGGER module_access_role_review_immutable');
+  try{await run("UPDATE module_access_role_reviews SET created_at=unixepoch()-7300,expires_at=unixepoch()-7000 WHERE id LIKE 'c%-0000-4000-8000-%'");}finally{await run(immutable);}
   await setRole(b,bv.visitorId,'grant');assert.deepEqual((await me(b,theirs,bv)).body.result.roles,['staff']);
  });
 

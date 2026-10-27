@@ -237,7 +237,8 @@ CREATE TABLE github_grant_revocations (
 );
 CREATE UNIQUE INDEX github_grant_pending_client ON github_grant_revocations(client_id) WHERE state IN ('dispatching','uncertain');
 CREATE TRIGGER github_grant_review BEFORE INSERT ON github_grant_revocations
-WHEN NEW.state!='review' OR (SELECT COUNT(*) FROM github_grant_revocations WHERE user_id=NEW.user_id)>=100
+-- Revocations are withdrawals: never refused for capacity (WH-181, OD-5).
+WHEN NEW.state!='review'
  OR NOT EXISTS(SELECT 1 FROM github_connections c JOIN github_token_vault t ON t.id=c.active_token_id JOIN github_refresh_custody r ON r.token_id=t.id WHERE c.user_id=NEW.user_id AND t.user_id=NEW.user_id AND t.state='active' AND t.expires_at>NEW.created_at AND t.id=NEW.token_id AND r.client_id=NEW.client_id AND r.github_user_id=NEW.github_user_id AND c.github_user_id=NEW.github_user_id AND c.login=NEW.login)
 BEGIN SELECT RAISE(ABORT,'github_grant_review'); END;
 CREATE TRIGGER github_grant_identity BEFORE UPDATE ON github_grant_revocations
@@ -246,7 +247,15 @@ WHEN NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.client_id!=OLD.client_id 
  OR (OLD.dispatched_at IS NOT NULL AND NEW.dispatched_at IS NOT OLD.dispatched_at)
 BEGIN SELECT RAISE(ABORT,'github_grant_immutable'); END;
 CREATE TRIGGER github_grant_retained BEFORE DELETE ON github_grant_revocations
-BEGIN SELECT RAISE(ABORT,'github_grant_receipt_required'); END;
+WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+BEGIN
+ -- Only a terminal, unreferenced, unheld row outside the history window may leave, and only with its sealed receipt.
+ SELECT RAISE(ABORT,'github_grant_receipt_required') WHERE NOT (OLD.state='revoked' OR (OLD.state='review' AND OLD.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) OR (1 AND NOT (OLD.state='revoked') AND EXISTS(SELECT 1 FROM github_grant_revocations x WHERE x.expires_at>OLD.expires_at AND 1 AND x.token_id=OLD.token_id)) OR OLD.state='cancelled')
+  OR 0
+  OR EXISTS(SELECT 1 FROM safety_preservation_holds WHERE released_at IS NULL AND scope='account' AND subject_user_id=OLD.user_id)
+  OR NOT (NOT (OLD.state='revoked') OR (1) OR OLD.id NOT IN (SELECT t.id FROM github_grant_revocations t WHERE t.user_id=OLD.user_id AND t.state='revoked' AND NOT (1) ORDER BY t.expires_at DESC,t.id DESC LIMIT 25))
+  OR NOT EXISTS(SELECT 1 FROM review_receipts WHERE family='github_grant_revocations' AND id=OLD.id AND (OLD.state='revoked')=(outcome IN ('applied','withdrawn')));
+END;
 CREATE TRIGGER github_grant_dispatch BEFORE UPDATE OF state ON github_grant_revocations
 WHEN NEW.state='dispatching' AND (
  NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now')
@@ -427,7 +436,7 @@ CREATE TABLE site_health_checks (
  detail TEXT NOT NULL DEFAULT 'Checking the published page and photo responses',
  started_at TEXT NOT NULL,
  finished_at TEXT
-, form_review_id TEXT);
+, form_review_id TEXT, directory_review_id TEXT);
 
 CREATE TABLE site_health_budget(day TEXT PRIMARY KEY,checks INTEGER NOT NULL CHECK(checks BETWEEN 1 AND 500));
 
@@ -437,7 +446,10 @@ CREATE TABLE directories (
  draft_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(draft_json) AND json_type(draft_json)='array' AND json_array_length(draft_json)<=25 AND length(CAST(draft_json AS BLOB))<=24576),
  live_json TEXT CHECK(live_json IS NULL OR (json_valid(live_json) AND json_type(live_json)='array' AND json_array_length(live_json)<=25 AND length(CAST(live_json AS BLOB))<=24576)),
  publication_revision INTEGER NOT NULL DEFAULT -1,
- published_at TEXT
+ published_at TEXT,
+ live_review_id TEXT REFERENCES directory_reviews(id),
+ live_digest TEXT CHECK(live_digest IS NULL OR (length(live_digest)=64 AND live_digest NOT GLOB '*[^0-9a-f]*')),
+ CHECK((live_json IS NULL AND live_review_id IS NULL AND live_digest IS NULL) OR (live_json IS NOT NULL AND (live_review_id IS NULL)=(live_digest IS NULL)))
 );
 
 CREATE TABLE directory_reviews (
@@ -458,6 +470,186 @@ CREATE TABLE directory_exports (
  turn_id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
  review_id TEXT NOT NULL REFERENCES directory_reviews(id) ON DELETE CASCADE
 );
+
+CREATE TABLE review_receipts (
+ family TEXT NOT NULL CHECK(family IN ('directory_reviews','backend_form_reviews','module_activation_reviews','module_access_role_reviews','app_activation_reviews','app_page_reviews','app_restore_reviews','app_migration_checks','backend_publication_reviews','backend_state_reviews','backend_nominations','cloudflare_dns_actions','domain_connections','github_backups','github_grant_revocations','composition_plans','cms_setup_reviews','cms_publication_reviews','cms_unpublish_reviews','cms_discard_reviews','cms_import_reviews')),
+ id TEXT NOT NULL CHECK(length(id) BETWEEN 1 AND 128),
+ owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+ kind TEXT NOT NULL CHECK(kind IN ('change','withdrawal')),
+ target TEXT NOT NULL CHECK(length(target) BETWEEN 1 AND 256),
+ outcome TEXT NOT NULL CHECK(outcome IN ('applied','withdrawn','expired','superseded','failed')),
+ payload_digest TEXT NOT NULL CHECK(length(payload_digest)=64 AND payload_digest NOT GLOB '*[^0-9a-f]*'),
+ request_hash TEXT NOT NULL CHECK(length(request_hash)=64 AND request_hash NOT GLOB '*[^0-9a-f]*'),
+ confirmed_by TEXT CHECK(confirmed_by IS NULL OR length(confirmed_by) BETWEEN 1 AND 128),
+ applied_at TEXT,
+ lifecycle_class TEXT NOT NULL CHECK(length(lifecycle_class) BETWEEN 1 AND 64),
+ sealed_at TEXT NOT NULL,
+ seal TEXT NOT NULL CHECK(length(seal)=64 AND seal NOT GLOB '*[^0-9a-f]*'),
+ PRIMARY KEY(family,id),
+ CHECK(outcome<>'withdrawn' OR kind='withdrawal'),
+ CHECK(outcome<>'applied' OR kind='change')
+);
+CREATE INDEX review_receipts_project ON review_receipts(project_id,family,sealed_at);
+CREATE INDEX review_receipts_owner ON review_receipts(owner_user_id);
+
+-- A sealed receipt is written in the batch that compacts its source row, and binds every field the still-present source
+-- row carries (owner, project, kind, target, outcome, confirming turn, and the digest or request hash where the source
+-- has one). Sealing time cannot be backdated, because the replay horizon runs from it. The Worker computes and verifies
+-- the SHA-256 seal; SQLite cannot, so the seal, the applied time and a digest the source row does not carry are only
+-- checked for shape here.
+CREATE TRIGGER review_receipt_bind BEFORE INSERT ON review_receipts BEGIN
+ SELECT RAISE(ABORT,'review_receipt_bind') WHERE NEW.sealed_at NOT GLOB '????-??-??T??:??:??*Z' OR NEW.sealed_at<strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 minute') OR NEW.sealed_at>strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 minute');
+ SELECT RAISE(ABORT,'review_receipt_bind') WHERE NEW.family='directory_reviews' AND (NEW.lifecycle_class<>'directories' OR NOT EXISTS(SELECT 1 FROM directory_reviews r WHERE r.id=NEW.id
+  AND r.user_id=NEW.owner_user_id
+  AND r.project_id=NEW.project_id
+  AND NEW.kind=(CASE WHEN r.kind='unpublish' THEN 'withdrawal' ELSE 'change' END)
+  AND NEW.target IS r.project_id
+  AND NEW.payload_digest=r.digest
+  AND NEW.confirmed_by IS r.confirmed_by
+  AND (NEW.outcome=(CASE WHEN r.status='applied' THEN (CASE WHEN r.kind='unpublish' THEN 'withdrawn' ELSE 'applied' END) WHEN (r.status='pending' AND r.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) THEN 'expired' END) OR (NEW.outcome='superseded' AND (r.kind='unpublish' AND NOT (r.status='applied') AND EXISTS(SELECT 1 FROM directory_reviews x WHERE x.expires_at>r.expires_at AND x.kind='unpublish' AND x.project_id=r.project_id))))));
+ SELECT RAISE(ABORT,'review_receipt_bind') WHERE NEW.family='backend_form_reviews' AND (NEW.lifecycle_class<>'backend-artifacts' OR NOT EXISTS(SELECT 1 FROM backend_form_reviews r WHERE r.id=NEW.id
+  AND r.user_id=NEW.owner_user_id
+  AND r.project_id=NEW.project_id
+  AND NEW.kind=(CASE WHEN r.enabled=0 THEN 'withdrawal' ELSE 'change' END)
+  AND NEW.target IS r.project_id
+  AND (NEW.outcome=(CASE WHEN r.status='applied' THEN (CASE WHEN r.enabled=0 THEN 'withdrawn' ELSE 'applied' END) WHEN (r.status='pending' AND r.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) THEN 'expired' END) OR (NEW.outcome='superseded' AND (r.enabled=0 AND NOT (r.status='applied') AND EXISTS(SELECT 1 FROM backend_form_reviews x WHERE x.expires_at>r.expires_at AND x.enabled=0 AND x.project_id=r.project_id))))));
+ SELECT RAISE(ABORT,'review_receipt_bind') WHERE NEW.family='module_activation_reviews' AND (NEW.lifecycle_class<>'module-registry' OR NOT EXISTS(SELECT 1 FROM module_activation_reviews r WHERE r.id=NEW.id
+  AND r.user_id=NEW.owner_user_id
+  AND r.project_id=NEW.project_id
+  AND NEW.kind=(CASE WHEN r.action='disable' THEN 'withdrawal' ELSE 'change' END)
+  AND NEW.target IS r.resource_id
+  AND NEW.payload_digest=r.review_digest
+  AND NEW.request_hash=r.request_hash
+  AND NEW.confirmed_by IS (SELECT a.id FROM module_activation_applies a WHERE a.review_id=r.id)
+  AND (NEW.outcome=(CASE WHEN EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=r.id) THEN (CASE WHEN r.action='disable' THEN 'withdrawn' ELSE 'applied' END) WHEN (NOT EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=r.id) AND r.expires_at<=unixepoch()-3600) THEN 'expired' END) OR (NEW.outcome='superseded' AND (r.action='disable' AND NOT (EXISTS(SELECT 1 FROM module_activation_applies a WHERE a.review_id=r.id)) AND EXISTS(SELECT 1 FROM module_activation_reviews x WHERE x.expires_at>r.expires_at AND x.action='disable' AND x.resource_id=r.resource_id))))));
+ SELECT RAISE(ABORT,'review_receipt_bind') WHERE NEW.family='module_access_role_reviews' AND (NEW.lifecycle_class<>'project-roles' OR NOT EXISTS(SELECT 1 FROM module_access_role_reviews r WHERE r.id=NEW.id
+  AND r.user_id=NEW.owner_user_id
+  AND r.project_id=NEW.project_id
+  AND NEW.kind=(CASE WHEN r.action='revoke' THEN 'withdrawal' ELSE 'change' END)
+  AND NEW.target IS r.instance_id||':'||r.visitor_id
+  AND NEW.payload_digest=r.review_digest
+  AND NEW.request_hash=r.request_hash
+  AND NEW.confirmed_by IS (SELECT a.id FROM module_access_role_applies a WHERE a.review_id=r.id)
+  AND (NEW.outcome=(CASE WHEN EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=r.id) THEN (CASE WHEN r.action='revoke' THEN 'withdrawn' ELSE 'applied' END) WHEN (NOT EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=r.id) AND r.expires_at<=unixepoch()-3600) THEN 'expired' END) OR (NEW.outcome='superseded' AND (r.action='revoke' AND NOT (EXISTS(SELECT 1 FROM module_access_role_applies a WHERE a.review_id=r.id)) AND EXISTS(SELECT 1 FROM module_access_role_reviews x WHERE x.expires_at>r.expires_at AND x.action='revoke' AND x.instance_id||':'||x.visitor_id=r.instance_id||':'||r.visitor_id))))));
+ SELECT RAISE(ABORT,'review_receipt_bind') WHERE NEW.family='app_activation_reviews' AND (NEW.lifecycle_class<>'visitor-app-data' OR NOT EXISTS(SELECT 1 FROM app_activation_reviews r WHERE r.id=NEW.id
+  AND r.user_id=NEW.owner_user_id
+  AND r.project_id=NEW.project_id
+  AND NEW.kind=(CASE WHEN r.enabled=0 THEN 'withdrawal' ELSE 'change' END)
+  AND NEW.target IS r.project_id
+  AND (NEW.outcome=(CASE WHEN r.status='applied' THEN (CASE WHEN r.enabled=0 THEN 'withdrawn' ELSE 'applied' END) WHEN (r.status='pending' AND r.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) THEN 'expired' END) OR (NEW.outcome='superseded' AND (r.enabled=0 AND NOT (r.status='applied') AND EXISTS(SELECT 1 FROM app_activation_reviews x WHERE x.expires_at>r.expires_at AND x.enabled=0 AND x.project_id=r.project_id))))));
+ SELECT RAISE(ABORT,'review_receipt_bind') WHERE NEW.family='app_page_reviews' AND (NEW.lifecycle_class<>'visitor-app-data' OR NOT EXISTS(SELECT 1 FROM app_page_reviews r WHERE r.id=NEW.id
+  AND r.user_id=NEW.owner_user_id
+  AND r.project_id=NEW.project_id
+  AND NEW.kind=(CASE WHEN r.config_json IS NULL THEN 'withdrawal' ELSE 'change' END)
+  AND NEW.target IS r.project_id
+  AND (NEW.outcome=(CASE WHEN r.status='applied' THEN (CASE WHEN r.config_json IS NULL THEN 'withdrawn' ELSE 'applied' END) WHEN (r.status='pending' AND r.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) THEN 'expired' END) OR (NEW.outcome='superseded' AND (r.config_json IS NULL AND NOT (r.status='applied') AND EXISTS(SELECT 1 FROM app_page_reviews x WHERE x.expires_at>r.expires_at AND x.config_json IS NULL AND x.project_id=r.project_id))))));
+ SELECT RAISE(ABORT,'review_receipt_bind') WHERE NEW.family='app_restore_reviews' AND (NEW.lifecycle_class<>'application-recovery' OR NOT EXISTS(SELECT 1 FROM app_restore_reviews r WHERE r.id=NEW.id
+  AND r.user_id=NEW.owner_user_id
+  AND r.project_id=NEW.project_id
+  AND NEW.kind=('change')
+  AND NEW.target IS r.project_id
+  AND (NEW.outcome=(CASE WHEN r.status='applied' THEN 'applied' WHEN (r.status='pending' AND r.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) THEN 'expired' END))));
+ SELECT RAISE(ABORT,'review_receipt_bind') WHERE NEW.family='app_migration_checks' AND (NEW.lifecycle_class<>'application-recovery' OR NOT EXISTS(SELECT 1 FROM app_migration_checks r WHERE r.id=NEW.id
+  AND r.user_id=NEW.owner_user_id
+  AND r.project_id=NEW.project_id
+  AND NEW.kind=('change')
+  AND NEW.target IS r.project_id
+  AND (NEW.outcome=(CASE WHEN EXISTS(SELECT 1 FROM app_migration_approvals a WHERE a.id=r.id AND a.status='applied') THEN 'applied' WHEN (r.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour') AND NOT EXISTS(SELECT 1 FROM app_migration_approvals a WHERE a.id=r.id) AND NOT EXISTS(SELECT 1 FROM app_migration_cancellations c WHERE c.id=r.id)) THEN 'expired' WHEN EXISTS(SELECT 1 FROM app_migration_cancellations c WHERE c.id=r.id) THEN 'failed' END))));
+ SELECT RAISE(ABORT,'review_receipt_bind') WHERE NEW.family='backend_publication_reviews' AND (NEW.lifecycle_class<>'backend-artifacts' OR NOT EXISTS(SELECT 1 FROM backend_publication_reviews r WHERE r.id=NEW.id
+  AND r.user_id=NEW.owner_user_id
+  AND r.project_id=NEW.project_id
+  AND NEW.kind=(CASE WHEN r.operation='unpublish' THEN 'withdrawal' ELSE 'change' END)
+  AND NEW.target IS r.project_id
+  AND (NEW.outcome=(CASE WHEN r.status='applied' THEN (CASE WHEN r.operation='unpublish' THEN 'withdrawn' ELSE 'applied' END) WHEN (r.status='pending' AND r.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) THEN 'expired' END) OR (NEW.outcome='superseded' AND (r.operation='unpublish' AND NOT (r.status='applied') AND EXISTS(SELECT 1 FROM backend_publication_reviews x WHERE x.expires_at>r.expires_at AND x.operation='unpublish' AND x.project_id=r.project_id))))));
+ SELECT RAISE(ABORT,'review_receipt_bind') WHERE NEW.family='backend_state_reviews' AND (NEW.lifecycle_class<>'backend-artifacts' OR NOT EXISTS(SELECT 1 FROM backend_state_reviews r WHERE r.id=NEW.id
+  AND r.user_id=NEW.owner_user_id
+  AND r.project_id=NEW.project_id
+  AND NEW.kind=('change')
+  AND NEW.target IS r.project_id
+  AND (NEW.outcome=(CASE WHEN r.status='applied' THEN 'applied' WHEN (r.status IN ('preparing','ready') AND r.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) THEN 'expired' WHEN r.status='failed' THEN 'failed' END))));
+ SELECT RAISE(ABORT,'review_receipt_bind') WHERE NEW.family='backend_nominations' AND (NEW.lifecycle_class<>'shared-reuse' OR NOT EXISTS(SELECT 1 FROM backend_nominations r WHERE r.id=NEW.id
+  AND r.user_id=NEW.owner_user_id
+  AND NEW.project_id IS NULL
+  AND NEW.kind=('change')
+  AND NEW.target IS r.version_id
+  AND NEW.payload_digest=r.digest
+  AND (NEW.outcome=(CASE WHEN (r.state='withdrawn' AND r.consent_at IS NOT NULL) THEN 'applied' WHEN (r.state='review' AND r.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) THEN 'expired' WHEN (r.state='withdrawn' AND r.consent_at IS NULL) THEN 'failed' END))));
+ SELECT RAISE(ABORT,'review_receipt_bind') WHERE NEW.family='cloudflare_dns_actions' AND (NEW.lifecycle_class<>'domains-dns' OR NOT EXISTS(SELECT 1 FROM cloudflare_dns_actions r WHERE r.id=NEW.id
+  AND r.user_id=NEW.owner_user_id
+  AND r.project_id=NEW.project_id
+  AND NEW.kind=('change')
+  AND NEW.target IS r.record_name
+  AND (NEW.outcome=(CASE WHEN r.state IN ('applied','unchanged','observed') THEN 'applied' WHEN (r.state='review' AND r.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) THEN 'expired' END))));
+ SELECT RAISE(ABORT,'review_receipt_bind') WHERE NEW.family='domain_connections' AND (NEW.lifecycle_class<>'domains-dns' OR NOT EXISTS(SELECT 1 FROM domain_connections r WHERE r.id=NEW.id
+  AND r.user_id=NEW.owner_user_id
+  AND r.project_id=NEW.project_id
+  AND NEW.kind=('change')
+  AND NEW.target IS r.hostname
+  AND (NEW.outcome=(CASE WHEN r.state='disconnected' THEN 'applied' WHEN (r.state='review' AND r.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) THEN 'expired' END))));
+ SELECT RAISE(ABORT,'review_receipt_bind') WHERE NEW.family='github_backups' AND (NEW.lifecycle_class<>'github-backups' OR NOT EXISTS(SELECT 1 FROM github_backups r WHERE r.id=NEW.id
+  AND r.user_id=NEW.owner_user_id
+  AND r.project_id=NEW.project_id
+  AND NEW.kind=('change')
+  AND NEW.target IS r.repo_owner||'/'||r.repo_name
+  AND NEW.payload_digest=r.sha256
+  AND NEW.request_hash=r.request_hash
+  AND (NEW.outcome=(CASE WHEN r.state='complete' THEN 'applied' WHEN (r.state='pending' AND r.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) THEN 'expired' WHEN r.state='failed' THEN 'failed' END))));
+ SELECT RAISE(ABORT,'review_receipt_bind') WHERE NEW.family='github_grant_revocations' AND (NEW.lifecycle_class<>'connections' OR NOT EXISTS(SELECT 1 FROM github_grant_revocations r WHERE r.id=NEW.id
+  AND r.user_id=NEW.owner_user_id
+  AND NEW.project_id IS NULL
+  AND NEW.kind=(CASE WHEN 1 THEN 'withdrawal' ELSE 'change' END)
+  AND NEW.target IS r.token_id
+  AND (NEW.outcome=(CASE WHEN r.state='revoked' THEN (CASE WHEN 1 THEN 'withdrawn' ELSE 'applied' END) WHEN (r.state='review' AND r.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) THEN 'expired' WHEN r.state='cancelled' THEN 'failed' END) OR (NEW.outcome='superseded' AND (1 AND NOT (r.state='revoked') AND EXISTS(SELECT 1 FROM github_grant_revocations x WHERE x.expires_at>r.expires_at AND 1 AND x.token_id=r.token_id))))));
+ SELECT RAISE(ABORT,'review_receipt_bind') WHERE NEW.family='composition_plans' AND (NEW.lifecycle_class<>'backend-artifacts' OR NOT EXISTS(SELECT 1 FROM composition_plans r WHERE r.id=NEW.id
+  AND r.user_id=NEW.owner_user_id
+  AND r.project_id=NEW.project_id
+  AND NEW.kind=('change')
+  AND NEW.target IS r.project_id
+  AND NEW.request_hash=r.request_hash
+  AND (NEW.outcome=(CASE WHEN EXISTS(SELECT 1 FROM backend_extension_uses u WHERE u.plan_id=r.id) THEN 'applied' WHEN (r.expires_at<=unixepoch()-3600 AND NOT EXISTS(SELECT 1 FROM backend_extension_uses u WHERE u.plan_id=r.id)) THEN 'expired' END))));
+ SELECT RAISE(ABORT,'review_receipt_bind') WHERE NEW.family='cms_setup_reviews' AND (NEW.lifecycle_class<>'cms-resources' OR NOT EXISTS(SELECT 1 FROM cms_setup_reviews r WHERE r.id=NEW.id
+  AND r.user_id=NEW.owner_user_id
+  AND r.project_id=NEW.project_id
+  AND NEW.kind=('change')
+  AND NEW.target IS r.project_id
+  AND (NEW.outcome=(CASE WHEN r.status='approved' THEN 'applied' WHEN (r.status='pending' AND r.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) THEN 'expired' END))));
+ SELECT RAISE(ABORT,'review_receipt_bind') WHERE NEW.family='cms_publication_reviews' AND (NEW.lifecycle_class<>'cms-content' OR NOT EXISTS(SELECT 1 FROM cms_publication_reviews r WHERE r.id=NEW.id
+  AND r.user_id=NEW.owner_user_id
+  AND r.project_id=NEW.project_id
+  AND NEW.kind=('change')
+  AND NEW.target IS r.project_id||':'||r.collection||':'||r.item_id
+  AND NEW.payload_digest=r.digest
+  AND (NEW.outcome=(CASE WHEN r.status='published' THEN 'applied' WHEN (r.status='pending' AND r.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) THEN 'expired' END))));
+ SELECT RAISE(ABORT,'review_receipt_bind') WHERE NEW.family='cms_unpublish_reviews' AND (NEW.lifecycle_class<>'cms-content' OR NOT EXISTS(SELECT 1 FROM cms_unpublish_reviews r WHERE r.id=NEW.id
+  AND r.user_id=NEW.owner_user_id
+  AND NEW.project_id IS NULL
+  AND NEW.kind=(CASE WHEN 1 THEN 'withdrawal' ELSE 'change' END)
+  AND NEW.target IS r.publication_id
+  AND (NEW.outcome=(CASE WHEN r.status='complete' THEN (CASE WHEN 1 THEN 'withdrawn' ELSE 'applied' END) WHEN (r.status='pending' AND r.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) THEN 'expired' END) OR (NEW.outcome='superseded' AND (1 AND NOT (r.status='complete') AND EXISTS(SELECT 1 FROM cms_unpublish_reviews x WHERE x.expires_at>r.expires_at AND 1 AND x.publication_id=r.publication_id))))));
+ SELECT RAISE(ABORT,'review_receipt_bind') WHERE NEW.family='cms_discard_reviews' AND (NEW.lifecycle_class<>'cms-content' OR NOT EXISTS(SELECT 1 FROM cms_discard_reviews r WHERE r.id=NEW.id
+  AND r.user_id=NEW.owner_user_id
+  AND NEW.project_id IS NULL
+  AND NEW.kind=('change')
+  AND NEW.target IS r.publication_id
+  AND (NEW.outcome=(CASE WHEN r.status='complete' THEN 'applied' WHEN (r.status='pending' AND r.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) THEN 'expired' END))));
+ SELECT RAISE(ABORT,'review_receipt_bind') WHERE NEW.family='cms_import_reviews' AND (NEW.lifecycle_class<>'cms-media-imports' OR NOT EXISTS(SELECT 1 FROM cms_import_reviews r WHERE r.id=NEW.id
+  AND r.user_id=NEW.owner_user_id
+  AND r.project_id=NEW.project_id
+  AND NEW.kind=('change')
+  AND NEW.target IS r.project_id||':'||r.source_id
+  AND NEW.payload_digest=r.source_digest
+  AND (NEW.outcome=(CASE WHEN r.status='imported' THEN 'applied' WHEN (r.status='pending' AND r.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) THEN 'expired' WHEN r.status='superseded' THEN 'superseded' END))));
+END;
+CREATE TRIGGER review_receipt_immutable BEFORE UPDATE ON review_receipts BEGIN SELECT RAISE(ABORT,'review_receipt_immutable'); END;
+-- Receipts leave with project or account cleanup, or after the 30-day replay horizon and never inside a safety hold.
+CREATE TRIGGER review_receipt_retained BEFORE DELETE ON review_receipts
+WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.owner_user_id) AND (OLD.project_id IS NULL OR EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id))
+BEGIN
+ SELECT RAISE(ABORT,'review_receipt_retained') WHERE OLD.sealed_at>strftime('%Y-%m-%dT%H:%M:%fZ','now','-30 days')
+  OR EXISTS(SELECT 1 FROM safety_preservation_holds WHERE released_at IS NULL AND scope='account' AND subject_user_id=OLD.owner_user_id)
+  OR (OLD.project_id IS NOT NULL AND EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id));
+END;
 
 CREATE TABLE backend_versions (
  id TEXT PRIMARY KEY,
@@ -2339,7 +2531,10 @@ BEGIN SELECT RAISE(ABORT,'github_token_quota'); END;
 CREATE TRIGGER github_backup_owner BEFORE INSERT ON github_backups
 BEGIN
  SELECT RAISE(ABORT,'github_backup_owner') WHERE NOT EXISTS(SELECT 1 FROM site_versions v JOIN projects p ON p.id=v.project_id WHERE v.id=NEW.version_id AND p.id=NEW.project_id AND p.owner_user_id=NEW.user_id);
- SELECT RAISE(ABORT,'github_backup_quota') WHERE (SELECT COUNT(*) FROM github_backups WHERE user_id=NEW.user_id)>=100;
+ SELECT RAISE(ABORT,'github_backup_quota') WHERE ((SELECT count(*) FROM github_backups t WHERE t.project_id=NEW.project_id AND ((t.state='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR t.state IN ('dispatching','uncertain')))>=25
+  OR (SELECT count(*) FROM github_backups t WHERE t.user_id=NEW.user_id AND ((t.state='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR t.state IN ('dispatching','uncertain')))>=100
+  OR (SELECT count(*) FROM github_backups t WHERE ((t.state='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR t.state IN ('dispatching','uncertain')))>=5000
+  OR ((SELECT count(*) FROM github_backups t WHERE ((t.state='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR t.state IN ('dispatching','uncertain')))>=2500 AND (SELECT count(*) FROM github_backups t WHERE t.user_id=NEW.user_id AND ((t.state='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR t.state IN ('dispatching','uncertain')))>=25));
 END;
 
 CREATE TRIGGER github_backup_identity BEFORE UPDATE ON github_backups
@@ -2349,7 +2544,10 @@ BEGIN SELECT RAISE(ABORT,'github_backup_immutable'); END;
 CREATE TRIGGER domain_connection_owner BEFORE INSERT ON domain_connections BEGIN
  SELECT RAISE(ABORT,'domain_connection_initial') WHERE NEW.state!='review' OR NEW.provider_id IS NOT NULL OR NEW.serve_until IS NOT NULL;
  SELECT RAISE(ABORT,'domain_connection_owner') WHERE NOT EXISTS(SELECT 1 FROM domain_claims d JOIN projects p ON p.id=d.project_id WHERE d.id=NEW.claim_id AND d.project_id=NEW.project_id AND d.hostname=NEW.hostname AND p.owner_user_id=NEW.user_id);
- SELECT RAISE(ABORT,'domain_connection_reviews') WHERE (SELECT COUNT(*) FROM domain_connections WHERE user_id=NEW.user_id)>=100;
+ SELECT RAISE(ABORT,'domain_connection_reviews') WHERE ((SELECT count(*) FROM domain_connections t WHERE t.project_id=NEW.project_id AND ((t.state='review' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR t.state IN ('creating','uncertain','provisioning','active','disconnecting')))>=25
+  OR (SELECT count(*) FROM domain_connections t WHERE t.user_id=NEW.user_id AND ((t.state='review' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR t.state IN ('creating','uncertain','provisioning','active','disconnecting')))>=100
+  OR (SELECT count(*) FROM domain_connections t WHERE ((t.state='review' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR t.state IN ('creating','uncertain','provisioning','active','disconnecting')))>=5000
+  OR ((SELECT count(*) FROM domain_connections t WHERE ((t.state='review' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR t.state IN ('creating','uncertain','provisioning','active','disconnecting')))>=2500 AND (SELECT count(*) FROM domain_connections t WHERE t.user_id=NEW.user_id AND ((t.state='review' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR t.state IN ('creating','uncertain','provisioning','active','disconnecting')))>=25));
 END;
 
 CREATE TRIGGER domain_connection_capacity BEFORE UPDATE OF state ON domain_connections
@@ -2410,7 +2608,10 @@ WHEN NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.expires_at!=OLD.expires_a
 BEGIN SELECT RAISE(ABORT,'cloudflare_vault_immutable'); END;
 
 CREATE TRIGGER cloudflare_dns_quota BEFORE INSERT ON cloudflare_dns_actions
-WHEN (SELECT COUNT(*) FROM cloudflare_dns_actions WHERE user_id=NEW.user_id)>=100
+WHEN (((SELECT count(*) FROM cloudflare_dns_actions t WHERE t.project_id=NEW.project_id AND ((t.state='review' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR t.state IN ('sending','uncertain')))>=25
+  OR (SELECT count(*) FROM cloudflare_dns_actions t WHERE t.user_id=NEW.user_id AND ((t.state='review' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR t.state IN ('sending','uncertain')))>=100
+  OR (SELECT count(*) FROM cloudflare_dns_actions t WHERE ((t.state='review' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR t.state IN ('sending','uncertain')))>=5000
+  OR ((SELECT count(*) FROM cloudflare_dns_actions t WHERE ((t.state='review' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR t.state IN ('sending','uncertain')))>=2500 AND (SELECT count(*) FROM cloudflare_dns_actions t WHERE t.user_id=NEW.user_id AND ((t.state='review' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR t.state IN ('sending','uncertain')))>=25)))
 BEGIN SELECT RAISE(ABORT,'cloudflare_dns_quota'); END;
 
 CREATE TRIGGER cloudflare_dns_identity BEFORE UPDATE ON cloudflare_dns_actions
@@ -2519,14 +2720,22 @@ CREATE TRIGGER directory_review_identity BEFORE UPDATE ON directory_reviews
 WHEN NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.project_id!=OLD.project_id OR NEW.kind!=OLD.kind OR NEW.snapshot_json!=OLD.snapshot_json OR NEW.digest!=OLD.digest OR NEW.expected_revision!=OLD.expected_revision OR NEW.publication_revision!=OLD.publication_revision OR NEW.expires_at!=OLD.expires_at OR OLD.status!='pending' OR NEW.status!='applied' OR NEW.confirmed_by IS NULL
 BEGIN SELECT RAISE(ABORT,'directory_changed'); END;
 
+-- Listing slots (draft plus live) are bounded per owner (250) under a platform ceiling (2000). Once the platform holds
+-- 1000 slots, an owner already holding 62 may not add more. Only growth is refused, so edits that remove listings and
+-- withdrawals (which only clear the live copy) are never refused for capacity.
 CREATE TRIGGER directory_capacity BEFORE UPDATE ON directories
+WHEN json_array_length(NEW.draft_json)+COALESCE(json_array_length(NEW.live_json),0)>json_array_length(OLD.draft_json)+COALESCE(json_array_length(OLD.live_json),0)
 BEGIN
- SELECT RAISE(ABORT,'directory_capacity') WHERE (SELECT COALESCE(SUM(json_array_length(draft_json)+COALESCE(json_array_length(live_json),0)),0) FROM directories WHERE project_id!=NEW.project_id)+json_array_length(NEW.draft_json)+COALESCE(json_array_length(NEW.live_json),0)>2000;
+ SELECT RAISE(ABORT,'directory_capacity') WHERE
+  (SELECT COALESCE(SUM(json_array_length(d.draft_json)+COALESCE(json_array_length(d.live_json),0)),0) FROM directories d JOIN projects p ON p.id=d.project_id WHERE d.project_id!=NEW.project_id AND p.owner_user_id=(SELECT owner_user_id FROM projects WHERE id=NEW.project_id))+json_array_length(NEW.draft_json)+COALESCE(json_array_length(NEW.live_json),0)>250
+  OR (SELECT COALESCE(SUM(json_array_length(draft_json)+COALESCE(json_array_length(live_json),0)),0) FROM directories WHERE project_id!=NEW.project_id)+json_array_length(NEW.draft_json)+COALESCE(json_array_length(NEW.live_json),0)>2000
+  OR ((SELECT COALESCE(SUM(json_array_length(draft_json)+COALESCE(json_array_length(live_json),0)),0) FROM directories WHERE project_id!=NEW.project_id)+json_array_length(NEW.draft_json)+COALESCE(json_array_length(NEW.live_json),0)>1000
+   AND (SELECT COALESCE(SUM(json_array_length(d.draft_json)+COALESCE(json_array_length(d.live_json),0)),0) FROM directories d JOIN projects p ON p.id=d.project_id WHERE d.project_id!=NEW.project_id AND p.owner_user_id=(SELECT owner_user_id FROM projects WHERE id=NEW.project_id))+json_array_length(NEW.draft_json)+COALESCE(json_array_length(NEW.live_json),0)>62);
 END;
 
 CREATE TRIGGER directory_review_apply AFTER UPDATE ON directory_reviews
 BEGIN
- UPDATE directories SET revision=revision+1,draft_json=CASE WHEN NEW.kind='edit' THEN NEW.snapshot_json ELSE draft_json END,live_json=CASE NEW.kind WHEN 'publish' THEN NEW.snapshot_json WHEN 'unpublish' THEN NULL ELSE live_json END,publication_revision=CASE WHEN NEW.kind='publish' THEN NEW.publication_revision ELSE publication_revision END,published_at=CASE WHEN NEW.kind='publish' THEN strftime('%Y-%m-%dT%H:%M:%fZ','now') ELSE published_at END WHERE project_id=NEW.project_id;
+ UPDATE directories SET revision=revision+1,draft_json=CASE WHEN NEW.kind='edit' THEN NEW.snapshot_json ELSE draft_json END,live_json=CASE NEW.kind WHEN 'publish' THEN NEW.snapshot_json WHEN 'unpublish' THEN NULL ELSE live_json END,live_review_id=CASE NEW.kind WHEN 'publish' THEN NEW.id WHEN 'unpublish' THEN NULL ELSE live_review_id END,live_digest=CASE NEW.kind WHEN 'publish' THEN NEW.digest WHEN 'unpublish' THEN NULL ELSE live_digest END,publication_revision=CASE WHEN NEW.kind='publish' THEN NEW.publication_revision ELSE publication_revision END,published_at=CASE WHEN NEW.kind='publish' THEN strftime('%Y-%m-%dT%H:%M:%fZ','now') ELSE published_at END WHERE project_id=NEW.project_id;
  INSERT INTO activity_events(id,user_id,project_id,action,summary,created_at) VALUES('directory:'||NEW.id,NEW.user_id,NEW.project_id,'directory.'||NEW.kind,CASE NEW.kind WHEN 'edit' THEN 'Updated private directory draft' WHEN 'publish' THEN 'Published reviewed directory snapshot' ELSE 'Took directory offline' END,strftime('%Y-%m-%dT%H:%M:%fZ','now'));
 END;
 
@@ -2551,7 +2760,22 @@ BEGIN SELECT RAISE(ABORT,'directory_changed'); END;
 CREATE TRIGGER directory_review_insert BEFORE INSERT ON directory_reviews
 BEGIN
  SELECT RAISE(ABORT,'directory_changed') WHERE NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id AND owner_user_id=NEW.user_id);
- SELECT RAISE(ABORT,'directory_capacity') WHERE NEW.kind!='unpublish' AND (SELECT COUNT(*) FROM directory_reviews WHERE project_id=NEW.project_id AND kind!='unpublish')>=100;
+ SELECT RAISE(ABORT,'directory_capacity') WHERE NOT (NEW.kind='unpublish') AND ((SELECT count(*) FROM directory_reviews t WHERE t.project_id=NEW.project_id AND t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.kind='unpublish'))>=25
+  OR (SELECT count(*) FROM directory_reviews t WHERE t.user_id=NEW.user_id AND t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.kind='unpublish'))>=100
+  OR (SELECT count(*) FROM directory_reviews t WHERE t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.kind='unpublish'))>=5000
+  OR ((SELECT count(*) FROM directory_reviews t WHERE t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.kind='unpublish'))>=2500 AND (SELECT count(*) FROM directory_reviews t WHERE t.user_id=NEW.user_id AND t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.kind='unpublish'))>=25));
+END;
+
+CREATE TRIGGER directory_review_retained BEFORE DELETE ON directory_reviews
+WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+BEGIN
+ -- Only a terminal, unreferenced, unheld row outside the history window may leave, and only with its sealed receipt.
+ SELECT RAISE(ABORT,'directory_retained') WHERE NOT (OLD.status='applied' OR (OLD.status='pending' AND OLD.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) OR (OLD.kind='unpublish' AND NOT (OLD.status='applied') AND EXISTS(SELECT 1 FROM directory_reviews x WHERE x.expires_at>OLD.expires_at AND x.kind='unpublish' AND x.project_id=OLD.project_id)))
+  OR (EXISTS(SELECT 1 FROM directories WHERE live_review_id=OLD.id)
+   OR EXISTS(SELECT 1 FROM directory_exports WHERE review_id=OLD.id))
+  OR EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
+  OR NOT (NOT (OLD.status='applied') OR (OLD.kind='unpublish') OR OLD.id NOT IN (SELECT t.id FROM directory_reviews t WHERE t.project_id=OLD.project_id AND t.status='applied' AND NOT (t.kind='unpublish') ORDER BY t.expected_revision DESC,t.id DESC LIMIT 25))
+  OR NOT EXISTS(SELECT 1 FROM review_receipts WHERE family='directory_reviews' AND id=OLD.id AND (OLD.status='applied')=(outcome IN ('applied','withdrawn')));
 END;
 
 CREATE TRIGGER backend_versions_immutable BEFORE UPDATE ON backend_versions BEGIN SELECT RAISE(ABORT,'backend_immutable'); END;
@@ -2577,7 +2801,10 @@ CREATE TRIGGER backend_runs_identity BEFORE UPDATE ON backend_runs WHEN
 
 CREATE TRIGGER backend_state_review_insert BEFORE INSERT ON backend_state_reviews WHEN
  NEW.status<>'preparing' OR NOT EXISTS(SELECT 1 FROM backend_versions v JOIN projects p ON p.id=v.project_id JOIN backend_state s ON s.project_id=p.id WHERE v.id=NEW.version_id AND p.id=NEW.project_id AND p.owner_user_id=NEW.user_id AND s.revision=NEW.base_revision AND s.state_json=NEW.before_json) OR
- (SELECT count(*) FROM backend_state_reviews WHERE project_id=NEW.project_id)>=100 OR (SELECT count(*) FROM backend_state_reviews)>=1000
+ (((SELECT count(*) FROM backend_state_reviews t WHERE t.project_id=NEW.project_id AND t.status IN ('preparing','ready') AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))>=25
+  OR (SELECT count(*) FROM backend_state_reviews t WHERE t.user_id=NEW.user_id AND t.status IN ('preparing','ready') AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))>=100
+  OR (SELECT count(*) FROM backend_state_reviews t WHERE t.status IN ('preparing','ready') AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))>=5000
+  OR ((SELECT count(*) FROM backend_state_reviews t WHERE t.status IN ('preparing','ready') AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))>=2500 AND (SELECT count(*) FROM backend_state_reviews t WHERE t.user_id=NEW.user_id AND t.status IN ('preparing','ready') AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))>=25)))
  BEGIN SELECT RAISE(ABORT,'backend_state_review_unavailable'); END;
 
 CREATE TRIGGER backend_state_review_identity BEFORE UPDATE ON backend_state_reviews WHEN
@@ -2619,7 +2846,10 @@ CREATE TRIGGER backend_state_links_authority BEFORE INSERT ON backend_state_link
 CREATE TRIGGER backend_state_links_immutable BEFORE UPDATE ON backend_state_links BEGIN SELECT RAISE(ABORT,'backend_state_link_immutable'); END;
 
 CREATE TRIGGER cms_setup_review_guard BEFORE INSERT ON cms_setup_reviews WHEN NEW.status<>'pending' OR NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id AND owner_user_id=NEW.user_id) OR
- EXISTS(SELECT 1 FROM cms_instances WHERE project_id=NEW.project_id) OR (SELECT count(*) FROM cms_setup_reviews WHERE user_id=NEW.user_id)>=100 OR (SELECT count(*) FROM cms_setup_reviews)>=1000
+ EXISTS(SELECT 1 FROM cms_instances WHERE project_id=NEW.project_id) OR (((SELECT count(*) FROM cms_setup_reviews t WHERE t.project_id=NEW.project_id AND t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))>=25
+  OR (SELECT count(*) FROM cms_setup_reviews t WHERE t.user_id=NEW.user_id AND t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))>=100
+  OR (SELECT count(*) FROM cms_setup_reviews t WHERE t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))>=5000
+  OR ((SELECT count(*) FROM cms_setup_reviews t WHERE t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))>=2500 AND (SELECT count(*) FROM cms_setup_reviews t WHERE t.user_id=NEW.user_id AND t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))>=25)))
  BEGIN SELECT RAISE(ABORT,'cms_setup_review_unavailable'); END;
 
 CREATE TRIGGER cms_instances_insert BEFORE INSERT ON cms_instances WHEN
@@ -2684,10 +2914,13 @@ CREATE TRIGGER cms_preview_admission BEFORE INSERT ON cms_preview_links WHEN NOT
 
 CREATE TRIGGER cms_preview_immutable BEFORE UPDATE ON cms_preview_links BEGIN SELECT RAISE(ABORT,'cms_preview_immutable'); END;
 
-CREATE TRIGGER cms_publication_admission BEFORE INSERT ON cms_publication_reviews WHEN NEW.status<>'pending' OR EXISTS(SELECT 1 FROM cms_draft_requests WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_edit_requests WHERE id=NEW.id) OR NOT EXISTS(SELECT 1 FROM cms_draft_requests d JOIN projects p ON p.id=d.project_id JOIN cms_instances c ON c.project_id=d.project_id WHERE d.id=NEW.draft_request_id AND d.user_id=NEW.user_id AND d.project_id=NEW.project_id AND p.owner_user_id=NEW.user_id AND d.collection=NEW.collection AND d.item_id=NEW.item_id AND c.state='ready') OR (SELECT count(*) FROM cms_publication_reviews WHERE user_id=NEW.user_id)>=100 OR (SELECT count(*) FROM cms_publication_reviews)>=500
+CREATE TRIGGER cms_publication_admission BEFORE INSERT ON cms_publication_reviews WHEN NEW.status<>'pending' OR EXISTS(SELECT 1 FROM cms_draft_requests WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_edit_requests WHERE id=NEW.id) OR NOT EXISTS(SELECT 1 FROM cms_draft_requests d JOIN projects p ON p.id=d.project_id JOIN cms_instances c ON c.project_id=d.project_id WHERE d.id=NEW.draft_request_id AND d.user_id=NEW.user_id AND d.project_id=NEW.project_id AND p.owner_user_id=NEW.user_id AND d.collection=NEW.collection AND d.item_id=NEW.item_id AND c.state='ready') OR (((SELECT count(*) FROM cms_publication_reviews t WHERE t.project_id=NEW.project_id AND ((t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR t.status='approved'))>=25
+  OR (SELECT count(*) FROM cms_publication_reviews t WHERE t.user_id=NEW.user_id AND ((t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR t.status='approved'))>=100
+  OR (SELECT count(*) FROM cms_publication_reviews t WHERE ((t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR t.status='approved'))>=5000
+  OR ((SELECT count(*) FROM cms_publication_reviews t WHERE ((t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR t.status='approved'))>=2500 AND (SELECT count(*) FROM cms_publication_reviews t WHERE t.user_id=NEW.user_id AND ((t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR t.status='approved'))>=25)))
  BEGIN SELECT RAISE(ABORT,'cms_publication_not_available'); END;
 
-CREATE TRIGGER cms_unpublish_admission BEFORE INSERT ON cms_unpublish_reviews WHEN NEW.status<>'pending' OR EXISTS(SELECT 1 FROM cms_publication_reviews WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_draft_requests WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_edit_requests WHERE id=NEW.id) OR NOT EXISTS(SELECT 1 FROM cms_publication_reviews r JOIN projects p ON p.id=r.project_id WHERE r.id=NEW.publication_id AND r.user_id=NEW.user_id AND p.owner_user_id=NEW.user_id AND r.status='published' AND r.withdrawn=0) OR (SELECT count(*) FROM cms_unpublish_reviews WHERE user_id=NEW.user_id)>=100 OR (SELECT count(*) FROM cms_unpublish_reviews)>=500
+CREATE TRIGGER cms_unpublish_admission BEFORE INSERT ON cms_unpublish_reviews WHEN NEW.status<>'pending' OR EXISTS(SELECT 1 FROM cms_publication_reviews WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_draft_requests WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_edit_requests WHERE id=NEW.id) OR NOT EXISTS(SELECT 1 FROM cms_publication_reviews r JOIN projects p ON p.id=r.project_id WHERE r.id=NEW.publication_id AND r.user_id=NEW.user_id AND p.owner_user_id=NEW.user_id AND r.status='published' AND r.withdrawn=0)
  BEGIN SELECT RAISE(ABORT,'cms_unpublish_not_available'); END;
 
 CREATE TRIGGER cms_unpublish_immutable BEFORE UPDATE ON cms_unpublish_reviews WHEN NEW.id<>OLD.id OR NEW.publication_id<>OLD.publication_id OR NEW.user_id<>OLD.user_id OR NEW.revision<>OLD.revision OR NEW.expires_at<>OLD.expires_at OR NEW.created_at<>OLD.created_at OR NOT((OLD.status='pending' AND NEW.status='approved' AND OLD.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND EXISTS(SELECT 1 FROM cms_publication_reviews r JOIN projects p ON p.id=r.project_id WHERE r.id=NEW.publication_id AND r.withdrawn=0 AND r.status='published' AND p.owner_user_id=NEW.user_id)) OR (OLD.status='approved' AND NEW.status='complete'))
@@ -2721,7 +2954,9 @@ END;
 CREATE TRIGGER cms_unpublish_replacement_guard BEFORE UPDATE OF status ON cms_unpublish_reviews WHEN NEW.status='approved' AND EXISTS(SELECT 1 FROM cms_publication_reviews replacement WHERE replacement.replaces_publication_id=NEW.publication_id AND replacement.status='approved')
  BEGIN SELECT RAISE(ABORT,'cms_replacement_pending'); END;
 
-CREATE TRIGGER cms_discard_admission BEFORE INSERT ON cms_discard_reviews WHEN NEW.status<>'pending' OR NOT EXISTS(SELECT 1 FROM cms_publication_reviews p JOIN projects project ON project.id=p.project_id WHERE p.id=NEW.publication_id AND p.user_id=NEW.user_id AND project.owner_user_id=NEW.user_id AND p.status='published' AND p.withdrawn=0) OR EXISTS(SELECT 1 FROM cms_publication_reviews WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_unpublish_reviews WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_draft_requests WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_edit_requests WHERE id=NEW.id) OR (SELECT count(*) FROM cms_discard_reviews WHERE user_id=NEW.user_id)>=100 OR (SELECT count(*) FROM cms_discard_reviews)>=500
+CREATE TRIGGER cms_discard_admission BEFORE INSERT ON cms_discard_reviews WHEN NEW.status<>'pending' OR NOT EXISTS(SELECT 1 FROM cms_publication_reviews p JOIN projects project ON project.id=p.project_id WHERE p.id=NEW.publication_id AND p.user_id=NEW.user_id AND project.owner_user_id=NEW.user_id AND p.status='published' AND p.withdrawn=0) OR EXISTS(SELECT 1 FROM cms_publication_reviews WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_unpublish_reviews WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_draft_requests WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_edit_requests WHERE id=NEW.id) OR (((SELECT count(*) FROM cms_discard_reviews t WHERE t.user_id=NEW.user_id AND ((t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR t.status='approved'))>=100
+  OR (SELECT count(*) FROM cms_discard_reviews t WHERE ((t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR t.status='approved'))>=5000
+  OR ((SELECT count(*) FROM cms_discard_reviews t WHERE ((t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR t.status='approved'))>=2500 AND (SELECT count(*) FROM cms_discard_reviews t WHERE t.user_id=NEW.user_id AND ((t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR t.status='approved'))>=25)))
  BEGIN SELECT RAISE(ABORT,'cms_discard_unavailable'); END;
 
 CREATE TRIGGER cms_discard_immutable BEFORE UPDATE ON cms_discard_reviews WHEN NEW.id<>OLD.id OR NEW.publication_id<>OLD.publication_id OR NEW.user_id<>OLD.user_id OR NEW.revision<>OLD.revision OR NEW.snapshot<>OLD.snapshot OR NEW.expires_at<>OLD.expires_at OR NEW.created_at<>OLD.created_at OR NOT((OLD.status='pending' AND NEW.status='approved' AND OLD.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND EXISTS(SELECT 1 FROM cms_publication_reviews p JOIN projects project ON project.id=p.project_id WHERE p.id=NEW.publication_id AND project.owner_user_id=NEW.user_id AND p.status='published' AND p.withdrawn=0)) OR (OLD.status='approved' AND NEW.status='complete'))
@@ -2746,7 +2981,10 @@ CREATE TRIGGER backend_publication_review_admit BEFORE INSERT ON backend_publica
   SELECT 1 FROM backend_runs r WHERE r.id=NEW.run_id AND r.user_id=NEW.user_id AND r.project_id=NEW.project_id AND r.version_id=NEW.version_id
   AND r.state='complete' AND json_extract(r.result_json,'$.ok')=1
  );
- SELECT RAISE(ABORT,'backend_publication_capacity') WHERE (SELECT count(*) FROM backend_publication_reviews WHERE project_id=NEW.project_id)>=100 OR (SELECT count(*) FROM backend_publication_reviews)>=1000;
+ SELECT RAISE(ABORT,'backend_publication_capacity') WHERE NOT (NEW.operation='unpublish') AND ((SELECT count(*) FROM backend_publication_reviews t WHERE t.project_id=NEW.project_id AND t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.operation='unpublish'))>=25
+  OR (SELECT count(*) FROM backend_publication_reviews t WHERE t.user_id=NEW.user_id AND t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.operation='unpublish'))>=100
+  OR (SELECT count(*) FROM backend_publication_reviews t WHERE t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.operation='unpublish'))>=5000
+  OR ((SELECT count(*) FROM backend_publication_reviews t WHERE t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.operation='unpublish'))>=2500 AND (SELECT count(*) FROM backend_publication_reviews t WHERE t.user_id=NEW.user_id AND t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.operation='unpublish'))>=25));
  SELECT RAISE(ABORT,'backend_publication_initial') WHERE NEW.status<>'pending';
 END;
 
@@ -2881,8 +3119,24 @@ BEGIN SELECT RAISE(ABORT,'operator_retention_immutable'); END;
 CREATE TRIGGER backend_form_admit BEFORE INSERT ON backend_form_reviews BEGIN
  SELECT RAISE(ABORT,'backend_form_owner') WHERE NOT EXISTS(SELECT 1 FROM projects p JOIN backend_form_settings s ON s.project_id=p.id WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.user_id AND s.revision=NEW.base_revision);
  SELECT RAISE(ABORT,'backend_form_targets') WHERE NEW.enabled=1 AND NOT EXISTS(SELECT 1 FROM publications s JOIN backend_publications b ON b.project_id=s.project_id JOIN backend_publication_reviews r ON r.id=b.review_id WHERE s.project_id=NEW.project_id AND s.version_id IS NOT NULL AND s.revision=NEW.site_revision AND b.review_id=NEW.backend_publication_id AND r.user_id=NEW.user_id AND r.status='applied');
- SELECT RAISE(ABORT,'backend_form_capacity') WHERE (SELECT count(*) FROM backend_form_reviews WHERE project_id=NEW.project_id)>=100 OR (SELECT count(*) FROM backend_form_reviews)>=1000;
+ SELECT RAISE(ABORT,'backend_form_capacity') WHERE NOT (NEW.enabled=0) AND ((SELECT count(*) FROM backend_form_reviews t WHERE t.project_id=NEW.project_id AND t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.enabled=0))>=25
+  OR (SELECT count(*) FROM backend_form_reviews t WHERE t.user_id=NEW.user_id AND t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.enabled=0))>=100
+  OR (SELECT count(*) FROM backend_form_reviews t WHERE t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.enabled=0))>=5000
+  OR ((SELECT count(*) FROM backend_form_reviews t WHERE t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.enabled=0))>=2500 AND (SELECT count(*) FROM backend_form_reviews t WHERE t.user_id=NEW.user_id AND t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.enabled=0))>=25));
  SELECT RAISE(ABORT,'backend_form_initial') WHERE NEW.status<>'pending';
+END;
+
+CREATE TRIGGER backend_form_review_retained BEFORE DELETE ON backend_form_reviews
+WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+BEGIN
+ -- Only a terminal, unreferenced, unheld row outside the history window may leave, and only with its sealed receipt.
+ SELECT RAISE(ABORT,'backend_form_retained') WHERE NOT (OLD.status='applied' OR (OLD.status='pending' AND OLD.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) OR (OLD.enabled=0 AND NOT (OLD.status='applied') AND EXISTS(SELECT 1 FROM backend_form_reviews x WHERE x.expires_at>OLD.expires_at AND x.enabled=0 AND x.project_id=OLD.project_id)))
+  OR (EXISTS(SELECT 1 FROM backend_form_settings WHERE review_id=OLD.id)
+   OR EXISTS(SELECT 1 FROM site_health_checks WHERE form_review_id=OLD.id)
+   OR EXISTS(SELECT 1 FROM service_client_activation_reviews WHERE id=OLD.id))
+  OR EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
+  OR NOT (NOT (OLD.status='applied') OR (OLD.enabled=0) OR OLD.id NOT IN (SELECT t.id FROM backend_form_reviews t WHERE t.project_id=OLD.project_id AND t.status='applied' AND NOT (t.enabled=0) ORDER BY t.expires_at DESC,t.id DESC LIMIT 25))
+  OR NOT EXISTS(SELECT 1 FROM review_receipts WHERE family='backend_form_reviews' AND id=OLD.id AND (OLD.status='applied')=(outcome IN ('applied','withdrawn')));
 END;
 
 CREATE TRIGGER backend_form_immutable BEFORE UPDATE ON backend_form_reviews WHEN NEW.id<>OLD.id OR NEW.user_id<>OLD.user_id OR NEW.project_id<>OLD.project_id OR NEW.enabled<>OLD.enabled OR NEW.config_json IS NOT OLD.config_json OR NEW.site_revision<>OLD.site_revision OR NEW.backend_publication_id IS NOT OLD.backend_publication_id OR NEW.base_revision<>OLD.base_revision OR NEW.expires_at<>OLD.expires_at OR OLD.status<>'pending' OR NEW.status<>'applied'
@@ -2932,7 +3186,10 @@ END;
 CREATE TRIGGER app_activation_admit BEFORE INSERT ON app_activation_reviews BEGIN
  SELECT RAISE(ABORT,'app_activation_owner') WHERE NOT EXISTS(SELECT 1 FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN backend_versions v ON v.project_id=p.id WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.user_id AND a.revision=NEW.base_revision AND v.id=NEW.version_id);
  SELECT RAISE(ABORT,'app_activation_test') WHERE NEW.enabled=1 AND NOT EXISTS(SELECT 1 FROM backend_runs r WHERE r.id=NEW.run_id AND r.user_id=NEW.user_id AND r.project_id=NEW.project_id AND r.version_id=NEW.version_id AND r.state='complete' AND json_extract(r.result_json,'$.ok')=1 AND json_type(r.result_json,'$.value')='object' AND (SELECT count(*) FROM json_each(r.result_json,'$.value'))=2 AND json_type(r.result_json,'$.value.state') IS NOT NULL AND json_type(r.result_json,'$.value.result') IS NOT NULL AND length(CAST(json_quote(json_extract(r.result_json,'$.value.state')) AS BLOB))<=4096 AND length(CAST(json_quote(json_extract(r.result_json,'$.value.result')) AS BLOB))<=4096);
- SELECT RAISE(ABORT,'app_activation_capacity') WHERE (SELECT count(*) FROM app_activation_reviews WHERE project_id=NEW.project_id)>=100 OR (SELECT count(*) FROM app_activation_reviews)>=1000;
+ SELECT RAISE(ABORT,'app_activation_capacity') WHERE NOT (NEW.enabled=0) AND ((SELECT count(*) FROM app_activation_reviews t WHERE t.project_id=NEW.project_id AND t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.enabled=0))>=25
+  OR (SELECT count(*) FROM app_activation_reviews t WHERE t.user_id=NEW.user_id AND t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.enabled=0))>=100
+  OR (SELECT count(*) FROM app_activation_reviews t WHERE t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.enabled=0))>=5000
+  OR ((SELECT count(*) FROM app_activation_reviews t WHERE t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.enabled=0))>=2500 AND (SELECT count(*) FROM app_activation_reviews t WHERE t.user_id=NEW.user_id AND t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.enabled=0))>=25));
  SELECT RAISE(ABORT,'app_activation_initial') WHERE NEW.status<>'pending';
 END;
 
@@ -2953,7 +3210,16 @@ CREATE TRIGGER app_activation_apply BEFORE UPDATE OF status ON app_activation_re
  UPDATE app_spaces SET enabled=NEW.enabled,version_id=NEW.version_id,revision=revision+1,review_id=NEW.id WHERE project_id=NEW.project_id;
 END;
 
-CREATE TRIGGER app_activation_delete_guard BEFORE DELETE ON app_activation_reviews WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) BEGIN SELECT RAISE(ABORT,'app_activation_immutable'); END;
+CREATE TRIGGER app_activation_delete_guard BEFORE DELETE ON app_activation_reviews
+WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+BEGIN
+ -- Only a terminal, unreferenced, unheld row outside the history window may leave, and only with its sealed receipt.
+ SELECT RAISE(ABORT,'app_activation_immutable') WHERE NOT (OLD.status='applied' OR (OLD.status='pending' AND OLD.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) OR (OLD.enabled=0 AND NOT (OLD.status='applied') AND EXISTS(SELECT 1 FROM app_activation_reviews x WHERE x.expires_at>OLD.expires_at AND x.enabled=0 AND x.project_id=OLD.project_id)))
+  OR (EXISTS(SELECT 1 FROM app_spaces WHERE review_id=OLD.id))
+  OR EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
+  OR NOT (NOT (OLD.status='applied') OR (OLD.enabled=0) OR OLD.id NOT IN (SELECT t.id FROM app_activation_reviews t WHERE t.project_id=OLD.project_id AND t.status='applied' AND NOT (t.enabled=0) ORDER BY t.expires_at DESC,t.id DESC LIMIT 25))
+  OR NOT EXISTS(SELECT 1 FROM review_receipts WHERE family='app_activation_reviews' AND id=OLD.id AND (OLD.status='applied')=(outcome IN ('applied','withdrawn')));
+END;
 
 CREATE TRIGGER plan_catalog_immutable BEFORE UPDATE ON plan_catalog BEGIN SELECT RAISE(ABORT,'plan_catalog_immutable'); END;
 
@@ -3020,7 +3286,10 @@ END;
 
 CREATE TRIGGER app_page_admit BEFORE INSERT ON app_page_reviews BEGIN
  SELECT RAISE(ABORT,'app_page_owner') WHERE NOT EXISTS(SELECT 1 FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN app_page_settings s ON s.project_id=a.project_id WHERE a.project_id=NEW.project_id AND a.owner_user_id=NEW.user_id AND a.revision=NEW.program_revision AND s.revision=NEW.base_revision AND (NEW.config_json IS NULL OR a.enabled=1));
- SELECT RAISE(ABORT,'app_page_capacity') WHERE (SELECT count(*) FROM app_page_reviews WHERE project_id=NEW.project_id)>=100 OR (SELECT count(*) FROM app_page_reviews)>=1000;
+ SELECT RAISE(ABORT,'app_page_capacity') WHERE NOT (NEW.config_json IS NULL) AND ((SELECT count(*) FROM app_page_reviews t WHERE t.project_id=NEW.project_id AND t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.config_json IS NULL))>=25
+  OR (SELECT count(*) FROM app_page_reviews t WHERE t.user_id=NEW.user_id AND t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.config_json IS NULL))>=100
+  OR (SELECT count(*) FROM app_page_reviews t WHERE t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.config_json IS NULL))>=5000
+  OR ((SELECT count(*) FROM app_page_reviews t WHERE t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.config_json IS NULL))>=2500 AND (SELECT count(*) FROM app_page_reviews t WHERE t.user_id=NEW.user_id AND t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND NOT (t.config_json IS NULL))>=25));
  SELECT RAISE(ABORT,'app_page_initial') WHERE NEW.status<>'pending';
 END;
 
@@ -3251,7 +3520,10 @@ CREATE TRIGGER cms_publication_media_safety BEFORE UPDATE OF status ON cms_publi
  SELECT 1 FROM cms_publication_media m WHERE m.review_id=NEW.id AND NOT EXISTS(SELECT 1 FROM approved_cms_media a WHERE a.user_id=m.user_id AND a.project_id=m.project_id AND a.media_id=m.media_id AND a.digest=m.digest)
 ) BEGIN SELECT RAISE(ABORT,'cms_media_safety_required'); END;
 
-CREATE TRIGGER cms_import_admission BEFORE INSERT ON cms_import_reviews WHEN NEW.status<>'pending' OR NOT EXISTS(SELECT 1 FROM cms_instances c JOIN projects p ON p.id=c.project_id JOIN cms_deployments d ON d.project_id=c.project_id WHERE c.project_id=NEW.project_id AND c.user_id=NEW.user_id AND p.owner_user_id=NEW.user_id AND c.state='ready' AND d.state='connected') OR EXISTS(SELECT 1 FROM cms_draft_requests WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_publication_reviews WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_edit_requests WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_unpublish_reviews WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_discard_reviews WHERE id=NEW.id) OR (SELECT count(*) FROM cms_import_reviews WHERE user_id=NEW.user_id)>=100 OR (SELECT count(*) FROM cms_import_reviews)>=500
+CREATE TRIGGER cms_import_admission BEFORE INSERT ON cms_import_reviews WHEN NEW.status<>'pending' OR NOT EXISTS(SELECT 1 FROM cms_instances c JOIN projects p ON p.id=c.project_id JOIN cms_deployments d ON d.project_id=c.project_id WHERE c.project_id=NEW.project_id AND c.user_id=NEW.user_id AND p.owner_user_id=NEW.user_id AND c.state='ready' AND d.state='connected') OR EXISTS(SELECT 1 FROM cms_draft_requests WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_publication_reviews WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_edit_requests WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_unpublish_reviews WHERE id=NEW.id) OR EXISTS(SELECT 1 FROM cms_discard_reviews WHERE id=NEW.id) OR (((SELECT count(*) FROM cms_import_reviews t WHERE t.project_id=NEW.project_id AND ((t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR t.status='approved'))>=25
+  OR (SELECT count(*) FROM cms_import_reviews t WHERE t.user_id=NEW.user_id AND ((t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR t.status='approved'))>=100
+  OR (SELECT count(*) FROM cms_import_reviews t WHERE ((t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR t.status='approved'))>=5000
+  OR ((SELECT count(*) FROM cms_import_reviews t WHERE ((t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR t.status='approved'))>=2500 AND (SELECT count(*) FROM cms_import_reviews t WHERE t.user_id=NEW.user_id AND ((t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR t.status='approved'))>=25)))
  BEGIN SELECT RAISE(ABORT,'cms_import_unavailable'); END;
 
 CREATE TRIGGER cms_import_immutable BEFORE UPDATE ON cms_import_reviews WHEN NEW.id<>OLD.id OR NEW.user_id<>OLD.user_id OR NEW.project_id<>OLD.project_id OR NEW.source_digest<>OLD.source_digest OR NEW.source_id<>OLD.source_id OR NEW.collection<>OLD.collection OR NEW.body<>OLD.body OR NEW.provenance<>OLD.provenance OR NEW.created_at<>OLD.created_at OR NEW.expires_at<>OLD.expires_at OR NOT ((OLD.status='pending' AND NEW.status='superseded' AND OLD.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR (OLD.status='pending' AND NEW.status='approved' AND OLD.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')) OR (OLD.status='approved' AND NEW.status='imported' AND EXISTS(SELECT 1 FROM cms_draft_requests d WHERE d.id=OLD.id AND d.user_id=OLD.user_id AND d.project_id=OLD.project_id AND d.collection=OLD.collection AND d.body=OLD.body AND d.content_format='structured' AND d.item_id IS NOT NULL)))
@@ -3263,7 +3535,16 @@ END;
 
 CREATE TRIGGER cms_import_draft_guard BEFORE INSERT ON cms_draft_requests WHEN EXISTS(SELECT 1 FROM cms_import_reviews r WHERE r.id=NEW.id AND (r.status<>'approved' OR r.project_id<>NEW.project_id OR r.user_id<>NEW.user_id OR r.collection<>NEW.collection OR r.body<>NEW.body OR NEW.content_format<>'structured')) BEGIN SELECT RAISE(ABORT,'cms_import_review_required'); END;
 
-CREATE TRIGGER cms_import_retained BEFORE DELETE ON cms_import_reviews WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) BEGIN SELECT RAISE(ABORT,'cms_import_retained'); END;
+CREATE TRIGGER cms_import_retained BEFORE DELETE ON cms_import_reviews
+WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+BEGIN
+ -- Only a terminal, unreferenced, unheld row outside the history window may leave, and only with its sealed receipt.
+ SELECT RAISE(ABORT,'cms_import_retained') WHERE NOT (OLD.status='imported' OR (OLD.status='pending' AND OLD.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) OR 0 OR OLD.status='superseded')
+  OR (EXISTS(SELECT 1 FROM cms_import_taxonomy_jobs WHERE review_id=OLD.id))
+  OR EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
+  OR NOT (NOT (OLD.status='imported') OR OLD.id NOT IN (SELECT t.id FROM cms_import_reviews t WHERE t.project_id=OLD.project_id AND t.status='imported' ORDER BY t.expires_at DESC,t.id DESC LIMIT 25))
+  OR NOT EXISTS(SELECT 1 FROM review_receipts WHERE family='cms_import_reviews' AND id=OLD.id AND (OLD.status='imported')=(outcome IN ('applied','withdrawn')));
+END;
 
 CREATE TRIGGER cms_import_publication_id BEFORE INSERT ON cms_publication_reviews WHEN EXISTS(SELECT 1 FROM cms_import_reviews WHERE id=NEW.id) BEGIN SELECT RAISE(ABORT,'cms_import_id_reserved'); END;
 
@@ -3533,7 +3814,16 @@ CREATE TRIGGER app_recovery_document_immutable BEFORE UPDATE ON app_recovery_doc
 
 CREATE TRIGGER app_recovery_revoke AFTER UPDATE OF revoked ON app_visitors WHEN NEW.revoked=1 BEGIN DELETE FROM app_recovery_documents WHERE visitor_id=NEW.id; END;
 
-CREATE TRIGGER app_restore_delete_guard BEFORE DELETE ON app_restore_reviews BEGIN SELECT RAISE(ABORT,'restore_immutable'); END;
+CREATE TRIGGER app_restore_delete_guard BEFORE DELETE ON app_restore_reviews
+WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+BEGIN
+ -- Only a terminal, unreferenced, unheld row outside the history window may leave, and only with its sealed receipt.
+ SELECT RAISE(ABORT,'restore_immutable') WHERE NOT (OLD.status='applied' OR (OLD.status='pending' AND OLD.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) OR 0)
+  OR (EXISTS(SELECT 1 FROM app_spaces WHERE rollback_id=OLD.id))
+  OR EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
+  OR NOT (NOT (OLD.status='applied') OR OLD.id NOT IN (SELECT t.id FROM app_restore_reviews t WHERE t.project_id=OLD.project_id AND t.status='applied' ORDER BY t.expires_at DESC,t.id DESC LIMIT 25))
+  OR NOT EXISTS(SELECT 1 FROM review_receipts WHERE family='app_restore_reviews' AND id=OLD.id AND (OLD.status='applied')=(outcome IN ('applied','withdrawn')));
+END;
 
 CREATE TRIGGER app_recovery_admit BEFORE INSERT ON app_recovery_points BEGIN
  SELECT RAISE(ABORT,'recovery_initial') WHERE NEW.sealed!=0 OR NEW.removed!=0;
@@ -3561,7 +3851,18 @@ END;
 
 CREATE TRIGGER app_migration_check_immutable BEFORE UPDATE ON app_migration_checks BEGIN SELECT RAISE(ABORT,'migration_immutable'); END;
 
-CREATE TRIGGER app_migration_check_delete BEFORE DELETE ON app_migration_checks BEGIN SELECT RAISE(ABORT,'migration_immutable'); END;
+CREATE TRIGGER app_migration_check_delete BEFORE DELETE ON app_migration_checks
+WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+BEGIN
+ -- Only a terminal, unreferenced, unheld row outside the history window may leave, and only with its sealed receipt.
+ SELECT RAISE(ABORT,'migration_immutable') WHERE NOT (EXISTS(SELECT 1 FROM app_migration_approvals a WHERE a.id=OLD.id AND a.status='applied') OR (OLD.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour') AND NOT EXISTS(SELECT 1 FROM app_migration_approvals a WHERE a.id=OLD.id) AND NOT EXISTS(SELECT 1 FROM app_migration_cancellations c WHERE c.id=OLD.id)) OR 0 OR EXISTS(SELECT 1 FROM app_migration_cancellations c WHERE c.id=OLD.id))
+  OR (EXISTS(SELECT 1 FROM app_migration_approvals WHERE id=OLD.id)
+   OR EXISTS(SELECT 1 FROM app_migration_cancellations WHERE id=OLD.id)
+   OR EXISTS(SELECT 1 FROM app_migration_documents WHERE migration_id=OLD.id))
+  OR EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
+  OR NOT (NOT (EXISTS(SELECT 1 FROM app_migration_approvals a WHERE a.id=OLD.id AND a.status='applied')) OR OLD.id NOT IN (SELECT t.id FROM app_migration_checks t WHERE t.project_id=OLD.project_id AND EXISTS(SELECT 1 FROM app_migration_approvals a WHERE a.id=t.id AND a.status='applied') ORDER BY t.expires_at DESC,t.id DESC LIMIT 25))
+  OR NOT EXISTS(SELECT 1 FROM review_receipts WHERE family='app_migration_checks' AND id=OLD.id AND (EXISTS(SELECT 1 FROM app_migration_approvals a WHERE a.id=OLD.id AND a.status='applied'))=(outcome IN ('applied','withdrawn')));
+END;
 
 CREATE TRIGGER app_migration_document_admit BEFORE INSERT ON app_migration_documents BEGIN
  SELECT RAISE(ABORT,'migration_document') WHERE NEW.state!='pending' OR NOT EXISTS(SELECT 1 FROM app_migration_current m JOIN app_recovery_documents d ON d.point_id=m.id WHERE m.id=NEW.migration_id AND d.visitor_id=NEW.visitor_id AND d.revision=NEW.base_revision);
@@ -3603,7 +3904,10 @@ CREATE TRIGGER app_restore_admit BEFORE INSERT ON app_restore_reviews BEGIN
  SELECT RAISE(ABORT,'restore_initial') WHERE NEW.status!='pending';
  SELECT RAISE(ABORT,'restore_authority') WHERE NOT EXISTS(SELECT 1 FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN app_recovery_points r ON r.project_id=a.project_id AND r.user_id=a.owner_user_id JOIN app_recovery_rosters roster ON roster.project_id=a.project_id WHERE r.id=NEW.point_id AND r.sealed=1 AND a.project_id=NEW.project_id AND a.owner_user_id=NEW.user_id AND a.enabled=0 AND a.revision=NEW.base_revision AND ((NEW.restore_program=0 AND NEW.from_version IS NULL AND a.version_id=r.version_id) OR (NEW.restore_program=1 AND NEW.from_version=a.version_id AND a.version_id!=r.version_id)) AND roster.roster_json=NEW.roster_json);
  SELECT RAISE(ABORT,'restore_missing_document') WHERE EXISTS(SELECT 1 FROM json_each(NEW.roster_json) entry WHERE NOT EXISTS(SELECT 1 FROM app_recovery_documents d WHERE d.point_id=NEW.point_id AND d.visitor_id=json_extract(entry.value,'$.visitor')));
- SELECT RAISE(ABORT,'restore_capacity') WHERE (SELECT count(*) FROM app_restore_reviews WHERE project_id=NEW.project_id)>=100 OR (SELECT count(*) FROM app_restore_reviews)>=1000;
+ SELECT RAISE(ABORT,'restore_capacity') WHERE ((SELECT count(*) FROM app_restore_reviews t WHERE t.project_id=NEW.project_id AND t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))>=25
+  OR (SELECT count(*) FROM app_restore_reviews t WHERE t.user_id=NEW.user_id AND t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))>=100
+  OR (SELECT count(*) FROM app_restore_reviews t WHERE t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))>=5000
+  OR ((SELECT count(*) FROM app_restore_reviews t WHERE t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))>=2500 AND (SELECT count(*) FROM app_restore_reviews t WHERE t.user_id=NEW.user_id AND t.status='pending' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))>=25));
 END;
 
 CREATE TRIGGER app_restore_immutable BEFORE UPDATE ON app_restore_reviews BEGIN
@@ -3648,7 +3952,7 @@ CREATE TRIGGER app_migration_check_admit BEFORE INSERT ON app_migration_checks B
  SELECT RAISE(ABORT,'migration_authority') WHERE NEW.to_version=NEW.from_version OR NOT EXISTS(SELECT 1 FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN app_recovery_points b ON b.id=NEW.id AND b.user_id=a.owner_user_id AND b.project_id=a.project_id AND b.version_id=a.version_id AND b.removed=0 AND b.sealed=1 JOIN app_recovery_rosters roster ON roster.project_id=a.project_id WHERE a.project_id=NEW.project_id AND a.owner_user_id=NEW.user_id AND a.enabled=0 AND a.version_id=NEW.from_version AND a.revision=NEW.base_revision AND roster.roster_json=NEW.roster_json);
  SELECT RAISE(ABORT,'migration_version') WHERE NOT EXISTS(SELECT 1 FROM backend_versions WHERE id=NEW.to_version AND project_id=NEW.project_id) OR NOT EXISTS(SELECT 1 FROM backend_versions WHERE id=NEW.transform_version AND project_id=NEW.project_id);
  SELECT RAISE(ABORT,'migration_test') WHERE NOT EXISTS(SELECT 1 FROM backend_runs r WHERE r.id=NEW.test_id AND r.user_id=NEW.user_id AND r.project_id=NEW.project_id AND r.version_id=NEW.to_version AND r.state='complete' AND json_extract(r.result_json,'$.ok')=1 AND json_extract(r.result_json,'$.check.status')='passed' AND json_type(r.result_json,'$.value')='object' AND (SELECT count(*) FROM json_each(r.result_json,'$.value'))=2 AND json_type(r.result_json,'$.value.state') IS NOT NULL AND json_type(r.result_json,'$.value.result') IS NOT NULL AND length(CAST(json_quote(json_extract(r.result_json,'$.value.state')) AS BLOB))<=4096 AND length(CAST(json_quote(json_extract(r.result_json,'$.value.result')) AS BLOB))<=4096);
- SELECT RAISE(ABORT,'migration_capacity') WHERE (SELECT count(*) FROM app_migration_checks m JOIN app_migration_current c ON c.id=m.id WHERE m.project_id=NEW.project_id)>=5 OR (SELECT count(*) FROM app_migration_current)>=50 OR (SELECT count(*) FROM app_migration_checks)>=1000;
+ SELECT RAISE(ABORT,'migration_capacity') WHERE (SELECT count(*) FROM app_migration_checks m JOIN app_migration_current c ON c.id=m.id WHERE m.project_id=NEW.project_id AND m.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))>=5 OR (SELECT count(*) FROM app_migration_current)>=50;
 END;
 
 CREATE TRIGGER app_maintenance_chat_link_admit BEFORE INSERT ON app_maintenance_chat_links BEGIN
@@ -3702,7 +4006,9 @@ END;
 CREATE TRIGGER backend_nomination_insert BEFORE INSERT ON backend_nominations BEGIN
  SELECT RAISE(ABORT,'nomination_requires_review') WHERE NEW.state!='review';
  SELECT RAISE(ABORT,'nomination_owner_or_digest') WHERE NOT EXISTS(SELECT 1 FROM backend_versions v JOIN projects p ON p.id=v.project_id WHERE v.id=NEW.version_id AND p.owner_user_id=NEW.user_id AND v.digest=NEW.digest);
- SELECT RAISE(ABORT,'nomination_capacity') WHERE (SELECT COUNT(*) FROM backend_nominations WHERE user_id=NEW.user_id)>=20 OR (SELECT COUNT(*) FROM backend_nominations WHERE user_id=NEW.user_id AND (state='nominated' OR (state='review' AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))))>=5;
+ SELECT RAISE(ABORT,'nomination_capacity') WHERE ((SELECT count(*) FROM backend_nominations t WHERE t.user_id=NEW.user_id AND (t.state='nominated' OR (t.state='review' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))))>=5
+  OR (SELECT count(*) FROM backend_nominations t WHERE (t.state='nominated' OR (t.state='review' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))))>=5000
+  OR ((SELECT count(*) FROM backend_nominations t WHERE (t.state='nominated' OR (t.state='review' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))))>=2500 AND (SELECT count(*) FROM backend_nominations t WHERE t.user_id=NEW.user_id AND (t.state='nominated' OR (t.state='review' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))))>=25));
  SELECT RAISE(ABORT,'nomination_already_open') WHERE EXISTS(SELECT 1 FROM backend_nominations WHERE user_id=NEW.user_id AND version_id=NEW.version_id AND (state='nominated' OR (state='review' AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))));
 END;
 
@@ -3990,8 +4296,10 @@ CREATE TRIGGER composition_plan_admit BEFORE INSERT ON composition_plans BEGIN
   WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.user_id AND p.details_revision=NEW.details_revision
   AND p.backend_revision=NEW.backend_revision AND (SELECT count(*) FROM backend_versions WHERE project_id=p.id)=NEW.backend_count
  );
- SELECT RAISE(ABORT,'composition_plan_quota') WHERE
-  (SELECT count(*) FROM composition_plans WHERE project_id=NEW.project_id)>=100 OR (SELECT count(*) FROM composition_plans)>=5000;
+ SELECT RAISE(ABORT,'composition_plan_quota') WHERE ((SELECT count(*) FROM composition_plans t WHERE t.project_id=NEW.project_id AND t.expires_at>unixepoch() AND NOT EXISTS(SELECT 1 FROM backend_extension_uses u WHERE u.plan_id=t.id))>=25
+  OR (SELECT count(*) FROM composition_plans t WHERE t.user_id=NEW.user_id AND t.expires_at>unixepoch() AND NOT EXISTS(SELECT 1 FROM backend_extension_uses u WHERE u.plan_id=t.id))>=100
+  OR (SELECT count(*) FROM composition_plans t WHERE t.expires_at>unixepoch() AND NOT EXISTS(SELECT 1 FROM backend_extension_uses u WHERE u.plan_id=t.id))>=5000
+  OR ((SELECT count(*) FROM composition_plans t WHERE t.expires_at>unixepoch() AND NOT EXISTS(SELECT 1 FROM backend_extension_uses u WHERE u.plan_id=t.id))>=2500 AND (SELECT count(*) FROM composition_plans t WHERE t.user_id=NEW.user_id AND t.expires_at>unixepoch() AND NOT EXISTS(SELECT 1 FROM backend_extension_uses u WHERE u.plan_id=t.id))>=25));
 END;
 
 CREATE TRIGGER composition_plan_immutable BEFORE UPDATE ON composition_plans BEGIN SELECT RAISE(ABORT,'composition_plan_immutable'); END;
@@ -5220,6 +5528,139 @@ CREATE TRIGGER safety_retention_decisions_admit BEFORE INSERT ON safety_retentio
 END;
 CREATE TRIGGER safety_retention_decisions_immutable BEFORE UPDATE ON safety_retention_decisions BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
 CREATE TRIGGER safety_retention_decisions_retained BEFORE DELETE ON safety_retention_decisions BEGIN SELECT RAISE(ABORT,'safety_case_immutable'); END;
+
+-- WH-181 delete guards for review families that had none: a row leaves only with project or account cleanup, or when it is
+-- terminal, unreferenced, outside the safety hold and the 25-row history window, and has its sealed review_receipts row.
+CREATE TRIGGER app_page_review_retained BEFORE DELETE ON app_page_reviews
+WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+BEGIN
+ -- Only a terminal, unreferenced, unheld row outside the history window may leave, and only with its sealed receipt.
+ SELECT RAISE(ABORT,'app_page_retained') WHERE NOT (OLD.status='applied' OR (OLD.status='pending' AND OLD.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) OR (OLD.config_json IS NULL AND NOT (OLD.status='applied') AND EXISTS(SELECT 1 FROM app_page_reviews x WHERE x.expires_at>OLD.expires_at AND x.config_json IS NULL AND x.project_id=OLD.project_id)))
+  OR (EXISTS(SELECT 1 FROM app_page_settings WHERE review_id=OLD.id)
+   OR EXISTS(SELECT 1 FROM app_runs WHERE page_review_id=OLD.id))
+  OR EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
+  OR NOT (NOT (OLD.status='applied') OR (OLD.config_json IS NULL) OR OLD.id NOT IN (SELECT t.id FROM app_page_reviews t WHERE t.project_id=OLD.project_id AND t.status='applied' AND NOT (t.config_json IS NULL) ORDER BY t.expires_at DESC,t.id DESC LIMIT 25))
+  OR NOT EXISTS(SELECT 1 FROM review_receipts WHERE family='app_page_reviews' AND id=OLD.id AND (OLD.status='applied')=(outcome IN ('applied','withdrawn')));
+END;
+CREATE TRIGGER backend_publication_review_retained BEFORE DELETE ON backend_publication_reviews
+WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+BEGIN
+ -- Only a terminal, unreferenced, unheld row outside the history window may leave, and only with its sealed receipt.
+ SELECT RAISE(ABORT,'backend_publication_retained') WHERE NOT (OLD.status='applied' OR (OLD.status='pending' AND OLD.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) OR (OLD.operation='unpublish' AND NOT (OLD.status='applied') AND EXISTS(SELECT 1 FROM backend_publication_reviews x WHERE x.expires_at>OLD.expires_at AND x.operation='unpublish' AND x.project_id=OLD.project_id)))
+  OR (EXISTS(SELECT 1 FROM backend_publications WHERE review_id=OLD.id)
+   OR EXISTS(SELECT 1 FROM backend_form_reviews WHERE backend_publication_id=OLD.id)
+   OR EXISTS(SELECT 1 FROM backend_public_usage WHERE publication_id=OLD.id))
+  OR EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
+  OR NOT (NOT (OLD.status='applied') OR (OLD.operation='unpublish') OR OLD.id NOT IN (SELECT t.id FROM backend_publication_reviews t WHERE t.project_id=OLD.project_id AND t.status='applied' AND NOT (t.operation='unpublish') ORDER BY t.expires_at DESC,t.id DESC LIMIT 25))
+  OR NOT EXISTS(SELECT 1 FROM review_receipts WHERE family='backend_publication_reviews' AND id=OLD.id AND (OLD.status='applied')=(outcome IN ('applied','withdrawn')));
+END;
+CREATE TRIGGER backend_state_review_retained BEFORE DELETE ON backend_state_reviews
+WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+BEGIN
+ -- Only a terminal, unreferenced, unheld row outside the history window may leave, and only with its sealed receipt.
+ SELECT RAISE(ABORT,'backend_state_retained') WHERE NOT (OLD.status='applied' OR (OLD.status IN ('preparing','ready') AND OLD.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) OR 0 OR OLD.status='failed')
+  OR (EXISTS(SELECT 1 FROM backend_state_reviews x WHERE x.restore_review_id=OLD.id)
+   OR EXISTS(SELECT 1 FROM backend_state_links WHERE review_id=OLD.id AND kind='export')
+   OR (OLD.status='applied' AND OLD.base_revision+1=(SELECT revision FROM backend_state WHERE project_id=OLD.project_id)))
+  OR EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
+  OR NOT (NOT (OLD.status='applied') OR OLD.id NOT IN (SELECT t.id FROM backend_state_reviews t WHERE t.project_id=OLD.project_id AND t.status='applied' ORDER BY t.expires_at DESC,t.id DESC LIMIT 25))
+  OR NOT EXISTS(SELECT 1 FROM review_receipts WHERE family='backend_state_reviews' AND id=OLD.id AND (OLD.status='applied')=(outcome IN ('applied','withdrawn')));
+END;
+CREATE TRIGGER backend_nomination_retained BEFORE DELETE ON backend_nominations
+WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) AND EXISTS(SELECT 1 FROM backend_versions WHERE id=OLD.version_id)
+BEGIN
+ -- Only a terminal, unreferenced, unheld row outside the history window may leave, and only with its sealed receipt.
+ SELECT RAISE(ABORT,'nomination_retained') WHERE NOT ((OLD.state='withdrawn' AND OLD.consent_at IS NOT NULL) OR (OLD.state='review' AND OLD.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) OR 0 OR (OLD.state='withdrawn' AND OLD.consent_at IS NULL))
+  OR 0
+  OR EXISTS(SELECT 1 FROM safety_preservation_holds WHERE released_at IS NULL AND scope='account' AND subject_user_id=OLD.user_id)
+  OR NOT (NOT ((OLD.state='withdrawn' AND OLD.consent_at IS NOT NULL)) OR OLD.id NOT IN (SELECT t.id FROM backend_nominations t WHERE t.user_id=OLD.user_id AND (t.state='withdrawn' AND t.consent_at IS NOT NULL) ORDER BY t.expires_at DESC,t.id DESC LIMIT 25))
+  OR NOT EXISTS(SELECT 1 FROM review_receipts WHERE family='backend_nominations' AND id=OLD.id AND ((OLD.state='withdrawn' AND OLD.consent_at IS NOT NULL))=(outcome IN ('applied','withdrawn')));
+END;
+CREATE TRIGGER cloudflare_dns_action_retained BEFORE DELETE ON cloudflare_dns_actions
+WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) AND EXISTS(SELECT 1 FROM domain_claims WHERE id=OLD.claim_id)
+BEGIN
+ -- Only a terminal, unreferenced, unheld row outside the history window may leave, and only with its sealed receipt.
+ SELECT RAISE(ABORT,'cloudflare_dns_retained') WHERE NOT (OLD.state IN ('applied','unchanged','observed') OR (OLD.state='review' AND OLD.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) OR 0)
+  OR 0
+  OR EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
+  OR NOT (NOT (OLD.state IN ('applied','unchanged','observed')) OR OLD.id NOT IN (SELECT t.id FROM cloudflare_dns_actions t WHERE t.project_id=OLD.project_id AND t.state IN ('applied','unchanged','observed') ORDER BY t.expires_at DESC,t.id DESC LIMIT 25))
+  OR NOT EXISTS(SELECT 1 FROM review_receipts WHERE family='cloudflare_dns_actions' AND id=OLD.id AND (OLD.state IN ('applied','unchanged','observed'))=(outcome IN ('applied','withdrawn')));
+END;
+CREATE TRIGGER domain_connection_retained BEFORE DELETE ON domain_connections
+WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+BEGIN
+ -- Only a terminal, unreferenced, unheld row outside the history window may leave, and only with its sealed receipt.
+ SELECT RAISE(ABORT,'domain_connection_retained') WHERE NOT (OLD.state='disconnected' OR (OLD.state='review' AND OLD.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) OR 0)
+  OR (EXISTS(SELECT 1 FROM domain_reconciliations WHERE connection_id=OLD.id)
+   OR EXISTS(SELECT 1 FROM cloudflare_dns_actions WHERE connection_id=OLD.id))
+  OR EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
+  OR NOT (NOT (OLD.state='disconnected') OR OLD.id NOT IN (SELECT t.id FROM domain_connections t WHERE t.project_id=OLD.project_id AND t.state='disconnected' ORDER BY t.expires_at DESC,t.id DESC LIMIT 25))
+  OR NOT EXISTS(SELECT 1 FROM review_receipts WHERE family='domain_connections' AND id=OLD.id AND (OLD.state='disconnected')=(outcome IN ('applied','withdrawn')));
+END;
+CREATE TRIGGER github_backup_retained BEFORE DELETE ON github_backups
+WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) AND EXISTS(SELECT 1 FROM site_versions WHERE id=OLD.version_id)
+BEGIN
+ -- Only a terminal, unreferenced, unheld row outside the history window may leave, and only with its sealed receipt.
+ SELECT RAISE(ABORT,'github_backup_retained') WHERE NOT (OLD.state='complete' OR (OLD.state='pending' AND OLD.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) OR 0 OR OLD.state='failed')
+  OR 0
+  OR EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
+  OR NOT (NOT (OLD.state='complete') OR OLD.id NOT IN (SELECT t.id FROM github_backups t WHERE t.project_id=OLD.project_id AND t.state='complete' ORDER BY t.expires_at DESC,t.id DESC LIMIT 25))
+  OR NOT EXISTS(SELECT 1 FROM review_receipts WHERE family='github_backups' AND id=OLD.id AND (OLD.state='complete')=(outcome IN ('applied','withdrawn')));
+END;
+CREATE TRIGGER composition_plan_retained BEFORE DELETE ON composition_plans
+WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) AND EXISTS(SELECT 1 FROM chat_turns WHERE id=OLD.id)
+BEGIN
+ -- Only a terminal, unreferenced, unheld row outside the history window may leave, and only with its sealed receipt.
+ SELECT RAISE(ABORT,'composition_plan_retained') WHERE NOT (EXISTS(SELECT 1 FROM backend_extension_uses u WHERE u.plan_id=OLD.id) OR (OLD.expires_at<=unixepoch()-3600 AND NOT EXISTS(SELECT 1 FROM backend_extension_uses u WHERE u.plan_id=OLD.id)) OR 0)
+  OR 0
+  OR EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
+  OR NOT (NOT (EXISTS(SELECT 1 FROM backend_extension_uses u WHERE u.plan_id=OLD.id)) OR OLD.id NOT IN (SELECT t.id FROM composition_plans t WHERE t.project_id=OLD.project_id AND EXISTS(SELECT 1 FROM backend_extension_uses u WHERE u.plan_id=t.id) ORDER BY t.expires_at DESC,t.id DESC LIMIT 25))
+  OR NOT EXISTS(SELECT 1 FROM review_receipts WHERE family='composition_plans' AND id=OLD.id AND (EXISTS(SELECT 1 FROM backend_extension_uses u WHERE u.plan_id=OLD.id))=(outcome IN ('applied','withdrawn')));
+END;
+CREATE TRIGGER cms_setup_review_retained BEFORE DELETE ON cms_setup_reviews
+WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+BEGIN
+ -- Only a terminal, unreferenced, unheld row outside the history window may leave, and only with its sealed receipt.
+ SELECT RAISE(ABORT,'cms_setup_retained') WHERE NOT (OLD.status='approved' OR (OLD.status='pending' AND OLD.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) OR 0)
+  OR (EXISTS(SELECT 1 FROM cms_instances WHERE review_id=OLD.id))
+  OR EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
+  OR NOT (NOT (OLD.status='approved') OR OLD.id NOT IN (SELECT t.id FROM cms_setup_reviews t WHERE t.project_id=OLD.project_id AND t.status='approved' ORDER BY t.expires_at DESC,t.id DESC LIMIT 25))
+  OR NOT EXISTS(SELECT 1 FROM review_receipts WHERE family='cms_setup_reviews' AND id=OLD.id AND (OLD.status='approved')=(outcome IN ('applied','withdrawn')));
+END;
+CREATE TRIGGER cms_publication_review_retained BEFORE DELETE ON cms_publication_reviews
+WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) AND EXISTS(SELECT 1 FROM cms_instances WHERE project_id=OLD.project_id) AND EXISTS(SELECT 1 FROM cms_draft_requests WHERE id=OLD.draft_request_id)
+BEGIN
+ -- Only a terminal, unreferenced, unheld row outside the history window may leave, and only with its sealed receipt.
+ SELECT RAISE(ABORT,'cms_publication_retained') WHERE NOT (OLD.status='published' OR (OLD.status='pending' AND OLD.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) OR 0)
+  OR ((OLD.status='published' AND OLD.withdrawn=0)
+   OR EXISTS(SELECT 1 FROM cms_publication_reviews x WHERE x.replaces_publication_id=OLD.id)
+   OR EXISTS(SELECT 1 FROM cms_publication_media WHERE review_id=OLD.id)
+   OR EXISTS(SELECT 1 FROM cms_unpublish_reviews WHERE publication_id=OLD.id)
+   OR EXISTS(SELECT 1 FROM cms_discard_reviews WHERE publication_id=OLD.id))
+  OR EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
+  OR NOT (NOT (OLD.status='published') OR OLD.id NOT IN (SELECT t.id FROM cms_publication_reviews t WHERE t.project_id=OLD.project_id AND t.status='published' ORDER BY t.expires_at DESC,t.id DESC LIMIT 25))
+  OR NOT EXISTS(SELECT 1 FROM review_receipts WHERE family='cms_publication_reviews' AND id=OLD.id AND (OLD.status='published')=(outcome IN ('applied','withdrawn')));
+END;
+CREATE TRIGGER cms_unpublish_review_retained BEFORE DELETE ON cms_unpublish_reviews
+WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) AND EXISTS(SELECT 1 FROM cms_publication_reviews WHERE id=OLD.publication_id)
+BEGIN
+ -- Only a terminal, unreferenced, unheld row outside the history window may leave, and only with its sealed receipt.
+ SELECT RAISE(ABORT,'cms_unpublish_retained') WHERE NOT (OLD.status='complete' OR (OLD.status='pending' AND OLD.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) OR (1 AND NOT (OLD.status='complete') AND EXISTS(SELECT 1 FROM cms_unpublish_reviews x WHERE x.expires_at>OLD.expires_at AND 1 AND x.publication_id=OLD.publication_id)))
+  OR 0
+  OR EXISTS(SELECT 1 FROM cms_publication_reviews x JOIN safety_held_projects h ON h.project_id=x.project_id WHERE x.id=OLD.publication_id) OR EXISTS(SELECT 1 FROM safety_preservation_holds WHERE released_at IS NULL AND scope='account' AND subject_user_id=OLD.user_id)
+  OR NOT (NOT (OLD.status='complete') OR (1) OR OLD.id NOT IN (SELECT t.id FROM cms_unpublish_reviews t WHERE t.user_id=OLD.user_id AND t.status='complete' AND NOT (1) ORDER BY t.expires_at DESC,t.id DESC LIMIT 25))
+  OR NOT EXISTS(SELECT 1 FROM review_receipts WHERE family='cms_unpublish_reviews' AND id=OLD.id AND (OLD.status='complete')=(outcome IN ('applied','withdrawn')));
+END;
+CREATE TRIGGER cms_discard_review_retained BEFORE DELETE ON cms_discard_reviews
+WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) AND EXISTS(SELECT 1 FROM cms_publication_reviews WHERE id=OLD.publication_id)
+BEGIN
+ -- Only a terminal, unreferenced, unheld row outside the history window may leave, and only with its sealed receipt.
+ SELECT RAISE(ABORT,'cms_discard_retained') WHERE NOT (OLD.status='complete' OR (OLD.status='pending' AND OLD.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) OR 0)
+  OR 0
+  OR EXISTS(SELECT 1 FROM cms_publication_reviews x JOIN safety_held_projects h ON h.project_id=x.project_id WHERE x.id=OLD.publication_id) OR EXISTS(SELECT 1 FROM safety_preservation_holds WHERE released_at IS NULL AND scope='account' AND subject_user_id=OLD.user_id)
+  OR NOT (NOT (OLD.status='complete') OR OLD.id NOT IN (SELECT t.id FROM cms_discard_reviews t WHERE t.user_id=OLD.user_id AND t.status='complete' ORDER BY t.expires_at DESC,t.id DESC LIMIT 25))
+  OR NOT EXISTS(SELECT 1 FROM review_receipts WHERE family='cms_discard_reviews' AND id=OLD.id AND (OLD.status='complete')=(outcome IN ('applied','withdrawn')));
+END;
 
 -- Ordinary deletion paths for held scope. Account holds cover the account cascade and every project of the
 -- subject; project holds cover one project; object holds cover one project photo. Customer-facing callers

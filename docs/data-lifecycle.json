@@ -456,11 +456,12 @@
         "chat_turns",
         "agent_inspections",
         "activity_events",
-        "chat_review_receipts"
+        "chat_review_receipts",
+        "review_receipts"
       ],
       "scope": "owner",
       "purpose": "Conversation continuity, saved agent inspection results, action history and metadata proving that a specific review was presented in a Chat reply.",
-      "currentRetention": "Retained under account; current Chat transcript has an upper revision but is not a whole-account snapshot. Internal inspections and receipts can outlive visible messages. chat_review_receipts has a direct NO ACTION owner reference and cascades with its Chat turn; it does not grant confirmation authority.",
+      "currentRetention": "Retained under account; current Chat transcript has an upper revision but is not a whole-account snapshot. Internal inspections and receipts can outlive visible messages. chat_review_receipts has a direct NO ACTION owner reference and cascades with its Chat turn; it does not grant confirmation authority. review_receipts (WH-181) holds sealed metadata-only receipts of compacted review rows (no payload, each carrying its source table's WH-009 class in lifecycle_class); it cascades with its project and account, is immutable, and may be deleted after the 30-day replay horizon unless a safety hold covers it.",
       "proposedRetention": "Retain active-account conversation until an approved user removal/retention policy; ordinary closure purge includes inspections and copied context. Extract only necessary unresolved-operation metadata first.",
       "deletionAuthority": "Owner closure or future reviewed conversation deletion; do not delete referenced authority/operation evidence without migration.",
       "exportPolicy": "Saved user/assistant turns and customer action summaries at a stable cutoff. Exclude private operator material and internal inspection dumps.",

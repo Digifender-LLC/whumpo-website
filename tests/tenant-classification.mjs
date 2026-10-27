@@ -17,25 +17,25 @@ const entry=(r,id)=>r.columns.find(c=>c.column===id);
 // ---- the committed registry matches the composed current schema ----
 const clean=await checkRegistry(registry,observed);
 assert.deepEqual(clean.problems,[]);
-assert.equal(observed.usersColumns.length,111);assert.equal(clean.coverage.classified,111);
+assert.equal(observed.usersColumns.length,112);assert.equal(clean.coverage.classified,112);
 assert.deepEqual([clean.coverage.unclassified,clean.coverage.stale,clean.coverage.duplicates],[[],[],[]]);
-assert.equal(new Set(observed.usersColumns.map(c=>c.table)).size,111,'no table has two users foreign keys');
-assert.deepEqual(observed.usersColumns.reduce((n,c)=>({...n,[c.onDelete]:(n[c.onDelete]??0)+1}),{}),{CASCADE:86,'NO ACTION':17,RESTRICT:7,'SET NULL':1});
+assert.equal(new Set(observed.usersColumns.map(c=>c.table)).size,112,'no table has two users foreign keys');
+assert.deepEqual(observed.usersColumns.reduce((n,c)=>({...n,[c.onDelete]:(n[c.onDelete]??0)+1}),{}),{CASCADE:87,'NO ACTION':17,RESTRICT:7,'SET NULL':1});
 
 // ---- proposed and undecided are reported, never coverage failures ----
 const report=registryReport(registry,observed);
-assert.equal(report.currentColumns,111);
-assert.equal(Object.values(report.byClass).reduce((a,b)=>a+b,0),111,'every current column is counted exactly once');
+assert.equal(report.currentColumns,112);
+assert.equal(Object.values(report.byClass).reduce((a,b)=>a+b,0),112,'every current column is counted exactly once');
 assert.equal(report.byStatus.accepted,undefined,'no entry is accepted at this baseline');
 assert.ok(report.byStatus.proposed>0&&report.byStatus.undecided>0);
-assert.equal(report.byStatus.proposed+report.byStatus.undecided,111);
+assert.equal(report.byStatus.proposed+report.byStatus.undecided,112);
 assert.equal(report.byEvidenceLevel['source-reading'],9,'the seven formerly undecided entries and two refinements carry source-reading evidence only');
 assert.equal(report.byClass['typed-subject'],2);assert.equal(report.byClass.split,1);assert.equal(report.byClass.account,7);
-// Mixed entries add intended outputs beside the current column; they do not add to the 111.
+// Mixed entries add intended outputs beside the current column; they do not add to the 112.
 assert.deepEqual(report.intended.typedSubjectColumns,['content_risk_evidence.account_id','content_risk_evidence.workspace_id','content_risk_reversals.account_id','content_risk_reversals.workspace_id']);
 assert.deepEqual(report.intended.splitTables,['profile_photo_scan_tickets','content_scan_tickets']);
 for(const table of report.intended.splitTables)assert.ok(!observed.tables.includes(table));
-assert.equal(report.byRetarget['hand-written']+report.byRetarget.keep+report.byRetarget['typed-subject']+report.byRetarget.split,111);
+assert.equal(report.byRetarget['hand-written']+report.byRetarget.keep+report.byRetarget['typed-subject']+report.byRetarget.split,112);
 assert.ok(!registry.columns.some(c=>c.retarget==='mechanical'),'no entry claims a mechanical rename');
 // Indirect tenants: 78 reach a tenant (38 through a project_id foreign key), 31 do not (29 at ca17c6a plus the two WH-050
 // operator receipt tables added on main), with the method recorded.
@@ -69,7 +69,7 @@ assert.equal(entry(registry,'welcome_onboarding.user_id').status,'proposed');
 
 // ---- freeze refusal, and a coherent path to a freeze that check also accepts ----
 const refusal=freezeStatus(registry);
-assert.equal(refusal.refused,true);assert.match(refusal.reasons.join('\n'),/111 of 111 entries are not accepted \(105 proposed, 6 undecided\)/);
+assert.equal(refusal.refused,true);assert.match(refusal.reasons.join('\n'),/112 of 112 entries are not accepted \(106 proposed, 6 undecided\)/);
 assert.match(refusal.reasons.join('\n'),/4 owner questions have no recorded answer \(payer-on-transfer, retention-and-closure-window, late-payment-continuity, funded-workspace-bound\)/);
 // Synthetic progression on a clone (the committed registry is never accepted here). An answer is recorded with its
 // date and contract anchor, the entries are accepted, then the registry is frozen; both gates must agree at each step.
@@ -93,7 +93,7 @@ mention((await checkRegistry(reopened,observed)).problems,/stripe_customers\.use
 // An entry cannot be accepted while its question is open, even before a freeze.
 mention(await problemsOf(r=>{entry(r,'stripe_customers.user_id').status='accepted';}),/accepted while owner question payer-on-transfer is open/);
 // Only a schema review edit freezes: a frozen status on the current registry fails check.
-mention(await problemsOf(r=>{r.status='frozen';}),/Registry is frozen but 111 entries are not accepted/);
+mention(await problemsOf(r=>{r.status='frozen';}),/Registry is frozen but 112 entries are not accepted/);
 
 // ---- negative controls: coverage and drift ----
 mention(await problemsOf(()=>{},{extraSql:'CREATE TABLE probe_new(id TEXT PRIMARY KEY, reviewer_id TEXT REFERENCES users(id));'}),/Unclassified users foreign key probe_new\.reviewer_id/);
@@ -152,14 +152,15 @@ for(const name of spike)assert.ok(baselined.has(name),name);
 assert.ok(baselined.has('safety_held_projects')&&baselined.has('operator_contained_projects'),'the views the spike called uncounted are found too');
 // 44 objects at ca17c6a plus WH-050's operator_containment_retained (same hold-subject comparison as the safety_hold_* triggers).
 assert.ok(baselined.has('operator_containment_retained'));
-assert.equal(baselined.size,45);
+// WH-181 adds 19 objects: the review_receipts delete guards (users.id and hold-subject comparisons with each family's user_id).
+assert.equal(baselined.size,64);
 const current=await runChecks();
 assert.deepEqual(current.problems,[]);
-assert.deepEqual([current.bodies.findings.total,current.bodies.findings.new,current.bodies.findings.stale],[49,0,0]);
+assert.deepEqual([current.bodies.findings.total,current.bodies.findings.new,current.bodies.findings.stale],[73,0,0]);
 
 // ---- the command line ----
 const cli=args=>spawnSync(process.execPath,['tools/tenant-classification.mjs',...args],{encoding:'utf8'});
-const check=cli([]);assert.equal(check.status,0,check.stderr);assert.match(check.stdout,/111\/111 users foreign keys classified, 0 unclassified, 0 stale/);assert.match(check.stdout,/schema freeze would be refused/);
+const check=cli([]);assert.equal(check.status,0,check.stderr);assert.match(check.stdout,/112\/112 users foreign keys classified, 0 unclassified, 0 stale/);assert.match(check.stdout,/schema freeze would be refused/);
 const freeze=cli(['freeze']);assert.equal(freeze.status,3);assert.match(freeze.stderr,/FREEZE REFUSED/);
 assert.equal(cli(['nonsense']).status,1);
-console.log('Tenant classification registry gate verified: 111 columns, drift, shape and freeze canaries fire.');
+console.log('Tenant classification registry gate verified: 112 columns, drift, shape and freeze canaries fire.');

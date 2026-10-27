@@ -34,6 +34,17 @@ The owner delegated every decision that does not cost the owner money to the age
 | D-9 (clarified) | Touch-target thresholds | Clarified 2026-10-27: 44px at phone width / coarse pointer, 24px minimum at desktop / fine pointer (WCAG 2.5.8 AA), inline links exempt; defects fixed in this PR. | Orchestrator clarification after a live smoke test found 40px Account security buttons at 390px and an 18px "Ask Whumpo" button at 1280px. | This PR |
 | OD-1–OD-7 | Review and directory retention parameters (`docs/review-retention.md`) | Adopt the recommendation recorded in each row. | They were written against the current schema and inventory. Adopting them lets WH-181 build against fixed numbers, and all of them can be changed before the cutover runs. | WH-181 to WH-184 (parameters fixed) |
 
+### Implementation decisions inside OD-1 to OD-7 (WH-181, 2026-10-27)
+
+Made while building the schema, within the parameters above, and recorded in full in [`docs/review-retention.md`](../review-retention.md#schema-and-trigger-changes-implemented-in-source-by-wh-181-owner-run-empty-d1-cutover-pending). Any of them can change before the cutover runs.
+
+| Decision | Choice | Reasoning |
+| --- | --- | --- |
+| Directory slot fair share (OD-7 fixed only the 250 per owner) | Past 1,000 platform slots an owner holding more than 62 may not add more | Same ratios as the policy table (half the ceiling, a quarter of the per-owner limit); only growth is refused, so unpublish and removing listings are never blocked |
+| Supersession of a pending withdrawal | A derived state (a newer withdrawal for the same target), accepted by the receipt binding and by the delete guard; no mutation at insert | The immutability triggers forbid changing a review and a row may leave only with its sealed receipt; sealing and deleting superseded rows is the WH-182 turnover job |
+| Families left on their lifetime caps | `project_spec_applies`, `service_client_applies`, `service_client_activation_reviews`, `cms_draft_requests` (+ edits), `cms_export_links`, `cms_preview_links`; `app_runs` and `backend_runs` stay with OD-8 | No pending, in-flight or expired state exists to count, or the current-activation reference cannot be read from a trigger; inventing a rule was out of scope |
+| Existing stricter limits | `backend_nominations` keeps owner 5, `app_migration_checks` keeps 5 per project and 50 platform, `domain_connections` keeps the 80-connection provider cap | They already count active rows and are stricter than the policy; only their lifetime caps were removed |
+
 ### Reserved for the owner (these cost money)
 
 | Item | Why reserved | Agent recommendation |
