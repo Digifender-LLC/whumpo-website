@@ -3,11 +3,14 @@ import assert from 'node:assert/strict';
 /** D-9 touch-target rule (WCAG 2.2 SC 2.5.8 inline exception). Buttons, radios and standalone links need 44px.
  * An <a> is "inline" only when its parent also holds non-blank text of its own (a text node outside any
  * element) so the link sits inside a sentence. A link alone in a li/div/nav is standalone and still checked.
- * Runs in the page; the optional root scopes the query (the negative control passes a synthetic fixture). */
-function smallTargets(root=document){
+ * min is 44 at phone width and 24 at desktop (D-9, 2026-10-27). Runs in the page; the optional root scopes the query (the negative control passes a synthetic fixture). */
+function smallTargets(min=44,root=document){
  const inline=e=>e.tagName==='A'&&[...e.parentElement.childNodes].some(n=>n.nodeType===3&&n.textContent.trim());
- return [...root.querySelectorAll(root===document?'main button, main a, main input[type=radio]':'button, a, input[type=radio]')].filter(e=>{const h=e.getBoundingClientRect().height;return h>0&&h<43&&!e.closest('label')&&!inline(e);}).map(e=>e.textContent?.trim()||e.getAttribute('aria-label'));
+ return [...root.querySelectorAll(root===document?'main button, main a, main input[type=radio]':'button, a, input[type=radio]')].filter(e=>{const h=e.getBoundingClientRect().height;return h>0&&h<min-1&&!e.closest('label')&&!inline(e);}).map(e=>e.textContent?.trim()||e.getAttribute('aria-label'));
 }
+
+/** Rendered heading levels in page order; runs in the page. */
+const headingLevels=()=>[...document.querySelectorAll('h1,h2,h3,h4,h5,h6')].map(h=>+h.tagName[1]);
 
 /** Actual built UI/Worker/current D1, keyboard-driven at a mobile viewport. Chat, dashboard and profile
  * are failing throughout: support needs identity only. No provider, notification or operator tool runs. */
@@ -60,10 +63,12 @@ export async function supportJourney({page,db,state,requests,origin,activate,ent
 
  phase('mobile, large text and follow-up');
  await activate(page.getByRole('radio',{name:'Review a usage decision or limit'}));
- for(const width of [360,390,1280]){await page.setViewportSize({width,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'No horizontal scroll at '+width);await page.screenshot({path:'/tmp/whumpo-support-'+width+'.png',fullPage:true});}
+ for(const width of [360,390,1280]){await page.setViewportSize({width,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'No horizontal scroll at '+width);await page.screenshot({path:'/tmp/whumpo-support-'+width+'.png',fullPage:true});
+  if(width!==360){const levels=await page.evaluate(headingLevels);assert.equal(levels.filter(l=>l===1).length,1,'Exactly one h1 at '+width+': '+levels);assert.ok(levels.every((l,i)=>l<=(levels[i-1]??0)+1),'No skipped heading level at '+width+': '+levels);}
+  if(width===1280)assert.deepEqual(await page.evaluate(smallTargets,24),[],'Standalone controls are at least 24px on desktop (D-9)');}
  await page.setViewportSize({width:390,height:844});
- const small=await page.evaluate(smallTargets);
- const control=await page.evaluate(`(${smallTargets})(Object.assign(document.body.appendChild(document.createElement('div')),{innerHTML:'<p>Email <a href="#a">inline sample</a> now.</p><a href="#b" style="display:block;height:20px">standalone sample</a><button style="height:20px">tiny button</button>'}))`);
+ const small=await page.evaluate(smallTargets,44);
+ const control=await page.evaluate(`(${smallTargets})(44,Object.assign(document.body.appendChild(document.createElement('div')),{innerHTML:'<p>Email <a href="#a">inline sample</a> now.</p><a href="#b" style="display:block;height:20px">standalone sample</a><button style="height:20px">tiny button</button>'}))`);
  assert.deepEqual(control,['standalone sample','tiny button'],'Negative control: standalone links and buttons under 44px still fail, inline links do not');
  assert.deepEqual(small,[],'Touch targets are at least 44px');
  await page.addStyleTag({content:'html{font-size:32px!important}'});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Large text does not scroll horizontally');
