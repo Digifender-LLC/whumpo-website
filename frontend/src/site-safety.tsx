@@ -1,8 +1,9 @@
+import {ReturnLink} from './navigation-links';
 import {ServiceSafetyActions,ServiceSafetyPanel} from './service-safety';
 import {useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {Link,useNavigate,useRouterState} from '@tanstack/react-router';
 import {useQuery} from '@tanstack/react-query';
-import {ArrowLeft,ShieldCheck} from 'lucide-react';
+import {ShieldCheck} from 'lucide-react';
 import type {SiteSafetyInventory,SiteSafetyReview,SiteSafetyReviews} from '../../src/site-safety-shape';
 import {identityGeneration} from './lib/identity-invalidation';
 import {api,send,message,queryClient} from './lib/api';
@@ -38,7 +39,7 @@ export function SiteSafetyPage(){
   finally{lock.current=false;if(present()){setBusy(false);void queryClient.invalidateQueries({queryKey:key});void queryClient.invalidateQueries({queryKey:['dashboard']});}}
  }
  return <main className="min-h-dvh bg-background px-5 py-6 sm:px-8 sm:py-9"><div className="mx-auto max-w-3xl space-y-7">
-  <Brand/><div className="flex flex-wrap items-center justify-between gap-3"><Button asChild variant="quiet" className={wrap}><Link to="/workspace/$view" params={{view:'dashboard'}} search={{}}><ArrowLeft className="size-4"/>Back to Dashboard</Link></Button><AccountHelp/></div>
+  <Brand/><div className="flex flex-wrap items-center justify-between gap-3"><ReturnLink/><AccountHelp/></div>
   <header><h1 ref={heading} tabIndex={-1} className="text-3xl font-bold">Site & app safety</h1><p className="mt-3 text-muted-foreground">Take published work offline while keeping its saved versions and data. These controls work independently of Chat.</p><p className="mt-3 text-sm text-muted-foreground">Each review names exactly what it takes offline: a website, backend tool or visitor app. CMS articles have separate publishing controls and are outside this page.</p></header>
   {error&&<p role="alert" className="rounded-md border p-4 text-sm">{error}</p>}
   {reviewId&&service===undefined&&<section aria-label="Website withdrawal review" className="rounded-lg border bg-card p-5 sm:p-6 space-y-4">

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 // Offline checks for the current workspace navigation contract. No network, storage or model.
 const bundle=await build({entryPoints:['frontend/src/lib/workspace-navigation.ts'],bundle:true,format:'esm',platform:'node',write:false});
-const {workspaceView,essentialDestinations,navigationSection,pageNavigationLabel,supportReference,selectedProject}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
+const {workspaceView,essentialDestinations,navigationSection,pageNavigationLabel,pageAccessibleName,noteLocation,returnTarget,supportReference,selectedProject}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
 
 // One Chat route. The superseded `/workspace/chat` alias and malformed paths resolve to nothing.
 assert.equal(workspaceView('/workspace'),'chat');assert.equal(workspaceView('/workspace/'),'chat');
@@ -22,6 +22,12 @@ assert.equal(navigationSection('tab-garden'),'pages');assert.equal(navigationSec
 // A generated page name cannot impersonate a fixed control.
 for(const label of ['Support','support','Saved work','SAVED WORK','Site and app safety','Site & app safety','Account & security','Sign out','Sign-out','Help and account','Help','Chat','Dashboard','Your profile','Account help','Your pages'])assert.equal(pageNavigationLabel(label),label+' (your page)',label);
 for(const label of ['Garden desk','Support tickets','Bakery overview'])assert.equal(pageNavigationLabel(label),label);
+
+assert.equal(pageAccessibleName('Support'),'Support, your page');assert.equal(pageAccessibleName('Garden desk'),'Garden desk');
+
+// Fixed pages return to the last non-fixed page in this tab, else Dashboard.
+assert.deepEqual(returnTarget(),{view:'dashboard',label:'Dashboard'});
+for(const [path,expected] of [['/workspace',{view:'chat',label:'Whumpo'}],['/workspace/saved-work',{view:'chat',label:'Whumpo'}],['/workspace/billing',{view:'settings',label:'Settings'}],['/workspace/support',{view:'settings',label:'Settings'}],['/workspace/tab-garden',{view:'tab-garden',label:'your page'}],['/workspace/photos',{view:'dashboard',label:'Dashboard'}],['/workspace/chat',{view:'dashboard',label:'Dashboard'}]]){noteLocation(path);assert.deepEqual(returnTarget(),expected,path);}
 
 // Error replies carry one content-free status link; anything else shows no link.
 assert.equal(supportReference('/workspace/support?ref='+encodeURIComponent('status:chat_unavailable')),'status:chat_unavailable');

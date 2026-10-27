@@ -54,7 +54,20 @@ export function navigationSection(view:string):'chat'|'dashboard'|'pages'|'setti
 const reservedLabels=new Set(['chat','dashboard','yourpages','pages','settings','help','helpandaccount','profile','yourprofile','signout','accounthelp','skiptoworkspace',...essentialDestinations.map(item=>item.label)].map(label=>normalized(label)));
 function normalized(label:string){return label.toLowerCase().replace(/&/g,'and').replace(/[^a-z0-9]/g,'');}
 /** A generated page cannot impersonate or shadow a fixed control by name. */
-export function pageNavigationLabel(label:string){return reservedLabels.has(normalized(label))?label+' (your page)':label;}
+export const pageSuffix='your page';
+export function pageNavigationLabel(label:string){return reservedLabels.has(normalized(label))?label+' ('+pageSuffix+')':label;}
+/** Screen readers get a comma pause instead of a spoken parenthesis. */
+export function pageAccessibleName(label:string){return pageNavigationLabel(label)===label?label:label+', '+pageSuffix;}
+const pageless=new Set(['saved-work','safety','support','security','profile','operator-safety','missing']);
+let origin='dashboard';
+/** Remember the last non-fixed page opened in this tab. A reload or a new tab
+ * forgets it and returns to Dashboard. */
+export function noteLocation(pathname:string){const view=workspaceView(pathname);if(!pageless.has(view))origin=view;}
+/** Where a fixed page returns to: Chat, Settings, an agent page or Dashboard. */
+export function returnTarget():{view:string;label:string}{
+ const section=navigationSection(origin);
+ return origin==='chat'?{view:'chat',label:'Whumpo'}:section==='settings'?{view:'settings',label:'Settings'}:section==='pages'?{view:origin,label:pageSuffix}:{view:'dashboard',label:'Dashboard'};
+}
 /** Error replies may carry one content-free support link. Only the exact
  * current status shape is accepted; anything else shows no link. */
 export function supportReference(value:unknown):string|null{

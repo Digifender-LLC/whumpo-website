@@ -40,7 +40,7 @@ export async function navigationJourney({page,db,state,requests,origin,activate,
 
  phase('generated page names are marked as pages');
  await activate(bar().getByRole('button',{name:'Your pages',exact:true}));const sheet=page.getByRole('dialog',{name:'Your pages',exact:true});await sheet.waitFor();
- for(const label of spoofed){assert.equal(await sheet.getByRole('link',{name:label,exact:true}).count(),0,label+' is not presented as a fixed control');await sheet.getByRole('link',{name:label+' (your page)',exact:true}).waitFor();}
+ for(const label of spoofed){assert.equal(await sheet.getByRole('link',{name:label,exact:true}).count(),0,label+' is not presented as a fixed control');await sheet.getByRole('link',{name:label+', your page',exact:true}).waitFor();}
  await page.keyboard.press('Escape');await sheet.waitFor({state:'detached'});
 
  phase('dashboard and Chat outage leave the Help controls intact');
@@ -76,6 +76,18 @@ export async function navigationJourney({page,db,state,requests,origin,activate,
  await page.goto(origin+'/workspace/?checkout=canceled');await page.waitForURL(url=>new URL(url).pathname==='/workspace/billing');
  await activate(bar().getByRole('link',{name:'Chat',exact:true}));await composer().waitFor();await reopened.waitFor();assert.equal(await composer().inputValue(),draft,'Provider and checkout returns keep the draft and reopened item');
  await activate(page.getByRole('button',{name:'Close saved item',exact:true}));await reopened.waitFor({state:'detached'});
+
+ phase('fixed pages return to the page they were opened from, else Dashboard');
+ const openEssential=async name=>{await activate(helpButton());await activate(help().getByRole('link',{name:new RegExp('^'+name.replace(/[&]/g,'\\&'))}));};
+ const returnTo=async(label,path)=>{await activate(page.getByRole('link',{name:'Back to '+label,exact:true}));await page.waitForURL(url=>new URL(url).pathname===path);};
+ await activate(bar().getByRole('link',{name:'Dashboard',exact:true}));await openEssential('Saved work');await returnTo('Dashboard','/workspace/dashboard');
+ await activate(bar().getByRole('link',{name:'Settings',exact:true}));await openEssential('Site & app safety');await returnTo('Settings','/workspace/settings');
+ await activate(bar().getByRole('link',{name:'Chat',exact:true}));await openEssential('Account & security');await returnTo('Whumpo','/workspace');await composer().waitFor();
+ await activate(bar().getByRole('button',{name:'Your pages',exact:true}));await activate(page.getByRole('dialog',{name:'Your pages',exact:true}).getByRole('link',{name:'Garden desk',exact:true}));
+ await openEssential('Saved work');await returnTo('your page','/workspace/tab-generated-5');
+ for(const [path,label,target] of [['/workspace/saved-work','Dashboard','/workspace/dashboard'],['/workspace/safety','Dashboard','/workspace/dashboard'],['/workspace/security','Dashboard','/workspace/dashboard']]){await page.goto(origin+path);await returnTo(label,target);}
+ await page.goto(origin+'/workspace/billing');await returnTo('Settings','/workspace/settings');
+ await page.goto(origin+'/workspace/photos');await returnTo('Dashboard','/workspace/dashboard');
 
  phase('superseded /workspace/chat alias is not a route');
  await page.goto(origin+'/workspace/chat');await page.getByRole('heading',{name:'Page not found',exact:true}).waitFor();assert.equal(await composer().count(),0);
@@ -130,7 +142,7 @@ export async function navigationJourney({page,db,state,requests,origin,activate,
  await page.route('**/api/workspace/dashboard',async route=>{const reply=await route.fetch();const json=await reply.json();if(reply.ok())json.layout={...json.layout,tabs:pages};await route.fulfill({response:reply,json});});
  await page.setViewportSize({width:1280,height:900});await page.reload();await composer().waitFor();await page.waitForLoadState('networkidle');
  const desktop=page.getByRole('navigation',{name:'Help and account',exact:true}),workspace=page.getByRole('navigation',{name:'Workspace',exact:true});
- for(const label of spoofed)await workspace.getByRole('link',{name:label+' (your page)',exact:true}).waitFor();
+ for(const label of spoofed)await workspace.getByRole('link',{name:label+', your page',exact:true}).waitFor();
  const desktopTree=await desktop.ariaSnapshot();for(const name of essentials)assert.match(desktopTree,new RegExp('link "'+name.replace(/[&]/g,'\\&')+'"'),desktopTree);assert.match(desktopTree,/button "Sign out"/);
  for(const name of essentials)await inView(desktop.getByRole('link',{name,exact:true}),'desktop '+name,900);
  await page.screenshot({path:'/tmp/whumpo-navigation-desktop.png'});

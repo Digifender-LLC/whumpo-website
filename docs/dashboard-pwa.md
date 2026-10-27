@@ -4,7 +4,7 @@
 
 ## Customer experience
 
-- Launching the installed app opens `/workspace`, preserving Chat as the default view. Dashboard, workflow pages, Profile and Settings retain their existing navigation and mobile safe-area/keyboard behavior. Authentication and first-project onboarding still apply.
+- Launching the installed app opens `/workspace`, preserving Chat as the default view. Dashboard, workflow pages, Profile and Settings keep the current navigation (desktop sidebar; mobile bar of Chat, Dashboard, Your pages, Settings and Help, with the essentials and Profile in the Help sheet) and mobile safe-area/keyboard behavior. Fixed pages return to the page they were opened from, or to Dashboard when that is unknown. Authentication and first-project onboarding still apply.
 - **Settings → Whumpo, a tap away** offers a browser install prompt when available. The prompt runs only after a click; dismissing it does not repeatedly prompt. Otherwise the card explains browser-menu installation. An installed standalone window shows its installed state.
 - iPhone/iPad guidance uses Safari's Share → Add to Home Screen flow, including Open as Web App when shown. The existing 180px Apple touch icon is the supplied elephant mark. The manifest includes matching 192/512px icons; they use `purpose: any` to preserve the artwork rather than falsely claiming a mask-safe design.
 - A failed workspace navigation displays a public branded offline page with a **Try again** action. Reconnecting reloads the requested workspace route. Saved server projects remain available after reconnection; unsent text retains only the existing [Chat recovery](unified-workspace-and-capacity.md) guarantees, not a new cross-device/offline sync promise.
