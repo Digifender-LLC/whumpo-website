@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import {mkdtempSync,writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {ciCommit,ciReview,ciPreflight,ciRelease,scrubCIOverrides} from '../tools/deploy-ci.mjs';
 import {validateCompatibility} from '../tools/release-manifest.mjs';
 
@@ -32,4 +35,29 @@ assert.throws(()=>scrubCIOverrides({WRANGLER_CI_OVERRIDE_NAME:'whumpo-runtime'})
 let touched=false;
 await assert.rejects(()=>ciRelease(process.cwd(),{observe:async()=>{touched=true;}},{env:{}}),/only in Cloudflare Workers Builds/);
 assert.equal(touched,false);
-console.log('CI release: commit identity, generated schema-unchanged review, schema/database/CMS refusals and Workers Builds name-override removal and the Workers Builds-only guard passed. No provider calls.');
+// Race guard: synthetic prepare/apply, real ciRelease control flow.
+const raceError=()=>Error('Worker changed outside this release');
+const race=async outcomes=>{
+ const prepares=[],logs=[];let n=0;
+ const deps={env:{WORKERS_CI:'1'},log:m=>logs.push(m),commit:()=>source,snapshot:async()=>({inputs:{sha256:'b'.repeat(64)}}),schema:async()=>artifact,
+  prepare:async()=>{const directory=mkdtempSync(join(tmpdir(),'ci-race-'));prepares.push(directory);return {directory,manifest:{id:'r'+prepares.length,schema:{mode:'none'}}};},
+  apply:async directory=>{const o=outcomes[n++];if(o.journal)writeFileSync(join(directory,'journal.json'),JSON.stringify({steps:o.journal}));if(o.error)throw o.error;}};
+ const result=await ciRelease(process.cwd(),{observe:async()=>observed(),configs:driver.configs},deps).then(r=>({r}),error=>({error}));
+ return {...result,prepares,logs,applies:n};
+};
+const pending={schema:{status:'pending'},runtime:{status:'pending'}};
+let out=await race([{error:raceError(),journal:pending},{}]);
+assert.ok(out.r&&out.applies===2&&out.prepares.length===2);
+assert.ok(out.logs.some(m=>m.startsWith('Retrying once')));
+// No journal file means apply stopped before saving anything: still all pending.
+out=await race([{error:raceError()},{}]);
+assert.ok(out.r&&out.applies===2);
+for(const status of ['running','unknown','confirmed']){
+ out=await race([{error:raceError(),journal:{...pending,runtime:{status}}},{}]);
+ assert.equal(out.error?.message,'Worker changed outside this release');assert.equal(out.applies,1);
+}
+out=await race([{error:Error('Release stopped at apps.'),journal:pending},{}]);
+assert.match(out.error.message,/Release stopped/);assert.equal(out.applies,1);
+out=await race([{error:raceError(),journal:pending},{error:raceError(),journal:pending},{}]);
+assert.equal(out.error?.message,'Worker changed outside this release');assert.equal(out.applies,2);
+console.log('CI release: commit identity, generated schema-unchanged review, schema/database/CMS refusals and Workers Builds name-override removal, the Workers Builds-only guard and the single pending-only retry after a concurrent merge passed. No provider calls.');
