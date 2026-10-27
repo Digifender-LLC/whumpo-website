@@ -22,6 +22,7 @@ export async function accountHelpJourney({page,context,db,state,requests,origin,
   await dialog().evaluate(element=>Promise.all(element.getAnimations().map(animation=>animation.finished.catch(()=>{}))));
   const box=await dialog().boundingBox();await page.screenshot({path:'/tmp/whumpo-account-help-geometry-'+width+'.png'});assert(box.x>=-.5&&box.x+box.width<=width+.5&&box.y>=-.5&&box.y+box.height<=844.5,JSON.stringify({width,box,viewport:await page.evaluate(()=>({width:innerWidth,height:innerHeight,scale:visualViewport.scale}))}));
   await dialog().getByRole('button',{name:'Sign out',exact:true}).scrollIntoViewIfNeeded();
+  const floor=width<=760?44:24,short=await dialog().evaluate((d,floor)=>[...d.querySelectorAll('button,summary')].filter(e=>e.getBoundingClientRect().height&&e.getBoundingClientRect().height<floor-.5).map(e=>e.textContent.trim()),floor);assert.deepEqual(short,[],'Standalone controls meet 44px at phone width and 24px on desktop (D-9)');
   const closeBox=await dialog().getByRole('button',{name:'Close',exact:true}).boundingBox();assert(closeBox.y>=0&&closeBox.y+closeBox.height<=844,'Close remains visible while the security controls scroll');
   await page.screenshot({path:'/tmp/whumpo-account-help-'+width+'.png'});
  }
