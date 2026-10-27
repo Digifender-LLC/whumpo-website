@@ -32,7 +32,7 @@ export async function prepareUsageReviewChat(db:D1Database,user:string,turn:stri
  const statement=text(match[1],950);
  const open=await db.prepare("SELECT id FROM usage_review_requests WHERE user_id=? AND kind='usage_review' AND state='open'").bind(user).first<{id:string}>();
  if(open)throw new BillingError(409,'You already have an open usage review. Ask “show my usage review '+open.id+'” to read its status.');
- return {reply:'Your usage review is saved for a platform operator. Your statement stays out of later AI context. No external message was sent, no response time is promised, and no limit or billing setting changed.\n\nReview: '+turn+'\nAsk “show my usage reviews” to check for a response.',statements:[db.prepare("INSERT INTO usage_review_requests(id,user_id,statement,kind,source) SELECT id,user_id,?,'usage_review','chat' FROM chat_turns WHERE id=? AND user_id=? AND ai_context_allowed=0").bind(statement,turn,user)]};
+ return {reply:'Your usage review is saved for a platform operator. Your statement stays out of later AI context. No external message was sent and no limit or billing setting changed. We reply on business days.\n\nReview: '+turn+'\nAsk “show my usage reviews” to check for a response.',statements:[db.prepare("INSERT INTO usage_review_requests(id,user_id,statement,kind,source) SELECT id,user_id,?,'usage_review','chat' FROM chat_turns WHERE id=? AND user_id=? AND ai_context_allowed=0").bind(statement,turn,user)]};
 }
 /** Operator-only response. This does not deliver a notice or change enforcement. */
 export async function answerUsageReview(db:Pick<D1Database,'prepare'>,user:string,id:string,response:string,operator:string){
