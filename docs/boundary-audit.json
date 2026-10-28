@@ -3755,7 +3755,7 @@
       },
       {
        "file": "tests/directories.mjs",
-       "contains": "await confirm(b.user,review);assert.equal((await current(a)).draft.length,0);",
+       "contains": "await confirm(b.user,review,'directory',409);assert.equal((await current(a)).draft.length,0);",
        "asserts": "another owner cannot confirm a directory change"
       },
       {
