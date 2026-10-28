@@ -5,7 +5,7 @@ import {execFileSync} from 'node:child_process';
 import {currentFixtureModules} from './helpers/current-modules.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
-const {module,identity}=await currentFixtureModules(["src/chat.ts", "src/cms-article-images.ts", "src/cms-bridge.ts", "src/cms-capability-contract.ts", "src/cms-content-shape.ts", "src/cms-content.ts", "src/cms-deploy.ts", "src/cms-edits.ts", "src/cms-gateway.ts", "src/cms-imports.ts", "src/cms-media-uploads.ts", "src/cms-pending.ts", "src/cms-preview.ts", "src/cms-projects.ts", "src/cms-provision.ts", "src/cms-publication-media.ts", "src/cms-publication.ts", "src/cms-wordpress-chat.ts", "src/cms-wordpress-import.ts", "src/cms-wordpress-mapped-media.ts", "src/cms-wordpress-sources.ts", "src/files.ts", "src/index.ts", "src/security.ts", "src/site-host.ts"]);
+const {module,identity}=await currentFixtureModules(["src/chat.ts", "src/photo-format.ts", "src/photo-scan-results.ts", "src/cms-article-images.ts", "src/cms-bridge.ts", "src/cms-capability-contract.ts", "src/cms-content-shape.ts", "src/cms-content.ts", "src/cms-deploy.ts", "src/cms-edits.ts", "src/cms-gateway.ts", "src/cms-imports.ts", "src/cms-media-uploads.ts", "src/cms-pending.ts", "src/cms-preview.ts", "src/cms-projects.ts", "src/cms-provision.ts", "src/cms-publication-media.ts", "src/cms-publication.ts", "src/cms-wordpress-chat.ts", "src/cms-wordpress-import.ts", "src/cms-wordpress-mapped-media.ts", "src/cms-wordpress-sources.ts", "src/files.ts", "src/index.ts", "src/security.ts", "src/site-host.ts"]);
 const {deployCMS,connectCMS}=await module('src/cms-deploy.ts'),{prepareCMS,confirmCMS}=await module('src/cms-projects.ts'),{allocateCMSResources}=await module('src/cms-provision.ts'),{deriveCMSSecret,verifyCMSRequest}=await module('src/cms-bridge.ts');
 const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-cms-deploy-');
 const store=await databaseFixture({d1:true,r2:true}),db=store.db,id=()=>crypto.randomUUID(),account='a'.repeat(32),master='local-master-fixture-'.repeat(4),digest='b'.repeat(64);
@@ -28,7 +28,7 @@ try{
  const bytes=new Uint8Array(await readFile(dir+'/photo.jpg')),photo=cleanPhoto(bytes);
  const nativeEnv={DB:db,WHUMPO_CMS_PROJECT_ID:a.project,WHUMPO_CMS_OWNER_ID:a.user,WHUMPO_CMS_ORIGIN:a.config.origin,WHUMPO_CMS_BRIDGE_KEY:a.config.secret};
  let writes=0,drop=false,capable=true;
- const dispatch=async request=>{writes++;const form=await request.formData(),file=form.get('file');assert.deepEqual(new Uint8Array(await file.arrayBuffer()),photo.bytes);return Response.json({success:true,data:{item:{id:'01ARZ3NDEKTSV4RRFFQ69G5FAV',status:'ready',filename:file.name,mimeType:'image/jpeg',size:photo.bytes.length,width:32,height:24,url:'PRIVATE_URL',storageKey:'PRIVATE_KEY',owner:'PRIVATE_OWNER'}}},{status:201});};
+ const dispatch=async request=>{writes++;const form=await request.formData(),file=form.get('file');assert.deepEqual(new Uint8Array(await file.arrayBuffer()),photo.bytes);return Response.json({success:true,data:{item:{id:writes===1?'01ARZ3NDEKTSV4RRFFQ69G5FAV':'01ARZ3NDEKTSV4RRFFQ69G'+String(writes).padStart(4,'0'),status:'ready',filename:file.name,mimeType:'image/jpeg',size:photo.bytes.length,width:32,height:24,url:'PRIVATE_URL',storageKey:'PRIVATE_KEY',owner:'PRIVATE_OWNER'}}},{status:201});};
  const env={CMS_BRIDGE_MASTER_KEY:master,['CMS_'+a.project.replaceAll('-','')]:{fetch:async request=>{
   if(!capable&&new URL(request.url).pathname.endsWith('/capabilities'))return Response.json({error:'old'},{status:403});
   const response=await cmsGateway(request,nativeEnv,dispatch);if(drop&&request.method==='POST'){drop=false;throw Error('lost native acknowledgement');}return response;
@@ -84,7 +84,7 @@ try{
  assert.deepEqual(await map(),mapped,'The converted body and evidence must be deterministic');
  const mutable=[{...choice[0]}],inFlight=map(mutable);mutable[0].mediaId='01ARZ3NDEKTSV4RRFFQ69G5FAA';assert.deepEqual(await inFlight,mapped,'Copy caller choices before asynchronous work');
  for(const invalid of [[],null,[{...choice[0],url:'https://evil.test'}],[choice[0],choice[0]],[{...choice[0],position:1}],[{...choice[0],mediaId:'bad'}]])await assert.rejects(map(invalid),e=>e.status===400);
- await assert.rejects(map(choice,id()),e=>e.status===404);await assert.rejects(map(choice,a.user,id()),e=>e.status===404);
+ await assert.rejects(map(choice,fixtureStranger),e=>e.status===404);await assert.rejects(map(choice,a.user,id()),e=>e.status===404);
  await assert.rejects(map([{position:0,mediaId:'01ARZ3NDEKTSV4RRFFQ69G5FAA'}]),e=>e.status===409);
  changed=true;await assert.rejects(map(),e=>e.status===409);changed=false;
  capable=false;await assert.rejects(map(),e=>e.status===409);capable=true;
@@ -120,6 +120,8 @@ try{
  await assert.rejects(db.prepare("UPDATE cms_import_reviews SET media_plan='[]' WHERE id=?").bind(mediaReview.id).run());
  const insertMapping=plan=>db.prepare("INSERT INTO cms_import_reviews(id,user_id,project_id,source_digest,source_id,collection,body,provenance,source_upload_id,media_plan) VALUES(?,?,?,?,99,'posts',?,?,?,?)").bind(id(),a.user,a.project,source.digest,mediaReview.body,mediaReview.provenance,source.id,JSON.stringify(plan)).run();
  for(const invalid of [[],[{...mapped.mediaPlan[0],digest:'f'.repeat(64)}],[{...mapped.mediaPlan[0],blockKey:'other'}],[{...mapped.mediaPlan[0],position:1}],[{...mapped.mediaPlan[0],mediaId:'01ARZ3NDEKTSV4RRFFQ69G5FAA'}]])await assert.rejects(insertMapping(invalid));
+ // Native media IDs are unique per upload except the first (the image under test); clear that one through the trusted scan contract.
+ {const {reservePhotoScan,recordPhotoScan}=await module('src/photo-scan-results.ts'),ticket=await reservePhotoScan(scope(a.user),'cms',a.user,first),ref=verdict=>({verdict,reference:'synthetic'});assert.equal((await recordPhotoScan(scope(a.user),ticket.id,ticket.authority,{digest:ticket.digest,policyVersion:ticket.policyVersion,csam:ref('clear'),sexual:ref('clear')})).outcome,'approved');}
  const mappedPage=await cmsImportPage(scope(a.user),a.user,mediaReview.id,importEnv),mappedHTML=await mappedPage.text();assert.ok(mappedHTML.includes('src="data:image/jpeg;base64,'));assert.ok(!mappedHTML.includes('src="https://old.example'));assert.ok(mappedHTML.includes('Fresh bread'));assert.match(mappedPage.headers.get('content-security-policy'),/img-src data:/);
  await assert.rejects(cmsImportPage(scope(fixtureStranger),fixtureStranger,mediaReview.id,importEnv),e=>e.status===404);
  changed=true;await assert.rejects(confirmCMSImport(scope(a.user),a.user,mediaReview.id,importEnv),e=>e.status===409);await assert.rejects(cmsImportPage(scope(a.user),a.user,mediaReview.id,importEnv),e=>e.status===409);changed=false;
@@ -167,7 +169,7 @@ try{
  const integrated=id();let loseImage=true;const interrupted={...articleEnv,FILES:{get:files.get.bind(files),put:async(...args)=>{const result=await files.put(...args);if(loseImage){loseImage=false;throw Error('lost image receipt');}return result;}}};
  await assert.rejects(prepareCMSPublication(scope(a.user),a.user,a.project,draft,integrated,interrupted),e=>e.status===503);
  const recovered=await cmsPublicationCommand(scope(a.user),a.user,id(),'/recover-cms-publish '+integrated,articleEnv)();assert.match(recovered,/Frozen images: 1/);assert.equal(publishes,0);
- const {readChat,sendChat}=await module('src/chat.ts');const recoverState=await readChat(scope(a.user),a.user),recoverTurn=id();
+ const {readChat,sendChat}=await module('src/chat.ts');const recoverState=await readChat(scope(a.user),a.user),recoverTurn=integrated;
  assert.equal((await sendChat(scope(a.user),a.user,{id:recoverTurn,revision:recoverState.state.revision,content:'/recover-cms-publish '+integrated},undefined,{cmsPublication:(turn,content)=>cmsPublicationCommand(scope(a.user),a.user,turn,content,articleEnv)})).status,200);
  assert.equal((await readChat(scope(a.user),a.user)).turns.find(t=>t.id===recoverTurn).cms_publication_confirmation_id,integrated);
  const reviewPage=await cmsPublicationPage(scope(a.user),a.user,integrated,files),reviewHTML=await reviewPage.text();assert.ok(reviewHTML.includes('src="data:image/jpeg;base64,'));assert.ok(!reviewHTML.includes('src="/cms/media/'));assert.match(reviewPage.headers.get('content-security-policy'),/img-src data:/);
@@ -208,7 +210,7 @@ try{
  const replayImport=await importHTTP(importPath,'POST',importBody);assert.equal(replayImport.status,200);assert.equal((await replayImport.json()).id,mediaReview.id);
  const httpPreview=await importHTTP(`cms-import-reviews/${mediaReview.id}/preview`);assert.equal(httpPreview.status,200);assert.ok((await httpPreview.text()).includes('src="data:image/jpeg;base64,'));
  const {cmsWordPressCommand}=await module('src/cms-wordpress-chat.ts');const chatReview=id();
- const chatMapped=await cmsWordPressCommand(scope(a.user),a.user,chatReview,`/import-wordpress ${a.project} ${repeated.id} 1 | ${image.asset._ref} ${image.asset._ref}`,importEnv)();assert.ok(chatMapped.includes('Send /confirm-cms-import '+chatReview));assert.equal((await readCMSImport(scope(a.user),a.user,chatReview)).status,'pending');assert.equal(importedWrites,1);
+ const chatMapped=await cmsWordPressCommand(scope(a.user),a.user,chatReview,`/import-wordpress ${a.project} ${repeated.id} 1 | ${image.asset._ref} ${image.asset._ref}`,importEnv)();assert.ok(chatMapped.includes('Use the confirmation button for import '+chatReview));assert.equal((await readCMSImport(scope(a.user),a.user,chatReview)).status,'pending');assert.equal(importedWrites,1);
  assert.match(await cmsWordPressCommand(scope(a.user),a.user,id(),`/import-wordpress ${a.project} ${source.id} 1 | https://evil.test`,importEnv)(),/confirmed local image IDs/);
  console.log('Mapped image API/Chat passed: strict ordered selections, session/origin checks, saved-review replay, authenticated inline preview and guided preparation without approval or inference.');
  const http=(suffix,method='GET',body,headers={})=>worker.fetch(new Request('https://whumpo.com/api/cms/'+a.project+'/media/uploads'+suffix,{method,headers:{origin:'https://whumpo.com',cookie:'__Host-whumpo_session='+session,'content-type':'image/jpeg','x-photo-name':'studio.jpg',...headers},body}),{...env,DB:db,AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})}},{waitUntil(){}});
@@ -218,7 +220,7 @@ try{
  assert.equal((await http('/'+first,'PUT',bytes,{'content-encoding':'gzip'})).status,415);
  assert.equal((await http('/'+first,'PUT',bytes,{'x-photo-name':'%ZZ'})).status,400);
  assert.equal((await http('/'+first,'PUT',new Uint8Array(1048577))).status,413);
- const replay=await http('/'+first,'PUT',bytes);assert.equal(replay.status,200);assert.deepEqual(await replay.json(),saved);
+ const replay=await http('/'+first,'PUT',bytes);assert.equal(replay.status,200);assert.deepEqual(await replay.json(),{...saved,safety:'approved'});
  assert.equal((await http('/'+first,'DELETE')).status,405);assert.equal(writes,before+1);
  console.log('Owner CMS uploads passed: native and local acknowledgement recovery, exact replay, concurrent admission, private metadata projection, owner isolation, immutable reservations, storage rollback and project capacity.');
 }finally{await store.close();await rm(dir,{recursive:true,force:true});}
