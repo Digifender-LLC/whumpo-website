@@ -1,5 +1,6 @@
 import {currentSiteFixtureHandlers,createFixtureWebsite,changeFixtureWebsite} from './current-site-fixture.mjs';
 import assert from 'node:assert/strict';
+import {assertTypedReplyEditRefused} from './helpers/receipt-forge.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
 Error.stackTraceLimit=0;
@@ -201,6 +202,7 @@ try{
   for(const bad of ['/contact-notify '+a.project,'/contact-notify '+a.project+' a@example.com b@example.com','/contact-notify '+a.project+' <a@example.com>']){const r=await chat(a,bad);assert.equal(r.result.status,200);assert.equal(await row('SELECT count(*) n FROM contact_destination_reviews WHERE id=?',r.id).then(x=>x.n),0);}
   const foreign=await chat(b,'/contact-notify '+a.project+' x@example.com');assert.equal((await row('SELECT count(*) n FROM contact_destination_reviews WHERE id=?',foreign.id)).n,0,'Another owner cannot prepare a review');
   await chat(b,'/confirm-contact-notify '+review.id);assert.equal((await N.contactNotificationStatus(db,a.id,a.project)).destination,null,'Another owner cannot confirm it');
+  await assertTypedReplyEditRefused({db,kind:'contactNotification',reviewId:review.id,table:'contact_destination_reviews',typed:async()=>{const r=await chat(a,'/confirm-contact-notify '+review.id);return (await readChat(scope(a.id),a.id)).turns.find(t=>t.id===r.id).assistant_text;}});
   assert.equal((await chat(a,'/confirm-contact-notify '+review.id)).result.status,200);
   let status=await N.contactNotificationStatus(db,a.id,a.project);assert.deepEqual({address:status.destination.address,state:status.destination.state},{address:'review-owner@example.com',state:'unverified'},'Applied, but never verified by the review itself');
   assert.equal((await row("SELECT count(*) n FROM activity_events WHERE id=?",'contact-notify:'+review.id)).n,1);assert.ok(!JSON.stringify(await rows('SELECT summary FROM activity_events WHERE user_id=?',a.id)).includes('review-owner@'),'Activity is content-free');

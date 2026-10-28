@@ -18,7 +18,7 @@ export async function readDirectory(db:D1Database,user:string,project:string){
  return {...p,draft:entries(p.draft_json),published:!!p.version_id&&p.live_json!==null&&p.publication_revision===p.current_publication};
 }
 import {requireRebuiltReply,rebuiltGuard} from './reviewed-rebuild';
-import {receiptStatement} from './chat-review-receipts';
+import {receiptStatement,reviewedReply,reviewChangedMessage} from './chat-review-receipts';
 const directoryReply=(name:string,change:string,kind:string,review:string,digest:string)=>`${name}\n\n${change}\n\n${kind==='edit'?'Your existing public snapshot will not change. ':''}Review ${review}\nSnapshot SHA-256: ${digest}\nNothing changes until you use this review’s confirmation button within 10 minutes.`;
 /** The reply a directory review shows, rebuilt from the saved row; undefined for edit, remove and restore, whose text embeds the
  * draft at review time (not saved on the row), so they cannot be rebuilt without a schema change. */
@@ -95,6 +95,7 @@ export async function directoryCommand(db:D1Database,user:string,turn:string,com
   if(verb==='/directory'&&!rest){const {results}=await db.prepare('SELECT p.id,p.name FROM projects p WHERE p.owner_user_id=? ORDER BY p.created_at DESC LIMIT 20').bind(user).all<{id:string;name:string}>();return result((results.map(p=>p.name+"\nProject: "+p.id).join('\n\n')||"No projects yet. Start a project first.")+'\n\nDirectories support private editable listings and a separately reviewed public page/JSON API.');}
   if(verb==='/confirm-directory'){
    if(!uuid.test(rest))throw new DirectoryError(400,"Choose the exact directory review using its confirmation control.");
+   if(!await reviewedReply(db,user,'directory',rest))throw new DirectoryError(409,reviewChangedMessage);
    const r=await db.prepare('SELECT r.*,p.name FROM directory_reviews r JOIN projects p ON p.id=r.project_id WHERE r.id=? AND r.user_id=?').bind(rest,user).first<{id:string;status:string;kind:string;project_id:string;expires_at:string;snapshot_json:string;digest:string;source_review_id:string|null;name:string}>();
    if(!r)throw new DirectoryError(404,'Directory review not found.');
    if(r.status==='applied')return result("That review was already applied. Ask to read the current directory for project "+r.project_id+' for current state.');

@@ -1,5 +1,5 @@
 import {ContactError} from './contacts';
-import {receiptStatement} from './chat-review-receipts';
+import {receiptStatement,reviewedReply,reviewChangedMessage} from './chat-review-receipts';
 import {notificationCatalog} from './notification-catalog';
 /**
  * WH-036 contact notifications. The private inbox (`contact_submissions`) is the source of truth; a notice is only a
@@ -223,6 +223,7 @@ export async function contactNotificationCommand(db:D1Database,userId:string,tur
  const result=(reply:string,statements:D1PreparedStatement[]=[])=>({reply,statements});
  if(verb==='/confirm-contact-notify'){
   if(extra.length||!id||!uuid.test(id))return result('Choose the contact notification review to confirm.');
+  if(!await reviewedReply(db,userId,'contactNotification',id))return result(reviewChangedMessage);
   const r=await db.prepare('SELECT r.status,r.expires_at,r.address FROM contact_destination_reviews r JOIN projects p ON p.id=r.project_id WHERE r.id=? AND r.user_id=? AND p.owner_user_id=?').bind(id,userId,userId).first<{status:string;expires_at:string;address:string}>();
   if(!r)return result('Contact notification review not found.');
   if(r.status==='applied')return result('That contact notification review was already applied. Open Dashboard → Contact inbox for its current status.');

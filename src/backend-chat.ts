@@ -107,7 +107,7 @@ export function backendChatCommand(db:D1Database,user:string,turnId:string,conte
     const review=await restoreBackendState(db,user,turnId,id,verb==='restore-backend-before'?'before':'after');await linkBackendState(db,user,turnId,review.id,'review');return describeBackendReview(review);
    }
    if(verb==='backend-state-review'){const review=await readBackendReview(db,user,id);await linkBackendState(db,user,turnId,id,'review');return describeBackendReview(review);}
-   if(verb==='confirm-backend-state')return describeBackendReview(await confirmBackendState(db,user,id));
+   if(verb==='confirm-backend-state'){await requireReviewedReply(db,user,'backendState',id);return describeBackendReview(await confirmBackendState(db,user,id));}
    if(verb==='review-backend-state'){
     if(!service)throw new BackendError(503,'Backend testing is not connected in this environment');
     const version=await ownedBackend(db,user,id);

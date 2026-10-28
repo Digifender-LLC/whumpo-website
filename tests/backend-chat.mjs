@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {currentSiteFixtureHandlers} from './current-site-fixture.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
-import {assertReplyEditRefused} from './helpers/receipt-forge.mjs';
+import {assertReplyEditRefused,assertTypedReplyEditRefused} from './helpers/receipt-forge.mjs';
 const m=await currentSiteFixtureHandlers(),store=await databaseFixture({d1:true}),db=store.db,owners=new Map(),scopes=new Map(),scope=user=>scopes.get(user);
 async function accountAuthority(user=crypto.randomUUID()){const authority=await workspaceFixture(db,m,user);owners.set(user,authority);scopes.set(user,await authority.scope());return authority;}
 const {sendChat,readChat,sendAIChat,getBilling}=m,id=()=>crypto.randomUUID();
@@ -39,6 +39,7 @@ try{
  assert.match((await guided(b,'/backend-state-review '+prepared.request.id)).turn.assistant_text,/Before: {}/);
  // Receipt: an edited data-review reply is refused on the confirm control and changes nothing.
  await assertReplyEditRefused({db,kind:'backendState',reviewId:prepared.request.id,table:'backend_state_reviews',confirm:async action=>m.sendChatControl(scope(b.user),b.user,{id:id(),revision:(await readChat(scope(b.user),b.user)).state.revision,action:{type:'confirm',...action}},undefined,{backendRuntime})});
+ await assertTypedReplyEditRefused({db,kind:'backendState',reviewId:prepared.request.id,table:'backend_state_reviews',typed:async()=>(await guided(b,'/confirm-backend-state '+prepared.request.id)).turn.assistant_text});
  assert.match((await guided(b,'/confirm-backend-state '+prepared.request.id)).turn.assistant_text,/Applied data review/);
  assert.match((await guided(b,'/backend-state '+b.project)).turn.assistant_text,/"count":5/);
  const history=await guided(b,'/backend-state-history '+b.project);assert.match(history.turn.assistant_text,new RegExp(prepared.request.id));

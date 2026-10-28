@@ -2,6 +2,7 @@ import {FeatureInclusionError} from './feature-inclusion';
 import {ConnectionError,githubInstallations,type GitHubConfig} from './github-connection';
 import {githubRepositories,listBackups,reviewBackup,confirmBackup} from './github-backups';
 import {receiptLine,reviewDigestLine,reviewEchoFromText} from './connector-receipts';
+import {reviewedReply,reviewChangedMessage} from './chat-review-receipts';
 export type BackupChatOptions={github?:GitHubConfig;githubTransport?:typeof fetch;files?:R2Bucket};
 const uuid=/^[0-9a-f-]{36}$/,positive=(s:string)=>/^[1-9][0-9]*$/.test(s)&&Number.isSafeInteger(Number(s));
 type Receipt=Awaited<ReturnType<typeof reviewBackup>>;
@@ -27,6 +28,7 @@ Ask to list repositories in this installation.`).join('\n\n'):'No active GitHub 
    if(verb==='/review-backup')return describe(await reviewBackup(db,options.files,user,{id:turnId,versionId:args[0],owner:repo![0],repo:repo![1],repoId:Number(args[2])},options.github,options.githubTransport));
    if(verb==='/check-backup'){const {backups}=await listBackups(db,user),b=backups.find(b=>b.id===args[0]);if(!b)throw new ConnectionError(404,'Backup review not found.');if(['pending','expired','complete','failed'].includes(b.state))return describe(b)+'\nThis check did not authorize a commit.';}
     // A Chat confirmation echoes the exact saved review turn (review ID = turn ID) that showed its price and digest.
+   if(verb==='/confirm-backup'&&!await reviewedReply(db,user,'backup',args[0]))throw new ConnectionError(409,reviewChangedMessage);
    const echo=verb==='/confirm-backup'?reviewEchoFromText((await db.prepare("SELECT assistant_text FROM chat_turns WHERE id=? AND user_id=? AND status='completed'").bind(args[0],user).first<{assistant_text:string}>())?.assistant_text):undefined;
    return describe(await confirmBackup(db,options.files,user,args[0],options.github,options.githubTransport,echo));
   }catch(cause){return (cause instanceof ConnectionError||cause instanceof FeatureInclusionError)?cause.message+"\nAsk to inspect your saved backup reviews.":"The backup result could not be saved. Ask to inspect your saved backup reviews. This Chat request will not be dispatched again.";}
