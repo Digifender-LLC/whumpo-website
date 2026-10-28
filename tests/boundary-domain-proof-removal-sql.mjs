@@ -35,7 +35,7 @@ async function review(u,c,ttl=600000){
  const turn=id();await turnStatement(u,turn,{mode:'guided',text:'/remove-domain-proof '+c.id}).run();
  const clock=Date.now;Date.now=()=>clock()-(600000-ttl);
  let prepared;try{prepared=await domainProofRemoval(db,u,turn,'/remove-domain-proof '+c.id);}finally{Date.now=clock;}
- assert.equal(prepared.statements.length,1,'the removal review was prepared');await db.batch(prepared.statements);
+ assert.equal(prepared.statements.length,1,'the removal review was prepared');await db.batch(prepared.statements);await db.prepare('UPDATE chat_turns SET assistant_text=? WHERE id=?').bind(prepared.reply,turn).run();/* the shown reply, which the confirm rebuilds and compares */
  return turn;
 }
 /** Runs the real confirm preflight and returns the turn plus the statements it admitted (not yet committed). */
