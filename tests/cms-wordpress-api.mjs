@@ -5,6 +5,7 @@ import {execFileSync} from 'node:child_process';
 import {currentFixtureModules} from './helpers/current-modules.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
+import {assertReplyEditRefused} from './helpers/receipt-forge.mjs';
 const {module,identity}=await currentFixtureModules(["src/chat.ts", "src/cms-bridge.ts", "src/cms-deploy.ts", "src/cms-gateway.ts", "src/cms-projects.ts", "src/cms-provision.ts", "src/cms-wordpress-chat.ts", "src/index.ts", "src/security.ts"]);
 const {deployCMS,connectCMS}=await module('src/cms-deploy.ts'),{prepareCMS,confirmCMS}=await module('src/cms-projects.ts'),{allocateCMSResources}=await module('src/cms-provision.ts'),{deriveCMSSecret,verifyCMSRequest}=await module('src/cms-bridge.ts');
 const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-cms-deploy-');
@@ -51,7 +52,10 @@ try{
  const inventory=await chat('/wordpress-sources '+a.project);assert.match(inventory.assistant_text,/wordpress.xml/);
  const reportTurn=await chat('/wordpress-inspect '+a.project+' '+source);assert.match(reportTurn.assistant_text,/Item 9/);assert.ok(!reportTurn.assistant_text.includes('<strong>'));assert.ok(!reportTurn.assistant_text.includes('Original story'));assert.ok(!reportTurn.assistant_text.includes('Source excerpt marker'));
  const forbidden=await chat('/wordpress-inspect '+a.project+' '+source,otherToken);assert.ok(!forbidden.assistant_text.includes('Private import'));
- const reviewTurn=await chat('/cms-import-review '+review);assert.equal(reviewTurn.cms_import_review_id,review);assert.equal(reviewTurn.cms_import_confirmation_id,review);assert.equal(nativeWrites,0);
+ const reviewTurn=await chat('/cms-import-review '+review);
+ // Receipt: an edited import review reply is refused on the confirm control and imports nothing.
+ await assertReplyEditRefused({db,kind:'cmsImport',reviewId:review,table:'cms_import_reviews',confirm:async action=>{const state=await readChat(scope(a.user),a.user),r=await call('/api/chat/actions',{method:'POST',body:{id:id(),revision:state.state.revision,action:{type:'confirm',...action}}});return {status:r.status};}});assert.equal(nativeWrites,0);
+ assert.equal(reviewTurn.cms_import_review_id,review);assert.equal(reviewTurn.cms_import_confirmation_id,review);assert.equal(nativeWrites,0);
  await db.prepare("UPDATE chat_turns SET assistant_text='Interrupted before review presentation' WHERE id=?").bind(reviewTurn.id).run();
  const interrupted=(await (await call('/api/chat')).json()).turns.find(t=>t.id===reviewTurn.id);assert.equal(interrupted.cms_import_confirmation_id,undefined);
  await db.prepare('UPDATE chat_turns SET assistant_text=? WHERE id=?').bind(reviewTurn.assistant_text,reviewTurn.id).run();

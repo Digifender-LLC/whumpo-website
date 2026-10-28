@@ -12,11 +12,12 @@ import {build} from 'esbuild';
 import {unzipSync} from 'fflate';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.mjs';
+import {assertReplyEditRefused} from './helpers/receipt-forge.mjs';
 const uiBuild=await build({entryPoints:['frontend/src/chat-turn-actions.tsx'],bundle:true,format:'cjs',platform:'node',jsx:'automatic',alias:{'@':'./frontend/src'},external:['react','react/*'],write:false});
 const uiModule={exports:{}};new Function('require','module','exports',uiBuild.outputFiles[0].text)(createRequire(import.meta.url),uiModule,uiModule.exports);
 const {TurnActions}=uiModule.exports;
 const renderActions=turn=>renderToStaticMarkup(createElement(TurnActions,{turn,onSend:async()=>{}}));
-const m=await currentSiteFixtureHandlers(),{listBackups,sendChat,readChat,ownedExport,seal,sendAIChat,getBilling}=m;
+const m=await currentSiteFixtureHandlers(),{listBackups,sendChat,sendChatControl,readChat,ownedExport,seal,sendAIChat,getBilling}=m;
 const fixture=await databaseFixture({d1:true,r2:true}),db=fixture.db,dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-backup-chat-'),identities=new Map(),scopes=new Map(),scope=user=>scopes.get(user);
 const config={clientId:'Iv1.test',clientSecret:'synthetic-secret',appId:123,slug:'test',key:fixtureKeyring('ab'.repeat(32))},now=new Date().toISOString();
 async function account(){const a=await workspaceFixture(db,m);identities.set(a.account,a);scopes.set(a.account,await a.scope());await paidPlan(db,a.account,'business');return a.account;}
@@ -55,6 +56,8 @@ try{
  repoPrivate=false;const review=await message('/review-backup '+version+' test/backup 17');assert.equal(review.result.status,200);assert.match(review.turn.assistant_text,/PUBLIC — anyone can read/);assert.match(review.turn.assistant_text,/SHA-256:/);assert.equal(review.turn.backup_confirmation_id,review.id);assert.equal(writes,0);
  await message('/check-backup '+review.id);assert.equal(writes,0);
  assert.match((await message('/backups',crypto.randomUUID(),undefined,undefined,other)).turn.assistant_text,/No GitHub backup reviews/);
+ // Receipt: an edited review reply is refused on the confirm control; nothing is written to GitHub.
+ await assertReplyEditRefused({db,kind:'backup',reviewId:review.id,table:'github_backups',statusColumn:'state',confirm:async action=>sendChatControl(scope(user),user,{id:crypto.randomUUID(),revision:(await readChat(scope(user),user)).state.revision,action:{type:'confirm',...action}},undefined,options)});assert.equal(writes,0);
  assert.match((await message('/confirm-backup '+review.id,crypto.randomUUID(),undefined,undefined,other)).turn.assistant_text,/not found/);
  assert.equal((await message('/confirm-backup '+review.id,crypto.randomUUID(),0)).result.status,409);assert.equal(writes,0);
  const revision=(await readChat(scope(user),user)).state.revision,confirmId=crypto.randomUUID();

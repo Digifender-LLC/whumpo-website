@@ -224,7 +224,7 @@ try{
   await assert.rejects(N.proposeContactDestination(db,a.id,a.project,'fourth@example.com'),e=>e.status===423,'The Dashboard control is refused the same way');
   // The model can prepare the exact review, never confirm it or add fields.
   const c=await account(),ctx=await m.siteContext(scope(c.id),c.id);
-  const proposal=await m.prepareSiteAction(scope(c.id),c.id,crypto.randomUUID(),JSON.stringify({reply:'Done!',action:{kind:'contactNotificationReview',projectId:c.project,address:'Model@Example.com'}}),ctx);assert.match(proposal.reply,/model@example\.com/);assert.match(proposal.reply,/Nothing changes/);assert.equal(proposal.statements.length,1);
+  const proposal=await m.prepareSiteAction(scope(c.id),c.id,crypto.randomUUID(),JSON.stringify({reply:'Done!',action:{kind:'contactNotificationReview',projectId:c.project,address:'Model@Example.com'}}),ctx);assert.match(proposal.reply,/model@example\.com/);assert.match(proposal.reply,/Nothing changes/);assert.equal(proposal.statements.length,2,"review row plus its receipt");
   for(const action of [{kind:'contactNotificationReview',projectId:c.project,address:'a@example.com',confirm:true},{kind:'contactNotificationReview',projectId:c.project},{kind:'confirmContactNotification',reviewId:review.id}])await assert.rejects(m.prepareSiteAction(scope(c.id),c.id,crypto.randomUUID(),JSON.stringify({reply:'Done',action}),ctx));
  });
  await test('operator-reviewed suppression reset: preview digest, exact suppression, audit, holds',async()=>{

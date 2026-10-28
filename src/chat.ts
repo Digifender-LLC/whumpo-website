@@ -399,7 +399,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   }
   if(external){
     const result=await external();
-    if(backend||githubGrant)await linkChatReviewReply(db,userId,input.id,result);
+    if(backend||githubGrant||cms||backup)await linkChatReviewReply(db,userId,input.id,result);
     await db.prepare('UPDATE chat_turns SET assistant_text=? WHERE id=? AND user_id=?').bind(result,input.id,userId).run();
   }
   if(dnsOptions?.healthChecks&&publication&&command.startsWith('/confirm ')){

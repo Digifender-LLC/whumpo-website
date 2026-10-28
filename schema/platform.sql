@@ -1828,7 +1828,7 @@ CREATE TABLE cloudflare_revocation_health (
 CREATE TABLE chat_review_receipts (
  turn_id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
  user_id TEXT NOT NULL REFERENCES users(id),
- kind TEXT NOT NULL CHECK(kind IN ('githubGrant','application','appPage','appRestore','backendPublication','backendForm')),
+ kind TEXT NOT NULL CHECK(kind IN ('githubGrant','application','appPage','appRestore','backendPublication','backendForm','directory','contactNotification','backendState','cmsImport','cmsDiscard','cmsUnpublish','cmsPublish','cmsSetup','backup')),
  review_id TEXT NOT NULL,
  reply_digest TEXT NOT NULL CHECK(length(reply_digest)=64)
 );
@@ -4280,7 +4280,16 @@ CREATE TRIGGER chat_review_receipt_admit BEFORE INSERT ON chat_review_receipts B
   (NEW.kind='appPage' AND EXISTS(SELECT 1 FROM app_page_reviews WHERE id=NEW.review_id AND user_id=NEW.user_id)) OR
   (NEW.kind='appRestore' AND EXISTS(SELECT 1 FROM app_restore_reviews WHERE id=NEW.review_id AND user_id=NEW.user_id AND restore_program=0)) OR
   (NEW.kind='backendPublication' AND EXISTS(SELECT 1 FROM backend_publication_reviews WHERE id=NEW.review_id AND user_id=NEW.user_id)) OR
-  (NEW.kind='backendForm' AND EXISTS(SELECT 1 FROM backend_form_reviews WHERE id=NEW.review_id AND user_id=NEW.user_id))
+  (NEW.kind='backendForm' AND EXISTS(SELECT 1 FROM backend_form_reviews WHERE id=NEW.review_id AND user_id=NEW.user_id)) OR
+  (NEW.kind='directory' AND EXISTS(SELECT 1 FROM directory_reviews WHERE id=NEW.review_id AND user_id=NEW.user_id)) OR
+  (NEW.kind='contactNotification' AND EXISTS(SELECT 1 FROM contact_destination_reviews WHERE id=NEW.review_id AND user_id=NEW.user_id)) OR
+  (NEW.kind='backendState' AND EXISTS(SELECT 1 FROM backend_state_reviews WHERE id=NEW.review_id AND user_id=NEW.user_id)) OR
+  (NEW.kind='cmsImport' AND EXISTS(SELECT 1 FROM cms_import_reviews WHERE id=NEW.review_id AND user_id=NEW.user_id)) OR
+  (NEW.kind='cmsDiscard' AND EXISTS(SELECT 1 FROM cms_discard_reviews WHERE id=NEW.review_id AND user_id=NEW.user_id)) OR
+  (NEW.kind='cmsUnpublish' AND EXISTS(SELECT 1 FROM cms_unpublish_reviews WHERE id=NEW.review_id AND user_id=NEW.user_id)) OR
+  (NEW.kind='cmsPublish' AND EXISTS(SELECT 1 FROM cms_publication_reviews WHERE id=NEW.review_id AND user_id=NEW.user_id)) OR
+  (NEW.kind='cmsSetup' AND EXISTS(SELECT 1 FROM cms_setup_reviews WHERE id=NEW.review_id AND user_id=NEW.user_id)) OR
+  (NEW.kind='backup' AND EXISTS(SELECT 1 FROM github_backups WHERE id=NEW.review_id AND user_id=NEW.user_id))
  );
 END;
 

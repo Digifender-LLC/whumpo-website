@@ -1,4 +1,5 @@
 import {ContactError} from './contacts';
+import {receiptStatement} from './chat-review-receipts';
 import {notificationCatalog} from './notification-catalog';
 /**
  * WH-036 contact notifications. The private inbox (`contact_submissions`) is the source of truth; a notice is only a
@@ -236,7 +237,9 @@ export async function contactNotificationCommand(db:D1Database,userId:string,tur
  if(!p)return result('Project not found. Ask to list your projects.');
  if(p.state==='suppressed'||await db.prepare('SELECT 1 FROM contact_notification_suppressions WHERE user_id=? AND address=?').bind(userId,address).first())return result('That address cannot receive notices from Whumpo. A bounced, complained or unsubscribed address stays blocked unless Whumpo support reviews a reset.');
  if(p.address===address)return result(`${address} is already the notification address for “${p.name}” (${p.state==='verified'?'verified':'not verified yet'}). Open Dashboard → Contact inbox to manage it.`);
- return result(`Send contact-form notices for “${p.name}” to ${address}?\n\n${p.address?'This replaces the current address; its unsent notices are discarded. ':''}The address must be verified with a code sent from notify@whumpo.com before any notice is sent. Each notice only says a new message arrived and links to your private inbox; it never contains the visitor's name, email or message. At most 10 notices an hour and 50 a day are sent; further messages stay in the inbox only. Remove the address at any time in Dashboard → Contact inbox.\n\nNothing changes until you use the confirmation button for review ${turnId} within 10 minutes.`,[
-  db.prepare('INSERT INTO contact_destination_reviews(id,user_id,project_id,address,expires_at) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(turnId,userId,id,address,new Date(Date.now()+destinationReviewMs).toISOString(),turnId,userId)
+ const reply=`Send contact-form notices for “${p.name}” to ${address}?\n\n${p.address?'This replaces the current address; its unsent notices are discarded. ':''}The address must be verified with a code sent from notify@whumpo.com before any notice is sent. Each notice only says a new message arrived and links to your private inbox; it never contains the visitor's name, email or message. At most 10 notices an hour and 50 a day are sent; further messages stay in the inbox only. Remove the address at any time in Dashboard → Contact inbox.\n\nNothing changes until you use the confirmation button for review ${turnId} within 10 minutes.`;
+ return result(reply,[
+  db.prepare('INSERT INTO contact_destination_reviews(id,user_id,project_id,address,expires_at) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(turnId,userId,id,address,new Date(Date.now()+destinationReviewMs).toISOString(),turnId,userId),
+  await receiptStatement(db,userId,turnId,'contactNotification',turnId,reply)
  ]);
 }
