@@ -1828,7 +1828,7 @@ CREATE TABLE cloudflare_revocation_health (
 CREATE TABLE chat_review_receipts (
  turn_id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
  user_id TEXT NOT NULL REFERENCES users(id),
- kind TEXT NOT NULL CHECK(kind IN ('githubGrant','application','appPage','appRestore','backendPublication','backendForm','directory','contactNotification','backendState','cmsImport','cmsDiscard','cmsUnpublish','cmsPublish','cmsSetup','backup')),
+ kind TEXT NOT NULL CHECK(kind IN ('githubGrant','application','appPage','appRestore','backendPublication','backendForm','directory','contactNotification','backendState','cmsImport','cmsDiscard','cmsUnpublish','cmsPublish','cmsSetup','backup','dns','hosting','backendNomination')),
  review_id TEXT NOT NULL,
  reply_digest TEXT NOT NULL CHECK(length(reply_digest)=64)
 );
@@ -4289,7 +4289,10 @@ CREATE TRIGGER chat_review_receipt_admit BEFORE INSERT ON chat_review_receipts B
   (NEW.kind='cmsUnpublish' AND EXISTS(SELECT 1 FROM cms_unpublish_reviews WHERE id=NEW.review_id AND user_id=NEW.user_id)) OR
   (NEW.kind='cmsPublish' AND EXISTS(SELECT 1 FROM cms_publication_reviews WHERE id=NEW.review_id AND user_id=NEW.user_id)) OR
   (NEW.kind='cmsSetup' AND EXISTS(SELECT 1 FROM cms_setup_reviews WHERE id=NEW.review_id AND user_id=NEW.user_id)) OR
-  (NEW.kind='backup' AND EXISTS(SELECT 1 FROM github_backups WHERE id=NEW.review_id AND user_id=NEW.user_id))
+  (NEW.kind='backup' AND EXISTS(SELECT 1 FROM github_backups WHERE id=NEW.review_id AND user_id=NEW.user_id)) OR
+  (NEW.kind='dns' AND EXISTS(SELECT 1 FROM cloudflare_dns_actions WHERE id=NEW.review_id AND user_id=NEW.user_id)) OR
+  (NEW.kind='hosting' AND EXISTS(SELECT 1 FROM domain_connections WHERE id=NEW.review_id AND user_id=NEW.user_id)) OR
+  (NEW.kind='backendNomination' AND EXISTS(SELECT 1 FROM backend_nominations WHERE id=NEW.review_id AND user_id=NEW.user_id))
  );
 END;
 

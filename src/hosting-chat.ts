@@ -1,4 +1,5 @@
 import {DomainError} from './domains';
+import {reviewedReply,reviewChangedMessage} from './chat-review-receipts';
 import {hostingConnections,reviewHosting,confirmHosting,refreshHosting,disconnectHosting,type HostingConfig} from './domain-hosting';
 export type HostingChatOptions={hosting?:HostingConfig;hostingTransport?:typeof fetch};
 type Receipt=Awaited<ReturnType<typeof reviewHosting>>;
@@ -20,7 +21,7 @@ export function hostingChatCommand(db:D1Database,user:string,turnId:string,comma
   try{
    if(verb==='/hosting'){const connections=await hostingConnections(db,user);return (connections.length?connections.map(describe).join('\n\n'):'No hosting connections yet.')+'\n\n'+(options.hosting?"Ask to choose an owned domain proof and prepare its hosting review. Preparing a review does not create a provider hostname.":'Domain hosting is awaiting platform configuration.');}
    if(verb==='/review-hosting')return describe(await reviewHosting(db,user,turnId,args[0],options.hosting));
-   if(verb==='/confirm-hosting')return describe(await confirmHosting(db,user,args[0],options.hosting,options.hostingTransport));
+   if(verb==='/confirm-hosting'){if(!await reviewedReply(db,user,'hosting',args[0]))throw new DomainError(409,reviewChangedMessage);return describe(await confirmHosting(db,user,args[0],options.hosting,options.hostingTransport));}
    if(verb==='/disconnect-hosting')return describe(await disconnectHosting(db,user,args[0],options.hosting,options.hostingTransport));
    const connections=await hostingConnections(db,user),c=connections.find(c=>c.id===args[0]);if(!c)throw new DomainError(404,'Domain connection not found.');
    // A check cannot confirm a review, create a hostname, or retry provider deletion.

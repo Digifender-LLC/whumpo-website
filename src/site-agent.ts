@@ -30,6 +30,7 @@ import {githubGrantAction} from './github-grant-chat';
 import {ConnectionError} from './github-connection';
 import {backupChatCommand} from './backup-chat';
 import {hostingChatCommand} from './hosting-chat';
+import {linkChatReviewReply} from './chat-review-receipts';
 import {dnsChatCommand,type DNSChatOptions} from './dns-chat';
 import {domainCommand} from './domains';
 import {inspectWorkspace,inspectionScopes,type InspectionScope} from './workspace-read';
@@ -210,7 +211,8 @@ export async function prepareSiteAction(db:D1Database,userId:string,turnId:strin
   }else if(action.operation==='review'){
    if(Object.keys(action).some(k=>!['kind','operation','claimId'].includes(k))||typeof action.claimId!=='string'||!/^[0-9a-f-]{36}$/.test(action.claimId))throw new ProposalError();command='/review-hosting '+action.claimId;
   }else throw new ProposalError();
-  return {reply:await hostingChatCommand(db,userId,turnId,command,dnsOptions)!(),statements:[] as D1PreparedStatement[]};
+  const reply=await hostingChatCommand(db,userId,turnId,command,dnsOptions)!();await linkChatReviewReply(db,userId,turnId,reply);
+  return {reply,statements:[] as D1PreparedStatement[]};
  }
  if(action.kind==='dns'){
   let command:string;
@@ -229,7 +231,8 @@ export async function prepareSiteAction(db:D1Database,userId:string,turnId:strin
   }else throw new ProposalError();
   // Only discovery and review are reachable here. Model output can never dispatch a DNS write.
   const operation=dnsChatCommand(db,userId,turnId,command,dnsOptions)!;
-  return {reply:await operation(),statements:[] as D1PreparedStatement[]};
+  const reply=await operation();await linkChatReviewReply(db,userId,turnId,reply);
+  return {reply,statements:[] as D1PreparedStatement[]};
  }
  if(action.kind==='domain'){
   if(action.operation==='prepare'){

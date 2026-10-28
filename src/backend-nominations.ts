@@ -1,5 +1,6 @@
 import {BackendError} from './backend-versions';
 import {hashToken} from './security';
+import {requireReviewedReply} from './chat-review-receipts';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 type Nomination={id:string;version_id:string;digest:string;state:'review'|'nominated'|'withdrawn';expires_at:string;consent_at:string|null;withdrawn_at:string|null};
 export async function readNomination(db:D1Database,user:string,id:string){
@@ -40,7 +41,7 @@ export function backendNominationCommand(db:D1Database,user:string,turn:string,c
   if(verb==='/backend-nominations'&&!id){const {results}=await db.prepare('SELECT n.id,n.version_id,n.digest,n.state,n.expires_at,n.consent_at,n.withdrawn_at FROM backend_nominations n JOIN backend_versions v ON v.id=n.version_id JOIN projects p ON p.id=v.project_id WHERE n.user_id=? AND p.owner_user_id=? ORDER BY n.created_at DESC,n.id DESC LIMIT 20').bind(user,user).all<Nomination>();return results.length?results.map(describe).join('\n\n'):"No reuse nominations. Nomination consent is operator-managed until a dedicated review control is available.";}
   if(verb==='/backend-nominations'||!id||!uuid.test(id)||extra.length||(verb==='/confirm-backend-nomination'?confirmation!=='NOMINATE':confirmation!==undefined))throw new BackendError(400,"Choose an exact saved nomination or version. Nomination consent and withdrawal are operator-managed.");
   if(verb==='/nominate-backend')return describe(await prepareNomination(db,user,turn,id));
-  if(verb==='/confirm-backend-nomination')return describe(await consentNomination(db,user,id,confirmation!));
+  if(verb==='/confirm-backend-nomination'){await requireReviewedReply(db,user,'backendNomination',id);return describe(await consentNomination(db,user,id,confirmation!));}
   if(verb==='/withdraw-backend-nomination')return describe(await withdrawNomination(db,user,id));
   return describe(await readNomination(db,user,id));
  }catch(error){return error instanceof BackendError?error.message:'Nomination outcome is unavailable. Inspect the same record before retrying.';}};
