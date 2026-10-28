@@ -17,6 +17,16 @@ export async function readDirectory(db:D1Database,user:string,project:string){
  if(!p)throw new DirectoryError(404,'Project not found.');
  return {...p,draft:entries(p.draft_json),published:!!p.version_id&&p.live_json!==null&&p.publication_revision===p.current_publication};
 }
+import {requireRebuiltReply,rebuiltGuard} from './reviewed-rebuild';
+const directoryReply=(name:string,change:string,kind:string,review:string,digest:string)=>`${name}\n\n${change}\n\n${kind==='edit'?'Your existing public snapshot will not change. ':''}Review ${review}\nSnapshot SHA-256: ${digest}\nNothing changes until you use this review’s confirmation button within 10 minutes.`;
+/** The reply a directory review shows, rebuilt from the saved row; undefined for edit, remove and restore, whose text embeds the
+ * draft at review time (not saved on the row), so they cannot be rebuilt without a schema change. */
+function rebuiltDirectoryReply(r:{id:string;kind:string;snapshot_json:string;digest:string;source_review_id:string|null;project_id:string;name:string}){
+ const change=r.kind==='publish'?'Publish this exact directory snapshot for anyone to read:\n\n'+summary(entries(r.snapshot_json))+'\n\nPage: '+directoryURL(r.project_id)+'\nPublic JSON: '+directoryURL(r.project_id)+'.json\nPublishing/restoring your website disables the directory until reviewed again. Public copies cannot be recalled.'
+  :r.kind==='unpublish'?'Take this directory page and its JSON API offline. The private draft and review history remain.'
+  :(()=>{const added=r.source_review_id===null?entries(r.snapshot_json).find(x=>x.id===r.id):undefined;return added?'Add this listing to the private draft:\n'+summary([added]):undefined;})();
+ return change===undefined?undefined:directoryReply(r.name,change,r.kind,r.id,r.digest);
+}
 function summary(items:Listing[]){return items.length?items.map(x=>`${x.title}\nListing: ${x.id}\n${x.description}${x.url?'\n'+x.url:''}`).join('\n\n'):'No listings.';}
 /** Only applied snapshots are recovery sources; pending proposals are never backups. */
 export async function directorySnapshot(db:D1Database,user:string,project:string,review:string){
@@ -70,7 +80,7 @@ export async function directoryAction(db:D1Database,user:string,turn:string,acti
  if(kind==='publish')change='Publish this exact directory snapshot for anyone to read:\n\n'+summary(draft)+'\n\nPage: '+directoryURL(project)+'\nPublic JSON: '+directoryURL(project)+'.json\nPublishing/restoring your website disables the directory until reviewed again. Public copies cannot be recalled.';
  if(kind==='unpublish')change='Take this directory page and its JSON API offline. The private draft and review history remain.';
  const digest=await hashToken(snapshot);
- return result(`${p.name}\n\n${change}\n\n${kind==='edit'?'Your existing public snapshot will not change. ':''}Review ${turn}\nSnapshot SHA-256: ${digest}\nNothing changes until you use this review’s confirmation button within 10 minutes.`,[
+ return result(directoryReply(p.name,change,kind,turn,digest),[
   db.prepare('INSERT OR IGNORE INTO directories(project_id) SELECT ? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(project,turn,user),
   db.prepare('INSERT INTO directory_reviews(id,user_id,project_id,kind,snapshot_json,digest,expected_revision,publication_revision,expires_at,source_review_id) SELECT ?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(turn,user,project,kind,snapshot,digest,p.revision,p.current_publication??-1,new Date(Date.now()+600000).toISOString(),source,turn,user)
  ]);
@@ -82,11 +92,12 @@ export async function directoryCommand(db:D1Database,user:string,turn:string,com
   if(verb==='/directory'&&!rest){const {results}=await db.prepare('SELECT p.id,p.name FROM projects p WHERE p.owner_user_id=? ORDER BY p.created_at DESC LIMIT 20').bind(user).all<{id:string;name:string}>();return result((results.map(p=>p.name+"\nProject: "+p.id).join('\n\n')||"No projects yet. Start a project first.")+'\n\nDirectories support private editable listings and a separately reviewed public page/JSON API.');}
   if(verb==='/confirm-directory'){
    if(!uuid.test(rest))throw new DirectoryError(400,"Choose the exact directory review using its confirmation control.");
-   const r=await db.prepare('SELECT * FROM directory_reviews WHERE id=? AND user_id=?').bind(rest,user).first<{status:string;kind:string;project_id:string;expires_at:string}>();
+   const r=await db.prepare('SELECT r.*,p.name FROM directory_reviews r JOIN projects p ON p.id=r.project_id WHERE r.id=? AND r.user_id=?').bind(rest,user).first<{id:string;status:string;kind:string;project_id:string;expires_at:string;snapshot_json:string;digest:string;source_review_id:string|null;name:string}>();
    if(!r)throw new DirectoryError(404,'Directory review not found.');
    if(r.status==='applied')return result("That review was already applied. Ask to read the current directory for project "+r.project_id+' for current state.');
    if(r.expires_at<=new Date().toISOString())throw new DirectoryError(409,'This review expired. Prepare a fresh review.');
-   return result(r.kind==='publish'?'Directory snapshot published at '+directoryURL(r.project_id)+'\nPublic JSON: '+directoryURL(r.project_id)+'.json':r.kind==='unpublish'?'Directory page and JSON API taken offline.':"Private directory draft updated. Its public snapshot has not changed. Ask to read the directory for project "+r.project_id+' to inspect it.',[db.prepare("UPDATE directory_reviews SET status='applied',confirmed_by=? WHERE id=? AND user_id=? AND status='pending' AND EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)").bind(turn,rest,user,turn,user)]);
+   const expected=rebuiltDirectoryReply(r),g=rebuiltGuard(user,expected===undefined?undefined:await requireRebuiltReply(db,user,rest,expected));
+   return result(r.kind==='publish'?'Directory snapshot published at '+directoryURL(r.project_id)+'\nPublic JSON: '+directoryURL(r.project_id)+'.json':r.kind==='unpublish'?'Directory page and JSON API taken offline.':"Private directory draft updated. Its public snapshot has not changed. Ask to read the directory for project "+r.project_id+' to inspect it.',[db.prepare("UPDATE directory_reviews SET status='applied',confirmed_by=? WHERE id=? AND user_id=? AND status='pending' AND EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)"+g.sql).bind(turn,rest,user,turn,user,...g.params)]);
   }
   const parts=rest.split('|').map(s=>s.trim()),ids=parts[0].split(/\s+/),op=({'/directory':'list','/directory-add':'add','/directory-edit':'edit','/directory-remove':'remove','/directory-publish':'publish','/directory-off':'unpublish','/directory-history':'history','/directory-restore':'restore','/directory-export':'export'} as Record<string,string>)[verb];
   const needsSnapshot=op==='restore'||op==='export',needsListing=op==='edit'||op==='remove',hasText=op==='add'||op==='edit';
