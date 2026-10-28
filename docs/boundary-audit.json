@@ -128,7 +128,7 @@
     },
     {
      "file": "wrangler.jsonc",
-     "contains": "\"database_id\": \"fb963f21-6507-46ea-9bbb-e430322fec86\""
+     "contains": "\"database_id\": \"2410286e-6770-4244-a013-4c441b7df0bb\""
     },
     {
      "file": "tests/boundary-operator-target.mjs",
@@ -3755,7 +3755,7 @@
       },
       {
        "file": "tests/directories.mjs",
-       "contains": "await confirm(b.user,review);assert.equal((await current(a)).draft.length,0);",
+       "contains": "await confirm(b.user,review,'directory',409);assert.equal((await current(a)).draft.length,0);",
        "asserts": "another owner cannot confirm a directory change"
       },
       {
