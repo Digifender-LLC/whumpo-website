@@ -12,7 +12,7 @@ import {build} from 'esbuild';
 import {unzipSync} from 'fflate';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.mjs';
-import {assertReplyEditRefused} from './helpers/receipt-forge.mjs';
+import {assertReplyEditRefused,assertTypedReplyEditRefused} from './helpers/receipt-forge.mjs';
 const uiBuild=await build({entryPoints:['frontend/src/chat-turn-actions.tsx'],bundle:true,format:'cjs',platform:'node',jsx:'automatic',alias:{'@':'./frontend/src'},external:['react','react/*'],write:false});
 const uiModule={exports:{}};new Function('require','module','exports',uiBuild.outputFiles[0].text)(createRequire(import.meta.url),uiModule,uiModule.exports);
 const {TurnActions}=uiModule.exports;
@@ -58,7 +58,8 @@ try{
  assert.match((await message('/backups',crypto.randomUUID(),undefined,undefined,other)).turn.assistant_text,/No GitHub backup reviews/);
  // Receipt: an edited review reply is refused on the confirm control; nothing is written to GitHub.
  await assertReplyEditRefused({db,kind:'backup',reviewId:review.id,table:'github_backups',statusColumn:'state',confirm:async action=>sendChatControl(scope(user),user,{id:crypto.randomUUID(),revision:(await readChat(scope(user),user)).state.revision,action:{type:'confirm',...action}},undefined,options)});assert.equal(writes,0);
- assert.match((await message('/confirm-backup '+review.id,crypto.randomUUID(),undefined,undefined,other)).turn.assistant_text,/not found/);
+ await assertTypedReplyEditRefused({db,kind:'backup',reviewId:review.id,table:'github_backups',statusColumn:'state',typed:async()=>(await message('/confirm-backup '+review.id)).turn.assistant_text});assert.equal(writes,0);
+ assert.match((await message('/confirm-backup '+review.id,crypto.randomUUID(),undefined,undefined,other)).turn.assistant_text,/no longer matches this review/);
  assert.equal((await message('/confirm-backup '+review.id,crypto.randomUUID(),0)).result.status,409);assert.equal(writes,0);
  const revision=(await readChat(scope(user),user)).state.revision,confirmId=crypto.randomUUID();
  const concurrent=await Promise.all([message('/confirm-backup '+review.id,confirmId,revision),message('/confirm-backup '+review.id,confirmId,revision)]);assert.ok(concurrent.every(r=>r.result.status===200));assert.equal(writes,1);

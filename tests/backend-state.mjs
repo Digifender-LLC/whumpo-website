@@ -46,6 +46,10 @@ try{
  assert.deepEqual((await readBackendState(scope(b.user),b.user,b.project)).state,{});
  await assert.rejects(backendAction(scope(b.user),b.user,id(),{...action,confirm:true},service),e=>e.status===400);
  await assert.rejects(backendAction(scope(b.user),b.user,id(),{kind:'backend',operation:'confirmState',reviewId:rid},service),e=>e.status===400);
+ // The chat layer receipts an agent-prepared review's reply (linkChatReviewReply); this unit fixture has no turn, so seed the same rows.
+ const digest=[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(proposal.reply)))].map(x=>x.toString(16).padStart(2,'0')).join('');
+ await db.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,1,'review',?,?,'ai','completed')").bind(rid,b.user,proposal.reply,new Date().toISOString()).run();
+ await db.prepare("INSERT INTO chat_review_receipts(turn_id,user_id,kind,review_id,reply_digest) VALUES(?,?,'backendState',?,?)").bind(rid,b.user,rid,digest).run();
  assert.match(await backendChatCommand(scope(b.user),b.user,id(),'/confirm-backend-state '+rid,service)(),/Applied data review/);
  assert.equal((await readBackendState(scope(b.user),b.user,b.project)).state.count,8);
  assert.match((await backendAction(scope(b.user),b.user,id(),{kind:'backend',operation:'state',projectId:b.project},service)).reply,/"count":8/);

@@ -17,3 +17,15 @@ export async function assertReplyEditRefused({db,kind,reviewId,table,confirm,sta
  assert.deepEqual(await db.prepare(`SELECT ${statusColumn} s FROM ${table} WHERE id=?`).bind(reviewId).first(),before,`${kind}: the refused confirm changed nothing`);
  return turns.length;
 }
+/** Same as assertReplyEditRefused for a typed `/confirm-*` command: `typed()` sends it and returns the reply text.
+ * The edited reply must get the shared refusal text and leave the review row untouched. */
+export async function assertTypedReplyEditRefused({db,kind,reviewId,table,typed,statusColumn='status'}){
+ const turns=(await db.prepare('SELECT r.turn_id,t.assistant_text FROM chat_review_receipts r JOIN chat_turns t ON t.id=r.turn_id WHERE r.kind=? AND r.review_id=?').bind(kind,reviewId).all()).results;
+ assert.ok(turns.length>0,`${kind}: a receipt was written with the review`);
+ const before=await db.prepare(`SELECT ${statusColumn} s FROM ${table} WHERE id=?`).bind(reviewId).first();
+ for(const t of turns)await db.prepare("UPDATE chat_turns SET assistant_text='Edited. '||assistant_text WHERE id=?").bind(t.turn_id).run();
+ const reply=await typed();
+ for(const t of turns)await db.prepare('UPDATE chat_turns SET assistant_text=? WHERE id=?').bind(t.assistant_text,t.turn_id).run();
+ assert.match(String(reply),/no longer matches this review/,`${kind}: typed confirm after an edited reply is refused`);
+ assert.deepEqual(await db.prepare(`SELECT ${statusColumn} s FROM ${table} WHERE id=?`).bind(reviewId).first(),before,`${kind}: the refused typed confirm changed nothing`);
+}
