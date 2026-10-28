@@ -173,7 +173,7 @@ try{
   assert.equal(provider.posts,0,'no DNS record was written');
   assert.equal((await action(expired.id)).state,'review');assert.equal((await action(expired.id)).provider_id,null);
   const twin=await m.reviewTXT(o.scope,o.id,id(),c.id,zone,config,provider.send);
-  assert.equal((await m.confirmDNS(o.scope,o.id,twin.id,config,provider.send)).state,'applied','negative control: the unexpired twin writes the record');
+  assert.equal((await m.confirmDNS(o.scope,o.id,twin.id,config,provider.send,false,{reviewDigest:twin.receipt.reviewDigest,acceptedPrice:twin.receipt.price})).state,'applied','negative control: the unexpired twin writes the record');
   assert.equal(provider.posts,1);
   console.log('Cloudflare DNS reviews: an expired review is refused with no provider write; the unexpired twin is applied.');
  }
@@ -207,7 +207,7 @@ try{
   assert.equal((await stored(expired.id)).state,'pending');
   const twin=await m.reviewBackup(o.scope,files,o.id,input(),config,remote.send);
   remote.tree=(await db.prepare('SELECT tree_sha FROM github_backups WHERE id=?').bind(twin.id).first()).tree_sha;
-  assert.equal((await m.confirmBackup(o.scope,files,o.id,twin.id,config,remote.send)).state,'complete','negative control: the unexpired twin is committed');
+  assert.equal((await m.confirmBackup(o.scope,files,o.id,twin.id,config,remote.send,{reviewDigest:twin.receipt.reviewDigest,acceptedPrice:twin.receipt.price})).state,'complete','negative control: the unexpired twin is committed');
   assert.equal(remote.writes,1);
   console.log('GitHub backup reviews: an expired review is refused with no repository write; the unexpired twin completes.');
  }
