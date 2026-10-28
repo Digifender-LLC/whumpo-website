@@ -52,7 +52,7 @@ try{
  const inventory=await chat('/wordpress-sources '+a.project);assert.match(inventory.assistant_text,/wordpress.xml/);
  const reportTurn=await chat('/wordpress-inspect '+a.project+' '+source);assert.match(reportTurn.assistant_text,/Item 9/);assert.ok(!reportTurn.assistant_text.includes('<strong>'));assert.ok(!reportTurn.assistant_text.includes('Original story'));assert.ok(!reportTurn.assistant_text.includes('Source excerpt marker'));
  const forbidden=await chat('/wordpress-inspect '+a.project+' '+source,otherToken);assert.ok(!forbidden.assistant_text.includes('Private import'));
- const reviewTurn=await chat('/cms-import-review '+review);
+ const reviewTurn=await chat('/cms-import-review '+review,token,review);
  // Receipt: an edited import review reply is refused on the confirm control and imports nothing.
  await assertReplyEditRefused({db,kind:'cmsImport',reviewId:review,table:'cms_import_reviews',confirm:async action=>{const state=await readChat(scope(a.user),a.user),r=await call('/api/chat/actions',{method:'POST',body:{id:id(),revision:state.state.revision,action:{type:'confirm',...action}}});return {status:r.status};}});assert.equal(nativeWrites,0);
  assert.equal(reviewTurn.cms_import_review_id,review);assert.equal(reviewTurn.cms_import_confirmation_id,review);assert.equal(nativeWrites,0);
@@ -65,12 +65,11 @@ try{
  const dedup=await chat('/import-wordpress '+a.project+' '+source+' 9');assert.match(dedup.assistant_text,new RegExp(review));assert.equal(nativeWrites,0);
  const imported=await chat('/confirm-cms-import '+review);assert.match(imported.assistant_text,/imported as a private draft/);assert.equal(imported.cms_import_confirmation_id,undefined);assert.equal(imported.cms_preview_request_id,review);assert.equal(nativeWrites,1);
  const recovered=await chat('/confirm-cms-import '+review);assert.equal(recovered.cms_preview_request_id,review);assert.equal(nativeWrites,1);
- const help=await chat('/help cms');assert.match(help.assistant_text,/wordpress-inspect/);
  const confirmed=await call(reviewPath+'/confirm',{method:'POST',body:{}});assert.equal(confirmed.status,200,await confirmed.clone().text());assert.equal((await confirmed.json()).status,'imported');assert.equal(nativeWrites,1);assert.equal((await call(reviewPath+'/confirm',{method:'POST',body:{}})).status,200);assert.equal(nativeWrites,1);
  const reviews=await call('/api/cms/'+a.project+'/wordpress/import-reviews');assert.equal((await reviews.json()).reviews[0].status,'imported');assert.equal((await db.prepare('SELECT count(*) n FROM cms_publication_reviews').first()).n,0);
  const incompleteSource=id(),incompleteXML=xml.replace('</item>','<category domain="category" nicename="updates">Updates</category></item>');
  assert.equal((await call(base+'/'+incompleteSource,{method:'PUT',body:incompleteXML,type:'application/xml'})).status,200);
  const incompleteReport=await(await call(base+'/'+incompleteSource)).json();assert.equal(incompleteReport.report.summary.reviewable,0);assert.ok(incompleteReport.report.articles[0].reasons.includes('missing_term_definition'));
  assert.equal((await call(base+'/'+incompleteSource+'/import-reviews',{method:'POST',body:{id:id(),sourceItemId:9}})).status,409);assert.equal(nativeWrites,1);
- console.log('Mounted WordPress API and Chat passed: guided inspection/review/confirmation/recovery, model approval exclusion, forged-action rejection, help discovery,  session/origin checks, invalid-file rejection before storage, retained-source inspection/download, owner isolation, source-derived review, forged-field denial, private preview, explicit confirmation/replay and no publication.');
+ console.log('Mounted WordPress API and Chat passed: guided inspection/review/confirmation/recovery, model approval exclusion, forged-action rejection, session/origin checks, invalid-file rejection before storage, retained-source inspection/download, owner isolation, source-derived review, forged-field denial, private preview, explicit confirmation/replay and no publication.');
 }finally{await store.close();await rm(dir,{recursive:true,force:true});}

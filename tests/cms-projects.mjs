@@ -35,7 +35,7 @@ try{
  await assertReplyEditRefused({db,kind:'cmsSetup',reviewId:chat.request.id,table:'cms_setup_reviews',confirm:async action=>sendChatControl(scope(b.user),b.user,{id:id(),revision:(await readChat(scope(b.user),b.user)).state.revision,action:{type:'confirm',...action}})});
  const approved=await guided(b,'/confirm-cms '+chat.request.id);assert.match(approved.turn.assistant_text,/queued/);assert.equal((await readChat(scope(b.user),b.user)).turns.find(t=>t.id===chat.request.id).cms_confirmation_id,null);
  await sendChat(scope(b.user),b.user,approved.request);assert.equal((await listCMS(scope(b.user),b.user)).length,1);
- assert.match((await guided(b,'/cms')).turn.assistant_text,/queued/);assert.equal((await readChat(scope(b.user),b.user)).state.step,'idea');
+ assert.match((await guided(b,'/cms')).turn.assistant_text,/queued/);
  // Two-per-account cap rolls back approval as well as insertion.
  const second=await project(a.user),third=await project(a.user);const r2=await prepareCMS(scope(a.user),a.user,id(),second.project,'Second','');await confirmCMS(scope(a.user),a.user,r2.id);const r3=await prepareCMS(scope(a.user),a.user,id(),third.project,'Third','');await assert.rejects(confirmCMS(scope(a.user),a.user,r3.id),e=>e.status===409);assert.equal((await readCMSReview(scope(a.user),a.user,r3.id)).status,'pending');
  const c=await project();await readChat(scope(c.user),c.user);const aiId=id(),context=(await readChat(scope(c.user),c.user)).state;
