@@ -5,7 +5,7 @@ import {execFileSync} from 'node:child_process';
 import {currentFixtureModules} from './helpers/current-modules.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
-import {assertReplyEditRefused} from './helpers/receipt-forge.mjs';
+import {assertReplyEditRefused,assertTypedReplyEditRefused} from './helpers/receipt-forge.mjs';
 const {module,identity}=await currentFixtureModules(["src/ai-chat.ts", "src/chat.ts", "src/cms-projects.ts"]);
 const {prepareCMS,confirmCMS,readCMSReview,listCMS,cmsAction}=await module('src/cms-projects.ts'),{sendChat,sendChatControl,readChat}=await module('src/chat.ts');
 const {sendAIChat}=await module('src/ai-chat.ts');
@@ -33,6 +33,7 @@ try{
  const chat=await guided(b,'/setup-cms '+b.project+' | Blog | Our updates');assert.equal(chat.turn.cms_confirmation_id,chat.request.id);assert.match(chat.turn.assistant_text,/does not promise an immediately available CMS/);
  // Receipt: an edited setup review reply is refused on the confirm control and approves nothing.
  await assertReplyEditRefused({db,kind:'cmsSetup',reviewId:chat.request.id,table:'cms_setup_reviews',confirm:async action=>sendChatControl(scope(b.user),b.user,{id:id(),revision:(await readChat(scope(b.user),b.user)).state.revision,action:{type:'confirm',...action}})});
+ await assertTypedReplyEditRefused({db,kind:'cmsSetup',reviewId:chat.request.id,table:'cms_setup_reviews',typed:async()=>(await guided(b,'/confirm-cms '+chat.request.id)).turn.assistant_text});
  const approved=await guided(b,'/confirm-cms '+chat.request.id);assert.match(approved.turn.assistant_text,/queued/);assert.equal((await readChat(scope(b.user),b.user)).turns.find(t=>t.id===chat.request.id).cms_confirmation_id,null);
  await sendChat(scope(b.user),b.user,approved.request);assert.equal((await listCMS(scope(b.user),b.user)).length,1);
  assert.match((await guided(b,'/cms')).turn.assistant_text,/queued/);

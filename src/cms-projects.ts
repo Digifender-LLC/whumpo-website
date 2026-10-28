@@ -1,3 +1,4 @@
+import {reviewedReply,reviewChangedMessage} from './chat-review-receipts';
 import {CMSProjectError} from './cms-error';
 export {CMSProjectError} from './cms-error';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -46,6 +47,7 @@ export function cmsChatCommand(db:D1Database,user:string,turn:string,content:str
    return describeCMSReview(await prepareCMS(db,user,turn,parts[0],parts[1],parts[2]??''));
   }
   if(!uuid.test(rest))throw new CMSProjectError(400,'Choose a CMS review ID');
+  if(verb==='confirm-cms'&&!await reviewedReply(db,user,'cmsSetup',rest))throw new CMSProjectError(409,reviewChangedMessage);
   return describeCMSReview(await (verb==='confirm-cms'?confirmCMS(db,user,rest):readCMSReview(db,user,rest)));
  }catch(error){return error instanceof CMSProjectError?error.message:"CMS status could not be saved. Ask to inspect its saved setup request before trying a new one.";}};
 }

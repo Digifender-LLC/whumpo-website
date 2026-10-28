@@ -1,3 +1,4 @@
+import {reviewedReply,reviewChangedMessage} from './chat-review-receipts';
 import {inspectCMSWordPress,analyzeCMSWordPress} from './cms-wordpress-api';
 import {listCMSWordPressSources} from './cms-wordpress-sources';
 import {prepareCMSWordPressImport,prepareCMSWordPressMediaImport} from './cms-wordpress-import';
@@ -36,7 +37,7 @@ export function cmsWordPressCommand(db:D1Database,user:string,turn:string,conten
   const verb=match[1].toLowerCase(),sections=(match[2]??'').trim().split('|'),parts=sections[0].trim().split(/\s+/);
   if(sections.length>2||sections.length>1&&verb!=='import-wordpress')throw new CMSProjectError(400,"Selected local image IDs are accepted only in a WordPress import review.");
   const mediaIds=sections.length===2?sections[1].trim().split(/\s+/):undefined;
-  if(verb==='confirm-cms-import'){if(parts.length!==1||!uuid.test(parts[0]))throw new CMSProjectError(400,"Choose the exact reviewed import using its confirmation control.");const row=await readCMSImport(db,user,parts[0]);if(!row.source_upload_id)throw new CMSProjectError(404,'Source-bound review not found');return describeWordPressImport(await confirmCMSImport(db,user,parts[0],env));}
+  if(verb==='confirm-cms-import'){if(parts.length!==1||!uuid.test(parts[0]))throw new CMSProjectError(400,"Choose the exact reviewed import using its confirmation control.");if(!await reviewedReply(db,user,'cmsImport',parts[0]))throw new CMSProjectError(409,reviewChangedMessage);const row=await readCMSImport(db,user,parts[0]);if(!row.source_upload_id)throw new CMSProjectError(404,'Source-bound review not found');return describeWordPressImport(await confirmCMSImport(db,user,parts[0],env));}
   const count=verb==='wordpress-sources'||verb==='cms-import-review'?1:verb==='wordpress-inspect'?2:3;
   if(parts.length!==count||!uuid.test(parts[0])||count>1&&!uuid.test(parts[1])||count===3&&!/^[1-9]\d{0,15}$/.test(parts[2]))throw new CMSProjectError(400,"Choose a publishing space, saved WordPress export, source article or existing import review.");
   const operation=verb==='wordpress-sources'?'listWordPressSources':verb==='wordpress-inspect'?'inspectWordPressSource':verb==='cms-import-review'?'readWordPressImport':'reviewWordPressImport';
