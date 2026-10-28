@@ -3,7 +3,7 @@ import {BackendError} from './backend-error';
 import {describeBackendPublication,readBackendPublicationReview,readBackendPublication} from './backend-publication';
 import {describeBackendForm,readBackendFormReview} from './backend-forms';
 type Turn=Record<string,unknown>;
-type Kind='githubGrant'|'application'|'appPage'|'appRestore'|'backendPublication'|'backendForm'|'directory'|'contactNotification'|'backendState'|'cmsImport'|'cmsDiscard'|'cmsUnpublish'|'cmsPublish'|'cmsSetup'|'backup';
+type Kind='githubGrant'|'application'|'appPage'|'appRestore'|'backendPublication'|'backendForm'|'directory'|'contactNotification'|'backendState'|'cmsImport'|'cmsDiscard'|'cmsUnpublish'|'cmsPublish'|'cmsSetup'|'backup'|'dns'|'hosting'|'backendNomination';
 type Receipt={kind:Kind;review_id:string};
 const prefixes:Record<string,Kind>={'GitHub access review':'githubGrant','Application review':'application','Application page review':'appPage','Application data restore review':'appRestore','Backend publish review':'backendPublication','Backend unpublish review':'backendPublication','Website tool review':'backendForm'};
 const U='([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})';
@@ -16,6 +16,9 @@ const shapes:[Kind,RegExp][]=[
  ['cmsUnpublish',new RegExp(`^Review CMS unpublish\\n[\\s\\S]*\\nUse the confirmation button for withdrawal ${U} to take this exact article offline\\.$`)],
  ['cmsDiscard',new RegExp(`^Review discarding staged CMS changes\\n[\\s\\S]*\\nUse the confirmation button for discard review ${U} to discard these exact staged changes\\.$`)],
  ['cmsImport',new RegExp(`^Review this WordPress import before approving it\\.\\n[\\s\\S]*\\nReview: ${U}\\n[\\s\\S]*\\nUse the confirmation button for import \\1 to import this exact private draft\\.$`)],
+ ['dns',new RegExp(`^Cloudflare (?:website routing \\(CNAME\\)|TXT proof): review\nReview: ${U}\n[\\s\\S]*\n\nAuthorize this exact addition using its review in Dashboard → Domains\\.$`)],
+ ['hosting',new RegExp(`^Hosting for [^\n]*: review\nConnection: ${U}\n[\\s\\S]*\n\nAuthorize this exact connection or cancel the review in Dashboard → Domains\\.$`)],
+ ['backendNomination',new RegExp(`^Private reuse nomination: review\nNomination: ${U}\n[\\s\\S]*\nAsk an operator to cancel nomination \\1$`)],
  ['backup',new RegExp(`^GitHub backup: pending\\nReview: ${U}\\n[\\s\\S]*\\nUse the confirmation button for backup \\1 to authorize this exact backup\\.(?:\\nThis check did not authorize a commit\\.)?$`)]
 ];
 /** Statement for a handler that knows its own reply and review id (same batch as the review insert). */
@@ -42,7 +45,7 @@ export async function readChatReviewReceipts(db:D1Database,user:string,turns:Tur
 export type ReviewedReply={turn:string;text:string};
 /** The receipt kind and review a UI confirm control targets, or undefined for kinds with no receipt row. */
 export function controlReceipt(a:{type:string;kind?:string;operation?:string;reviewId?:string}):{kind:Kind;reviewId:string}|undefined{
- const kind=a.type==='confirm'&&['application','appPage','backendPublication','backendForm','directory','contactNotification','backendState','cmsImport','cmsDiscard','cmsUnpublish','cmsPublish','cmsSetup','backup'].includes(String(a.kind))?a.kind as Kind:a.type==='githubGrant'&&a.operation==='confirm'?'githubGrant':a.type==='appRestore'?'appRestore':undefined;
+ const kind=a.type==='confirm'&&['application','appPage','backendPublication','backendForm','directory','contactNotification','backendState','cmsImport','cmsDiscard','cmsUnpublish','cmsPublish','cmsSetup','backup','dns','hosting','backendNomination'].includes(String(a.kind))?a.kind as Kind:a.type==='githubGrant'&&a.operation==='confirm'?'githubGrant':a.type==='appRestore'?'appRestore':undefined;
  return kind&&a.reviewId?{kind,reviewId:a.reviewId}:undefined;
 }
 /** Same rule as readChatReviewReceipts: a non-confirm turn whose stored text still hashes to its receipt digest. */

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {currentSiteFixtureHandlers,createFixtureProject} from './current-site-fixture.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.mjs';
+import {assertTypedReplyEditRefused} from './helpers/receipt-forge.mjs';
 const m=await currentSiteFixtureHandlers(),{disconnectHosting,refreshHosting,sendChat,readChat,sendAIChat,getBilling}=m;
 const fixture=await databaseFixture({d1:true}),db=fixture.db,identities=new Map(),scopes=new Map(),scope=user=>scopes.get(user);
 const config={token:'synthetic-token',zone:'a'.repeat(32),target:'hosting.whumpo.site'};
@@ -27,6 +28,7 @@ try{
  assert.match((await message('/hosting',crypto.randomUUID(),undefined,undefined,other)).text,/No hosting connections/);
  assert.match((await message('/check-hosting '+reviewId,crypto.randomUUID(),undefined,undefined,other)).text,/not found/);
  assert.equal((await message('/confirm-hosting '+reviewId,crypto.randomUUID(),0)).result.status,409);assert.equal(writes,0);
+ await assertTypedReplyEditRefused({db,kind:'hosting',reviewId,table:'domain_connections',statusColumn:'state',typed:async()=>(await message('/confirm-hosting '+reviewId)).text});assert.equal(writes,0);
  const state=await readChat(scope(user),user),confirmId=crypto.randomUUID();
  const results=await Promise.all([message('/confirm-hosting '+reviewId,confirmId,state.state.revision),message('/confirm-hosting '+reviewId,confirmId,state.state.revision)]);assert.ok(results.every(r=>r.result.status===200));assert.equal(writes,1);
  await message('/confirm-hosting '+reviewId,confirmId,state.state.revision);assert.equal(writes,1);

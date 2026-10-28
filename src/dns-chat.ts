@@ -8,6 +8,7 @@ import {cloudflareZones,type CloudflareConfig} from './cloudflare-connection';
 import {listDNSActions,reviewTXT,reviewCNAME,confirmDNS} from './cloudflare-dns';
 import {receiptLine,reviewDigestLine,reviewEchoFromText} from './connector-receipts';
 import {DomainError} from './domains';
+import {reviewedReply,reviewChangedMessage} from './chat-review-receipts';
 import {hostingConnections} from './domain-hosting';
 import {ConnectionError} from './github-connection';
 export type DNSChatOptions=HostingChatOptions & BackupChatOptions & HealthOptions & {background?:(promise:Promise<unknown>)=>void;cmsPublication?:(turn:string,content:string)=>(()=>Promise<string>)|undefined;cmsContent?:CMSContent;cms?:CMSRead;backendRuntime?:Fetcher;config?:CloudflareConfig;transport?:typeof fetch;hostingReady?:boolean};
@@ -34,6 +35,7 @@ export function dnsChatCommand(db:D1Database,user:string,turnId:string,command:s
     // A check of a pending review must never become permission to create a record.
     if(action.state==='review')return describe(action)+'\nNo DNS write was authorized by this check.';
    }
+   if(verb==='/confirm-dns'&&!await reviewedReply(db,user,'dns',args[0]))throw new DomainError(409,reviewChangedMessage);
     // A Chat confirmation echoes the exact saved review turn (review ID = turn ID) that showed its price and digest.
    const echo=verb==='/confirm-dns'?reviewEchoFromText((await db.prepare("SELECT assistant_text FROM chat_turns WHERE id=? AND user_id=? AND status='completed'").bind(args[0],user).first<{assistant_text:string}>())?.assistant_text):undefined;
    return describe(await confirmDNS(db,user,args[0],options.config,options.transport,options.hostingReady,echo));
