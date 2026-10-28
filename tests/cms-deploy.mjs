@@ -5,10 +5,11 @@ import {execFileSync} from 'node:child_process';
 import {currentFixtureModules} from './helpers/current-modules.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
+import {assertReplyEditRefused} from './helpers/receipt-forge.mjs';
 const {module,identity}=await currentFixtureModules(["src/chat.ts", "src/cms-bridge.ts", "src/cms-content.ts", "src/cms-deploy.ts", "src/cms-discard.ts", "src/cms-index.ts", "src/cms-preview.ts", "src/cms-projects.ts", "src/cms-provision.ts", "src/cms-publication.ts", "src/cms-status.ts", "src/cms-unpublish.ts", "src/index.ts", "src/security.ts", "src/site-agent.ts", "src/site-host.ts", "src/site-traffic.ts", "src/workspace-read.ts"]);
 const {deployCMS,connectCMS}=await module('src/cms-deploy.ts'),{prepareCMS,confirmCMS}=await module('src/cms-projects.ts'),{allocateCMSResources}=await module('src/cms-provision.ts'),{deriveCMSSecret,verifyCMSRequest}=await module('src/cms-bridge.ts'),{readCMSStatus}=await module('src/cms-status.ts');
 const {createCMSDraft,readCMSDraft,listCMSDrafts,cmsContentAction,cmsContentCommand}=await module('src/cms-content.ts'),{cmsRequestAllowed}=await module('src/cms-bridge.ts');
-const {sendChat,readChat}=await module('src/chat.ts'),{prepareSiteAction}=await module('src/site-agent.ts');
+const {sendChat,sendChatControl,readChat}=await module('src/chat.ts'),{prepareSiteAction}=await module('src/site-agent.ts');
 const {cmsPreview,renderCMSDraft}=await module('src/cms-preview.ts');
 const {prepareCMSPublication,confirmCMSPublication,readCMSPublication,cmsPublicationCommand,cmsPublicURL,cmsPublicationPage}=await module('src/cms-publication.ts'),{default:publicHost}=await module('src/site-host.ts');
 const {prepareCMSUnpublish,confirmCMSUnpublish,readCMSUnpublish,cmsUnpublishCommand}=await module('src/cms-unpublish.ts');
@@ -134,6 +135,8 @@ try{
  const pubTurn=id(),pubOptions={cmsPublication:(turn,content)=>cmsPublicationCommand(scope(a.user),a.user,turn,content,env)},pubState=await readChat(scope(a.user),a.user);
  assert.equal((await sendChat(scope(a.user),a.user,{id:pubTurn,revision:pubState.state.revision,content:'/publish-cms '+a.project+' '+draftId},undefined,pubOptions)).status,200);
  const pubReview=await readCMSPublication(scope(a.user),a.user,pubTurn),pubChat=(await readChat(scope(a.user),a.user)).turns.at(-1);assert.equal(pubChat.cms_publication_confirmation_id,pubTurn);
+ // Receipt: an edited cmsPublish reply is refused on the confirm control and changes nothing.
+ await assertReplyEditRefused({db,kind:'cmsPublish',reviewId:pubTurn,table:'cms_publication_reviews',confirm:async action=>sendChatControl(scope(a.user),a.user,{id:id(),revision:(await readChat(scope(a.user),a.user)).state.revision,action:{type:'confirm',...action}},undefined,pubOptions)});
  const frozen=await (await cmsPublicationPage(scope(a.user),a.user,pubTurn)).text();assert.ok(frozen.includes('Edited'));assert.ok(frozen.includes('<strong>Changed</strong>'));assert.ok(frozen.includes('href="/cms"'));assert.ok(!frozen.includes('Private draft preview'));
  await assert.rejects(readCMSPublication(scope(fixtureStranger),fixtureStranger,pubTurn),e=>e.status===404);await assert.rejects(confirmCMSPublication(scope(fixtureStranger),fixtureStranger,pubTurn,env),e=>e.status===404);
  await assert.rejects(db.prepare('UPDATE cms_publication_reviews SET public_html=? WHERE id=?').bind('forged',pubTurn).run(),/immutable/);
@@ -168,6 +171,8 @@ try{
  const unpublishProposal=await prepareSiteAction(scope(a.user),a.user,id(),JSON.stringify({reply:'FAKE OFFLINE CLAIM',action:{kind:'cms',operation:'reviewUnpublish',projectId:a.project,requestId:pubTurn}}),{},{cmsContent:execute});assert.match(unpublishProposal.reply,/Review CMS unpublish/);assert.ok(!unpublishProposal.reply.includes('FAKE'));
  const competingOff=await prepareCMSUnpublish(scope(a.user),a.user,pubTurn,id(),env),offTurn=id(),offOptions={cmsPublication:(turn,text)=>cmsUnpublishCommand(scope(a.user),a.user,turn,text,env)??cmsPublicationCommand(scope(a.user),a.user,turn,text,env)},offState=await readChat(scope(a.user),a.user);
  assert.equal((await sendChat(scope(a.user),a.user,{id:offTurn,revision:offState.state.revision,content:'/unpublish-cms '+pubTurn},undefined,offOptions)).status,200);assert.equal((await readChat(scope(a.user),a.user)).turns.at(-1).cms_unpublish_confirmation_id,offTurn);
+ // Receipt: an edited cmsUnpublish reply is refused on the confirm control and changes nothing.
+ await assertReplyEditRefused({db,kind:'cmsUnpublish',reviewId:offTurn,table:'cms_unpublish_reviews',confirm:async action=>sendChatControl(scope(a.user),a.user,{id:id(),revision:(await readChat(scope(a.user),a.user)).state.revision,action:{type:'confirm',...action}},undefined,offOptions)});
  await assert.rejects(readCMSUnpublish(scope(fixtureStranger),fixtureStranger,offTurn),e=>e.status===404);await assert.rejects(confirmCMSUnpublish(scope(fixtureStranger),fixtureStranger,offTurn,env),e=>e.status===404);
  const expiredOff=id();await db.prepare("INSERT INTO cms_unpublish_reviews(id,publication_id,user_id,revision,expires_at) SELECT ?,publication_id,user_id,revision,'2000-01-01T00:00:00.000Z' FROM cms_unpublish_reviews WHERE id=?").bind(expiredOff,offTurn).run();await assert.rejects(confirmCMSUnpublish(scope(a.user),a.user,expiredOff,env),e=>e.status===409);assert.equal((await publicHost.fetch(publicRequest,{DB:db})).status,200);
  const beforeUnpublish=p.service.fetch;let unpublishes=0,unpublishReceipt;
@@ -218,6 +223,8 @@ try{
  const discardProposal=await prepareSiteAction(scope(a.user),a.user,id(),JSON.stringify({reply:'FAKE DISCARDED',action:{kind:'cms',operation:'reviewDiscard',projectId:a.project,requestId:replacementReview.id}}),{},{cmsContent:execute});assert.match(discardProposal.reply,/Review discarding/);assert.ok(!discardProposal.reply.includes('FAKE'));
  const discardTurn=id(),discardOptions={cmsPublication:(turn,text)=>cmsDiscardCommand(scope(a.user),a.user,turn,text,env)},discardState=await readChat(scope(a.user),a.user);
  assert.equal((await sendChat(scope(a.user),a.user,{id:discardTurn,revision:discardState.state.revision,content:'/discard-cms '+replacementReview.id},undefined,discardOptions)).status,200);assert.equal((await readChat(scope(a.user),a.user)).turns.at(-1).cms_discard_confirmation_id,discardTurn);
+ // Receipt: an edited cmsDiscard reply is refused on the confirm control and changes nothing.
+ await assertReplyEditRefused({db,kind:'cmsDiscard',reviewId:discardTurn,table:'cms_discard_reviews',confirm:async action=>sendChatControl(scope(a.user),a.user,{id:id(),revision:(await readChat(scope(a.user),a.user)).state.revision,action:{type:'confirm',...action}},undefined,discardOptions)});
  await assert.rejects(readCMSDiscard(scope(fixtureStranger),fixtureStranger,discardTurn),e=>e.status===404);await assert.rejects(confirmCMSDiscard(scope(fixtureStranger),fixtureStranger,discardTurn,env),e=>e.status===404);
  await assert.rejects(cmsContentAction(scope(a.user),a.user,{operation:'confirmDiscard',projectId:a.project,requestId:discardTurn},id(),env),e=>e.status===400);
  const staleDiscard=await prepareCMSDiscard(scope(a.user),a.user,replacementReview.id,id(),env);current._rev='bmV3cmV2';await assert.rejects(confirmCMSDiscard(scope(a.user),a.user,staleDiscard.id,env),e=>e.status===409);current._rev='ZGlzY2FyZA==';

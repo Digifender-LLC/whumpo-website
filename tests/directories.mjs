@@ -7,7 +7,7 @@ const {sendChat,sendChatControl,readChat,prepareSiteAction,host}=m,{readDirector
 const stamp=()=>new Date().toISOString();
 async function chat(user,content,id=crypto.randomUUID()){const state=await readChat(scope(user),user);const r=await sendChat(scope(user),user,{id,content,revision:state.state.revision});assert.equal(r.status,200,JSON.stringify(r));return id;}
 const approvals=new Map();
-async function confirm(user,reviewId,kind='directory'){const input={id:crypto.randomUUID(),revision:(await readChat(scope(user),user)).state.revision,action:{type:'confirm',kind,reviewId}};const result=await sendChatControl(scope(user),user,input);assert.equal(result.status,200,JSON.stringify(result));approvals.set(input.id,input);return input.id;}
+async function confirm(user,reviewId,kind='directory',status=200){const input={id:crypto.randomUUID(),revision:(await readChat(scope(user),user)).state.revision,action:{type:'confirm',kind,reviewId}};const result=await sendChatControl(scope(user),user,input);assert.equal(result.status,status,JSON.stringify(result));approvals.set(input.id,input);return input.id;}
 async function fixture(){const user=crypto.randomUUID();await accountAuthority(user);const {project,version}=await createFixtureProject(scope(user),user,'Community','A community directory');const review=await chat(user,'/publish '+version);await confirm(user,review,'site');return {user,project,version};}
 const get=(project,suffix='')=>host.fetch(new Request('https://'+project+'.whumpo.site'+'/directory'+suffix),store.env);
 const current=(f)=>readDirectory(scope(f.user),f.user,f.project);
@@ -15,7 +15,7 @@ async function add(f,title='Garden club',description='Saturday mornings'){const 
 try{
  const a=await fixture(),b=await fixture();assert.equal((await get(a.project)).status,404);
  const review=await chat(a.user,`/directory-add ${a.project} | Garden club | Saturday mornings | https://example.com/`);assert.equal((await current(a)).draft.length,0);assert.equal((await get(a.project,'.json')).status,404);
- await confirm(b.user,review);assert.equal((await current(a)).draft.length,0);await assert.rejects(readDirectory(scope(b.user),b.user,a.project),{status:404});
+ await confirm(b.user,review,'directory',409);assert.equal((await current(a)).draft.length,0);await assert.rejects(readDirectory(scope(b.user),b.user,a.project),{status:404});
  const confirmed=await confirm(a.user,review);assert.equal((await current(a)).draft[0].id,review);const rev=(await current(a)).revision;
  assert.equal((await sendChatControl(scope(a.user),a.user,approvals.get(confirmed))).status,200);await confirm(a.user,review);assert.equal((await current(a)).revision,rev);
  const pub=await chat(a.user,'/directory-publish '+a.project);assert.equal((await get(a.project)).status,404);await confirm(a.user,pub);assert.equal((await get(a.project)).status,200);const live=async()=>store.db.prepare('SELECT d.live_review_id,d.live_digest,r.digest FROM directories d LEFT JOIN directory_reviews r ON r.id=d.live_review_id WHERE d.project_id=?').bind(a.project).first();let liveRow=await live();assert.equal(liveRow.live_review_id,pub);assert.equal(liveRow.live_digest,liveRow.digest);const json=await (await get(a.project,'.json')).json();assert.equal(json.listings[0].description,'Saturday mornings');assert.equal(json.listings[0].id,review);assert.equal(json.user_id,undefined);

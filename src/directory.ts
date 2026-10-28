@@ -18,6 +18,7 @@ export async function readDirectory(db:D1Database,user:string,project:string){
  return {...p,draft:entries(p.draft_json),published:!!p.version_id&&p.live_json!==null&&p.publication_revision===p.current_publication};
 }
 import {requireRebuiltReply,rebuiltGuard} from './reviewed-rebuild';
+import {receiptStatement} from './chat-review-receipts';
 const directoryReply=(name:string,change:string,kind:string,review:string,digest:string)=>`${name}\n\n${change}\n\n${kind==='edit'?'Your existing public snapshot will not change. ':''}Review ${review}\nSnapshot SHA-256: ${digest}\nNothing changes until you use this review’s confirmation button within 10 minutes.`;
 /** The reply a directory review shows, rebuilt from the saved row; undefined for edit, remove and restore, whose text embeds the
  * draft at review time (not saved on the row), so they cannot be rebuilt without a schema change. */
@@ -80,9 +81,11 @@ export async function directoryAction(db:D1Database,user:string,turn:string,acti
  if(kind==='publish')change='Publish this exact directory snapshot for anyone to read:\n\n'+summary(draft)+'\n\nPage: '+directoryURL(project)+'\nPublic JSON: '+directoryURL(project)+'.json\nPublishing/restoring your website disables the directory until reviewed again. Public copies cannot be recalled.';
  if(kind==='unpublish')change='Take this directory page and its JSON API offline. The private draft and review history remain.';
  const digest=await hashToken(snapshot);
- return result(directoryReply(p.name,change,kind,turn,digest),[
+ const reply=directoryReply(p.name,change,kind,turn,digest);
+ return result(reply,[
   db.prepare('INSERT OR IGNORE INTO directories(project_id) SELECT ? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(project,turn,user),
-  db.prepare('INSERT INTO directory_reviews(id,user_id,project_id,kind,snapshot_json,digest,expected_revision,publication_revision,expires_at,source_review_id) SELECT ?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(turn,user,project,kind,snapshot,digest,p.revision,p.current_publication??-1,new Date(Date.now()+600000).toISOString(),source,turn,user)
+  db.prepare('INSERT INTO directory_reviews(id,user_id,project_id,kind,snapshot_json,digest,expected_revision,publication_revision,expires_at,source_review_id) SELECT ?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(turn,user,project,kind,snapshot,digest,p.revision,p.current_publication??-1,new Date(Date.now()+600000).toISOString(),source,turn,user),
+  await receiptStatement(db,user,turn,'directory',turn,reply)
  ]);
 }
 export async function directoryCommand(db:D1Database,user:string,turn:string,command:string){

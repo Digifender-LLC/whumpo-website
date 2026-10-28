@@ -5,7 +5,7 @@ import {workspaceFixture} from './helpers/workspace-identity.mjs';
 // Review kinds that store NO reply digest (directory add/publish/unpublish, contact form, version removal, photo removal) rebuild
 // the expected reply from the saved review row at confirm. A stored reply that differs is refused (409) and changes nothing;
 // restoring the text confirms. Directory edit, remove and restore replies embed the draft at review time, which the row does not
-// hold, so they cannot be rebuilt without a schema change: that gap is pinned at the end and must flip if the row ever stores it.
+// hold, so they use the shared chat_review_receipts digest instead (kind 'directory'), as does the contact notification address.
 // Run `node tests/digest-gap-direct.mjs` or add `--d1`.
 const m=await currentSiteFixtureHandlers(),store=await databaseFixture(),db=store.db,id=()=>crypto.randomUUID();
 const env={DB:db,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})}},origin='https://whumpo.com';
@@ -67,9 +67,20 @@ try{
  const proof=await prepare(o,scope,'/remove-domain-proof '+claim);
  await refused(o,'domainProof',proof,'domain_proof_removals',async done=>equal(!!await row('SELECT id FROM domain_claims WHERE id=?',claim),!done,'Reviewed proof '+(done?'gone':'present')));
 
- // Stopped kind: a directory edit reply embeds the old listing, which the row does not hold. Still accepted; flip when rebuildable.
- const listing=(await listed()).draft[0].id,edit=await prepare(o,scope,`/directory-edit ${project} ${listing} | Garden club | Sunday mornings`);await forge(edit);
- equal((await confirm(o,'directory',edit)).status,200,'Directory edit confirm after a changed reply (known gap, not rebuildable from the row)');
+ // Directory edit, remove and restore replies embed the draft at review time, which the row does not hold: they are covered by the
+ // shared receipt (kind 'directory'), so a changed reply is refused on the confirm control exactly like the rebuildable kinds.
+ const listing=(await listed()).draft[0].id,edit=await prepare(o,scope,`/directory-edit ${project} ${listing} | Garden club | Sunday mornings`);
+ equal((await row("SELECT kind FROM chat_review_receipts WHERE review_id=?",edit)).kind,'directory','Directory edit review has a receipt');
+ await refused(o,'directory',edit,'directory_reviews',async done=>equal((await listed()).draft[0].description,done?'Sunday mornings':'Saturday mornings','Directory edit '+(done?'applied':'not applied')));
+ const gone=await prepare(o,scope,`/directory-remove ${project} ${listing}`);
+ await refused(o,'directory',gone,'directory_reviews',async done=>equal((await listed()).draft.length,done?0:1,'Directory removal '+(done?'applied':'not applied')));
+ const back=await prepare(o,scope,`/directory-restore ${project} ${add}`);
+ await refused(o,'directory',back,'directory_reviews',async done=>equal((await listed()).draft.length,done?1:0,'Directory restore '+(done?'applied':'not applied')));
+
+ // Contact notification address.
+ const notify=await prepare(o,scope,`/contact-notify ${project} Garden@Example.com`);
+ equal((await row("SELECT kind FROM chat_review_receipts WHERE review_id=?",notify)).kind,'contactNotification','Contact notification review has a receipt');
+ await refused(o,'contactNotification',notify,'contact_destination_reviews',async done=>equal((await row('SELECT address a FROM contact_notification_destinations WHERE project_id=?',project))?.a,done?'garden@example.com':undefined,'Notification address '+(done?'saved':'unchanged')));
  console.log(`Digest gap direct passed (${checks} checks, ${process.argv.includes('--d1')?'local D1':'SQLite'}).`);
 }catch(error){console.error(String(error.stack||error).replace(/data:text\/javascript;base64,[A-Za-z0-9+/=]+/g,'<bundled module>'));process.exitCode=1;}
 finally{await store.close();}
