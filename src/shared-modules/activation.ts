@@ -5,6 +5,7 @@ import {FeatureInclusionError,featureRequest} from '../feature-inclusion';
 import {assertWorkspace} from '../workspace-identity/admission';
 import {chatTurnGroups} from '../chat-turn-groups';
 import {ModuleError} from './policy';
+import {compactedReview,turnoverStatements} from '../review-turnover';
 import {linkedReviewedReply,reviewedReplyGuard} from '../chat-review-receipts';
 import {catalogState,currentSpecification,instanceOf,moduleDescriptor,moduleFeature,pin,registeredInstances,type RegistryRow} from './registry';
 
@@ -89,7 +90,8 @@ export async function prepareModuleActivationCommand(db:D1Database,user:string,t
  review.request_hash=await jsonDigest({kind:'moduleActivationReview',projectId:project,instanceId:localId,action});
  const saved:SavedReview={...review,review_digest:await reviewDigest(review)},keys=Object.keys(saved) as (keyof SavedReview)[],reply=describe(review,dependencies);
  return {reply,statements:[
-  // Expired unapplied reviews no longer count against capacity; WH-182 compacts them into sealed receipts.
+  // Expired unapplied reviews no longer count against capacity; this batch first seals and removes the project's eligible rows (WH-182).
+  ...await turnoverStatements(db,'module_activation_reviews',{user,project}),
   db.prepare(`INSERT INTO module_activation_reviews(${keys.join(',')}) VALUES(${keys.map(()=>'?').join(',')})`).bind(...keys.map(k=>saved[k])),
   link(db,user,turn,turn,await sha256(reply))
  ]};
@@ -100,7 +102,7 @@ async function ownedRegistry(db:D1Database,user:string,project:string){
 }
 async function ownedReview(db:D1Database,user:string,review:string){
  const row=await db.prepare('SELECT r.* FROM module_activation_reviews r JOIN projects p ON p.id=r.project_id AND p.owner_user_id=r.user_id WHERE r.id=? AND r.user_id=?').bind(review,user).first<SavedReview>();
- if(!row)throw new ModuleError('not_found','Module review not found.');
+ if(!row)throw await compactedReview(db,'module_activation_reviews',review,user,(s,m)=>new ModuleError(s===503?'unresolved':'stale_configuration',m))??new ModuleError('not_found','Module review not found.');
  return row;
 }
 /** Read-time validity for presentation and preflight; the committing trigger repeats every check. */

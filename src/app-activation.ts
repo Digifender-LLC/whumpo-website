@@ -3,6 +3,7 @@ import {liveAppPage,applicationURL} from './app-pages';
 import {BackendError,listBackends} from './backend-versions';
 import {hashToken} from './security';
 import {readVisitorApplicationResource} from './app-resource';
+import {admitWithTurnover,compactedReview} from './review-turnover';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 type Review={id:string;project_id:string;user_id:string;version_id:string;run_id:string|null;enabled:number;base_revision:number;status:string;expires_at:string;source:string;digest:string};
 export async function readApplication(db:D1Database,user:string,project:string){
@@ -15,13 +16,14 @@ export async function readApplication(db:D1Database,user:string,project:string){
 }
 export async function readApplicationReview(db:D1Database,user:string,id:string){
  const row=await db.prepare('SELECT r.*,v.source,v.digest FROM app_activation_reviews r JOIN projects p ON p.id=r.project_id AND p.owner_user_id=r.user_id JOIN backend_versions v ON v.id=r.version_id AND v.project_id=r.project_id WHERE r.id=? AND r.user_id=?').bind(id,user).first<Review>();
- if(!row)throw new BackendError(404,'Application review not found');if(await hashToken(row.source)!==row.digest)throw new BackendError(409,'Application source integrity check failed');return row;
+ if(!row)throw await compactedReview(db,'app_activation_reviews',id,user,(s,m)=>new BackendError(s,m))??new BackendError(404,'Application review not found');if(await hashToken(row.source)!==row.digest)throw new BackendError(409,'Application source integrity check failed');return row;
 }
 export async function prepareApplication(db:D1Database,user:string,project:string,id:string,operation:'enable'|'disable',version:string|null,run:string|null){
  if(!uuid.test(id)||!['enable','disable'].includes(operation)||operation==='enable'&&(!version||!uuid.test(version)||!run||!uuid.test(run))||operation==='disable'&&(version!==null||run!==null))throw new BackendError(400,'Provide an application operation and a successful state-transition test for enable');
  await listBackends(db,user,project);
  const previous=await db.prepare('SELECT id FROM app_activation_reviews WHERE id=?').bind(id).first();
  if(!previous){
+  const gone=await compactedReview(db,'app_activation_reviews',id,user,(s,m)=>new BackendError(s,m));if(gone)throw gone;
   if(operation==='enable'){
    // WH-126: the application consumes the project's access module instance (its visitor identities); it never owns them.
    if(!await db.prepare("SELECT 1 FROM module_instances WHERE project_id=? AND kind='access'").bind(project).first())throw new BackendError(409,'Activate this project’s visitor access module before authorizing an application');
@@ -29,7 +31,7 @@ export async function prepareApplication(db:D1Database,user:string,project:strin
   }
   const current=await db.prepare('SELECT version_id,revision FROM app_spaces WHERE project_id=? AND owner_user_id=?').bind(project,user).first<{version_id:string;revision:number}>();
   if(!current)throw new BackendError(404,'Application configuration not found');
-  try{await db.prepare('INSERT INTO app_activation_reviews(id,project_id,user_id,version_id,run_id,enabled,base_revision) VALUES(?,?,?,?,?,?,?)').bind(id,project,user,operation==='enable'?version:current.version_id,run,operation==='enable'?1:0,current.revision).run();}catch{/* Recover only an exact committed review. */}
+  try{await admitWithTurnover(db,'app_activation_reviews',{user,project},db.prepare('INSERT INTO app_activation_reviews(id,project_id,user_id,version_id,run_id,enabled,base_revision) VALUES(?,?,?,?,?,?,?)').bind(id,project,user,operation==='enable'?version:current.version_id,run,operation==='enable'?1:0,current.revision));}catch{/* Recover only an exact committed review. */}
  }
  let row:Review;try{row=await readApplicationReview(db,user,id);}catch{throw new BackendError(409,'Review unavailable; check the transition test, current configuration and review allowance');}
  if(row.project_id!==project||row.enabled!==(operation==='enable'?1:0)||operation==='enable'&&row.version_id!==version||row.run_id!==run)throw new BackendError(409,'Review ID already used');return row;

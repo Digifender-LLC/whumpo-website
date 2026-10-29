@@ -16,13 +16,19 @@ The [WH-052 background-job decision](background-jobs.md) retains this scheduler 
 | traffic | Daily 03:17 | Expire old aggregate traffic counters and measurement-quality counters (WH-037), hashed per-connection admission keys older than the previous UTC day and per-project photo read counters before last month (WH-075) |
 | funnel | Hourly at :47 and daily 03:17 | Prune [funnel measurements](funnel-metrics.md) older than 180 days, then derive consent-gated, content-free events from existing receipts (bounded, idempotent) |
 | guest_previews | Daily 03:17 | Remove [guest preview link](guest-previews.md) metadata that ended over 30 days ago and never received comments (at most 500 per run); comments and their links stay |
-| applications | Daily 03:17 | Remove stale migration documents, deletion receipts and daily counters |
+| applications | Daily 03:17 | Remove stale migration documents, deletion receipts and daily counters; then the [WH-182 review turnover pass](review-retention.md#review-turnover-wh-182-implemented-in-source-nothing-deployed): seal and remove eligible review rows of projects with no recent admission and age sealed receipts out after 30 days (bounded, see below) |
 | contacts | Daily 03:17 | Expire submissions and delivery receipts |
 | photos | Daily 03:17 | Process private object cleanup and bounded orphan detection |
 | github | Daily 03:17, when configured | Expire OAuth state/tokens and retry pending revocations |
 | cloudflare | Daily 03:17, when configured | Retire abandoned staged authorization and retry pending revocations |
 
 This wraps the existing [scheduled handler](https://developers.cloudflare.com/workers/runtime-apis/handlers/scheduled/); it does not introduce more frequent jobs, new provider calls or new services. The complete current schema stores at most fourteen telemetry rows, one per allowlisted job. Each invocation writes a start record and a terminal record, plus the last-success timestamp for completed passes. The original estimate of at most 315 D1 write statements per day predates the hourly `chat_drafts` and `funnel` jobs; each adds at most three telemetry writes per invocation (about 75 per day). The WH-025 `funnel` job also runs one bounded delete and one derivation batch per invocation and writes rows only for consenting accounts. The WH-092 `guest_previews` job adds one bounded delete and three telemetry writes per daily run. Account allowance/actual row charges still require observation; no new recurring minimum is enabled.
+
+## Review turnover (WH-182, October 28, 2026; source only, not deployed)
+
+Terminal, superseded and expired review rows now leave in two places: the admitting batch of each review prepare (the caller's rows, at most 200 per call), and a bounded pass at the end of the daily `applications` job (up to 25 projects or owners per family and 1,000 rows per run, then sealed receipts older than 30 days, up to 1,000 per run). Rows that are held, referenced, pending or in flight are re-checked by the deleting statement and survive. The pass reports under `applications` because `maintenance_health` has no `reviews` job name; the failure rule is unchanged (a failing pass fails the job visibly, and a failing earlier step does not skip it).
+
+The operator report gains a `reviews` section (per family: rows waiting, oldest waiting age, sealed receipts), the `review_turnover` and `review_receipts` backlogs (43 queues in all, attention at 25 hours) and eighteen `<table>_active` counters against the 5,000-row platform ceilings (32 counters in all, flagged at 50% and 80%). They hold counts only. `node tests/maintenance-inventory.mjs` checks them against the schema; `node tests/review-turnover.mjs` (and `--d1`) checks the turnover itself.
 
 ## Meaning and failure behavior
 

@@ -13,6 +13,7 @@ import {renderCMSRichText} from './cms-rich-text';
 import {previewHeaders} from './components';
 import {escapeCMS as escapeHTML} from './cms-rich-text';
 import {requireApprovedCMSMedia} from './cms-media-safety';
+import {admitWithTurnover,compactedReview} from './review-turnover';
 type Review={media_plan:string;taxonomy_plan:string;source_upload_id:string|null;id:string;user_id:string;project_id:string;source_digest:string;source_id:number;collection:string;body:string;provenance:string;status:'pending'|'approved'|'imported'|'superseded';created_at:string;expires_at:string};
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 export type CMSImportCandidate={sourceDigest:string;sourceId:number;collection:'posts'|'pages';title:string;content:unknown;excerpt?:string;provenance:ImportProvenance;taxonomyPlan?:ImportTerm[];mediaPlan?:ImportImage[]};
@@ -25,7 +26,7 @@ function canonical(candidate:CMSImportCandidate){
  const mediaPlan=JSON.stringify(importMediaPlan(candidate.mediaPlan??[],JSON.parse(body).data.content));
  return {body,provenance,taxonomyPlan,mediaPlan};
 }
-export async function readCMSImport(db:D1Database,user:string,id:string){const row=await db.prepare('SELECT r.* FROM cms_import_reviews r JOIN projects p ON p.id=r.project_id WHERE r.id=? AND r.user_id=? AND p.owner_user_id=?').bind(id,user,user).first<Review>();if(!row)throw new CMSProjectError(404,'Import review not found');
+export async function readCMSImport(db:D1Database,user:string,id:string){const row=await db.prepare('SELECT r.* FROM cms_import_reviews r JOIN projects p ON p.id=r.project_id WHERE r.id=? AND r.user_id=? AND p.owner_user_id=?').bind(id,user,user).first<Review>();if(!row)throw await compactedReview(db,'cms_import_reviews',id,user,(s,m)=>new CMSProjectError(s,m))??new CMSProjectError(404,'Import review not found');
  try{if(canonicalImportProvenance(JSON.parse(row.provenance))!==row.provenance)throw Error();}catch{throw new CMSProjectError(409,'This import review uses an unsupported source contract. Prepare a new review from the retained WordPress export.');}
  return row;}
 export async function prepareCMSImport(db:D1Database,user:string,project:string,id:string,candidate:CMSImportCandidate,env:Record<string,unknown>,sourceUploadId?:string){
@@ -38,7 +39,7 @@ export async function prepareCMSImport(db:D1Database,user:string,project:string,
  if(row&&row.id!==id){const existing=await readCMSImport(db,user,row.id);if(existing.status==='pending'&&existing.expires_at<=new Date().toISOString())row=null;}
  if(!row&&taxonomyPlan!=='[]')await requireCMSImportTaxonomies(db,user,project,env);
  if(!row&&candidate.excerpt!==undefined)await requireCMSExcerpts(db,user,project,env);
- if(!row){await requireStructuredCMS(db,user,project,env);try{await db.prepare('INSERT INTO cms_import_reviews(id,user_id,project_id,source_digest,source_id,collection,body,provenance,source_upload_id,taxonomy_plan,media_plan) VALUES(?,?,?,?,?,?,?,?,?,?,?)').bind(id,user,project,candidate.sourceDigest,candidate.sourceId,candidate.collection,body,provenance,sourceUploadId??null,taxonomyPlan,mediaPlan).run();}catch{/* Resolve exact or competing source reservations. */}row=await db.prepare("SELECT id FROM cms_import_reviews WHERE project_id=? AND source_digest=? AND source_id=? AND status<>'superseded'").bind(project,candidate.sourceDigest,candidate.sourceId).first<{id:string}>();}
+ if(!row){const gone=await compactedReview(db,'cms_import_reviews',id,user,(s,m)=>new CMSProjectError(s,m));if(gone)throw gone;await requireStructuredCMS(db,user,project,env);try{await admitWithTurnover(db,'cms_import_reviews',{user,project},db.prepare('INSERT INTO cms_import_reviews(id,user_id,project_id,source_digest,source_id,collection,body,provenance,source_upload_id,taxonomy_plan,media_plan) VALUES(?,?,?,?,?,?,?,?,?,?,?)').bind(id,user,project,candidate.sourceDigest,candidate.sourceId,candidate.collection,body,provenance,sourceUploadId??null,taxonomyPlan,mediaPlan));}catch{/* Resolve exact or competing source reservations. */}row=await db.prepare("SELECT id FROM cms_import_reviews WHERE project_id=? AND source_digest=? AND source_id=? AND status<>'superseded'").bind(project,candidate.sourceDigest,candidate.sourceId).first<{id:string}>();}
  if(!row)throw new CMSProjectError(409,'Import review capacity is full or unavailable');
  const saved=await readCMSImport(db,user,row.id);if(saved.source_upload_id!==(sourceUploadId??null)||saved.project_id!==project||saved.source_digest!==candidate.sourceDigest||saved.source_id!==candidate.sourceId||saved.collection!==candidate.collection||saved.body!==body||saved.provenance!==provenance||saved.taxonomy_plan!==taxonomyPlan||saved.media_plan!==mediaPlan)throw new CMSProjectError(409,'This source article already has a different saved review. Inspect it before changing the import.');return saved;
 }

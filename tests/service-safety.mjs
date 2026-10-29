@@ -88,10 +88,12 @@ try{
  });
  await test('saved direct and existing handler reviews are discoverable without inference or automatic writes',async()=>{
   for(const kind of ['backend','application']){
-   const o=await owner(),existing=id();if(kind==='backend')await publication.prepareBackendPublication(o.scope,o.user,o.project,existing,'unpublish',o.version,null);else await pages.prepareAppPage(o.scope,o.user,o.project,existing,null);
-   for(let i=0;i<22;i++)await prepare(o,kind);const before=calls;let after=null,ids=[];
+   const o=await owner(),existing=id();
+   for(let i=0;i<22;i++)await prepare(o,kind);
+   if(kind==='backend')await publication.prepareBackendPublication(o.scope,o.user,o.project,existing,'unpublish',o.version,null);else await pages.prepareAppPage(o.scope,o.user,o.project,existing,null);const before=calls;let after=null,ids=[];
    do{const list=await http(o,'?kind='+kind+'&project='+o.project+(after?'&after='+after:''));ids.push(...list.reviews.map(r=>r.id));after=list.next;}while(after);
-   assert.equal(ids.length,23);assert.equal(new Set(ids).size,23);assert(ids.includes(existing));assert.equal(calls,before);
+   // WH-182: these are withdrawals of one target; each newer one supersedes the older and admission seals the older away, so storage stays bounded at two rows.
+   assert.equal(ids.length,2);assert.equal(new Set(ids).size,2);assert(ids.includes(existing));assert.equal(calls,before);
    assert.equal((await http(o,saved(kind,existing)+'/confirm','POST',confirm)).review.state,'applied');
   }
  });

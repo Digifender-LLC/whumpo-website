@@ -6,6 +6,7 @@ import {renderCMSDraft} from './cms-preview';
 import {cmsConnection} from './cms-status';
 import {callCMS} from './cms-bridge';
 import {CMSProjectError} from './cms-projects';
+import {admitWithTurnover,compactedReview} from './review-turnover';
 import {hashToken} from './security';
 import {requireApprovedCMSMedia} from './cms-media-safety';
 import {previewHeaders} from './components';
@@ -26,7 +27,7 @@ export async function prepareCMSPublication(db:D1Database,user:string,project:st
  await requireApprovedCMSMedia(db,user,project,manifest);
  const resolveImage=(image:{asset:{_ref:string}})=>{const found=manifest.find(m=>m.mediaId===image.asset._ref);if(!found)throw new CMSProjectError(409,'Article image could not be captured');return {src:`/cms/media/${id}/${found.digest}.jpg`,width:found.width,height:found.height};};
  const privateHTML=renderCMSDraft(snap,false,resolveImage),publicHTML=renderCMSDraft(snap,true,resolveImage),digest=await hashToken(publicHTML);
- try{await db.prepare('INSERT INTO cms_publication_reviews(id,draft_request_id,user_id,project_id,collection,item_id,revision,snapshot,preview_html,public_html,digest,replaces_publication_id,media_manifest) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,draft,user,project,snap.collection,snap.item.id,snap.revision,JSON.stringify(snap),privateHTML,publicHTML,digest,base?.id??null,JSON.stringify(manifest)).run();}catch{}
+ try{await admitWithTurnover(db,'cms_publication_reviews',{user,project},db.prepare('INSERT INTO cms_publication_reviews(id,draft_request_id,user_id,project_id,collection,item_id,revision,snapshot,preview_html,public_html,digest,replaces_publication_id,media_manifest) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,draft,user,project,snap.collection,snap.item.id,snap.revision,JSON.stringify(snap),privateHTML,publicHTML,digest,base?.id??null,JSON.stringify(manifest)));}catch{}
  const row=await readCMSPublication(db,user,id);if(row.project_id!==project||row.draft_request_id!==draft)throw new CMSProjectError(409,'Review ID already used');await recoverImages(db,user,row,env,images);return row;
 }
 async function recoverImages(db:D1Database,user:string,row:Review,env:Record<string,unknown>,captured?:CMSArticleImage[]){

@@ -48,18 +48,27 @@ try{
  const stage=id();ciphers.set(stage,await fixtureCiphertext(fixtureKeyring(),`whumpo:github:token:${owner}:${stage}`,'PRIVATE_CREDENTIAL_CANARY'));github(stage,'active');sql.prepare('INSERT INTO github_token_staging VALUES(?,?,?)').run(stage,'PRIVATE_STATE_CANARY',at(-2*day));
  sql.prepare("INSERT INTO connection_oauth_exchanges(token_id,user_id,provider,client_id,state_hash,key_id,revision,state,created_at) VALUES(?,?,'github','fixture','PRIVATE_STATE','fixture-current',1,'dispatched',?)").run(newGH,owner,at(-2*day));
  sql.prepare('INSERT INTO github_refresh_custody(token_id,user_id,client_id,ciphertext,expires_at) VALUES(?,?,?,?,?)').run(newGH,owner,'fixture',await fixtureCiphertext(fixtureKeyring(),`whumpo:github:refresh:${owner}:${newGH}`,'PRIVATE_REFRESH_CANARY'),at(180*day));
+ // WH-182: an expired, never-applied review that no admission has sealed yet, and a sealed receipt past its 30-day replay horizon.
+ sql.prepare('INSERT INTO directories(project_id) VALUES(?)').run(project);
+ sql.prepare("INSERT INTO directory_reviews(id,user_id,project_id,kind,snapshot_json,digest,expected_revision,publication_revision,expires_at) VALUES(?,?,?,'edit','[]',?,1,0,?)").run(id(),owner,project,'a'.repeat(64),at(-2*day));
+ sql.exec('DROP TRIGGER review_receipt_bind');
+ sql.prepare("INSERT INTO review_receipts(family,id,owner_user_id,project_id,kind,target,outcome,payload_digest,request_hash,confirmed_by,applied_at,lifecycle_class,sealed_at,seal) VALUES('directory_reviews',?,?,?,'change',?,'expired',?,?,NULL,NULL,'directories',?,?)").run(id(),owner,project,project,'a'.repeat(64),'b'.repeat(64),at(-33*day),'c'.repeat(64));
  sql.exec('PRAGMA query_only=ON');
  report=await maintenanceReport(db,Date.now());
- assert.equal(report.backlogs.length,41);assert.ok(report.backlogs.every(q=>q.state!=='unavailable'),JSON.stringify(report.backlogs));
+ assert.equal(report.backlogs.length,43);assert.ok(report.backlogs.every(q=>q.state!=='unavailable'),JSON.stringify(report.backlogs));
  for(const queue of ['contact_receipts','contact_notification_outbox','contact_notification_queue','traffic','fair_use','health_budget','github_staged','connection_exchanges']){const backlog=report.backlogs.find(q=>q.queue===queue);assert.equal(backlog.state,'attention',queue);assert.equal(backlog.count,1,queue);}
  assert.equal(report.backlogs.find(q=>q.queue==='contact_receipts').oldestAgeMs>=2*day,true);
  for(const queue of ['github','cloudflare']){const backlog=report.backlogs.find(q=>q.queue===queue);assert.equal(backlog.state,'pending');assert.equal(backlog.unknownAgeCount,0);assert.ok(backlog.oldestAgeMs<60000);}
+ for(const queue of ['review_turnover','review_receipts']){const backlog=report.backlogs.find(q=>q.queue===queue);assert.equal(backlog.count,1,queue);assert.equal(backlog.state,'attention',queue);}
+  assert.equal(report.reviews.length,21);assert.ok(report.reviews.every(r=>r.state!=='unavailable'),JSON.stringify(report.reviews));
+ {const directory=report.reviews.find(r=>r.family==='directory_reviews');assert.deepEqual([directory.state,directory.waiting,directory.sealedReceipts],['attention',1,1]);assert.ok(report.reviews.filter(r=>r.family!=='directory_reviews').every(r=>r.state==='current'&&r.waiting===0));}
  assert.equal(report.backlogs.find(q=>q.queue==='github_refresh_grants').count,1);
  assert.equal(report.backlogs.find(q=>q.queue==='github_refresh_grants').unknownAgeCount,0);
  assert.equal(report.operations.length,4);assert.ok(report.operations.every(o=>o.state==='available'));
  // WH-050 F8: every shared counter's ceiling matches the trigger/table that enforces it; 50%/80% flags; read-only.
- for(const [name,{enforcedBy,evidence}] of Object.entries(platformCounterInventory)){const source=sql.prepare('SELECT sql FROM sqlite_master WHERE name=?').get(enforcedBy)?.sql??'';assert.ok(source.replace(/\s+/g,' ').includes(evidence),name);}
- assert.equal(report.counters.length,14);assert.ok(report.counters.every(c=>c.state!=='unavailable'),JSON.stringify(report.counters));
+ // An index may share a trigger's name (domain_connection_owner), so every object of that name is searched.
+ for(const [name,{enforcedBy,evidence}] of Object.entries(platformCounterInventory)){const source=sql.prepare("SELECT group_concat(sql,' ') sql FROM sqlite_master WHERE name=?").get(enforcedBy)?.sql??'';assert.ok(source.replace(/\s+/g,' ').includes(evidence),name);}
+ assert.equal(report.counters.length,14+18,'fourteen shared counters and the eighteen review families that have a platform active cap');assert.ok(report.counters.every(c=>c.state!=='unavailable'),JSON.stringify(report.counters));
  assert.equal(report.counters.find(c=>c.counter==='contact_receipts').used,2);assert.equal(report.counters.find(c=>c.counter==='contact_receipts').state,'normal');
  sql.exec('PRAGMA query_only=OFF');
  const period=new Date(now).toISOString().slice(0,7);
@@ -74,5 +83,5 @@ try{
  const broken=await counterReport({prepare:()=>{throw Error('PRIVATE_SECRET_CANARY');}},now);assert.ok(broken.counters.every(c=>c.state==='unavailable'));assert.equal(broken.attention,true);assert.ok(!JSON.stringify(broken).includes('PRIVATE_'));
  assert.ok(!JSON.stringify(counters).includes(project)&&!JSON.stringify(counters).includes(owner));
  const encoded=JSON.stringify(report);for(const marker of ['PRIVATE_',owner,newGH,newCF,project])assert.ok(!encoded.includes(marker),marker);
- console.log('Maintenance inventory passed: complete current schema, missing telemetry attention, precise new revocation clocks, retry stability/cascade, 41 read-only queues, four receipt families, 14 shared platform counters checked against their schema ceilings with 50%/80% flags, retention eligibility and private data exclusion.');
+ console.log('Maintenance inventory passed: complete current schema, missing telemetry attention, precise new revocation clocks, retry stability/cascade, 43 read-only queues, four receipt families, 32 shared platform counters (14 shared plus 18 review-family active caps) checked against their schema ceilings with 50%/80% flags, retention eligibility and private data exclusion.');
 }finally{sql.close();}
