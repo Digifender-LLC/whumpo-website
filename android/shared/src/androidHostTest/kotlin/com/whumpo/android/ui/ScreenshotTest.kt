@@ -43,7 +43,7 @@ class ScreenshotTest : RobolectricUiTest() {
 
     @Composable
     private fun Padded(content: @Composable () -> Unit) = Column(Modifier.padding(16.dp)) {
-        Text("Projects", style = MaterialTheme.typography.headlineMedium)
+        Text("Projects", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onBackground)
         Column(Modifier.padding(top = 16.dp)) { content() }
     }
 
