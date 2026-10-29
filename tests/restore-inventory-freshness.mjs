@@ -146,6 +146,17 @@ try{
   await assertResult(verified,inventory,'stale-authority'); // the verified state is not revived once undone
   current=await register(inventory);await assertResult(current,inventory);
  }
+ // WH-203: a restore must never revive an open compromise review after it committed (the epoch advanced, the sessions are gone).
+ {
+  const run=(sqlText,...values)=>db.prepare(sqlText).bind(...values).run(),t=Date.now();
+  const a=await db.prepare('SELECT auth_epoch,credential_revision,kit_generation FROM identity_accounts WHERE account_id=?').bind(owner.account).first();
+  await run("INSERT INTO owner_security_reviews(review_id,account_id,epoch,credential_revision,kit_generation,credentials,connections,created_at,expires_at,state,revision) VALUES('review-restore',?,?,?,?,'[]','[]',?,?,'open',1)",owner.account,a.auth_epoch,a.credential_revision,a.kit_generation,t,t+600000);
+  const openArchive=await register(inventory);await assertResult(openArchive,inventory);
+  await run('UPDATE identity_accounts SET auth_epoch=auth_epoch+1 WHERE account_id=?',owner.account);
+  await run("UPDATE owner_security_reviews SET state='committed',revision=revision+1,commit_request_id='request-restore',commit_request_hash=?,receipt=?,committed_at=? WHERE review_id='review-restore'",'a'.repeat(64),JSON.stringify({reviewId:'review-restore',epoch:a.auth_epoch+1,stage:'ready',revokedCredentials:[],kitRotated:false,pendingEmailChange:null,connections:[],sessionsRevoked:'all',accountRecoveryOnly:true}),Date.now());
+  await assertResult(openArchive,inventory,'stale-authority'); // the archive that held the review open and the earlier epoch is not revived
+  current=await register(inventory);await assertResult(current,inventory);
+ }
  // A source with an obsolete or incomplete schema cannot issue fresh evidence.
  const wrongSource=new DatabaseSync(':memory:');wrongSource.exec('CREATE TABLE users(id TEXT PRIMARY KEY)');
  try{const wrong=await open(sqliteD1Adapter(wrongSource));await assertResult(current,wrong,'independent-evidence');}finally{wrongSource.close();}

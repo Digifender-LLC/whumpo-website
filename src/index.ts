@@ -20,6 +20,7 @@ import {stripeBillingWebhook,subscriptionsEnabled,subscriptionStatus,refreshSubs
 import {serviceClientActivationPreview} from './project-specification/service-clients/activation';
 import {runMaintenance} from './maintenance';
 import {accountEmailRoute,emailChangeDelivery} from './email-change/http';
+import {securityReviewRoute} from './email-change/review-http';
 import {maintainEmailChanges} from './email-change/maintenance';
 import {cleanupInteractionDrafts} from './chat-interactions/retention';
 import {exportChatTranscript} from './chat-transcript';
@@ -180,6 +181,10 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
   // WH-201 direct owner controls for the account email: not Chat, no agent action. Delivery is inactive until WH-202, so a change request returns delivery_unavailable and stores nothing.
   if(pathname==='/api/account/email'||pathname.startsWith('/api/account/email/')){
    return (await accountEmailRoute(request,env,env.DB,workspacePrincipal(env.DB,user.id),{delivery:emailChangeDelivery(env)}))??error(404,'Not found');
+  }
+  // WH-203 direct owner controls for the compromise review: not Chat, no agent action, no restricted grant.
+  if(pathname.startsWith('/api/account/security/review/')){
+   return (await securityReviewRoute(request,env,env.DB,workspacePrincipal(env.DB,user.id),{delivery:emailChangeDelivery(env)}))??error(404,'Not found');
   }
   if(pathname==='/api/profile'){
     if(method==='GET')return json(await readProfile(env.DB,user.id));

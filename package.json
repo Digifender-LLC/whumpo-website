@@ -133,6 +133,7 @@
     "test:cost-event-adapters": "node tests/cost-event-adapters.mjs",
     "test:cost-events-store": "node tests/cost-events-store.mjs && node tests/cost-events-store.mjs --d1",
     "test:email-change-store": "node tests/email-change-store.mjs && node tests/email-change-store.mjs --d1",
+    "test:email-change-review": "node tests/email-change-review.mjs && node tests/email-change-review.mjs --d1",
     "test:ack-timing": "node tests/ack-timing.mjs",
     "test:app-activation": "node tests/app-activation.mjs",
     "test:app-activation-http": "node tests/app-activation-http.mjs",

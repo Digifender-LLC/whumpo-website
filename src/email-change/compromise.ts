@@ -78,9 +78,11 @@ export function closeForSecurityReview(change:EmailChange):EmailChange {
 }
 
 const identifier=(value:unknown,code:string)=>{check(typeof value==='string'&&/^[A-Za-z0-9-]{1,64}$/.test(value),code);return value;};
-function selection(value:unknown,what:string):string[] {
+// Passkey credential IDs are base64url (identity_credentials.id: 1..1024 characters of [A-Za-z0-9_-]); review and connection IDs have no underscore.
+const credentialId=(value:unknown)=>{check(typeof value==='string'&&/^[A-Za-z0-9_-]{1,1024}$/.test(value),'INVALID_SELECTION');return value;};
+function selection(value:unknown,what:string,parse:(x:unknown,code:string)=>string=identifier):string[] {
  check(value===undefined||Array.isArray(value),'INVALID_SELECTION',what);
- const list=(value??[]).map(x=>identifier(x,'INVALID_SELECTION'));
+ const list=(value??[]).map(x=>parse(x,'INVALID_SELECTION'));
  check(new Set(list).size===list.length,'INVALID_SELECTION',what);
  return list.sort();
 }
@@ -99,7 +101,7 @@ export function parseReviewCommit(input:unknown):ReviewCommitRequest {
   rotateKit={offerId:identifier(data.rotateKit.offerId,'UNKNOWN_OFFER')};
  }
  return {requestId:requestIdentifier(data.requestId),reviewId:identifier(data.reviewId,'UNKNOWN_REVIEW'),
-  revokeCredentials:selection(data.revokeCredentials,'credentials'),rotateKit,revokeConnections:selection(data.revokeConnections,'connections')};
+  revokeCredentials:selection(data.revokeCredentials,'credentials',credentialId),rotateKit,revokeConnections:selection(data.revokeConnections,'connections')};
 }
 
 export type PrepareInput={

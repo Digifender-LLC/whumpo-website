@@ -21,7 +21,8 @@ const root=fileURLToPath(new URL('..',import.meta.url));
 const moduleFiles=['src/email-change/policy.ts','src/email-change/change.ts','src/email-change/token.ts','src/email-change/compromise.ts','src/email-change/revocation.ts','src/email-change/provider-revokers.ts','src/email-change/connection-holds.ts'];
 const read=file=>readFileSync(join(root,file),'utf8');
 // WH-201: the storage slice, the trusted HTTP adapter and the maintenance job are NOT part of the pure module; they have their own checks below.
-const wiringFiles=['src/email-change/store.ts','src/email-change/http.ts','src/email-change/maintenance.ts'];
+// WH-203 adds the review storage slice and its trusted adapter (review-store.ts, review-http.ts), covered by tests/email-change-review.mjs.
+const wiringFiles=['src/email-change/store.ts','src/email-change/http.ts','src/email-change/maintenance.ts','src/email-change/review-store.ts','src/email-change/review-http.ts'];
 const entry=moduleFiles.map(f=>`export * from './${f.replace(/\.ts$/,'')}';`).join('');
 /** Bundles the source (with optional mutated files) in esbuild's own process, so bundles can overlap the JS suites. */
 async function bundleSource(overrides={}){
@@ -919,7 +920,7 @@ await checkOnce('the source module is pure, and no Worker entry reaches it',asyn
   assert.ok(Object.hasOwn(inputs,worker)&&(worker!=='src/index.ts'||reached.size>100),`${worker}: ${reached.size} modules`);
   // WH-201: only the main Worker reaches the module, and only through the trusted adapter. The site, app and runtime Workers never do.
   const reachedModule=[...reached].filter(p=>/email-change/.test(p));
-  if(worker==='src/index.ts')assert.ok(reachedModule.includes('src/email-change/http.ts')&&reachedModule.every(p=>p==='src/email-change/http.ts'||p==='src/email-change/store.ts'||p==='src/email-change/maintenance.ts'||moduleFiles.includes(p)),`${worker} reaches ${reachedModule}`);
+  if(worker==='src/index.ts')assert.ok(reachedModule.includes('src/email-change/http.ts')&&reachedModule.every(p=>wiringFiles.includes(p)||moduleFiles.includes(p)),`${worker} reaches ${reachedModule}`);
   else assert.deepEqual(reachedModule,[],`${worker} reaches the email-change module`);
  }
  // No Chat, agent, model or other module imports it: the only importer outside the folder is the main Worker's route table.

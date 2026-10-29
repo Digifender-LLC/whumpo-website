@@ -23,9 +23,9 @@ export type EmailChangeOptions={delivery?:EmailChangeDelivery|null;now?:()=>numb
 
 const base='/api/account/email',maxBody=4096;
 const headers={'content-type':'application/json; charset=utf-8','cache-control':'no-store',pragma:'no-cache','x-content-type-options':'nosniff','referrer-policy':'no-referrer'};
-const respond=(value:unknown,status=200)=>new Response(JSON.stringify(value),{status,headers});
+export const respond=(value:unknown,status=200)=>new Response(JSON.stringify(value),{status,headers});
 // Fixed messages: nothing here echoes an address, token, change ID from another account or database text.
-const failures:Record<string,[number,string,string]>={
+export const failures:Record<string,[number,string,string]>={
  AUTH_REQUIRED:[401,'proof_required','Sign in with your current passkey to continue.'],
  PROOF_REQUIRED:[401,'proof_required','Verify your current passkey to continue.'],
  IDENTITY_CHANGED:[409,'identity_changed','Your account access changed. Verify your current access and review this action again.'],
@@ -39,13 +39,19 @@ const failures:Record<string,[number,string,string]>={
  CHANGE_CLOSED:[409,'change_closed','That change is closed.'],TOKEN_EXPIRED:[409,'token_expired','That confirmation has expired. Request the change again.'],
  ADDRESS_UNAVAILABLE:[409,'address_unavailable','That address cannot be used.'],INVALID_TOKEN:[400,'invalid_token','That confirmation is not valid.'],
  UNKNOWN_CHANGE:[404,'unknown_change','Change not found.'],UNDO_UNAVAILABLE:[409,'undo_unavailable','That change can no longer be undone.'],
+ // WH-203 compromise review (review-http.ts).
+ UNKNOWN_REVIEW:[404,'unknown_review','That review was not found.'],STALE_REVIEW:[409,'stale_review','Your account changed or this review expired. Start a new review.'],
+ STALE_OFFER:[409,'stale_review','That recovery kit offer expired. Start a new review.'],UNKNOWN_OFFER:[404,'unknown_offer','That recovery kit offer was not found.'],
+ KIT_NOT_SAVED:[409,'kit_not_saved','Save the replacement recovery kit before replacing the current one.'],KIT_OFFER_EXISTS:[409,'kit_offer_exists','This review already offered a kit. Start a new review for another.'],
+ INVALID_SELECTION:[400,'invalid_selection','That selection is not part of this review.'],REVIEW_LIMIT:[409,'review_limit','Too many stored reviews. Try again later.'],
+ REVIEW_TOO_LARGE:[409,'review_too_large','This account has too many items for one review. Contact support.'],
 };
-const failure=(code:string)=>{
+export const failure=(code:string)=>{
 
  if(code==='DELIVERY_UNAVAILABLE')return respond({version:1,status:'delivery_unavailable'});
  const [status,name,message]=failures[code]??[503,'unavailable','Account email is temporarily unavailable.'];return respond({error:message,code:name},status);};
 
-async function readBody(request:Request):Promise<unknown> {
+export async function readBody(request:Request):Promise<unknown> {
  if(!/^application\/json(?:\s*;|$)/i.test(request.headers.get('content-type')??''))throw new EmailChangeError('INVALID_REQUEST','content-type');
  const length=request.headers.get('content-length');
  if(length!==null&&(!/^\d+$/.test(length)||Number(length)>maxBody))throw new EmailChangeError('INVALID_REQUEST','size');
