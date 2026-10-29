@@ -30,7 +30,7 @@ export async function checkHealth(db:D1Database,user:string,project:string,trans
   const html=await pageText(response);if(await hashToken(html)!==await hashToken(publishedHTML(s.html,s.contact_enabled===1,project,form)))throw Error('The served page did not match the current saved version.');
   // WH-183: a directory the platform serves (live and bound to this publication) must return the approved snapshot: ETag and listings hash both equal its digest.
   if(dir?.live_json&&dir.publication_revision===s.revision){
-   const expected=dir.live_digest??await hashToken(dir.live_json),r=await transport(url+'directory.json',{method:'GET',headers:{accept:'application/json','cache-control':'no-cache','user-agent':platformCheckAgent},redirect:'manual',signal:AbortSignal.timeout(10000)});
+   const expected=dir.live_digest,r=await transport(url+'directory.json',{method:'GET',headers:{accept:'application/json','cache-control':'no-cache','user-agent':platformCheckAgent},redirect:'manual',signal:AbortSignal.timeout(10000)});
    const text=r.ok&&r.body?await pageBody(r):(await r.body?.cancel(),'');let listings:unknown;try{listings=JSON.parse(text).listings;}catch{}
    if(r.status!==200||r.headers.get('etag')!=='"'+expected+'"'||!Array.isArray(listings)||await hashToken(JSON.stringify(listings))!==expected)throw Error('The served directory did not match the approved snapshot.');
   }
