@@ -16,6 +16,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import com.whumpo.android.ui.shell.TopDestination
 import com.whumpo.android.ui.shell.WhumpoShell
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -81,7 +82,11 @@ class ShellBehaviorTest : RobolectricUiTest() {
     fun backFromAnotherDestinationReturnsToChat() {
         launch(Screen.Compact) { WhumpoShell() }.use { scenario ->
             compose.onNodeWithTag("nav-settings").performClick()
-            scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+            compose.onNodeWithTag("nav-settings").assertIsSelected()
+            scenario.onActivity {
+                assertTrue("back callback enabled", it.onBackPressedDispatcher.hasEnabledCallbacks())
+                it.onBackPressedDispatcher.onBackPressed()
+            }
             // Back is delivered through a coroutine, so wait for the selection instead of asserting once.
             compose.waitUntil(5_000) {
                 compose.onAllNodes(isSelected() and hasTestTag("nav-chat")).fetchSemanticsNodes().isNotEmpty()
