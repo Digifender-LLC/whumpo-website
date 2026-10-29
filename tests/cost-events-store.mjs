@@ -67,7 +67,7 @@ try{
   // Provider ID: learned once (null -> value), never replaced.
   const sid5='prov-'+id(),g1={...await call(A,sid5,'dispatched')};
   await m.appendCostEvent(db,g1);
-  const withId=async(rev,v)=>{const e={...await observed(A,sid5),providerEventId:v,revision:rev};e.idempotencyKey=g1.idempotencyKey;return e;};
+  const withId=async(rev,v)=>{const e={...await observed(A,sid5),providerEventId:v,revision:rev};e.idempotencyKey=g1.idempotencyKey;return e;}; // gitleaks:allow (copies a fixture field; no secret)
   await m.appendCostEvent(db,await withId(4,'evt-1'));
   await rejects(m.appendCostEvent(db,await withId(5,'evt-2')),'IMMUTABLE_FIELD');
  });
