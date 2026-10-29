@@ -338,6 +338,10 @@ The table below records the frozen operation **set** and authority for each new 
 | Microsoft Calendar (WH-099) | `events.range` (≤31 days) | `event.create` (transaction ID) | owner removal / single-flight | `Calendars.ReadWrite` is broader than selected calendars, so Whumpo enforces the selection. |
 | HubSpot (WH-100) | `contacts.search` | `contact.create` (**owner-request + approved-rule candidate**) | refresh-token delete / single-flight | The refresh-token delete API carries the token in the URL path. That conflicts with the "never in URLs" rule, and WH-100 must decide on it. Preserve unmapped fields. |
 
+## Rule authority (WH-145)
+
+`src/connector-catalog/rule-authority.ts` (`admitRuleAction`) is the pure decision for a rule-context action. It is unwired: it stores no approval, hashes nothing and is not called by the job runner (WH-069). The caller supplies the server-derived principal, the canonical digests of the destination and body template, the credential id and the claim-time use count. It refuses with the reference codes of `tools/prototypes/connectors.mjs`, in this order: `PRINCIPAL_FORBIDDEN` (not a rule), `UNKNOWN_PROVIDER`/`UNKNOWN_OPERATION`, `RULE_READ_FORBIDDEN` (reads and reconciliation), `OWNER_REQUEST_ONLY`, `RULE_APPROVAL_REQUIRED` (missing or malformed approval, rule id, revision or job digest), `ADAPTER_NOT_ACCEPTED`, `RULE_DESTINATION_MISMATCH` (operation, destination digest or template digest differs), `RULE_CREDENTIAL_MISMATCH` (new here: the reference never bound the credential) and `RULE_LIMIT`. No provider is `live-accepted`, so every adapter refuses today. `tests/connector-rule-authority.mjs` checks each code and each bound field against the reference runtime.
+
 ## Delivery slices
 
 WH-056 stays the parent with its acceptance unchanged. It closes only when every child below is accepted. Provider sandbox and customer acceptance stay in WH-031/032 (existing providers) and WH-096–100 (new providers), which depend on WH-056. Task scopes live in [backlog.json](roadmap/backlog.json).
