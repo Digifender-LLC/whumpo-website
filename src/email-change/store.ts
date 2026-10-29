@@ -62,10 +62,9 @@ export async function readHolders(db:Database,address:string):Promise<AddressHol
 }
 /** Limit evidence inside its windows: the account's request and failure times, and the address's send times. */
 export async function readLimits(db:Database,accountId:string,address:string|null,now:number){
- const times=async(sql:string,...values:unknown[])=>(await db.prepare(sql).bind(...values).all<{at:number}>()).results.map(r=>r.at);
- const requests=await times("SELECT at FROM owner_email_change_limits WHERE kind='request' AND account_id=? AND at>? ORDER BY at",accountId,now-emailChangeBounds.limitWindowMs);
- const failures=await times("SELECT at FROM owner_email_change_limits WHERE kind='failure' AND account_id=? AND at>? ORDER BY at",accountId,now-emailChangeBounds.failureWindowMs);
- const addressSends=address===null?[]:await times("SELECT at FROM owner_email_change_limits WHERE kind='send' AND address_key=? AND at>? ORDER BY at",await addressKey(address),now-emailChangeBounds.limitWindowMs);
+ const requests=(await db.prepare("SELECT at FROM owner_email_change_limits WHERE kind='request' AND account_id=? AND at>? ORDER BY at").bind(accountId,now-emailChangeBounds.limitWindowMs).all<{at:number}>()).results.map(r=>r.at);
+ const failures=(await db.prepare("SELECT at FROM owner_email_change_limits WHERE kind='failure' AND account_id=? AND at>? ORDER BY at").bind(accountId,now-emailChangeBounds.failureWindowMs).all<{at:number}>()).results.map(r=>r.at);
+ const addressSends=address===null?[]:(await db.prepare("SELECT at FROM owner_email_change_limits WHERE kind='send' AND address_key=? AND at>? ORDER BY at").bind(await addressKey(address),now-emailChangeBounds.limitWindowMs).all<{at:number}>()).results.map(r=>r.at);
  return {requests,failures,addressSends};
 }
 

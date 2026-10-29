@@ -139,22 +139,22 @@
   {
    "id": "B5",
    "severity": "low",
-   "title": "Anonymous visitor login starts can exhaust app challenge capacity for one project and for every tenant",
-   "status": "reproduced (executed, local SQLite)",
+   "title": "Anonymous visitor login starts can exhaust app challenge capacity for one project and for every tenant \u2014 resolved October 28, 2026 in source",
+   "status": "resolved October 28, 2026 in source: at most 5 live challenges per project and client hash (a hash of the connecting address) and a typed 429 when any cap is reached (executed regression on local SQLite; not deployed; schema change, cutover pending)",
    "owner": "Visitor identity maintainers; schema change needs a coordinated cutover",
-   "reproduction": "node tests/boundary-app-challenge-capacity.mjs (expected to exit 1 until remediated)",
+   "reproduction": "node tests/boundary-app-challenge-capacity.mjs (exits 0: the regression)",
    "evidence": [
     {
      "file": "schema/platform.sql",
-     "contains": "SELECT RAISE(ABORT,'app_challenge_capacity') WHERE (SELECT count(*) FROM app_auth_challenges WHERE project_id=NEW.project_id)>=50 OR (SELECT count(*) FROM app_auth_challenges)>=1000;"
+     "contains": "SELECT RAISE(ABORT,'app_challenge_client_capacity') WHERE (SELECT count(*) FROM app_auth_challenges WHERE project_id=NEW.project_id AND client_hash=NEW.client_hash"
     },
     {
-     "file": "src/app-gateway.ts",
-     "contains": "if(path.startsWith('auth/')&&!(await env.AUTH_LIMITER.limit({key:'app:'+ip})).success)"
+     "file": "src/app-auth.ts",
+     "contains": "if(/app_challenge_(?:client_)?capacity/.test(String(cause)))throw new BackendError(429"
     },
     {
      "file": "tests/boundary-app-challenge-capacity.mjs",
-     "contains": "B5 reproduced"
+     "contains": "await refused(login(victim,'203.0.113.1'));"
     }
    ]
   },
@@ -7421,14 +7421,19 @@
      ]
     },
     "admission": {
-     "state": "gap",
-     "gapKind": "control",
-     "finding": "B5",
-     "detail": "AUTH_LIMITER (10/min per IP) bounds attempts, but anonymous login starts each store a 5-minute challenge under a 50-per-project / 1,000-platform cap, so one client can block a project's sign-ins and twenty can block every tenant (B5).",
+     "state": "evidenced",
+     "detail": "AUTH_LIMITER (10/min per IP) bounds attempts, and a login start stores a challenge under a trigger cap of 5 live challenges per project and client hash (a hash of the connecting address, never the address) on top of 50 per project and 1,000 platform-wide; every cap is a typed 429.",
      "enforcedAt": [
       {
        "file": "src/app-auth.ts",
-       "contains": "db.prepare('INSERT INTO app_auth_challenges(token_hash,project_id,access_id,activation_revision,challenge,kind,visitor_id,invite_hash,session_hash) VALUES(?,?,?,?,?,?,?,?,?)')"
+       "contains": "if(/app_challenge_(?:client_)?capacity/.test(String(cause)))throw new BackendError(429"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/boundary-app-challenge-capacity.mjs",
+       "contains": "await refused(login(victim,'203.0.113.1'));",
+       "asserts": "one client is refused with a typed 429 after five live challenges while another client and another project can still start sign-in"
       }
      ]
     },
@@ -8250,6 +8255,14 @@
      "file": "src/index.ts",
      "kind": "job",
      "match": "default applications",
+     "methods": [
+      "SCHEDULED"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "job",
+     "match": "default reviews",
      "methods": [
       "SCHEDULED"
      ]

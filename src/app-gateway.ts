@@ -143,7 +143,7 @@ export async function applicationGateway(request:Request,env:AppEnv,fetcher:type
    if(passkey){
     const kind=passkey[1] as 'signup'|'login'|'add';
     if(passkey[2]==='options'){
-     const result=await appPasskeyOptions(env.DB,project,kind,local,kind==='signup'&&typeof data.inviteCode==='string'?data.inviteCode:kind==='add'?session:'');
+     const result=await appPasskeyOptions(env.DB,project,kind,local,kind==='signup'&&typeof data.inviteCode==='string'?data.inviteCode:kind==='add'?session:'',ip);
      return json({options:result.options},200,[cookie(project,'challenge',result.challengeToken,local)]);
     }
     if(!data.credential||typeof data.credential!=='object'||Array.isArray(data.credential))throw new BackendError(400,'Provide a passkey response');

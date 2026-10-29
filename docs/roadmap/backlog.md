@@ -4693,7 +4693,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-28 UTC: source and local verification only; not merged, not deployed. Shipped with WH-170 as one schema change. Adds users.email_verified_at/_via, owner_email_changes, owner_email_change_limits and owner_security_reviews with every contract predicate repeated as a trigger or constraint (src/email-change/store.ts, http.ts, maintenance.ts), the trusted adapter at /api/account/email (Origin, 4 KiB body, rate limit; delivery_unavailable and nothing stored while delivery is inactive), the Account email Settings controls, the daily email_changes maintenance job, closure and restore coverage, and the lifecycle classes. Also folds in WH-182's reviews telemetry job (maintenance_health CHECK) and the WH-004 B5 challenge cap (client_hash, D-11). Evidence: node tests/email-change-store.mjs and --d1 (14 cases: supersede, token reuse, restore cannot revive old state), tests/email-change-contract.mjs, tests/restore-inventory-freshness.mjs, tests/maintenance-inventory.mjs, tests/maintenance-scheduled.mjs, tests/account-email-ui.mjs. The owner-run empty-D1 cutover is not done.
 
 ## WH-202 — Wire account email notices to platform delivery after the WH-036 live sender
 
@@ -6006,7 +6006,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-28 UTC: source and local verification only (disposable SQLite and actual local D1); not merged, not deployed, issue not claimed. Combined with WH-201 into one schema change (branch schema/wh-170-wh-201) so the test platform needs one empty-D1 cutover. Adds the append-only cost_events table (UNIQUE key+revision, immutability and tenant-owner triggers, 9,000-row capacity), src/cost-event-store.ts (duplicate, stale-revision, revision-compatibility and exact-integer rules), emission after the inference, gateway and storage receipt transitions (src/cost-event-emission.ts; storage readings at powers of two), the cost-events lifecycle class and closure inventory counts. Owner decision D-10 (planning lead, no money): closure deletes the owner's events with the account, no closure key, no tombstones; period close, company totals and provider statements move to WH-171. Evidence: node tests/cost-events-store.mjs and --d1 (13 cases including a forced emission failure that leaves the receipt intact), tests/cost-event-adapters.mjs, tests/cost-events-contract.mjs. Schema sqlSha256 7bb66ead8bb9385b5979e8a15979041a3c8c68f797895b146c46b034b4e7d3ef, inventory 55e23c9a597d2281b4857c520ae0dcd564ab1cd8b27e6c7e9ef592909629ae68, 1124 objects, 226 tables. The owner-run empty-D1 cutover is not done.
 
 ## WH-171 — Import provider usage and invoices and report aggregate cost reconciliation
 

@@ -1,9 +1,7 @@
-// WH-004 finding B5 reproduction (local SQLite fixture, synthetic accounts; no network or provider).
-// Anonymous `POST /apps/:project/auth/login/options` stores one 5-minute challenge per call. The schema caps
-// app_auth_challenges at 50 per project and 1,000 platform-wide, and nothing but expiry removes an unused row.
-// Per-IP AUTH_LIMITER allows 10 per minute, so one client sustains 50 live rows (10/min x 5 min) for one project,
-// and 20 clients fill the platform cap. Expected: a legitimate visitor of another project can still start sign-in.
-// Exits 1 while the defect reproduces. Deliberately not in package.json scripts or any tools/verify.mjs profile.
+// WH-004 finding B5 (fixed in the WH-170/WH-201 schema change): anonymous `POST /apps/:project/auth/login/options` stores a 5-minute
+// challenge per call. The schema now caps live challenges at 5 per (project, client hash) on top of the 50-per-project and 1,000-platform
+// caps, and a full table is a typed 429 instead of a generic 503. Local SQLite fixture, synthetic accounts; no network or provider.
+// Exits 0 when one client is refused with 429 after five starts while another client (and another project) can still start sign-in.
 import assert from 'node:assert/strict';
 import {currentSiteFixtureHandlers,enableFixtureVisitorAccess} from './current-site-fixture.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
@@ -21,22 +19,31 @@ async function app(){
  const review=id();await prepareApplication(scope,user,project,review,'enable',version,test);await confirmApplication(scope,user,review);
  return project;
 }
-// Exactly what the gateway calls for an anonymous login/options request (no invitation, no session).
-const login=project=>auth.appPasskeyOptions(db,project,'login',false,'');
+// Exactly what the gateway calls for an anonymous login/options request (no invitation, no session), with the connecting address.
+const login=(project,client)=>auth.appPasskeyOptions(db,project,'login',false,'',client);
+const refused=async(promise)=>assert.rejects(promise,e=>e?.status===429&&/Try again/.test(e.message)&&!/app_challenge/.test(e.message));
 const count=async(sql,...p)=>(await db.prepare(sql).bind(...p).first()).n;
-let reproduced=[];
 try{
- // One anonymous client, one project: 50 unanswered login starts within five minutes.
  const victim=await app();
- for(let n=0;n<50;n++)await login(victim);
+ // One client: five live challenges, then a typed 429; its refusal stores nothing.
+ for(let n=0;n<5;n++)await login(victim,'203.0.113.1');
+ await refused(login(victim,'203.0.113.1'));
+ assert.equal(await count('SELECT count(*) n FROM app_auth_challenges WHERE project_id=?',victim),5);
+ // A different client can still start a login for the same project, and the same client for another project.
+ await login(victim,'203.0.113.2');
+ const other=await app();await login(other,'203.0.113.1');
+ // Only a hash of the address is stored.
+ const rows=(await db.prepare('SELECT client_hash FROM app_auth_challenges').all()).results;
+ assert.ok(rows.every(r=>/^[0-9a-f]{64}$/.test(r.client_hash)));assert.ok(!JSON.stringify(rows).includes('203.0.113'));
+ // Ten clients fill the project cap of 50: the next client gets the typed 429, and another project is unaffected.
+ for(let c=3;c<=10;c++)for(let n=0;n<5;n++)await login(victim,'203.0.113.'+c);
+ for(let n=0;n<4;n++)await login(victim,'203.0.113.11');
  assert.equal(await count('SELECT count(*) n FROM app_auth_challenges WHERE project_id=?',victim),50);
- try{await login(victim);}catch(error){reproduced.push(`project ${victim.slice(0,8)}: a visitor's login start fails after 50 anonymous starts (${String(error?.message??error).slice(0,80)})`);}
- // Twenty anonymous clients (one per project they target) fill the platform-wide table.
- for(let p=1;p<20;p++){const target=await app();for(let n=0;n<50;n++)await login(target);}
+ await refused(login(victim,'203.0.113.200'));
+ await login(other,'203.0.113.3');
+ // Twenty projects of fifty fill the platform cap through many clients; a bystander project then gets the typed 429, never a 503.
+ for(let p=0;p<20;p++){const target=await app();for(let c=0;c<10;c++)for(let n=0;n<5;n++){try{await login(target,'198.51.100.'+c);}catch(e){assert.equal(e.status,429);}}}
  assert.equal(await count('SELECT count(*) n FROM app_auth_challenges'),1000);
- const bystander=await app();
- assert.equal(await count('SELECT count(*) n FROM app_auth_challenges WHERE project_id=?',bystander),0);
- try{await login(bystander);}catch(error){reproduced.push(`unrelated project ${bystander.slice(0,8)}: its first login start fails once 1,000 anonymous challenges exist platform-wide (${String(error?.message??error).slice(0,80)})`);}
+ await refused(login(await app(),'192.0.2.9'));
 }finally{await store.close?.();}
-if(reproduced.length){console.error('B5 reproduced:\n- '+reproduced.join('\n- '));process.exit(1);}
-console.log('Anonymous login starts cannot exhaust visitor sign-in for a project or for other tenants.');
+console.log('Anonymous login starts cannot exhaust visitor sign-in: one client is capped at five live challenges per project with a typed 429, other clients and projects still start sign-in, and the project and platform caps return the same typed 429.');

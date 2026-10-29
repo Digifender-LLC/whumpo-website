@@ -1145,6 +1145,8 @@ CREATE TABLE app_auth_challenges (
  visitor_id TEXT NOT NULL,
  invite_hash TEXT NOT NULL,
  session_hash TEXT NOT NULL,
+ -- WH-004 B5: SHA-256 of the requester's connecting address (never the address), so one client cannot hold more than 5 live challenges per project.
+ client_hash TEXT NOT NULL CHECK(length(client_hash)=64 AND client_hash NOT GLOB '*[^0-9a-f]*'),
  expires_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now','+5 minutes'))
 );
 
@@ -1805,7 +1807,7 @@ CREATE TABLE content_risk_reversals (
 );
 
 CREATE TABLE maintenance_health (
- job TEXT PRIMARY KEY CHECK(job IN ('identity','chat_drafts','imports','hosting','health','fair_use','traffic','funnel','guest_previews','email_changes','applications','contacts','photos','github','cloudflare')),
+ job TEXT PRIMARY KEY CHECK(job IN ('identity','chat_drafts','imports','hosting','health','fair_use','traffic','funnel','guest_previews','email_changes','reviews','applications','contacts','photos','github','cloudflare')),
  run_id TEXT NOT NULL,
  started_at INTEGER NOT NULL CHECK(started_at>=0),
  finished_at INTEGER,
@@ -3269,6 +3271,7 @@ CREATE TRIGGER app_passkey_identity BEFORE UPDATE ON app_passkeys WHEN NEW.id<>O
 
 CREATE TRIGGER app_challenge_admit BEFORE INSERT ON app_auth_challenges BEGIN
  SELECT RAISE(ABORT,'app_challenge_authority') WHERE NOT EXISTS(SELECT 1 FROM module_instances i JOIN module_activations ac ON ac.instance_id=i.id JOIN module_activation_reviews ar ON ar.id=ac.review_id JOIN projects p ON p.id=i.project_id AND p.owner_user_id=ar.user_id WHERE i.id=NEW.access_id AND i.project_id=NEW.project_id AND i.kind='access' AND ac.state='active' AND ac.revision=NEW.activation_revision);
+ SELECT RAISE(ABORT,'app_challenge_client_capacity') WHERE (SELECT count(*) FROM app_auth_challenges WHERE project_id=NEW.project_id AND client_hash=NEW.client_hash AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))>=5;
  SELECT RAISE(ABORT,'app_challenge_capacity') WHERE (SELECT count(*) FROM app_auth_challenges WHERE project_id=NEW.project_id)>=50 OR (SELECT count(*) FROM app_auth_challenges)>=1000;
 END;
 

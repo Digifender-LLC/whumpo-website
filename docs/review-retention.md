@@ -324,7 +324,7 @@ The 25 admission inserts across 23 source files are wired; the families are list
 
 **Executive decisions recorded here (agent decisions, reversible):**
 
-- **The daily pass reports under the `applications` job.** `maintenance_health.job` has a CHECK listing the fourteen job names, so a `reviews` telemetry row would make every scheduled run fail visibly until the schema admits it, and schema changes were out of scope. The pass therefore runs in a `finally` of the `applications` job (the nearest lifecycle-cleanup job). Moving it to its own `reviews` job needs one CHECK change and a `maintenanceJobs` entry, at the next owner-run cutover.
+- **The daily pass reports as its own `reviews` job (changed October 28, 2026).** It first ran inside `applications` because `maintenance_health.job` had a CHECK without `reviews`; the WH-170/WH-201 schema change adds `reviews` to that CHECK, `maintenanceJobs` allowlists it and `src/index.ts` runs `maintainReviews` as a separate job entry, so its telemetry no longer hides behind `applications`.
 - **Digest and request hash derivation.** SQLite cannot hash, and the bind trigger only shape-checks values the source row lacks. Deriving them from the canonical row and its identity keeps them deterministic and covered by the seal.
 - **Inline fallback.** Admission availability outranks timely storage turnover; the daily pass and the next admission recover anything a failed turnover left.
 
