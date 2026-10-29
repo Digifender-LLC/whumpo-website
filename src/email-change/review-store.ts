@@ -123,7 +123,7 @@ export async function persistCommit(db:Database,{review,offer,step,request,accou
  for(const c of github)statements.push(
   db.prepare(`UPDATE github_token_vault SET state='revoking' WHERE id=? AND user_id=? AND ${after}`).bind(vaultId(c),account.accountId,...afterParams),
   db.prepare(`UPDATE github_connections SET active_token_id=NULL WHERE user_id=? AND active_token_id=? AND ${after}`).bind(account.accountId,vaultId(c),...afterParams),
-  db.prepare(`DELETE FROM github_token_staging WHERE token_id=? AND ${after}`).bind(vaultId(c),...afterParams));
+  db.prepare(`DELETE FROM github_token_staging WHERE token_id=? AND token_id IN (SELECT id FROM github_token_vault WHERE user_id=?) AND ${after}`).bind(vaultId(c),account.accountId,...afterParams));
  if(cloudflare.length)statements.push(db.prepare(`UPDATE cloudflare_oauth_states SET cancelled=1 WHERE user_id=? AND ${after}`).bind(account.accountId,...afterParams));
  for(const c of cloudflare)statements.push(db.prepare(`UPDATE cloudflare_token_vault SET state='revoking' WHERE id=? AND user_id=? AND ${after}`).bind(vaultId(c),account.accountId,...afterParams));
  if(step.change)statements.push(writeChange(db,step.change));
