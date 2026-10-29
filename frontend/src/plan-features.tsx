@@ -1,6 +1,7 @@
 import {useState} from 'react';
+import {Check} from 'lucide-react';
 import {publicPlans} from '../../src/plans';
-import {commonFeatureNotice,connectionProviderNames,guestFeedbackNotice,launchAvailabilityNotice,launchFeatureCatalogue,launchPackaging} from '../../src/plan-features';
+import {commonFeatureNotice,connectionProviderNames,guestFeedbackNotice,launchAvailabilityNotice,launchFeatureCatalogue,launchHighlights,launchPackaging} from '../../src/plan-features';
 
 export function PlanFeatureDetails({planId}:{planId:string}) {
   const packaging=launchPackaging(planId),plan=publicPlans.find(p=>p.id===planId);
@@ -33,4 +34,30 @@ export function PlanPreferenceField({initialPlan}:{initialPlan:string}) {
     </label>
     <PlanFeatureDetails planId={selected}/>
   </div>;
+}
+
+const audiencePlans={personal:['starter','personal'],business:['business','business-pro']} as const;
+const recommendedPlan={personal:'personal',business:'business'} as const;
+const dollars=(cents:number)=>'$'+cents/100;
+
+/** Native plan cards from the draft catalogue. Display only: nothing here grants access or starts a purchase. */
+export function PlanCards({audience,billingInterval}:{audience:'personal'|'business';billingInterval:'monthly'|'annual'}) {
+  const plans=audiencePlans[audience].map(id=>publicPlans.find(p=>p.id===id)!);
+  return <ul className={'grid list-none gap-6 p-0 md:grid-cols-2'}>
+    {plans.map(plan=>{
+      const recommended=recommendedPlan[audience]===plan.id,annual=billingInterval==='annual';
+      return <li key={plan.id} className={'flex min-w-0 flex-col gap-4 rounded-xl border bg-surface-raised p-6 shadow-sm '+(recommended?'border-action':'border-line')}>
+        <div className="flex min-h-8 flex-wrap items-center justify-between gap-2">
+          <h3 className="font-sans text-heading text-ink">{plan.name}</h3>
+          {recommended&&<span className="inline-flex h-6 items-center rounded-full bg-action-soft px-2 text-caption font-semibold text-ink">Recommended</span>}
+        </div>
+        <p className="text-caption font-semibold text-ink-muted">Planned launch pricing — not available yet</p>
+        <p className="text-title text-ink">{dollars(annual?plan.annualCents:plan.monthlyCents)}<span className="text-body-sm font-normal text-ink-muted">{annual?' / year':' / month'}</span></p>
+        <ul className="grid list-none gap-2 p-0 text-body-sm text-ink">
+          {launchHighlights[plan.id as keyof typeof launchHighlights].slice(0,3).map(h=><li key={h} className="flex gap-2"><Check aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-ready-ink"/>{h}</li>)}
+        </ul>
+        <div className="mt-auto"><PlanFeatureDetails planId={plan.id}/></div>
+      </li>;
+    })}
+  </ul>;
 }
