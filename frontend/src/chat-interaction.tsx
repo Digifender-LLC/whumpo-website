@@ -2,6 +2,7 @@ import {ChatConnectionConsent} from './connection-consent';
 import {isWorkspaceViewDefinition} from '../../src/chat-interactions/view-definition';
 import {TemporaryViewComponent,viewLabels} from './workspace-view-components';
 import {ProjectPhotoUpload} from './project-photo-upload';
+import {ChatUploadHandoff} from './photo-collections';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import {Link} from '@tanstack/react-router';
@@ -29,7 +30,7 @@ function startingAnswers(form:InteractionRead):Answers{return form.submission?.a
 
 /** Maintained templates and exact admitted information compositions only. */
 export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInChat}:{id:string;owner:string;chatRevision:number;busy:boolean;onAnswerInChat:()=>void}){
- const recovery=useInteractionRecovery(owner,id),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[fieldError,setFieldError]=useState<string|null>(null),[checked,setChecked]=useState(false),[discard,setDiscard]=useState(false),[resourceState,setResourceState]=useState<Record<string,boolean>>({});
+ const recovery=useInteractionRecovery(owner,id),[savedPhoto,setSavedPhoto]=useState<{id:string;name:string}|null>(null),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[fieldError,setFieldError]=useState<string|null>(null),[checked,setChecked]=useState(false),[discard,setDiscard]=useState(false),[resourceState,setResourceState]=useState<Record<string,boolean>>({});
  const onResourceReady=useCallback((fieldId:string,ready:boolean)=>setResourceState(previous=>previous[fieldId]===ready?previous:{...previous,[fieldId]:ready}),[]);
  const section=useRef<HTMLElement>(null),restored=useRef(false);
  const result=useRef<HTMLParagraphElement>(null),followResult=useRef<HTMLParagraphElement>(null),discardButton=useRef<HTMLButtonElement>(null),keepButton=useRef<HTMLButtonElement>(null);
@@ -152,7 +153,8 @@ export function ChatInteraction({id,owner,chatRevision,busy:chatBusy,onAnswerInC
    {!photo&&<p className="text-sm text-muted-foreground break-words">{form.envelope.definition.summary}</p>}
    {content&&form.envelope.scope.projectId&&['open','submitted'].includes(form.state)&&!form.replacementInteractionId&&<ChatInteractionCards owner={owner} interactionId={id} digest={form.envelope.definitionDigest} projectId={form.envelope.scope.projectId}/>}
    {conflict&&<div role="alert" className="rounded-md border p-3 space-y-3 text-sm"><p>This form changed after your local edits. Your edits are shown below and have not overwritten the saved version.</p><Button variant="secondary" className="min-h-11" disabled={busy||!!pending} onClick={()=>recovery.save(null)}>Use latest saved answers</Button></div>}
-   {photo&&form.envelope.scope.projectId&&form.state==='open'&&<ProjectPhotoUpload key={owner+form.envelope.scope.projectId} owner={owner} project={form.envelope.scope.projectId} handoff={{interactionId:form.envelope.id,definitionDigest:form.envelope.definitionDigest}} disabled={locked}/>}
+   {photo&&form.envelope.scope.projectId&&form.state==='open'&&<ProjectPhotoUpload key={owner+form.envelope.scope.projectId} owner={owner} project={form.envelope.scope.projectId} handoff={{interactionId:form.envelope.id,definitionDigest:form.envelope.definitionDigest}} disabled={locked} onSaved={u=>setSavedPhoto({id:u.id,name:u.name})}/>}
+   {photo&&savedPhoto&&form.envelope.scope.projectId&&form.state==='open'&&<ChatUploadHandoff key={savedPhoto.id} owner={owner} project={form.envelope.scope.projectId} fileId={savedPhoto.id} name={savedPhoto.name}/>}
    {connection&&form.state==='open'&&!query.isFetching&&!query.error&&!pending&&<ChatConnectionConsent owner={owner} provider={connection} handoff={{interactionId:id,definitionDigest:form.envelope.definitionDigest}} disabled={locked}/>}
    {view&&form.state==='open'&&!query.isFetching&&!query.error&&!pending&&<div className="space-y-5">{view.widgets.map(kind=><section key={kind} aria-label={viewLabels[kind]} className="rounded-md border p-3 space-y-3"><h3 className="text-sm font-semibold">{viewLabels[kind]}</h3><TemporaryViewComponent owner={owner} interactionId={id} digest={form.envelope.definitionDigest} kind={kind} projectId={view.projectId}/></section>)}</div>}
    {supportView&&form.state==='open'&&!query.isFetching&&!query.error&&!pending&&<ChatSupportRequests owner={owner} interactionId={id} digest={form.envelope.definitionDigest}/>}

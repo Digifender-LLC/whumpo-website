@@ -8,7 +8,7 @@ import {Input} from './components/ui/input';
 const changed='whumpo:photo-recovery-changed';
 
 /** Same explicit upload operation in Photos and Chat. Remount per account/project. */
-export function ProjectPhotoUpload({owner,project,disabled=false,onSaved,handoff=null}:{owner:string;project:string;disabled?:boolean;handoff?:PhotoHandoff|null;onSaved?:()=>void}){
+export function ProjectPhotoUpload({owner,project,disabled=false,onSaved,handoff=null}:{owner:string;project:string;disabled?:boolean;handoff?:PhotoHandoff|null;onSaved?:(upload:PhotoUpload)=>void}){
  const label=useId(),form=useRef<HTMLFormElement>(null),active=useRef(true),working=useRef(false),prepared=useRef<{id:string;blob:Blob}|null>(null);
  const [pending,setPending]=useState<PhotoUpload|null>(null),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[error,setError]=useState(''),[checked,setChecked]=useState(false);
  function load(){const saved=readPhotoRecovery(sessionStorage,owner,project);setPending(saved);if(prepared.current?.id!==saved?.id)prepared.current=null;return saved;}
@@ -22,7 +22,7 @@ export function ProjectPhotoUpload({owner,project,disabled=false,onSaved,handoff
    setNotice('The earlier uploader closed before this upload was reserved. Its request cannot start now. You can choose a photo in this uploader.');
   }else if(data.photo?.status==='ready'){
    resolvePhotoRecovery(sessionStorage,owner,upload);prepared.current=null;setPending(null);setChecked(false);form.current?.reset();window.dispatchEvent(new Event(changed));
-   setNotice(data.photo.safetyStatus==='approved'?'Photo saved privately and cleared for use. Ask Whumpo to add it to your website.':data.photo.safetyStatus==='blocked'?'Photo saved privately but unavailable for use.':'Photo saved privately. It is held for safety checks and cannot be displayed or used yet.');onSaved?.();
+   setNotice(data.photo.safetyStatus==='approved'?'Photo saved privately and cleared for use. Ask Whumpo to add it to your website.':data.photo.safetyStatus==='blocked'?'Photo saved privately but unavailable for use.':'Photo saved privately. It is held for safety checks and cannot be displayed or used yet.');onSaved?.(upload);
   }else{setChecked(true);setNotice(data.photo?'The upload started but is not confirmed. Retry the same photo to finish it.':'No saved upload was found yet. This does not prove an earlier request stopped. Retry uses the original upload ID.');}
  }
  async function run(action:()=>Promise<void>){
