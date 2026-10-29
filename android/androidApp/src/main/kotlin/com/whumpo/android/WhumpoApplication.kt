@@ -23,6 +23,7 @@ class WhumpoApplication : Application() {
             environment = WhumpoEnvironment.from(BuildConfig.WHUMPO_ENVIRONMENT, BuildConfig.WHUMPO_ORIGIN),
             accountState = store,
             io = Dispatchers.IO,
+            context = this,
         )
         appScope.launch { store.restore() }
     }

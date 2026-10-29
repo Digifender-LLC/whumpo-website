@@ -8,21 +8,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
-/**
- * Repositories for the WH-082 shell. They never contact a server: remote data reports
- * why it is unavailable instead of inventing content, and drafts live only in the
- * encrypted account store.
- */
-class ShellProjectsRepository(private val store: AccountStateStore) : ProjectsRepository {
-    override fun projects(): Flow<Availability<List<ProjectSummary>>> =
-        store.activeAccount.map { unavailableFor(it != null) }
-}
-
-class ShellActivityRepository(private val store: AccountStateStore) : ActivityRepository {
-    override fun activity(): Flow<Availability<List<ActivityItem>>> =
-        store.activeAccount.map { unavailableFor(it != null) }
-}
-
+/** Shell repositories: drafts live only in the encrypted account store. Remote data goes through `MobileApiClient`. */
 class StoredChatDraftRepository(
     private val store: AccountStateStore,
     private val io: CoroutineDispatcher,
@@ -53,8 +39,3 @@ class StoreAccountRepository(
 
     override suspend fun signOut() = withContext(io) { store.signOut() }
 }
-
-private fun unavailableFor(signedIn: Boolean): Availability<Nothing> =
-    Availability.Unavailable(
-        if (signedIn) UnavailableReason.SERVICE_NOT_CONNECTED else UnavailableReason.SIGN_IN_REQUIRED,
-    )

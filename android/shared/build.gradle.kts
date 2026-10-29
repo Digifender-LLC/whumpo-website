@@ -48,7 +48,11 @@ kotlin {
             api(libs.kotlinx.serialization.json)
         }
         // One engine for both targets: OkHttp runs on Android and on the JVM desktop target.
-        androidMain.dependencies { implementation(libs.ktor.client.okhttp) }
+        androidMain.dependencies {
+            implementation(libs.ktor.client.okhttp)
+            // Photo preparation reads the EXIF orientation before the metadata is dropped.
+            implementation(libs.androidx.exifinterface)
+        }
         jvmMain.dependencies { implementation(libs.ktor.client.okhttp) }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
