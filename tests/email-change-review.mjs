@@ -14,7 +14,7 @@ import {accountClosureInventory} from '../tools/account-closure-inventory.mjs';
 // existing connection cleaners over a synthetic transport and the synthetic mailer. No network, no secret, no real address or
 // credential (every address is under .test, every credential is a SYNTHETIC-* value).
 const bundle=await build({stdin:{contents:[
- "export {securityReviewRoute} from './src/email-change/review-http';export {accountEmailRoute} from './src/email-change/http';",
+ "export {default as worker} from './src/index';export {securityReviewRoute} from './src/email-change/review-http';export {accountEmailRoute} from './src/email-change/http';",
  "export {readConnections,readOpenReview} from './src/email-change/review-store';export {deliverStored} from './src/email-change/store';",
  "export {createSyntheticMailer,queueNotice} from './src/email-change/token';export {maintainEmailChanges} from './src/email-change/maintenance';",
  "export {admitWorkspace} from './src/workspace-identity/admission';export {resolveIdentity} from './src/workspace-identity/authority';",
@@ -297,6 +297,17 @@ try{
   // A second review never redispatches or requeues: the surviving hold keeps its state.
   const s=await o.resession(),r2=(await prepare(s)).data;assert.deepEqual(r2.connections.map(c=>c.connectionId),[`gh-${ghId}`]);
   assert.equal(r2.connections[0].access,'disabled');
+ });
+ await check('through the Worker fetch handler: a commit returns the receipt and clears the cookie; sessions are gone; a replay after signing in again returns the same receipt',async()=>{
+  const o=await owner(),r=(await prepare(o.session)).data,requestId=id(),cookie=s=>'__Host-whumpo_session='+s.token;
+  const workerEnv={DB:db,ENVIRONMENT:'local',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:env.AUTH_LIMITER},ctx={waitUntil(){}};
+  const send=s=>m.worker.fetch(new Request(origin+'/api/account/security/review/commit',{method:'POST',headers:{origin,cookie:cookie(s),'content-type':'application/json'},
+   body:JSON.stringify({version:1,requestId,reviewId:r.reviewId,revokeCredentials:[],rotateKit:null,revokeConnections:[]})}),workerEnv,ctx);
+  const first=await send(o.session),text=await first.text();
+  assert.equal(first.status,200,text);assert.equal(JSON.parse(text).receipt.reviewId,r.reviewId);
+  assert.match(first.headers.get('set-cookie'),/^__Host-whumpo_session=; .*Expires=Thu, 01 Jan 1970/);
+  assert.equal(await count('identity_sessions','account_id=?',o.account),0);
+  const replay=await send(await o.resession());assert.equal(replay.status,200);assert.equal(await replay.text(),text);assert.equal(replay.headers.get('set-cookie'),null);
  });
  await check('restore and forward repair cannot revive a committed review, an earlier epoch or a superseded offer',async()=>{
   const o=await owner(),r=(await prepare(o.session)).data,pre=await account(o);

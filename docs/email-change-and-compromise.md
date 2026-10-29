@@ -286,6 +286,8 @@ Rules the handlers add or settle:
 
 Not built, and why: the Settings controls for the review (no blocker, but separate UI work); scheduled read-only reconciliation of uncertain holds and any compromise-specific dispatcher (they need provider reads or calls); the security-review notice (it goes nowhere until WH-202 supplies the sender and outbox; the adapter queues it only when a delivery seam exists).
 
+**Known gap, deferred (MEDIUM).** The schema caps an account at 20 security reviews in total, and rows cannot be deleted for 90 days. Repeated `prepare` calls (about 3.5 hours by an attacker holding a stolen passkey, or 20 ordinary visits across 90 days) make `REVIEW_LIMIT` lock the owner out of the emergency control. Decision: expired, never-committed reviews will stop counting toward the cap and maintenance will delete them; committed reviews keep the 90-day retention. Reason: the fix needs a schema change and a test-platform cutover, so it is batched with the next schema change instead of shipping alone.
+
 Verification: `pnpm test:email-change-review` runs [`tests/email-change-review.mjs`](../tests/email-change-review.mjs) on SQLite and local D1 with signed synthetic WebAuthn. It also covers the local synthetic part of WH-204: sign-in around a commit, zero-key recovery with the saved kit, and the provider holds through the existing cleaners over a synthetic transport.
 
 ## 4. Data classes and retention (WH-116 / WH-009 extension)

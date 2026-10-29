@@ -160,6 +160,8 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   const user=await scoped.DB.prepare('SELECT id,email FROM users WHERE id=?').bind(principal.accountId).first<User>();
   if(!user)throw new IdentityError(401,'proof_required','Sign in to continue.');
   const response=await handleWorkspace(request,scoped,ctx,user);
+  // A committed security review revokes every session and advances the epoch, so the trailing assert would always fail; only that response clears the cookie (a replay does not, and is still asserted).
+  if(pathname==='/api/account/security/review/commit'&&response.status===200&&response.headers.has('set-cookie'))return response;
   try{await assertWorkspace(scoped.DB,user.id);}catch(error){await response.body?.cancel().catch(()=>{});throw error;}
   return response;
 }
