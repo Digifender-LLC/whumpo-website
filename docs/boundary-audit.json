@@ -8217,7 +8217,7 @@
       },
       {
        "file": "tests/boundary-audit.mjs",
-       "contains": "'unregistered route: src/app-gateway.ts exact modules/upload [GET,POST]'",
+       "contains": "'unregistered route: src/app-gateway.ts exact modules/upload [GET,HEAD,POST]'",
        "asserts": "widening the upload route's methods is reported"
       }
      ]
@@ -8253,6 +8253,92 @@
        "file": "tests/shared-modules-records.mjs",
        "contains": "{...submission(records),configRevision:records.config_revision+1},v1)).body.code,'stale_configuration');",
        "asserts": "a stale configuration revision is refused"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "visitor-module-compositions",
+   "title": "Module composition source GET/HEAD compositions/<id>.js (WH-070)",
+   "surface": "visitor",
+   "privileged": [],
+   "authorityClass": "none: static, read-only source with no session, cookie or principal; every module decision stays in POST modules",
+   "reach": "Service binding only (via whumpo-sites APP_HOST).",
+   "entries": [
+    {
+     "file": "src/app-gateway.ts",
+     "kind": "regex",
+     "match": "/^compositions\\/([a-z-]{1,40})\\.js$/",
+     "methods": [
+      "GET",
+      "HEAD"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "n/a",
+     "detail": "The route reads no cookie and grants nothing: it returns fixed source text with no set-cookie. Drafts are excluded by the status in src/module-compositions.ts; the page that runs the source has the visitor's own authority only through POST modules."
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Shared gateway gate: a foreign Origin or cross-site Sec-Fetch-Site is refused before the route; POST, PUT and DELETE answer 405 and HEAD is answered only here.",
+     "enforcedAt": [
+      {
+       "file": "src/app-gateway.ts",
+       "contains": "if(request.headers.get('sec-fetch-site')==='cross-site'||(request.headers.has('origin')&&request.headers.get('origin')!==origin)||method==='POST'&&request.headers.get('origin')!==origin)return json({error:'Origin check failed'},403);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/module-compositions-http.mjs",
+       "contains": "assert.equal((await get(a,'/compositions/staff-portal.js',{headers:{origin:'https://evil.example'}})).status,403);",
+       "asserts": "a foreign Origin is refused"
+      },
+      {
+       "file": "tests/module-compositions-http.mjs",
+       "contains": "assert.equal((await get(a,'/config',{method:'HEAD'})).status,405);",
+       "asserts": "HEAD is not accepted elsewhere"
+      }
+     ]
+    },
+    "admission": {
+     "state": "evidenced",
+     "detail": "The per-IP API_LIMITER gate runs before the route. Source is small, fixed and read-only.",
+     "enforcedAt": [
+      {
+       "file": "src/app-gateway.ts",
+       "contains": "if(!(await env.API_LIMITER.limit({key:'app:'+ip})).success)return json({error:'Too many requests. Try again in a minute.'},429);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/module-compositions-http.mjs",
+       "contains": "API_LIMITER:{limit:async()=>({success:false})}})).status,429,'the gateway limiter applies');",
+       "asserts": "the limiter applies"
+      }
+     ]
+    },
+    "tenant": {
+     "state": "evidenced",
+     "detail": "Served only for a project that owns an access module instance and is not under an operator serving stop; an unknown project or one without the instance gets 404. The source is identical for every tenant and holds no tenant data.",
+     "enforcedAt": [
+      {
+       "file": "src/app-gateway.ts",
+       "contains": "await env.DB.prepare(\"SELECT 1 FROM module_instances WHERE project_id=? AND kind='access'\").bind(project).first())return json({error:'Not found'},404);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/module-compositions-http.mjs",
+       "contains": "assert.equal((await get(b,'/compositions/'+name+'.js')).status,404,'a project without an access module gets nothing');",
+       "asserts": "another project gets 404"
+      },
+      {
+       "file": "tests/module-compositions-http.mjs",
+       "contains": "moduleCompositions['staff-portal'].status='draft';",
+       "asserts": "a draft is never served"
       }
      ]
     }
