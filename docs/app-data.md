@@ -319,7 +319,7 @@ Consequently, loss of the recovery response leaves the visitor with either the p
 
 ### Acceptance
 
-`test:app-auth` now includes publication races, strict form schema, model confirmation denial, page host/CSP, stale sign-in rollback after withdrawal, historical replay, in-flight transition revocation and recovery acknowledgment loss. `test:app-pages-http` exercises real local workerd and QuickJS with signed ES256 fixtures: two isolated visitors, enrollment, login/logout, private receipts, exact retry, page/field rejection, recovery, replacement keys and saved data. It requires fresh synthetic fixtures in `.secrets/app-page-fixture.json`; test credentials never enter tracked files.
+`test:app-auth` now includes publication races, strict form schema, model confirmation denial, page host/CSP, stale sign-in rollback after withdrawal, historical replay, in-flight transition revocation and recovery acknowledgment loss. `test:app-pages-http` runs in-process (connected handlers, SQLite or `--d1`, stub backend runtime; no host or fixture file) with signed ES256 fixtures: two isolated visitors, enrollment, login/logout, private receipts, exact retry, page/field rejection, recovery, replacement keys and saved data. It needs no setup; credentials are generated per run and never enter tracked files.
 
 Browser inspection verified the actual signed-in form against local QuickJS, saved-information rendering, stale-revision rejection followed by safe resubmission, and no horizontal overflow at 390px. The browser used a synthetic authenticated fixture; this does not claim physical-device passkey enrollment was exercised. The current form UI is deliberately bounded; richer app frontends and complete data lifecycle controls remain MVP work.
 
