@@ -10658,6 +10658,8 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/mobile-api-v1.md](../../docs/mobile-api-v1.md)
 - [tools/prototypes/mobile-v1.mjs](../../tools/prototypes/mobile-v1.mjs)
 - [tests/mobile-v1-contract.mjs](../../tests/mobile-v1-contract.mjs)
+- [docs/android-app-platform.md](../../docs/android-app-platform.md)
+- [docs/android/app-ux.md](../../docs/android/app-ux.md)
 
 ### Execution coordination
 
@@ -10668,6 +10670,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/117. Planning owner: Unassigne
 - 2026-09-30: docs/android-app.md records the accepted product/architecture baseline and current service mapping against f90bf5f plus the working tree. Exact v1 wire contracts and native implementation acceptance remain this lane's future work; no Android execution issue or release is claimed.
 - 2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.
 - 2026-10-04: docs/mobile-api-v1.md freezes the /api/mobile/v1 contract (34 operations mapped to existing handlers or declared new adapters, native bearer/handoff/revocation model, client_update_required admission, four admitted review controls, idempotency, pagination, exclusions, journey/evidence matrix and source gaps) against b4671f9, with synthetic fixtures and an offline contract test. docs/android-app.md is refreshed against current source. Planned only: no mobile route, native session, Android code, FCM adapter or device acceptance. Owner decisions (minimum Android version, Play distribution/identity, Play Integrity, session cap, native take-down, push default, stale-client status code) are listed in the contract. Live issue/dependency state was not re-checked offline.
+- 2026-10-29 platform ADR (docs only, no app code, build, Play action or deployment): docs/android-app-platform.md selects Kotlin Multiplatform + Compose Multiplatform, Android first (scored 45/50 against native Compose 40, Flutter 37, React Native/Expo + react-native-macos 36, Capacitor/Tauri 29; code reuse excluded by owner direction 2026-10-29). Android behaviour is unchanged because CMP on Android is Jetpack Compose; Credential Manager, FCM and Keystore stay first-party in androidMain. Mac path: PWA now, CMP Desktop (JVM) target after WH-087 using the frozen browser handoff for sign-in. docs/android/app-ux.md adds the IA, six core journeys, Material 3 mapping from tokens.json (primary = link, brand Sky Blue = primaryContainer; contrast pairs computed), type, motion, haptics, dark/dynamic-colour policy, accessibility targets, states, adaptive layouts and an 8-package plan. Facts checked against official docs on 2026-10-29 (CMP iOS and Desktop Stable; passkeys on Android 9+; Play target API 36 since 2026-08-31; 12 testers for 14 days for new personal accounts). The v1 wire contract is unchanged; its owner decisions remain open.
 
 ## WH-082 — Build the native Android foundation and reproducible checks
 
@@ -10713,6 +10716,8 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/android-app.md](../../docs/android-app.md)
 - [docs/brand/whumpo-identity.md](../../docs/brand/whumpo-identity.md)
 - [docs/verification.md](../../docs/verification.md)
+- [docs/android-app-platform.md](../../docs/android-app-platform.md)
+- [docs/android/app-ux.md](../../docs/android/app-ux.md)
 
 ### Execution coordination
 
@@ -10720,7 +10725,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-29 platform ADR (docs only, no app code, build, Play action or deployment): the Android-only shell is to be restructured into a KMP build (:shared commonMain/androidMain/jvmMain plus :androidApp) by WP1 of docs/android/app-ux.md before screens are added; Keystore store, backup rules, environment guard and their tests move with it. The current light theme (white on a non-token blue) is replaced by the generated token theme in WP2. No source changed here.
 
 ## WH-083 — Implement native identity, versioned API access and browser returns
 
@@ -10776,6 +10781,8 @@ Planning dependencies: WH-081, WH-115. Verify completion in current issue eviden
 - [schema](../../schema)
 - [docs/roadmap/identity-and-data-protection.md](../../docs/roadmap/identity-and-data-protection.md)
 - [docs/workspace-identity.md](../../docs/workspace-identity.md)
+- [docs/android-app-platform.md](../../docs/android-app-platform.md)
+- [docs/android/app-ux.md](../../docs/android/app-ux.md)
 
 ### Execution coordination
 
@@ -10784,6 +10791,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 ### Evidence
 
 - 2026-10-02 UTC: removed stale numbered-additive-migration wording from active scope to match WH-120 and the complete-current-schema contract. Implementation uses current fixtures/reviewed empty test databases. Feature scope, dependencies and acceptance remain unchanged; this amendment does not implement the feature.
+- 2026-10-29 platform ADR (docs only, no app code, build, Play action or deployment): client side planned as WP5 (Credential Manager PasskeyAuthenticator, PKCE Custom Tab handoff, App Links autoVerify, staged assetlinks.json template). Credential Manager passkeys need Android 9/API 28+ and assetlinks.json with delegate_permission/common.get_login_creds served 200 application/json without redirect (developer.android.com/identity/credential-manager/prerequisites). Production assetlinks publication and the release signing fingerprint are owner tasks.
 
 ## WH-084 — Deliver the native Chat, project and explicit-review journey
 
@@ -10839,6 +10847,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [src/project-details.ts](../../src/project-details.ts)
 - [docs/roadmap/chat-first-experience.md](../../docs/roadmap/chat-first-experience.md)
 - [docs/chat-interactions.md](../../docs/chat-interactions.md)
+- [docs/android/app-ux.md](../../docs/android/app-ux.md)
 
 ### Execution coordination
 
@@ -10846,7 +10855,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-29 platform ADR (docs only, no app code, build, Play action or deployment): client UX for Chat, review sheet with the four frozen controls, projects list-detail and states is specified in docs/android/app-ux.md (WP6, WP7). Contract scope unchanged.
 
 ## WH-085 — Add explicit Android photo and share intake with upload recovery
 
@@ -10955,6 +10964,8 @@ Planning dependencies: WH-083, WH-084, WH-052, WH-075. Verify completion in curr
 - [src/index.ts](../../src/index.ts)
 - [wrangler.jsonc](../../wrangler.jsonc)
 - [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [docs/android-app-platform.md](../../docs/android-app-platform.md)
+- [docs/android/app-ux.md](../../docs/android/app-ux.md)
 
 ### Execution coordination
 
@@ -10962,7 +10973,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-29 platform ADR (docs only, no app code, build, Play action or deployment): client UX planned (WP7): in-context POST_NOTIFICATIONS on Android 13+, opt-in by default, three channels (Needs your review, Work finished, Something went wrong), private lock-screen copy, taps open Activity and read current state. FCM rechecked as a no-cost Firebase product (firebase.google.com/pricing). The Firebase project and server credential custody are owner tasks; no provider configured.
 
 ## WH-087 — Accept and distribute a bounded private Android beta
 
@@ -11006,6 +11017,7 @@ Planning dependencies: WH-084, WH-085, WH-086, WH-048. Verify completion in curr
 
 - Google Play developer-account ownership, package identity, signing custody and approved app association require verification before signed distribution.
 - Physical Pixel/Samsung devices, approved disposable identities, real FCM and photo-safety acceptance, and an explicitly admitted Android cohort are required.
+- Play account type and creation date are unconfirmed: a personal account created after 2023-11-13 needs 12 testers opted in for 14 days of closed testing before production access (internal testing is exempt). Play App Signing enrolment, store listing, Data safety, and a reviewer access path for a passkey-only app are owner tasks in docs/android-app-platform.md.
 
 ### References
 
@@ -11017,6 +11029,7 @@ Planning dependencies: WH-084, WH-085, WH-086, WH-048. Verify completion in curr
 - [docs/customer-benchmarks.md](../../docs/customer-benchmarks.md)
 - [docs/roadmap/README.md](../../docs/roadmap/README.md)
 - [docs/roadmap/identity-and-data-protection.md](../../docs/roadmap/identity-and-data-protection.md)
+- [docs/android-app-platform.md](../../docs/android-app-platform.md)
 
 ### Execution coordination
 
@@ -11025,6 +11038,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 ### Evidence
 
 - 2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.
+- 2026-10-29 platform ADR (docs only, no app code, build, Play action or deployment): Play facts checked 2026-10-29: new apps and updates must target API 36 since 2026-08-31 (shell targets 36); closed-testing rule per support.google.com/googleplay/android-developer/answer/14151465; Play-distributed apps are auto-registered for Android developer verification (developer.android.com/developer-verification/guides). Not a release or device claim.
 
 ## WH-088 — Prioritize native expansion and review public Android distribution
 
@@ -11070,6 +11084,7 @@ No external blockers recorded. This does not grant deployment, purchase, provide
 - [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
 - [docs/payments.md](../../docs/payments.md)
 - [docs/pricing-and-model-policy.md](../../docs/pricing-and-model-policy.md)
+- [docs/android-app-platform.md](../../docs/android-app-platform.md)
 
 ### Execution coordination
 
@@ -11077,4 +11092,4 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-29 platform ADR (docs only, no app code, build, Play action or deployment): the Mac path is recorded for later expansion: PWA now; a gated CMP Desktop target (WP8) after WH-087 with browser-handoff sign-in; signed/notarized Mac release, native AuthenticationServices passkeys and APNs need an Apple Developer Program membership (owner cost decision). iOS remains deferred; CMP iOS is Stable if scoped.
