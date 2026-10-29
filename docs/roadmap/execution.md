@@ -93,7 +93,7 @@ Inspect the final diff and preserve unrelated files. A completion report must co
 - Whether source only, configured, deployed, locally accepted, live accepted or device accepted; source/configuration timestamp and release identity where relevant.
 - Remaining external blockers, risks and the next exact action. Private evidence gets a sanitized reference, never raw secrets or content.
 
-Close an execution issue only when its acceptance criteria are satisfied. If implementation is complete but live acceptance is still required by that same packet, leave it blocked or split the missing acceptance into a clearly linked required child and keep the parent open. Planning readiness is not a `done` field. A new task or deployment must not erase the recorded historical scope of prior evidence.
+Close an execution issue only when its acceptance criteria are satisfied. If implementation is complete but live acceptance is still required by that same packet, leave it blocked or split the missing acceptance into a clearly linked required child and keep the parent open. Set readiness to `done` only when the task's own acceptance is met on `main` and an evidence entry cites the merged PR; partially live work is not `done`. A new task or deployment must not erase the recorded historical scope of prior evidence.
 
 ## Task template
 
