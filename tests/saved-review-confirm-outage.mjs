@@ -1,13 +1,25 @@
 import assert from 'node:assert/strict';
-import {currentSiteFixtureHandlers,createFixtureProject,enableFixtureVisitorAccess} from './current-site-fixture.mjs';
+import {currentSiteFixtureHandlers,createFixtureProject,changeFixtureWebsite,enableFixtureVisitorAccess} from './current-site-fixture.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
 // WH-212 / D-5: with no model binding, a Chat-prepared review is confirmed the way Saved work does it:
 // a fresh read of `/api/chat/turns/:id`, then the existing `/api/chat/actions` confirm using that turn's own
 // revision as the conversation fence. No Chat read, no model, no second approval path.
+//
+// Coverage by `confirmationControls` kind (src/chat-controls.ts, 18 kinds):
+//  Covered, prepared by a typed command and confirmed locally:
+//   site, application (first sections), then version, photo, contact, contactNotification, domainProof, directory,
+//   backendForm, backendPublication, backendState, cmsSetup (the per-kind table below, each with one negative control).
+//  NOT covered (untested), because preparing the review needs a live provider or a model:
+//   appPage        prepared only by `/design-app-page`, which needs a model (no model-free prepare path).
+//   backup         prepare reads the GitHub API (installation, repository, branch head, tree); a stub would fake the provider.
+//   cmsImport      prepare reads a live WordPress site.
+//   cmsPublish, cmsUnpublish, cmsDiscard   prepare reads the live EmDash/WordPress CMS instance and its staged content.
+//  The dashboard /confirm-dns and /confirm-hosting routes and the appMaintenance controls are out of scope here.
 // Run `node tests/saved-review-confirm-outage.mjs` (SQLite) or add `--d1`.
 const m=await currentSiteFixtureHandlers(),store=await databaseFixture(),db=store.db;
-const env={DB:db,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})}};
+const calls={n:0},service={fetch:async(_url,init)=>{calls.n++;const d=JSON.parse(init.body);return Response.json({ok:true,value:d.input?.state?{state:{count:(d.input.state.count??0)+(d.input.input.add??1)},result:'prepared'}:d.input});}};
+const env={DB:db,BACKEND_RUNTIME:service,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})}};
 const origin='https://whumpo.com';
 let checks=0;
 const equal=(a,b,msg)=>{assert.equal(a,b,msg);checks++;};
@@ -101,6 +113,62 @@ try{
  equal((await http(owner,'/api/chat/actions','POST',appBody)).status,200,'Same-ID application retry reads the saved result');
  equal(await count('SELECT count(*) n FROM chat_turns WHERE id=?',appBody.id),1,'No duplicate application turn');
  equal(await count('SELECT count(*) n FROM app_spaces WHERE project_id=? AND enabled=1',app),1,'No duplicate application effect');
+ // Every other locally preparable kind: typed prepare, fresh read, confirm with the turn's own revision, same-ID replay,
+ // zero inference calls, and one negative control per kind (stale, foreign, expired or digest mismatch).
+ const jid=()=>crypto.randomUUID(),stamp=()=>new Date().toISOString();
+ const atPast=async(ms,fn)=>{const clock=Date.now;Date.now=()=>clock()-ms;try{return await fn();}finally{Date.now=clock;}};
+ const typed=async(o,content)=>{const id=jid(),r=await m.sendChat(await o.scope(),o.account,{id,revision:(await http(o,'/api/chat')).json.state.revision,content},undefined,{backendRuntime:service});equal(r.status,200,'Prepared by typed command: '+content.split(' ')[0]);return id;};
+ const confirmSite=async(o,version)=>{const id=await typed(o,'/publish '+version),t=await read(o,id);equal((await http(o,'/api/chat/actions','POST',{id:jid(),revision:t.turn.revision,action:{type:'confirm',kind:'site',reviewId:id}})).status,200,'Site published for the fixture');};
+ const site=async(o,publish=true)=>{const created=await createFixtureProject(await o.scope(),o.account,'Kind '+jid().slice(0,6),'A synthetic website.');if(publish)await confirmSite(o,created.version);return created;};
+ const backend=async(o,source='export default x=>x')=>{const s=await o.scope(),created=await site(o),b=jid(),r=jid();await m.backend.saveBackend(s,o.account,created.project,b,source);await m.backend.testBackend(s,service,o.account,created.project,b,r,{});return {...created,backend:b,run:r};};
+ const kinds=[
+  {kind:'version',table:'version_removals',negative:'foreign',setup:async o=>{const c=await site(o,false);await changeFixtureWebsite(await o.scope(),o.account,c.project,[{type:'content.replace',contentId:'headline',text:'Second draft'}]);return c;},prepare:(o,c)=>typed(o,'/delete-version '+c.version)},
+  {kind:'photo',table:'photo_removals',negative:'stale',setup:site,prepare:async(o,c)=>{const f=jid();await db.prepare("INSERT INTO project_files(id,project_id,name,object_key,digest,size,width,height,created_at) VALUES(?,?,'Pending',?,'fixture',10,1,1,?)").bind(f,c.project,`photos/${c.project}/${f}.jpg`,stamp()).run();return typed(o,'/delete-photo '+f);}},
+  {kind:'contact',table:'contact_reviews',negative:'expired',setup:site,prepare:(o,c)=>typed(o,'/contact-on '+c.project)},
+  {kind:'contactNotification',table:'contact_destination_reviews',negative:'digest',setup:site,prepare:(o,c)=>typed(o,'/contact-notify '+c.project+' owner@example.com')},
+  {kind:'domainProof',table:'domain_proof_removals',negative:'expired',setup:site,prepare:async(o,c)=>{c.claim??=await typed(o,`/domain www.${jid().slice(0,8)}.example.com ${c.project}`);return typed(o,'/remove-domain-proof '+c.claim);}},
+  {kind:'directory',table:'directory_reviews',negative:'digest',setup:site,prepare:(o,c)=>typed(o,`/directory-add ${c.project} | Garden club | Saturday mornings | https://example.com/`)},
+  {kind:'backendForm',table:'backend_form_reviews',negative:'stale',setup:async o=>{const c=await backend(o),p=jid(),s=await o.scope();await m.backendPublication.prepareBackendPublication(s,o.account,c.project,p,'publish',c.backend,c.run);await m.backendPublication.confirmBackendPublication(s,o.account,p);return c;},prepare:(o,c)=>typed(o,'/configure-backend-form '+c.project+' '+JSON.stringify({title:'Estimate',description:'Try it.',buttonLabel:'Go',fields:[{key:'quantity',label:'Quantity',type:'number'}]}))},
+  {kind:'backendPublication',table:'backend_publication_reviews',negative:'digest',setup:backend,prepare:(o,c)=>typed(o,`/publish-backend ${c.backend} ${c.run}`)},
+  {kind:'backendState',table:'backend_state_reviews',pending:'ready',negative:'digest',setup:o=>backend(o,'export default ({state,input})=>({state:{count:(state.count??0)+input.add},result:null})'),prepare:(o,c)=>typed(o,`/review-backend-state ${c.backend} {"add":5}`)},
+  {kind:'cmsSetup',done:'approved',table:'cms_setup_reviews',negative:'foreign',setup:o=>site(o,false),prepare:(o,c)=>typed(o,`/setup-cms ${c.project} | Blog | Our updates`)},
+ ];
+ for(const k of kinds){
+  const o=await workspaceFixture(db,m),other=await workspaceFixture(db,m),c=await k.setup(o),label=k.kind+': ',_=await createFixtureProject(await other.scope(),other.account,'Foreign','A synthetic foreign website.'),spent=await count('SELECT count(*) n FROM inference_calls');
+  const status=async id=>(await db.prepare(`SELECT status s FROM ${k.table} WHERE id=?`).bind(id).first())?.s??null;
+  const post=async(who,revision,reviewId,id=jid())=>{const body={id,revision,action:{type:'confirm',kind:k.kind,reviewId}};return {body,res:await http(who,'/api/chat/actions','POST',body)};};
+  const latest=who=>http(who,'/api/chat').then(r=>r.json.state.revision);
+  const open=async id=>{const t=await read(o,id);equal(t.status,200,label+'fresh read');equal(t.turn.id,id,label+'fresh read returns the prepared turn');return t.turn.revision;};
+  let id;
+  if(k.negative==='stale'){
+   id=await k.prepare(o,c);const rev=await open(id);
+   equal((await http(o,'/api/chat/actions','POST',{id:jid(),revision:await latest(o),action:{type:'shortcut',kind:'versions',projectId:c.project}})).status,200,label+'conversation advances');
+   equal((await post(o,rev,id)).res.status,409,label+'stale revision refused');equal(await status(id),k.pending??'pending',label+'stale refusal applied nothing');
+   id=await k.prepare(o,c);
+  }else if(k.negative==='expired'){
+   const old=await atPast(700000,()=>k.prepare(o,c)),rev=await open(old);
+   await post(o,rev,old);equal(await status(old),k.pending??'pending',label+'expired review applied nothing');
+   id=await k.prepare(o,c);
+  }else{
+   id=await k.prepare(o,c);
+   if(k.negative==='foreign'){
+    equal((await read(other,id)).status,404,label+'foreign account cannot read the turn');
+    await post(other,await latest(other),id);equal(await status(id),k.pending??'pending',label+'foreign confirm applied nothing');
+   }else{
+    const original=(await db.prepare('SELECT assistant_text t FROM chat_turns WHERE id=?').bind(id).first()).t;
+    await db.prepare('UPDATE chat_turns SET assistant_text=? WHERE id=?').bind(original+' (altered)',id).run();
+    equal((await post(o,await open(id),id)).res.status,409,label+'digest mismatch refused');equal(await status(id),k.pending??'pending',label+'digest mismatch applied nothing');
+    await db.prepare('UPDATE chat_turns SET assistant_text=? WHERE id=?').bind(original,id).run();
+   }
+  }
+  const confirmation=await post(o,await open(id),id);equal(confirmation.res.status,200,label+'confirm from the fresh read');
+  equal(await status(id),k.done??'applied',label+'review applied');
+  const events=await count('SELECT count(*) n FROM activity_events WHERE user_id=?',o.account),turns=await count('SELECT count(*) n FROM chat_turns WHERE user_id=?',o.account),runs=calls.n;
+  equal((await http(o,'/api/chat/actions','POST',confirmation.body)).status,200,label+'same-ID replay reads the saved result');
+  equal(await count('SELECT count(*) n FROM activity_events WHERE user_id=?',o.account),events,label+'replay ran no second effect');
+  equal(await count('SELECT count(*) n FROM chat_turns WHERE user_id=?',o.account),turns,label+'replay added no turn');equal(calls.n,runs,label+'replay ran no backend');
+  equal(await count('SELECT count(*) n FROM inference_calls'),spent,label+'no inference call');
+ }
  equal(await count('SELECT count(*) n FROM inference_calls'),modelCalls,'No model call was recorded');
  console.log(`Saved review confirm outage passed (${checks} checks, ${process.argv.includes('--d1')?'local D1':'SQLite'}).`);
 }catch(error){console.error(String(error.stack||error).replace(/data:text\/javascript;base64,[A-Za-z0-9+/=]+/g,'<bundled module>'));process.exitCode=1;}
