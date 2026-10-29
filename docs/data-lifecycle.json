@@ -364,7 +364,7 @@
       ],
       "scope": "owner",
       "purpose": "Profile/name/bio/photo, welcome progress, saved workspace tabs and preferences. Current versioned view definitions and immutable layout change receipts.",
-      "currentRetention": "Account-linked storage; profile photo bytes are in D1 and replacement clears the current safety receipt. No age-based profile/chat-memory expiry. Layout before/after definitions, request metadata and turn provenance remain for the account lifetime, independently of Chat cleanup and page removal; no seven-day draft expiry applies.",
+      "currentRetention": "Account-linked storage; profile photo bytes are in D1 and replacement clears the current safety receipt. No age-based profile/chat-memory expiry. Layout before/after definitions, request metadata and turn provenance are kept for the latest 50 layout revisions per owner (B11, owner decision), independently of Chat cleanup and page removal; the current layout is stored in workspace_preferences and its receipt is never pruned. A table trigger deletes older receipts on each insert and the daily email_changes maintenance job (src/workspace-layout-maintenance.ts) removes any surplus; no seven-day draft expiry applies.",
       "proposedRetention": "Retain while active or until explicit replacement/removal; ordinary closure purge includes agent-context copies. Pending/blocked images follow restricted safety review, never ordinary export.",
       "deletionAuthority": "Owner profile/workspace edits; exact account closure plus safety-case coordination for held images.",
       "exportPolicy": "Allowlist profile, preferences and workflow configuration. Include uploaded photo only with valid current checks; omit auth and internal safety references.",
@@ -375,7 +375,8 @@
         "docs/data-protection.md",
         "src/workspace-layout.ts",
         "src/workspace-view-contract.ts",
-        "docs/workspace-views.md"
+        "docs/workspace-views.md",
+        "src/workspace-layout-maintenance.ts"
       ],
       "storageStatus": "current",
       "protection": {
@@ -2894,20 +2895,23 @@
       "id": "connector-receipts",
       "tables": [
         "lookup_consents",
-        "connector_receipts"
+        "connector_receipts",
+        "rule_approvals"
       ],
       "scope": "owner",
-      "purpose": "Request-bound lookup consent and minimized action receipts for the new connector providers (WH-143): a single-use consent bound to owner, provider, operation, credential, parameter digest and destination, and a receipt of identifiers, digests, price, state and a bounded detail code. Never a message, event or contact body, recipient list, provider error body or credential. Connector content is the separate, still unadmitted connector-content class.",
-      "currentRetention": "Tables exist; no adapter writes them yet. A consent lives at most 15 minutes, is used once, and is kept seven days after use, voiding or expiry; a table trigger refuses earlier deletion while the account exists. A receipt is kept 400 days after its last change (WH-143 decision, owner may revise), and a dispatching or uncertain receipt is never deleted while the account exists. Bounded maintenance deletes both past those windows. Account closure cascades.",
+      "purpose": "Request-bound lookup consent and minimized action receipts for the new connector providers (WH-143): a single-use consent bound to owner, provider, operation, credential, parameter digest and destination, and a receipt of identifiers, digests, price, state and a bounded detail code. Never a message, event or contact body, recipient list, provider error body or credential. Connector content is the separate, still unadmitted connector-content class. Rule approvals (WH-145) store an owner's approval of one deterministic rule revision to run one action: operation, destination digest, body-template digest, per-day limit, credential and a use counter. Digests and identifiers only.",
+      "currentRetention": "Tables exist; no adapter writes them yet. A consent lives at most 15 minutes, is used once, and is kept seven days after use, voiding or expiry; a table trigger refuses earlier deletion while the account exists. A receipt is kept 400 days after its last change (WH-143 decision, owner may revise), and a dispatching or uncertain receipt is never deleted while the account exists. Bounded maintenance deletes both past those windows. Account closure cascades. A rule approval (table exists, store in src/connector-catalog/rule-approvals-store.ts, no job runner wiring yet) has a use counter on the database clock that restarts each UTC day and never passes the limit; an owner holds at most 200; only a revoked approval may be deleted while the account exists, and the account closure cascades.",
       "proposedRetention": "Same as current.",
-      "deletionAuthority": "Bounded maintenance (src/connector-records-maintenance.ts) or account closure cascade; no route edits a row.",
+      "deletionAuthority": "Bounded maintenance (src/connector-records-maintenance.ts) for consents and receipts, the owner's revocation then deletion of a rule approval, or account closure cascade; no route edits a row.",
       "exportPolicy": "Allowlist receipt time, provider, operation, state, price and the reviewed destination identifier. Never digests, credential identifiers, provider account identifiers or consent rows.",
       "references": [
         "schema/platform.sql",
         "src/connector-records-maintenance.ts",
         "docs/connectors.md",
         "docs/data-protection.md",
-        "docs/inference-privacy.md"
+        "docs/inference-privacy.md",
+        "src/connector-catalog/rule-approvals-store.ts",
+        "src/connector-catalog/rule-authority.ts"
       ],
       "storageStatus": "current",
       "protection": {
@@ -2923,6 +2927,48 @@
         ],
         "remainingExposure": [
           "Rows link an account to a provider operation, a destination identifier and timing through opaque identifiers and SHA-256 digests; no body, recipient list, token or credential."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
+      "id": "account-closures",
+      "tables": [
+        "account_closures"
+      ],
+      "scope": "owner",
+      "purpose": "The durable record of a platform account closure (WH-018): opaque closure and account identifiers, state, revision, the review digest, quiesce and close times, a bounded failure code and the list of states. No inventory content, name, address or reason text. It has no foreign key to users, so it outlives the account it closes.",
+      "currentRetention": "Table exists; no route, job or store writes it yet (WH-018 slice 1 is pure source). States only move forward (requested, reviewed, confirmed, quiescing, closed, with cancelled and failed), a closed, cancelled or failed row is immutable, and one open closure per account is allowed. A table trigger refuses every delete. The retention window is not approved.",
+      "proposedRetention": "Unapproved: keep the record until a later reviewed decision sets a window; it is the deletion evidence that restore must replay.",
+      "deletionAuthority": "None today: no delete path exists. A later reviewed cleanup decision would own it; account closure never cascades to it.",
+      "exportPolicy": "Allowlist the owner's own closure state and times. Never the review digest or other accounts' records.",
+      "references": [
+        "schema/platform.sql",
+        "src/account-closure/machine.ts",
+        "docs/account-closure.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Restricted operator diagnostics and, later, the owner's own closure status; no support, model or Chat reader"
+        ],
+        "processors": [
+          "Deterministic closure state machine; no model or provider"
+        ],
+        "remainingExposure": [
+          "Rows link an opaque account identifier to the fact and timing of a closure request; no content."
         ],
         "decision": "retain-and-verify",
         "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",

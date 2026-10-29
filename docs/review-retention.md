@@ -138,6 +138,7 @@ Class, lane and turnover values:
 | `project_spec_applies` | `project_spec_apply_admit` | project 500 · platform 20000 | receipt | R2 | lifetime | cascade | configuration-authority |
 | `project_spec_proposals` | `project_spec_proposal_admit` | project 50 · platform 4000 | review | R1 | expiring | app+trigger+cascade | project-configurations |
 | `projects` | `project_quota` | owner 20 | inventory | R6 | owner-removable | cascade | projects |
+| `rule_approvals` | `rule_approval_new` | other 200 | inventory | R6 | owner-removable | cascade | connector-receipts |
 | `safety_case_audit` | `safety_case_audit_capacity` | platform 100000 | evidence | R5 | restricted | none | safety-case-access |
 | `safety_case_evidence` | `safety_case_evidence_admit` | case 1000 | evidence | R5 | restricted | none | restricted-safety-cases |
 | `safety_case_roles` | `safety_case_roles_capacity` | platform 1000 | evidence | R5 | restricted | none | safety-case-access |

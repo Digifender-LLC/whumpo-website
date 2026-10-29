@@ -23,6 +23,7 @@ import {accountEmailRoute,emailChangeDelivery} from './email-change/http';
 import {securityReviewRoute} from './email-change/review-http';
 import {maintainEmailChanges} from './email-change/maintenance';
 import {maintainConnectorRecords} from './connector-records-maintenance';
+import {pruneLayoutReceipts} from './workspace-layout-maintenance';
 import {cleanupInteractionDrafts} from './chat-interactions/retention';
 import {exportChatTranscript} from './chat-transcript';
 import {quarantineBackendImport,listBackendImports,scanBackendImports} from './backend-imports';
@@ -672,8 +673,8 @@ export default {
       // module request receipts past their 30-day replay window.
       {name:'contacts',run:async()=>{await cleanupContacts(env.DB);await cleanupModuleRecords(env.DB);await cleanupModuleRequestReceipts(env.DB);}},
       {name:'guest_previews',run:()=>cleanupGuestPreviews(env.DB)},
-      // WH-201: expired address changes, closed changes past retention, 48-hour limit evidence and old compromise reviews; WH-143 lookup consents and connector receipts past retention share this daily job.
-      {name:'email_changes',run:async()=>({...await maintainEmailChanges(env.DB),...await maintainConnectorRecords(env.DB)})},
+      // WH-201: expired address changes, closed changes past retention, 48-hour limit evidence and old compromise reviews; WH-143 lookup consents and connector receipts past retention and B11 surplus layout receipts share this daily job.
+      {name:'email_changes',run:async()=>({...await maintainEmailChanges(env.DB),...await maintainConnectorRecords(env.DB),...await pruneLayoutReceipts(env.DB)})},
       {name:'photos',run:()=>cleanupPhotos(env)},
       {name:'github',enabled:!!githubConfig(env),run:()=>cleanupGitHub(env.DB,githubConfig(env))},
       {name:'cloudflare',enabled:!!cloudflareConfig(env),run:()=>cleanupCloudflare(env.DB,cloudflareConfig(env))},

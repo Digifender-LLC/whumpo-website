@@ -264,9 +264,9 @@
    "id": "B11",
    "severity": "low",
    "title": "Workspace layout receipts grow without any cap or retention, so one owner can grow the shared control database",
-   "status": "open: traced in source, not executed; the fix is a cap trigger or pruning, a schema change for the coordinated cutover (deferred)",
+   "status": "resolved October 29, 2026 (UTC) by schema batch 2: an owner keeps the latest 50 layout receipts, enforced by the workspace_layout_receipt_cap trigger and the daily email_changes maintenance pass (tests/workspace-layout.mjs); live once the orchestrator cuts over to the new schema",
    "owner": "Workspace views and platform schema maintainers; owner decision on layout-history retention",
-   "reproduction": "Static trace: POST /api/workspace/views/v1/mutate -> mutateLayout inserts one immutable row per accepted change; no count trigger, DELETE or maintenance job exists",
+   "reproduction": "Static trace before the fix: POST /api/workspace/views/v1/mutate -> mutateLayout inserts one immutable row per accepted change; no count trigger, DELETE or maintenance job existed. Regression: node tests/workspace-layout.mjs (60 changes leave 50 receipts, the current layout is never pruned)",
    "evidence": [
     {
      "file": "src/workspace-layout.ts",
@@ -275,6 +275,14 @@
     {
      "file": "schema/platform.sql",
      "contains": "CREATE TRIGGER workspace_layout_receipt_immutable BEFORE UPDATE ON workspace_layout_receipts"
+    },
+    {
+     "file": "schema/platform.sql",
+     "contains": "CREATE TRIGGER workspace_layout_receipt_cap AFTER INSERT ON workspace_layout_receipts"
+    },
+    {
+     "file": "src/workspace-layout-maintenance.ts",
+     "contains": "export async function pruneLayoutReceipts("
     }
    ]
   }

@@ -88,6 +88,9 @@ const metrics={
  openLookupConsents:['lookup_consents','owner_id',"state IN ('issued','confirmed') AND expires_at>unixepoch()*1000"],
  connectorReceipts:['connector_receipts','owner_id'],
  openConnectorReceipts:['connector_receipts','owner_id',"state IN ('review','dispatching','uncertain')"],
+ // WH-145: rule approvals (an unrevoked one still lets a rule act, so it is revoked first), deleted with the account.
+ ruleApprovals:['rule_approvals','owner_id'],
+ activeRuleApprovals:['rule_approvals','owner_id','revoked_at IS NULL'],
 };
 export const closureInventorySQL=`WITH scope AS (SELECT id FROM users WHERE (?1 IS NULL OR id=?1)),
  owned_projects AS (SELECT id FROM projects WHERE owner_user_id IN (SELECT id FROM scope))
