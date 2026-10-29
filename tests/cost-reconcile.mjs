@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
-import {readFileSync} from 'node:fs';
+import {mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {spawnSync} from 'node:child_process';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {databaseFixture} from './helpers/current-database.mjs';
 
 // WH-171: statement import and aggregate reconciliation over cost events appended to the current schema (in-memory SQLite, or
@@ -124,6 +127,15 @@ try{
   const count=async()=>(await db.prepare('SELECT count(*) AS n FROM cost_events').first()).n;
   const before=await count();await report([stmt([line('u1',1)])]);assert.equal(await count(),before);
   assert.doesNotMatch(readFileSync('tools/cost-reconcile.mjs','utf8'),/INSERT|UPDATE|DELETE|CREATE|DROP/i);
+ });
+ await check('a malformed statement file is reported by code, never by its content',async()=>{
+  const dir=mkdtempSync(join(tmpdir(),'cost-reconcile-')),file=join(dir,'statement.json');
+  try{
+   writeFileSync(file,'invoice-PRIVATE-7,acct-secret\n');
+   const r=spawnSync(process.execPath,['tools/cost-reconcile.mjs',file],{encoding:'utf8'});
+   assert.equal(r.status,1);assert.match(r.stderr,/\(INVALID_JSON\)/);
+   assert.doesNotMatch(r.stdout+r.stderr,/PRIVATE|secret|invoice/);
+  }finally{rmSync(dir,{recursive:true,force:true});}
  });
  console.log(`cost-reconcile: ${cases} cases passed`);
 }finally{await store.close?.();}
