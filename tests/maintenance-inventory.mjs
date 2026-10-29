@@ -8,7 +8,7 @@ const db={prepare:q=>{const bound=p=>({first:async()=>sql.prepare(q).get(...p)??
 try{
  await initializeFixtureKeys(keyFixture.db);
  const owner=id(),project=id(),now=Date.now(),at=offset=>new Date(now+offset).toISOString(),day=86400000;
- sql.prepare("INSERT INTO users VALUES(?,?,?)").run(owner,'PRIVATE_EMAIL_CANARY@example.invalid',at(0));
+ sql.prepare("INSERT INTO users(id,email,created_at) VALUES(?,?,?)").run(owner,'PRIVATE_EMAIL_CANARY@example.invalid',at(0));
  sql.prepare('INSERT INTO projects(id,owner_user_id,name,created_at,updated_at) VALUES(?,?,?,?,?)').run(project,owner,'PRIVATE_NAME_CANARY',at(0),at(0));
  const oldGH=id(),oldCF=id(),newGH=id(),newCF=id();
  const ciphers=new Map();for(const token of [oldGH,oldCF,newGH,newCF])ciphers.set(token,await fixtureCiphertext(fixtureKeyring(),`whumpo:${[oldGH,newGH].includes(token)?'github':'cloudflare'}:token:${owner}:${token}`,'PRIVATE_CREDENTIAL_CANARY'));
@@ -53,9 +53,19 @@ try{
  sql.prepare("INSERT INTO directory_reviews(id,user_id,project_id,kind,snapshot_json,digest,expected_revision,publication_revision,expires_at) VALUES(?,?,?,'edit','[]',?,1,0,?)").run(id(),owner,project,'a'.repeat(64),at(-2*day));
  sql.exec('DROP TRIGGER review_receipt_bind');
  sql.prepare("INSERT INTO review_receipts(family,id,owner_user_id,project_id,kind,target,outcome,payload_digest,request_hash,confirmed_by,applied_at,lifecycle_class,sealed_at,seal) VALUES('directory_reviews',?,?,?,'change',?,'expired',?,?,NULL,NULL,'directories',?,?)").run(id(),owner,project,project,'a'.repeat(64),'b'.repeat(64),at(-33*day),'c'.repeat(64));
+ // WH-201 queues: an expired pending change, a closed change still holding its plaintext address and past retention, 48-hour limit
+ // evidence and a compromise review past its 90 days, each written already old through the schema's own insert checks.
+ {
+  const old=Date.now()-40*day,hex=char=>char.repeat(64);
+  sql.prepare("INSERT INTO identity_accounts(account_id,policy_version,stage,auth_epoch,kit_generation,kit_verifier,completion_receipt_id) VALUES(?,1,'ready',1,1,?,?)").run(owner,hex('a'),id());
+  sql.prepare("INSERT INTO owner_email_change_limits(kind,account_id,at) VALUES('request',?,?)").run(owner,Date.now());
+  sql.prepare("INSERT INTO owner_email_change_limits(kind,address_key,at) VALUES('send',?,?)").run(hex('b'),Date.now()-4*day);
+  sql.prepare("INSERT INTO owner_email_changes(change_id,account_id,request_id,request_hash,new_address,new_address_hash,epoch,created_at,expires_at,state,revision,history,deliverable) VALUES('change-old',?,'request-old',?,'private-new@example.invalid',?,1,?,?,'pending',1,'[\"pending\"]',0)").run(owner,hex('c'),hex('d'),old,old+3600000);
+  sql.prepare("INSERT INTO owner_security_reviews(review_id,account_id,epoch,credential_revision,kit_generation,credentials,connections,created_at,expires_at,state,revision) SELECT 'review-old',account_id,auth_epoch,credential_revision,kit_generation,'[]','[]',?,?,'open',1 FROM identity_accounts WHERE account_id=?").run(Date.now()-100*day,Date.now()-100*day+600000,owner);
+ }
  sql.exec('PRAGMA query_only=ON');
  report=await maintenanceReport(db,Date.now());
- assert.equal(report.backlogs.length,43);assert.ok(report.backlogs.every(q=>q.state!=='unavailable'),JSON.stringify(report.backlogs));
+ assert.equal(report.backlogs.length,48);assert.ok(report.backlogs.every(q=>q.state!=='unavailable'),JSON.stringify(report.backlogs));
  for(const queue of ['contact_receipts','contact_notification_outbox','contact_notification_queue','traffic','fair_use','health_budget','github_staged','connection_exchanges']){const backlog=report.backlogs.find(q=>q.queue===queue);assert.equal(backlog.state,'attention',queue);assert.equal(backlog.count,1,queue);}
  assert.equal(report.backlogs.find(q=>q.queue==='contact_receipts').oldestAgeMs>=2*day,true);
  for(const queue of ['github','cloudflare']){const backlog=report.backlogs.find(q=>q.queue===queue);assert.equal(backlog.state,'pending');assert.equal(backlog.unknownAgeCount,0);assert.ok(backlog.oldestAgeMs<60000);}
@@ -64,11 +74,13 @@ try{
  {const directory=report.reviews.find(r=>r.family==='directory_reviews');assert.deepEqual([directory.state,directory.waiting,directory.sealedReceipts],['attention',1,1]);assert.ok(report.reviews.filter(r=>r.family!=='directory_reviews').every(r=>r.state==='current'&&r.waiting===0));}
  assert.equal(report.backlogs.find(q=>q.queue==='github_refresh_grants').count,1);
  assert.equal(report.backlogs.find(q=>q.queue==='github_refresh_grants').unknownAgeCount,0);
+ for(const queue of ['email_change_expiry','email_change_limits','security_reviews']){const backlog=report.backlogs.find(q=>q.queue===queue);assert.equal(backlog.count,1,queue);assert.equal(backlog.state,'attention',queue);assert.equal(backlog.unknownAgeCount,0,queue);}
+ assert.equal(report.backlogs.find(q=>q.queue==='email_change_redaction').count,0,'a pending change keeps its address; the job closes it first');assert.equal(report.backlogs.find(q=>q.queue==='email_change_retention').count,0,'a change can only be inserted pending, so none is closed and old yet');
  assert.equal(report.operations.length,4);assert.ok(report.operations.every(o=>o.state==='available'));
  // WH-050 F8: every shared counter's ceiling matches the trigger/table that enforces it; 50%/80% flags; read-only.
  // An index may share a trigger's name (domain_connection_owner), so every object of that name is searched.
  for(const [name,{enforcedBy,evidence}] of Object.entries(platformCounterInventory)){const source=sql.prepare("SELECT group_concat(sql,' ') sql FROM sqlite_master WHERE name=?").get(enforcedBy)?.sql??'';assert.ok(source.replace(/\s+/g,' ').includes(evidence),name);}
- assert.equal(report.counters.length,14+18,'fourteen shared counters and the eighteen review families that have a platform active cap');assert.ok(report.counters.every(c=>c.state!=='unavailable'),JSON.stringify(report.counters));
+ assert.equal(report.counters.length,14+1+18,'fourteen shared counters, the cost-event capacity and the eighteen review families that have a platform active cap');assert.ok(report.counters.every(c=>c.state!=='unavailable'),JSON.stringify(report.counters));
  assert.equal(report.counters.find(c=>c.counter==='contact_receipts').used,2);assert.equal(report.counters.find(c=>c.counter==='contact_receipts').state,'normal');
  sql.exec('PRAGMA query_only=OFF');
  const period=new Date(now).toISOString().slice(0,7);
@@ -83,5 +95,5 @@ try{
  const broken=await counterReport({prepare:()=>{throw Error('PRIVATE_SECRET_CANARY');}},now);assert.ok(broken.counters.every(c=>c.state==='unavailable'));assert.equal(broken.attention,true);assert.ok(!JSON.stringify(broken).includes('PRIVATE_'));
  assert.ok(!JSON.stringify(counters).includes(project)&&!JSON.stringify(counters).includes(owner));
  const encoded=JSON.stringify(report);for(const marker of ['PRIVATE_',owner,newGH,newCF,project])assert.ok(!encoded.includes(marker),marker);
- console.log('Maintenance inventory passed: complete current schema, missing telemetry attention, precise new revocation clocks, retry stability/cascade, 43 read-only queues, four receipt families, 32 shared platform counters (14 shared plus 18 review-family active caps) checked against their schema ceilings with 50%/80% flags, retention eligibility and private data exclusion.');
+ console.log('Maintenance inventory passed: complete current schema, missing telemetry attention, precise new revocation clocks, retry stability/cascade, 48 read-only queues, four receipt families, 33 shared platform counters (14 shared, the cost-event capacity and 18 review-family caps) checked against their schema ceilings with 50%/80% flags, retention eligibility and private data exclusion.');
 }finally{sql.close();}

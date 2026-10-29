@@ -96,7 +96,7 @@ try {
  // Expiration and disable/re-enable cannot replay old challenges or restore sessions.
  const exp=await begin(b);
  const expired=await db.prepare('DELETE FROM app_auth_challenges WHERE challenge=? RETURNING *').bind(exp.options.challenge).first();
- await db.prepare('INSERT INTO app_auth_challenges(token_hash,project_id,access_id,activation_revision,challenge,kind,visitor_id,invite_hash,session_hash,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(expired.token_hash,expired.project_id,expired.access_id,expired.activation_revision,expired.challenge,expired.kind,expired.visitor_id,expired.invite_hash,expired.session_hash,'2000-01-01T00:00:00.000Z').run();
+ await db.prepare('INSERT INTO app_auth_challenges(token_hash,project_id,access_id,activation_revision,challenge,kind,visitor_id,invite_hash,session_hash,client_hash,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)').bind(expired.token_hash,expired.project_id,expired.access_id,expired.activation_revision,expired.challenge,expired.kind,expired.visitor_id,expired.invite_hash,expired.session_hash,'f'.repeat(64),'2000-01-01T00:00:00.000Z').run();
  await denied(verify(b,'login',exp,key.assertion(exp.options,3)),400);
  // Disabling the application keeps visitor sign-in (it belongs to the access instance) but stops document access.
  const disabled=await signup(b);opt=await begin(b);await configure(b,'disable');assert.ok((await verify(b,'login',opt,disabled.key.assertion(opt.options))).session);await denied(data.readAppData(db,disabled.session,b.project),401);

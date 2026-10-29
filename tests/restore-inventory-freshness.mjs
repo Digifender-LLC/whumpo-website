@@ -31,7 +31,7 @@ const reject=async action=>{await assert.rejects(action,/unavailable/);refusals+
 try{
  await initializeFixtureKeys(db,keyring);const owner=await workspaceFixture(db,m);
  const session=await db.prepare('SELECT * FROM identity_sessions WHERE id=?').bind(owner.authority).first();
- await db.prepare('UPDATE users SET email=? WHERE id=?').bind('PRIVATE_SOURCE_PROFILE_CANARY',owner.account).run();
+ await db.prepare('UPDATE users SET created_at=? WHERE id=?').bind('PRIVATE_SOURCE_PROFILE_CANARY',owner.account).run();
  const init=await createRestoreInventory({inventoryFile,streamId});assert.equal(init.version,2);
  const inventory=await open(),original=await register(inventory);
  await assertResult(original,inventory);
@@ -68,7 +68,7 @@ try{
 
  // A consumed/cancelled/current record need not disappear. A changed full row
  // is independently observed; neither its old digest nor the current value leaks.
- await db.prepare('UPDATE users SET email=? WHERE id=?').bind('PRIVATE_CHANGED_PROFILE_CANARY',owner.account).run();
+ await db.prepare('UPDATE users SET created_at=? WHERE id=?').bind('PRIVATE_CHANGED_PROFILE_CANARY',owner.account).run();
  await assertResult(current,inventory,'stale-authority');
  const changed=await evidence(current,inventory);assert.equal(changed.events.length,2);assert.equal(changed.events.at(-1).kind,'record-current');
  assert.ok(!JSON.stringify(changed).includes('PRIVATE_CHANGED_PROFILE_CANARY'));
@@ -94,10 +94,10 @@ try{
 
  // Change the real source after the first snapshot has been read. Both full
  // observations must agree, even for a record not present in the candidate.
- const addedUser=id();await db.prepare("INSERT INTO users VALUES(?,?,'2026-10-02')").bind(addedUser,'added@example.invalid').run();
+ const addedUser=id();await db.prepare("INSERT INTO users(id,email,created_at) VALUES(?,?,'2026-10-02')").bind(addedUser,'added@example.invalid').run();
  let sourceReads=0;
  const racing=await open(interceptDatabase(db,/SELECT \* FROM "users"/,async()=>{},async()=>{
-  if(++sourceReads===1)await db.prepare("UPDATE users SET email='changed@example.invalid' WHERE id=?").bind(addedUser).run();
+  if(++sourceReads===1)await db.prepare("UPDATE users SET created_at='changed@example.invalid' WHERE id=?").bind(addedUser).run();
  }));
  await assertResult(current,racing,'independent-evidence');assert.equal(sourceReads,2);
  await assertResult(current,racing); // A prior refusal doesn't poison later reads.
@@ -111,7 +111,7 @@ try{
  assert.equal((await inventory.evidenceSource.fetch(request(doomed.manifest))).status,404);
 
  // A concurrent journal write fences an automatic observation batch.
- await db.prepare('UPDATE users SET email=? WHERE id=?').bind('PRIVATE_RACED_PROFILE_CANARY',owner.account).run();
+ await db.prepare('UPDATE users SET created_at=? WHERE id=?').bind('PRIVATE_RACED_PROFILE_CANARY',owner.account).run();
  let journalRace=false;const sequenceBefore=(await inventory.inspect()).currentSequence;
  const competing=await open(interceptDatabase(db,/SELECT \* FROM "users"/,async()=>{
   if(!journalRace){journalRace=true;await restarted.observe({operationId:'competitor',selection:{kind:'owner-erased',ownerId:'never-present'}});}
@@ -120,6 +120,32 @@ try{
  await assertResult(current,inventory,'stale-authority');
  current=await register(inventory);await assertResult(current,inventory);
 
+ // WH-201: a restore must never revive a superseded address change, a used token or an earlier verification state. The change rows and
+ // the users row are ordinary watched records, so an archive taken before the current source moved on is held, whichever way it moved.
+ {
+  const run=(sqlText,...values)=>db.prepare(sqlText).bind(...values).run(),now=Date.now(),email=await db.prepare('SELECT email FROM users WHERE id=?').bind(owner.account).first();
+  const key=char=>char.repeat(64),pending=async(changeId,address,deliverable)=>{
+   await run("INSERT INTO owner_email_change_limits(kind,account_id,at) VALUES('request',?,?)",owner.account,Date.now());
+   if(deliverable)await run("INSERT INTO owner_email_change_limits(kind,address_key,at) VALUES('send',?,?)",key(changeId==='change-one'?'b':'c'),Date.now());
+   await run("INSERT INTO owner_email_changes(change_id,account_id,request_id,request_hash,new_address,new_address_hash,epoch,created_at,expires_at,state,revision,history,deliverable) VALUES(?,?,?,?,?,?,1,?,?,'pending',1,'[\"pending\"]',?)",
+    changeId,owner.account,'request-'+changeId,key('a'),address,key(changeId==='change-one'?'b':'c'),Date.now(),Date.now()+3600000,deliverable?1:0);
+  };
+  await pending('change-one','one@example.test',false);
+  const beforeSupersede=await register(inventory);await assertResult(beforeSupersede,inventory);
+  await run("UPDATE owner_email_changes SET state='superseded',revision=revision+1,history=json_insert(history,'$[#]','superseded') WHERE change_id='change-one'");
+  await assertResult(beforeSupersede,inventory,'stale-authority'); // the superseded change is not revived by restoring the archive that held it pending
+  await pending('change-two','two@example.test',true);
+  await run("UPDATE owner_email_changes SET token_verifier=?,revision=revision+1 WHERE change_id='change-two'",key('e'));
+  const withToken=await register(inventory);await assertResult(withToken,inventory);
+  await run("UPDATE owner_email_changes SET state='confirmed',revision=revision+1,history=json_insert(history,'$[#]','confirmed'),previous_address=?,receipt_verified_at=?,undo_until=?+604800000 WHERE change_id='change-two'",email.email,now,now);
+  await run("UPDATE users SET email='two@example.test',email_verified_at=?,email_verified_via='notify@whumpo.com' WHERE id=?",now,owner.account);
+  await assertResult(withToken,inventory,'stale-authority'); // a used token and the old unverified address are not revived
+  const verified=await register(inventory);await assertResult(verified,inventory);
+  await run("UPDATE owner_email_changes SET state='undone',revision=revision+1,history=json_insert(history,'$[#]','undone') WHERE change_id='change-two'");
+  await run('UPDATE users SET email=?,email_verified_at=NULL,email_verified_via=NULL WHERE id=?',email.email,owner.account);
+  await assertResult(verified,inventory,'stale-authority'); // the verified state is not revived once undone
+  current=await register(inventory);await assertResult(current,inventory);
+ }
  // A source with an obsolete or incomplete schema cannot issue fresh evidence.
  const wrongSource=new DatabaseSync(':memory:');wrongSource.exec('CREATE TABLE users(id TEXT PRIMARY KEY)');
  try{const wrong=await open(sqliteD1Adapter(wrongSource));await assertResult(current,wrong,'independent-evidence');}finally{wrongSource.close();}

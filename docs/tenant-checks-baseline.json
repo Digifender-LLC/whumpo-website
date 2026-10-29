@@ -35,6 +35,7 @@
    {"fingerprint":"64f22f4f000ad5df","object":"cms_wordpress_source_retained","kind":"trigger","comparison":"users.id = cms_wordpress_sources.user_id","types":"account/workspace"},
    {"fingerprint":"bf265473338ec90a","object":"composition_plan_retained","kind":"trigger","comparison":"users.id = composition_plans.user_id","types":"account/workspace"},
    {"fingerprint":"4e6538da79537eb4","object":"contact_suppression_delete","kind":"trigger","comparison":"users.id = contact_notification_suppressions.user_id","types":"account/workspace"},
+   {"fingerprint":"c039cd10a3e13286","object":"cost_events_append_only","kind":"trigger","comparison":"users.id = cost_events.owner_id","types":"account/workspace"},
    {"fingerprint":"df7e55768ba738fb","object":"directory_review_retained","kind":"trigger","comparison":"users.id = directory_reviews.user_id","types":"account/workspace"},
    {"fingerprint":"e38a5e001055253e","object":"domain_connection_retained","kind":"trigger","comparison":"users.id = domain_connections.user_id","types":"account/workspace"},
    {"fingerprint":"8afd84929b2cbdd1","object":"feature_preview_retained","kind":"trigger","comparison":"users.id = feature_preview_grants.user_id","types":"account/workspace"},

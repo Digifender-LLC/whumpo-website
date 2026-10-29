@@ -14,11 +14,13 @@ import {cleanIdentityCeremonies} from './workspace-identity/ceremonies';
 import {handleIdentityRequest,workspaceIdentity} from './workspace-identity/http';
 import {handleSafetyCaseRequest} from './safety-case-http';
 import {IdentityError} from './workspace-identity/authority';
-import {admitWorkspace,workspaceBindings,assertWorkspace,requireFreshWorkspace,workspaceTransport} from './workspace-identity/admission';
+import {admitWorkspace,workspaceBindings,workspacePrincipal,assertWorkspace,requireFreshWorkspace,workspaceTransport} from './workspace-identity/admission';
 import {FeatureInclusionError} from './feature-inclusion';
 import {stripeBillingWebhook,subscriptionsEnabled,subscriptionStatus,refreshSubscriptions,startSubscription,billingPortal} from './stripe-billing';
 import {serviceClientActivationPreview} from './project-specification/service-clients/activation';
 import {runMaintenance} from './maintenance';
+import {accountEmailRoute,emailChangeDelivery} from './email-change/http';
+import {maintainEmailChanges} from './email-change/maintenance';
 import {cleanupInteractionDrafts} from './chat-interactions/retention';
 import {exportChatTranscript} from './chat-transcript';
 import {quarantineBackendImport,listBackendImports,scanBackendImports} from './backend-imports';
@@ -175,6 +177,10 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
     if(method==='PUT')return json(await saveOnboarding(env.DB,user.id,(await body(request))??{}));
   }
   if(pathname==='/api/onboarding/complete'&&method==='POST')return json(await completeOnboarding(env.DB,user.id,(await body(request))??{}));
+  // WH-201 direct owner controls for the account email: not Chat, no agent action. Delivery is inactive until WH-202, so a change request returns delivery_unavailable and stores nothing.
+  if(pathname==='/api/account/email'||pathname.startsWith('/api/account/email/')){
+   return (await accountEmailRoute(request,env,env.DB,workspacePrincipal(env.DB,user.id),{delivery:emailChangeDelivery(env)}))??error(404,'Not found');
+  }
   if(pathname==='/api/profile'){
     if(method==='GET')return json(await readProfile(env.DB,user.id));
     if(method==='PATCH')return json(await updateProfile(env.DB,user.id,await body(request)));
@@ -650,12 +656,15 @@ export default {
       {name:'fair_use',run:()=>cleanupFairUseObservations(env.DB)},
       {name:'traffic',run:async()=>{await cleanupTraffic(env.DB);await cleanupPublicClients(env.DB);}},
       {name:'funnel',run:()=>maintainFunnelEvents(env.DB)},
-      // WH-182: the bounded review turnover pass runs in this daily job. maintenance_health admits no `reviews` row yet (a schema CHECK), so it reports here.
-      {name:'applications',run:async()=>{try{await cleanupAppLifecycle(env.DB);await reconcileBuildJobs(env.DB);}finally{await maintainReviews(env.DB);}}},
+      {name:'applications',run:async()=>{await cleanupAppLifecycle(env.DB);await reconcileBuildJobs(env.DB);}},
+      // WH-182 review turnover, reported under its own telemetry name (the maintenance_health check admits `reviews` since the WH-170/WH-201 schema change).
+      {name:'reviews',run:()=>maintainReviews(env.DB)},
       // Form-submission expiry: the contact inbox and WH-127 module records (both skip safety-held projects), then content-free
       // module request receipts past their 30-day replay window.
       {name:'contacts',run:async()=>{await cleanupContacts(env.DB);await cleanupModuleRecords(env.DB);await cleanupModuleRequestReceipts(env.DB);}},
       {name:'guest_previews',run:()=>cleanupGuestPreviews(env.DB)},
+      // WH-201: expired address changes, closed changes past retention, 48-hour limit evidence and old compromise reviews.
+      {name:'email_changes',run:()=>maintainEmailChanges(env.DB)},
       {name:'photos',run:()=>cleanupPhotos(env)},
       {name:'github',enabled:!!githubConfig(env),run:()=>cleanupGitHub(env.DB,githubConfig(env))},
       {name:'cloudflare',enabled:!!cloudflareConfig(env),run:()=>cleanupCloudflare(env.DB,cloudflareConfig(env))},

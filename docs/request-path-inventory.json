@@ -253,10 +253,10 @@
      "whumpo-sites"
     ],
     "d1": {
-     "calls": 5,
+     "calls": 6,
      "batches": 1,
-     "statements": 7,
-     "reads": 4,
+     "statements": 8,
+     "reads": 5,
      "writes": 3
     },
     "r2": {
@@ -273,6 +273,7 @@
      "project_files",
      "project_spec_held",
      "project_spec_versions",
+     "projects",
      "public_client_usage",
      "publications",
      "storage_project_usage",
@@ -792,10 +793,10 @@
      "whumpo-sites"
     ],
     "d1": {
-     "calls": 6,
+     "calls": 7,
      "batches": 1,
-     "statements": 8,
-     "reads": 5,
+     "statements": 9,
+     "reads": 6,
      "writes": 3
     },
     "r2": {

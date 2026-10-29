@@ -232,7 +232,7 @@ try{
  await denies(()=>login(spent.key,1),'proof_required');
  phase='account quota';
  const quotaCode=await invite(),quotaOptions=await signupOptions(request(),env,form(quotaCode)),quotaKey=authenticator();
- for(let n=(await row('SELECT count(*) n FROM users')).n;n<50;n++)await run("INSERT INTO users VALUES(?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))",id(),id()+'@example.invalid');
+ for(let n=(await row('SELECT count(*) n FROM users')).n;n<50;n++)await run("INSERT INTO users(id,email,created_at) VALUES(?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))",id(),id()+'@example.invalid');
  await denies(()=>signupVerify(request(),env,quotaOptions.challengeToken,input(quotaKey.registration(quotaOptions.options))),'identity_changed');
  assert.equal((await row('SELECT used_by FROM invitations WHERE code_hash=?',await hashToken(quotaCode))).used_by,null);
  assert.equal((await row('SELECT count(*) n FROM users')).n,50);

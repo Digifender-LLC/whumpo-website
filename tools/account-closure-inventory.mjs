@@ -76,6 +76,13 @@ const metrics={
  accessRoleReceipts:['module_access_role_applies','user_id'],
  moduleRecords:['module_records','project_id IN (SELECT id FROM owned_projects)'],
  moduleFiles:['module_files','project_id IN (SELECT id FROM owned_projects)'],
+ // WH-170: shadow cost events deleted with the account and its projects (no tombstones). WH-201: the account's address changes
+ // (open ones and undo reservations), rate-limit evidence and compromise-review records, all deleted with the account.
+ costEvents:['cost_events','owner_id'],
+ emailChanges:['owner_email_changes','account_id'],
+ openEmailChanges:['owner_email_changes','account_id',"state='pending' OR (state='confirmed' AND undo_until>unixepoch()*1000)"],
+ emailChangeLimits:['owner_email_change_limits','account_id'],
+ securityReviews:['owner_security_reviews','account_id'],
 };
 export const closureInventorySQL=`WITH scope AS (SELECT id FROM users WHERE (?1 IS NULL OR id=?1)),
  owned_projects AS (SELECT id FROM projects WHERE owner_user_id IN (SELECT id FROM scope))

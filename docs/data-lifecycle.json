@@ -54,16 +54,17 @@
         "customer_eligibility"
       ],
       "scope": "owner",
-      "purpose": "Identify the account and its recorded US customer declaration.",
+      "purpose": "Identify the account, its recorded US customer declaration and the verification time and sender of its email address (WH-201; the sign-in email is a label, never a sign-in method, recovery factor or authority).",
       "currentRetention": "Retained while the account exists; eligibility cascades. Other tables can prevent account deletion.",
       "proposedRetention": "Active account; ordinary personal fields enter closure purge. Only justified minimal proof survives in a separate restricted receipt.",
       "deletionAuthority": "Recently authenticated owner confirms exact account closure; restricted preservation review precedes purge.",
-      "exportPolicy": "Allowlist account identifier, email, creation time and US customer declaration. Account rows have no password fields.",
+      "exportPolicy": "Allowlist account identifier, email, the time the email was verified, creation time and US customer declaration. Account rows have no password fields.",
       "references": [
         "src/workspace-identity/canonical-inputs.sql",
         "src/workspace-identity/http.ts",
         "docs/content-safety.md",
-        "docs/data-protection.md"
+        "docs/data-protection.md",
+        "docs/email-change-and-compromise.md"
       ],
       "storageStatus": "current",
       "protection": {
@@ -2708,6 +2709,179 @@
         ],
         "decision": "retain-and-verify",
         "rationale": "Retain the declared private R2 and D1 layers with narrow readers, as for project media; uploads stay unservable until the existing exact-digest safety approval.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
+      "id": "cost-events",
+      "tables": [
+        "cost_events"
+      ],
+      "scope": "mixed",
+      "purpose": "Reconcile shadow provider cost (WH-170): append-only, content-free events about consumption with tenant attribution (owner and project, never a physical locator), emitted after the inference, gateway and storage receipt transitions. Evidence only: zero customer units, never authority to charge, credit, admit or throttle.",
+      "currentRetention": "Rows are immutable and kept while the owner and project exist. Account closure deletes the owner's rows through the account and project foreign-key cascade, with no closure key and no tombstones (owner decision October 28, 2026). A later revision that arrives after a higher one is stored as stale for audit and never counted. No automatic deletion exists; platform-scope rows (none are produced yet) have no owner and are never cascaded.",
+      "proposedRetention": "Keep tenant events while the account exists and delete them with the account. Period close, company totals and provider statements are WH-171; what company-level figures outlive an account is decided there, not here.",
+      "deletionAuthority": "Account closure cascade only. No route, operator edit or maintenance job updates or deletes a row; a table trigger refuses both.",
+      "exportPolicy": "Not part of customer export: internal cost evidence, not owner content. Never shown to customers or the model; operators read events through reviewed reports only.",
+      "references": [
+        "src/cost-event-store.ts",
+        "src/cost-event-emission.ts",
+        "src/cost-events.ts",
+        "docs/cost-events.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Operators through reviewed cost reports only; no customer, model or view reader"
+        ],
+        "processors": [
+          "Deterministic emission after receipt transitions; no model, client beacon or third-party analytics"
+        ],
+        "remainingExposure": [
+          "Events link an account and project to usage and cost timing through opaque identifiers; they hold no prompt, reply, address, file name, credential or provider locator, and stay operator-restricted."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
+      "id": "owner-email-changes",
+      "tables": [
+        "owner_email_changes"
+      ],
+      "scope": "owner",
+      "purpose": "Verified address change (WH-201): a pending change with the SHA-256 verifier of its confirmation token, and the confirmed change's previous address, previous verification state and seven-day undo reservation.",
+      "currentRetention": "Pending until confirmed, cancelled, superseded, stale, expired or undeliverable; maintenance expires pending rows after one hour, replaces the plaintext new address with its hash once the change is closed (a confirmed one when its undo window ends) and removes the previous address at the same point; closed rows are deleted 30 days after the later of their expiry and undo deadline. Account closure cascades. A table trigger refuses any other deletion, any reopening, any token edit on a closed row and any write that is not revision plus one.",
+      "proposedRetention": "Same as current. The previous address stays reserved (no other account can claim it) only while the undo window lasts.",
+      "deletionAuthority": "Owner cancellation or undo through the account email controls, bounded daily maintenance, or account closure cascade.",
+      "exportPolicy": "Allowlist the open pending address and its expiry and the undo deadline. Never token verifiers, request hashes, address hashes or rate-limit keys.",
+      "references": [
+        "schema/platform.sql",
+        "src/email-change/store.ts",
+        "src/email-change/maintenance.ts",
+        "src/email-change/http.ts",
+        "docs/email-change-and-compromise.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Current owner through the account email controls; bounded operator diagnostics never see addresses (closed rows hold hashes)"
+        ],
+        "processors": [
+          "Deterministic change store and maintenance; the confirmation token is minted only inside a claimed delivery attempt and never reaches storage, logs, analytics or model context"
+        ],
+        "remainingExposure": [
+          "A pending change holds a readable new address and, for a confirmed one, the previous address for seven days; the token verifier is a SHA-256 hash of 256 random bits."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
+      "id": "owner-email-change-limits",
+      "tables": [
+        "owner_email_change_limits"
+      ],
+      "scope": "mixed",
+      "purpose": "Rate evidence for address changes (WH-201): an account's request and failed-confirmation times, and hashed per-destination daily send keys that bound messages to one address across all accounts.",
+      "currentRetention": "48 hours: daily maintenance deletes older rows, and a table trigger refuses any earlier deletion (it would reset a limit) except with the owner's account. Send keys hold only a SHA-256 hash of the address and no account. Account closure cascades the account's rows.",
+      "proposedRetention": "Keep 48 hours.",
+      "deletionAuthority": "Bounded daily maintenance or account closure cascade.",
+      "exportPolicy": "Not exported: abuse-control counters. Hashed address keys are never shown.",
+      "references": [
+        "schema/platform.sql",
+        "src/email-change/store.ts",
+        "src/email-change/maintenance.ts",
+        "docs/email-change-and-compromise.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Admission triggers and the change store only"
+        ],
+        "processors": [
+          "Deterministic counters"
+        ],
+        "remainingExposure": [
+          "An unsalted hash of a guessable address can be tested by someone with database access; rows live 48 hours and are never exported."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
+      "id": "owner-security-reviews",
+      "tables": [
+        "owner_security_reviews"
+      ],
+      "scope": "owner",
+      "purpose": "Compromise review (WH-203 reads and writes these rows; WH-201 stores them): a snapshot bound to the authority epoch, credential revision, kit generation and connection set, the replacement kit offer (verifier only), the owner's selections and a content-free commit receipt that claims account recovery only.",
+      "currentRetention": "Ten-minute snapshot; deleted 90 days after the commit or the expiry by bounded daily maintenance, and a table trigger refuses earlier deletion while the account exists. A committed review is immutable, and a commit needs the epoch advanced by exactly one. Account closure cascades.",
+      "proposedRetention": "Keep 90 days after commit or expiry.",
+      "deletionAuthority": "Bounded daily maintenance or account closure cascade.",
+      "exportPolicy": "Allowlist review time, selections and outcome. Never the kit offer verifier, kit, token or credential material.",
+      "references": [
+        "schema/platform.sql",
+        "src/email-change/compromise.ts",
+        "src/email-change/maintenance.ts",
+        "docs/email-change-and-compromise.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Current owner through the compromise review controls (WH-203); bounded operator diagnostics show states only"
+        ],
+        "processors": [
+          "Deterministic review commit; no model, support or Chat reader"
+        ],
+        "remainingExposure": [
+          "Rows hold credential, session and connection identifiers and counts, and a SHA-256 kit offer verifier; no kit, token or credential material."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
         "requirements": [
           "DP-02",
           "DP-03",

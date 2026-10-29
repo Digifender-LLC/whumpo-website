@@ -119,7 +119,9 @@ export async function measure({allowedArguments=[]}={}){
  // Tally of the request being measured; setup work outside `active` is not counted.
  let active=null;
  const tally={
-  d1:(kind,queries)=>{if(!active)return;if(kind==='batch')active.d1.batches++;else active.d1.calls++;for(const q of queries){active.d1.statements++;if(writeSQL.test(q))active.d1.writes++;else active.d1.reads++;for(const t of names)if(new RegExp('\\b'+t+'\\b').test(q))active.tables.add(t);}},
+  // WH-170 shadow cost events are conditional by design (a public photo read is recorded only at powers of two), so their
+  // statements are tallied apart: they must not make a repeat request look like a cache. Everything else is counted as before.
+  d1:(kind,all)=>{if(!active)return;const queries=all.filter(q=>!/\bcost_events\b/.test(q));active.shadowStatements+=all.length-queries.length;if(!queries.length)return;if(kind==='batch')active.d1.batches++;else active.d1.calls++;for(const q of queries){active.d1.statements++;if(writeSQL.test(q))active.d1.writes++;else active.d1.reads++;for(const t of names)if(new RegExp('\\b'+t+'\\b').test(q))active.tables.add(t);}},
   r2:op=>{if(active)active.r2[op]=(active.r2[op]??0)+1;},
   service:name=>{if(active)active.services[name]=(active.services[name]??0)+1;},
   assets:()=>{if(active)active.assets++;},
@@ -147,7 +149,7 @@ export async function measure({allowedArguments=[]}={}){
  // the Worker whose code serves it, and the inventory records that no route currently reaches it.
  async function send(url,init,{via}={}){
   const routed=entryWorker(workers,url),worker=routed?.worker??via;assert.ok(entry[worker],'No entry for '+url);
-  const counts={workers:[],d1:{calls:0,batches:0,statements:0,reads:0,writes:0},r2:{},services:{},assets:0,rateLimiter:{},subrequests:[],waitUntil:0,tables:new Set()};
+  const counts={workers:[],d1:{calls:0,batches:0,statements:0,reads:0,writes:0},r2:{},services:{},assets:0,rateLimiter:{},subrequests:[],waitUntil:0,tables:new Set(),shadowStatements:0};
   active=counts;tally.invoke(worker);
   let response;try{response=await entry[worker](new Request(url,init));await Promise.all(background.splice(0));}finally{active=null;}
   const body=await response.arrayBuffer();

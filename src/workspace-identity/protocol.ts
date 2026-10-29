@@ -22,6 +22,6 @@ export function identityRequestContext(request:Request,env:IdentityEnvironment){
 export function identityDatabaseError(error:unknown):never{
  if(error instanceof IdentityError)throw error;
  if(/identity_request_conflict/.test(String(error)))throw new IdentityError(409,'request_conflict','This request ID already belongs to a different change.');
- if(/UNIQUE|FOREIGN KEY|CHECK constraint|identity_.*limit|user_quota/.test(String(error)))throw identityChanged();
+ if(/UNIQUE|FOREIGN KEY|CHECK constraint|identity_.*limit|user_quota|users_email_new/.test(String(error)))throw identityChanged();
  throw identityUnavailable();
 }

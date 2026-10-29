@@ -17,7 +17,7 @@ const store=await databaseFixture(),db=store.db,id=()=>crypto.randomUUID(),now=(
 const originalFetch=globalThis.fetch;globalThis.fetch=async()=>{throw Error('No network is allowed');};
 const revisions=new Map();let checks=0;
 const later=ms=>new Date(Date.now()+ms).toISOString();
-async function user(){const u=id();await db.prepare("INSERT INTO users VALUES(?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(u,u+'@example.invalid').run();return u;}
+async function user(){const u=id();await db.prepare("INSERT INTO users(id,email,created_at) VALUES(?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(u,u+'@example.invalid').run();return u;}
 /** A Chat turn row as chat.ts inserts it; `action` is the typed control, stored only on guided turns. */
 function turnStatement(u,turn,{action=null,mode='guided',text='/confirm'}={}){
  const revision=(revisions.get(u)??0)+1;revisions.set(u,revision);

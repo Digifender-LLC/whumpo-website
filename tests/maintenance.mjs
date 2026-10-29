@@ -36,7 +36,7 @@ try{
  const unavailable=await maintenanceReport({prepare:()=>{throw Error('PRIVATE_SECRET_CANARY');}},now);
  assert.ok(unavailable.jobs.every(j=>j.state==='unavailable'));assert.equal(unavailable.attention,true);assert.ok(!JSON.stringify(unavailable).includes('PRIVATE_SECRET_CANARY'));
  const user=crypto.randomUUID(),op=crypto.randomUUID(),date=new Date(now-1800000).toISOString();
- sql.prepare("INSERT INTO users VALUES(?,?,?)").run(user,'private@example.invalid',date);
+ sql.prepare("INSERT INTO users(id,email,created_at) VALUES(?,?,?)").run(user,'private@example.invalid',date);
  sql.prepare("INSERT INTO standard_ai_requests(id,user_id,request_hash,created_at,updated_at) VALUES(?,?,?,?,?)").run(op,user,'a'.repeat(64),date,date);
  sql.prepare("INSERT INTO file_cleanup(object_key,created_at) VALUES('PRIVATE_OBJECT_KEY_CANARY',?)").run(new Date(now-91000000).toISOString());
  sql.prepare("UPDATE maintenance_health SET status='running',started_at=?,finished_at=NULL WHERE job='traffic'").run(now-1000000);

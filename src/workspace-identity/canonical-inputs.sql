@@ -3,7 +3,12 @@
 CREATE TABLE users (
  id TEXT PRIMARY KEY,
  email TEXT NOT NULL UNIQUE,
- created_at TEXT NOT NULL
+ created_at TEXT NOT NULL,
+ -- WH-201: when and by whom the address was verified. Both NULL until a change confirms it. They move only with `email`, in
+ -- lockstep with an owner_email_changes row (trigger users_email_lockstep in schema/platform.sql). Verification is never authority.
+ email_verified_at INTEGER CHECK(email_verified_at IS NULL OR (typeof(email_verified_at)='integer' AND email_verified_at>0)),
+ email_verified_via TEXT CHECK(email_verified_via IS NULL OR email_verified_via='notify@whumpo.com'),
+ CHECK((email_verified_at IS NULL)=(email_verified_via IS NULL))
 ) STRICT;
 CREATE TRIGGER user_quota BEFORE INSERT ON users
 WHEN (SELECT count(*) FROM users)>=50

@@ -9,7 +9,7 @@ const sql=new DatabaseSync(':memory:');
 try{
  sql.exec(await currentSchema());
  const account=crypto.randomUUID(),other=crypto.randomUUID();
- for(const id of [account,other])sql.prepare("INSERT INTO users VALUES(?,?,'2026-09-30')").run(id,id+'@example.invalid');
+ for(const id of [account,other])sql.prepare("INSERT INTO users(id,email,created_at) VALUES(?,?,'2026-09-30')").run(id,id+'@example.invalid');
  const db={prepare:q=>({bind:(...p)=>({first:async()=>sql.prepare(q).get(...p)??null,all:async()=>({success:true,results:sql.prepare(q).all(...p)}),run:async()=>sql.prepare(q).run(...p)})})};
  const input={action:'record',account,id:'finding-1',incident:'incident-1',kind:'confirmed_evasion',occurredAt:Date.now()-1000,evidenceRef:'case-1',reviewerRef:'operator-1',reviewed:true};
  for(const value of [null,[],{...input,reviewed:false},{...input,secret:'x'},{...input,evidenceRef:'raw private text'},{...input,account:"' OR 1=1 --"},{...input,kind:'model_refusal'},{...input,occurredAt:Date.now()+60000}])assert.throws(()=>parse(JSON.stringify(value)));

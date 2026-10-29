@@ -14,7 +14,7 @@ async function denies(action,code){await assert.rejects(action,e=>e.code===code)
 async function rejects(action,pattern){await assert.rejects(action,pattern);cases++;}
 async function owner(stage='ready'){
  const account=id(),attempt=stage==='enrolling'?id():null;
- await run('INSERT INTO users VALUES(?,?,unixepoch())',account,account+'@example.invalid');
+ await run('INSERT INTO users(id,email,created_at) VALUES(?,?,unixepoch())',account,account+'@example.invalid');
  await run('INSERT INTO identity_accounts(account_id,policy_version,stage,auth_epoch,current_attempt_id,kit_generation,kit_verifier,completion_receipt_id) VALUES(?,1,?,1,?,?,?,?)',account,stage,attempt,stage==='enrolling'?0:1,stage==='enrolling'?null:'a'.repeat(64),stage==='ready'?id():null);
  if(attempt)await run("INSERT INTO identity_attempts VALUES(?,?,'enrollment','open',0,1,0,unixepoch())",attempt,account);
  return {account,attempt};
@@ -140,7 +140,7 @@ try{
  const rollback=effect(cp,sensitive);
  await rejects(()=>db.batch([rollback.statement,stmt('UPDATE identity_sessions SET proof_at=proof_at+1 WHERE id=?',cs.authority)]),/identity_session/);
  assert.equal(await row('SELECT 1 FROM test_effects WHERE id=?',rollback.effectId),null);await check(db,cp,sensitive);
- const rollbackEpoch=effect(cp);await rejects(()=>db.batch([stmt('UPDATE identity_accounts SET auth_epoch=auth_epoch+1 WHERE account_id=?',c.account),rollbackEpoch.statement,stmt('INSERT INTO users VALUES(?,?,unixepoch())',c.account,'duplicate@example.invalid')]),/UNIQUE/);
+ const rollbackEpoch=effect(cp);await rejects(()=>db.batch([stmt('UPDATE identity_accounts SET auth_epoch=auth_epoch+1 WHERE account_id=?',c.account),rollbackEpoch.statement,stmt('INSERT INTO users(id,email,created_at) VALUES(?,?,unixepoch())',c.account,'duplicate@example.invalid')]),/UNIQUE/);
  await check(db,cp,sensitive);await expectEffect(cp,true,sensitive);
  const second=await key(c);await expectEffect(cp,true,workspace);await expectEffect(cp,false,sensitive);
  const afterAdd=await resolve(db,request(cs.token));await run('DELETE FROM identity_credentials WHERE id=?',second);await expectEffect(afterAdd,false,sensitive);

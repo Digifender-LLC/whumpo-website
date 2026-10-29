@@ -230,3 +230,15 @@ Independent readback verified: homepage 200, anonymous Chat API 401 (proof requi
 ## After CI supersedes an owner-applied release
 
 Workers Builds redeploys main through `deploy ci` after an owner `apply`, so the Worker tags change. `status` then reports `reconciliation.result: "superseded by a later release"` with the live version IDs and tags (only when the journal is `deployed` and every step is confirmed; otherwise the original error stays). That journal is now historical: do not reconcile it. Start a new `prepare` for the next owner release.
+
+## WH-170 cost events and WH-201 email change schema — October 28, 2026 UTC (source only; cutover is the owner's)
+
+**SCHEMA CHANGE: merging requires an immediate test-platform cutover; do not merge other PRs between merge and cutover.** One combined change adds the `cost_events` table (WH-170) and the address-verification columns on `users`, `owner_email_changes`, `owner_email_change_limits` and `owner_security_reviews` (WH-201), with their triggers, lifecycle classes, closure and restore coverage and one new scheduled job (`email_changes`, allowlisted in the `maintenance_health` check). The automatic deploy (`pnpm run deploy ci`) refuses it until the control database is the new schema, so after the merge the owner (or the orchestrator on the owner's instruction) selects a **new empty D1 database**, runs `deploy prepare` and `apply`, and verifies the readback; nothing in this change deploys, applies or binds anything.
+
+| | Before (`ebd298c`, with WH-181 and WH-183) | After |
+| --- | --- | --- |
+| Complete-SQL digest (`sqlSha256`, what a review file pins) | `bfd003de9a2c449deeaf848e8fa5c61be1896756a91bcdea33fe7aaa078c1aae` | `7bb66ead8bb9385b5979e8a15979041a3c8c68f797895b146c46b034b4e7d3ef` |
+| Catalog-inventory digest (`expected.sha256`, what live readback compares) | `5c28ff788d6aa7cd47e9d8636d267cd19f7c8e28a38abee5bf107c7cf9f518d0` | `55e23c9a597d2281b4857c520ae0dcd564ab1cd8b27e6c7e9ef592909629ae68` |
+| Catalog objects / tables | 1083 / 222 | 1124 / 226 |
+
+Both digests are the output of `tools/current-schema.mjs` (`currentSchemaArtifact()`); the tenant registry baseline (`docs/tenant-classification.json`, `reviewedSchemaSha256`) carries the inventory digest as printed by the tool. The change adds four tables, two columns, one scheduled-job name and their indexes and triggers; it adds no migration, legacy reader or password field. No provider, secret, deployment or spend is involved. Nothing is migrated: as for every earlier schema change, the cutover initialises a new empty database, and test data in the old one is not carried over.

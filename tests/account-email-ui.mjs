@@ -1,0 +1,20 @@
+Error.stackTraceLimit=0;
+import assert from 'node:assert/strict';
+import {build} from 'esbuild';
+const {outputFiles}=await build({tsconfig:'tsconfig.frontend.json',stdin:{resolveDir:process.cwd(),contents:"export {AccountEmailSettings,changeText} from './frontend/src/account-email';export {queryClient} from './frontend/src/lib/api';export {QueryClientProvider} from '@tanstack/react-query';export {renderToStaticMarkup} from 'react-dom/server';export {createElement} from 'react';"},banner:{js:"import {createRequire as moduleRequire} from 'node:module';const require=moduleRequire(process.cwd()+'/package.json');"},plugins:[{name:'static-workspace-context',setup(b){b.onResolve({filter:/^\.\/workspace(?:-pages)?$/},args=>({path:args.path,namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},args=>({loader:'jsx',resolveDir:process.cwd(),contents:args.path==='./workspace'?"export function useWorkspace(){return {notify(){throw Error('No side effects during render')}}}":"import React from 'react';export function Section({title,description,children}){return <section><h2>{title}</h2><p>{description}</p>{children}</section>}export function Field({label,children}){return <label>{label}{children}</label>}"}));}}],bundle:true,format:'esm',platform:'node',write:false,jsx:'automatic'});
+const {AccountEmailSettings,changeText,queryClient,QueryClientProvider,renderToStaticMarkup,createElement}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+const base={version:1,email:'owner@example.com',verified:true,pending:null,undo:null,deliveryAvailable:true};
+function render(state){queryClient.clear();queryClient.setQueryData(['account-email'],{...base,...state});return renderToStaticMarkup(createElement(QueryClientProvider,{client:queryClient},createElement(AccountEmailSettings)))}
+let html=render({});
+for(const t of ['owner@example.com','Verified','Send confirmation','autoComplete="email"'])assert.ok(html.includes(t),t);
+for(const t of ['not connected yet','Confirmation code','Undo email change'])assert.ok(!html.includes(t),'unexpected '+t);
+html=render({verified:false,deliveryAvailable:false});
+for(const t of ['Not verified yet','Email confirmation is not connected yet, so email change requests are paused.'])assert.ok(html.includes(t),t);
+html=render({pending:{changeId:'c1',expiresAt:4102444800000}});
+for(const t of ['Confirmation code from the email','autoComplete="off"','>Confirm<','>Cancel<'])assert.ok(html.includes(t),t);
+assert.ok(!html.includes('Undo email change'));
+html=render({undo:{changeId:'c2',until:4102444800000}});
+assert.ok(html.includes('>Undo email change<')&&html.includes('You can undo the last email change until'));
+assert.equal(changeText({status:'delivery_unavailable'}),'Email confirmation is not connected yet. Nothing was changed.');
+assert.ok(changeText({status:'pending-confirmation',changeId:'c',expiresAt:1}).startsWith('Confirmation sent.'));
+queryClient.clear();console.log('Account email UI passed: address, verified state, paused notice, pending, undo and delivery_unavailable result.');

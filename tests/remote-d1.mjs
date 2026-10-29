@@ -29,7 +29,7 @@ try{
   const n=requests.length;await rejected(()=>db.batch(items));assert.equal(requests.length,n,'Invalid capabilities never reach transport');
  }
  // A real late SQL failure rolls back the synthetic batch; no sequential fallback.
- await rejected(()=>db.batch([db.prepare("INSERT INTO users VALUES('atomic','atomic@example.invalid','2026-10-02')"),db.prepare("INSERT INTO users VALUES('atomic','duplicate@example.invalid','2026-10-02')")]));
+ await rejected(()=>db.batch([db.prepare("INSERT INTO users(id,email,created_at) VALUES('atomic','atomic@example.invalid','2026-10-02')"),db.prepare("INSERT INTO users(id,email,created_at) VALUES('atomic','duplicate@example.invalid','2026-10-02')")]));
  assert.equal(await db.prepare("SELECT id FROM users WHERE id='atomic'").first(),null);
  for(const change of [()=>[],rows=>[...rows,...rows],rows=>rows.map(r=>({...r,success:false})),rows=>rows.map(r=>({...r,results:null}))]){
   mutateResult=change;await rejected(()=>first.all());
@@ -37,7 +37,7 @@ try{
  mutateResult=undefined;fail=true;let sent=requests.length;await rejected(()=>db.batch([first,second]));assert.equal(requests.length,sent+1);fail=false;
  // A lost committed mutation is reported, never sent twice. Exact domain
  // readback remains responsible for resolving a previously admitted operation.
- afterCommit=true;sent=requests.length;await rejected(()=>db.batch([db.prepare("INSERT INTO users VALUES('lost','lost@example.invalid','2026-10-02')")]));
+ afterCommit=true;sent=requests.length;await rejected(()=>db.batch([db.prepare("INSERT INTO users(id,email,created_at) VALUES('lost','lost@example.invalid','2026-10-02')")]));
  assert.equal(requests.length,sent+1);assert.equal((await db.prepare("SELECT count(*) AS n FROM users WHERE id='lost'").first()).n,1);
  // Exercise the actual current key initializer through this REST adapter shape.
  const m=await currentFixtureModules(['src/connection-rotation.ts']),rotation=await m.module('src/connection-rotation.ts');

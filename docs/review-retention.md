@@ -62,7 +62,7 @@ Class, lane and turnover values:
 | Counted table | Capacity trigger(s) | Caps | Class | Lane | Turnover today | Deleted by | WH-009 class |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `app_activation_reviews` | `app_activation_admit` | project 25 (filtered) · owner 25 (filtered) · owner 100 (filtered) · platform 2500 (filtered) · platform 5000 (filtered) | review | R1 | active-only | none | visitor-app-data |
-| `app_auth_challenges` | `app_challenge_admit` | project 50 · platform 1000 | inventory | R6 | expiring | app+trigger+cascade | visitor-identity |
+| `app_auth_challenges` | `app_challenge_admit` | project 5 (filtered) · project 50 · platform 1000 | inventory | R6 | expiring | app+trigger+cascade | visitor-identity |
 | `app_daily_usage` | `app_run_admit` | owner 100 (window) · platform 500 (window) · platform 1000 (window) | rate | R6 | window | app | visitor-app-data |
 | `app_deletion_receipts` | `app_deletion_receipt_capacity` | platform 1000 | receipt | R2 | expiring | app+cascade | visitor-identity |
 | `app_deletion_reviews` | `app_deletion_review_capacity` | platform 5000 | review | R1 | expiring | app+cascade | visitor-identity |
@@ -105,6 +105,7 @@ Class, lane and turnover values:
 | `contact_receipts` | `contact_submission_guard` | project 100 · owner 100 · platform 500 · platform 1000 | receipt | R2 | expiring | app+cascade | contacts |
 | `content_risk_evidence` | `content_risk_evidence_admit` | owner 10000 · platform 100000 | evidence | R5 | restricted | cascade | safety-cases |
 | `content_screening_decisions` | `content_screening_capacity` | owner 10000 · platform 100000 | evidence | R5 | restricted | cascade | safety-checks |
+| `cost_events` | `cost_events_capacity` | platform 9000 | inventory | R6 | lifetime | cascade | cost-events |
 | `directories` | `directory_capacity` | owner ≤62 · owner ≤250 · platform ≤1000 · platform ≤2000 | version | R4 | owner-removable | cascade | directories |
 | `directory_reviews` | `directory_review_insert` | project 25 (filtered) · owner 25 (filtered) · owner 100 (filtered) · platform 2500 (filtered) · platform 5000 (filtered) | review | R1 | active-only | cascade | directories |
 | `domain_claims` | `domain_claim_quota` | project 3 · owner 10 · platform 80 | inventory | R6 | owner-removable | trigger+cascade | domains-dns |
@@ -127,6 +128,8 @@ Class, lane and turnover values:
 | `operator_containments` | `operator_containment_admit` | platform 10000 | evidence | R5 | restricted | trigger | operator-containment |
 | `operator_retention_receipts` | `operator_retention_apply` | platform ≤10000 | evidence | R5 | restricted | trigger | operator-containment |
 | `operator_session_revocations` | `operator_session_revocation_admit` | platform 10000 | evidence | R5 | restricted | trigger | operator-containment |
+| `owner_email_change_limits` | `owner_email_change_limit_rate` | account 3 (filtered) · account 5 (filtered) · other 3 (filtered) | rate | R6 | expiring | app+cascade | owner-email-change-limits |
+| `owner_security_reviews` | `owner_security_review_new` | account 20 | inventory | R6 | expiring | app+cascade | owner-security-reviews |
 | `photo_scan_tickets` | `photo_scan_ticket_quota` | owner 100 · platform 5000 | evidence | R5 | lifetime | cascade | safety-checks |
 | `project_files` | `project_file_quota` | project 20 · owner 50 · platform 500 | inventory | R6 | owner-removable | trigger+cascade | project-media |
 | `project_files+file_cleanup` | `project_file_cleanup_capacity` | platform 500 | inventory | R6 | owner-removable | app+trigger+cascade | project-media |
@@ -157,7 +160,7 @@ Class, lane and turnover values:
 - **Ceiling set** (the WH-061 design set: retention-class families whose terminal rows used to count forever, read from the registry because the two withdrawal-only families have no count cap): `app_activation_reviews`, `app_migration_checks`, `app_page_reviews`, `app_restore_reviews`, `app_runs`, `backend_form_reviews`, `backend_nominations`, `backend_publication_reviews`, `backend_runs`, `backend_state_reviews`, `cloudflare_dns_actions`, `cms_discard_reviews`, `cms_draft_requests`, `cms_draft_requests+cms_edit_requests`, `cms_export_links`, `cms_import_reviews`, `cms_preview_links`, `cms_publication_reviews`, `cms_setup_reviews`, `cms_unpublish_reviews`, `composition_plans`, `directory_reviews`, `domain_connections`, `github_backups`, `github_grant_revocations`, `module_access_role_reviews`, `module_activation_reviews`, `project_spec_applies`, `service_client_activation_reviews`, `service_client_applies` (30).
 - **Converted set** (ceiling-set families whose caps WH-181 turned into active-only counts): `app_activation_reviews`, `app_migration_checks`, `app_page_reviews`, `app_restore_reviews`, `backend_form_reviews`, `backend_nominations`, `backend_publication_reviews`, `backend_state_reviews`, `cloudflare_dns_actions`, `cms_discard_reviews`, `cms_import_reviews`, `cms_publication_reviews`, `cms_setup_reviews`, `cms_unpublish_reviews`, `composition_plans`, `directory_reviews`, `domain_connections`, `github_backups`, `github_grant_revocations`, `module_access_role_reviews`, `module_activation_reviews` (21).
 - **Shared ceiling set, the B1 class** (ceiling-set families that still have a platform-wide lifetime cap, so one owner can exhaust them for everyone; WH-181 stopped on these, see "Families WH-181 did not convert"): `app_runs`, `backend_runs`, `cms_draft_requests`, `cms_draft_requests+cms_edit_requests`, `cms_export_links`, `cms_preview_links`, `project_spec_applies`, `service_client_activation_reviews`, `service_client_applies` (9).
-- **Other lifetime platform-wide ceilings** (version, inventory and evidence tables; routed to their owners below, not pruned by WH-061): `app_recovery_points`, `backend_imports`, `backend_versions`, `cms_instances`, `cms_media_uploads`, `cms_publication_media`, `cms_wordpress_sources`, `feature_preview_grants`, `photo_scan_tickets`, `service_client_versions` (10).
+- **Other lifetime platform-wide ceilings** (version, inventory and evidence tables; routed to their owners below, not pruned by WH-061): `app_recovery_points`, `backend_imports`, `backend_versions`, `cms_instances`, `cms_media_uploads`, `cms_publication_media`, `cms_wordpress_sources`, `cost_events`, `feature_preview_grants`, `photo_scan_tickets`, `service_client_versions` (11).
 <!-- review-retention:sets:end -->
 
 Findings beyond B1 that the inventory exposes:
@@ -165,7 +168,7 @@ Findings beyond B1 that the inventory exposes:
 - **Run receipts.** `app_runs` (platform 10,000) and `backend_runs` (platform 5,000) have lifetime platform caps. Only the visitor-erasure trigger removes `app_runs`, and only project cleanup removes `backend_runs`, so visitor and backend runs eventually stop for every tenant. Backend publication, application activation and migration reviews reference a `backend_runs.run_id`, so referenced runs must be kept.
 - **Protective actions inside capacity.** `cms_unpublish_reviews` (platform 500) and `github_grant_revocations` (owner 100) are protective actions that capacity can refuse. Unlike `directory_review_insert`, which already exempts `kind='unpublish'`, `backend_publication_reviews` and `app_page_reviews` do not exempt their withdrawals.
 - **Directory listing slots.** `directory_capacity` (platform ≤2,000 draft-plus-live listing slots) is a shared live-data ceiling. Listings are removable by their owner, but two owners with 20 projects each can reach the limit. This needs per-owner fair share; see the directory section.
-- **Other lifetime platform ceilings.** These belong to their own packets and are listed for routing only: versions and recovery points ([version retention](version-retention.md)), CMS rows (CMS testing is owner-deferred), quarantine imports (WH-014), photo scan tickets and preview grants (WH-012/WH-122).
+- **Other lifetime platform ceilings.** These belong to their own packets and are listed for routing only: versions and recovery points ([version retention](version-retention.md)), CMS rows (CMS testing is owner-deferred), quarantine imports (WH-014), photo scan tickets and preview grants (WH-012/WH-122), and shadow cost events (WH-170; deleted with the account, 9,000-row ceiling).
 
 ## Row states and what each must remain
 
@@ -324,7 +327,7 @@ The 25 admission inserts across 23 source files are wired; the families are list
 
 **Executive decisions recorded here (agent decisions, reversible):**
 
-- **The daily pass reports under the `applications` job.** `maintenance_health.job` has a CHECK listing the fourteen job names, so a `reviews` telemetry row would make every scheduled run fail visibly until the schema admits it, and schema changes were out of scope. The pass therefore runs in a `finally` of the `applications` job (the nearest lifecycle-cleanup job). Moving it to its own `reviews` job needs one CHECK change and a `maintenanceJobs` entry, at the next owner-run cutover.
+- **The daily pass reports as its own `reviews` job (changed October 28, 2026).** It first ran inside `applications` because `maintenance_health.job` had a CHECK without `reviews`; the WH-170/WH-201 schema change adds `reviews` to that CHECK, `maintenanceJobs` allowlists it and `src/index.ts` runs `maintainReviews` as a separate job entry, so its telemetry no longer hides behind `applications`.
 - **Digest and request hash derivation.** SQLite cannot hash, and the bind trigger only shape-checks values the source row lacks. Deriving them from the canonical row and its identity keeps them deterministic and covered by the seal.
 - **Inline fallback.** Admission availability outranks timely storage turnover; the daily pass and the next admission recover anything a failed turnover left.
 

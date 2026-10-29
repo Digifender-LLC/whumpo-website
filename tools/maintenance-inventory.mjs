@@ -6,6 +6,9 @@ const expiry=table=>queue(table,'expires_at<=?1','expires_at');
 const date=(column,modifier)=>`strftime('%Y-%m-%dT%H:%M:%fZ',${column},'${modifier}')`;
 const aged=(table,column,modifier)=>queue(table,`${date(column,modifier)}<=?1`,date(column,modifier));
 const healthMatch=`h.project_id=p.id AND h.publication_revision=s.revision AND h.contact_revision=COALESCE(c.revision,-1) AND h.form_review_id IS (SELECT id FROM backend_live_forms WHERE project_id=p.id)`;
+// Unix-millisecond columns (WH-201) shown as the ISO instants the report reads; `nowMs` is the observation instant in milliseconds.
+const ms=(column,modifier)=>`strftime('%Y-%m-%dT%H:%M:%fZ',(${column})/1000.0,'unixepoch'${modifier?`,'${modifier}'`:''})`;
+const nowMs="CAST(strftime('%s',?1) AS INTEGER)*1000";
 export const backlogInventory={
  chat_drafts:queue('chat_interactions',`removed_at IS NULL AND state!='submitted' AND ${date('COALESCE(draft_saved_at,created_at)','+7 days')}<=?1`,date('COALESCE(draft_saved_at,created_at)','+7 days'),2*3600000),
  connection_exchanges:queue('connection_oauth_exchanges',"state='dispatched'",'created_at',600000),
@@ -56,6 +59,13 @@ export const backlogInventory={
  review_turnover:{sql:Object.values(reviewFamilies).map(f=>`SELECT ${f.unix?"strftime('%Y-%m-%dT%H:%M:%fZ',r.expires_at,'unixepoch')":'r.expires_at'} AS due_at FROM ${f.table} r WHERE ${eligibleSql(f)}`).join(' UNION ALL '),threshold:daily},
  // Sealed receipts past the 30-day replay horizon, outside a safety hold.
  review_receipts:queue('review_receipts q',`${date('q.sealed_at','+30 days')}<=?1 AND NOT EXISTS(SELECT 1 FROM safety_preservation_holds WHERE released_at IS NULL AND scope='account' AND subject_user_id=q.owner_user_id) AND (q.project_id IS NULL OR NOT EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=q.project_id))`,date('q.sealed_at','+30 days')),
+ // WH-201: pending address changes past their expiry, closed changes still holding a plaintext address, closed changes past their
+ // 30-day retention, rate-limit evidence past 48 hours and compromise reviews past 90 days (all removed by the daily email_changes job).
+ email_change_expiry:queue('owner_email_changes',`state='pending' AND expires_at<=${nowMs}`,ms('expires_at'),2*3600000),
+ email_change_redaction:queue('owner_email_changes',`(new_address IS NOT NULL OR previous_address IS NOT NULL) AND (state NOT IN ('pending','confirmed') OR (state='confirmed' AND undo_until<=${nowMs}))`,ms('COALESCE(undo_until,expires_at)')),
+ email_change_retention:queue('owner_email_changes',`state!='pending' AND max(expires_at,COALESCE(undo_until,0))+2592000000<=${nowMs}`,ms('max(expires_at,COALESCE(undo_until,0))','+30 days')),
+ email_change_limits:queue('owner_email_change_limits',`at+172800000<=${nowMs}`,ms('at','+2 days')),
+ security_reviews:queue('owner_security_reviews',`COALESCE(committed_at,expires_at)+7776000000<=${nowMs}`,ms('COALESCE(committed_at,expires_at)','+90 days')),
 };
 export const operationInventory={
  standard_ai:{table:'standard_ai_requests',state:'state',states:['reserved','dispatched','uncertain'],time:'updated_at',guide:'docs/standard-ai-accounting.md'},
@@ -83,5 +93,6 @@ export const platformCounterInventory={
  build_job_pool:{sql:"SELECT count(*) AS used FROM build_jobs WHERE state='running' OR cleanup<>'released'",ceiling:16,window:'concurrent',enforcedBy:'build_job_admit',evidence:"(SELECT count(*) FROM build_jobs WHERE state='running' OR cleanup<>'released')>=16",note:'Shared build capacity in use; a slot is held until its cleanup is released (WH-074).'},
  operator_containments:{sql:'SELECT count(*) AS used FROM operator_containments',ceiling:10000,window:'retained',enforcedBy:'operator_containment_admit',evidence:'(SELECT count(*) FROM operator_containments)>=10000',note:'Containment and serving-stop audit rows are deleted only by reviewed cleanup 90 days after an explicit lift or close; at the ceiling new containment fails closed.'},
  ...Object.fromEntries(Object.values(reviewFamilies).filter(f=>f.active).map(f=>[`${f.table}_active`,{sql:`SELECT count(*) AS used FROM ${f.table} t WHERE ${f.active}`,ceiling:5000,window:'active',enforcedBy:f.capTrigger,evidence:`(SELECT count(*) FROM ${f.table} t WHERE ${f.active})>=5000`,note:'Pending and in-flight non-withdrawal rows only (WH-181); an owner already at 25 is refused from 2,500 (50%).'}])),
+ cost_events:{sql:'SELECT count(*) AS used FROM cost_events',ceiling:9000,window:'retained',enforcedBy:'cost_events_capacity',evidence:'(SELECT count(*) FROM cost_events)>=9000',note:'Shadow cost events (WH-170) are kept while the account exists; the ledger refuses new events at the ceiling (restore admission reads at most 10,000 rows of a table) until WH-171 retires closed periods. A refused emission never touches a receipt.'},
  operator_session_revocations:{sql:'SELECT count(*) AS used FROM operator_session_revocations',ceiling:10000,window:'retained',enforcedBy:'operator_session_revocation_admit',evidence:'(SELECT count(*) FROM operator_session_revocations)>=10000',note:'Revocation receipts are deleted only by reviewed cleanup 90 days after revocation; at the ceiling new revocation fails closed.'},
 };

@@ -20,6 +20,8 @@ const root=fileURLToPath(new URL('..',import.meta.url));
 // Worker import-graph checks below cover them; their behaviour and mutants are in tests/email-change-revokers.mjs.
 const moduleFiles=['src/email-change/policy.ts','src/email-change/change.ts','src/email-change/token.ts','src/email-change/compromise.ts','src/email-change/revocation.ts','src/email-change/provider-revokers.ts','src/email-change/connection-holds.ts'];
 const read=file=>readFileSync(join(root,file),'utf8');
+// WH-201: the storage slice, the trusted HTTP adapter and the maintenance job are NOT part of the pure module; they have their own checks below.
+const wiringFiles=['src/email-change/store.ts','src/email-change/http.ts','src/email-change/maintenance.ts'];
 const entry=moduleFiles.map(f=>`export * from './${f.replace(/\.ts$/,'')}';`).join('');
 /** Bundles the source (with optional mutated files) in esbuild's own process, so bundles can overlap the JS suites. */
 async function bundleSource(overrides={}){
@@ -703,10 +705,11 @@ async function suite(m){
   const revoker=m.createSyntheticRevoker();
   assert.equal(await revoker.revoke({provider:'example-provider',connectionId:'x-0001'}),'unrecognized');
  });
- await test('data classes are planned, hash-only for tokens and never claim deployment',async()=>{
+ await test('data classes: three are stored and registered (WH-201), the outbox stays planned, hash-only for tokens, nothing claims deployment',async()=>{
   const ids=m.dataClasses.map(c=>c.id);assert.equal(new Set(ids).size,ids.length);
   for(const c of m.dataClasses){for(const k of ['id','status','records','protection','secrets','retention','export','deletion'])assert.ok(c[k],`${c.id}.${k}`);}
-  assert.ok(m.dataClasses.filter(c=>c.status==='planned').length>=4);
+  assert.deepEqual(m.dataClasses.filter(c=>c.status==='planned').map(c=>c.id),['platform-notifications']);
+  assert.deepEqual(m.dataClasses.filter(c=>c.status==='current').map(c=>c.id).sort(),['connections','owner-email-changes','owner-email-change-limits','owner-security-reviews'].sort());
   assert.match(m.dataClasses.find(c=>c.id==='owner-email-changes').secrets,/SHA-256/);
   assert.match(m.dataClasses.find(c=>c.id==='platform-notifications').secrets,/never stored/);
   assert.match(m.dataClasses.find(c=>c.id==='connections').deletion,/only after an exact revocation receipt/);
@@ -852,19 +855,30 @@ await checkOnce('current recovery treats email as a lookup identifier with one g
  assert.match(src,/identityRecord\(input,\['version','email','key'\]\)/);
  assert.match(src,/if\(!a\|\|!equal\)throw invalidProof\(\);/);
 });
-// G-E1 is closed in the source module (verification time and sender, previous-state undo) but stays open in the schema:
-// WH-201 adds the columns and tables (including the security-review records) and must update this pin and the
-// module-isolation assertions together.
-await checkOnce('the stored account email still has no verification state and no edit path outside the unwired module (gap G-E1 in schema)',()=>{
+// G-E1 (WH-201): the schema now carries the verification state, the change, limit and security-review classes. The pin is positive:
+// the columns, tables and lockstep triggers exist, the address is still a plain unique label, and nothing profile-shaped edits it.
+await checkOnce('the stored account email has verification state, change records and lockstep triggers in the schema, and no edit path other than the stores (gap G-E1)',()=>{
  const users=read('src/workspace-identity/canonical-inputs.sql').match(/CREATE TABLE users \(([^;]*)\) STRICT;/)[1];
- assert.match(users,/email TEXT NOT NULL UNIQUE/);assert.ok(!/verif/i.test(users));
- const schema=read('src/workspace-identity/canonical-inputs.sql')+read('src/workspace-identity/schema.sql');
- assert.ok(!/email_change|security_review/i.test(schema));
+ assert.match(users,/email TEXT NOT NULL UNIQUE/);assert.match(users,/email_verified_at INTEGER/);assert.match(users,/email_verified_via TEXT[^\n]*email_verified_via='notify@whumpo\.com'/);
+ assert.ok(!/password|recovery_code|magic|otp/i.test(users),'no password or legacy proof column');
+ const platform=read('schema/platform.sql');
+ for(const table of ['owner_email_changes','owner_email_change_limits','owner_security_reviews'])assert.equal((platform.match(new RegExp('CREATE TABLE '+table+' \\('))??[]).length,1,table);
+ for(const trigger of ['users_email_lockstep','users_email_new','owner_email_change_confirm','owner_email_change_undo','owner_email_change_limit_rate','owner_security_review_commit'])assert.match(platform,new RegExp('CREATE TRIGGER '+trigger+'\\b'),trigger);
+ assert.ok(!/password|recovery_code|magic_link|otp/i.test(platform.slice(platform.indexOf('CREATE TABLE owner_email_changes'))),'no password or legacy proof field in the new classes');
  const profile=read('src/profile.ts');
  const allow=profile.match(/keys\.some\(k=>!\[([^\]]*)\]\.includes\(k\)\)/)[1];assert.ok(!allow.includes('email'));
  assert.match(profile,/SELECT name,about_me FROM user_profiles WHERE user_id=\? AND share_context=1/);
+ // The only writers of users.email are the signup insert and the change store (which runs under the lockstep trigger).
+ const writers=readdirSync(join(root,'src'),{recursive:true}).filter(f=>/\.ts$/.test(f)).map(f=>join('src',f)).filter(f=>/UPDATE users SET email/i.test(read(f)));
+ assert.deepEqual(writers,['src/email-change/store.ts']);
  assert.deepEqual(Object.keys(source.emailChangeBounds).filter(k=>/Ms$/.test(k)).sort(),['failureWindowMs','freshPasskeyMs','limitWindowMs','tokenLifetimeMs','undoWindowMs']);
  assert.deepEqual([source.emailChangeBounds.tokenLifetimeMs,source.emailChangeBounds.undoWindowMs],[HOUR,7*DAY],'decisions 1 and 2: recommended values');
+ // The schema repeats the decision values: one hour, seven days, 3/3/5 per day, day and hour.
+ const lifecycle=JSON.parse(read('docs/data-lifecycle.json'));
+ for(const [cls,table] of [['owner-email-changes','owner_email_changes'],['owner-email-change-limits','owner_email_change_limits'],['owner-security-reviews','owner_security_reviews']])assert.ok(lifecycle.classes.find(c=>c.id===cls&&c.tables.includes(table)&&c.storageStatus==='current'),`${cls} is registered in the lifecycle catalogue`);
+ for(const c of source.dataClasses.filter(c=>c.status==='current'&&c.id.startsWith('owner-')))assert.ok(lifecycle.classes.some(l=>l.id===c.id),c.id);
+ assert.match(platform,/expires_at=created_at\+3600000/);assert.match(platform,/undo_until=receipt_verified_at\+604800000/);
+ assert.match(platform,/NEW\.kind='request'[^\n]*>=3\)/);assert.match(platform,/NEW\.kind='send'[^\n]*>=3\)/);assert.match(platform,/NEW\.kind='failure'[^\n]*-3600000\)>=5\)/);
 });
 await checkOnce('the inactive support notice would address the unverified account email (gap G-E5)',()=>{
  assert.match(read('src/support-delivery.ts'),/recipient:row\.email/);
@@ -886,7 +900,7 @@ await checkOnce('the existing provider adapters settle revocation only on an exa
 });
 await checkOnce('the source module is pure, and no Worker entry reaches it',async()=>{
  // Every file in the module directory is listed, so a new file cannot escape the purity checks below.
- assert.deepEqual(readdirSync(join(root,'src/email-change')).sort(),moduleFiles.map(f=>f.slice('src/email-change/'.length)).sort());
+ assert.deepEqual(readdirSync(join(root,'src/email-change')).sort(),[...moduleFiles,...wiringFiles].map(f=>f.slice('src/email-change/'.length)).sort());
  const allowed=new Set(['../security','./policy','./change','./revocation']);
  const specifiersOf=text=>[...text.matchAll(/\bfrom\s+['"]([^'"]+)['"]|\bimport\s*\(\s*['"]([^'"]+)['"]/g)].map(x=>x[1]??x[2]);
  const effectful=/\bfetch\s*\(|XMLHttpRequest|WebSocket|process\.env|D1Database|\.prepare\(|\benv\.[A-Z_]+|console\./;
@@ -903,9 +917,16 @@ await checkOnce('the source module is pure, and no Worker entry reaches it',asyn
   const reached=new Set([worker]);
   for(const path of reached)for(const edge of inputs[path]?.imports??[])if(!edge.external&&Object.hasOwn(inputs,edge.path))reached.add(edge.path);
   assert.ok(Object.hasOwn(inputs,worker)&&(worker!=='src/index.ts'||reached.size>100),`${worker}: ${reached.size} modules`);
-  assert.deepEqual([...reached].filter(p=>/email-change/.test(p)),[],`${worker} reaches the email-change module`);
+  // WH-201: only the main Worker reaches the module, and only through the trusted adapter. The site, app and runtime Workers never do.
+  const reachedModule=[...reached].filter(p=>/email-change/.test(p));
+  if(worker==='src/index.ts')assert.ok(reachedModule.includes('src/email-change/http.ts')&&reachedModule.every(p=>p==='src/email-change/http.ts'||p==='src/email-change/store.ts'||p==='src/email-change/maintenance.ts'||moduleFiles.includes(p)),`${worker} reaches ${reachedModule}`);
+  else assert.deepEqual(reachedModule,[],`${worker} reaches the email-change module`);
  }
- assert.ok(Object.keys(inputs).every(p=>!/email-change/.test(p)),'no Worker entry parses the email-change module');
+ // No Chat, agent, model or other module imports it: the only importer outside the folder is the main Worker's route table.
+ const importers=readdirSync(join(root,'src'),{recursive:true}).filter(f=>/\.tsx?$/.test(f)).map(f=>join('src',f)).filter(f=>!f.startsWith('src/email-change/')&&/email-change/.test(read(f)));
+ assert.deepEqual(importers,['src/index.ts'],'the adapter is mounted by the main Worker only; no agent action reaches it');
+ for(const file of wiringFiles){assert.ok(!/ai-chat|site-agent|workspace-agent|agent-|chat-interactions/.test(read(file).split('\n').filter(l=>/^import /.test(l)).join('\n')),`${file} imports no Chat or agent module`);}
+ assert.ok(!/email-change|accountEmail/.test(read('src/ai-chat.ts')+read('src/site-agent.ts')),'no agent action can prepare, confirm, cancel or read a change');
 });
 await checkOnce('the source address rule is the WH-036 destination rule',()=>{
  const rule=text=>{const start=text.indexOf('/^[a-z0-9.!#'),end=text.indexOf('$/.test(address)',start);return start<0||end<0?null:text.slice(start,end+2);};

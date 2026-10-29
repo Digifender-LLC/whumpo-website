@@ -9,7 +9,7 @@ const originalFetch=globalThis.fetch;
 globalThis.fetch=async()=>assert.fail('Unconfigured empty fixture must not access a provider');
 try{
  const ready=crypto.randomUUID(),enrolling=crypto.randomUUID(),attempt=crypto.randomUUID(),expired=crypto.randomUUID(),current=crypto.randomUUID(),grant=crypto.randomUUID();
- sql.prepare("INSERT INTO users VALUES(?,?,'2026-10-01'),(?,?,'2026-10-01')").run(ready,'ready@example.invalid',enrolling,'enrolling@example.invalid');
+ sql.prepare("INSERT INTO users(id,email,created_at) VALUES(?,?,'2026-10-01'),(?,?,'2026-10-01')").run(ready,'ready@example.invalid',enrolling,'enrolling@example.invalid');
  sql.prepare("INSERT INTO identity_accounts(account_id,policy_version,stage,auth_epoch,kit_generation,kit_verifier,completion_receipt_id) VALUES(?,1,'ready',1,1,?,?)").run(ready,'a'.repeat(64),crypto.randomUUID());
  sql.prepare("INSERT INTO identity_accounts(account_id,policy_version,stage,auth_epoch,current_attempt_id) VALUES(?,1,'enrolling',1,?)").run(enrolling,attempt);
  sql.prepare("INSERT INTO identity_attempts VALUES(?,?,'enrollment','open',0,1,0,unixepoch()-7200)").run(attempt,enrolling);
@@ -22,6 +22,10 @@ try{
  sql.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Synthetic','Synthetic review turnover','draft','2026-10-01','2026-10-01')").run(reviewProject,ready);
  sql.prepare('INSERT INTO directories(project_id) VALUES(?)').run(reviewProject);
  for(const [review,at] of [[lapsedReview,'2000-01-01T00:00:00.000Z'],[liveReview,new Date(Date.now()+600000).toISOString()]])sql.prepare("INSERT INTO directory_reviews(id,user_id,project_id,kind,snapshot_json,digest,expected_revision,publication_revision,expires_at) VALUES(?,?,?,'edit','[]',?,?,0,?)").run(review,ready,reviewProject,'a'.repeat(64),review===lapsedReview?1:2,at);
+ // WH-201: a pending address change that expired three hours ago is closed (and its plaintext address removed) by the daily job.
+ const aged=Date.now()-3*3600000;
+ sql.prepare("INSERT INTO owner_email_change_limits(kind,account_id,at) VALUES('request',?,?)").run(ready,Date.now());
+ sql.prepare("INSERT INTO owner_email_changes(change_id,account_id,request_id,request_hash,new_address,new_address_hash,epoch,created_at,expires_at,state,revision,history,deliverable) VALUES('change-scheduled',?,'request-sched',?,'sched@example.invalid',?,1,?,?,'pending',1,'[\"pending\"]',0)").run(ready,'a'.repeat(64),'b'.repeat(64),aged,aged+3600000);
  let listCalls=0;
  const env={DB:db,FILES:{list:async()=>{listCalls++;return {objects:[]};},delete:async()=>assert.fail('Empty photo fixture must not delete')}};
  await assert.rejects(worker.scheduled({cron:'17 3 * * *'},env),/Scheduled maintenance or telemetry failed/);
@@ -35,9 +39,10 @@ try{
  assert.equal(sql.prepare('SELECT count(*) n FROM directory_reviews WHERE id=?').get(lapsedReview).n,0);
  assert.equal(sql.prepare('SELECT outcome FROM review_receipts WHERE family=? AND id=?').get('directory_reviews',lapsedReview).outcome,'expired');
  assert.equal(sql.prepare('SELECT count(*) n FROM directory_reviews WHERE id=?').get(liveReview).n,1);
+ assert.deepEqual({...sql.prepare("SELECT state,new_address FROM owner_email_changes WHERE change_id='change-scheduled'").get()},{state:'expired',new_address:null});
  let report=await maintenanceReport(db);
  assert.equal(report.jobs.find(j=>j.job==='traffic').state,'failed');
- for(const name of ['identity','chat_drafts','imports','fair_use','guest_previews','applications','contacts','photos'])assert.equal(report.jobs.find(j=>j.job===name).state,'completed',name);
+ for(const name of ['identity','chat_drafts','imports','fair_use','guest_previews','applications','reviews','contacts','photos','email_changes'])assert.equal(report.jobs.find(j=>j.job===name).state,'completed',name);
  for(const name of ['github','cloudflare'])assert.equal(report.jobs.find(j=>j.job===name).state,'skipped',name);
  assert.equal(listCalls,1);assert.ok(!JSON.stringify(report).includes('PRIVATE_SCHEDULER_CANARY'));
  failTraffic=false;await worker.scheduled({cron:'17 3 * * *'},env);

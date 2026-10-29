@@ -49,7 +49,7 @@ export async function revokeAppVisitor(db:D1Database, user:string, project:strin
  if (result.meta.changes<1) throw new BackendError(404,'Visitor unavailable');
 }
 
-export async function appPasskeyOptions(db:D1Database, project:string, kind:Kind, local=false, secret='') {
+export async function appPasskeyOptions(db:D1Database, project:string, kind:Kind, local=false, secret='', client='local') {
  const {access_id:access,revision} = await active(db,project), {rpID} = rp(local,project);
  let visitor='', invite='', session='';
  if (kind==='signup') {
@@ -73,8 +73,12 @@ export async function appPasskeyOptions(db:D1Database, project:string, kind:Kind
  const challengeToken=newSessionToken();
  await db.batch([
   db.prepare(`DELETE FROM app_auth_challenges WHERE expires_at<=${nowSQL}`),
-  db.prepare('INSERT INTO app_auth_challenges(token_hash,project_id,access_id,activation_revision,challenge,kind,visitor_id,invite_hash,session_hash) VALUES(?,?,?,?,?,?,?,?,?)').bind(await digest('challenge',challengeToken),project,access,revision,options.challenge,kind,visitor,invite,session)
- ]);
+  db.prepare('INSERT INTO app_auth_challenges(token_hash,project_id,access_id,activation_revision,challenge,kind,visitor_id,invite_hash,session_hash,client_hash) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(await digest('challenge',challengeToken),project,access,revision,options.challenge,kind,visitor,invite,session,await digest('client',project+'|'+client))
+ ]).catch(cause=>{
+  // A full table is a typed, retryable refusal, not a generic 503 (WH-004 B5): one client's live challenges are capped per project, and the project and platform caps remain.
+  if(/app_challenge_(?:client_)?capacity/.test(String(cause)))throw new BackendError(429,'Too many sign-in attempts are waiting. Try again in a few minutes.');
+  throw cause;
+ });
  return {options,challengeToken};
 }
 

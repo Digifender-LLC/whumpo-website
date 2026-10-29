@@ -6,7 +6,7 @@ const {reserveStandardAI,readStandardAI,dispatchStandardAI,markStandardAIUncerta
 const fixture=await databaseFixture({d1:true}),db=fixture.db;
 try{
  const user=crypto.randomUUID(),other=crypto.randomUUID(),id=crypto.randomUUID(),hash='a'.repeat(64),now=new Date().toISOString();
- for(const owner of [user,other])await db.prepare("INSERT INTO users VALUES(?,?,?)").bind(owner,owner+'@example.test',now).run();
+ for(const owner of [user,other])await db.prepare("INSERT INTO users(id,email,created_at) VALUES(?,?,?)").bind(owner,owner+'@example.test',now).run();
  const reservations=await Promise.all([reserveStandardAI(db,user,id,hash),reserveStandardAI(db,user,id,hash)]);
  assert.equal(reservations.filter(r=>r.created).length,1);
  assert.equal(await readStandardAI(db,other,id),null);
