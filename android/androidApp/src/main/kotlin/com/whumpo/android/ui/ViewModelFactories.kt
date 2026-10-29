@@ -12,7 +12,7 @@ import com.whumpo.android.ui.settings.SettingsViewModel
 
 // The ViewModels live in :shared; wiring them to the Android-only AppContainer stays here.
 fun chatViewModelFactory(c: AppContainer): ViewModelProvider.Factory =
-    viewModelFactory { initializer { ChatViewModel(c.chatDrafts, c.account) } }
+    viewModelFactory { initializer { ChatViewModel(c.chatDrafts, c.account, c.mobileApi, c.clientInfo, c.reauth) } }
 
 fun projectsViewModelFactory(c: AppContainer): ViewModelProvider.Factory =
     viewModelFactory { initializer { ProjectsViewModel(c.projects) } }
