@@ -74,6 +74,7 @@ import {contactPage} from './contact-page';
 import {ContactError,contactInbox,deleteContact,cleanupContacts} from './contacts';
 import {contactNotificationStatus,proposeContactDestination,removeContactDestination,requestContactVerification,confirmContactDestination,runContactDelivery} from './contact-notifications';
 import {contactDelivery} from './contact-email';
+import {dispatchJobs} from './job-dispatcher';
 import {handleModuleRequest,cleanupModuleRequestReceipts} from './shared-modules/api';
 import {ModuleError} from './shared-modules/policy';
 import {readOwnerRecords,readRecordsSummary,cleanupModuleRecords} from './shared-modules/records';
@@ -651,9 +652,9 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
 
 export default {
   async scheduled(_event: ScheduledController, env: Env) {
-    // WH-036 every-minute contact notice drain. No cron trigger for it is configured; the owner adds "* * * * *" only when
-    // activating (docs/contact-forms.md), and even then nothing runs unless contactDelivery(env) finds the reviewed provider and binding.
-    if(_event.cron==='* * * * *'){const delivery=contactDelivery(env);if(delivery)await runContactDelivery(env.DB,delivery.settings,delivery.sender);return;}
+    // The every-minute trigger is a job-type registry (docs/job-orchestration.md, WH-052 P-1). Contact notice delivery (WH-036) is
+    // its only type and does nothing unless contactDelivery(env) finds the reviewed provider and binding.
+    if(_event.cron==='* * * * *'){await dispatchJobs([{type:'contact_delivery',run:async ctx=>{const delivery=contactDelivery(env);if(delivery)await runContactDelivery(env.DB,delivery.settings,delivery.sender,{scan:25,claim:ctx.claim,provider:ctx.provider});}}]);return;}
     const imports={name:'imports' as const,run:()=>scanBackendImports(env.DB)};
     if(_event.cron==='47 * * * *'){
       await runMaintenance(env.DB,[imports,{name:'chat_drafts',run:()=>cleanupInteractionDrafts(env.DB)},
