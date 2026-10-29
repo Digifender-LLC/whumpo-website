@@ -1,5 +1,7 @@
 # ADR: durable background work
 
+> **October 29, 2026 (UTC):** [Durable job orchestration](job-orchestration.md) re-scores the options against current dependent requirements. It confirms D1/cron and adds the single per-minute dispatcher tick, lane fairness, the WH-156 attempt-bound ruling and measured adoption triggers. This record keeps the transition contract and traces.
+
 **WH-052 — October 2, 2026 (UTC). Engineering decision and local prototype; no runtime dispatcher, new schedule or service enabled.** Reconciles the September 30 ADR (`2dcbb7a`) with current source `e21a106`, WH-071 resource identities and the deployed WH-113/114 actor boundary. The [current job/outbox envelope](job-envelope.md) is the shared contract for subsequent adapters. The selected approach is **D1-owned job state and immutable business receipts, advanced by bounded scheduled passes**. Keep existing hourly/daily maintenance. Implement a separate short-interval dispatcher only when the corresponding domain feature is approved and its measured latency/cost gates pass. Queues is the next delivery option if measured demand requires it; Workflows is deferred.
 
 This decision does not activate scanning, account closure, notifications, customer deployments or a new paid service. [Safety](content-safety.md), [lifecycle policy](data-lifecycle.md), [maintenance](maintenance.md) and exact customer authorization remain authoritative. A job runner can resume authorized work; it cannot supply the missing approval.
