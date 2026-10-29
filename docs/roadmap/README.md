@@ -310,6 +310,8 @@ Earlier WH-021/044 now explicitly describe **owner-maintenance** inference/fundi
 
 **Accepted September 30, 2026; runtime implementation and activation remain planned.** The [Android feature contract](../android-app.md) defines a Kotlin/Compose owner app for Android 9/API 28+, starting with invited testers. The October 1 direction makes Chat primary, with Projects/Activity as supporting views and Settings for infrequent account work. Native interactions share the WH-105/106 contract; authenticated Custom Tabs handle unsupported elements, website previews, welcome/recovery and infrequent setup. Photos, Android sharing and FCM push belong in the first private beta.
 
+**October 29, 2026 platform decision:** the [platform ADR](../android-app-platform.md) selects Kotlin Multiplatform with Compose Multiplatform, Android first. The Mac path is the PWA now, then a gated Compose Desktop target after WH-087. The [owner app UX spec](../android/app-ux.md) holds the 8-package implementation plan and the owner tasks for Play, signing and Digital Asset Links. Docs only: there is no app code, Play action or deployment.
+
 | Sequence | Packets | Deliverable |
 | --- | --- | --- |
 | Contract first, P1 | WH-081 | Current-service mapping, v1 API/identity contract, supported journeys and acceptance matrix; consumes WH-105 interaction compatibility and WH-113 workspace identity. |
