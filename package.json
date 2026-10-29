@@ -29,6 +29,7 @@
     "test:saved-review-confirm-outage": "node tests/saved-review-confirm-outage.mjs && node tests/saved-review-confirm-outage.mjs --d1",
     "build": "node tools/build.mjs",
     "test:account-email-ui": "node tests/account-email-ui.mjs",
+    "test:security-review-ui": "node tests/security-review-ui.mjs",
     "test:billing-ui": "node tests/billing-ui.mjs",
     "test:billing": "node tests/billing.mjs",
     "test:runtime-ai": "node tests/runtime-ai.mjs",
