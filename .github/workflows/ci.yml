@@ -35,6 +35,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       - run: pnpm build
+      # The Workers Builds gate runs this too; checking it here catches an unregistered route before merge, not after.
+      - name: Every route is registered in the boundary audit
+        run: node tests/boundary-audit.mjs
       - name: Roadmap backlog is in sync
         run: node tools/roadmap.mjs validate && node tools/roadmap.mjs render --check
 
