@@ -225,14 +225,14 @@ object WhumpoTokens {
     const val RadiusXlDp: Int = 28
     const val RadiusFullDp: Int = 9999
 
-    const val Space-1Dp: Int = 4
-    const val Space-2Dp: Int = 8
-    const val Space-3Dp: Int = 12
-    const val Space-4Dp: Int = 16
-    const val Space-5Dp: Int = 20
-    const val Space-6Dp: Int = 24
-    const val Space-8Dp: Int = 32
-    const val Space-12Dp: Int = 48
+    const val Space1Dp: Int = 4
+    const val Space2Dp: Int = 8
+    const val Space3Dp: Int = 12
+    const val Space4Dp: Int = 16
+    const val Space5Dp: Int = 20
+    const val Space6Dp: Int = 24
+    const val Space8Dp: Int = 32
+    const val Space12Dp: Int = 48
 
     const val DurationFastMs: Int = 150
     const val DurationBaseMs: Int = 250

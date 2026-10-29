@@ -117,7 +117,7 @@ export function assertM3Contrast(tokens){
  assert.notEqual(m3Scheme(tokens,'light').primary.toLowerCase(),tokens.color.tokens.find(t=>t.name==='sky-blue').value,'light primary must not be Sky Blue');
 }
 
-const camel=n=>n.replace(/-([a-z])/g,(_,c)=>c.toUpperCase());
+const camel=n=>n.replace(/-([a-z0-9])/g,(_,c)=>c.toUpperCase());
 const pascal=n=>{const c=camel(n);return c[0].toUpperCase()+c.slice(1);};
 const argb=h=>'0xFF'+h.slice(1).toUpperCase()+'L';
 const f=v=>{const n=String(parseFloat(v));return (n.includes('.')?n:n+'.0')+'f';};
