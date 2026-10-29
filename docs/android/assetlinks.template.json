@@ -1,0 +1,15 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.get_login_creds",
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.whumpo.android",
+      "sha256_cert_fingerprints": [
+        "REPLACE_WITH_PLAY_APP_SIGNING_CERTIFICATE_SHA256_UPPERCASE_HEX_PAIRS_SEPARATED_BY_COLONS"
+      ]
+    }
+  }
+]

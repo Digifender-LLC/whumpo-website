@@ -10,9 +10,11 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -30,14 +32,30 @@ class NavigationTest {
         "settings" to "Settings",
     )
 
+    // The shell only shows for a signed-in account (WP5 sign-in gate), so the tests sign a fixture account in.
     @Before
+    fun signedIn() {
+        Fixtures.reset()
+        Fixtures.container.accountState.activate(Fixtures.ownerA)
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("nav-chat").fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    @After
     fun signedOut() = Fixtures.reset()
 
     @Test
     fun chatIsTheFirstDestination() {
         compose.onNodeWithTag("nav-chat").assertIsSelected()
         compose.onNode(isHeading() and hasText("Chat")).assertIsDisplayed()
-        compose.onNodeWithTag("unavailable-sign_in_required").assertIsDisplayed()
+        compose.onNodeWithTag("chat-composer").assertIsDisplayed()
+    }
+
+    @Test
+    fun signedOutShowsWelcomeInsteadOfTheShell() {
+        Fixtures.reset()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("auth-sign-in").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(isHeading() and hasText("Welcome back to Whumpo.")).assertIsDisplayed()
+        compose.onNodeWithTag("nav-chat").assertDoesNotExist()
     }
 
     @Test

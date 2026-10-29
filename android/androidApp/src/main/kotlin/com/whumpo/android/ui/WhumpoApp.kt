@@ -3,6 +3,7 @@ package com.whumpo.android.ui
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.whumpo.android.AppContainer
+import com.whumpo.android.ui.auth.AuthGate
 import com.whumpo.android.ui.activity.ActivityScreen
 import com.whumpo.android.ui.chat.ChatScreen
 import com.whumpo.android.ui.projects.ProjectsScreen
@@ -18,19 +19,22 @@ import com.whumpo.android.ui.shell.WhumpoShell
  */
 @Composable
 fun WhumpoApp(container: AppContainer) {
-    // No connectivity source yet, so the offline banner stays off until the API client reports one.
-    WhumpoShell { destination, width ->
-        AdaptivePanes(
-            width = width,
-            list = {
-                when (destination) {
-                    TopDestination.Chat -> ChatScreen(viewModel(factory = chatViewModelFactory(container)))
-                    TopDestination.Projects -> ProjectsScreen(viewModel(factory = projectsViewModelFactory(container)))
-                    TopDestination.Activity -> ActivityScreen(viewModel(factory = activityViewModelFactory(container)))
-                    TopDestination.Settings -> SettingsScreen(viewModel(factory = settingsViewModelFactory(container)))
-                }
-            },
-            detail = { DetailPlaceholder() },
-        )
+    // The shell only shows for a signed-in account; signed out, the sign-in screens (WP5) take its place.
+    AuthGate(container.auth) {
+        // No connectivity source yet, so the offline banner stays off until the API client reports one.
+        WhumpoShell { destination, width ->
+            AdaptivePanes(
+                width = width,
+                list = {
+                    when (destination) {
+                        TopDestination.Chat -> ChatScreen(viewModel(factory = chatViewModelFactory(container)))
+                        TopDestination.Projects -> ProjectsScreen(viewModel(factory = projectsViewModelFactory(container)))
+                        TopDestination.Activity -> ActivityScreen(viewModel(factory = activityViewModelFactory(container)))
+                        TopDestination.Settings -> SettingsScreen(viewModel(factory = settingsViewModelFactory(container)))
+                    }
+                },
+                detail = { DetailPlaceholder() },
+            )
+        }
     }
 }

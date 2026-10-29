@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -110,7 +111,7 @@ class AccountStateTest {
     }
 
     @Test
-    fun signOutFromSettingsClearsDraftsAndReturnsToSignedOutChat() {
+    fun signOutFromSettingsClearsDraftsAndReturnsToWelcome() {
         store.activate(Fixtures.ownerA)
         store.write(Fixtures.ownerA, StateSlot.CHAT_DRAFT, "erase me")
         val scenario = ActivityScenario.launch(MainActivity::class.java)
@@ -120,8 +121,8 @@ class AccountStateTest {
         compose.waitUntil(5_000) { store.activeAccount.value == null }
         assertFalse(stateDir.exists())
 
-        compose.onNodeWithTag("nav-chat").performClick()
-        compose.onNodeWithTag("unavailable-sign_in_required").assertIsDisplayed()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("auth-sign-in").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("auth-sign-in").assertIsDisplayed()
         scenario.close()
     }
 }
