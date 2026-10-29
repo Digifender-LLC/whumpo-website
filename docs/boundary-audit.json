@@ -8678,14 +8678,22 @@
   },
   {
    "id": "scheduled-contact-delivery",
-   "title": "Every-minute contact notice drain (outside runMaintenance)",
+   "title": "Every-minute job-type registry (contact notice drain; outside runMaintenance)",
    "surface": "scheduled",
    "privileged": [
     "notification"
    ],
    "authorityClass": "Worker cron \"* * * * *\" + reviewed provider variables + send_email binding (all three required)",
-   "reach": "Cloudflare cron trigger only; configured in wrangler.jsonc (the inline comment saying no cron is configured is stale, R8). Live activation state is unverified.",
+   "reach": "Cloudflare cron trigger only; configured in wrangler.jsonc (WH-052 P-1 replaced the stale inline comment; the branch is the job-type registry and contact delivery is its only type). Live activation state is unverified.",
    "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "job",
+     "match": "* * * * * dispatchJobs",
+     "methods": [
+      "SCHEDULED"
+     ]
+    },
     {
      "file": "src/index.ts",
      "kind": "job",

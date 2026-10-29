@@ -155,7 +155,7 @@ export async function contactSendsInWindow(db:Pick<D1Database,'prepare'>,now=new
  * beyond that remain in the inbox only. Contained projects (WH-050) queue and send nothing. Past the ceiling nothing is queued and due
  * notices are cancelled (`ceiling`). Invoked by the every-minute scheduled handler only after owner activation (docs/contact-forms.md).
  */
-export async function runContactDelivery(db:Pick<D1Database,'prepare'|'batch'>,settings:ContactNotificationSettings|null,sender:ContactSender,options:{now?:Date;limit?:number;timeoutMs?:number}={}){
+export async function runContactDelivery(db:Pick<D1Database,'prepare'|'batch'>,settings:ContactNotificationSettings|null,sender:ContactSender,options:{now?:Date;limit?:number;scan?:number;timeoutMs?:number;claim?:(owner:string)=>'ok'|'owner-cap'|'stop';provider?:<T>(call:()=>Promise<T>)=>Promise<T>}={}){
  const result={enabled:false,queued:0,accepted:0,retried:0,failed:0,cancelled:0,refused:0};
  if(!settings)return result;
  result.enabled=true;
@@ -169,7 +169,7 @@ export async function runContactDelivery(db:Pick<D1Database,'prepare'|'batch'>,s
   const insert=await db.prepare("INSERT INTO contact_notification_outbox(id,user_id,project_id,destination_id,kind,submission_id,idempotency_key,provider,review,created_at,next_attempt_at,expires_at) SELECT ?,?,?,?,'new_message',?,?,?,?,?,?,? WHERE (SELECT count(*) FROM contact_notification_outbox WHERE destination_id=? AND kind='new_message' AND created_at>?)<10 AND (SELECT count(*) FROM contact_notification_outbox WHERE destination_id=? AND kind='new_message' AND created_at>?)<50 ON CONFLICT(idempotency_key) DO NOTHING").bind(crypto.randomUUID(),c.user_id,c.project_id,c.destination_id,c.submission_id,'message:'+c.submission_id+':'+c.destination_id,settings.provider,settings.review,iso,iso,expires,c.destination_id,hour,c.destination_id,dayAgo).run();
   result.queued+=insert.meta.changes;
  }
- const due=(await db.prepare("SELECT o.id,o.user_id,o.project_id,o.kind,o.submission_id,o.idempotency_key,o.attempts,o.expires_at,d.state AS dstate,d.address,d.verification_code AS code,d.verification_expires_at AS code_expires_at,(SELECT 1 FROM contact_submissions s WHERE s.id=o.submission_id) AS submission_exists,EXISTS(SELECT 1 FROM operator_contained_projects c WHERE c.project_id=o.project_id AND c.scope='contact') AS contained FROM contact_notification_outbox o JOIN contact_notification_destinations d ON d.id=o.destination_id WHERE o.state='queued' AND o.next_attempt_at<=? ORDER BY o.next_attempt_at,o.id LIMIT ?").bind(iso,limit).all<Due>()).results;
+ const due=(await db.prepare("SELECT o.id,o.user_id,o.project_id,o.kind,o.submission_id,o.idempotency_key,o.attempts,o.expires_at,d.state AS dstate,d.address,d.verification_code AS code,d.verification_expires_at AS code_expires_at,(SELECT 1 FROM contact_submissions s WHERE s.id=o.submission_id) AS submission_exists,EXISTS(SELECT 1 FROM operator_contained_projects c WHERE c.project_id=o.project_id AND c.scope='contact') AS contained FROM contact_notification_outbox o JOIN contact_notification_destinations d ON d.id=o.destination_id WHERE o.state='queued' AND o.next_attempt_at<=? ORDER BY o.next_attempt_at,o.id LIMIT ?").bind(iso,options.scan??limit).all<Due>()).results;
  const cancel=async(row:Due,error:string|null)=>{if((await db.prepare("UPDATE contact_notification_outbox SET state='cancelled',last_error=? WHERE id=? AND state='queued'").bind(error,row.id).run()).meta.changes){if(error==='ceiling')result.refused++;else result.cancelled++;}};
  const fail=async(row:Due,error:'rejected'|'exhausted'|'uncertain')=>{const changed=(await db.prepare("UPDATE contact_notification_outbox SET state='failed',last_error=? WHERE id=? AND state='queued'").bind(error,row.id).run()).meta.changes;if(changed)result.failed++;return changed>0;};
  for(const row of due){
@@ -179,6 +179,8 @@ export async function runContactDelivery(db:Pick<D1Database,'prepare'|'batch'>,s
   if(row.kind==='new_message'&&(row.dstate!=='verified'||!row.submission_exists)){await cancel(row,null);continue;}
   if(row.kind==='verification'&&(row.dstate!=='unverified'||!row.code||!row.code_expires_at||row.code_expires_at<=iso||!row.idempotency_key.endsWith(':'+row.code))){await cancel(row,'expired');continue;}
   if(overCeiling){await cancel(row,'ceiling');continue;}
+  // Dispatcher caps (WH-052 P-1) apply only to rows about to be claimed; the cancellations above cost no slot.
+  const slot=options.claim?.(row.user_id)??'ok';if(slot==='stop')break;if(slot==='owner-cap')continue;
   const attempts=row.attempts+1,next=new Date(now.getTime()+backoffMinutes(attempts)*60000).toISOString();
   // Claim the attempt (and push the retry time) and count it against the ceiling in one transaction before sending, so a crash
   // cannot hot-loop, double-count or send past the ceiling. The ledger trigger refuses the whole claim past the ceiling.
@@ -194,7 +196,7 @@ export async function runContactDelivery(db:Pick<D1Database,'prepare'|'batch'>,s
   }catch(cause){if(String(cause).includes('contact_send_ceiling')){overCeiling=true;await cancel(row,'ceiling');continue;}throw cause;}
   if(!claimed)continue;
   let outcome:ContactProviderOutcome;
-  try{outcome=await withTimeout(sender({outboxId:row.id,idempotencyKey:row.idempotency_key,kind:row.kind,projectId:row.project_id,recipient:row.address,...(row.kind==='verification'?{verificationCode:row.code!}:{})},settings),timeout);}catch{outcome={accepted:false,retryable:false,uncertain:true};}
+  try{outcome=await (options.provider??(call=>call()))(()=>withTimeout(sender({outboxId:row.id,idempotencyKey:row.idempotency_key,kind:row.kind,projectId:row.project_id,recipient:row.address,...(row.kind==='verification'?{verificationCode:row.code!}:{})},settings),timeout));}catch{outcome={accepted:false,retryable:false,uncertain:true};}
   if(outcome.accepted){
    const ref=typeof outcome.providerRef==='string'&&outcome.providerRef.length>=1&&outcome.providerRef.length<=100?outcome.providerRef:null;
    await db.prepare("UPDATE contact_notification_outbox SET state='accepted',accepted_at=?,provider_ref=? WHERE id=? AND state='queued'").bind(iso,ref,row.id).run();result.accepted++;
