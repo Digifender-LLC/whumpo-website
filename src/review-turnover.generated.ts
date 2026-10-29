@@ -364,7 +364,7 @@ export const reviewFamilies:Record<string,ReviewFamily>={
 /** The family's outcome for a row the guard allows to leave (superseded only when no other outcome applies). */
 export const outcomeSql=(f:ReviewFamily)=>f.superseded?`COALESCE(${f.outcome},CASE WHEN ${f.superseded} THEN 'superseded' END)`:f.outcome;
 export const scopeColumn=(f:ReviewFamily)=>f.project?'project_id':'user_id';
-/** Policy terminalGraceMs: a row is compacted only one hour after its review expired, whatever its outcome, so a retried confirmation of a just-applied review still finds its row. A superseded withdrawal has no grace: it is already replaced, and bounding withdrawal rows by target depends on it leaving at once. */
-export const settledSql=(f:ReviewFamily)=>(f.unix?'r.expires_at<=unixepoch()-3600':"r.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')")+(f.superseded?' OR '+f.superseded:'');
+/** Policy terminalGraceMs: a row is compacted only one hour after its review expired, whatever its outcome, so a retried confirmation of a just-applied review still finds its row. A pending withdrawal that a newer one has superseded has no grace: it is already replaced, and bounding withdrawal rows by target depends on it leaving at once. */
+export const settledSql=(f:ReviewFamily)=>(f.unix?'r.expires_at<=unixepoch()-3600':"r.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')")+(f.superseded?' OR ('+f.outcome+' IS NULL AND '+f.superseded+')':'');
 /** Row filter for FROM table r: terminal, unreferenced, unheld, outside the history window and past the grace. */
 export const eligibleSql=(f:ReviewFamily)=>`NOT (${f.ineligible}) AND ${outcomeSql(f)} IS NOT NULL AND (${settledSql(f)})`;
