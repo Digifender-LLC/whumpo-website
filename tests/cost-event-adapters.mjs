@@ -518,10 +518,10 @@ function staticScope(texts=sourceText){
   assert.ok(!/prototypes|cost-events[.]mjs/.test(text),file);
  }
  assert.match(contract,/crypto\.subtle\.digest\('SHA-256'/);
- // WH-170: only the append-only store and the emission module import the contract or adapters. No route, report or other consumer does.
+ // WH-170: only the append-only store, the emission module and the WH-171 reconciliation report import the contract or adapters. No route, report or other consumer does.
  const users=[...walk('src'),...walk('frontend'),...walk('public-app')].filter(f=>/\.(?:ts|tsx|js|mjs)$/.test(f)&&!/src\/cost-event(?:s|-adapters)\.ts$/.test(f)).filter(f=>/cost-event(?:s|-adapters)/.test(readFileSync(new URL('../'+f,import.meta.url),'utf8')));
  const wired=['src/model-costs.ts','src/gateway-spend.ts','src/storage-budget.ts','src/ai-chat.ts','src/standard-ai-recovery.ts'];
- assert.deepEqual(users.filter(f=>!/src\/cost-event-(?:store|emission)\.ts$/.test(f)&&!wired.includes(f)),[]);
+ assert.deepEqual(users.filter(f=>!/src\/cost-(?:event-(?:store|emission)|reconcile)\.ts$/.test(f)&&!wired.includes(f)),[]);
  // The producers reach it only through the emission module, after their receipt transition; none imports the store or the pure modules.
  for(const file of wired)assert.ok(/from '\.\/cost-event-emission'/.test(read(file))&&!/cost-event-(?:store|adapters)|cost-events'/.test(read(file)),file);
  assert.ok(!/cost-event/.test(read('src/task-cost-report.ts')));
