@@ -205,6 +205,78 @@
      "contains": "no flag means a remote write"
     }
    ]
+  },
+  {
+   "id": "B8",
+   "severity": "low",
+   "title": "cost-reconcile echoed the start of a private statement file on a JSON parse error",
+   "status": "resolved October 29, 2026 in source: a SyntaxError is reported as INVALID_JSON, never by its message (regression in tests/cost-reconcile.mjs; tool not run remotely)",
+   "owner": "Operator tooling maintainers (WH-171)",
+   "reproduction": "node tests/cost-reconcile.mjs [--d1] (case: a malformed statement file is reported by code, never by its content)",
+   "evidence": [
+    {
+     "file": "tools/cost-reconcile.mjs",
+     "contains": "error instanceof SyntaxError?'INVALID_JSON'"
+    },
+    {
+     "file": "tests/cost-reconcile.mjs",
+     "contains": "a malformed statement file is reported by code, never by its content"
+    }
+   ]
+  },
+  {
+   "id": "B9",
+   "severity": "low",
+   "title": "Contact notice intake: one owner's cap-refused submissions kept every other tenant's notices out of the outbox",
+   "status": "resolved October 29, 2026 in source: the intake candidate query skips destinations at their hourly/daily cap (regression on SQLite and local D1; not deployed; delivery not yet active)",
+   "owner": "Contact notification maintainers (WH-036)",
+   "reproduction": "node tests/boundary-contact-notice-intake.mjs [--d1] (regression, exit 0; fails with the candidate predicate removed)",
+   "evidence": [
+    {
+     "file": "src/contact-notifications.ts",
+     "contains": "AND (SELECT count(*) FROM contact_notification_outbox o WHERE o.destination_id=d.id AND o.kind='new_message' AND o.created_at>?)<10"
+    },
+    {
+     "file": "tests/boundary-contact-notice-intake.mjs",
+     "contains": "another tenant's notice is queued although the noisy destination is at its cap"
+    }
+   ]
+  },
+  {
+   "id": "B10",
+   "severity": "low",
+   "title": "Every-minute job dispatcher (#446): one owner's due backlog filled the 25-row contact drain scan, so its per-owner cap starved other tenants",
+   "status": "resolved October 29, 2026 in source: under the dispatcher the drain scans at most perOwner rows per owner (regression on SQLite and local D1; not deployed)",
+   "owner": "Job orchestration and contact notification maintainers (WH-052, WH-036)",
+   "reproduction": "node tests/boundary-contact-notice-intake.mjs [--d1] (regression, exit 0; fails with the per-owner scan bound removed)",
+   "evidence": [
+    {
+     "file": "src/contact-notifications.ts",
+     "contains": "WHERE o.owner_rank<=?"
+    },
+    {
+     "file": "tests/boundary-contact-notice-intake.mjs",
+     "contains": "the bystander's notice is sent in the first minute despite the noisy backlog"
+    }
+   ]
+  },
+  {
+   "id": "B11",
+   "severity": "low",
+   "title": "Workspace layout receipts grow without any cap or retention, so one owner can grow the shared control database",
+   "status": "open: traced in source, not executed; the fix is a cap trigger or pruning, a schema change for the coordinated cutover (deferred)",
+   "owner": "Workspace views and platform schema maintainers; owner decision on layout-history retention",
+   "reproduction": "Static trace: POST /api/workspace/views/v1/mutate -> mutateLayout inserts one immutable row per accepted change; no count trigger, DELETE or maintenance job exists",
+   "evidence": [
+    {
+     "file": "src/workspace-layout.ts",
+     "contains": "db.prepare('INSERT INTO workspace_layout_receipts(request_id,user_id,request_hash,request_json,from_revision,to_revision,previous_json,layout_json,origin_turn_id,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)')"
+    },
+    {
+     "file": "schema/platform.sql",
+     "contains": "CREATE TRIGGER workspace_layout_receipt_immutable BEFORE UPDATE ON workspace_layout_receipts"
+    }
+   ]
   }
  ],
  "families": [
@@ -8724,11 +8796,15 @@
     },
     "tenant": {
      "state": "evidenced",
-     "detail": "Notices go only to each project's verified destination and contain no visitor content; contained projects are cancelled.",
+     "detail": "Notices go only to each project's verified destination and contain no visitor content; contained projects are cancelled. One owner cannot starve others: intake skips destinations at their cap (B9) and the dispatcher's drain scans at most its per-owner cap of each owner's rows (B10).",
      "enforcedAt": [
       {
        "file": "src/contact-notifications.ts",
        "contains": "if(row.contained){await cancel(row,'contained');continue;}"
+      },
+      {
+       "file": "src/contact-notifications.ts",
+       "contains": "WHERE o.owner_rank<=?"
       }
      ],
      "tests": [
@@ -8736,6 +8812,16 @@
        "file": "tests/contact-notifications.mjs",
        "contains": "assert.equal(r.queued,10,'At most 10 notices an hour per destination');",
        "asserts": "per-destination hourly cap"
+      },
+      {
+       "file": "tests/boundary-contact-notice-intake.mjs",
+       "contains": "another tenant's notice is queued although the noisy destination is at its cap",
+       "asserts": "B9: a capped destination does not block another tenant's intake"
+      },
+      {
+       "file": "tests/boundary-contact-notice-intake.mjs",
+       "contains": "the bystander's notice is sent in the first minute despite the noisy backlog",
+       "asserts": "B10: a 30-row backlog does not block another tenant's drain"
       }
      ]
     },
@@ -8789,14 +8875,6 @@
      "file": "tools/configure-github-app.mjs",
      "kind": "tool",
      "match": "gh-cli+wrangler-secret",
-     "methods": [
-      "CLI"
-     ]
-    },
-    {
-     "file": "tools/cost-reconcile.mjs",
-     "kind": "tool",
-     "match": "wrangler-remote",
      "methods": [
       "CLI"
      ]
@@ -9179,6 +9257,14 @@
      ]
     },
     {
+     "file": "tools/cost-reconcile.mjs",
+     "kind": "tool",
+     "match": "wrangler-remote",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
      "file": "tools/report-connections.mjs",
      "kind": "tool",
      "match": "via-import",
@@ -9258,6 +9344,11 @@
        "file": "tests/remote-d1.mjs",
        "contains": "for(const items of [[],[{}],[foreign],[{sql:'SELECT 1',params:[]}],null]){",
        "asserts": "only registered statements reach the transport"
+      },
+      {
+       "file": "tests/cost-reconcile.mjs",
+       "contains": "a malformed statement file is reported by code, never by its content",
+       "asserts": "B8: cost-reconcile errors carry a code, never statement text"
       }
      ]
     }

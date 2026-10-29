@@ -5,8 +5,8 @@ import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
 import {paidPlan} from './helpers/paid-plan.mjs';
 Error.stackTraceLimit=0;
-// WH-004 F2/F3: one owner's contact notices must not keep other tenants' notices out of the outbox (F2: submissions a
-// per-destination cap refuses) or out of the every-minute drain (F3: a backlog filling the dispatcher's scan window).
+// WH-004 B9/B10: one owner's contact notices must not keep other tenants' notices out of the outbox (B9: submissions a
+// per-destination cap refuses) or out of the every-minute drain (B10: a backlog filling the dispatcher's scan window).
 // Synthetic provider only; SQLite by default, local D1 with --d1.
 const m=await currentSiteFixtureHandlers(),store=await databaseFixture({d1:process.argv.includes('--d1')}),db=store.db,N=m.contactNotifications;
 const bundled=await build({stdin:{contents:"export * from './src/job-dispatcher';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
@@ -43,7 +43,7 @@ try{
  // Personal allows five live sites, so one owner can hold three verified destinations.
  const noisy=await owner('personal'),quiet=await owner();
  const noisyA=await noisy.project(),noisyB=await noisy.project(),noisyC=await noisy.project(),quietSite=await quiet.project();
- // F2. The noisy owner sends 20 messages to one form in one hour (the project's hourly cap; two connections at 10 each).
+ // B9. The noisy owner sends 20 messages to one form in one hour (the project's hourly cap; two connections at 10 each).
  for(let i=0;i<20;i++)await noisyA.submit();
  await N.runContactDelivery(db,settings,async()=>({accepted:false,retryable:true}),{scan:0});
  assert.equal(await queued(noisyA.project),10,'the destination hourly cap queues 10');
@@ -52,7 +52,7 @@ try{
  await N.runContactDelivery(db,settings,send,{scan:0});
  assert.equal(await queued(quietSite.project),1,"another tenant's notice is queued although the noisy destination is at its cap");
  assert.equal(await queued(noisyA.project),10,'the noisy destination stays at its hourly cap');
- // F3. Twenty more noisy notices from two other projects, all due before the bystander's: 30 > the 25-row scan window.
+ // B10. Twenty more noisy notices from two other projects, all due before the bystander's: 30 > the 25-row scan window.
  for(const p of [noisyB,noisyC])for(let i=0;i<10;i++)await p.submit();
  for(let i=0;i<3;i++)await N.runContactDelivery(db,settings,send,{scan:0});
  assert.equal(await queued(noisyB.project)+await queued(noisyC.project),20);
