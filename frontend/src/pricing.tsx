@@ -12,7 +12,7 @@ export function Pricing() {
   const [audience,setAudience]=useState<Audience>('personal');
   const [billingInterval,setBillingInterval]=useState<BillingInterval>('monthly');
   return <section id="pricing" className="landing-container py-24" aria-labelledby="pricing-heading">
-    <div className="text-center"><p className="text-xs font-semibold tracking-[.16em] uppercase text-link">Room for your next chapter</p><h2 id="pricing-heading" className="mt-4 text-4xl font-bold sm:text-5xl">Start small. Dream bigger.</h2><p className="mt-4 text-ink-muted">Find room for your next idea. The invite-only preview is free; paid plans are not available yet.</p></div>
+    <div className="text-center"><p className="text-xs font-semibold tracking-[.16em] uppercase text-link">Room for your next chapter</p><h2 id="pricing-heading" className="mt-4 text-display">Start small. Dream bigger.</h2><p className="mt-4 text-ink-muted">Find room for your next idea. The invite-only preview is free; paid plans are not available yet.</p></div>
     <div className="mt-10 flex flex-wrap items-center justify-center gap-x-8 gap-y-4">
       <Switch label="Plans for" value={audience} options={[{value:'personal',label:'Personal'},{value:'business',label:'Business'}]} onChange={setAudience}/>
       <Switch label="Billing" value={billingInterval} options={[{value:'monthly',label:'Monthly'},{value:'annual',label:'Annual'}]} onChange={setBillingInterval}/>

@@ -262,3 +262,16 @@ Owner-instructed test-platform cutover for the WH-203 review-cap fix and the WH-
 - Owner invitation file (private, never the code): `invitation-f27e0485484f.txt`.
 - Superseded databases `whumpo-control-2026-10-27`, `-27b` and `-27c` were deleted on owner approval (Q-003, 2026-10-29). `whumpo-control-2026-10-28` is kept.
 - Not done: owner re-enrollment.
+
+## Test-platform cutover — October 30, 2026 UTC
+
+Owner-instructed test-platform cutover for schema batch 2: #465 (layout receipt cap, live-digest CHECK, `account_closures`, `rule_approvals`). Source `b3c0172`; the binding commit `cec6b06` merged as PR #469. Main's Workers Builds were green after #469.
+
+- Release: `dadb6080-8f2e-4057-a7a5-604da9e6d110`.
+- New empty database: `whumpo-control-2026-10-30` (`ecad1001-f1a7-4a92-be3e-17adb8e9b23c`). Complete-SQL sha256 `8ecf8c278e4d1cabcbef2941ce87d77c594ac2d9b1e659694bcac55168604faa`; inventory sha256 `19b55cb56f2247d90bbfa6ee9be861980703b8a01dc00bebc090d0a0a5f847d6`: 230 tables, 1148 objects.
+- Platform version `67c11dbd-520f-4384-9878-c884cdc1f195`; all four candidate tags matched. CMS registry empty.
+- Preflight on the old database `whumpo-control-2026-10-29`: every count zero.
+- Key policy `test-20261026`, review `wh117d-20261030`.
+- Live checks: `/` and `/api/health` 200; anonymous `/api/chat` and `/api/profile` 401; the smoke and guest-preview suites passed with cleanup verified.
+- The old databases `whumpo-control-2026-10-28` and `-10-29` are kept, not deleted.
+- Not done: owner re-enrollment.

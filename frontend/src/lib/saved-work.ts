@@ -54,10 +54,12 @@ const photoCopy:Partial<Record<SavedWorkPhase,Copy>>={
  finished:{label:'Approved by the current safety check',detail:'Recorded as approved. This is saved history, not a live status check.'},
 };
 export function savedWorkStatus(item:Pick<SavedWorkItem,'kind'|'phase'>):Copy{return (item.kind==='photo'?photoCopy[item.phase]:undefined)??phaseCopy[item.phase];}
-export function savedWorkExpiry(item:Pick<SavedWorkItem,'phase'|'expiresAt'>,locale?:string){
+export function savedWorkDeadline(item:Pick<SavedWorkItem,'phase'|'expiresAt'>){
  const time=item.expiresAt?savedWorkTime(item.expiresAt):null;if(!time)return null;
- const text=time.toLocaleString(locale);
- return item.phase==='expired'?'Expired '+text:item.phase==='form'?'Answer by '+text:'Review by '+text;
+ return {label:item.phase==='expired'?'Expired':item.phase==='form'?'Answer by':'Review by',time};
+}
+export function savedWorkExpiry(item:Pick<SavedWorkItem,'phase'|'expiresAt'>,locale?:string){
+ const d=savedWorkDeadline(item);return d&&d.label+' '+d.time.toLocaleString(locale);
 }
 export type SavedWorkDestination=
  {kind:'safety';label:string;search:{project:string;review:string;service?:'backend'|'application'}}|

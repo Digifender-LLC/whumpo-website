@@ -28,7 +28,7 @@ export function PlanPreferenceField({initialPlan}:{initialPlan:string}) {
   const [selected,setSelected]=useState(initialPlan);
   return <div className="min-w-0 space-y-4">
     <label className="grid gap-2 text-sm font-medium">Preferred launch plan
-      <select className="min-h-11 w-full min-w-0 rounded-md border bg-background px-3" name="plan" value={selected} onChange={e=>setSelected(e.target.value)}>
+      <select className="min-h-11 w-full min-w-0 rounded-md border bg-surface px-3" name="plan" value={selected} onChange={e=>setSelected(e.target.value)}>
         {publicPlans.filter(p=>p.monthlyCents).map(p=><option key={p.id} value={p.id}>{p.name} · ${p.monthlyCents/100}/month</option>)}
       </select>
     </label>
