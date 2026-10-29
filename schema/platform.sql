@@ -449,7 +449,8 @@ CREATE TABLE directories (
  published_at TEXT,
  live_review_id TEXT REFERENCES directory_reviews(id),
  live_digest TEXT CHECK(live_digest IS NULL OR (length(live_digest)=64 AND live_digest NOT GLOB '*[^0-9a-f]*')),
- CHECK((live_json IS NULL AND live_review_id IS NULL AND live_digest IS NULL) OR (live_json IS NOT NULL AND (live_review_id IS NULL)=(live_digest IS NULL)))
+ -- A live directory always carries the digest and the review that published it.
+ CHECK((live_json IS NULL AND live_review_id IS NULL AND live_digest IS NULL) OR (live_json IS NOT NULL AND live_review_id IS NOT NULL AND live_digest IS NOT NULL))
 );
 
 CREATE TABLE directory_reviews (
@@ -1087,6 +1088,9 @@ CREATE TRIGGER workspace_layout_receipt_current BEFORE INSERT ON workspace_layou
 WHEN NOT EXISTS(SELECT 1 FROM workspace_preferences p WHERE p.user_id=NEW.user_id AND p.revision=NEW.from_revision AND p.layout_json=NEW.previous_json)
  OR (NEW.origin_turn_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM chat_turns c WHERE c.id=NEW.origin_turn_id AND c.user_id=NEW.user_id AND c.mode='ai' AND c.status='pending' AND c.input_tokens IS NULL))
 BEGIN SELECT RAISE(ABORT,'workspace_layout_changed'); END;
+-- B11: an owner keeps the latest 50 layout revisions. The newest receipt (the current layout, needed for undo) is never pruned; nightly maintenance repeats this for any older surplus.
+CREATE TRIGGER workspace_layout_receipt_cap AFTER INSERT ON workspace_layout_receipts
+BEGIN DELETE FROM workspace_layout_receipts WHERE user_id=NEW.user_id AND to_revision<=NEW.to_revision-50; END;
 CREATE TRIGGER workspace_layout_current_update BEFORE UPDATE ON workspace_preferences
 WHEN NEW.user_id!=OLD.user_id OR NEW.revision!=OLD.revision+1 OR NOT EXISTS(
  SELECT 1 FROM workspace_layout_receipts r WHERE r.user_id=NEW.user_id AND r.from_revision=OLD.revision AND r.to_revision=NEW.revision AND r.previous_json=OLD.layout_json AND r.layout_json=NEW.layout_json)
@@ -6163,3 +6167,93 @@ CREATE TRIGGER connector_receipt_retained BEFORE DELETE ON connector_receipts
 WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.owner_id)
  AND (OLD.state IN ('dispatching','uncertain') OR OLD.updated_at>unixepoch()*1000-34560000000)
 BEGIN SELECT RAISE(ABORT,'connector_receipt_retained'); END;
+
+-- WH-018 account closure record (docs/account-closure.md "Slice 1"). Platform-scoped and deliberately without a foreign key to users:
+-- the record outlives the account it closes, so the account cascade neither blocks on nor erases it. No route, job or store reads it yet.
+-- States only move forward: requested -> reviewed -> confirmed -> quiescing -> closed, cancelled before closed, failed from confirmed or
+-- quiescing; closed, cancelled and failed are final. The same predicates live in src/account-closure/machine.ts.
+CREATE TABLE account_closures (
+ closure_id TEXT PRIMARY KEY CHECK(length(closure_id) BETWEEN 1 AND 64 AND closure_id NOT GLOB '*[^A-Za-z0-9-]*'),
+ account_id TEXT NOT NULL CHECK(length(account_id) BETWEEN 1 AND 128),
+ state TEXT NOT NULL CHECK(state IN ('requested','reviewed','confirmed','quiescing','closed','cancelled','failed')),
+ revision INTEGER NOT NULL CHECK(typeof(revision)='integer' AND revision BETWEEN 1 AND 9007199254740991),
+ requested_at INTEGER NOT NULL CHECK(typeof(requested_at)='integer' AND requested_at>0),
+ updated_at INTEGER NOT NULL CHECK(typeof(updated_at)='integer' AND updated_at>=requested_at),
+ review_digest TEXT CHECK(review_digest IS NULL OR (length(review_digest)=64 AND review_digest NOT GLOB '*[^0-9a-f]*')),
+ quiesced_at INTEGER CHECK(quiesced_at IS NULL OR (typeof(quiesced_at)='integer' AND quiesced_at>=requested_at)),
+ closed_at INTEGER CHECK(closed_at IS NULL OR (typeof(closed_at)='integer' AND closed_at>=requested_at)),
+ failure_code TEXT CHECK(failure_code IS NULL OR (length(failure_code) BETWEEN 1 AND 64 AND failure_code NOT GLOB '*[^a-z-]*')),
+ history TEXT NOT NULL CHECK(json_valid(history) AND json_type(history)='array' AND json_array_length(history) BETWEEN 1 AND 8 AND length(history)<=200),
+ CHECK((state IN ('reviewed','confirmed','quiescing','closed')) <= (review_digest IS NOT NULL)),
+ CHECK((state IN ('quiescing','closed')) <= (quiesced_at IS NOT NULL)),
+ CHECK((state='closed')=(closed_at IS NOT NULL)),
+ CHECK((state='failed')=(failure_code IS NOT NULL))
+);
+CREATE UNIQUE INDEX account_closures_open ON account_closures(account_id) WHERE state IN ('requested','reviewed','confirmed','quiescing');
+CREATE INDEX account_closures_account ON account_closures(account_id);
+-- A closure starts requested at revision 1 with its own history.
+CREATE TRIGGER account_closure_new BEFORE INSERT ON account_closures
+WHEN NEW.state!='requested' OR NEW.revision!=1 OR NEW.updated_at!=NEW.requested_at OR NEW.history!='["requested"]'
+BEGIN SELECT RAISE(ABORT,'account_closure_new'); END;
+-- Identity never changes; every update is one forward step that appends exactly that state to the history; a terminal row is immutable.
+CREATE TRIGGER account_closure_guard BEFORE UPDATE ON account_closures
+WHEN OLD.state IN ('closed','cancelled','failed') OR NEW.revision IS NOT OLD.revision+1
+ OR NEW.closure_id IS NOT OLD.closure_id OR NEW.account_id IS NOT OLD.account_id OR NEW.requested_at IS NOT OLD.requested_at
+ OR NEW.updated_at<OLD.updated_at
+ OR NOT ((OLD.state='requested' AND NEW.state IN ('reviewed','cancelled'))
+  OR (OLD.state='reviewed' AND NEW.state IN ('confirmed','cancelled'))
+  OR (OLD.state='confirmed' AND NEW.state IN ('quiescing','cancelled','failed'))
+  OR (OLD.state='quiescing' AND NEW.state IN ('closed','cancelled','failed')))
+ OR NEW.history IS NOT json_insert(OLD.history,'$[#]',NEW.state)
+ OR (NEW.review_digest IS NOT OLD.review_digest AND NOT (OLD.state='requested' AND NEW.state='reviewed'))
+ OR (NEW.quiesced_at IS NOT OLD.quiesced_at AND NOT (OLD.state='confirmed' AND NEW.state='quiescing'))
+BEGIN SELECT RAISE(ABORT,'account_closure_guard'); END;
+-- No age-based retention is approved (docs/data-lifecycle.json); the record is kept until a later reviewed decision.
+CREATE TRIGGER account_closure_retained BEFORE DELETE ON account_closures
+BEGIN SELECT RAISE(ABORT,'account_closure_retained'); END;
+
+-- WH-145 rule approval (docs/connectors.md "Rule authority"). One row is the owner's approval of one deterministic rule revision to run
+-- one connector action: operation, destination digest, body template digest, per-period limit and credential are fixed at issue.
+-- The use counter belongs to the current UTC day on the database clock and only moves one step at a time, never past the limit.
+-- Digests and identifiers only: no destination, body or credential. src/connector-catalog/rule-authority.ts decides; the job runner (WH-069) is not wired.
+CREATE TABLE rule_approvals (
+ approval_id TEXT PRIMARY KEY CHECK(length(approval_id) BETWEEN 1 AND 64 AND approval_id NOT GLOB '*[^A-Za-z0-9-]*'),
+ owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ rule_id TEXT NOT NULL CHECK(length(rule_id) BETWEEN 1 AND 64 AND rule_id NOT GLOB '*[^A-Za-z0-9-]*'),
+ rule_revision INTEGER NOT NULL CHECK(typeof(rule_revision)='integer' AND rule_revision BETWEEN 1 AND 9007199254740991),
+ provider TEXT NOT NULL CHECK(provider IN ('gmail','google-calendar','outlook-email','microsoft-calendar','hubspot')),
+ operation_id TEXT NOT NULL CHECK(length(operation_id) BETWEEN 1 AND 64 AND operation_id NOT GLOB '*[^A-Za-z0-9.]*'),
+ destination_digest TEXT NOT NULL CHECK(length(destination_digest)=64 AND destination_digest NOT GLOB '*[^0-9a-f]*'),
+ template_digest TEXT NOT NULL CHECK(length(template_digest)=64 AND template_digest NOT GLOB '*[^0-9a-f]*'),
+ credential_id TEXT NOT NULL CHECK(length(credential_id) BETWEEN 1 AND 128 AND credential_id NOT GLOB '*[^A-Za-z0-9_-]*'),
+ max_per_period INTEGER NOT NULL CHECK(typeof(max_per_period)='integer' AND max_per_period BETWEEN 1 AND 1000),
+ period_start INTEGER NOT NULL CHECK(typeof(period_start)='integer' AND period_start>=0 AND period_start%86400000=0),
+ used_count INTEGER NOT NULL CHECK(typeof(used_count)='integer' AND used_count BETWEEN 0 AND 1000 AND used_count<=max_per_period),
+ created_at INTEGER NOT NULL CHECK(typeof(created_at)='integer' AND created_at>0),
+ revoked_at INTEGER CHECK(revoked_at IS NULL OR (typeof(revoked_at)='integer' AND revoked_at>=created_at)),
+ revision INTEGER NOT NULL CHECK(typeof(revision)='integer' AND revision BETWEEN 1 AND 9007199254740991),
+ UNIQUE(owner_id,rule_id,rule_revision)
+);
+CREATE INDEX rule_approvals_owner ON rule_approvals(owner_id);
+-- Issue: unused and unrevoked; an owner holds at most 200 approvals (a storage bound; a revoked one may be deleted).
+CREATE TRIGGER rule_approval_new BEFORE INSERT ON rule_approvals
+WHEN NEW.revision!=1 OR NEW.used_count!=0 OR NEW.revoked_at IS NOT NULL OR NEW.period_start!=0
+ OR (SELECT count(*) FROM rule_approvals WHERE owner_id=NEW.owner_id)>=200
+BEGIN SELECT RAISE(ABORT,'rule_approval_new'); END;
+-- Binding columns never change. An update is either one use (the counter moves by exactly one inside today's UTC period, or restarts
+-- at one when the period rolled over) or the revocation, which is final and stops further use.
+CREATE TRIGGER rule_approval_guard BEFORE UPDATE ON rule_approvals
+WHEN OLD.revoked_at IS NOT NULL OR NEW.revision IS NOT OLD.revision+1
+ OR NEW.approval_id IS NOT OLD.approval_id OR NEW.owner_id IS NOT OLD.owner_id OR NEW.rule_id IS NOT OLD.rule_id OR NEW.rule_revision IS NOT OLD.rule_revision
+ OR NEW.provider IS NOT OLD.provider OR NEW.operation_id IS NOT OLD.operation_id OR NEW.destination_digest IS NOT OLD.destination_digest
+ OR NEW.template_digest IS NOT OLD.template_digest OR NEW.credential_id IS NOT OLD.credential_id OR NEW.max_per_period IS NOT OLD.max_per_period
+ OR NEW.created_at IS NOT OLD.created_at
+ OR NOT (
+  (NEW.revoked_at IS NOT NULL AND NEW.used_count=OLD.used_count AND NEW.period_start=OLD.period_start)
+  OR (NEW.revoked_at IS NULL AND NEW.period_start=(unixepoch()*1000)/86400000*86400000
+   AND ((NEW.period_start=OLD.period_start AND NEW.used_count=OLD.used_count+1) OR (NEW.period_start>OLD.period_start AND NEW.used_count=1))))
+BEGIN SELECT RAISE(ABORT,'rule_approval_guard'); END;
+-- Only a revoked approval may be deleted while the account exists; the account cascade removes the rest.
+CREATE TRIGGER rule_approval_retained BEFORE DELETE ON rule_approvals
+WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.owner_id) AND OLD.revoked_at IS NULL
+BEGIN SELECT RAISE(ABORT,'rule_approval_retained'); END;

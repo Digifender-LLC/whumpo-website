@@ -114,6 +114,8 @@ const c:Record<string,[string,string,Disposition]>={
  openLookupConsents:['lookup_consents','connector-receipts','cancel'],
  connectorReceipts:['connector_receipts','connector-receipts','delete'],
  openConnectorReceipts:['connector_receipts','connector-receipts','cancel'],
+ ruleApprovals:['rule_approvals','connector-receipts','delete'],
+ activeRuleApprovals:['rule_approvals','connector-receipts','cancel'],
 };
 export const closureCategories:Readonly<Record<string,readonly [string,string,Disposition]>>=Object.freeze(c);
 /** Open provider work: closure refuses until each settles (cancelling a local row never settles a provider effect). */

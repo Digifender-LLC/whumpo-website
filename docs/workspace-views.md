@@ -55,7 +55,7 @@ Preparation performs no layout writes. The committing batch rechecks identity, f
 
 The current API is `/api/workspace/views/v1/`: GET `layout` and `history`, POST `mutate` and `receipt`. The previous API/whole-layout operation is removed. Current frontend consumers validate the versioned layout; no old-layout reader exists. Agent reads include five recent receipt summaries to fit the existing bounded lookup; owner history returns the latest twenty. Model input uses an explicit field projection, and the model cannot supply the Chat request ID.
 
-The schema has **175 current tables**, including `workspace_layout_receipts` and an always-empty atomic assertion table. History is account-linked and retained independently of page removal/Chat cleanup; provenance records the original turn without cascading its deletion. The lifecycle catalog maps both tables. This does not finish account export/closure or independent restore suppression.
+The schema has **175 current tables**, including `workspace_layout_receipts` and an always-empty atomic assertion table. History is account-linked and retained independently of page removal/Chat cleanup, but only the latest 50 revisions per owner are kept (B11, October 29, 2026: the `workspace_layout_receipt_cap` trigger and the daily `email_changes` maintenance pass delete older receipts; the current layout lives in `workspace_preferences` and its receipt is never pruned); provenance records the original turn without cascading its deletion. The lifecycle catalog maps both tables. This does not finish account export/closure or independent restore suppression.
 
 Verified evidence:
 

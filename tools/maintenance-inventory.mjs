@@ -69,6 +69,8 @@ export const backlogInventory={
  security_reviews:queue('owner_security_reviews',`COALESCE(committed_at,expires_at)+7776000000<=${nowMs} OR (state='open' AND expires_at<=${nowMs})`,ms('CASE WHEN state=\'open\' THEN expires_at ELSE COALESCE(committed_at,expires_at)+7776000000 END')),
  // WH-143: lookup consents seven days after use, voiding or expiry, and receipts 400 days after their last change (never dispatching or uncertain); removed by the same daily email_changes job.
  lookup_consents:queue('lookup_consents',`COALESCE(settled_at,expires_at)+604800000<=${nowMs}`,ms('COALESCE(settled_at,expires_at)','+7 days')),
+ // B11: layout receipts beyond an owner's latest 50 (the cap trigger keeps this at zero; the daily email_changes job prunes any surplus).
+ workspace_layout_receipts:queue('workspace_layout_receipts','to_revision<=(SELECT max(m.to_revision) FROM workspace_layout_receipts m WHERE m.user_id=workspace_layout_receipts.user_id)-50','created_at'),
  connector_receipts:queue('connector_receipts',`state NOT IN ('dispatching','uncertain') AND updated_at+34560000000<=${nowMs}`,ms('updated_at','+400 days')),
 };
 export const operationInventory={

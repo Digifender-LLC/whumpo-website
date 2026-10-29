@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.mjs';
 import {currentSiteFixtureHandlers} from './current-site-fixture.mjs';
+import {build} from 'esbuild';
 Error.stackTraceLimit=0;
+const prune=await import('data:text/javascript;base64,'+Buffer.from((await build({stdin:{contents:"export * from './src/workspace-layout-maintenance';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'})).outputFiles[0].text).toString('base64'));
 const m=await currentSiteFixtureHandlers(),fixture=await databaseFixture(),{db}=fixture,id=()=>crypto.randomUUID();
 const run=(sql,...p)=>db.prepare(sql).bind(...p).run(),row=(sql,...p)=>db.prepare(sql).bind(...p).first();
 let cases=0;const test=async(name,fn)=>{try{await fn();cases++;}catch(error){console.error(name,String(error));throw error;}};
@@ -56,6 +58,25 @@ try{
   await assert.rejects(apply(o,change('renamePage',1,{pageId:'tab-garden',label:'garden'})),{code:'no_change'});
   await assert.rejects(apply(o,change('setDashboard',1,{view:view(o.project)})),{code:'invalid_view'});
   assert.deepEqual((await m.readLayout(o.scope,o.user)).layout,saved.layout);
+ });
+ await test('B11: 60 changes leave the latest 50 receipts and never prune the current layout; nightly pruning is bounded',async()=>{
+  const o=await owner();let saved=await apply(o,change('createPage',0,{page:page(o)}));
+  for(let n=1;n<60;n++)saved=await apply(o,change('renamePage',n,{pageId:'tab-garden',label:'name '+n}));
+  assert.equal(saved.revision,60);assert.equal(await count(o,'workspace_layout_receipts'),50);
+  assert.equal((await row('SELECT min(to_revision) a,max(to_revision) b FROM workspace_layout_receipts WHERE user_id=?',o.user)).a,11);
+  assert.deepEqual(await m.readLayoutReceipt(o.scope,o.user,saved.requestId),saved);
+  const current=await m.readLayout(o.scope,o.user);assert.equal(current.revision,60);assert.equal(current.layout.tabs[0].label,'name 59');
+  assert.equal((await m.readLayoutHistory(o.scope,o.user)).items[0].revision,60);
+  // Another owner is untouched. Without the trigger (a database from before the cap) maintenance removes the surplus, 3 rows at a time at most.
+  const other=await owner();await apply(other,change('createPage',0,{page:page(other)}));
+  await run('DROP TRIGGER workspace_layout_receipt_cap');
+  for(let n=60;n<65;n++)saved=await apply(o,change('renamePage',n,{pageId:'tab-garden',label:'name '+n}));
+  assert.equal(await count(o,'workspace_layout_receipts'),55);
+  assert.equal((await prune.pruneLayoutReceipts(db,3)).layoutReceipts,3);assert.equal(await count(o,'workspace_layout_receipts'),52);
+  assert.equal((await prune.pruneLayoutReceipts(db)).layoutReceipts,2);assert.equal(await count(o,'workspace_layout_receipts'),50);
+  assert.equal((await prune.pruneLayoutReceipts(db)).layoutReceipts,0);assert.equal(await count(other,'workspace_layout_receipts'),1);
+  assert.equal((await m.readLayout(o.scope,o.user)).revision,65);assert.deepEqual(await m.readLayoutReceipt(o.scope,o.user,saved.requestId),saved);
+  await assert.rejects(prune.pruneLayoutReceipts(db,0),/Invalid/);
  });
  await test('owner isolation applies to definitions, requests and undo',async()=>{
   const a=await owner(),b=await owner(),saved=await apply(a,change('createPage',0,{page:page(a)}));

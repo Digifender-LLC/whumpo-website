@@ -53,6 +53,7 @@
    {"fingerprint":"0a69bb78aaca0bbc","object":"project_spec_creation_retained","kind":"trigger","comparison":"users.id = project_spec_creations.user_id","types":"account/workspace"},
    {"fingerprint":"4f9205d9548bdf91","object":"review_receipt_retained","kind":"trigger","comparison":"safety_preservation_holds.subject_user_id = review_receipts.owner_user_id","types":"account/workspace"},
    {"fingerprint":"077ba83e9552c477","object":"review_receipt_retained","kind":"trigger","comparison":"users.id = review_receipts.owner_user_id","types":"account/workspace"},
+   {"fingerprint":"3eb604ea0a4b58f3","object":"rule_approval_retained","kind":"trigger","comparison":"users.id = rule_approvals.owner_id","types":"account/workspace"},
    {"fingerprint":"bb3defd5f9c5758d","object":"safety_held_projects","kind":"view","comparison":"safety_preservation_holds.subject_user_id = projects.owner_user_id","types":"account/workspace"},
    {"fingerprint":"32c0425b03870ac4","object":"safety_hold_app_document","kind":"trigger","comparison":"safety_preservation_holds.subject_user_id = projects.owner_user_id","types":"account/workspace"},
    {"fingerprint":"1a72b518dc87f555","object":"safety_hold_app_recovery_document","kind":"trigger","comparison":"safety_preservation_holds.subject_user_id = projects.owner_user_id","types":"account/workspace"},

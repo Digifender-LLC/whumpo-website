@@ -6,9 +6,9 @@
  "evidence": "docs/workspace-collaboration-evidence.md",
  "baseline": {
   "sourceCommit": "4dea09c",
-  "reviewedSchemaSha256": "7e27e43ce3f39bcefecf28a50e2f83bec6190b774522c76f7792eabd7075b5bc",
-  "tables": 228,
-  "usersForeignKeyColumns": 118
+  "reviewedSchemaSha256": "19b55cb56f2247d90bbfa6ee9be861980703b8a01dc00bebc090d0a0a5f847d6",
+  "tables": 230,
+  "usersForeignKeyColumns": 119
  },
  "vocabulary": {
   "classes": {
@@ -146,6 +146,7 @@
   {"column":"projects.owner_user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id"},"status":"proposed","evidenceLevel":"review-spike","key":"workspace_id, immutable; the project quota (20 per owner) becomes per workspace","basis":"The project root: projects.workspace_id is immutable and closure is ordered, not a cascade","evidence":["docs/workspace-collaboration.md#project-transfer"],"questions":["funded-workspace-bound"]},
   {"column":"publication_actions.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace+actor","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id","actor":"actor_ref"},"status":"proposed","evidenceLevel":"review-spike","basis":"Preparer and confirmer provenance on every review type","evidence":["docs/workspace-collaboration.md#approvals-and-release-authority"]},
   {"column":"review_receipts.owner_user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace+actor","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id","actor":"actor_ref"},"status":"proposed","evidenceLevel":"review-spike","basis":"Preparer and confirmer provenance on every review type","evidence":["docs/workspace-collaboration.md#approvals-and-release-authority"]},
+  {"column":"rule_approvals.owner_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id"},"status":"proposed","evidenceLevel":"source-reading","basis":"A rule approval authorizes a deterministic rule to act on the tenant's connection, so owner_id becomes workspace_id; account closure deletes it","evidence":["docs/connectors.md#rule-authority-wh-145"]},
   {"column":"service_client_activation_reviews.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace+actor","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id","actor":"actor_ref"},"status":"proposed","evidenceLevel":"review-spike","basis":"Preparer and confirmer provenance on every review type","evidence":["docs/workspace-collaboration.md#approvals-and-release-authority"]},
   {"column":"service_client_applies.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace+actor","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id","actor":"actor_ref"},"status":"proposed","evidenceLevel":"review-spike","basis":"Preparer and confirmer provenance on every review type","evidence":["docs/workspace-collaboration.md#approvals-and-release-authority"]},
   {"column":"service_client_proposals.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace+actor","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id","actor":"actor_ref"},"status":"proposed","evidenceLevel":"review-spike","basis":"Preparer and confirmer provenance on every review type","evidence":["docs/workspace-collaboration.md#approvals-and-release-authority"]},
@@ -250,6 +251,7 @@
    "version_photos"
   ],
   "noTenantPath": [
+   "account_closures",
    "chat_interaction_checks",
    "cms_platform_deploy_lock",
    "connection_key_policy",
