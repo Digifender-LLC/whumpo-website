@@ -1,44 +1,21 @@
+const groups:readonly (readonly [string,readonly (readonly [string,string])[]])[]=[
+ ['Policies',[['Draft terms','https://digifender.com/legal/whumpo/terms'],['Draft privacy policy','https://digifender.com/legal/whumpo/privacy'],['Draft cookie notice','https://digifender.com/legal/whumpo/cookies']]],
+ ['More',[['More Whumpo policies','https://digifender.com/legal/whumpo'],['Legal contact','mailto:legal@digifender.com'],['A Digifender product','https://digifender.com/']]],
+];
+const link='inline-flex min-h-11 items-center underline underline-offset-4 text-ink-muted hover:text-ink';
 export function LegalLinks() {
   return (
-    <div className="flex flex-col gap-1 text-xs">
-      <a
-        className="min-h-11 self-start inline-flex items-center text-muted-foreground underline underline-offset-4"
-        href="https://digifender.com/"
-      >
-        A Digifender product
-      </a>
-      <nav aria-label="Legal" className="flex flex-wrap gap-x-5 gap-y-2">
-        <a
-          className="inline-flex min-h-11 items-center underline underline-offset-4"
-          href="https://digifender.com/legal/whumpo/terms"
-        >
-          Draft terms
-        </a>
-        <a
-          className="inline-flex min-h-11 items-center underline underline-offset-4"
-          href="https://digifender.com/legal/whumpo/privacy"
-        >
-          Draft privacy policy
-        </a>
-        <a
-          className="inline-flex min-h-11 items-center underline underline-offset-4"
-          href="https://digifender.com/legal/whumpo/cookies"
-        >
-          Draft cookie notice
-        </a>
-        <a
-          className="inline-flex min-h-11 items-center underline underline-offset-4"
-          href="https://digifender.com/legal/whumpo"
-        >
-          More Whumpo policies
-        </a>
-        <a
-          className="inline-flex min-h-11 items-center underline underline-offset-4"
-          href="mailto:legal@digifender.com"
-        >
-          Legal contact
-        </a>
-      </nav>
-    </div>
+    <nav aria-label="Legal" className="flex flex-wrap gap-x-12 gap-y-4 text-caption">
+      {groups.map(([title, links]) => (
+        <div key={title}>
+          <p className="font-semibold text-ink">{title}</p>
+          <ul className="mt-1 flex flex-col">
+            {links.map(([label, href]) => (
+              <li key={label}><a className={link} href={href}>{label}</a></li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </nav>
   );
 }
