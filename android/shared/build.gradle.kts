@@ -63,6 +63,7 @@ kotlin {
             implementation(libs.kotlinx.coroutines.test)
             implementation(libs.ktor.client.mock)
             implementation(libs.androidx.test.core)
+            implementation(libs.androidx.activity.compose)
             implementation(libs.compose.ui.test.junit4)
             implementation(libs.robolectric)
             implementation(libs.roborazzi)
