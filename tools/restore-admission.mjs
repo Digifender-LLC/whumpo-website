@@ -38,7 +38,13 @@ const effectReceipts={
  github_grant_revocations:['state',['revoked','cancelled']],
 };
 
+// Memoized per process: it bundles and imports the vault with esbuild, and every evidence read repeats it inside a fixed 10 s window.
+let contractOnce;
 async function currentContract(){
+ contractOnce??=buildContract().catch(error=>{contractOnce=undefined;throw error;});
+ const c=await contractOnce;return {...c,schema:structuredClone(c.schema),compilers:structuredClone(c.compilers),tables:structuredClone(c.tables)}; // callers may tamper with copies
+}
+async function buildContract(){
  const schema=await currentSchemaArtifact(),content=await checkSpecificationCompiler(),clients=await checkServiceClientCompiler();
  const local=new DatabaseSync(':memory:');
  try{
