@@ -13,7 +13,8 @@ kotlin {
         namespace = "com.whumpo.shared"
         compileSdk = libs.versions.compileSdk.get().toInt()
         minSdk = libs.versions.minSdk.get().toInt()
-        withHostTest {}
+        // Robolectric needs merged resources and manifest (Roborazzi screenshots, WP3).
+        withHostTest { isIncludeAndroidResources = true }
         // Packages Compose resources (the bundled fonts) for Android.
         androidResources { enable = true }
     }
@@ -40,6 +41,7 @@ kotlin {
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)
             implementation(libs.compose.ui)
+            implementation(libs.compose.ui.backhandler)
             api(libs.kotlinx.coroutines.core)
             api(libs.jetbrains.lifecycle.viewmodel)
             api(libs.ktor.client.core)
@@ -60,8 +62,21 @@ kotlin {
             implementation(libs.junit4)
             implementation(libs.kotlinx.coroutines.test)
             implementation(libs.ktor.client.mock)
+            implementation(libs.androidx.test.core)
+            implementation(libs.compose.ui.test.junit4)
+            implementation(libs.robolectric)
+            implementation(libs.roborazzi)
+            implementation(libs.roborazzi.compose)
         }
     }
+}
+
+// Roborazzi without its Gradle plugin (the plugin does not target the KMP Android library host test):
+// the library reads these system properties. Default is verify; -Pscreenshots.record rewrites the goldens in
+// src/androidHostTest/screenshots (CI: the "Record screenshots" workflow input).
+tasks.withType<Test>().configureEach {
+    val record = providers.gradleProperty("screenshots.record").isPresent
+    systemProperty(if (record) "roborazzi.test.record" else "roborazzi.test.verify", "true")
 }
 
 compose.resources {

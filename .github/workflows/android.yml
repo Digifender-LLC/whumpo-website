@@ -15,6 +15,11 @@ on:
       - "tests/fixtures/mobile-v1/**"
       - ".github/workflows/android.yml"
   workflow_dispatch:
+    inputs:
+      record_screenshots:
+        description: "Re-record the Roborazzi goldens and upload them as an artifact (then commit them)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -54,8 +59,17 @@ jobs:
         run: ./gradlew assembleLocalDebug assembleDeployedDebug assembleLocalDebugAndroidTest assembleDeployedDebugAndroidTest
       - name: Lint
         run: ./gradlew lintLocalDebug lintDeployedDebug
-      - name: Shared module JVM tests and desktop compile
-        run: ./gradlew :shared:jvmTest :shared:testAndroidHostTest :shared:compileKotlinJvm
+      # Includes the Roborazzi screenshot tests (Robolectric, no emulator). They verify the committed goldens in
+      # android/shared/src/androidHostTest/screenshots; the record_screenshots dispatch input rewrites them instead.
+      - name: Shared module JVM tests, screenshot tests and desktop compile
+        run: ./gradlew :shared:jvmTest :shared:testAndroidHostTest :shared:compileKotlinJvm ${{ inputs.record_screenshots && '-Pscreenshots.record' || '' }}
+      - name: Upload recorded screenshots
+        if: ${{ always() && inputs.record_screenshots }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-screenshot-goldens
+          path: android/shared/src/androidHostTest/screenshots/
+          retention-days: 7
       - name: App unit tests
         run: ./gradlew testLocalDebugUnitTest testDeployedDebugUnitTest
       - name: Upload reports
@@ -66,6 +80,7 @@ jobs:
           path: |
             android/androidApp/build/reports/
             android/shared/build/reports/
+            android/shared/build/outputs/roborazzi/
           retention-days: 7
 
   instrumented:
