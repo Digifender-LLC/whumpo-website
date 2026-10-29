@@ -106,7 +106,7 @@ const service={fetch:async(url,init)=>{
 // Seeding calls testBackend directly, bypassing the platform's per-project lane wrapper; give them a fixture lane.
 const seedRuntime={fetch:(url,init)=>service.fetch(url,{...init,headers:{'x-whumpo-lane':'e'.repeat(64),...init?.headers}})};
 const cdb=countingDatabase(db);
-const env={...store.env,DB:cdb,ENVIRONMENT:'local',AUTH_LIMITER,API_LIMITER,BACKEND_RUNTIME:service,ASSETS:{fetch:async request=>{const p=new URL(request.url).pathname;const file=['/visitor.js','/visitor.css'].includes(p)?p:'/index.html';return new Response(await readFile('public-app'+file),{headers:{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'}});}}};
+const env={...store.env,DB:cdb,ENVIRONMENT:'local',AUTH_LIMITER,API_LIMITER,BACKEND_RUNTIME:service,ASSETS:{fetch:async request=>{const p=new URL(request.url).pathname;const file=['/visitor.js','/visitor.css','/design-tokens.css'].includes(p)?p:'/index.html';return new Response(await readFile('public-app'+file),{headers:{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'}});}}};
 const seedEnv={...store.env,DB:db};
 
 server=createServer(async(req,res)=>{try{
