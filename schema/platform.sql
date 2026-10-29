@@ -6035,12 +6035,12 @@ CREATE TABLE owner_security_reviews (
 );
 CREATE INDEX owner_security_reviews_account ON owner_security_reviews(account_id);
 CREATE INDEX owner_security_reviews_retention ON owner_security_reviews(expires_at);
--- A review binds the account's current epoch, credential revision and kit generation; an account keeps at most 20 (a storage bound).
+-- A review binds the account's current epoch, credential revision and kit generation; an account keeps at most 20 committed or unexpired (a storage bound); expired open reviews do not count and may be deleted.
 CREATE TRIGGER owner_security_review_new BEFORE INSERT ON owner_security_reviews
 WHEN NEW.state!='open' OR NEW.revision!=1 OR NEW.kit_offer_id IS NOT NULL
  OR NOT EXISTS(SELECT 1 FROM identity_accounts a WHERE a.account_id=NEW.account_id AND a.stage='ready' AND a.auth_epoch=NEW.epoch
   AND a.credential_revision=NEW.credential_revision AND a.kit_generation=NEW.kit_generation)
- OR (SELECT count(*) FROM owner_security_reviews WHERE account_id=NEW.account_id)>=20
+ OR (SELECT count(*) FROM owner_security_reviews WHERE account_id=NEW.account_id AND (state='committed' OR expires_at>unixepoch()*1000))>=20
 BEGIN SELECT RAISE(ABORT,'security_review_new'); END;
 CREATE TRIGGER owner_security_review_guard BEFORE UPDATE ON owner_security_reviews
 WHEN OLD.state='committed' OR NEW.revision IS NOT OLD.revision+1 OR NEW.review_id IS NOT OLD.review_id OR NEW.account_id IS NOT OLD.account_id
@@ -6059,4 +6059,107 @@ WHEN NEW.state='committed' AND NOT (
 BEGIN SELECT RAISE(ABORT,'security_review_commit'); END;
 CREATE TRIGGER owner_security_review_retained BEFORE DELETE ON owner_security_reviews
 WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.account_id) AND COALESCE(OLD.committed_at,OLD.expires_at)>unixepoch()*1000-7776000000
+ AND NOT (OLD.state='open' AND OLD.expires_at<=unixepoch()*1000)
 BEGIN SELECT RAISE(ABORT,'security_review_retained'); END;
+
+-- WH-143 request-bound lookup consent (docs/connectors.md "Request-bound lookup and data-use consent"). One row is one exact lookup the
+-- owner confirmed: owner, provider, operation, credential, parameter digest and destination are fixed at issue, the row lives at most
+-- 15 minutes, and it is used once. Disconnect or reconnection voids open rows (adapter wiring is later; the state exists now).
+CREATE TABLE lookup_consents (
+ consent_id TEXT PRIMARY KEY CHECK(length(consent_id) BETWEEN 1 AND 64 AND consent_id NOT GLOB '*[^A-Za-z0-9-]*'),
+ owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ provider TEXT NOT NULL CHECK(provider IN ('gmail','google-calendar','outlook-email','microsoft-calendar','hubspot')),
+ operation_id TEXT NOT NULL CHECK(length(operation_id) BETWEEN 1 AND 64 AND operation_id NOT GLOB '*[^A-Za-z0-9.]*'),
+ credential_id TEXT NOT NULL CHECK(length(credential_id) BETWEEN 1 AND 128 AND credential_id NOT GLOB '*[^A-Za-z0-9_-]*'),
+ params_digest TEXT NOT NULL CHECK(length(params_digest)=64 AND params_digest NOT GLOB '*[^0-9a-f]*'),
+ destination TEXT NOT NULL CHECK(destination IN ('owner-panel','model-context')),
+ created_at INTEGER NOT NULL CHECK(typeof(created_at)='integer' AND created_at>0),
+ expires_at INTEGER NOT NULL CHECK(typeof(expires_at)='integer' AND expires_at>created_at AND expires_at<=created_at+900000),
+ state TEXT NOT NULL CHECK(state IN ('issued','confirmed','used','voided')),
+ confirmed_at INTEGER CHECK(confirmed_at IS NULL OR typeof(confirmed_at)='integer'),
+ settled_at INTEGER CHECK(settled_at IS NULL OR typeof(settled_at)='integer'),
+ revision INTEGER NOT NULL CHECK(typeof(revision)='integer' AND revision BETWEEN 1 AND 9007199254740991),
+ CHECK((state='issued' AND confirmed_at IS NULL AND settled_at IS NULL)
+  OR (state='confirmed' AND confirmed_at IS NOT NULL AND confirmed_at>=created_at AND settled_at IS NULL)
+  OR (state='used' AND confirmed_at IS NOT NULL AND confirmed_at>=created_at AND settled_at>=confirmed_at)
+  OR (state='voided' AND settled_at>=created_at))
+);
+CREATE INDEX lookup_consents_owner ON lookup_consents(owner_id,state);
+CREATE INDEX lookup_consents_retention ON lookup_consents(expires_at);
+-- Issue: a fresh unconfirmed row; an owner holds at most 20 unexpired ones (a storage bound).
+CREATE TRIGGER lookup_consent_new BEFORE INSERT ON lookup_consents
+WHEN NEW.state!='issued' OR NEW.revision!=1
+ OR (SELECT count(*) FROM lookup_consents WHERE owner_id=NEW.owner_id AND state IN ('issued','confirmed') AND expires_at>unixepoch()*1000)>=20
+BEGIN SELECT RAISE(ABORT,'lookup_consent_new'); END;
+-- Binding columns never change. issued->confirmed->used is the only path to use, each step needs an unexpired row, and used or voided is final.
+CREATE TRIGGER lookup_consent_guard BEFORE UPDATE ON lookup_consents
+WHEN OLD.state IN ('used','voided') OR NEW.revision IS NOT OLD.revision+1 OR NEW.consent_id IS NOT OLD.consent_id OR NEW.owner_id IS NOT OLD.owner_id
+ OR NEW.provider IS NOT OLD.provider OR NEW.operation_id IS NOT OLD.operation_id OR NEW.credential_id IS NOT OLD.credential_id
+ OR NEW.params_digest IS NOT OLD.params_digest OR NEW.destination IS NOT OLD.destination OR NEW.created_at IS NOT OLD.created_at OR NEW.expires_at IS NOT OLD.expires_at
+ OR NOT ((OLD.state='issued' AND NEW.state IN ('confirmed','voided')) OR (OLD.state='confirmed' AND NEW.state IN ('used','voided')))
+ OR (NEW.state IN ('confirmed','used') AND unixepoch()*1000>=OLD.expires_at)
+ OR (NEW.state IN ('used','voided') AND OLD.state='confirmed' AND NEW.confirmed_at IS NOT OLD.confirmed_at)
+BEGIN SELECT RAISE(ABORT,'lookup_consent_guard'); END;
+-- Rows are kept seven days after they were used, voided or expired, then deleted by bounded maintenance (the account cascade also removes them).
+CREATE TRIGGER lookup_consent_retained BEFORE DELETE ON lookup_consents
+WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.owner_id) AND COALESCE(OLD.settled_at,OLD.expires_at)>unixepoch()*1000-604800000
+BEGIN SELECT RAISE(ABORT,'lookup_consent_retained'); END;
+
+-- WH-143 minimized connector action receipts for the new providers (docs/connectors.md "Data classification"). Identifiers, digests,
+-- price, state and a bounded detail code only: no message, event or contact body, recipient list, provider error body or credential.
+-- States are the frozen receipt states; the reviewed body itself would live only in the planned connector-content class.
+CREATE TABLE connector_receipts (
+ receipt_id TEXT PRIMARY KEY CHECK(length(receipt_id) BETWEEN 1 AND 64 AND receipt_id NOT GLOB '*[^A-Za-z0-9-]*'),
+ owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ provider TEXT NOT NULL CHECK(provider IN ('gmail','google-calendar','outlook-email','microsoft-calendar','hubspot')),
+ operation_id TEXT NOT NULL CHECK(length(operation_id) BETWEEN 1 AND 64 AND operation_id NOT GLOB '*[^A-Za-z0-9.]*'),
+ authority TEXT NOT NULL CHECK(authority IN ('owner-request','approved-rule')),
+ rule_revision INTEGER CHECK(rule_revision IS NULL OR (typeof(rule_revision)='integer' AND rule_revision>=1)),
+ credential_id TEXT NOT NULL CHECK(length(credential_id) BETWEEN 1 AND 128 AND credential_id NOT GLOB '*[^A-Za-z0-9_-]*'),
+ provider_account_id TEXT NOT NULL CHECK(length(provider_account_id) BETWEEN 1 AND 128 AND provider_account_id NOT GLOB '*[^ -~]*'),
+ destination_id TEXT NOT NULL CHECK(length(destination_id) BETWEEN 1 AND 256 AND destination_id NOT GLOB '*[^ -~]*'),
+ operation_digest TEXT NOT NULL CHECK(length(operation_digest)=64 AND operation_digest NOT GLOB '*[^0-9a-f]*'),
+ request_digest TEXT NOT NULL CHECK(length(request_digest)=64 AND request_digest NOT GLOB '*[^0-9a-f]*'),
+ review_digest TEXT NOT NULL CHECK(length(review_digest)=64 AND review_digest NOT GLOB '*[^0-9a-f]*'),
+ price_units INTEGER NOT NULL CHECK(typeof(price_units)='integer' AND price_units BETWEEN 0 AND 1000000),
+ price_basis TEXT NOT NULL CHECK(price_basis IN ('plan-inclusion','quoted')),
+ state TEXT NOT NULL CHECK(state IN ('review','dispatching','applied','unchanged','uncertain','observed','failed','expired','cancelled')),
+ provider_object_id TEXT CHECK(provider_object_id IS NULL OR (length(provider_object_id) BETWEEN 1 AND 256 AND provider_object_id NOT GLOB '*[^ -~]*')),
+ detail_code TEXT CHECK(detail_code IS NULL OR (length(detail_code) BETWEEN 1 AND 40 AND detail_code NOT GLOB '*[^a-z0-9-]*')),
+ created_at INTEGER NOT NULL CHECK(typeof(created_at)='integer' AND created_at>0),
+ expires_at INTEGER NOT NULL CHECK(typeof(expires_at)='integer' AND expires_at>created_at AND expires_at<=created_at+3600000),
+ updated_at INTEGER NOT NULL CHECK(typeof(updated_at)='integer' AND updated_at>=created_at),
+ revision INTEGER NOT NULL CHECK(typeof(revision)='integer' AND revision BETWEEN 1 AND 9007199254740991),
+ CHECK((authority='approved-rule')=(rule_revision IS NOT NULL)),
+ CHECK(price_basis='quoted' OR price_units=0),
+ CHECK(provider_object_id IS NULL OR state IN ('applied','unchanged','uncertain','observed'))
+);
+CREATE INDEX connector_receipts_owner ON connector_receipts(owner_id,state);
+CREATE INDEX connector_receipts_retention ON connector_receipts(updated_at);
+-- A new receipt starts in review; an owner keeps at most 2000 (a storage bound, deletion is by maintenance and account closure).
+CREATE TRIGGER connector_receipt_new BEFORE INSERT ON connector_receipts
+WHEN NEW.state!='review' OR NEW.revision!=1 OR NEW.provider_object_id IS NOT NULL OR NEW.detail_code IS NOT NULL OR NEW.updated_at!=NEW.created_at
+ OR (SELECT count(*) FROM connector_receipts WHERE owner_id=NEW.owner_id)>=2000
+BEGIN SELECT RAISE(ABORT,'connector_receipt_new'); END;
+-- Binding columns never change. review->dispatching needs an unexpired review (the claim); a dispatched receipt only settles;
+-- uncertain is resolved only by reconciliation (observed or failed); applied, unchanged, observed, failed, expired and cancelled are final.
+CREATE TRIGGER connector_receipt_guard BEFORE UPDATE ON connector_receipts
+WHEN OLD.state IN ('applied','unchanged','observed','failed','expired','cancelled') OR NEW.revision IS NOT OLD.revision+1
+ OR NEW.receipt_id IS NOT OLD.receipt_id OR NEW.owner_id IS NOT OLD.owner_id OR NEW.provider IS NOT OLD.provider OR NEW.operation_id IS NOT OLD.operation_id
+ OR NEW.authority IS NOT OLD.authority OR NEW.rule_revision IS NOT OLD.rule_revision OR NEW.credential_id IS NOT OLD.credential_id
+ OR NEW.provider_account_id IS NOT OLD.provider_account_id OR NEW.destination_id IS NOT OLD.destination_id OR NEW.operation_digest IS NOT OLD.operation_digest
+ OR NEW.request_digest IS NOT OLD.request_digest OR NEW.review_digest IS NOT OLD.review_digest OR NEW.price_units IS NOT OLD.price_units
+ OR NEW.price_basis IS NOT OLD.price_basis OR NEW.created_at IS NOT OLD.created_at OR NEW.expires_at IS NOT OLD.expires_at
+ OR NEW.updated_at<OLD.updated_at
+ OR NOT ((OLD.state='review' AND NEW.state IN ('dispatching','expired','cancelled'))
+  OR (OLD.state='dispatching' AND NEW.state IN ('applied','unchanged','uncertain','failed'))
+  OR (OLD.state='uncertain' AND NEW.state IN ('observed','failed')))
+ OR (NEW.state='dispatching' AND unixepoch()*1000>=OLD.expires_at)
+ OR (NEW.state='expired' AND unixepoch()*1000<OLD.expires_at)
+BEGIN SELECT RAISE(ABORT,'connector_receipt_guard'); END;
+-- Receipts are kept 400 days after their last change, then deleted by bounded maintenance; a dispatching or uncertain receipt is never
+-- deleted while the account exists. The account cascade removes the rest.
+CREATE TRIGGER connector_receipt_retained BEFORE DELETE ON connector_receipts
+WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.owner_id)
+ AND (OLD.state IN ('dispatching','uncertain') OR OLD.updated_at>unixepoch()*1000-34560000000)
+BEGIN SELECT RAISE(ABORT,'connector_receipt_retained'); END;

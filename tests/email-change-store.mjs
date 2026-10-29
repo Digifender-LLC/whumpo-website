@@ -303,5 +303,17 @@ try{
   for(let n=0;n<19;n++)await insert({epoch:account.auth_epoch+1}).catch(()=>{});
   const heavy=await owner();void heavy;
  });
+ await check('security review cap (WH-203): expired open reviews neither count nor linger; live and committed ones do',async()=>{
+  const a=await owner(),now=Date.now(),account=await one('SELECT * FROM identity_accounts WHERE account_id=?',a.account);
+  const add=(created)=>run("INSERT INTO owner_security_reviews(review_id,account_id,epoch,credential_revision,kit_generation,credentials,connections,created_at,expires_at,state,revision) VALUES(?,?,?,?,?,'[]','[]',?,?,'open',1)",id(),a.account,account.auth_epoch,account.credential_revision,account.kit_generation,created,created+600000);
+  const expired=[];for(let n=0;n<20;n++){const created=now-700000-n;expired.push(created);await add(created);}
+  await add(now);  // 20 expired open reviews do not block a new prepare
+  for(let n=1;n<20;n++)await add(now+n);
+  await rejects(add(now+99),/security_review_new/);  // 20 live reviews still hit the cap
+  await run("DELETE FROM owner_security_reviews WHERE account_id=? AND state='open' AND expires_at<=?",a.account,now);
+  assert.equal(await count("owner_security_reviews WHERE account_id='"+a.account+"'"),20,'expired open rows are deletable');
+  const live=await one("SELECT review_id FROM owner_security_reviews WHERE account_id=? LIMIT 1",a.account);
+  await rejects(run('DELETE FROM owner_security_reviews WHERE review_id=?',live.review_id),/security_review_retained/);  // an unexpired open row is retained
+ });
  console.log(`Email change store passed (${cases} cases, ${process.argv.includes('--d1')?'actual local D1':'in-memory SQLite'}): real trusted adapter, identity scope and schema triggers; delivery inactive stores nothing; Origin/body/rate-limit boundaries; identical responses; supersede and token reuse; replay and undo; epoch fence; reservation; restore and forward repair cannot revive a superseded change, a used token or an earlier verification state; bounded maintenance; closure; security-review rows.`);
 }finally{await fixture.close();}

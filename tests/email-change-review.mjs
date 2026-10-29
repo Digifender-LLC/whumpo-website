@@ -329,6 +329,14 @@ try{
   await run('DELETE FROM users WHERE id=?',o.account);
   assert.equal(await count('owner_security_reviews','account_id=?',o.account),0);assert.equal((await accountClosureInventory(db,o.account).catch(()=>({counts:{securityReviews:0}}))).counts.securityReviews,0);
  });
+ await check('maintenance purges expired open reviews at once and keeps live and committed ones (WH-203)',async()=>{
+  const o=await owner(),a=await account(o),live=(await prepare(o.session)).data;
+  const created=Date.now()-700000;
+  for(let n=0;n<3;n++)await run("INSERT INTO owner_security_reviews(review_id,account_id,epoch,credential_revision,kit_generation,credentials,connections,created_at,expires_at,state,revision) VALUES(?,?,?,?,?,'[]','[]',?,?,'open',1)",id(),o.account,a.auth_epoch,a.credential_revision,a.kit_generation,created-n,created-n+600000);
+  const first=await m.maintainEmailChanges(db,2);assert.equal(first.openReviews,2,'bounded by the limit');
+  assert.equal((await m.maintainEmailChanges(db,2)).openReviews,1);
+  assert.equal(await count('owner_security_reviews','account_id=?',o.account),1);assert.equal((await one('SELECT state FROM owner_security_reviews WHERE review_id=?',live.reviewId)).state,'open');
+ });
  await check('delivery inactive: the review still works and queues no notice',async()=>{
   const o=await owner(),r=(await prepare(o.session)).data,before=outbox.length;queued=false;
   const done=await commit(o.session,r.reviewId,{});queued=true;assert.equal(done.status,200);assert.equal(outbox.length,before);

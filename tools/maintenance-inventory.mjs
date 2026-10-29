@@ -65,7 +65,10 @@ export const backlogInventory={
  email_change_redaction:queue('owner_email_changes',`(new_address IS NOT NULL OR previous_address IS NOT NULL) AND (state NOT IN ('pending','confirmed') OR (state='confirmed' AND undo_until<=${nowMs}))`,ms('COALESCE(undo_until,expires_at)')),
  email_change_retention:queue('owner_email_changes',`state!='pending' AND max(expires_at,COALESCE(undo_until,0))+2592000000<=${nowMs}`,ms('max(expires_at,COALESCE(undo_until,0))','+30 days')),
  email_change_limits:queue('owner_email_change_limits',`at+172800000<=${nowMs}`,ms('at','+2 days')),
- security_reviews:queue('owner_security_reviews',`COALESCE(committed_at,expires_at)+7776000000<=${nowMs}`,ms('COALESCE(committed_at,expires_at)','+90 days')),
+ security_reviews:queue('owner_security_reviews',`COALESCE(committed_at,expires_at)+7776000000<=${nowMs} OR (state='open' AND expires_at<=${nowMs})`,ms('CASE WHEN state=\'open\' THEN expires_at ELSE COALESCE(committed_at,expires_at)+7776000000 END')),
+ // WH-143: lookup consents seven days after use, voiding or expiry, and receipts 400 days after their last change (never dispatching or uncertain); removed by the same daily email_changes job.
+ lookup_consents:queue('lookup_consents',`COALESCE(settled_at,expires_at)+604800000<=${nowMs}`,ms('COALESCE(settled_at,expires_at)','+7 days')),
+ connector_receipts:queue('connector_receipts',`state NOT IN ('dispatching','uncertain') AND updated_at+34560000000<=${nowMs}`,ms('updated_at','+400 days')),
 };
 export const operationInventory={
  standard_ai:{table:'standard_ai_requests',state:'state',states:['reserved','dispatched','uncertain'],time:'updated_at',guide:'docs/standard-ai-accounting.md'},

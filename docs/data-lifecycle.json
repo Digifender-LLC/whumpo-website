@@ -2235,7 +2235,7 @@
       "id": "connector-content",
       "tables": [],
       "scope": "owner",
-      "purpose": "Bounded external mailbox/calendar/CRM content and reviewed action receipts.",
+      "purpose": "Bounded external mailbox/calendar/CRM content. Action receipts are the separate connector-receipts class.",
       "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation.",
       "proposedRetention": "Extend the existing class lifecycle and LC-01–09 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
       "deletionAuthority": "Future exact domain authority with current identity and preservation checks; this metadata permits no deletion.",
@@ -2854,8 +2854,8 @@
       ],
       "scope": "owner",
       "purpose": "Compromise review (WH-203 reads and writes these rows; WH-201 stores them): a snapshot bound to the authority epoch, credential revision, kit generation and connection set, the replacement kit offer (verifier only), the owner's selections and a content-free commit receipt that claims account recovery only.",
-      "currentRetention": "Ten-minute snapshot; deleted 90 days after the commit or the expiry by bounded daily maintenance, and a table trigger refuses earlier deletion while the account exists. A committed review is immutable, and a commit needs the epoch advanced by exactly one. Account closure cascades.",
-      "proposedRetention": "Keep 90 days after commit or expiry.",
+      "currentRetention": "Ten-minute snapshot. Bounded daily maintenance deletes an expired open (never committed) review at once and a committed review 90 days after its commit. A table trigger refuses earlier deletion of a committed review (and of an unexpired open one) while the account exists. Expired open reviews do not count toward the 20-per-account cap; committed and unexpired ones do. A committed review is immutable, and a commit needs the epoch advanced by exactly one. Account closure cascades.",
+      "proposedRetention": "Keep a committed review 90 days after commit; an expired open review is not kept.",
       "deletionAuthority": "Bounded daily maintenance or account closure cascade.",
       "exportPolicy": "Allowlist review time, selections and outcome. Never the kit offer verifier, kit, token or credential material.",
       "references": [
@@ -2879,6 +2879,50 @@
         ],
         "remainingExposure": [
           "Rows hold credential, session and connection identifiers and counts, and a SHA-256 kit offer verifier; no kit, token or credential material."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
+      "id": "connector-receipts",
+      "tables": [
+        "lookup_consents",
+        "connector_receipts"
+      ],
+      "scope": "owner",
+      "purpose": "Request-bound lookup consent and minimized action receipts for the new connector providers (WH-143): a single-use consent bound to owner, provider, operation, credential, parameter digest and destination, and a receipt of identifiers, digests, price, state and a bounded detail code. Never a message, event or contact body, recipient list, provider error body or credential. Connector content is the separate, still unadmitted connector-content class.",
+      "currentRetention": "Tables exist; no adapter writes them yet. A consent lives at most 15 minutes, is used once, and is kept seven days after use, voiding or expiry; a table trigger refuses earlier deletion while the account exists. A receipt is kept 400 days after its last change (WH-143 decision, owner may revise), and a dispatching or uncertain receipt is never deleted while the account exists. Bounded maintenance deletes both past those windows. Account closure cascades.",
+      "proposedRetention": "Same as current.",
+      "deletionAuthority": "Bounded maintenance (src/connector-records-maintenance.ts) or account closure cascade; no route edits a row.",
+      "exportPolicy": "Allowlist receipt time, provider, operation, state, price and the reviewed destination identifier. Never digests, credential identifiers, provider account identifiers or consent rows.",
+      "references": [
+        "schema/platform.sql",
+        "src/connector-records-maintenance.ts",
+        "docs/connectors.md",
+        "docs/data-protection.md",
+        "docs/inference-privacy.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Current owner through the connector review and receipt views (adapter wiring is later); bounded operator diagnostics show states only"
+        ],
+        "processors": [
+          "Deterministic consent and receipt state machine; no model, support or Chat reader. Provider content never enters these rows."
+        ],
+        "remainingExposure": [
+          "Rows link an account to a provider operation, a destination identifier and timing through opaque identifiers and SHA-256 digests; no body, recipient list, token or credential."
         ],
         "decision": "retain-and-verify",
         "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",

@@ -68,7 +68,7 @@ async function suite(m){
  await test('operation data classes are current lifecycle classes or the reserved/proposed connector classes',()=>{
   const classes=new Map(JSON.parse(read('docs/data-lifecycle.json')).classes.map(c=>[c.id,c.storageStatus]));
   for(const [p,e] of Object.entries(m.connectorCatalog.providers))for(const [id,op] of Object.entries(e.operations)){
-   if(op.dataClass==='connector-receipts'){assert.equal(classes.has('connector-receipts'),false,'proposed class is registered by WH-143');continue;}
+   if(op.dataClass==='connector-receipts'){assert.equal(classes.get('connector-receipts'),'current','WH-143 registers the class with its tables');continue;}
    assert.ok(classes.has(op.dataClass),`${p}.${id}`);
    assert.equal(classes.get(op.dataClass),e.readiness==='planned'?'planned':'current',`${p}.${id}`);
   }

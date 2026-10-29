@@ -5,7 +5,7 @@
  *  - closed changes lose their plaintext addresses (the hash stays), a confirmed one when its seven-day undo window ends;
  *  - closed changes are deleted 30 days after the later of their expiry and undo deadline (never a pending one);
  *  - rate-limit evidence is deleted after 48 hours;
- *  - compromise-review rows are deleted 90 days after commit or expiry. */
+ *  - compromise-review rows are deleted 90 days after commit or expiry, except that expired open ones (never committed) go at once. */
 export const emailChangeRetention=Object.freeze({closedChangeDays:30,limitHours:48,reviewDays:90,batch:200});
 
 export async function maintainEmailChanges(db:Pick<D1Database,'prepare'>,limit:number=emailChangeRetention.batch){
@@ -16,5 +16,6 @@ export async function maintainEmailChanges(db:Pick<D1Database,'prepare'>,limit:n
  const changes=(await db.prepare("DELETE FROM owner_email_changes WHERE change_id IN (SELECT change_id FROM owner_email_changes WHERE state!='pending' AND max(expires_at,COALESCE(undo_until,0))<=(unixepoch()*1000)-2592000000 ORDER BY expires_at LIMIT ?)").bind(limit).run()).meta.changes;
  const limits=(await db.prepare('DELETE FROM owner_email_change_limits WHERE id IN (SELECT id FROM owner_email_change_limits WHERE at<=(unixepoch()*1000)-172800000 ORDER BY at LIMIT ?)').bind(limit).run()).meta.changes;
  const reviews=(await db.prepare('DELETE FROM owner_security_reviews WHERE review_id IN (SELECT review_id FROM owner_security_reviews WHERE COALESCE(committed_at,expires_at)<=(unixepoch()*1000)-7776000000 ORDER BY expires_at LIMIT ?)').bind(limit).run()).meta.changes;
- return {expired,redacted,changes,limits,reviews};
+ const openReviews=(await db.prepare("DELETE FROM owner_security_reviews WHERE review_id IN (SELECT review_id FROM owner_security_reviews WHERE state='open' AND expires_at<=(unixepoch()*1000) ORDER BY expires_at LIMIT ?)").bind(limit).run()).meta.changes;
+ return {expired,redacted,changes,limits,reviews,openReviews};
 }

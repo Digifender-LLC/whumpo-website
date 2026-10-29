@@ -83,6 +83,11 @@ const metrics={
  openEmailChanges:['owner_email_changes','account_id',"state='pending' OR (state='confirmed' AND undo_until>unixepoch()*1000)"],
  emailChangeLimits:['owner_email_change_limits','account_id'],
  securityReviews:['owner_security_reviews','account_id'],
+ // WH-143: lookup consents (open ones are unexpired, unused) and connector receipts (open ones may still hold a provider effect), deleted with the account.
+ lookupConsents:['lookup_consents','owner_id'],
+ openLookupConsents:['lookup_consents','owner_id',"state IN ('issued','confirmed') AND expires_at>unixepoch()*1000"],
+ connectorReceipts:['connector_receipts','owner_id'],
+ openConnectorReceipts:['connector_receipts','owner_id',"state IN ('review','dispatching','uncertain')"],
 };
 export const closureInventorySQL=`WITH scope AS (SELECT id FROM users WHERE (?1 IS NULL OR id=?1)),
  owned_projects AS (SELECT id FROM projects WHERE owner_user_id IN (SELECT id FROM scope))

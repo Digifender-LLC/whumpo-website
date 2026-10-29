@@ -101,6 +101,7 @@ Class, lane and turnover values:
 | `cms_setup_reviews` | `cms_setup_review_guard` | project 25 (filtered) · owner 25 (filtered) · owner 100 (filtered) · platform 2500 (filtered) · platform 5000 (filtered) | review | R1 | active-only | cascade | cms-resources |
 | `cms_wordpress_sources` | `cms_wordpress_source_admit` | project 5 · owner 10 · platform 50 | inventory | R6 | lifetime | cascade | cms-media-imports |
 | `composition_plans` | `composition_plan_admit` | project 25 (filtered) · owner 25 (filtered) · owner 100 (filtered) · platform 2500 (filtered) · platform 5000 (filtered) | review | R1 | active-only | cascade | backend-artifacts |
+| `connector_receipts` | `connector_receipt_new` | other 2000 | receipt | R2 | expiring | app+cascade | connector-receipts |
 | `contact_notification_outbox` | `contact_outbox_insert` | owner 10 (window) · destination 3 (window) · destination 10 (window) · destination 50 (window) | operation | R3 | window | app+cascade | contact-notifications |
 | `contact_receipts` | `contact_submission_guard` | project 100 · owner 100 · platform 500 · platform 1000 | receipt | R2 | expiring | app+cascade | contacts |
 | `content_risk_evidence` | `content_risk_evidence_admit` | owner 10000 · platform 100000 | evidence | R5 | restricted | cascade | safety-cases |
@@ -120,6 +121,7 @@ Class, lane and turnover values:
 | `identity_credentials` | `identity_credential_limit` | account 10 | inventory | R6 | owner-removable | app+cascade | owner-identity-progress |
 | `identity_effect_receipts` | `identity_effect_receipt_limit` | platform 50000 | receipt | R2 | expiring | app | owner-identity-receipts |
 | `identity_grants` | `identity_grant_limit` | account 20 · platform 20000 | inventory | R6 | expiring | app+cascade | owner-identity-admission |
+| `lookup_consents` | `lookup_consent_new` | other 20 (filtered) | inventory | R6 | expiring | app+cascade | connector-receipts |
 | `module_access_role_reviews` | `module_access_role_review_admit` | project 25 (filtered) · owner 25 (filtered) · owner 100 (filtered) · platform 2500 (filtered) · platform 5000 (filtered) | review | R1 | active-only | cascade | project-roles |
 | `module_activation_reviews` | `module_activation_review_admit` | project 25 (filtered) · owner 25 (filtered) · owner 100 (filtered) · platform 2500 (filtered) · platform 5000 (filtered) | review | R1 | active-only | cascade | module-registry |
 | `module_files` | `module_file_admit` | visitor+instance 10 (window) | inventory | R6 | window | app+cascade | module-files |
@@ -129,7 +131,7 @@ Class, lane and turnover values:
 | `operator_retention_receipts` | `operator_retention_apply` | platform ≤10000 | evidence | R5 | restricted | trigger | operator-containment |
 | `operator_session_revocations` | `operator_session_revocation_admit` | platform 10000 | evidence | R5 | restricted | trigger | operator-containment |
 | `owner_email_change_limits` | `owner_email_change_limit_rate` | account 3 (filtered) · account 5 (filtered) · other 3 (filtered) | rate | R6 | expiring | app+cascade | owner-email-change-limits |
-| `owner_security_reviews` | `owner_security_review_new` | account 20 | inventory | R6 | expiring | app+cascade | owner-security-reviews |
+| `owner_security_reviews` | `owner_security_review_new` | account 20 (filtered) | inventory | R6 | expiring | app+cascade | owner-security-reviews |
 | `photo_scan_tickets` | `photo_scan_ticket_quota` | owner 100 · platform 5000 | evidence | R5 | lifetime | cascade | safety-checks |
 | `project_files` | `project_file_quota` | project 20 · owner 50 · platform 500 | inventory | R6 | owner-removable | trigger+cascade | project-media |
 | `project_files+file_cleanup` | `project_file_cleanup_capacity` | platform 500 | inventory | R6 | owner-removable | app+trigger+cascade | project-media |

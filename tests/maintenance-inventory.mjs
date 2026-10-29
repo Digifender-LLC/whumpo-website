@@ -62,10 +62,13 @@ try{
   sql.prepare("INSERT INTO owner_email_change_limits(kind,address_key,at) VALUES('send',?,?)").run(hex('b'),Date.now()-4*day);
   sql.prepare("INSERT INTO owner_email_changes(change_id,account_id,request_id,request_hash,new_address,new_address_hash,epoch,created_at,expires_at,state,revision,history,deliverable) VALUES('change-old',?,'request-old',?,'private-new@example.invalid',?,1,?,?,'pending',1,'[\"pending\"]',0)").run(owner,hex('c'),hex('d'),old,old+3600000);
   sql.prepare("INSERT INTO owner_security_reviews(review_id,account_id,epoch,credential_revision,kit_generation,credentials,connections,created_at,expires_at,state,revision) SELECT 'review-old',account_id,auth_epoch,credential_revision,kit_generation,'[]','[]',?,?,'open',1 FROM identity_accounts WHERE account_id=?").run(Date.now()-100*day,Date.now()-100*day+600000,owner);
+  // WH-143: a lookup consent expired 10 days ago and a receipt last changed 500 days ago are both past retention.
+  sql.prepare("INSERT INTO lookup_consents(consent_id,owner_id,provider,operation_id,credential_id,params_digest,destination,created_at,expires_at,state,revision) VALUES('consent-old',?,'gmail','messages.search','credential-x',?,'owner-panel',?,?,'issued',1)").run(owner,hex('e'),Date.now()-10*day-600000,Date.now()-10*day);
+  sql.prepare("INSERT INTO connector_receipts(receipt_id,owner_id,provider,operation_id,authority,credential_id,provider_account_id,destination_id,operation_digest,request_digest,review_digest,price_units,price_basis,state,created_at,expires_at,updated_at,revision) VALUES('receipt-old',?,'gmail','message.send','owner-request','credential-x','account-x','dest-x',?,?,?,0,'plan-inclusion','review',?,?,?,1)").run(owner,hex('1'),hex('2'),hex('3'),Date.now()-500*day,Date.now()-500*day+3600000,Date.now()-500*day);
  }
  sql.exec('PRAGMA query_only=ON');
  report=await maintenanceReport(db,Date.now());
- assert.equal(report.backlogs.length,48);assert.ok(report.backlogs.every(q=>q.state!=='unavailable'),JSON.stringify(report.backlogs));
+ assert.equal(report.backlogs.length,50);assert.ok(report.backlogs.every(q=>q.state!=='unavailable'),JSON.stringify(report.backlogs));
  for(const queue of ['contact_receipts','contact_notification_outbox','contact_notification_queue','traffic','fair_use','health_budget','github_staged','connection_exchanges']){const backlog=report.backlogs.find(q=>q.queue===queue);assert.equal(backlog.state,'attention',queue);assert.equal(backlog.count,1,queue);}
  assert.equal(report.backlogs.find(q=>q.queue==='contact_receipts').oldestAgeMs>=2*day,true);
  for(const queue of ['github','cloudflare']){const backlog=report.backlogs.find(q=>q.queue===queue);assert.equal(backlog.state,'pending');assert.equal(backlog.unknownAgeCount,0);assert.ok(backlog.oldestAgeMs<60000);}
@@ -74,7 +77,7 @@ try{
  {const directory=report.reviews.find(r=>r.family==='directory_reviews');assert.deepEqual([directory.state,directory.waiting,directory.sealedReceipts],['attention',1,1]);assert.ok(report.reviews.filter(r=>r.family!=='directory_reviews').every(r=>r.state==='current'&&r.waiting===0));}
  assert.equal(report.backlogs.find(q=>q.queue==='github_refresh_grants').count,1);
  assert.equal(report.backlogs.find(q=>q.queue==='github_refresh_grants').unknownAgeCount,0);
- for(const queue of ['email_change_expiry','email_change_limits','security_reviews']){const backlog=report.backlogs.find(q=>q.queue===queue);assert.equal(backlog.count,1,queue);assert.equal(backlog.state,'attention',queue);assert.equal(backlog.unknownAgeCount,0,queue);}
+ for(const queue of ['email_change_expiry','email_change_limits','security_reviews','lookup_consents','connector_receipts']){const backlog=report.backlogs.find(q=>q.queue===queue);assert.equal(backlog.count,1,queue);assert.equal(backlog.state,'attention',queue);assert.equal(backlog.unknownAgeCount,0,queue);}
  assert.equal(report.backlogs.find(q=>q.queue==='email_change_redaction').count,0,'a pending change keeps its address; the job closes it first');assert.equal(report.backlogs.find(q=>q.queue==='email_change_retention').count,0,'a change can only be inserted pending, so none is closed and old yet');
  assert.equal(report.operations.length,4);assert.ok(report.operations.every(o=>o.state==='available'));
  // WH-050 F8: every shared counter's ceiling matches the trigger/table that enforces it; 50%/80% flags; read-only.
@@ -95,5 +98,5 @@ try{
  const broken=await counterReport({prepare:()=>{throw Error('PRIVATE_SECRET_CANARY');}},now);assert.ok(broken.counters.every(c=>c.state==='unavailable'));assert.equal(broken.attention,true);assert.ok(!JSON.stringify(broken).includes('PRIVATE_'));
  assert.ok(!JSON.stringify(counters).includes(project)&&!JSON.stringify(counters).includes(owner));
  const encoded=JSON.stringify(report);for(const marker of ['PRIVATE_',owner,newGH,newCF,project])assert.ok(!encoded.includes(marker),marker);
- console.log('Maintenance inventory passed: complete current schema, missing telemetry attention, precise new revocation clocks, retry stability/cascade, 48 read-only queues, four receipt families, 33 shared platform counters (14 shared, the cost-event capacity and 18 review-family caps) checked against their schema ceilings with 50%/80% flags, retention eligibility and private data exclusion.');
+ console.log('Maintenance inventory passed: complete current schema, missing telemetry attention, precise new revocation clocks, retry stability/cascade, 50 read-only queues, four receipt families, 33 shared platform counters (14 shared, the cost-event capacity and 18 review-family caps) checked against their schema ceilings with 50%/80% flags, retention eligibility and private data exclusion.');
 }finally{sql.close();}
