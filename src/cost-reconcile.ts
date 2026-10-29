@@ -1,6 +1,6 @@
 // WH-171: operator-side import of exported provider statements and the aggregate reconciliation report. Pure functions over plain
 // data: no database, network or clock. Statements are never stored; the report holds aggregates only (no owner, project, resource,
-// task or provider-record identifiers). Mirrors the reference `reconcile()` in tools/prototypes/cost-events.mjs.
+// task or provider-record identifiers). Mirrors the reference `reconcile()` in the WH-168 offline prototype.
 import { costScale, dimensions, tariffs, type CostEvent } from './cost-events';
 
 export class CostReconcileError extends Error {
