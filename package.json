@@ -26,6 +26,7 @@
     "invite": "node tools/create-invite.mjs",
     "test:chat-interactions": "node tests/chat-interaction-contract.mjs && node tests/chat-interaction-input.mjs && node tests/chat-interaction-storage.mjs && node tests/chat-interaction-intake.mjs && node tests/chat-interaction-composition.mjs && node tests/chat-interaction-model-continuation.mjs && node tests/chat-interaction-agent.mjs && node tests/chat-interaction-history.mjs && node tests/chat-interaction-cards.mjs && node tests/chat-interaction-cards-client.mjs",
     "test:chat": "node tests/chat.mjs",
+    "test:saved-review-confirm-outage": "node tests/saved-review-confirm-outage.mjs && node tests/saved-review-confirm-outage.mjs --d1",
     "build": "node tools/build.mjs",
     "test:account-email-ui": "node tests/account-email-ui.mjs",
     "test:billing-ui": "node tests/billing-ui.mjs",
