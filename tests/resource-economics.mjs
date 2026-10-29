@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
-import { plans } from '../src/plans.ts';
-import { resourceProposal as p, resourceTariff, estimateWorkload, planEconomics, rolloverProposal } from '../src/resource-economics.ts';
+import {build} from 'esbuild';
+// Sources use extensionless TS imports, so bundle them as the sibling tests do.
+const bundled=await build({stdin:{contents:"export {plans} from './src/plans';export {resourceProposal,resourceTariff,estimateWorkload,planEconomics,rolloverProposal} from './src/resource-economics';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'neutral',write:false,logLevel:'silent'});
+const { plans, resourceProposal: p, resourceTariff, estimateWorkload, planEconomics, rolloverProposal } = await import('data:text/javascript;base64,' + Buffer.from(bundled.outputFiles[0].text).toString('base64'));
 for (const rate of Object.values(resourceTariff)) if (rate.units > 0) assert.ok(rate.costUSD / rate.units <= p.ceilingUSDPerUnit);
 for (const plan of plans.filter(x => Object.hasOwn(p.allowances, x.id))) {
   const units = p.allowances[plan.id];

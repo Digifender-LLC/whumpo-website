@@ -87,7 +87,7 @@ try{
   res.writeHead(200,{'content-type':{html:'text/html',js:'text/javascript',css:'text/css',svg:'image/svg+xml',png:'image/png',woff2:'font/woff2'}[ext]??'application/octet-stream','cache-control':'no-store'}).end(bytes);
  }catch(error){errors.push({phase,error:error.message});if(!res.headersSent)res.writeHead(500);res.end('Local lifecycle fixture failed');}}
  server=createServer((req,res)=>{const pending=handle(req,res);pendingHandlers.add(pending);void pending.finally(()=>pendingHandlers.delete(pending));});
- await new Promise((done,reject)=>{server.once('error',reject);server.listen(8787,'127.0.0.1',done);});origin='http://localhost:'+server.address().port;
+ await new Promise((done,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',done);});origin='http://localhost:'+server.address().port;
  browser=await chromium.launch({headless:true,...(process.env.WHUMPO_CHROMIUM?{executablePath:process.env.WHUMPO_CHROMIUM}:{})});
  const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});page=await context.newPage();page.setDefaultTimeout(20000);page.on('pageerror',error=>errors.push({phase,error:error.message}));
  await page.goto(origin+'/_fixture/start');
