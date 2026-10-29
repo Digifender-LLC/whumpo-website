@@ -93,8 +93,8 @@ The work packages, their order, file sets and acceptance tests are in [android/a
 
 Agents do not perform these. Each needs the owner (money, accounts or production).
 
-1. **Confirm the Play account type and creation date.** A personal account created after November 13, 2023 must run a 12-tester, 14-day closed test before production. An organization account avoids that rule but needs organization verification. This does not block the internal-testing beta (WH-087).
-2. **Confirm the package name** (the shell uses a provisional `com.whumpo.android`). It is permanent once uploaded.
+1. **Answered 2026-10-29 (Q-006): the Play account is personal and was created after November 13, 2023, so the 12-tester, 14-day closed-test rule applies before production. It may become an organization account later.** Original question: confirm the Play account type and creation date. A personal account created after November 13, 2023 must run a 12-tester, 14-day closed test before production. An organization account avoids that rule but needs organization verification. This does not block the internal-testing beta (WH-087).
+2. **Answered 2026-10-29 (Q-005): the package name is `com.whumpo.android`, now final.** It is permanent once uploaded.
 3. **Enrol in Play App Signing** at the first upload, keep custody of the upload key, and share the app-signing certificate SHA-256. It feeds `assetlinks.json` and the server's approved-origin list (WH-083).
 4. **Approve publishing `/.well-known/assetlinks.json` on production `whumpo.com`** with `get_login_creds` and `handle_all_urls` for the release signing identity only. Agents prepare the file and the route. The owner approves the production deploy.
 5. **Create the Firebase project for FCM** (no cost) and approve the server credential's custody (WH-086).

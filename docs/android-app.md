@@ -128,3 +128,10 @@ Release recovery uses a server-side stop to new native work, revocable mobile se
 During implementation run Android build, lint, unit and instrumentation checks selected for each slice. Run `pnpm check` for backend changes and relevant existing identity, natural Chat, Chat-delivery, history, site/application-journey, publication, onboarding and photo checks after inspecting their fixture/live setup. Do not run real-model/provider or CMS tests by implication. Physical passkeys, Turnstile, configured FCM and customer photo clearance require their real acceptance evidence; mocks cannot close those gates.
 
 For the WH-081 change, run `node tests/mobile-v1-contract.mjs` (offline shapes, admission, session/handoff/idempotency semantics, secret/PII scan), `node tools/roadmap.mjs validate`, `alignment`, `render --check`, `pnpm check` equivalents (`tsc` for both projects) and `git diff --check`, plus a local-link check. This change creates no Android build, mobile endpoint, migration, signing identity, provider configuration, deployment or execution issue.
+
+## Owner answers
+
+| ID | Question | Answer | Date |
+| --- | --- | --- | --- |
+| Q-005 | Android application ID | `com.whumpo.android` is final (applicationId and namespace). | 2026-10-29 |
+| Q-006 | Play account type | Personal account created after Nov 13, 2023, so the 12-tester / 14-day closed-testing rule applies before production. It may become an organization account later. | 2026-10-29 |

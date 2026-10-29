@@ -1,21 +1,23 @@
-# Pinned Android toolchain for the Whumpo owner app (WH-082).
-# AGP and Kotlin move together; see docs/android-build.md before changing a version.
+# Pinned Android and Kotlin Multiplatform toolchain for the Whumpo owner app (WH-082, WP1).
+# Versions checked 2026-10-29; sources are listed in docs/android-build.md.
+# AGP, Kotlin and Compose Multiplatform move together; see docs/android-build.md before changing a version.
 [versions]
-androidGradlePlugin = "9.3.2"
-kotlin = "2.3.0"
-compileSdk = "36"
+androidGradlePlugin = "9.5.0"
+composeMultiplatform = "1.12.2"
+kotlin = "2.4.21"
+compileSdk = "37"
 targetSdk = "36"
 minSdk = "28"
 androidxActivity = "1.9.3"
-androidxComposeBom = "2025.09.01"
+androidxComposeBom = "2026.09.00"
 androidxCore = "1.15.0"
-androidxLifecycle = "2.10.0"
+androidxLifecycle = "2.11.0"
 androidxNavigation = "2.8.5"
 androidxTestCore = "1.6.1"
 androidxTestExtJunit = "1.2.1"
 androidxTestRunner = "1.6.2"
 junit4 = "4.13.2"
-kotlinxCoroutines = "1.10.1"
+kotlinxCoroutines = "1.11.0"
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidxActivity" }
@@ -32,11 +34,17 @@ androidx-navigation-compose = { module = "androidx.navigation:navigation-compose
 androidx-test-core = { module = "androidx.test:core", version.ref = "androidxTestCore" }
 androidx-test-ext-junit = { module = "androidx.test.ext:junit", version.ref = "androidxTestExtJunit" }
 androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidxTestRunner" }
+compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "composeMultiplatform" }
+jetbrains-lifecycle-viewmodel = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel", version.ref = "androidxLifecycle" }
 junit4 = { module = "junit:junit", version.ref = "junit4" }
+kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "androidGradlePlugin" }
-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
-kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+android-kmp-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "androidGradlePlugin" }
+compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "composeMultiplatform" }
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
