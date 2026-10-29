@@ -7,8 +7,10 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertWidthIsAtLeast
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isHeading
+import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
@@ -80,8 +82,10 @@ class ShellBehaviorTest : RobolectricUiTest() {
         launch(Screen.Compact) { WhumpoShell() }.use { scenario ->
             compose.onNodeWithTag("nav-settings").performClick()
             scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
-            compose.waitForIdle()
-            compose.onNodeWithTag("nav-chat").assertIsSelected()
+            // Back is delivered through a coroutine, so wait for the selection instead of asserting once.
+            compose.waitUntil(5_000) {
+                compose.onAllNodes(isSelected() and hasTestTag("nav-chat")).fetchSemanticsNodes().isNotEmpty()
+            }
         }
     }
 }

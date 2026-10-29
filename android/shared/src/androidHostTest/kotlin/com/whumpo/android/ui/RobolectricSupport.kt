@@ -28,6 +28,8 @@ import org.robolectric.Shadows.shadowOf
 /** Activity whose content survives recreation, for rotation tests. */
 class ShellTestActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        // No action bar: the app draws edge to edge and the goldens must not show a system title.
+        setTheme(android.R.style.Theme_Material_NoActionBar)
         super.onCreate(savedInstanceState)
         setContent { content() }
     }
