@@ -33,6 +33,7 @@
     "test:runtime-ai": "node tests/runtime-ai.mjs",
     "test:directory-history": "node tests/directory-history.mjs",
     "test:directories": "node tests/directories.mjs",
+    "test:review-retention-journey": "node tests/review-retention-journey.mjs",
     "test:review-retention-contract": "node tests/review-retention-contract.mjs",
     "test:site-health": "node tests/site-health.mjs && node tests/site-diagnostics.mjs",
     "test:app-page-design": "node tests/app-page-design.mjs",
