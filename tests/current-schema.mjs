@@ -15,7 +15,7 @@ try{
  const tables=sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(r=>r.name);
  for(const old of ['sessions','passkeys','auth_challenges','recovery_codes','d1_migrations'])assert.ok(!tables.includes(old),old+' must not be supported');
  for(const current of ['identity_accounts','identity_sessions','identity_credentials','identity_kit_offers','identity_admission_checks'])assert.ok(tables.includes(current));
- assert.deepEqual(sqlite.prepare('PRAGMA table_info(users)').all().map(c=>c.name),['id','email','created_at']);
+ assert.deepEqual(sqlite.prepare('PRAGMA table_info(users)').all().map(c=>c.name),['id','email','created_at','email_verified_at','email_verified_via'],'users carry the WH-201 verification state and no password field');
  assert.equal(currentSchemaPlan(artifact,schemaSummary([])).mode,'initialize');
  assert.equal(currentSchemaPlan(artifact,artifact.expected).mode,'none');
  assert.throws(()=>currentSchemaPlan(artifact,{...artifact.expected,sha256:'obsolete'}),/new empty database/);

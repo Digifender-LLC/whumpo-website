@@ -1,4 +1,5 @@
 import {completeStandardAI, readStandardAI} from './standard-ai-usage';
+import {emitInferenceCall} from './cost-event-emission';
 
 type PendingTurn = {id:string;input_tokens:number|null;output_tokens:number|null;created_at:string};
 /** Recover only a persisted standard request. Never dispatch or touch customer balances. */
@@ -24,6 +25,7 @@ export async function reconcileStandardChat(db:D1Database,user:string,turn:Pendi
    db.prepare("UPDATE chat_turns SET status='failed',assistant_text='The request stopped before reaching the AI. Send a new message to try again.' WHERE id=? AND user_id=? AND status='pending' AND input_tokens IS NULL AND output_tokens IS NULL AND EXISTS(SELECT 1 FROM standard_ai_requests s WHERE s.id=chat_turns.id AND s.user_id=chat_turns.user_id AND s.state='released')").bind(turn.id,user),
    db.prepare("UPDATE chat_turns SET status='uncertain',assistant_text='The AI request was interrupted. This message will not be sent twice. Your credits were not used; check your saved work before asking again.' WHERE id=? AND user_id=? AND status='pending' AND input_tokens IS NULL AND output_tokens IS NULL AND EXISTS(SELECT 1 FROM standard_ai_requests s WHERE s.id=chat_turns.id AND s.user_id=chat_turns.user_id AND s.state='uncertain')").bind(turn.id,user)
   ]);
+  for(const id of [turn.id,turn.id+':ack'])await emitInferenceCall(db,user,id);
  }
  return true;
 }

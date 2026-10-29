@@ -1,5 +1,6 @@
 import {inferenceCost} from './model-policy';
 import {inferenceRoutingPolicy,planInferenceRoute} from './inference-routing';
+import {emitGatewayAttempt} from './cost-event-emission';
 type Decision=ReturnType<typeof planInferenceRoute>;
 type Selection=NonNullable<Decision['selected']>;
 export class GatewaySpendError extends Error{constructor(readonly status:number,message:string){super(message);}}
@@ -24,17 +25,19 @@ export async function reserveGatewaySpend(db:D1Database,owner:string,id:string,d
   if(existing)throw new GatewaySpendError(409,'Inference request already has a different reservation');
   throw new GatewaySpendError(409,'Inference funding or approval could not be reserved');
  }
+ await emitGatewayAttempt(db,owner,id);
  return {id,status:'reserved',replayed:false};
 }
 export async function dispatchGatewaySpend(db:D1Database,owner:string,id:string){
  // Release and dispatch race on the same receipt. Only one can win.
- const result=await db.prepare("UPDATE gateway_spend_attempts SET status='dispatched' WHERE id=? AND user_id=? AND status='reserved'").bind(id,owner).run();return result.meta.changes>0;
+ const result=await db.prepare("UPDATE gateway_spend_attempts SET status='dispatched' WHERE id=? AND user_id=? AND status='reserved'").bind(id,owner).run();if(result.meta.changes>0)await emitGatewayAttempt(db,owner,id);return result.meta.changes>0;
 }
 export async function releaseGatewaySpend(db:D1Database,owner:string,id:string){
- const result=await db.prepare("UPDATE gateway_spend_attempts SET status='released' WHERE id=? AND user_id=? AND status='reserved'").bind(id,owner).run();return result.meta.changes>0;
+ const result=await db.prepare("UPDATE gateway_spend_attempts SET status='released' WHERE id=? AND user_id=? AND status='reserved'").bind(id,owner).run();if(result.meta.changes>0)await emitGatewayAttempt(db,owner,id);return result.meta.changes>0;
 }
 export async function uncertainGatewaySpend(db:D1Database,owner:string,id:string){
  await db.prepare("UPDATE gateway_spend_attempts SET status='uncertain' WHERE id=? AND user_id=? AND status='dispatched'").bind(id,owner).run();
+ await emitGatewayAttempt(db,owner,id);
 }
 export async function settleGatewaySpend(db:D1Database,owner:string,id:string,input:number,output:number){
  integer(input);integer(output);const row=await read(db,owner,id);if(!row)throw new GatewaySpendError(404,'Inference reservation not found');
@@ -46,5 +49,6 @@ export async function settleGatewaySpend(db:D1Database,owner:string,id:string,in
  if(input>s.inputBound||output>s.outputBound||provider>s.providerReservationMicros||customer>s.customerReservationMicros){await uncertainGatewaySpend(db,owner,id);throw new GatewaySpendError(409,'Reported inference usage exceeds its reservation; reconciliation required');}
  const result=await db.prepare("UPDATE gateway_spend_attempts SET status='settled',input_tokens=?,output_tokens=?,provider_actual=?,customer_actual=? WHERE id=? AND user_id=? AND status IN ('dispatched','uncertain')").bind(input,output,provider,customer,id,owner).run();
  if(result.meta.changes===0){const current=await read(db,owner,id);if(!current||!matches(current))throw new GatewaySpendError(409,'Inference settlement conflicts with its receipt');}
+ if(result.meta.changes>0)await emitGatewayAttempt(db,owner,id);
  return {providerMicros:provider,customerMicros:customer,replayed:result.meta.changes===0};
 }

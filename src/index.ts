@@ -19,6 +19,7 @@ import {FeatureInclusionError} from './feature-inclusion';
 import {stripeBillingWebhook,subscriptionsEnabled,subscriptionStatus,refreshSubscriptions,startSubscription,billingPortal} from './stripe-billing';
 import {serviceClientActivationPreview} from './project-specification/service-clients/activation';
 import {runMaintenance} from './maintenance';
+import {accountEmailRoute,emailChangeDelivery} from './email-change/http';
 import {cleanupInteractionDrafts} from './chat-interactions/retention';
 import {exportChatTranscript} from './chat-transcript';
 import {quarantineBackendImport,listBackendImports,scanBackendImports} from './backend-imports';
@@ -156,7 +157,8 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   const scoped=workspaceBindings(env,admitWorkspace(env.DB,principal),principal.accountId);
   const user=await scoped.DB.prepare('SELECT id,email FROM users WHERE id=?').bind(principal.accountId).first<User>();
   if(!user)throw new IdentityError(401,'proof_required','Sign in to continue.');
-  const response=await handleWorkspace(request,scoped,ctx,user);
+  // WH-201 direct owner controls for the account email: not Chat, no agent action; delivery is inactive until WH-202.
+  const response=(await accountEmailRoute(request,scoped,scoped.DB,principal,{delivery:emailChangeDelivery(scoped)}))??await handleWorkspace(request,scoped,ctx,user);
   try{await assertWorkspace(scoped.DB,user.id);}catch(error){await response.body?.cancel().catch(()=>{});throw error;}
   return response;
 }

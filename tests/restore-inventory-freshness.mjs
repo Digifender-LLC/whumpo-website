@@ -31,7 +31,7 @@ const reject=async action=>{await assert.rejects(action,/unavailable/);refusals+
 try{
  await initializeFixtureKeys(db,keyring);const owner=await workspaceFixture(db,m);
  const session=await db.prepare('SELECT * FROM identity_sessions WHERE id=?').bind(owner.authority).first();
- await db.prepare('UPDATE users SET email=? WHERE id=?').bind('PRIVATE_SOURCE_PROFILE_CANARY',owner.account).run();
+ await db.prepare('UPDATE users SET created_at=? WHERE id=?').bind('PRIVATE_SOURCE_PROFILE_CANARY',owner.account).run();
  const init=await createRestoreInventory({inventoryFile,streamId});assert.equal(init.version,2);
  const inventory=await open(),original=await register(inventory);
  await assertResult(original,inventory);
@@ -68,7 +68,7 @@ try{
 
  // A consumed/cancelled/current record need not disappear. A changed full row
  // is independently observed; neither its old digest nor the current value leaks.
- await db.prepare('UPDATE users SET email=? WHERE id=?').bind('PRIVATE_CHANGED_PROFILE_CANARY',owner.account).run();
+ await db.prepare('UPDATE users SET created_at=? WHERE id=?').bind('PRIVATE_CHANGED_PROFILE_CANARY',owner.account).run();
  await assertResult(current,inventory,'stale-authority');
  const changed=await evidence(current,inventory);assert.equal(changed.events.length,2);assert.equal(changed.events.at(-1).kind,'record-current');
  assert.ok(!JSON.stringify(changed).includes('PRIVATE_CHANGED_PROFILE_CANARY'));
@@ -94,10 +94,10 @@ try{
 
  // Change the real source after the first snapshot has been read. Both full
  // observations must agree, even for a record not present in the candidate.
- const addedUser=id();await db.prepare("INSERT INTO users VALUES(?,?,'2026-10-02')").bind(addedUser,'added@example.invalid').run();
+ const addedUser=id();await db.prepare("INSERT INTO users(id,email,created_at) VALUES(?,?,'2026-10-02')").bind(addedUser,'added@example.invalid').run();
  let sourceReads=0;
  const racing=await open(interceptDatabase(db,/SELECT \* FROM "users"/,async()=>{},async()=>{
-  if(++sourceReads===1)await db.prepare("UPDATE users SET email='changed@example.invalid' WHERE id=?").bind(addedUser).run();
+  if(++sourceReads===1)await db.prepare("UPDATE users SET created_at='changed@example.invalid' WHERE id=?").bind(addedUser).run();
  }));
  await assertResult(current,racing,'independent-evidence');assert.equal(sourceReads,2);
  await assertResult(current,racing); // A prior refusal doesn't poison later reads.
@@ -111,7 +111,7 @@ try{
  assert.equal((await inventory.evidenceSource.fetch(request(doomed.manifest))).status,404);
 
  // A concurrent journal write fences an automatic observation batch.
- await db.prepare('UPDATE users SET email=? WHERE id=?').bind('PRIVATE_RACED_PROFILE_CANARY',owner.account).run();
+ await db.prepare('UPDATE users SET created_at=? WHERE id=?').bind('PRIVATE_RACED_PROFILE_CANARY',owner.account).run();
  let journalRace=false;const sequenceBefore=(await inventory.inspect()).currentSequence;
  const competing=await open(interceptDatabase(db,/SELECT \* FROM "users"/,async()=>{
   if(!journalRace){journalRace=true;await restarted.observe({operationId:'competitor',selection:{kind:'owner-erased',ownerId:'never-present'}});}

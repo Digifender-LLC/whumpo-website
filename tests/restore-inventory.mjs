@@ -27,7 +27,7 @@ const held=async(candidate,manifest,inventory,code)=>{const result=await inspect
 const network=globalThis.fetch;globalThis.fetch=()=>assert.fail('Operator inventory must not access real providers');
 try{
  await initializeFixtureKeys(db,keyring);const owner=await workspaceFixture(db,m);
- await db.prepare("UPDATE users SET email='PRIVATE_INVENTORY_PROFILE_CANARY' WHERE id=?").bind(owner.account).run();
+ await db.prepare("UPDATE users SET created_at='PRIVATE_INVENTORY_PROFILE_CANARY' WHERE id=?").bind(owner.account).run();
  const init=await createRestoreInventory({inventoryFile,streamId});assert.equal(init.archives,0);assert.equal(init.independentCustodyAccepted,false);
  await reject(()=>createRestoreInventory({inventoryFile,streamId}));
  await reject(()=>openRestoreInventory({inventoryFile,expectedStreamId:'wrong-stream'}));

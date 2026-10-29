@@ -12,12 +12,12 @@ const key=fixtureKeyring();const previousFetch=globalThis.fetch,previousError=co
 globalThis.fetch=async()=>assert.fail('No real provider or other network access');console.error=x=>logs.push(String(x));console.warn=x=>logs.push(String(x));
 try{
  await initializeFixtureKeys(db,key);
- const owner=await workspaceFixture(db,m),other=await workspaceFixture(db,m),scope=await owner.scope(),foreignScope=await other.scope();
+ const ownerId=id();await db.prepare("INSERT INTO users(id,email,created_at) VALUES(?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(ownerId,markers.email).run();
+ const owner=await workspaceFixture(db,m,ownerId),other=await workspaceFixture(db,m),scope=await owner.scope(),foreignScope=await other.scope();
  await m.readChat(scope,owner.account);await m.readChat(foreignScope,other.account);
  const {project,version}=await createFixtureProject(scope,owner.account,'Neighborhood garden','Landscaping and garden care');
  const foreign=await createFixtureProject(foreignScope,other.account,markers.foreign,markers.foreign);
  await db.prepare("UPDATE workspace_state SET step='ready' WHERE user_id=?").bind(owner.account).run();
- await db.prepare('UPDATE users SET email=? WHERE id=?').bind(markers.email,owner.account).run();
  await db.prepare('INSERT INTO user_profiles(user_id,name,about_me,share_context,photo) VALUES(?,?,?,0,?)').bind(owner.account,'Private profile name',markers.profile,markers.photo).run();
  const tokenId=id(),photoId=id();
  await db.prepare("INSERT INTO github_token_vault VALUES(?,?,?,'2099-01-01','revoking')").bind(tokenId,owner.account,await fixtureCiphertext(key,`whumpo:github:token:${owner.account}:${tokenId}`,markers.token)).run();

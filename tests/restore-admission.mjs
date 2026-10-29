@@ -121,7 +121,7 @@ try{
  reads=0;clear();permit(manifest);
  await held({...options(manifest),evidenceSource:altered(b=>{if(++reads===2)b.keyBackup.sha256='f'.repeat(64);})},'evidence-changed');
  clear();permit(manifest);
- let changed=false;const changing=interceptDatabase(db,/SELECT \* FROM "users"/,async()=>{if(changed)return;changed=true;await db.prepare("UPDATE users SET email='changed@example.invalid' WHERE id=?").bind(owner.account).run();});
+ let changed=false;const changing=interceptDatabase(db,/SELECT \* FROM "users"/,async()=>{if(changed)return;changed=true;await db.prepare("UPDATE users SET created_at='changed@example.invalid' WHERE id=?").bind(owner.account).run();});
  // Mutating during the object read occurs after the first admitted snapshot.
  await held({...options(manifest),objects:{get:async key=>{await changing.prepare('SELECT * FROM "users"').all();return objects.get(key);}}},'candidate-changed');
  clear();manifest=await current();await passed(options(manifest));

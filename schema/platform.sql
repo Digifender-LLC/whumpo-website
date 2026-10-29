@@ -5755,3 +5755,300 @@ BEGIN
  FROM safety_preservation_holds WHERE released_at IS NULL
   AND ((scope='account' AND subject_user_id=OLD.user_id) OR (OLD.project_id IS NOT NULL AND scope='project' AND project_id=OLD.project_id)) ORDER BY placed_at,id LIMIT 1;
 END;
+
+-- Shadow cost events (WH-170; docs/cost-events.md). Append-only evidence about consumption, never authority to charge, credit,
+-- admit or throttle: no customer-facing route reads or writes this table and `customerUnits` is the constant 0. One row per
+-- (idempotency key, revision); the key is the SHA-256 of {dimension, source, sourceEventId}, derived by src/cost-events.ts.
+-- Rows are immutable. The only deletion is the FK cascade of account closure (owner decision October 28, 2026): the owner's
+-- events go with the owner and project, with no closure key and no tombstones; an append for an owner or project that no longer
+-- exists is refused. `stale` marks a revision that arrived after a higher one (kept for audit, never counted). Heads are the
+-- highest revision per key. Platform-scope rows (shared-account, control-plane) have no owner and are never cascaded.
+CREATE TABLE cost_events (
+ seq INTEGER PRIMARY KEY AUTOINCREMENT,
+ idempotency_key TEXT NOT NULL CHECK(length(idempotency_key)=64 AND idempotency_key NOT GLOB '*[^0-9a-f]*'),
+ revision INTEGER NOT NULL CHECK(typeof(revision)='integer' AND revision BETWEEN 1 AND 9007199254740991),
+ source TEXT NOT NULL CHECK(source IN ('inference-receipt','gateway-settlement','storage-operations','cloudflare-usage-import','liability-register','notification-delivery','connector-call')),
+ dimension TEXT NOT NULL CHECK(length(dimension) BETWEEN 3 AND 64),
+ scope TEXT NOT NULL CHECK(scope IN ('tenant','platform')),
+ owner_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+ resource_id TEXT CHECK(resource_id IS NULL OR length(resource_id)=36),
+ pool TEXT CHECK(pool IS NULL OR pool IN ('shared-account','control-plane')),
+ workload TEXT NOT NULL CHECK(length(workload) BETWEEN 3 AND 32),
+ work_class TEXT NOT NULL CHECK(work_class IN ('task','retry','control','standing')),
+ outcome TEXT NOT NULL CHECK(outcome IN ('settled','pending','uncertain','released')),
+ quantity_value INTEGER CHECK(quantity_value IS NULL OR (typeof(quantity_value)='integer' AND quantity_value BETWEEN 0 AND 9007199254740991)),
+ cost_basis TEXT NOT NULL CHECK(cost_basis IN ('tariff','receipt','provider-reported','shadow','unknown')),
+ cost_micros INTEGER CHECK(cost_micros IS NULL OR (typeof(cost_micros)='integer' AND cost_micros BETWEEN 0 AND 9007199254740991)),
+ exposure_micros INTEGER CHECK(exposure_micros IS NULL OR (typeof(exposure_micros)='integer' AND exposure_micros BETWEEN 0 AND 9007199254740991)),
+ occurred_at TEXT NOT NULL CHECK(length(occurred_at)=24 AND substr(occurred_at,11,1)='T' AND substr(occurred_at,24,1)='Z' AND occurred_at NOT GLOB '*[^0-9TZ:.-]*'),
+ observed_at TEXT NOT NULL CHECK(length(observed_at)=24 AND substr(observed_at,11,1)='T' AND substr(observed_at,24,1)='Z' AND observed_at NOT GLOB '*[^0-9TZ:.-]*' AND observed_at>=occurred_at),
+ event_json TEXT NOT NULL CHECK(json_valid(event_json) AND json_type(event_json)='object' AND length(CAST(event_json AS BLOB))<=4096
+  AND json_extract(event_json,'$.contractVersion')=1 AND json_extract(event_json,'$.customerUnits')=0
+  AND json_extract(event_json,'$.idempotencyKey')=idempotency_key AND json_extract(event_json,'$.revision')=revision),
+ stale INTEGER NOT NULL DEFAULT 0 CHECK(stale IN (0,1)),
+ received_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ UNIQUE(idempotency_key,revision),
+ CHECK((scope='tenant' AND owner_id IS NOT NULL AND pool IS NULL)
+  OR (scope='platform' AND owner_id IS NULL AND project_id IS NULL AND resource_id IS NULL AND pool IS NOT NULL)),
+ CHECK(resource_id IS NULL OR project_id IS NOT NULL),
+ CHECK((cost_basis='unknown' AND cost_micros IS NULL) OR (cost_basis='tariff' AND cost_micros IS NULL AND quantity_value IS NOT NULL) OR (cost_basis NOT IN ('unknown','tariff') AND cost_micros IS NOT NULL)),
+ CHECK(cost_basis='unknown' OR exposure_micros IS NULL),
+ CHECK(outcome NOT IN ('pending','uncertain') OR cost_basis='unknown')
+);
+CREATE INDEX cost_events_owner_period ON cost_events(owner_id,occurred_at) WHERE owner_id IS NOT NULL;
+CREATE INDEX cost_events_project ON cost_events(project_id) WHERE project_id IS NOT NULL;
+-- A project's registered owner must equal the event's owner, whichever statement writes the row.
+CREATE TRIGGER cost_events_tenant_owner BEFORE INSERT ON cost_events
+WHEN NEW.project_id IS NOT NULL AND (SELECT owner_user_id FROM projects WHERE id=NEW.project_id) IS NOT NEW.owner_id
+BEGIN SELECT RAISE(ABORT,'cost_event_tenant_mismatch'); END;
+CREATE TRIGGER cost_events_immutable BEFORE UPDATE ON cost_events
+BEGIN SELECT RAISE(ABORT,'cost_event_immutable'); END;
+-- Deletion is account closure only: the row's owner (and project, when named) is already gone when the cascade reaches it. A
+-- platform row has no owner and is never deleted.
+CREATE TRIGGER cost_events_append_only BEFORE DELETE ON cost_events
+WHEN OLD.owner_id IS NULL OR (EXISTS(SELECT 1 FROM users WHERE id=OLD.owner_id) AND (OLD.project_id IS NULL OR EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id)))
+BEGIN SELECT RAISE(ABORT,'cost_event_append_only'); END;
+
+-- Verified email change, rate limits and security reviews (WH-201; docs/email-change-and-compromise.md sections 2, 3 and 4).
+-- An address is an unverified identifier until a change confirms it; verification is never authority, never a sign-in method, a
+-- recovery factor or an approval. users.email_verified_at/_via move only together with users.email and only in lockstep with a
+-- change row (trigger users_email_lockstep), so a repair or restore cannot revive an earlier verification state. There is no
+-- password, recovery-code, link-sign-in or legacy column anywhere here. Times are Unix milliseconds. Every predicate of the
+-- contract that the module in src/email-change repeats in application code is repeated below as a constraint or trigger, using
+-- the database clock (unixepoch()), because the committing statement is the only place a race can be closed.
+
+-- One row per requested change. Only the SHA-256 verifier of the confirmation token is stored (never the plaintext); the new
+-- address is held in plain text only while the change is pending or inside its undo window, then replaced by its hash.
+CREATE TABLE owner_email_changes (
+ change_id TEXT PRIMARY KEY CHECK(length(change_id) BETWEEN 8 AND 64 AND change_id NOT GLOB '*[^A-Za-z0-9-]*'),
+ account_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ request_id TEXT NOT NULL CHECK(length(request_id) BETWEEN 8 AND 64 AND request_id NOT GLOB '*[^A-Za-z0-9-]*'),
+ request_hash TEXT NOT NULL CHECK(length(request_hash)=64 AND request_hash NOT GLOB '*[^0-9a-f]*'),
+ new_address TEXT CHECK(new_address IS NULL OR (length(new_address) BETWEEN 3 AND 254 AND new_address=lower(new_address) AND new_address NOT GLOB '*[^!-~]*' AND instr(new_address,'@')>1)),
+ new_address_hash TEXT NOT NULL CHECK(length(new_address_hash)=64 AND new_address_hash NOT GLOB '*[^0-9a-f]*'),
+ epoch INTEGER NOT NULL CHECK(typeof(epoch)='integer' AND epoch BETWEEN 1 AND 9007199254740991),
+ created_at INTEGER NOT NULL CHECK(typeof(created_at)='integer' AND created_at>0),
+ expires_at INTEGER NOT NULL CHECK(typeof(expires_at)='integer' AND expires_at=created_at+3600000),
+ state TEXT NOT NULL CHECK(state IN ('pending','confirmed','undone','cancelled','superseded','stale','expired','undeliverable','unavailable')),
+ revision INTEGER NOT NULL CHECK(typeof(revision)='integer' AND revision BETWEEN 1 AND 9007199254740991),
+ history TEXT NOT NULL CHECK(json_valid(history) AND json_type(history)='array' AND json_array_length(history) BETWEEN 1 AND 8 AND length(CAST(history AS BLOB))<=256),
+ deliverable INTEGER NOT NULL CHECK(deliverable IN (0,1)),
+ token_verifier TEXT CHECK(token_verifier IS NULL OR (length(token_verifier)=64 AND token_verifier NOT GLOB '*[^0-9a-f]*')),
+ previous_address TEXT CHECK(previous_address IS NULL OR (length(previous_address) BETWEEN 3 AND 254 AND previous_address=lower(previous_address) AND previous_address NOT GLOB '*[^!-~]*' AND instr(previous_address,'@')>1)),
+ previous_verified_at INTEGER CHECK(previous_verified_at IS NULL OR (typeof(previous_verified_at)='integer' AND previous_verified_at>0)),
+ previous_verified_via TEXT CHECK(previous_verified_via IS NULL OR previous_verified_via='notify@whumpo.com'),
+ receipt_verified_at INTEGER CHECK(receipt_verified_at IS NULL OR (typeof(receipt_verified_at)='integer' AND receipt_verified_at>0)),
+ undo_until INTEGER CHECK(undo_until IS NULL OR (typeof(undo_until)='integer' AND undo_until=receipt_verified_at+604800000)),
+ UNIQUE(account_id,request_id),
+ CHECK((previous_verified_at IS NULL)=(previous_verified_via IS NULL)),
+ CHECK((state IN ('confirmed','undone'))=(receipt_verified_at IS NOT NULL AND undo_until IS NOT NULL)),
+ CHECK(state IN ('confirmed','undone') OR (previous_address IS NULL AND previous_verified_at IS NULL)),
+ CHECK(state!='pending' OR new_address IS NOT NULL)
+);
+-- One pending change per account; a verifier identifies one change.
+CREATE UNIQUE INDEX owner_email_changes_pending ON owner_email_changes(account_id) WHERE state='pending';
+CREATE UNIQUE INDEX owner_email_changes_verifier ON owner_email_changes(token_verifier) WHERE token_verifier IS NOT NULL;
+CREATE INDEX owner_email_changes_reserved ON owner_email_changes(previous_address) WHERE previous_address IS NOT NULL;
+CREATE INDEX owner_email_changes_retention ON owner_email_changes(expires_at);
+
+-- Rate-limit evidence (48 hours): the account's request and failure times, and hashed per-address daily send keys. A send key
+-- carries no account and no address, only the hash that bounds messages to one destination across all accounts.
+CREATE TABLE owner_email_change_limits (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ kind TEXT NOT NULL CHECK(kind IN ('request','send','failure')),
+ account_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+ address_key TEXT CHECK(address_key IS NULL OR (length(address_key)=64 AND address_key NOT GLOB '*[^0-9a-f]*')),
+ at INTEGER NOT NULL CHECK(typeof(at)='integer' AND at>0),
+ CHECK((kind='send' AND address_key IS NOT NULL AND account_id IS NULL) OR (kind IN ('request','failure') AND account_id IS NOT NULL AND address_key IS NULL))
+);
+CREATE INDEX owner_email_change_limits_account ON owner_email_change_limits(kind,account_id,at) WHERE account_id IS NOT NULL;
+CREATE INDEX owner_email_change_limits_address ON owner_email_change_limits(address_key,at) WHERE address_key IS NOT NULL;
+CREATE INDEX owner_email_change_limits_retention ON owner_email_change_limits(at);
+-- At most 3 change requests per account and day, 3 confirmation messages per destination and day, 5 failed confirmations per
+-- account and hour.
+CREATE TRIGGER owner_email_change_limit_rate BEFORE INSERT ON owner_email_change_limits
+WHEN NEW.at>unixepoch()*1000+60000
+ OR (NEW.kind='request' AND (SELECT count(*) FROM owner_email_change_limits WHERE kind='request' AND account_id=NEW.account_id AND at>unixepoch()*1000-86400000)>=3)
+ OR (NEW.kind='send' AND (SELECT count(*) FROM owner_email_change_limits WHERE kind='send' AND address_key=NEW.address_key AND at>unixepoch()*1000-86400000)>=3)
+ OR (NEW.kind='failure' AND (SELECT count(*) FROM owner_email_change_limits WHERE kind='failure' AND account_id=NEW.account_id AND at>unixepoch()*1000-3600000)>=5)
+BEGIN SELECT RAISE(ABORT,'email_change_rate_limited'); END;
+CREATE TRIGGER owner_email_change_limit_immutable BEFORE UPDATE ON owner_email_change_limits
+BEGIN SELECT RAISE(ABORT,'email_change_limit_immutable'); END;
+-- Evidence is kept 48 hours (a deletion earlier than that would reset a limit); it goes sooner only with its account.
+CREATE TRIGGER owner_email_change_limit_retained BEFORE DELETE ON owner_email_change_limits
+WHEN OLD.at>unixepoch()*1000-172800000 AND (OLD.account_id IS NULL OR EXISTS(SELECT 1 FROM users WHERE id=OLD.account_id))
+BEGIN SELECT RAISE(ABORT,'email_change_limit_retained'); END;
+
+-- Insert: a new change is pending at revision 1 with no token, for a ready account at its current epoch, to an address that is
+-- not the current one, and it comes with this account's request-limit row; a deliverable one also with its send-limit row.
+CREATE TRIGGER owner_email_change_new BEFORE INSERT ON owner_email_changes
+WHEN NEW.state!='pending' OR NEW.revision!=1 OR NEW.history!='["pending"]' OR NEW.token_verifier IS NOT NULL
+ OR NEW.previous_address IS NOT NULL OR NEW.receipt_verified_at IS NOT NULL OR NEW.new_address IS NULL
+BEGIN SELECT RAISE(ABORT,'email_change_new'); END;
+CREATE TRIGGER owner_email_change_identity BEFORE INSERT ON owner_email_changes
+WHEN NOT EXISTS(SELECT 1 FROM identity_accounts a JOIN users u ON u.id=a.account_id
+  WHERE a.account_id=NEW.account_id AND a.stage='ready' AND a.auth_epoch=NEW.epoch AND u.email!=NEW.new_address)
+BEGIN SELECT RAISE(ABORT,'email_change_identity'); END;
+CREATE TRIGGER owner_email_change_limits_present BEFORE INSERT ON owner_email_changes
+WHEN NOT EXISTS(SELECT 1 FROM owner_email_change_limits WHERE kind='request' AND account_id=NEW.account_id AND at>unixepoch()*1000-60000)
+ OR (NEW.deliverable=1 AND NOT EXISTS(SELECT 1 FROM owner_email_change_limits WHERE kind='send' AND address_key=NEW.new_address_hash AND at>unixepoch()*1000-60000))
+BEGIN SELECT RAISE(ABORT,'email_change_limits'); END;
+
+-- Update: identity, binding and expiry never change; every write is revision+1; states only move forward.
+CREATE TRIGGER owner_email_change_immutable BEFORE UPDATE ON owner_email_changes
+WHEN NEW.change_id IS NOT OLD.change_id OR NEW.account_id IS NOT OLD.account_id OR NEW.request_id IS NOT OLD.request_id
+ OR NEW.request_hash IS NOT OLD.request_hash OR NEW.new_address_hash IS NOT OLD.new_address_hash OR NEW.epoch IS NOT OLD.epoch
+ OR NEW.created_at IS NOT OLD.created_at OR NEW.expires_at IS NOT OLD.expires_at OR NEW.deliverable IS NOT OLD.deliverable
+BEGIN SELECT RAISE(ABORT,'email_change_immutable'); END;
+CREATE TRIGGER owner_email_change_revision BEFORE UPDATE ON owner_email_changes
+WHEN NEW.revision IS NOT OLD.revision+1
+BEGIN SELECT RAISE(ABORT,'email_change_revision'); END;
+CREATE TRIGGER owner_email_change_transition BEFORE UPDATE ON owner_email_changes
+WHEN NEW.state IS NOT OLD.state AND NOT ((OLD.state='pending' AND NEW.state IN ('confirmed','cancelled','superseded','stale','expired','undeliverable','unavailable'))
+ OR (OLD.state='confirmed' AND NEW.state='undone'))
+BEGIN SELECT RAISE(ABORT,'email_change_transition'); END;
+-- History grows by exactly one entry per transition, naming the new state, and never otherwise.
+CREATE TRIGGER owner_email_change_history BEFORE UPDATE ON owner_email_changes
+WHEN (NEW.state IS NOT OLD.state AND (json_array_length(NEW.history)!=json_array_length(OLD.history)+1 OR json_extract(NEW.history,'$[#-1]') NOT GLOB NEW.state||'*'
+  OR substr(NEW.history,1,length(OLD.history)-1)!=substr(OLD.history,1,length(OLD.history)-1)))
+ OR (NEW.state IS OLD.state AND NEW.history IS NOT OLD.history)
+BEGIN SELECT RAISE(ABORT,'email_change_history'); END;
+-- A pending change changes only its token verifier. A verifier is minted for a deliverable, unexpired change and cleared again by a
+-- definite non-delivery; the plaintext token is never a column.
+CREATE TRIGGER owner_email_change_claim BEFORE UPDATE ON owner_email_changes
+WHEN OLD.state='pending' AND NEW.state='pending' AND (NEW.new_address IS NOT OLD.new_address OR NEW.previous_address IS NOT OLD.previous_address
+  OR NEW.previous_verified_at IS NOT OLD.previous_verified_at OR NEW.previous_verified_via IS NOT OLD.previous_verified_via
+  OR NEW.receipt_verified_at IS NOT OLD.receipt_verified_at OR NEW.undo_until IS NOT OLD.undo_until
+  OR (NEW.token_verifier IS NOT NULL AND NEW.token_verifier IS NOT OLD.token_verifier AND (OLD.deliverable=0 OR unixepoch()*1000>=OLD.expires_at)))
+BEGIN SELECT RAISE(ABORT,'email_change_claim'); END;
+-- Confirmation: token verifier present and unchanged, unexpired, account ready at the unchanged epoch, address not the current one,
+-- not another account's address and not another account's reserved previous address; the previous address and verification state
+-- are the account's current ones; the undo window is seven days from the receipt time.
+CREATE TRIGGER owner_email_change_confirm BEFORE UPDATE ON owner_email_changes
+WHEN OLD.state='pending' AND NEW.state='confirmed' AND NOT (
+ OLD.token_verifier IS NOT NULL AND NEW.token_verifier IS OLD.token_verifier AND NEW.new_address IS OLD.new_address
+ AND unixepoch()*1000<OLD.expires_at
+ AND NEW.receipt_verified_at BETWEEN unixepoch()*1000-60000 AND unixepoch()*1000+60000
+ AND EXISTS(SELECT 1 FROM identity_accounts a JOIN users u ON u.id=a.account_id
+  WHERE a.account_id=OLD.account_id AND a.stage='ready' AND a.auth_epoch=OLD.epoch AND u.email!=OLD.new_address AND u.email IS NEW.previous_address
+   AND u.email_verified_at IS NEW.previous_verified_at AND u.email_verified_via IS NEW.previous_verified_via)
+ AND NOT EXISTS(SELECT 1 FROM users o WHERE o.email=OLD.new_address AND o.id!=OLD.account_id)
+ AND NOT EXISTS(SELECT 1 FROM owner_email_changes r WHERE r.account_id!=OLD.account_id AND r.state='confirmed' AND r.previous_address=OLD.new_address AND r.undo_until>unixepoch()*1000))
+BEGIN SELECT RAISE(ABORT,'email_change_confirm'); END;
+-- The other pending exits: expiry needs the expiry time, stale needs a moved epoch, unavailable needs a holder, undeliverable
+-- clears the verifier, and none of them carries a receipt.
+CREATE TRIGGER owner_email_change_close BEFORE UPDATE ON owner_email_changes
+WHEN OLD.state='pending' AND NEW.state IN ('cancelled','superseded','stale','expired','undeliverable','unavailable') AND NOT (
+ NEW.receipt_verified_at IS NULL AND NEW.undo_until IS NULL AND NEW.previous_address IS NULL AND NEW.new_address IS OLD.new_address
+ AND (NEW.state!='expired' OR unixepoch()*1000>=OLD.expires_at)
+ AND (NEW.state!='stale' OR NOT EXISTS(SELECT 1 FROM identity_accounts a WHERE a.account_id=OLD.account_id AND a.stage='ready' AND a.auth_epoch=OLD.epoch))
+ AND (NEW.state!='unavailable' OR EXISTS(SELECT 1 FROM users o WHERE o.email=OLD.new_address AND o.id!=OLD.account_id)
+  OR EXISTS(SELECT 1 FROM owner_email_changes r WHERE r.account_id!=OLD.account_id AND r.state='confirmed' AND r.previous_address=OLD.new_address AND r.undo_until>unixepoch()*1000))
+ AND (NEW.state!='undeliverable' OR NEW.token_verifier IS NULL)
+ AND (NEW.state IN ('undeliverable') OR NEW.token_verifier IS OLD.token_verifier))
+BEGIN SELECT RAISE(ABORT,'email_change_close'); END;
+-- Undo: inside the window, only while the account still holds the new address; it restores the recorded previous state.
+CREATE TRIGGER owner_email_change_undo BEFORE UPDATE ON owner_email_changes
+WHEN OLD.state='confirmed' AND NEW.state='undone' AND NOT (
+ unixepoch()*1000<OLD.undo_until AND OLD.previous_address IS NOT NULL AND NEW.previous_address IS OLD.previous_address
+ AND NEW.previous_verified_at IS OLD.previous_verified_at AND NEW.previous_verified_via IS OLD.previous_verified_via
+ AND NEW.receipt_verified_at IS OLD.receipt_verified_at AND NEW.undo_until IS OLD.undo_until AND NEW.token_verifier IS OLD.token_verifier
+ AND NEW.new_address IS OLD.new_address
+ AND EXISTS(SELECT 1 FROM identity_accounts a JOIN users u ON u.id=a.account_id WHERE a.account_id=OLD.account_id AND a.stage='ready' AND u.email=OLD.new_address))
+BEGIN SELECT RAISE(ABORT,'email_change_undo'); END;
+-- A closed change (confirmed, undone or any terminal state) keeps its facts; the only write is the redaction of the plaintext
+-- addresses: the new address once the change is closed (a confirmed one when its undo window ends) and the previous address when
+-- the window has ended or the change was undone.
+CREATE TRIGGER owner_email_change_frozen BEFORE UPDATE ON owner_email_changes
+WHEN NEW.state IS OLD.state AND OLD.state!='pending' AND (NEW.token_verifier IS NOT OLD.token_verifier
+  OR NEW.previous_verified_at IS NOT OLD.previous_verified_at OR NEW.previous_verified_via IS NOT OLD.previous_verified_via
+  OR NEW.receipt_verified_at IS NOT OLD.receipt_verified_at OR NEW.undo_until IS NOT OLD.undo_until
+  OR (NEW.new_address IS NOT OLD.new_address AND (NEW.new_address IS NOT NULL OR (OLD.state='confirmed' AND unixepoch()*1000<OLD.undo_until)))
+  OR (NEW.previous_address IS NOT OLD.previous_address AND (NEW.previous_address IS NOT NULL OR (OLD.state='confirmed' AND unixepoch()*1000<OLD.undo_until))))
+BEGIN SELECT RAISE(ABORT,'email_change_frozen'); END;
+-- Deletion is retention or closure only: a pending change, a change inside its undo window, or one closed less than 30 days ago
+-- (counted from the later of its expiry and its undo deadline) stays while its account exists.
+CREATE TRIGGER owner_email_change_retained BEFORE DELETE ON owner_email_changes
+WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.account_id)
+ AND (OLD.state='pending' OR max(OLD.expires_at,COALESCE(OLD.undo_until,0))>unixepoch()*1000-2592000000)
+BEGIN SELECT RAISE(ABORT,'email_change_retained'); END;
+
+-- The account's address and its verification state move only together, and only in lockstep with a change row: forward to the
+-- confirmed change's new address verified at its receipt time by the platform sender, or back to exactly the recorded previous
+-- address and state of an undone change. No profile write, repair or restore can set, advance or revive them any other way.
+CREATE TRIGGER users_email_lockstep BEFORE UPDATE OF email,email_verified_at,email_verified_via ON users
+WHEN (NEW.email IS NOT OLD.email OR NEW.email_verified_at IS NOT OLD.email_verified_at OR NEW.email_verified_via IS NOT OLD.email_verified_via)
+ AND NOT (
+  EXISTS(SELECT 1 FROM owner_email_changes c WHERE c.account_id=OLD.id AND c.state='confirmed' AND c.new_address=NEW.email AND c.previous_address IS OLD.email
+   AND c.previous_verified_at IS OLD.email_verified_at AND c.previous_verified_via IS OLD.email_verified_via AND c.receipt_verified_at=NEW.email_verified_at
+   AND NEW.email_verified_via='notify@whumpo.com')
+  OR EXISTS(SELECT 1 FROM owner_email_changes c WHERE c.account_id=OLD.id AND c.state='undone' AND c.new_address IS OLD.email AND c.previous_address=NEW.email
+   AND c.previous_verified_at IS NEW.email_verified_at AND c.previous_verified_via IS NEW.email_verified_via))
+BEGIN SELECT RAISE(ABORT,'users_email_lockstep'); END;
+-- A new account starts unverified, and cannot take an address another account holds as its reserved previous address.
+CREATE TRIGGER users_email_new BEFORE INSERT ON users
+WHEN NEW.email_verified_at IS NOT NULL
+ OR EXISTS(SELECT 1 FROM owner_email_changes c WHERE c.state='confirmed' AND c.previous_address=NEW.email AND c.undo_until>unixepoch()*1000)
+BEGIN SELECT RAISE(ABORT,'users_email_new'); END;
+
+-- Compromise review snapshot, its replacement kit offer (verifier only) and its commit receipt (WH-203 reads and writes these rows).
+-- The receipt carries identifiers, counts and states; it has no content-recovery field and claims account recovery only.
+CREATE TABLE owner_security_reviews (
+ review_id TEXT PRIMARY KEY CHECK(length(review_id) BETWEEN 1 AND 64 AND review_id NOT GLOB '*[^A-Za-z0-9-]*'),
+ account_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ epoch INTEGER NOT NULL CHECK(typeof(epoch)='integer' AND epoch BETWEEN 1 AND 9007199254740991),
+ credential_revision INTEGER NOT NULL CHECK(typeof(credential_revision)='integer' AND credential_revision BETWEEN 0 AND 9007199254740991),
+ kit_generation INTEGER NOT NULL CHECK(typeof(kit_generation)='integer' AND kit_generation BETWEEN 0 AND 9007199254740991),
+ credentials TEXT NOT NULL CHECK(json_valid(credentials) AND json_type(credentials)='array' AND length(CAST(credentials AS BLOB))<=2048),
+ connections TEXT NOT NULL CHECK(json_valid(connections) AND json_type(connections)='array' AND length(CAST(connections AS BLOB))<=2048),
+ created_at INTEGER NOT NULL CHECK(typeof(created_at)='integer' AND created_at>0),
+ expires_at INTEGER NOT NULL CHECK(typeof(expires_at)='integer' AND expires_at=created_at+600000),
+ state TEXT NOT NULL CHECK(state IN ('open','committed')),
+ revision INTEGER NOT NULL CHECK(typeof(revision)='integer' AND revision BETWEEN 1 AND 9007199254740991),
+ kit_offer_id TEXT CHECK(kit_offer_id IS NULL OR (length(kit_offer_id) BETWEEN 1 AND 64 AND kit_offer_id NOT GLOB '*[^A-Za-z0-9-]*')),
+ kit_verifier TEXT CHECK(kit_verifier IS NULL OR (length(kit_verifier)=64 AND kit_verifier NOT GLOB '*[^0-9a-f]*')),
+ kit_offer_created_at INTEGER CHECK(kit_offer_created_at IS NULL OR typeof(kit_offer_created_at)='integer'),
+ kit_offer_expires_at INTEGER CHECK(kit_offer_expires_at IS NULL OR typeof(kit_offer_expires_at)='integer'),
+ kit_saved_at INTEGER CHECK(kit_saved_at IS NULL OR typeof(kit_saved_at)='integer'),
+ commit_request_id TEXT CHECK(commit_request_id IS NULL OR (length(commit_request_id) BETWEEN 8 AND 64 AND commit_request_id NOT GLOB '*[^A-Za-z0-9-]*')),
+ commit_request_hash TEXT CHECK(commit_request_hash IS NULL OR (length(commit_request_hash)=64 AND commit_request_hash NOT GLOB '*[^0-9a-f]*')),
+ receipt TEXT CHECK(receipt IS NULL OR (json_valid(receipt) AND json_type(receipt)='object' AND length(CAST(receipt AS BLOB))<=4096 AND json_extract(receipt,'$.accountRecoveryOnly')=1 AND json_extract(receipt,'$.sessionsRevoked')='all')),
+ committed_at INTEGER CHECK(committed_at IS NULL OR typeof(committed_at)='integer'),
+ UNIQUE(account_id,commit_request_id),
+ CHECK((kit_offer_id IS NULL)=(kit_verifier IS NULL) AND (kit_offer_id IS NULL)=(kit_offer_created_at IS NULL) AND (kit_offer_id IS NULL)=(kit_offer_expires_at IS NULL)),
+ CHECK(kit_saved_at IS NULL OR kit_offer_id IS NOT NULL),
+ CHECK(kit_offer_id IS NULL OR (kit_offer_expires_at>kit_offer_created_at AND kit_offer_created_at>=created_at AND kit_offer_expires_at<=kit_offer_created_at+1800000 AND kit_offer_expires_at<=expires_at)),
+ CHECK(kit_saved_at IS NULL OR (kit_saved_at>=kit_offer_created_at AND kit_saved_at<kit_offer_expires_at)),
+ CHECK((state='open' AND commit_request_id IS NULL AND commit_request_hash IS NULL AND receipt IS NULL AND committed_at IS NULL)
+  OR (state='committed' AND commit_request_id IS NOT NULL AND commit_request_hash IS NOT NULL AND receipt IS NOT NULL AND committed_at IS NOT NULL)),
+ -- A kit that the receipt says was rotated must have been saved first (save-before-rotation).
+ CHECK(receipt IS NULL OR json_extract(receipt,'$.kitRotated')=0 OR kit_saved_at IS NOT NULL)
+);
+CREATE INDEX owner_security_reviews_account ON owner_security_reviews(account_id);
+CREATE INDEX owner_security_reviews_retention ON owner_security_reviews(expires_at);
+-- A review binds the account's current epoch, credential revision and kit generation; an account keeps at most 20 (a storage bound).
+CREATE TRIGGER owner_security_review_new BEFORE INSERT ON owner_security_reviews
+WHEN NEW.state!='open' OR NEW.revision!=1 OR NEW.kit_offer_id IS NOT NULL
+ OR NOT EXISTS(SELECT 1 FROM identity_accounts a WHERE a.account_id=NEW.account_id AND a.stage='ready' AND a.auth_epoch=NEW.epoch
+  AND a.credential_revision=NEW.credential_revision AND a.kit_generation=NEW.kit_generation)
+ OR (SELECT count(*) FROM owner_security_reviews WHERE account_id=NEW.account_id)>=20
+BEGIN SELECT RAISE(ABORT,'security_review_new'); END;
+CREATE TRIGGER owner_security_review_guard BEFORE UPDATE ON owner_security_reviews
+WHEN OLD.state='committed' OR NEW.revision IS NOT OLD.revision+1 OR NEW.review_id IS NOT OLD.review_id OR NEW.account_id IS NOT OLD.account_id
+ OR NEW.epoch IS NOT OLD.epoch OR NEW.credential_revision IS NOT OLD.credential_revision OR NEW.kit_generation IS NOT OLD.kit_generation
+ OR NEW.credentials IS NOT OLD.credentials OR NEW.connections IS NOT OLD.connections OR NEW.created_at IS NOT OLD.created_at OR NEW.expires_at IS NOT OLD.expires_at
+ OR (OLD.kit_offer_id IS NOT NULL AND (NEW.kit_offer_id IS NOT OLD.kit_offer_id OR NEW.kit_verifier IS NOT OLD.kit_verifier OR NEW.kit_offer_created_at IS NOT OLD.kit_offer_created_at OR NEW.kit_offer_expires_at IS NOT OLD.kit_offer_expires_at))
+ OR (OLD.kit_saved_at IS NOT NULL AND NEW.kit_saved_at IS NOT OLD.kit_saved_at)
+BEGIN SELECT RAISE(ABORT,'security_review_guard'); END;
+-- Commit: the review is open and unexpired, the epoch advanced by exactly one in the same batch (which also deleted the older
+-- sessions, grants, challenges and kit offers), and the receipt names that epoch.
+CREATE TRIGGER owner_security_review_commit BEFORE UPDATE ON owner_security_reviews
+WHEN NEW.state='committed' AND NOT (
+ OLD.state='open' AND unixepoch()*1000<OLD.expires_at AND NEW.committed_at BETWEEN unixepoch()*1000-60000 AND unixepoch()*1000+60000
+ AND json_extract(NEW.receipt,'$.reviewId')=OLD.review_id AND json_extract(NEW.receipt,'$.epoch')=OLD.epoch+1
+ AND EXISTS(SELECT 1 FROM identity_accounts a WHERE a.account_id=OLD.account_id AND a.auth_epoch=OLD.epoch+1))
+BEGIN SELECT RAISE(ABORT,'security_review_commit'); END;
+CREATE TRIGGER owner_security_review_retained BEFORE DELETE ON owner_security_reviews
+WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.account_id) AND COALESCE(OLD.committed_at,OLD.expires_at)>unixepoch()*1000-7776000000
+BEGIN SELECT RAISE(ABORT,'security_review_retained'); END;

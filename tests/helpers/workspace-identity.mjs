@@ -1,7 +1,7 @@
 /** Synthetic authority rows for domain tests. HTTP journeys use signed WebAuthn. */
 export async function workspaceFixture(db,m,account=crypto.randomUUID(),proofOffset=-5){
  const id=()=>crypto.randomUUID(),credential=id();
- await db.prepare("INSERT OR IGNORE INTO users VALUES(?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(account,account+'@example.invalid').run();
+ await db.prepare("INSERT OR IGNORE INTO users(id,email,created_at) VALUES(?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(account,account+'@example.invalid').run();
  await db.prepare("INSERT INTO identity_accounts(account_id,policy_version,stage,auth_epoch,kit_generation,kit_verifier,completion_receipt_id) VALUES(?,1,'ready',1,1,?,?)").bind(account,'a'.repeat(64),id()).run();
  await db.prepare("INSERT INTO identity_credentials VALUES(?,?,?,0,'Synthetic passkey','active',NULL,unixepoch(),NULL)").bind(credential,account,new Uint8Array([1,2,3])).run();
  return workspaceSession(db,m,{account,credential},proofOffset);

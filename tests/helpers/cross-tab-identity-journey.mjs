@@ -115,7 +115,7 @@ export async function crossTabIdentityJourney({page,context,db,origin,requests,p
   phase('account change in another tab clears old account drafts and saved location');
   await composer(page).fill('Old account private draft');await composer(peer).fill('Old account peer draft');
   const other=crypto.randomUUID(),key=authenticator('http://localhost:8787');
-  await db.prepare("INSERT INTO users VALUES(?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(other,'other-browser-owner@example.invalid').run();
+  await db.prepare("INSERT INTO users(id,email,created_at) VALUES(?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(other,'other-browser-owner@example.invalid').run();
   await db.prepare("INSERT INTO identity_accounts(account_id,policy_version,stage,auth_epoch,kit_generation,kit_verifier,completion_receipt_id) VALUES(?,1,'ready',1,1,?,?)").bind(other,'b'.repeat(64),crypto.randomUUID()).run();
   await db.prepare("INSERT INTO identity_credentials VALUES(?,?,?,0,'Other synthetic owner','active',NULL,unixepoch(),NULL)").bind(key.id,other,key.publicKey).run();
   await peerCDP.send('WebAuthn.removeVirtualAuthenticator',{authenticatorId:peerAuth});

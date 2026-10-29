@@ -9,7 +9,7 @@ const {assessContentRisk:assess}=modules[1];
 const sql=new DatabaseSync(':memory:');
 try{
  sql.exec(await currentSchema());
- sql.exec("INSERT INTO users VALUES('a','a@example.invalid','2026-09-30'),('b','b@example.invalid','2026-09-30')");
+ sql.exec("INSERT INTO users(id,email,created_at) VALUES('a','a@example.invalid','2026-09-30'),('b','b@example.invalid','2026-09-30')");
  const db={prepare:q=>({bind:(...p)=>({first:async()=>sql.prepare(q).get(...p)??null,all:async()=>({success:true,results:sql.prepare(q).all(...p)}),run:async()=>sql.prepare(q).run(...p)})})};
  const event={id:'event-1',userId:'a',incidentId:'incident-1',kind:'confirmed_evasion',occurredAt:Date.now()-1000,evidenceRef:'case-1',reviewerRef:'reviewer-1'};
  await Promise.all([record(db,event),record(db,event)]);

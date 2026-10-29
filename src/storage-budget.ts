@@ -1,4 +1,5 @@
 import {publicClientKey,reservePublicClient} from './public-admission';
+import {emitProjectStorageRead} from './cost-event-emission';
 export class StorageLimitError extends Error {status=503;constructor(message='The test platform’s monthly photo allowance has been reached. Please try again after the monthly reset.'){super(message);}}
 /** Platform-wide R2 operation ceiling, separate from customer AI units and account-wide allowances. */
 export async function reserveStorage(db:D1Database,kind:'read'|'write',count=1){
@@ -43,4 +44,6 @@ async function chargeProjectReads(db:D1Database,project:string,count:number){
   if(/CHECK constraint failed/i.test(String(cause)))throw new StorageLimitError();
   throw cause;
  }
+ // After the receipt batch has committed, in its own statements; a failure is logged and never reaches the reader.
+ await emitProjectStorageRead(db,project);
 }

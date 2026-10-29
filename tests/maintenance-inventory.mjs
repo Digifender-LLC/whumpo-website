@@ -8,7 +8,7 @@ const db={prepare:q=>{const bound=p=>({first:async()=>sql.prepare(q).get(...p)??
 try{
  await initializeFixtureKeys(keyFixture.db);
  const owner=id(),project=id(),now=Date.now(),at=offset=>new Date(now+offset).toISOString(),day=86400000;
- sql.prepare("INSERT INTO users VALUES(?,?,?)").run(owner,'PRIVATE_EMAIL_CANARY@example.invalid',at(0));
+ sql.prepare("INSERT INTO users(id,email,created_at) VALUES(?,?,?)").run(owner,'PRIVATE_EMAIL_CANARY@example.invalid',at(0));
  sql.prepare('INSERT INTO projects(id,owner_user_id,name,created_at,updated_at) VALUES(?,?,?,?,?)').run(project,owner,'PRIVATE_NAME_CANARY',at(0),at(0));
  const oldGH=id(),oldCF=id(),newGH=id(),newCF=id();
  const ciphers=new Map();for(const token of [oldGH,oldCF,newGH,newCF])ciphers.set(token,await fixtureCiphertext(fixtureKeyring(),`whumpo:${[oldGH,newGH].includes(token)?'github':'cloudflare'}:token:${owner}:${token}`,'PRIVATE_CREDENTIAL_CANARY'));

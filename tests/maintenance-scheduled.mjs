@@ -9,7 +9,7 @@ const originalFetch=globalThis.fetch;
 globalThis.fetch=async()=>assert.fail('Unconfigured empty fixture must not access a provider');
 try{
  const ready=crypto.randomUUID(),enrolling=crypto.randomUUID(),attempt=crypto.randomUUID(),expired=crypto.randomUUID(),current=crypto.randomUUID(),grant=crypto.randomUUID();
- sql.prepare("INSERT INTO users VALUES(?,?,'2026-10-01'),(?,?,'2026-10-01')").run(ready,'ready@example.invalid',enrolling,'enrolling@example.invalid');
+ sql.prepare("INSERT INTO users(id,email,created_at) VALUES(?,?,'2026-10-01'),(?,?,'2026-10-01')").run(ready,'ready@example.invalid',enrolling,'enrolling@example.invalid');
  sql.prepare("INSERT INTO identity_accounts(account_id,policy_version,stage,auth_epoch,kit_generation,kit_verifier,completion_receipt_id) VALUES(?,1,'ready',1,1,?,?)").run(ready,'a'.repeat(64),crypto.randomUUID());
  sql.prepare("INSERT INTO identity_accounts(account_id,policy_version,stage,auth_epoch,current_attempt_id) VALUES(?,1,'enrolling',1,?)").run(enrolling,attempt);
  sql.prepare("INSERT INTO identity_attempts VALUES(?,?,'enrollment','open',0,1,0,unixepoch()-7200)").run(attempt,enrolling);

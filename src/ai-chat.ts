@@ -8,6 +8,7 @@ import {appPageDesignProjectId,readAppPageDesign,appPageDesignPrompt,appPageDesi
 import {inspectionRequest,inspectionMessages,inspectionAllowance} from './agent-inspection';
 import {firstDraftProjectId,firstAppProjectId,welcomeDraftProject,firstDraftProposalAllowed} from './first-draft';
 import { startAcknowledgment } from './acknowledgment';
+import { emitInferenceCall } from './cost-event-emission';
 import { ensureInferenceBudget, inferenceReservation, inferenceDispatchStatement, dispatchInference, observeInference, uncertainInference } from './model-costs';
 import { museTestRoute } from './model-policy';
 import {cloudflareStatus} from './cloudflare-connection';
@@ -109,6 +110,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     throw cause;
   }
   if (inserted[taskClaim.length+1].meta.changes !== 1) return noReservation();
+  await emitInferenceCall(db,userId,id);
   let routingResult:import('./ai').Completion|undefined,taskFollowupDispatched=false;
   let inspectionGuards:D1PreparedStatement[]=[];
   const modelTransport:typeof fetch=async(input,init)=>{if(inspectionGuards.length)await db.batch(inspectionGuards);if(task)await db.batch(informationTaskGuards(db,userId,task,formSubmissionId?'pending':'succeeded',id));if(task&&!formSubmissionId)taskFollowupDispatched=true;return transport(input,init);};
@@ -117,6 +119,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     if(task){
       const sent=await db.batch([...informationTaskGuards(db,userId,task,formSubmissionId?'pending':'succeeded',id),standardAIDispatchStatement(db,userId,id),inferenceDispatchStatement(db,userId,id)]);
       if(sent.at(-2)?.meta.changes!==1||sent.at(-1)?.meta.changes!==1)return {status:200};
+      await emitInferenceCall(db,userId,id);
     }else{
       if (!(await dispatchStandardAI(db, userId, id))) return { status: 200 };
       if (!(await dispatchInference(db,userId,id))) return {status:200};
@@ -228,6 +231,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
         if(receipt?.state==='reserved'){
           await cancelStandardAI(db,userId,id);
           await db.prepare("UPDATE inference_calls SET status='released' WHERE id=? AND user_id=? AND status='reserved'").bind(id,userId).run();
+          await emitInferenceCall(db,userId,id);
         }
       }
       await closeStandardAIAttempt(db,userId,id);

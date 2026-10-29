@@ -2715,6 +2715,49 @@
           "DP-05"
         ]
       }
+    },
+    {
+      "id": "cost-events",
+      "tables": [
+        "cost_events"
+      ],
+      "scope": "mixed",
+      "purpose": "Reconcile shadow provider cost (WH-170): append-only, content-free events about consumption with tenant attribution (owner and project, never a physical locator), emitted after the inference, gateway and storage receipt transitions. Evidence only: zero customer units, never authority to charge, credit, admit or throttle.",
+      "currentRetention": "Rows are immutable and kept while the owner and project exist. Account closure deletes the owner's rows through the account and project foreign-key cascade, with no closure key and no tombstones (owner decision October 28, 2026). A later revision that arrives after a higher one is stored as stale for audit and never counted. No automatic deletion exists; platform-scope rows (none are produced yet) have no owner and are never cascaded.",
+      "proposedRetention": "Keep tenant events while the account exists and delete them with the account. Period close, company totals and provider statements are WH-171; what company-level figures outlive an account is decided there, not here.",
+      "deletionAuthority": "Account closure cascade only. No route, operator edit or maintenance job updates or deletes a row; a table trigger refuses both.",
+      "exportPolicy": "Not part of customer export: internal cost evidence, not owner content. Never shown to customers or the model; operators read events through reviewed reports only.",
+      "references": [
+        "src/cost-event-store.ts",
+        "src/cost-event-emission.ts",
+        "src/cost-events.ts",
+        "docs/cost-events.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Operators through reviewed cost reports only; no customer, model or view reader"
+        ],
+        "processors": [
+          "Deterministic emission after receipt transitions; no model, client beacon or third-party analytics"
+        ],
+        "remainingExposure": [
+          "Events link an account and project to usage and cost timing through opaque identifiers; they hold no prompt, reply, address, file name, credential or provider locator, and stay operator-restricted."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     }
   ],
   "protectionContract": "docs/data-protection.md",

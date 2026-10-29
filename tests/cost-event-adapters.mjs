@@ -507,7 +507,7 @@ async function suite(m,label){
  return count;
 }
 
-// ---------- Static scope: pure source, no runtime wiring, no schema or consumer change ----------
+// ---------- Static scope: pure source; WH-170 wires only the store and the emission module, never a route or consumer ----------
 const walk=(dir)=>readdirSync(new URL('../'+dir+'/',import.meta.url),{withFileTypes:true}).flatMap(d=>d.isDirectory()?walk(dir+'/'+d.name):[dir+'/'+d.name]);
 function staticScope(texts=sourceText){
  const contract=texts['src/cost-events.ts'],adapters=texts['src/cost-event-adapters.ts'];
@@ -518,11 +518,16 @@ function staticScope(texts=sourceText){
   assert.ok(!/prototypes|cost-events[.]mjs/.test(text),file);
  }
  assert.match(contract,/crypto\.subtle\.digest\('SHA-256'/);
- // Nothing in the product imports the contract or adapters: no route, producer or consumer is wired to them in this packet.
+ // WH-170: only the append-only store and the emission module import the contract or adapters. No route, report or other consumer does.
  const users=[...walk('src'),...walk('frontend'),...walk('public-app')].filter(f=>/\.(?:ts|tsx|js|mjs)$/.test(f)&&!/src\/cost-event(?:s|-adapters)\.ts$/.test(f)).filter(f=>/cost-event(?:s|-adapters)/.test(readFileSync(new URL('../'+f,import.meta.url),'utf8')));
- assert.deepEqual(users,[]);
- for(const file of ['src/model-costs.ts','src/gateway-spend.ts','src/storage-budget.ts','src/task-cost-report.ts'])assert.ok(!/cost-event/.test(read(file)),file);
- assert.ok(!/cost.?event/i.test(read('schema/platform.sql')),'no schema change');
+ const wired=['src/model-costs.ts','src/gateway-spend.ts','src/storage-budget.ts','src/ai-chat.ts','src/standard-ai-recovery.ts'];
+ assert.deepEqual(users.filter(f=>!/src\/cost-event-(?:store|emission)\.ts$/.test(f)&&!wired.includes(f)),[]);
+ // The producers reach it only through the emission module, after their receipt transition; none imports the store or the pure modules.
+ for(const file of wired)assert.ok(/from '\.\/cost-event-emission'/.test(read(file))&&!/cost-event-(?:store|adapters)|cost-events'/.test(read(file)),file);
+ assert.ok(!/cost-event/.test(read('src/task-cost-report.ts')));
+ // The table has no customer-facing route: only the store and the emission module (its first-revision time lookup) name it.
+ assert.deepEqual(walk('src').filter(f=>/\.(?:ts|tsx)$/.test(f)&&/cost_events/.test(readFileSync(new URL('../'+f,import.meta.url),'utf8'))),['src/cost-event-emission.ts','src/cost-event-store.ts']);
+ assert.equal((read('schema/platform.sql').match(/CREATE TABLE cost_events\b/g)??[]).length,1);
 }
 staticScope();
 
