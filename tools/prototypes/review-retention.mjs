@@ -118,6 +118,9 @@ export const capRegistry=Object.freeze({
  cost_events:R('inventory','R6','lifetime','cost-events'),
  owner_email_change_limits:R('rate','R6','expiring','owner-email-change-limits'),
  owner_security_reviews:R('inventory','R6','expiring','owner-security-reviews'),
+ // WH-143: single-use lookup consents and minimized connector receipts, both capped by trigger and removed by the daily maintenance pass.
+ lookup_consents:R('inventory','R6','expiring','connector-receipts'),
+ connector_receipts:R('receipt','R2','expiring','connector-receipts'),
  app_activation_reviews:R('review','R1','active-only','visitor-app-data','enabled=0'),
  app_auth_challenges:R('inventory','R6','expiring','visitor-identity'),
  app_daily_usage:R('rate','R6','window','visitor-app-data'),

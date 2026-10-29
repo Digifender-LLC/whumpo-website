@@ -233,6 +233,8 @@ Workers Builds redeploys main through `deploy ci` after an owner `apply`, so the
 
 ## WH-170 cost events and WH-201 email change schema — October 28, 2026 UTC (source only; cutover is the owner's)
 
+**SCHEMA CHANGE (October 29, 2026, WH-143 and WH-203): merging requires an immediate test-platform cutover; do not merge other PRs between merge and cutover.** Adds `lookup_consents` and `connector_receipts` (WH-143, class `connector-receipts`, 228 tables) and changes two `owner_security_reviews` triggers (WH-203): the 20-review cap counts only committed and unexpired reviews, and an expired open review may be deleted (`email_changes` maintenance now purges them). Complete-SQL digest (`sqlSha256`): `d6a39d55b4227787c9caeb1afd0f79d7e6d90d9321c3378a50b732afcbcb4d8b`. The D1 binding and the B4 pin are unchanged here; the orchestrator does the cutover after merge.
+
 **SCHEMA CHANGE: merging requires an immediate test-platform cutover; do not merge other PRs between merge and cutover.** One combined change adds the `cost_events` table (WH-170) and the address-verification columns on `users`, `owner_email_changes`, `owner_email_change_limits` and `owner_security_reviews` (WH-201), with their triggers, lifecycle classes, closure and restore coverage and one new scheduled job (`email_changes`, allowlisted in the `maintenance_health` check). The automatic deploy (`pnpm run deploy ci`) refuses it until the control database is the new schema, so after the merge the owner (or the orchestrator on the owner's instruction) selects a **new empty D1 database**, runs `deploy prepare` and `apply`, and verifies the readback; nothing in this change deploys, applies or binds anything.
 
 | | Before (`ebd298c`, with WH-181 and WH-183) | After |
