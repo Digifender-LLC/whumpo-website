@@ -38,6 +38,9 @@ jobs:
       # The Workers Builds gate runs this too; checking it here catches an unregistered route before merge, not after.
       - name: Every route is registered in the boundary audit
         run: node tests/boundary-audit.mjs
+      # Outside every verify profile (WH-054), so only this step stops an unreviewed dynamic tenant SQL site; about 1 s.
+      - name: Every dynamic SQL site is in the tenant allowlist
+        run: node tests/tenant-sql-surface.mjs
       - name: Roadmap backlog is in sync
         run: node tools/roadmap.mjs validate && node tools/roadmap.mjs render --check
 
