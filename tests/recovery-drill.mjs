@@ -19,14 +19,14 @@ import {currentSiteFixtureHandlers,createFixtureProject,enableFixtureVisitorAcce
 import {createRestoreInventory,openRestoreInventory} from '../tools/restore-inventory.mjs';
 import {inspectIsolatedRestore} from '../tools/restore-admission.mjs';
 import {restoreCapturedCMSDatabase,captureCMSDatabase} from '../tools/cms-database-snapshot.mjs';
-import {captureRecoveryPoint,verifyRecoveryPoint,openArchivedControl,restoreControlD1,restoreObjects,restoreWorkerArtifact,isolatedObjects,reconcileArtifacts,restoreDiscrepancies,DrillHold} from '../tools/recovery-drill.mjs';
+import {captureRecoveryPoint,verifyRecoveryPoint,openArchivedControl,restoreControlD1,restoreObjects,restoreWorkerArtifact,isolatedObjects,reconcileArtifacts,restoreDiscrepancies,recoveryCoverage,inventoryKeyVersions,inventoryCutovers,DrillHold} from '../tools/recovery-drill.mjs';
 
 Error.stackTraceLimit=0;
 const id=()=>crypto.randomUUID(),hash=v=>createHash('sha256').update(v).digest('hex');
 const directory=await mkdtemp('/tmp/whumpo-recovery-drill-'),phases={},holds={};let refusals=0;
 const phase=async(name,work)=>{const start=performance.now();try{return await work();}finally{phases[name]=Math.round((performance.now()-start)*10)/10;console.error(`drill phase ${name}: ${phases[name]} ms`);}};
 const drillHold=async(work,code)=>{await assert.rejects(work,e=>e instanceof DrillHold&&e.code===code,code);refusals++;};
-const closers=[];let fixture,isolated,sourceRuntime,restoredRuntime;
+const closers=[];let summaryExtra,fixture,isolated,sourceRuntime,restoredRuntime;
 const require=createRequire(import.meta.resolve('wrangler')),{Miniflare,convertV4MiniflareOptions}=require('miniflare');
 const workerd=async dir=>new Miniflare(convertV4MiniflareOptions({modulesRoot:dir,modules:[{type:'ESModule',path:dir+'/worker.js'},...(await readdir(dir)).filter(p=>p.endsWith('.wasm')).map(p=>({type:'CompiledWasm',path:dir+'/'+p}))],compatibilityDate:'2026-09-29'}));
 const lane=()=>hash(id());
@@ -79,6 +79,34 @@ try{
  const visitors=[];
  for(const note of ['first visitor note','second visitor note']){const who=id();await db.prepare(fixtureVisitorSQL).bind(who,app,app).run();const session=await m.appData.issueAppSession(db,who);const r=await m.appData.transitionAppData(db,runtimeService,session,app,id(),0,{note});assert.equal(r.state,'complete');visitors.push({who,session});}
  assert.ok(executions>=3,'Fixture writes used actual QuickJS executions');
+ // ---- WH-008 refresh: one synthetic row in each table added since the October 8 drill. Real triggers stay on.
+ const ms=Date.now(),iso=new Date(ms).toISOString(),seeded={};
+ {
+  const run=(sql,...v)=>db.prepare(sql).bind(...v).run();
+  const costKey=hash('drill-cost');
+  await run("INSERT INTO cost_events(idempotency_key,revision,source,dimension,scope,owner_id,project_id,workload,work_class,outcome,quantity_value,cost_basis,cost_micros,occurred_at,observed_at,event_json) VALUES(?,1,'inference-receipt','input-tokens','tenant',?,?,'drill-work','task','settled',10,'receipt',5,?,?,?)",costKey,owner.account,site,iso,iso,JSON.stringify({contractVersion:1,customerUnits:0,idempotencyKey:costKey,revision:1}));
+  const reviewed=id();
+  await run("INSERT INTO directory_reviews(id,user_id,project_id,kind,snapshot_json,digest,expected_revision,publication_revision,expires_at,status) VALUES(?,?,?,'edit','[]',?,0,0,?,'applied')",reviewed,owner.account,site,hash('directory'),iso);
+  await run("INSERT INTO review_receipts(family,id,owner_user_id,project_id,kind,target,outcome,payload_digest,request_hash,applied_at,lifecycle_class,sealed_at,seal) VALUES('directory_reviews',?,?,?,'change',?,'applied',?,?,?,'directories',?,?)",reviewed,owner.account,site,site,hash('directory'),hash('request'),iso,iso,hash('seal'));
+  await run("INSERT INTO lookup_consents(consent_id,owner_id,provider,operation_id,credential_id,params_digest,destination,created_at,expires_at,state,revision) VALUES(?,?,'gmail','messages.search','cred-drill',?,'owner-panel',?,?,'issued',1)",id(),owner.account,hash('params'),ms,ms+600000);
+  const receipt=id();
+  await run("INSERT INTO connector_receipts(receipt_id,owner_id,provider,operation_id,authority,credential_id,provider_account_id,destination_id,operation_digest,request_digest,review_digest,price_units,price_basis,state,created_at,expires_at,updated_at,revision) VALUES(?,?,'hubspot','contacts.note','owner-request','cred-drill','acct-drill','dest-drill',?,?,?,0,'plan-inclusion','review',?,?,?,1)",receipt,owner.account,hash('op'),hash('req'),hash('rev'),ms,ms+600000,ms);
+  await run("INSERT INTO rule_approvals(approval_id,owner_id,rule_id,rule_revision,provider,operation_id,destination_digest,template_digest,credential_id,max_per_period,period_start,used_count,created_at,revision) VALUES(?,?,'rule-drill',1,'gmail','messages.send',?,?,'cred-drill',5,0,0,?,1)",id(),owner.account,hash('dest'),hash('tpl'),ms);
+  await run("INSERT INTO account_closures(closure_id,account_id,state,revision,requested_at,updated_at,history) VALUES(?,?,'requested',1,?,?,'[\"requested\"]')",id(),'closing-'+id(),ms,ms);
+  await run("INSERT INTO owner_email_change_limits(kind,account_id,at) VALUES('request',?,?)",owner.account,ms);
+  await run("INSERT INTO owner_email_change_limits(kind,address_key,at) VALUES('send',?,?)",hash('new@example.test'),ms);
+  await run("INSERT INTO owner_email_changes(change_id,account_id,request_id,request_hash,new_address,new_address_hash,epoch,created_at,expires_at,state,revision,history,deliverable) VALUES(?,?,?,?,'new@example.test',?,1,?,?,'pending',1,'[\"pending\"]',1)",id(),owner.account,id(),hash('email-request'),hash('new@example.test'),ms,ms+3600000);
+  await run("INSERT INTO owner_security_reviews(review_id,account_id,epoch,credential_revision,kit_generation,credentials,connections,created_at,expires_at,state,revision) SELECT ?,account_id,auth_epoch,credential_revision,kit_generation,'[]','[]',?,?,'open',1 FROM identity_accounts WHERE account_id=?",id(),ms,ms+600000,owner.account);
+  // Workspace layout cap (B11): 52 revisions leave the newest 50, and the newest receipt is never pruned.
+  await run("INSERT INTO workspace_preferences(user_id,revision,layout_json,updated_at) VALUES(?,0,'{\"version\":1,\"n\":0}',?) ON CONFLICT(user_id) DO NOTHING",owner.account,iso);
+  for(let n=0;n<52;n++){
+   const previous=(await db.prepare('SELECT revision,layout_json FROM workspace_preferences WHERE user_id=?').bind(owner.account).first()),next=JSON.stringify({version:1,n:n+1});
+   await run("INSERT INTO workspace_layout_receipts(request_id,user_id,request_hash,request_json,from_revision,to_revision,previous_json,layout_json,created_at) VALUES(?,?,?,'{}',?,?,?,?,?)",id(),owner.account,hash('layout'+n),previous.revision,previous.revision+1,previous.layout_json,next,iso);
+   await run('UPDATE workspace_preferences SET revision=?,layout_json=?,updated_at=? WHERE user_id=?',previous.revision+1,next,iso,owner.account);
+  }
+  for(const t of ['review_receipts','cost_events','lookup_consents','connector_receipts','account_closures','rule_approvals','owner_email_changes','owner_email_change_limits','owner_security_reviews','workspace_layout_receipts'])seeded[t]=(await db.prepare(`SELECT count(*) n FROM ${t}`).first()).n;
+  assert.ok(Object.values(seeded).every(n=>n>=1)&&seeded.workspace_layout_receipts===50,JSON.stringify(seeded));
+ }
  const reference=async(database,runtime)=>{
   const rows=(await database.prepare('SELECT d.visitor_id,d.state_json,v.source FROM app_documents d JOIN app_visitors x ON x.id=d.visitor_id JOIN app_spaces a ON a.project_id=x.project_id JOIN backend_versions v ON v.id=a.version_id ORDER BY d.visitor_id').all()).results;
   const outputs=[];for(const row of rows)outputs.push(await execute(runtime,row.source,{state:JSON.parse(row.state_json),input:{note:'recovery probe'}}));
@@ -141,6 +169,23 @@ try{
  restoredRuntime=await workerd(restoredBuild);
  const after=await phase('restoredQuickJS',()=>reference(target.DRILL_A,restoredRuntime));
  assert.deepEqual(after,before,'Restored program, documents and runtime artifact reproduce the pre-disaster outputs');
+ // Every table of the current schema is captured and restored (or excluded with a rationale); a restored count that differs from the archive holds.
+ const catalog=JSON.parse(await readFile('docs/data-lifecycle.json','utf8')),{snapshot:pointSnapshot}=await verifyRecoveryPoint(pointA,pointDigestA);
+ const countRestored=async table=>(await target.DRILL_A.prepare(`SELECT count(*) n FROM "${table}"`).first()).n;
+ const coverage=await phase('recoveryCoverage',()=>recoveryCoverage(pointSnapshot,countRestored,catalog));
+ assert.equal(coverage.status,'complete',JSON.stringify(coverage.holds));assert.equal(coverage.tables,230);assert.equal(coverage.excluded,0);
+ for(const table of Object.keys(seeded))assert.equal(await countRestored(table),seeded[table],table+' restored with its archived rows');
+ // A new table, a table that vanished from the restore, a stale exclusion and a mismatched count each fail until classified.
+ const withTable=structuredClone(pointSnapshot);withTable.tables.push({name:'new_personal_data',columns:['id'],rows:[]});
+ holds.unclassifiedTable=(await recoveryCoverage(withTable,countRestored,catalog)).holds;assert.deepEqual(holds.unclassifiedTable,['coverage-unclassified-table']);
+ holds.restoreMismatch=(await recoveryCoverage(pointSnapshot,async()=>-1,catalog)).holds;assert.deepEqual(holds.restoreMismatch,['coverage-restore-mismatch']);
+ holds.staleExclusion=(await recoveryCoverage(pointSnapshot,countRestored,catalog,{retired_table:'none'})).holds;assert.deepEqual(holds.staleExclusion,['coverage-stale-exclusion']);
+ const excludedCoverage=await recoveryCoverage(pointSnapshot,async()=>-1,catalog,Object.fromEntries(pointSnapshot.tables.filter(t=>t.name!=='sqlite_sequence').map(t=>[t.name,'drill rationale'])));
+ assert.equal(excludedCoverage.status,'complete');assert.equal(excludedCoverage.excluded,230);
+ refusals+=3;
+ // WH-117 key versions in the restored candidate: one registered key, all 4 credential rows under it, no running rotation.
+ const keyVersions=await phase('inventoryKeyVersions',()=>inventoryKeyVersions(target.DRILL_A));
+ assert.equal(keyVersions.status,'settled',JSON.stringify(keyVersions.holds));assert.deepEqual(keyVersions.ciphertextByKey,{[keyVersions.active]:4});assert.equal(keyVersions.registered.length,1);
  const rto=Math.round(performance.now()-restoreStart);
  const loss=await phase('restoreDiscrepancies',()=>restoreDiscrepancies(target.DRILL_A,db));
  assert.deepEqual(loss.counts.resurrected,{});assert.deepEqual(loss.counts.rolledBack,{});assert.deepEqual(loss.tables.lostSinceSnapshot,{project_files:1});
@@ -190,6 +235,34 @@ try{
   }finally{sql.close();}
  }
 
+ // ---- Interrupted key rotation and interrupted cutover, on throwaway copies of the archive (nothing live is written).
+ {
+  const sql=await tamperedCopy([]);
+  try{
+   sql.prepare("INSERT INTO connection_key_registry(id,fingerprint,review_id) VALUES('next-key',?,'synthetic-rotation-review')").run(hash('next-key'));
+   const active=sql.prepare('SELECT active_key,revision FROM connection_key_policy').get();
+   sql.prepare("INSERT INTO connection_key_rotations(id,source_key,target_key,revision,review_id,state) VALUES(?,?,?,?,?,'running')").run(id(),active.active_key,'next-key',active.revision+1,'synthetic-rotation-review');
+   const copy=sqliteD1Adapter(sql),stuck=await inventoryKeyVersions(copy);
+   assert.deepEqual(stuck.holds,['key-rotation-unsettled']);assert.equal(stuck.rotations.running.length,1);assert.deepEqual(stuck.registered,[active.active_key,'next-key'].sort());
+   holds.interruptedRotation=(await inspect({db:copy})).holds;assert.notEqual(holds.interruptedRotation.length,0,'A candidate with a running rotation is never admitted');
+   refusals++;
+   // A ciphertext under a key id that is not registered is a missing key version.
+  }finally{sql.close();}
+  const lostKey=await tamperedCopy([['github_token_vault','ciphertext',"'wv2.lost-key.AAAA'"]]);
+  try{holds.unregisteredKeyVersion=(await inventoryKeyVersions(sqliteD1Adapter(lostKey))).holds;}finally{lostKey.close();}
+  assert.deepEqual(holds.unregisteredKeyVersion,['key-version-unregistered']);refusals++;
+  const journal=(status,steps)=>({release:'drill-release',manifestDigest:hash('m'),status,steps:Object.fromEntries(['schema','runtime','apps','sites','platform'].map((k,i)=>[k,{status:steps[i]??'pending',...(steps[i]==='running'||steps[i]==='unknown'||steps[i]==='confirmed'?{operationConfirmed:steps[i]!=='running'}:{})}]))});
+  const settled=inventoryCutovers([journal('deployed',Array(5).fill('confirmed')),journal('prepared',[])]);
+  assert.deepEqual([settled.status,settled.interrupted],['settled',0]);
+  const midApply=inventoryCutovers([journal('applying',['confirmed','confirmed','running'])]);
+  assert.deepEqual(midApply.holds,['cutover-interrupted']);assert.deepEqual(midApply.releases[0].stuck,[{step:'apps',status:'running',operationConfirmed:false}]);assert.equal(midApply.releases[0].pending,2);
+  const uncertain=inventoryCutovers([journal('needs-reconciliation',['confirmed','unknown'])]);
+  assert.equal(uncertain.releases[0].stuck[0].status,'unknown');
+  holds.cutoverFormat=inventoryCutovers([{release:'x',status:'weird',steps:{}},null]).holds;assert.deepEqual(holds.cutoverFormat,['journal-format']);
+  holds.cutoverMidApply=midApply.holds;refusals+=3;
+  summaryExtra={cutovers:{settled:settled.interrupted,midApplyStuck:midApply.releases[0].stuck.length}};
+ }
+
  // ---- Identity, revocation, deletion and publication changes after the point.
  const replacement=await workspaceSession(db,m,{account:owner.account,credential:owner.credential}),current=await replacement.scope();
  await owner.revoke();
@@ -236,8 +309,8 @@ try{
 
  const summary={suite:'WH-008 isolated local disaster-recovery drill',node:process.versions.node,
   inventory:{controlRows:capture.controlRows,controlBytes:capture.controlBytes,restoreStatements:control.statements,objects:capture.objects,objectBytes:capture.objectBytes,runtimeFiles:worker.files,credentials:admitted.keys.credentials,keyIds:admitted.keys.keyIds.length,tables:admitted.tables,artifacts:{publishedSites:artifacts.publishedSites,publishedBackends:artifacts.publishedBackends,applications:artifacts.applications,applicationDocuments:artifacts.applicationDocuments}},
-  measured:{phasesMs:phases,restoreToVerifiedMs:rto,lossSinceSnapshot:{...loss.tables.lostSinceSnapshot,objects:1},pointAgeAtDisasterMs:disasterAt-capture.capturedAt},
-  holds,afterRevocationTables:gaps.tables,drillRefusals:refusals,independentEvidenceRetries:independentEvidenceRetries.length,afterRevocationCounts:gaps.counts,servingAllowed:false,providerDispatchAllowed:false,retirementAllowed:false,remoteAccess:false};
+  measured:{phasesMs:phases,restoreToVerifiedMs:rto,lossSinceSnapshot:{...loss.tables.lostSinceSnapshot,objects:1},pointAgeAtDisasterMs:disasterAt-capture.capturedAt,rpoLocalMs:disasterAt-capture.capturedAt,rtoLocalMs:rto},
+  coverage:{...coverage,perClass:undefined},keyVersions,seededRows:seeded,...summaryExtra,holds,afterRevocationTables:gaps.tables,drillRefusals:refusals,independentEvidenceRetries:independentEvidenceRetries.length,afterRevocationCounts:gaps.counts,servingAllowed:false,providerDispatchAllowed:false,retirementAllowed:false,remoteAccess:false};
  console.log(JSON.stringify(summary,null,1));
 }finally{
  globalThis.fetch=network;

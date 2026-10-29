@@ -597,7 +597,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-29 UTC (WH-008 drill refresh, branch wh-008-dr-refresh from 5de295f; local synthetic drill only, no remote restore, no live read, no schema change): tools/recovery-drill.mjs gained recoveryCoverage, inventoryKeyVersions (WH-117 registry, rotations, ciphertext per key ID) and inventoryCutovers (release journals stuck mid-apply). tests/recovery-drill.mjs now seeds rows in review_receipts, cost_events, lookup_consents, connector_receipts, account_closures, rule_approvals, the email-change and security-review tables and the B11 layout cap (50 of 52 receipts kept). Coverage: 230 of 230 tables captured and restored with equal row counts, 0 excluded, 57 lifecycle classes, 62 tables populated and 168 empty; a new, mismatched or stale-excluded table is injected and held. Local measurements (not Cloudflare numbers, three runs): RPO 1.04 to 1.27 s capture-to-disaster age, RTO 20.6 to 22.2 s to a verified fenced candidate, 1,293 restore statements. Still unverified live: remote D1 export/import limits and duration, live key registry and rotation state, live release journals, owner approval of the proposed targets, WH-019 reconciliation. docs/disaster-recovery.md updated. Readiness unchanged; WH-008 stays open.
 
 ## WH-011 — Select and authorize moderation providers and response operations
 
