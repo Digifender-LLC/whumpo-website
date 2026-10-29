@@ -139,7 +139,7 @@
   {
    "id": "B5",
    "severity": "low",
-   "title": "Anonymous visitor login starts can exhaust app challenge capacity for one project and for every tenant \u2014 resolved October 28, 2026 in source",
+   "title": "Anonymous visitor login starts can exhaust app challenge capacity for one project and for every tenant — resolved October 28, 2026 in source",
    "status": "resolved October 28, 2026 in source: at most 5 live challenges per project and client hash (a hash of the connecting address) and a typed 429 when any cap is reached (executed regression on local SQLite; not deployed; schema change, cutover pending)",
    "owner": "Visitor identity maintainers; schema change needs a coordinated cutover",
    "reproduction": "node tests/boundary-app-challenge-capacity.mjs (exits 0: the regression)",
@@ -1997,6 +1997,164 @@
        "file": "tests/email-change-store.mjs",
        "contains": "assert.equal(refused.data.code,'stale_change');",
        "asserts": "an epoch advance makes a pending change stale"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "account-security-review",
+   "title": "Owner security review: prepare, kit, save kit and commit a compromise review (WH-203)",
+   "privileged": [
+    "credential"
+   ],
+   "authorityClass": "session owner; a fresh passkey (at most ten minutes) for prepare, kit and commit; saving a kit needs only the current session; no Chat, agent action or restricted grant",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/account/security/review/commit",
+     "methods": [
+      "ANY"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "prefix",
+     "match": "/api/account/security/review/",
+     "methods": [
+      "ANY"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "The adapter runs only on the owner's admitted workspace scope; reviews are read by account and review ID, so another account's review is unknown.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "workspacePrincipal(env.DB,user.id)"
+      },
+      {
+       "file": "src/email-change/review-store.ts",
+       "contains": "FROM owner_security_reviews WHERE account_id=? AND review_id=?"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/email-change-review.mjs",
+       "contains": "const theirs=(await prepare(b.session)).data;assert.equal((await commit(o.session,theirs.reviewId)).data.code,'unknown_review');",
+       "asserts": "another account's review cannot be committed"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Mutating methods pass the global exact-Origin gate in handle() and the adapter checks Origin again, with POST only, content type, a bounded body and the identity route limiter.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(method) && !sameOrigin(request)) return error(403, \"Origin check failed\");"
+      },
+      {
+       "file": "src/email-change/review-http.ts",
+       "contains": "if(request.headers.get('origin')!==new URL(request.url).origin)return respond({error:'Origin check failed',code:'origin_check_failed'},403);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/email-change-review.mjs",
+       "contains": "assert.equal((await call(o.session,'prepare',ok,{headers:{origin:'https://elsewhere.invalid'}})).status,403);",
+       "asserts": "a cross-origin review request is refused"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "evidenced",
+     "detail": "Prepare, kit and commit need a fresh passkey (at most ten minutes) and the committing batch repeats it; saving a kit needs only the current session. The early return for a committed response skips only the trailing workspace assert, not this check.",
+     "enforcedAt": [
+      {
+       "file": "src/email-change/review-http.ts",
+       "contains": "if(action!=='kit/save')await requireFreshWorkspace(db,userId);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/email-change-review.mjs",
+       "contains": "assert.equal((await prepare(stale)).status,401);assert.equal((await call(stale,'kit',{version:1,reviewId:id()})).status,401);assert.equal((await commit(stale,id())).status,401);",
+       "asserts": "prepare, kit and commit with a stale passkey are refused"
+      }
+     ]
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "A commit names a review by ID and may select only credentials, connections and a saved kit offer inside that review's snapshot; others are refused invalid_selection, unknown_review or kit_not_saved.",
+     "enforcedAt": [
+      {
+       "file": "src/email-change/review-store.ts",
+       "contains": "FROM owner_security_reviews WHERE account_id=? AND review_id=?"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/email-change-review.mjs",
+       "contains": "assert.equal((await commit(o.session,fresh.reviewId,{revokeCredentials:[b.passkeys[0].id]})).data.code,'invalid_selection');",
+       "asserts": "a credential outside the review snapshot is refused"
+      },
+      {
+       "file": "tests/email-change-review.mjs",
+       "contains": "const stolen=await commit(s,r2.reviewId,{rotateKit:{offerId:offer.offerId}});assert.equal(stolen.data.code,'kit_not_saved');",
+       "asserts": "another review's kit offer cannot be used"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "The commit request ID is unique per account and bound to a request hash; the same payload replays the saved receipt with no second effect and no cookie clear, a different one is request_conflict.",
+     "enforcedAt": [
+      {
+       "file": "src/email-change/review-store.ts",
+       "contains": "FROM owner_security_reviews WHERE account_id=? AND commit_request_id=?"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/email-change-review.mjs",
+       "contains": "assert.equal((await commit(fresh,r.reviewId,{revokeCredentials:[o.passkeys[1].id]},requestId)).data.code,'request_conflict');",
+       "asserts": "a reused request ID with another payload conflicts"
+      },
+      {
+       "file": "tests/email-change-review.mjs",
+       "contains": "assert.equal(replay.status,200);assert.equal(replay.text,first.text);assert.equal(replay.headers.get('set-cookie'),null,'a replay revokes nothing');",
+       "asserts": "a replay returns the saved receipt and revokes nothing"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Every write is revision plus one and the committing batch rechecks open state, revision, expiry, epoch, credential revision and kit generation; a moved, expired or raced review changes nothing.",
+     "enforcedAt": [
+      {
+       "file": "src/email-change/review-store.ts",
+       "contains": "AND state='open' AND revision=?"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/email-change-review.mjs",
+       "contains": "assert.equal((await commit(o.session,r.reviewId,{revokeCredentials:[o.passkeys[0].id]})).data.code,'stale_review');",
+       "asserts": "a credential set that moved after the snapshot makes the review stale"
+      },
+      {
+       "file": "tests/email-change-review.mjs",
+       "contains": "assert.equal((await call(o.session,'commit',body,{now:()=>Date.now()+400000})).data.code,'stale_review');",
+       "asserts": "an expired review is refused"
+      },
+      {
+       "file": "tests/email-change-review.mjs",
+       "contains": "assert.equal(results.filter(x=>x.status===200).length,1,JSON.stringify(results.map(x=>x.data)));",
+       "asserts": "competing commits produce one effect"
       }
      ]
     }
