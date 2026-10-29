@@ -10,7 +10,7 @@ import {IdentitySecurity,useSignOut} from './identity/flow';
 /** Workspace sign-out through the shared identity controller; never a page-local adapter. */
 export function SignOutButton({className}:{className?:string}){
  const {busy,error,signOut}=useSignOut();
- return <><Button type="button" variant="secondary" className={className??'min-h-11 h-auto whitespace-normal'} disabled={busy} onClick={()=>void signOut()}><LogOut className="size-4 shrink-0"/>Sign out</Button>{error&&<p role="alert" className="text-sm">{error}</p>}</>;
+ return <><Button type="button" variant="secondary" className={className??'min-h-11 h-auto whitespace-normal'} disabled={busy} onClick={()=>void signOut()}><LogOut className="size-4 shrink-0"/>Sign out</Button>{error&&<p role="alert" className="text-body-sm">{error}</p>}</>;
 }
 const HelpContext=createContext<{open:boolean;show:(trigger:HTMLButtonElement)=>void}|null>(null);
 export function AccountHelp(){
@@ -30,7 +30,7 @@ export function AccountHelpProvider({children}:{children:ReactNode}){
   <DialogContent onOpenAutoFocus={event=>{event.preventDefault();heading.current?.focus();}} onCloseAutoFocus={event=>{event.preventDefault();returnFocus();}} className="account-help-dialog max-w-2xl max-h-[90dvh] flex flex-col p-5 sm:p-7 [&>button:last-child]:size-11 [&>button:last-child]:grid [&>button:last-child]:place-items-center [&>button:last-child]:right-2 [&>button:last-child]:top-2">
    <DialogHeader className="pr-10 text-left shrink-0"><DialogTitle ref={heading} tabIndex={-1}>Account help</DialogTitle><DialogDescription className="[.phone-keyboard_&]:sr-only">Manage your passkeys, recovery kit or sign-in. Closing this panel keeps your unsaved answer in place.</DialogDescription></DialogHeader>
    <div className="min-h-0 overflow-y-auto overscroll-contain space-y-6 pr-1">
-    <p className="text-sm text-muted-foreground">Support works without Chat. We reply on business days. Never share your recovery key in Chat or with support.</p>
+    <p className="text-body-sm text-ink-muted">Support works without Chat. We reply on business days. Never share your recovery key in Chat or with support.</p>
     <div className="flex flex-wrap gap-3"><Button asChild variant="secondary" className="min-h-11 h-auto whitespace-normal"><Link to="/workspace/$view" params={{view:'safety'}} search={{}} onClick={()=>setOpen(false)}>Site & app safety</Link></Button><Button asChild variant="secondary" className="min-h-11 h-auto whitespace-normal"><Link to="/workspace/$view" params={{view:'saved-work'}} search={{}} onClick={()=>setOpen(false)}>Saved work</Link></Button><Button asChild variant="secondary" className="min-h-11 h-auto whitespace-normal"><Link to="/workspace/$view" params={{view:'support'}} search={{}} onClick={()=>setOpen(false)}>Get support</Link></Button></div>
     {open&&<IdentitySecurity/>}
    </div>
@@ -43,7 +43,7 @@ export function AccountHelpProvider({children}:{children:ReactNode}){
 export function AccountSecurityPage(){
  const content=useRef<HTMLDivElement>(null);
  useEffect(()=>{document.title='Account security — Whumpo';if(document.activeElement===document.body)content.current?.querySelector<HTMLElement>('[data-identity-step]')?.focus();},[]);
- return <main className="min-h-dvh bg-background px-5 py-6 sm:px-8 sm:py-9"><div className="mx-auto max-w-xl space-y-7">
+ return <main className="min-h-dvh bg-surface px-5 py-6 sm:px-8 sm:py-9"><div className="mx-auto max-w-xl space-y-7">
   <Brand/>
   <ReturnLink/>
   <div ref={content}><IdentitySecurity/></div>

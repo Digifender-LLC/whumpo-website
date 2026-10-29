@@ -15,9 +15,10 @@ import {useWorkspaceAccount} from './identity/flow';
 import {checkChatRequest,checkFormRequest,checkPhotoUpload,localRecoveryCopy,localRecoveryDestination,localRecoveryNeedsCheck,readLocalRecovery,type LocalCheck,type LocalRecoveryItem} from './lib/local-recovery';
 import {readPhotoUploadStatus} from '../../src/photo-upload-shape';
 import {StatusBadge,type Status} from './components/whumpo/status-badge';
+import {Skeleton} from './components/ui/skeleton';
 import type {InteractionReceipt} from '../../src/chat-interactions/types';
 
-const wrap='min-h-11 h-auto whitespace-normal text-left';
+const wrap='min-h-11 h-auto whitespace-normal text-left',alert='rounded-md border border-attention-ink/40 bg-attention-soft p-4 text-body-sm text-attention-ink';
 export function SavedWorkLink({onNavigate}:{onNavigate?:()=>void}){return <Button asChild variant="secondary" className={wrap}><Link to="/workspace/$view" params={{view:'saved-work'}} search={{}} onClick={onNavigate}><History className="size-4 shrink-0"/>Saved work</Link></Button>;}
 
 /** Identity-only fixed page, outside profile/Chat/dashboard reads. It lists
@@ -52,26 +53,26 @@ export function SavedWorkPage(){
   if(mounted.current&&result.isFetchNextPageError)focusIndex.current=null;
  }
  const viewLabel=view==='open'?'Open work':'All saved work';
- return <main className="min-h-dvh bg-background px-5 py-6 sm:px-8 sm:py-9"><div className="mx-auto max-w-3xl space-y-7">
+ return <main className="min-h-dvh bg-surface px-5 py-6 sm:px-8 sm:py-9"><div className="mx-auto max-w-3xl space-y-7">
   <Brand/><div className="flex flex-wrap items-center justify-between gap-3"><ReturnLink/><AccountHelp/></div>
-  <header><h1 ref={heading} tabIndex={-1} className="text-3xl font-bold">Saved work</h1><p className="mt-3 text-muted-foreground">Find requests, reviews and forms Whumpo saved for you, then open each one in its exact place.</p><p className="mt-3 text-sm text-muted-foreground">This page never approves, retries or sends anything by itself. A review that Chat prepared can be confirmed here only after Whumpo reads it again and you choose the button. Whumpo cannot prepare a new review here. The page you open shows the current state, which can differ from the saved status here.</p></header>
+  <header><h1 ref={heading} tabIndex={-1} className="text-title">Saved work</h1><p className="mt-3 text-ink-muted">Find requests, reviews and forms Whumpo saved for you, then open each one in its exact place.</p><details className="mt-3 text-body-sm text-ink-muted"><summary className="min-h-11 cursor-pointer py-3 font-medium text-ink">What to know</summary><p>This page never approves, retries or sends anything by itself. A review that Chat prepared can be confirmed here only after Whumpo reads it again and you choose the button. Whumpo cannot prepare a new review here. The page you open shows the current state, which can differ from the saved status here.</p></details></header>
   {owner&&<LocalRecoverySection key={owner} owner={owner} revision={localRevision}/>}
   <section aria-label="Saved work filters" className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-4">
    <div role="group" aria-label="Which saved work to show" className="flex flex-wrap gap-2">{(['open','all'] as const).map(value=><Button key={value} type="button" variant={view===value?'primary':'secondary'} aria-pressed={view===value} className={wrap} onClick={()=>{focusIndex.current=null;setView(value);}}>{value==='open'?'Open work':'All saved work'}</Button>)}</div>
-   <div className="flex flex-col gap-2 min-w-0"><label htmlFor="saved-work-kind" className="text-sm font-medium">Type</label><select id="saved-work-kind" value={kind??''} onChange={event=>{focusIndex.current=null;setKind(isSavedWorkKind(event.target.value)?event.target.value:null);}} className="min-h-11 w-full sm:w-auto max-w-full rounded-md border bg-background px-3">
+   <div className="flex flex-col gap-2 min-w-0"><label htmlFor="saved-work-kind" className="text-body-sm font-medium">Type</label><select id="saved-work-kind" value={kind??''} onChange={event=>{focusIndex.current=null;setKind(isSavedWorkKind(event.target.value)?event.target.value:null);}} className="min-h-11 w-full sm:w-auto max-w-full rounded-md border border-line-strong bg-surface px-3">
     <option value="">All types</option>{(Object.entries(savedWorkKinds) as [SavedWorkKind,string][]).map(([value,label])=><option key={value} value={value}>{label}</option>)}
    </select></div>
   </section>
   <section aria-labelledby="saved-work-results" className="space-y-4">
-   <div className="flex flex-wrap items-center justify-between gap-3"><h2 id="saved-work-results" ref={results} tabIndex={-1} className="text-xl font-bold">{viewLabel}{kind?' · '+savedWorkKinds[kind]:''}</h2><Button variant="secondary" className={wrap} disabled={list.isFetching} onClick={()=>{setLocalRevision(value=>value+1);void list.refetch();}}>Check saved work again</Button></div>
-   {refreshing&&<p role="status">Checking your saved work…</p>}
-   {list.error&&!list.isFetchNextPageError&&!refreshing&&<div role="alert" className="rounded-md border bg-card p-4 space-y-3 text-sm"><p>{message(list.error)}</p><p>Saved records are unchanged by this page. Use Check saved work again to retry.</p></div>}
+   <div className="flex flex-wrap items-center justify-between gap-3"><h2 id="saved-work-results" ref={results} tabIndex={-1} className="text-heading">{viewLabel}{kind?' · '+savedWorkKinds[kind]:''}</h2><Button variant="secondary" className={wrap} disabled={list.isFetching} onClick={()=>{setLocalRevision(value=>value+1);void list.refetch();}}>Check saved work again</Button></div>
+   {refreshing&&<div role="status" className="space-y-3"><span className="sr-only">Checking your saved work…</span><Skeleton className="h-24"/><Skeleton className="h-24"/></div>}
+   {list.error&&!list.isFetchNextPageError&&!refreshing&&<div role="alert" className={alert+' space-y-3'}><p>{message(list.error)}</p><p>Saved records are unchanged by this page. Use Check saved work again to retry.</p></div>}
    {visible&&<>
-    <p role="status" className="text-sm text-muted-foreground">{items.length?`Showing ${items.length} saved ${items.length===1?'item':'items'}${list.hasNextPage?'. More are available.':'.'}`:view==='open'?'No open saved work. Choose All saved work to include finished and expired items.':'No saved work matches this filter.'}</p>
-    {groups.map(group=><section key={group.kind} aria-labelledby={'saved-work-group-'+group.kind} className="space-y-3"><h3 id={'saved-work-group-'+group.kind} className="text-lg font-bold break-words">{savedWorkKinds[group.kind]}</h3>
+    <p role="status" className="text-body-sm text-ink-muted">{items.length?`Showing ${items.length} saved ${items.length===1?'item':'items'}${list.hasNextPage?'. More are available.':'.'}`:view==='open'?'No open saved work. Choose All saved work to include finished and expired items.':'No saved work matches this filter.'}</p>
+    {groups.map(group=><section key={group.kind} aria-labelledby={'saved-work-group-'+group.kind} className="space-y-3"><h3 id={'saved-work-group-'+group.kind} className="text-heading break-words">{savedWorkKinds[group.kind]}</h3>
      <ul className="space-y-3">{group.items.map(item=><li key={item.key}><SavedWorkEntry item={item} owner={owner??''}/></li>)}</ul>
     </section>)}
-    {list.isFetchNextPageError&&<p role="alert" className="rounded-md border bg-card p-4 text-sm">{message(list.error)} The items above are from the last completed check.</p>}
+    {list.isFetchNextPageError&&<p role="alert" className={alert}>{message(list.error)} The items above are from the last completed check.</p>}
     {list.hasNextPage&&<Button data-saved-work-more variant="secondary" className={wrap} disabled={list.isFetchingNextPage} onClick={()=>void showMore()}>{list.isFetchingNextPage?'Loading more…':'Show more'}</Button>}
    </>}
   </section>
@@ -81,15 +82,15 @@ export function SavedWorkPage(){
 const phaseStatus:Record<SavedWorkItem['phase'],Status>={review:'attention',form:'attention',working:'working',uncertain:'working',attention:'attention',finished:'ready',expired:'idle'};
 function SavedWorkEntry({item,owner}:{item:SavedWorkItem;owner:string}){
  const status=savedWorkStatus(item),expiry=savedWorkExpiry(item),destination=savedWorkDestination(item),place=item.projectName??'Your account',id='saved-work-'+item.kind+'-'+item.id;
- return <article data-saved-work-key={item.key} tabIndex={-1} aria-labelledby={id} className="rounded-lg border bg-card p-4 sm:p-5 space-y-2 min-w-0">
+ return <article data-saved-work-key={item.key} tabIndex={-1} aria-labelledby={id} className="rounded-lg border bg-surface-raised p-4 sm:p-5 space-y-2 min-w-0">
   <h4 id={id} className="font-semibold break-words">{place}<span className="sr-only">, {savedWorkKinds[item.kind]}</span></h4>
-  <p className="text-sm font-medium" data-saved-work-phase={item.phase}><StatusBadge status={phaseStatus[item.phase]}>{status.label}</StatusBadge></p>
-  <p className="text-sm text-muted-foreground">{status.detail}</p>
-  {expiry&&<p className="text-sm">{expiry}</p>}
+  <p className="text-body-sm font-medium" data-saved-work-phase={item.phase}><StatusBadge status={phaseStatus[item.phase]}>{status.label}</StatusBadge></p>
+  <p className="text-body-sm text-ink-muted">{status.detail}</p>
+  {expiry&&<p className="text-body-sm">{expiry}</p>}
   {destination?<Button asChild variant="secondary" className={wrap}>{destination.kind==='safety'
    ?<Link to="/workspace/$view" params={{view:'safety'}} search={destination.search}>{destination.label}<span className="sr-only"> for {savedWorkKinds[item.kind]}, {place}</span></Link>
    :<Link to="/workspace" search={destination.search}>{destination.label}<span className="sr-only"> for {savedWorkKinds[item.kind]}, {place}</span></Link>}</Button>
-  :<p className="text-sm text-muted-foreground">No linked Chat message or review page. This status is shown for reference.</p>}
+  :<p className="text-body-sm text-ink-muted">No linked Chat message or review page. This status is shown for reference.</p>}
   {owner&&item.phase==='review'&&item.turnId&&!item.safety&&<SavedReviewConfirm key={owner} owner={owner} turnId={item.turnId}/>}
  </article>;
 }
@@ -126,14 +127,14 @@ function LocalRecoverySection({owner,revision}:{owner:string;revision:number}){
  const state=(item:LocalRecoveryItem):LocalCheck|'checking'|'error'|null=>{const index=checked.indexOf(item);if(index<0)return null;const q=checks[index];return q.isFetching||q.isPending?'checking':q.error?'error':q.data??null;};
  if(!local.items.length&&!local.failed)return null;
  return <section aria-labelledby="saved-work-local" className="space-y-3" data-local-recovery-section>
-  <h2 id="saved-work-local" className="text-xl font-bold">On this device</h2>
-  <p className="text-sm text-muted-foreground">Only this browser tab keeps these records. They are not saved to your account and clear when you sign out or change accounts. Checking them never sends anything again.</p>
-  {local.failed&&<p role="alert" className="text-sm">Some recovery details in this tab could not be read. Keep this tab open and open Chat to check your work.</p>}
+  <h2 id="saved-work-local" className="text-heading">On this device</h2>
+  <p className="text-body-sm text-ink-muted">Only this browser tab keeps these records. They are not saved to your account and clear when you sign out or change accounts. Checking them never sends anything again.</p>
+  {local.failed&&<p role="alert" className={alert}>Some recovery details in this tab could not be read. Keep this tab open and open Chat to check your work.</p>}
   <ul className="space-y-3">{local.items.map(item=>{const check=state(item),copy=localRecoveryCopy(item,check),destination=localRecoveryDestination(item),id='saved-work-local-'+item.key.replace(/[^a-z0-9-]/g,'-'),status=check==='checking'?'checking':check==='error'?'error':check?check.state:item.kind==='location'?'location':'unsaved';
-   return <li key={item.key}><article data-local-recovery={item.kind} data-local-state={status} aria-labelledby={id} className="rounded-lg border border-dashed bg-card p-4 sm:p-5 space-y-2 min-w-0">
+   return <li key={item.key}><article data-local-recovery={item.kind} data-local-state={status} aria-labelledby={id} className="rounded-lg border border-dashed bg-surface-raised p-4 sm:p-5 space-y-2 min-w-0">
     <h3 id={id} className="font-semibold break-words">{copy.title}</h3>
-    <p className="text-sm font-medium" role={check==='checking'?'status':undefined}>{copy.label}</p>
-    <p className="text-sm text-muted-foreground">{copy.detail}</p>
+    <p className="text-body-sm font-medium" role={check==='checking'?'status':undefined}>{copy.label}</p>
+    <p className="text-body-sm text-ink-muted">{copy.detail}</p>
     <Button asChild variant="secondary" className={wrap}>{destination.kind==='photos'
      ?<Link to="/workspace/$view" params={{view:'photos'}} search={destination.search}>{destination.label}<span className="sr-only">: {copy.title}</span></Link>
      :<Link to="/workspace" search={destination.search}>{destination.label}<span className="sr-only">: {copy.title}</span></Link>}</Button>

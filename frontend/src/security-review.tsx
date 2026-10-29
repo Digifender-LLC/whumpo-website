@@ -4,6 +4,9 @@ import {send,APIError,resetWorkspaceClient} from './lib/api';
 import {identityCeremony} from './lib/identity';
 import {invalidateIdentity} from './lib/identity-invalidation';
 import {Button} from './components/ui/button';
+import {Deadline} from './lib/time-ago';
+
+const alertBox='rounded-md border border-attention-ink/40 bg-attention-soft p-4 text-body-sm text-attention-ink';
 
 /** WH-203/WH-204 owner security review (docs/email-change-and-compromise.md sections 3 and 3.2). Direct control, never Chat. */
 type Snapshot={reviewId:string;expiresAt:number;credentials:string[];sessions:{sessionId:string;credentialId:string;issuedAt:number}[];kitGeneration:number;pendingEmailChange:{changeId:string;expiresAt:number}|null;connections:{connectionId:string;provider:string;access:string;revocation:string}[]};
@@ -14,7 +17,6 @@ export type Step='start'|'select'|'kit'|'confirm'|'done';
 type View={step:Step;busy:boolean;status:string;error:string;snap:Snapshot|null;dropKeys:string[];dropConns:string[];kit:Kit|null;kitSaved:boolean;kitSkipped:boolean;ack:boolean;receipt:Receipt|null;resume:boolean};
 type Handlers={start():void;toggleKey(id:string):void;toggleConn(id:string):void;toSelectDone():void;makeKit():void;skipKit():void;saved():void;copy():void;download():void;setAck(v:boolean):void;commit():void;back(step:Step):void;signIn():void};
 
-const when=(ms:number)=>new Date(ms).toLocaleString();
 const providerName=(p:string)=>p==='github'?'GitHub':p==='cloudflare'?'Cloudflare':p;
 const keyLabel=(id:string,i:number)=>'Passkey '+(i+1)+' (ends '+id.slice(-6)+')';
 const revocationText=(s:string)=>s==='queued'?'access ended here, removal at the provider is queued':s==='revoked'?'removed at the provider':'access ended here, provider removal is being checked';
@@ -38,7 +40,7 @@ export function reviewError(e:unknown):{text:string;goto:Step|null;keepAttempt:b
  }
 }
 
-const heading='text-base font-semibold focus-visible:outline-2 focus-visible:outline-ring';
+const heading='text-heading focus-visible:outline-2 focus-visible:outline-ring';
 export function SecurityReviewView({v,on}:{v:View;on:Handlers}){
  const head=useRef<HTMLHeadingElement>(null),first=useRef(true);
  useEffect(()=>{if(first.current){first.current=false;return;}head.current?.focus();},[v.step]);
@@ -46,48 +48,48 @@ export function SecurityReviewView({v,on}:{v:View;on:Handlers}){
  const h=(t:string)=><h3 ref={head} tabIndex={-1} className={heading}>{t}</h3>;
  return <div className="grid gap-5 min-w-0">
   {v.step==='start'&&<div className="grid gap-3">{h('Secure my account')}
-   <p className="text-sm">Use this if you think a passkey, recovery kit, email account or connection may be exposed. You will check your passkey, choose what to remove, and be signed out everywhere.</p>
-   <p className="text-sm text-muted-foreground">This restores control of your account. It does not recover encrypted content.</p>
-   {v.resume&&<p className="text-sm">A security review may not have finished. Check its result; the same request is safe to repeat.</p>}
+   <p className="text-body-sm">Use this if you think a passkey, recovery kit, email account or connection may be exposed. You will check your passkey, choose what to remove, and be signed out everywhere.</p>
+   <details className="text-body-sm text-ink-muted"><summary className="min-h-11 cursor-pointer py-3 font-medium text-ink">What to know</summary><p>This restores control of your account. It does not recover encrypted content.</p></details>
+   {v.resume&&<p className="text-body-sm">A security review may not have finished. Check its result; the same request is safe to repeat.</p>}
    <div className="flex flex-wrap gap-3"><Button className="min-h-11" disabled={v.busy} onClick={on.start}>{v.resume?'Check result':'Secure my account'}</Button></div></div>}
   {v.step==='select'&&snap&&<form className="grid gap-5" onSubmit={e=>{e.preventDefault();on.toSelectDone()}}>{h('Choose what to keep')}
-   <p className="text-sm">This review is valid until {when(snap.expiresAt)}. Every sign-in on every device ends when you finish.</p>
-   <fieldset className="grid gap-3"><legend className="text-sm font-medium">Passkeys</legend><p className="text-sm text-muted-foreground">All are kept unless you remove them. Remove one only if you do not recognise it or no longer hold it.</p>
-    {snap.credentials.map((id,i)=><label key={id} className="flex items-start gap-3 text-sm min-h-11"><input type="checkbox" className="mt-1" checked={v.dropKeys.includes(id)} onChange={()=>on.toggleKey(id)}/><span>Remove {keyLabel(id,i)}<span className="block text-muted-foreground">Signed in {snap.sessions.filter(s=>s.credentialId===id).length} time(s) right now</span></span></label>)}</fieldset>
-   <fieldset className="grid gap-3"><legend className="text-sm font-medium">Connections</legend>
-    {snap.connections.length?<><p className="text-sm text-muted-foreground">All are chosen for removal, because a connection could still act for you. Access ends here at once and Whumpo asks the provider to remove it.</p>
-     {snap.connections.map(c=><label key={c.connectionId} className="flex items-start gap-3 text-sm min-h-11"><input type="checkbox" className="mt-1" checked={v.dropConns.includes(c.connectionId)} onChange={()=>on.toggleConn(c.connectionId)}/><span>Remove {providerName(c.provider)} connection<span className="block text-muted-foreground">{c.access==='active'?'Access is on':'Access is already off'}</span></span></label>)}</>:<p className="text-sm text-muted-foreground">You have no provider connections.</p>}</fieldset>
-   {snap.pendingEmailChange&&<p className="text-sm">An email change is waiting for confirmation. It will be cancelled.</p>}
-   {v.dropKeys.length===snap.credentials.length&&<p className="text-sm" role="alert">You chose to remove every passkey. You will need your saved recovery kit to get back in.</p>}
+   <p className="text-body-sm">This review is valid until <Deadline value={snap.expiresAt}/>. Every sign-in on every device ends when you finish.</p>
+   <fieldset className="grid gap-3"><legend className="text-body-sm font-medium">Passkeys</legend><p className="text-body-sm text-ink-muted">All are kept unless you remove them. Remove one only if you do not recognise it or no longer hold it.</p>
+    {snap.credentials.map((id,i)=><label key={id} className="flex items-start gap-3 text-body-sm min-h-11"><input type="checkbox" className="mt-1" checked={v.dropKeys.includes(id)} onChange={()=>on.toggleKey(id)}/><span>Remove {keyLabel(id,i)}<span className="block text-ink-muted">Signed in {snap.sessions.filter(s=>s.credentialId===id).length} time(s) right now</span></span></label>)}</fieldset>
+   <fieldset className="grid gap-3"><legend className="text-body-sm font-medium">Connections</legend>
+    {snap.connections.length?<><p className="text-body-sm text-ink-muted">All are chosen for removal, because a connection could still act for you. Access ends here at once and Whumpo asks the provider to remove it.</p>
+     {snap.connections.map(c=><label key={c.connectionId} className="flex items-start gap-3 text-body-sm min-h-11"><input type="checkbox" className="mt-1" checked={v.dropConns.includes(c.connectionId)} onChange={()=>on.toggleConn(c.connectionId)}/><span>Remove {providerName(c.provider)} connection<span className="block text-ink-muted">{c.access==='active'?'Access is on':'Access is already off'}</span></span></label>)}</>:<p className="text-body-sm text-ink-muted">You have no provider connections.</p>}</fieldset>
+   {snap.pendingEmailChange&&<p className="text-body-sm">An email change is waiting for confirmation. It will be cancelled.</p>}
+   {v.dropKeys.length===snap.credentials.length&&<p className={alertBox} role="alert">You chose to remove every passkey. You will need your saved recovery kit to get back in.</p>}
    <div className="flex flex-wrap gap-3"><Button className="min-h-11" disabled={v.busy}>Continue</Button><Button type="button" variant="secondary" className="min-h-11" disabled={v.busy} onClick={()=>on.back('start')}>Cancel</Button></div></form>}
   {v.step==='kit'&&<div className="grid gap-4">{h('Replace your recovery kit')}
-   <p className="text-sm">A new kit replaces the one you have now, and the old kit stops working. Keep it private and apart from your passkeys. It cannot be shown again.</p>
+   <p className="text-body-sm">A new kit replaces the one you have now, and the old kit stops working. Keep it private and apart from your passkeys. It cannot be shown again.</p>
    {!v.kit&&<div className="flex flex-wrap gap-3"><Button className="min-h-11" disabled={v.busy} onClick={on.makeKit}>Create new recovery kit</Button><Button type="button" variant="secondary" className="min-h-11" disabled={v.busy} onClick={on.skipKit}>Keep my current kit</Button></div>}
    {v.kit&&<><div className="grid sm:grid-cols-2 gap-2"><Button type="button" variant="secondary" className="min-h-11" onClick={on.download}><Download className="size-4"/>Download</Button><Button type="button" variant="secondary" className="min-h-11" onClick={on.copy}><Copy className="size-4"/>Copy</Button></div>
-    <details className="rounded-md border p-4"><summary className="cursor-pointer text-sm font-medium">Show private recovery key</summary><p className="font-mono text-sm break-all select-all mt-4">{v.kit.key}</p></details>
-    {v.kitSaved?<p className="text-sm">Saved. Continue when you are ready.</p>:<Button className="min-h-11 h-auto whitespace-normal" disabled={v.busy} onClick={on.saved}>I have saved my new recovery kit</Button>}
-    <div className="flex flex-wrap gap-3"><Button className="min-h-11" disabled={v.busy||!v.kitSaved} onClick={()=>on.back('confirm')}>Continue</Button><Button type="button" variant="secondary" className="min-h-11" disabled={v.busy} onClick={on.skipKit}>Keep my current kit instead</Button></div></>}
+    <details className="rounded-md border p-4"><summary className="cursor-pointer text-body-sm font-medium">Show private recovery key</summary><p className="font-mono text-body-sm break-all select-all mt-4">{v.kit.key}</p></details>
+    {v.kitSaved?<p className="text-body-sm text-ready-ink">Saved. Continue when you are ready.</p>:<Button className="min-h-11 h-auto whitespace-normal" disabled={v.busy} onClick={on.saved}>I have saved my new recovery kit</Button>}
+    <div className="flex flex-wrap gap-3"><Button variant={v.kitSaved?'primary':'secondary'} className="min-h-11" disabled={v.busy||!v.kitSaved} onClick={()=>on.back('confirm')}>Continue</Button><Button type="button" variant="secondary" className="min-h-11" disabled={v.busy} onClick={on.skipKit}>Keep my current kit instead</Button></div></>}
    <Button type="button" variant="quiet" className="min-h-11 justify-self-start" disabled={v.busy} onClick={()=>on.back('select')}>Back</Button></div>}
   {v.step==='confirm'&&snap&&<form className="grid gap-4" onSubmit={e=>{e.preventDefault();on.commit()}}>{h('Confirm')}
-   <ul className="text-sm list-disc pl-5 grid gap-1"><li>You will be signed out on every device, including this one.</li>
+   <ul className="text-body-sm list-disc pl-5 grid gap-1"><li>You will be signed out on every device, including this one.</li>
     <li>{v.dropKeys.length?'Passkeys removed: '+v.dropKeys.length+' of '+snap.credentials.length+'.':'No passkeys will be removed.'}</li>
     <li>{v.dropConns.length?'Connections removed: '+v.dropConns.length+' of '+snap.connections.length+'.':'No connections will be removed.'}</li>
     <li>{rotating?'Your recovery kit will be replaced by the one you just saved.':'Your current recovery kit stays.'}</li>
     {snap.pendingEmailChange&&<li>The waiting email change will be cancelled.</li>}</ul>
-   {v.dropKeys.length===snap.credentials.length&&<p className="text-sm" role="alert">No passkey will remain. Your saved recovery kit is the only way back in.</p>}
-   <label className="flex items-start gap-3 text-sm min-h-11"><input type="checkbox" className="mt-1" checked={v.ack} onChange={e=>on.setAck(e.target.checked)}/><span>I understand this cannot be undone and I will be signed out everywhere.</span></label>
+   {v.dropKeys.length===snap.credentials.length&&<p className={alertBox} role="alert">No passkey will remain. Your saved recovery kit is the only way back in.</p>}
+   <label className="flex items-start gap-3 text-body-sm min-h-11"><input type="checkbox" className="mt-1" checked={v.ack} onChange={e=>on.setAck(e.target.checked)}/><span>I understand this cannot be undone and I will be signed out everywhere.</span></label>
    <div className="flex flex-wrap gap-3"><Button className="min-h-11 h-auto whitespace-normal" disabled={v.busy||!v.ack||!ready}>Secure my account now</Button><Button type="button" variant="secondary" className="min-h-11" disabled={v.busy} onClick={()=>on.back('kit')}>Back</Button></div></form>}
   {v.step==='done'&&v.receipt&&<div className="grid gap-3">{h('Your account is secured')}
-   <ul className="text-sm list-disc pl-5 grid gap-1"><li>You are signed out everywhere.</li>
+   <ul className="text-body-sm list-disc pl-5 grid gap-1"><li>You are signed out everywhere.</li>
     <li>Passkeys removed: {v.receipt.revokedCredentials.length}.</li>
     <li>{v.receipt.kitRotated?'Your recovery kit was replaced. The old kit no longer works.':'Your recovery kit was not changed.'}</li>
     {v.receipt.pendingEmailChange&&<li>The waiting email change was cancelled.</li>}
     {v.receipt.connections.map(c=><li key={c.connectionId}>Connection removed: {revocationText(c.revocation)}.</li>)}
     {v.receipt.stage==='recovering'&&<li>No passkey remains. Use your saved recovery kit to get back in.</li>}</ul>
-   <p className="text-sm text-muted-foreground">This restores control of your account. It does not recover encrypted content.</p>
+   <p className="text-body-sm text-ink-muted">This restores control of your account. It does not recover encrypted content.</p>
    <Button className="min-h-11 justify-self-start" onClick={on.signIn}>Continue to sign-in</Button></div>}
-  <p role="status" aria-live="polite" className="text-sm text-muted-foreground">{v.status}</p>
-  {v.error&&<p role="alert" className="text-sm">{v.error}</p>}
+  <p role="status" aria-live="polite" className="text-body-sm text-ink-muted">{v.status}</p>
+  {v.error&&<p role="alert" className={alertBox}>{v.error}</p>}
  </div>;
 }
 
