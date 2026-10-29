@@ -14,6 +14,8 @@ kotlin {
         compileSdk = libs.versions.compileSdk.get().toInt()
         minSdk = libs.versions.minSdk.get().toInt()
         withHostTest {}
+        // Packages Compose resources (the bundled fonts) for Android.
+        androidResources { enable = true }
     }
     jvm()
 
@@ -33,19 +35,36 @@ kotlin {
 
         commonMain.dependencies {
             implementation(libs.compose.runtime)
+            implementation(libs.compose.animation.core)
+            implementation(libs.compose.components.resources)
+            implementation(libs.compose.foundation)
+            implementation(libs.compose.material3)
+            implementation(libs.compose.ui)
             api(libs.kotlinx.coroutines.core)
             api(libs.jetbrains.lifecycle.viewmodel)
+            api(libs.ktor.client.core)
+            api(libs.kotlinx.serialization.json)
         }
+        // One engine for both targets: OkHttp runs on Android and on the JVM desktop target.
+        androidMain.dependencies { implementation(libs.ktor.client.okhttp) }
+        jvmMain.dependencies { implementation(libs.ktor.client.okhttp) }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
         }
         jvmTest.dependencies {
             implementation(libs.junit4)
             implementation(libs.kotlinx.coroutines.test)
+            implementation(libs.ktor.client.mock)
         }
         getByName("androidHostTest").dependencies {
             implementation(libs.junit4)
             implementation(libs.kotlinx.coroutines.test)
+            implementation(libs.ktor.client.mock)
         }
     }
+}
+
+compose.resources {
+    packageOfResClass = "com.whumpo.shared.resources"
+    publicResClass = false
 }

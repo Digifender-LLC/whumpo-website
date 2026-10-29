@@ -29,6 +29,17 @@ Android tooling is kept separate from the Node 24/pnpm 11 workspace: `android/` 
 
 `jvmCommonMain` exists because that code uses `java.io` and `java.security`; both targets are JVM-based, so the directory is added to both. When a non-JVM target arrives it moves behind `expect`/`actual`. The `com.whumpo.core.*` and `com.whumpo.android.ui.*` package names were kept so the move changes no imports. ViewModel factories that need the Android-only `AppContainer` live in `:androidApp` (`ViewModelFactories.kt`).
 
+## Mobile API client (WP4)
+
+`com.whumpo.core.api` in `:shared` is the typed client for the frozen [v1 contract](mobile-api-v1.md): `Models.kt` (kotlinx.serialization wire models), `MobileApiException.kt` (one subtype per contract error code), `MobileApiClient.kt` (one method per operation, 34 in all) and `OkHttpEngine.kt`. It has no UI and no sign-in: WP5 supplies a `SessionProvider` (bearer token and a callback when the server rejects the session).
+
+- **HTTP stack (decision, 2026-10-29, WP4): Ktor client 3.6.1 core with the OkHttp engine, plus kotlinx.serialization-json 1.12.0.** The plan (platform ADR, Libraries) already named Ktor and kotlinx.serialization. OkHttp is the lightest single engine that runs on both Android and the JVM desktop target, so there is one engine dependency and no per-platform engine code. `MobileApiClient` takes any `HttpClientEngine`, so tests inject Ktor's `MockEngine`. No ContentNegotiation plugin: bodies are encoded and decoded by one strict `Json` instance in the client.
+- **Strict responses.** Unknown or missing keys, a version other than 1, a preview path outside the allowlist, or an approvable review whose control does not match its kind fail as `InvalidResponse`. The unknown review `kind` stays a string so the app can show update-required; `Review.present(client)` enables approval only for a control capability the build declared.
+- **Errors.** `proof_required` (`ProofRequired.Proof.SIGN_IN` or `FRESH_PASSKEY`), `client_update_required` (426, with `minimumBuild`), `rate_limited` (`retryAfterSeconds`, falling back to `Retry-After`), `stale_revision` (`currentRevision`) and the rest map to subtypes of `MobileApiException`; a gateway page, redirect or unknown code is `Unrecognized`. On an authenticated route, `proof_required` with `signin` or `identity_changed` calls `SessionProvider.onSessionRejected()` before throwing.
+- **Request IDs and replay.** Writes take the caller's request, upload or submission ID (`newRequestId()` makes a lowercase UUID). The client never retries and never regenerates an ID. A lost write reply is `Transport(outcomeUnknown = true)`; resolve it by reading (`resolveSend`/`getChatTurn`, `interactionReceipt`, `getPhotoUpload`), and retry only as an explicit owner action with the same ID and payload. `fresh_passkey` is surfaced for the caller to reauthenticate and retry with the same ID.
+- **Interactions.** `interactions/list`, `read` and `resources` return the WH-105 payload as a `JsonObject` (version checked); the contract freezes only the envelopes. `mutate`, `receipt`, `continue`, `stop` and `reconcile` are typed from the fixtures.
+- **Single source of truth.** The tests read `tests/fixtures/mobile-v1/*.json`, the same files `tests/mobile-v1-contract.mjs` reads, found by walking up from the module directory. Nothing was copied or moved. `android.yml` now also runs when those fixtures change.
+
 ## Local build
 
 You need JDK 17+ and an Android SDK with `platforms;android-36` and build-tools. Set `ANDROID_HOME` or write `android/local.properties` (`sdk.dir=…`). `local.properties` is gitignored. The SDK is not part of the repository.
@@ -61,6 +72,7 @@ Debug APKs are written to `android/androidApp/build/outputs/apk/{local,deployed}
 ## Tests
 
 - `:shared` tests (run on the JVM target and on the Android host-test target; the 19 original `:core` tests plus the ViewModel tests, which moved with the code, plus a `commonTest` smoke test): environment validation, account scope hashing, encrypted store (account switch, sign-out, restore after restart, foreign key, slot binding), and shell repositories.
+- `MobileApiClientTest` (WP4, in `jvmCommonTest`, so it runs on the JVM and Android host targets): every one of the 34 operations is called against its fixture pair with a mock engine (method, path, query, body, `Whumpo-Client`, bearer only on authenticated routes, no cookie, and the typed result re-encodes to the fixture body); every error code; response rejection fixtures; review presentation and the four controls; lost-reply, retry and fresh-passkey flows; client-side admission from the request rejection fixtures; FCM data parsing; the client header.
 - ViewModel tests (now in `:shared`): Chat draft debounce/sign-out/account change, Projects loading state, Settings sign-out.
 - Instrumentation tests: navigation and Tab semantics/headings for the four destinations, rotation (`recreate`), environment display, 200% font scale, Keystore round trip and associated-data binding, no-backup location and ciphertext-only storage, account switch/sign-out erasure, sign-out from the Settings screen, draft surviving recreation and restart, backup flag and rules, and the composer staying above the soft keyboard. The keyboard test is *skipped* (`assume`) if the emulator never shows an IME.
 
@@ -78,4 +90,13 @@ Standard GitHub-hosted runners are free for public repositories. Private reposit
 ## Verification record
 
 - **October 4, 2026 (original shell):** Gradle wrapper hashes matched; `:core:test` passed 19/19 locally; the Android modules were CI-only.
+- **October 29, 2026 (WP4):** `:shared:jvmTest` (including `MobileApiClientTest`) and `:shared:compileKotlinJvm` passed locally on Temurin 21; the Android targets are verified in GitHub Actions only (see the PR). The client is not wired into the app yet and the shell still has no `INTERNET` permission.
 - **October 29, 2026 (WP1):** the dev machine still has no Android SDK, and no SDK license was accepted locally. The restructure was verified in GitHub Actions on the pull request: see the PR for the run. The Gradle wrapper JAR is unchanged (SHA-256 `7a9ce74c…262c5d`); only the distribution URL and checksum moved to 9.8.2.
+
+## Theme (WP2)
+
+- `android/shared/src/commonMain/kotlin/com/whumpo/android/ui/theme/WhumpoTokens.kt` is **generated** by `node tools/design-tokens.mjs` from `docs/design/whumpo-design-system/tokens.json` (palettes, the mapped Material 3 scheme for light and dark, type, radii, spacing, motion). `--check` (part of `pnpm check`) fails when the file is stale. The same run asserts 4.5:1 for every mapped text pair and 3:1 for outline and focus ring in both themes, and that light `primary` is not Sky Blue. `WhumpoTheme.kt` and `WhumpoButtons.kt` are hand-written and contain no hex.
+- Fonts: `composeResources/font/*.ttf` (Poppins Medium and Bold, Inter Regular, Medium and SemiBold) are lossless TTF conversions of the design system's `.woff2` files, so the app and the web ship the same glyphs. Licences (SIL OFL 1.1): `composeResources/files/OFL-Poppins.txt` and `OFL-Inter.txt`.
+- Material 3 for Compose Multiplatform is versioned apart from Compose: `composeMaterial3 = 1.9.0` in the catalog.
+- Roborazzi is not introduced in WP2 (it needs Robolectric and the Android SDK, which only CI has). Verification is `WhumpoTokensTest` (JVM, `:shared:jvmTest`) plus the generator check. Screenshot tests belong with WP3.
+- `overline` is exposed as `WhumpoTheme.overline`; callers apply uppercase to the text (a `TextStyle` cannot).

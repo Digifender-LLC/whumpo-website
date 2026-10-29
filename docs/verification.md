@@ -17,6 +17,8 @@ Run `pnpm check` separately for backend/frontend types. Run `pnpm verify` for th
 
 Runtime ceilings are safeguards, not performance promises. Journeys require more CPU/memory and disk than `fast`; exact requirements depend on workerd and the host. Run profiles sequentially on a constrained machine. They do not share a persistent database or fixed server port. The suites dispose their local services and fixture storage after their test bodies. Setup failure before cleanup is installed, a disposal failure or forced process termination can leave temporary files/processes requiring inspection; the runner is not a container supervisor. The runner's empty home directory has its own cleanup check.
 
+The `site` profile also runs about a hundred further fixture suites that previously ran in no profile (about eight minutes in total, each under 60 s). They are kept out of `fast` and `protection` because those are the deploy gate. `node tools/list-unrun-tests.mjs` lists `tests/*.mjs` that no profile, package script or workflow references.
+
 ## Credentials and live operations
 
 The runner allows only basic OS executable/temp paths into child environments, uses a unique empty home/config directory, disables Wrangler metrics and dotenv loading, and excludes inherited provider tokens, proxies, `NODE_OPTIONS` and live-test flags. It refuses a checkout containing `.env`, `.env.*`, `.dev.vars` or `.dev.vars.*`, because Wrangler can load those independently of environment variables. Use a separate credential-free checkout in that case; do not remove operator secrets to make a test pass.

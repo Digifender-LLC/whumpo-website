@@ -254,8 +254,8 @@ try{
   await page.route('**/api/chat/interactions/v1/view-component',route=>route.fulfill({status:503,contentType:'application/json',body:'{"error":"Synthetic observation outage"}'}));
   await refresh().click();await traffic().getByText('Synthetic observation outage',{exact:false}).waitFor();assert.equal(await traffic().locator('p.text-4xl').count(),0);
   await page.unroute('**/api/chat/interactions/v1/view-component');await refresh().click();await traffic().getByText('12',{exact:true}).first().waitFor();
-  await run("UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE user_id=? AND feature_id='core.insights'",c.user);await refresh().click();await traffic().getByText('This information is not available with your current access.',{exact:false}).waitFor();assert.equal(await traffic().locator('p.text-4xl').count(),0);
-  await page.reload();await traffic().getByText('This information is not available with your current access.',{exact:false}).waitFor();assert.equal(modelCalls,selectionCalls+7);assert.equal((await site.readSpecification(c.scope,c.user,c.project)).revision,1);assert.equal((await row('SELECT count(*) n FROM publications WHERE project_id=?',c.project)).n,0);
+  await run("UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE user_id=? AND feature_id='core.insights'",c.user);await refresh().click();await traffic().getByText('You don’t have access to this yet.',{exact:false}).waitFor();assert.equal(await traffic().locator('p.text-4xl').count(),0);
+  await page.reload();await traffic().getByText('You don’t have access to this yet.',{exact:false}).waitFor();assert.equal(modelCalls,selectionCalls+7);assert.equal((await site.readSpecification(c.scope,c.user,c.project)).revision,1);assert.equal((await row('SELECT count(*) n FROM publications WHERE project_id=?',c.project)).n,0);
  }
  if(process.argv.includes('--reviews-only')||process.argv.includes('--publications-only')){
   const key=authenticator(origin),cdp=await context.newCDPSession(page);

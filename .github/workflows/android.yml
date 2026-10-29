@@ -6,11 +6,13 @@ on:
   pull_request:
     paths:
       - "android/**"
+      - "tests/fixtures/mobile-v1/**"
       - ".github/workflows/android.yml"
   push:
     branches: [main]
     paths:
       - "android/**"
+      - "tests/fixtures/mobile-v1/**"
       - ".github/workflows/android.yml"
   workflow_dispatch:
 
