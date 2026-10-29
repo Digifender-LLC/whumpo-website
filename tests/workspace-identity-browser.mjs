@@ -104,7 +104,7 @@ try{
   await activate(page.getByRole('link',{name:'Skip to content',exact:true}));assert(await page.getByRole('main').evaluate(e=>e===document.activeElement));
 
   await page.setViewportSize({width:390,height:844});
-  await hearOrca('landing enters invited signup',()=>activate(page.getByRole('link',{name:'Meet Whumpo',exact:true})),[/A little hello/i,/heading/i]);
+  await hearOrca('landing enters invited signup',()=>activate(page.getByRole('link',{name:'Start with an invite',exact:true}).first()),[/A little hello/i,/heading/i]);
  }else await page.goto(origin+'/workspace?signup=true');await a11y.check(page,'invited-signup');await enter(page.getByLabel('Email',{exact:true}),'browser-identity@example.invalid');await enter(page.getByLabel('Invitation code'),code);await activate(page.getByRole('checkbox'));await hearOrca('first passkey enters saved setup',()=>activate(page.getByRole('button',{name:'Create my first passkey'})),[/Make this account yours/i,/heading/i]);
  await page.getByRole('heading',{name:'Make this account yours.'}).waitFor();assert.equal(await page.getByLabel('Your name',{exact:true}).count(),0);
  await focusHeading('Make this account yours.');
