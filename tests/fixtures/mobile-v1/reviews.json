@@ -97,7 +97,7 @@
     },
     "unavailableReason": null
    },
-   "client": "withoutApplicationControls",
+   "client": "withoutSiteControls",
    "enabled": false,
    "reason": "client_update_required"
   },
@@ -168,7 +168,7 @@
     ]
    }
   },
-  "withoutApplicationControls": {
+  "withoutSiteControls": {
    "contract": 1,
    "build": 42,
    "platform": "android",
