@@ -8,6 +8,47 @@
  --cloud-white:#f8fafc;
  --font-display-family:Poppins, "Poppins Rounded", "Nunito", ui-rounded, system-ui, sans-serif;
  --font-ui-family:Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+ --type-hero-size:56px;
+ --type-hero-line:60px;
+ --type-hero-weight:700;
+ --type-hero-tracking:-0.02em;
+ --type-display-size:40px;
+ --type-display-line:48px;
+ --type-display-weight:700;
+ --type-display-tracking:-0.015em;
+ --type-title-size:28px;
+ --type-title-line:36px;
+ --type-title-weight:700;
+ --type-title-tracking:-0.01em;
+ --type-wordmark-size:24px;
+ --type-wordmark-line:28px;
+ --type-wordmark-weight:700;
+ --type-wordmark-tracking:-0.01em;
+ --type-heading-size:18px;
+ --type-heading-line:26px;
+ --type-heading-weight:600;
+ --type-body-size:16px;
+ --type-body-line:24px;
+ --type-body-weight:400;
+ --type-body-sm-size:14px;
+ --type-body-sm-line:20px;
+ --type-body-sm-weight:400;
+ --type-label-size:14px;
+ --type-label-line:20px;
+ --type-label-weight:500;
+ --type-caption-size:12px;
+ --type-caption-line:16px;
+ --type-caption-weight:500;
+ --type-overline-size:12px;
+ --type-overline-line:16px;
+ --type-overline-weight:600;
+ --type-overline-tracking:0.16em;
+ --duration-fast:150ms;
+ --duration-base:250ms;
+ --duration-slow:400ms;
+ --ease-standard:cubic-bezier(.2,0,0,1);
+ --ease-enter:cubic-bezier(0,0,0,1);
+ --ease-exit:cubic-bezier(.3,0,1,1);
  --space-1:4px;
  --space-2:8px;
  --space-3:12px;
@@ -45,6 +86,7 @@
  --shadow-sm:0 1px 2px #0f2d5b0f, 0 2px 6px #0f2d5b0d;
  --shadow-md:0 4px 12px #0f2d5b0f, 0 12px 32px #0f2d5b14;
  --shadow-lg:0 12px 48px #0f2d5b1f;
+ --hero-sky:radial-gradient(ellipse at 78% 43%,#cce9ff 0,transparent 52%),radial-gradient(ellipse at 96% 96%,#e1f7ed 0,transparent 33%),#f8fafc;
 }
 .dark{
  --surface:#0b1830;
@@ -71,4 +113,5 @@
  --shadow-sm:0 1px 2px #00000066;
  --shadow-md:0 6px 20px #00000080;
  --shadow-lg:0 16px 48px #000000a6;
+ --hero-sky:radial-gradient(ellipse at 78% 43%,#1d4577 0,transparent 52%),radial-gradient(ellipse at 96% 96%,#16392b 0,transparent 33%),#0b1830;
 }
