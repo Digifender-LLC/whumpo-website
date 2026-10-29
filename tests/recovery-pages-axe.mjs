@@ -8,7 +8,7 @@ import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 
-const pages=[['Support','/workspace/support'],['Saved work','/workspace/saved-work'],['Site safety','/workspace/safety'],['Account security','/workspace/security']];
+const pages=[['Support','/workspace/support'],['Saved work','/workspace/saved-work'],['Site safety','/workspace/safety'],['Account security','/workspace/security'],['Settings','/workspace/settings']];
 const widths=[390,1280],schemes=['light','dark'];
 /** Known findings: serious/critical ones listed here are tracked, not failed. Fix in a follow-up, then delete the entry. */
 export const allowlist=[
