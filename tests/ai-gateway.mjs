@@ -12,7 +12,7 @@ const transport=async(url,request)=>{
  const headers=new Headers(request.headers);
  for(const [key,value] of Object.entries({'authorization':'Bearer '+config.apiToken,'cf-aig-gateway-id':config.gatewayId,'cf-aig-skip-cache':'true','cf-aig-collect-log':'false','cf-aig-max-attempts':'1','cf-aig-no-wholesale':'true','cf-aig-request-timeout':'5000'}))assert.equal(headers.get(key),value);
  assert.equal(headers.has('cf-aig-metadata'),false);assert.equal(headers.has('x-opencode-session'),false);
- const body=JSON.parse(request.body);assert.deepEqual(body,{model:config.model,messages,max_tokens:512,stream:false});
+ const body=JSON.parse(request.body);assert.equal(body.messages[0].role,'system');assert.match(body.messages[0].content,/^Whumpo content policy/);assert.deepEqual(body.messages.slice(1),messages);assert.deepEqual({...body,messages:undefined},{model:config.model,messages:undefined,max_tokens:512,stream:false});
  return Response.json({model:config.model,choices:[{finish_reason:'stop',message:{role:'assistant',content:'A private draft.'}}],usage:{prompt_tokens:12,completion_tokens:4}});
 };
 assert.deepEqual(await completeGateway(config,messages,transport),{text:'A private draft.',inputTokens:12,outputTokens:4});assert.equal(calls,1);

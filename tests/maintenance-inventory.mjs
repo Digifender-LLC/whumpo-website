@@ -2,7 +2,9 @@ import {sqliteD1} from './sqlite-d1.mjs';
 import {initializeFixtureKeys,fixtureKeyring,fixtureCiphertext} from './helpers/connection-keyring.mjs';
 import assert from 'node:assert/strict';
 import {maintenanceReport,counterReport} from '../tools/report-maintenance.mjs';
-import {platformCounterInventory} from '../tools/maintenance-inventory.mjs';
+import {platformCounterInventory,backlogInventory} from '../tools/maintenance-inventory.mjs';
+// Live D1 rejects a compound SELECT with more than 5 terms (RB-2: review_turnover was "unavailable"); local SQLite would not notice.
+for(const [queue,{sql}] of Object.entries(backlogInventory)){const terms=[1];let depth=0;const stack=[];for(const m of sql.matchAll(/\(|\)|\bUNION(?: ALL)?\b/gi)){if(m[0]==='(')stack.push(terms.push(1)-1);else if(m[0]===')')stack.pop();else terms[stack.at(-1)??0]++;}assert.ok(terms.every(n=>n<=5),`${queue} exceeds the D1 compound SELECT limit`);}
 const keyFixture=await sqliteD1(),sql=keyFixture.sql,id=()=>crypto.randomUUID();
 const db={prepare:q=>{const bound=p=>({first:async()=>sql.prepare(q).get(...p)??null,all:async()=>({results:sql.prepare(q).all(...p)})});return {...bound([]),bind:(...p)=>bound(p)};}};
 try{
