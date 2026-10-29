@@ -1869,6 +1869,140 @@
    }
   },
   {
+   "id": "account-email",
+   "title": "Owner account email: request, confirm, cancel and undo an address change (WH-201)",
+   "privileged": [
+    "data-change"
+   ],
+   "authorityClass": "session owner; a fresh passkey (at most ten minutes) to request or undo; delivery inactive returns delivery_unavailable and stores nothing",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/account/email",
+     "methods": [
+      "ANY"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "prefix",
+     "match": "/api/account/email/",
+     "methods": [
+      "ANY"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "The adapter runs only on the owner's admitted workspace scope (its batches carry the current-identity predicate); change IDs are read by account, so another account's change is never visible.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "workspacePrincipal(env.DB,user.id)"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/email-change-store.mjs",
+       "contains": "assert.equal((await call(b,'cancel',{version:1,changeId})).data.code,'unknown_change');",
+       "asserts": "another account cannot cancel or undo a change it does not own"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Mutating methods pass the global exact-Origin gate in handle() and the adapter checks Origin again, with content type, a 4 KiB body bound and the identity route limiter.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(method) && !sameOrigin(request)) return error(403, \"Origin check failed\");"
+      },
+      {
+       "file": "src/email-change/http.ts",
+       "contains": "if(request.headers.get('origin')!==new URL(request.url).origin)return respond({error:'Origin check failed',code:'origin_check_failed'},403);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/email-change-store.mjs",
+       "contains": "assert.equal((await call(a,'change',ok,{headers:{origin:'https://elsewhere.invalid'}})).status,403);",
+       "asserts": "a cross-origin change request is refused before anything is stored"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "evidenced",
+     "detail": "A request and an undo elevate the workspace scope to a fresh passkey (at most ten minutes), which the committing batch rechecks; cancel and confirm need only the current session.",
+     "enforcedAt": [
+      {
+       "file": "src/email-change/http.ts",
+       "contains": "await requireFreshWorkspace(db,userId);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/email-change-store.mjs",
+       "contains": "assert.equal((await call(old,'undo',{version:1,changeId:c2})).data.code,'proof_required');",
+       "asserts": "an undo with a stale passkey is refused"
+      }
+     ]
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "The change, its token verifier and its limits are bound to the requesting account; a token presented by another account is refused generically and counted as that account's failure.",
+     "enforcedAt": [
+      {
+       "file": "src/email-change/store.ts",
+       "contains": "one(db,'account_id=? AND change_id=?',accountId,changeId)"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/email-change-store.mjs",
+       "contains": "const foreign=await call(b,'confirm',{version:1,token});assert.equal(foreign.status,400);assert.equal(foreign.data.code,'invalid_token');",
+       "asserts": "another account presenting the token learns nothing and the change is untouched"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "The request ID is unique per account and bound to a request hash; the same payload returns the saved response, a different one is request_conflict; a confirmed token replays its receipt with no second effect.",
+     "enforcedAt": [
+      {
+       "file": "schema/platform.sql",
+       "contains": " UNIQUE(account_id,request_id),"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/email-change-store.mjs",
+       "contains": "assert.equal((await change(a,addr('other'),requestId)).data.code,'request_conflict');",
+       "asserts": "a reused request ID with another payload conflicts"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Every write is revision plus one and the confirmation recheck (token, owner, pending, expiry, unchanged epoch, address uniqueness) is a trigger; a superseded, expired, cancelled or stale-epoch token changes nothing.",
+     "enforcedAt": [
+      {
+       "file": "schema/platform.sql",
+       "contains": "CREATE TRIGGER owner_email_change_revision BEFORE UPDATE ON owner_email_changes"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/email-change-store.mjs",
+       "contains": "assert.equal(refused.data.code,'stale_change');",
+       "asserts": "an epoch advance makes a pending change stale"
+      }
+     ]
+    }
+   }
+  },
+  {
    "id": "service-site-safety",
    "title": "Owner safety withdrawal reviews for websites, backends and applications",
    "privileged": [
@@ -6501,7 +6635,7 @@
     {
      "file": "src/site-host.ts",
      "kind": "regex",
-     "match": "/^\\/(?:assets\\/[0-9a-f-]{36}\\.jpg)?$/",
+     "match": "/^\\/(?:assets\\/[0-9a-f-]{36}\\.jpg|directory(?:\\.json)?)?$/",
      "methods": [
       "GET",
       "HEAD"
@@ -6519,7 +6653,7 @@
      "enforcedAt": [
       {
        "file": "src/site-host.ts",
-       "contains": "if(!mapping||!/^\\/(?:assets\\/[0-9a-f-]{36}\\.jpg)?$/.test(url.pathname))return new Response('Site not found',{status:404,headers});"
+       "contains": "if(!mapping||!/^\\/(?:assets\\/[0-9a-f-]{36}\\.jpg|directory(?:\\.json)?)?$/.test(url.pathname))return new Response('Site not found',{status:404,headers});"
       }
      ],
      "tests": [
@@ -8132,6 +8266,14 @@
      "file": "src/index.ts",
      "kind": "job",
      "match": "default guest_previews",
+     "methods": [
+      "SCHEDULED"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "job",
+     "match": "default email_changes",
      "methods": [
       "SCHEDULED"
      ]

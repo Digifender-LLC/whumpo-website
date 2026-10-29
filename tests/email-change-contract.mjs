@@ -705,10 +705,11 @@ async function suite(m){
   const revoker=m.createSyntheticRevoker();
   assert.equal(await revoker.revoke({provider:'example-provider',connectionId:'x-0001'}),'unrecognized');
  });
- await test('data classes are planned, hash-only for tokens and never claim deployment',async()=>{
+ await test('data classes: three are stored and registered (WH-201), the outbox stays planned, hash-only for tokens, nothing claims deployment',async()=>{
   const ids=m.dataClasses.map(c=>c.id);assert.equal(new Set(ids).size,ids.length);
   for(const c of m.dataClasses){for(const k of ['id','status','records','protection','secrets','retention','export','deletion'])assert.ok(c[k],`${c.id}.${k}`);}
-  assert.ok(m.dataClasses.filter(c=>c.status==='planned').length>=4);
+  assert.deepEqual(m.dataClasses.filter(c=>c.status==='planned').map(c=>c.id),['platform-notifications']);
+  assert.deepEqual(m.dataClasses.filter(c=>c.status==='current').map(c=>c.id).sort(),['connections','owner-email-changes','owner-email-change-limits','owner-security-reviews'].sort());
   assert.match(m.dataClasses.find(c=>c.id==='owner-email-changes').secrets,/SHA-256/);
   assert.match(m.dataClasses.find(c=>c.id==='platform-notifications').secrets,/never stored/);
   assert.match(m.dataClasses.find(c=>c.id==='connections').deletion,/only after an exact revocation receipt/);
@@ -873,6 +874,9 @@ await checkOnce('the stored account email has verification state, change records
  assert.deepEqual(Object.keys(source.emailChangeBounds).filter(k=>/Ms$/.test(k)).sort(),['failureWindowMs','freshPasskeyMs','limitWindowMs','tokenLifetimeMs','undoWindowMs']);
  assert.deepEqual([source.emailChangeBounds.tokenLifetimeMs,source.emailChangeBounds.undoWindowMs],[HOUR,7*DAY],'decisions 1 and 2: recommended values');
  // The schema repeats the decision values: one hour, seven days, 3/3/5 per day, day and hour.
+ const lifecycle=JSON.parse(read('docs/data-lifecycle.json'));
+ for(const [cls,table] of [['owner-email-changes','owner_email_changes'],['owner-email-change-limits','owner_email_change_limits'],['owner-security-reviews','owner_security_reviews']])assert.ok(lifecycle.classes.find(c=>c.id===cls&&c.tables.includes(table)&&c.storageStatus==='current'),`${cls} is registered in the lifecycle catalogue`);
+ for(const c of source.dataClasses.filter(c=>c.status==='current'&&c.id.startsWith('owner-')))assert.ok(lifecycle.classes.some(l=>l.id===c.id),c.id);
  assert.match(platform,/expires_at=created_at\+3600000/);assert.match(platform,/undo_until=receipt_verified_at\+604800000/);
  assert.match(platform,/NEW\.kind='request'[^\n]*>=3\)/);assert.match(platform,/NEW\.kind='send'[^\n]*>=3\)/);assert.match(platform,/NEW\.kind='failure'[^\n]*-3600000\)>=5\)/);
 });

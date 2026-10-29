@@ -183,12 +183,13 @@ try{
   const rel=JSON.parse((await one('SELECT event_json FROM cost_events WHERE idempotency_key=? AND revision=4',await m.idempotencyKey({source:'gateway-settlement',sourceEventId:rid,dimension:'ai.inference.call'}))).event_json);
   assert.equal(rel.outcome,'released');assert.equal(rel.cost.micros,0);
  });
- await check('storage reads emit the monotone counter as the revision; the latest reading is the head',async()=>{
+ await check('storage reads emit the monotone counter as the revision at powers of two; the latest recorded reading is the head',async()=>{
   const H=await user(),ph=await project(H);
-  for(let n=1;n<=3;n++)await m.reservePublicPhotoRead(db,new Request('https://x.invalid/',{headers:{'cf-connecting-ip':'203.0.113.'+n}}),ph);
+  for(let n=1;n<=5;n++)await m.reservePublicPhotoRead(db,new Request('https://x.invalid/',{headers:{'cf-connecting-ip':'203.0.113.'+n}}),ph);
   const k=await m.idempotencyKey({source:'storage-operations',sourceEventId:`${ph}:${period}:read_ops`,dimension:'r2.class_b_ops'});
-  assert.deepEqual((await rows(k)).map(r=>[r.revision,r.stale]),[[1,0],[2,0],[3,0]]);
-  const head=(await m.costEventHeads(db,H))[0];assert.equal(head.quantity.value,3);assert.equal(head.attribution.projectId,ph);assert.equal(head.workload,'storage-files');
+  // Only powers of two are recorded (1, 2 and 4 of five reads), so a busy site adds at most 16 rows a month; the counter keeps the exact figure.
+  assert.deepEqual((await rows(k)).map(r=>[r.revision,r.stale]),[[1,0],[2,0],[4,0]]);assert.equal((await one('SELECT read_ops FROM storage_project_usage WHERE project_id=?',ph)).read_ops,5);
+  const head=(await m.costEventHeads(db,H))[0];assert.equal(head.quantity.value,4);assert.equal(head.attribution.projectId,ph);assert.equal(head.workload,'storage-files');
  });
  await check('a forced emission failure leaves the receipt and the customer result intact, and records no zero',async()=>{
   const flaky=new Proxy(db,{get:(t,k)=>k==='prepare'?q=>/INSERT INTO cost_events/.test(q)?{bind:()=>({run:async()=>{throw new Error('forced emission failure PRIVATE_CANARY');}})}:t.prepare(q):typeof t[k]==='function'?t[k].bind(t):t[k]});
@@ -213,8 +214,21 @@ try{
   assert.equal((await m.reserveGatewaySpend(broken,o2,a2,d2,b2)).status,'reserved');assert.equal(await m.dispatchGatewaySpend(broken,o2,a2),true);
  });
  await check('the table has no customer-facing reader: no src module other than the store and emission names it',async()=>{
-  assert.deepEqual((await all("SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='cost_events' ORDER BY name")).map(r=>r.name),['cost_events_append_only','cost_events_immutable','cost_events_tenant_owner']);
+  assert.deepEqual((await all("SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='cost_events' ORDER BY name")).map(r=>r.name),['cost_events_append_only','cost_events_capacity','cost_events_immutable','cost_events_tenant_owner']);
   assert.deepEqual((await all("SELECT name FROM pragma_index_list('cost_events') WHERE \"unique\"=1 AND origin='u'")).length,1);
+ });
+ await check('capacity: the ledger refuses new events at 9,000 rows (restore admission reads 10,000) without touching a receipt',async()=>{
+  const have=(await one('SELECT count(*) n FROM cost_events')).n;
+  await run(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<${8999-have}) INSERT INTO cost_events(idempotency_key,revision,source,dimension,scope,pool,workload,work_class,outcome,quantity_value,cost_basis,cost_micros,occurred_at,observed_at,event_json)
+   SELECT printf('%064x',i+1000000),1,'liability-register','liability.account-minimum','platform','shared-account','platform-standing','standing','settled',1,'provider-reported',1,'2026-10-01T00:00:00.000Z','2026-10-01T00:00:00.000Z',json_object('contractVersion',1,'customerUnits',0,'idempotencyKey',printf('%064x',i+1000000),'revision',1) FROM n`);
+  assert.equal((await one('SELECT count(*) n FROM cost_events')).n,8999);
+  const Z=await user(),sid='cap-'+id();
+  await m.appendCostEvent(db,await observed(Z,sid+'-last'));assert.equal((await one('SELECT count(*) n FROM cost_events')).n,9000);
+  await rejects(m.appendCostEvent(db,await observed(Z,sid)),'cost_event_capacity');
+  // The refused emission leaves the receipt alone.
+  warnings.length=0;const {owner,decision,buckets}=await gateway(),aid=id();
+  assert.equal((await m.reserveGatewaySpend(db,owner,aid,decision,buckets)).status,'reserved');
+  assert.equal((await one('SELECT status FROM gateway_spend_attempts WHERE id=?',aid)).status,'reserved');assert.ok(warnings.some(w=>w.includes('cost_event.emission_failed')));
  });
  console.log(`Cost events store passed (${cases} cases, ${process.argv.includes('--d1')?'actual local D1':'in-memory SQLite'}): append-only table with unique (key, revision), duplicate/conflict/stale/delayed/out-of-order rules, revision compatibility, tenant and closed-owner refusal, immutability, closure deletion, exact integers, concurrent appends, emission at inference/gateway/storage transitions and a forced emission failure that leaves the receipt intact.`);
 }finally{console.warn=warn;await store.close();}

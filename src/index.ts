@@ -14,12 +14,13 @@ import {cleanIdentityCeremonies} from './workspace-identity/ceremonies';
 import {handleIdentityRequest,workspaceIdentity} from './workspace-identity/http';
 import {handleSafetyCaseRequest} from './safety-case-http';
 import {IdentityError} from './workspace-identity/authority';
-import {admitWorkspace,workspaceBindings,assertWorkspace,requireFreshWorkspace,workspaceTransport} from './workspace-identity/admission';
+import {admitWorkspace,workspaceBindings,workspacePrincipal,assertWorkspace,requireFreshWorkspace,workspaceTransport} from './workspace-identity/admission';
 import {FeatureInclusionError} from './feature-inclusion';
 import {stripeBillingWebhook,subscriptionsEnabled,subscriptionStatus,refreshSubscriptions,startSubscription,billingPortal} from './stripe-billing';
 import {serviceClientActivationPreview} from './project-specification/service-clients/activation';
 import {runMaintenance} from './maintenance';
 import {accountEmailRoute,emailChangeDelivery} from './email-change/http';
+import {maintainEmailChanges} from './email-change/maintenance';
 import {cleanupInteractionDrafts} from './chat-interactions/retention';
 import {exportChatTranscript} from './chat-transcript';
 import {quarantineBackendImport,listBackendImports,scanBackendImports} from './backend-imports';
@@ -157,8 +158,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   const scoped=workspaceBindings(env,admitWorkspace(env.DB,principal),principal.accountId);
   const user=await scoped.DB.prepare('SELECT id,email FROM users WHERE id=?').bind(principal.accountId).first<User>();
   if(!user)throw new IdentityError(401,'proof_required','Sign in to continue.');
-  // WH-201 direct owner controls for the account email: not Chat, no agent action; delivery is inactive until WH-202.
-  const response=(await accountEmailRoute(request,scoped,scoped.DB,principal,{delivery:emailChangeDelivery(scoped)}))??await handleWorkspace(request,scoped,ctx,user);
+  const response=await handleWorkspace(request,scoped,ctx,user);
   try{await assertWorkspace(scoped.DB,user.id);}catch(error){await response.body?.cancel().catch(()=>{});throw error;}
   return response;
 }
@@ -177,6 +177,10 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
     if(method==='PUT')return json(await saveOnboarding(env.DB,user.id,(await body(request))??{}));
   }
   if(pathname==='/api/onboarding/complete'&&method==='POST')return json(await completeOnboarding(env.DB,user.id,(await body(request))??{}));
+  // WH-201 direct owner controls for the account email: not Chat, no agent action. Delivery is inactive until WH-202, so a change request returns delivery_unavailable and stores nothing.
+  if(pathname==='/api/account/email'||pathname.startsWith('/api/account/email/')){
+   return (await accountEmailRoute(request,env,env.DB,workspacePrincipal(env.DB,user.id),{delivery:emailChangeDelivery(env)}))??error(404,'Not found');
+  }
   if(pathname==='/api/profile'){
     if(method==='GET')return json(await readProfile(env.DB,user.id));
     if(method==='PATCH')return json(await updateProfile(env.DB,user.id,await body(request)));
@@ -658,6 +662,8 @@ export default {
       // module request receipts past their 30-day replay window.
       {name:'contacts',run:async()=>{await cleanupContacts(env.DB);await cleanupModuleRecords(env.DB);await cleanupModuleRequestReceipts(env.DB);}},
       {name:'guest_previews',run:()=>cleanupGuestPreviews(env.DB)},
+      // WH-201: expired address changes, closed changes past retention, 48-hour limit evidence and old compromise reviews.
+      {name:'email_changes',run:()=>maintainEmailChanges(env.DB)},
       {name:'photos',run:()=>cleanupPhotos(env)},
       {name:'github',enabled:!!githubConfig(env),run:()=>cleanupGitHub(env.DB,githubConfig(env))},
       {name:'cloudflare',enabled:!!cloudflareConfig(env),run:()=>cleanupCloudflare(env.DB,cloudflareConfig(env))},

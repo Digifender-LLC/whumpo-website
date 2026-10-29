@@ -1805,7 +1805,7 @@ CREATE TABLE content_risk_reversals (
 );
 
 CREATE TABLE maintenance_health (
- job TEXT PRIMARY KEY CHECK(job IN ('identity','chat_drafts','imports','hosting','health','fair_use','traffic','funnel','guest_previews','applications','contacts','photos','github','cloudflare')),
+ job TEXT PRIMARY KEY CHECK(job IN ('identity','chat_drafts','imports','hosting','health','fair_use','traffic','funnel','guest_previews','email_changes','applications','contacts','photos','github','cloudflare')),
  run_id TEXT NOT NULL,
  started_at INTEGER NOT NULL CHECK(started_at>=0),
  finished_at INTEGER,
@@ -5809,6 +5809,11 @@ BEGIN SELECT RAISE(ABORT,'cost_event_immutable'); END;
 CREATE TRIGGER cost_events_append_only BEFORE DELETE ON cost_events
 WHEN OLD.owner_id IS NULL OR (EXISTS(SELECT 1 FROM users WHERE id=OLD.owner_id) AND (OLD.project_id IS NULL OR EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id)))
 BEGIN SELECT RAISE(ABORT,'cost_event_append_only'); END;
+-- Capacity: restore admission reads at most 10,000 rows of a table, so the ledger refuses new events at 9,000 until WH-171 retires closed
+-- periods. A refused emission is logged and never touches the receipt; the maintenance report shows the counter at 50% and 80%.
+CREATE TRIGGER cost_events_capacity BEFORE INSERT ON cost_events
+WHEN (SELECT count(*) FROM cost_events)>=9000
+BEGIN SELECT RAISE(ABORT,'cost_event_capacity'); END;
 
 -- Verified email change, rate limits and security reviews (WH-201; docs/email-change-and-compromise.md sections 2, 3 and 4).
 -- An address is an unverified identifier until a change confirms it; verification is never authority, never a sign-in method, a

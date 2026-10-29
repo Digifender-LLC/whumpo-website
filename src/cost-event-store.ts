@@ -29,19 +29,20 @@ export type AppendResult = { status: 'accepted' | 'duplicate' | 'stale-revision'
 type Stored = { revision: number; event_json: string };
 const parse = (row: Stored) => JSON.parse(row.event_json) as CostEvent;
 
-// The owner and project are read, not trusted: the registered owner of the project must equal the event's owner.
-async function checkOwnership(db: D1Database, e: CostEvent) {
+// Ownership is enforced by the table (foreign keys to the owner and project, and the tenant trigger), so the common path needs no
+// extra read; only a refused insert looks at which of the two no longer exists.
+function checkStatic(e: CostEvent) {
  const a = e.attribution;
- if (a.scope === 'platform') { check(a.pool !== 'closed-account', 'POOL_UNSUPPORTED', 'closure deletes the owner\'s events; there is no closed-account pool'); return; }
- const owner = await db.prepare('SELECT id FROM users WHERE id=?').bind(a.ownerId).first();
- check(owner, 'TENANT_MISMATCH', 'the owner does not exist');
- if (a.projectId !== null) {
-  const project = await db.prepare('SELECT owner_user_id FROM projects WHERE id=?').bind(a.projectId).first<{ owner_user_id: string }>();
-  check(project, 'UNKNOWN_PROJECT', 'project is not registered');
-  check(project.owner_user_id === a.ownerId, 'TENANT_MISMATCH', 'project belongs to another owner');
- }
+ if (a.scope === 'platform') check(a.pool !== 'closed-account', 'POOL_UNSUPPORTED', 'closure deletes the owner\'s events; there is no closed-account pool');
  // No resource registry exists yet (WH-171+), so membership of a resource in the project cannot be proven.
- check(a.resourceId === null, 'TENANT_MISMATCH', 'resource is not part of the project');
+ else check(a.resourceId === null, 'TENANT_MISMATCH', 'resource is not part of the project');
+}
+async function refusal(db: D1Database, e: CostEvent): Promise<CostEventError> {
+ const a = e.attribution;
+ if (a.scope !== 'tenant') return new CostEventError('TENANT_MISMATCH', 'platform attribution was refused');
+ if (!await db.prepare('SELECT id FROM users WHERE id=?').bind(a.ownerId).first()) return new CostEventError('TENANT_MISMATCH', 'the owner does not exist');
+ if (a.projectId !== null && !await db.prepare('SELECT id FROM projects WHERE id=?').bind(a.projectId).first()) return new CostEventError('UNKNOWN_PROJECT', 'project is not registered');
+ return new CostEventError('TENANT_MISMATCH', 'project belongs to another owner');
 }
 
 const columns = 'idempotency_key,revision,source,dimension,scope,owner_id,project_id,resource_id,pool,workload,work_class,outcome,quantity_value,cost_basis,cost_micros,exposure_micros,occurred_at,observed_at,event_json,stale';
@@ -61,7 +62,7 @@ function insertStatement(db: D1Database, e: CostEvent, stale: boolean, seen: num
  */
 export async function appendCostEvent(db: D1Database, input: unknown): Promise<AppendResult> {
  const event = await validateCostEvent(input);
- await checkOwnership(db, event);
+ checkStatic(event);
  for (let attempt = 0; attempt < 3; attempt++) {
   const prior = (await db.prepare('SELECT revision,event_json FROM cost_events WHERE idempotency_key=? ORDER BY revision').bind(event.idempotencyKey).all<Stored>()).results;
   const events = prior.map(parse);
@@ -78,8 +79,7 @@ export async function appendCostEvent(db: D1Database, input: unknown): Promise<A
    if (result.meta.changes === 1) return { status: stale ? 'stale-revision' : 'accepted', key: event.idempotencyKey, revision: event.revision };
   } catch (cause) {
    const text = String(cause);
-   if (text.includes('cost_event_tenant_mismatch')) throw new CostEventError('TENANT_MISMATCH', 'project belongs to another owner');
-   if (/FOREIGN KEY/i.test(text)) throw new CostEventError('UNKNOWN_PROJECT', 'owner or project no longer exists');
+   if (text.includes('cost_event_tenant_mismatch') || /FOREIGN KEY/i.test(text)) throw await refusal(db, event);
    if (!/UNIQUE/i.test(text)) throw cause;
   }
  }
