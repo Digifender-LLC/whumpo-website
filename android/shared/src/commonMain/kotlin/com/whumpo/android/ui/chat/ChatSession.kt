@@ -115,15 +115,17 @@ class ChatSession(
     val state: StateFlow<ChatState> = mutable.asStateFlow()
 
     private val parent: Job? = scope.coroutineContext[Job]
-    private var jobs: Job = SupervisorJob(parent)
+    private var work: CoroutineScope = newWork()
     private var pollJob: Job? = null
     private var seq = 0
     private val confirmIds = mutableMapOf<String, String>()
 
+    private fun newWork() = CoroutineScope(scope.coroutineContext + SupervisorJob(parent))
+
     /** Forget everything (sign-out or account change) and stop all work. */
     fun reset() {
-        jobs.cancel()
-        jobs = SupervisorJob(parent)
+        work.cancel()
+        work = newWork()
         pollJob = null
         confirmIds.clear()
         mutable.value = ChatState()
@@ -138,7 +140,7 @@ class ChatSession(
     fun refreshNow() = launchWork { refresh() }
 
     private fun launchWork(block: suspend () -> Unit) {
-        scope.launch(jobs) {
+        work.launch {
             try {
                 block()
             } catch (e: CancellationException) {
@@ -182,7 +184,7 @@ class ChatSession(
 
     private fun startPolling() {
         if (pollJob?.isActive == true) return
-        pollJob = scope.launch(jobs) {
+        pollJob = work.launch {
             try {
                 var polls = 0
                 while (polls < maxPolls) {
