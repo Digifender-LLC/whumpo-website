@@ -63,3 +63,5 @@ Serving never waits for measurement. Each counted or excluded request costs one 
 ### Verification
 
 `pnpm test:site-health` runs `tests/site-health.mjs` and `tests/site-diagnostics.mjs`; `node tests/site-traffic.mjs` covers counting. Synthetic cases cover missing, late and failed telemetry, shed work, exclusions, stale/interrupted/unhealthy/changed checks, DNS/TLS and form states, cross-owner reads and canary leakage. Live deployment, real bot traffic and custom-domain probes are not tested.
+
+WH-183: a health check's identity now includes the live directory review (`directory_review_id`, compared like the live form). When a directory is live for the current publication, the check also fetches `/directory.json` from the fixed platform origin and requires the `ETag` and the SHA-256 of the served listings to equal `live_digest`. Custom hostnames are still not probed.
