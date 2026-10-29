@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {validateRoadmap,alignmentProblems} from '../tools/roadmap.mjs';
+import {validateRoadmap,alignmentProblems,renderRoadmap} from '../tools/roadmap.mjs';
 
 const current=JSON.parse(await readFile(new URL('../docs/roadmap/backlog.json',import.meta.url),'utf8'));
 await validateRoadmap(current);assert.deepEqual(alignmentProblems(current),[]);
@@ -33,4 +33,11 @@ for(const [from,to] of [['WH-121','WH-020'],['WH-122','WH-090'],['WH-116','WH-02
 }
 const cycle=structuredClone(current);task(cycle,'WH-122').dependsOn.push('WH-090');
 await assert.rejects(validateRoadmap(cycle),/cycle/i);refused++;
+const doneTask=current.tasks.find(t=>t.readiness==='done');
+assert.ok(doneTask,'at least one done task');
+const noEvidence=structuredClone(current);task(noEvidence,doneTask.id).evidence=[];
+await assert.rejects(validateRoadmap(noEvidence),/done tasks need evidence/);refused++;
+const blockedDone=structuredClone(current);task(blockedDone,doneTask.id).blockers=['pending'];
+await assert.rejects(validateRoadmap(blockedDone),/done tasks need evidence/);refused++;
+assert.match(renderRoadmap(current),/Planning readiness: \*\*done\*\* \(complete; see Evidence\)/);
 console.log(`Roadmap handoffs passed: current graph accepted; ${refused} missing-prerequisite, downstream-gate and cycle regressions refused.`);

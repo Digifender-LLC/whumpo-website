@@ -98,7 +98,7 @@
       "title": "Extend release manifests and rehearse partial deployment recovery",
       "phase": "F0",
       "priority": "P0",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [
@@ -141,7 +141,8 @@
       "evidence": [
         "2026-10-01: issue #39 holds active release verification work on codex/release-verification. Existing release protocol is implemented; archive/compiler-lock correction and remaining focused checks are unfinished. Alignment does not close or redeploy this work.",
         "2026-10-01: archive/compiler-lock correction and WH-002 focused acceptance completed against aca1bc3. New archives retain both compiler locks; build/checker drift and removal refuse; recovered source/assets match the original snapshot; nonempty synthetic registrations/bindings survive all four interrupted Worker steps without duplicate deployment. Build-snapshot, manifest, lease and actual Wrangler bundle round-trip suites passed (all five executable modules, including Wasm). Exact migration/destructive-restore review gates retained. Historical archives remain immutable; no runtime/schema/deployment, CMS functional test or live fault injection. Full recovery drills remain separate. Detailed evidence: docs/releases.md and issue #39.",
-        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #39 (zemdregon/whumpo) for focused release-verification acceptance (archive and compiler-lock correction, interrupted-step recovery); full disaster recovery stays with WH-008, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place."
+        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #39 (zemdregon/whumpo) for focused release-verification acceptance (archive and compiler-lock correction, interrupted-step recovery); full disaster recovery stays with WH-008, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #41, #438 (zemdregon/whumpo) is the merged change(s) behind the evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -149,7 +150,7 @@
       "title": "Define focused verification profiles and optional free-tier CI",
       "phase": "F0",
       "priority": "P0",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [],
@@ -189,7 +190,8 @@
         "2026-10-27 UTC, source and local only, not deployed: delivered by PR #361 (merged 2026-10-26T14:51:26Z, merge commit 16a883f) and PR #377 (merged 2026-10-27T05:29:21Z, merge commit 3bda12a). #361 adds pnpm run test:workers-fetch-compat (tests/workers-fetch-compat.mjs), which scans every fetch/new Request/transport/fetcher/.fetch call in src/**/*.ts (34 calls, 0 violations) against an allowlist of options and proves the allowlisted shapes are accepted and redirect:'error' and cache:'default' are rejected inside workerd under Miniflare (compat date 2026-09-28); the --probe-redirect=error mutation fails the test with exit 1. The PR reports pnpm run test:workers-fetch-compat, node tools/verify.mjs fast and pnpm check all exit 0. Limits stated by the PR: hand-rolled scanner, non-literal and spread inits are not checked, local workerd only (not deployed Cloudflare), and the test is not in any verification profile. #377 makes deploy status report 'superseded by a later release' (with the live role id and tag) when the journal is deployed, every step is confirmed and the strict reconcile fails only with 'Candidate Worker version was not confirmed' while a live tag differs; every other case keeps its original error. The PR reports tests/release-manifest.mjs (ready, superseded, non-terminal journal, pending and unknown steps), tests/deploy-ci.mjs, tests/release-provider.mjs, pnpm check and git diff --check passing, and adds a docs/releases.md section. Read from gh pr view and the PR body; nothing re-run here. Readiness unchanged.",
         "2026-10-27 UTC, source, local and read-only live probe runs, no sign-in: live-verification tooling delivered by PRs #359 (merged 2026-10-26T14:49:19Z, merge commit 6139e04), #365 (merged 2026-10-27T04:56:57Z, merge commit 163e747) and #366 (merged 2026-10-27T05:10:34Z, merge commit ea5a86a). #359 adds tools/live-browser-probe.mjs (opt-in --live <origin>, GET only, headless Chromium, fail-closed on any non-GET or off-origin request), tests/live-browser-probe.mjs (loopback stub) and docs/live-verification-checklist.md (manual signed-in steps); the PR reports the loopback test and pnpm check passing and says its live run was not performed. #365 allows exactly the identity config and state POSTs (body {\"version\":1}) and the Cloudflare challenge-platform traffic so Turnstile can render, keeps everything else aborted, and reports the loopback test passing; its live run against https://whumpo.com passed visible heading, no horizontal scroll at 390 and 1280px, turnstile_iframe, health, manifest and no blocked requests, and failed console_errors and csp_violations on both pages, all from the Cloudflare Insights beacon blocked by the site CSP (not fixed). #366 requires the Turnstile iframe, or the response input together with an observed api.js request, as proof; the PR reports the loopback test, git diff --check and pnpm run check passing, and a live run with turnstile_iframe ok via response_input and exit code 2 from the same console and CSP samples plus a data: connect-src message from the widget (not investigated). The probe never signs in, solves Turnstile or checks Stripe, passkeys or any write. PR #378 (merged 2026-10-27T05:31:50Z, merge commit 3e6b2d8) adds the opt-in tests/checkout-prefill-live.mjs (refuses unless RUN_LIVE_CHECKOUT=1; seeds a synthetic example.test identity on the live test platform, starts checkout, aborts unless the API says testMode true and the session is a cs_test_ sandbox session, opens it in headless Chromium and asserts the account email is shown; no card details, payment or completion) and a note in docs/live-verification-checklist.md. The PR reports a live run result of success true, sandbox true, prefilled true, cleanupVerified true (a cleanup record was written first, the synthetic user deleted, and no rows remained in users, identity_accounts, stripe_customers or stripe_subscription_orders for that id), pnpm run check passing, git diff --check clean, and a clear refusal without the flag. The Stripe sandbox customer object itself is not deleted (the test has no Stripe API access). This is probe and checklist tooling plus one sandbox prefill check, not signup, device or payment acceptance. Read from gh pr view and the PR body; nothing re-run here. Readiness unchanged.",
         "2026-10-27 UTC, live workspace smoke run by the orchestrator against https://whumpo.com on main 054da5c: RUN_LIVE_WORKSPACE_SMOKE=1 node tests/workspace-smoke-live.mjs exited 0 at 2026-10-27T06:43:37.602Z; 36 of 36 page checks passed (9 signed-in pages x 390 and 1280 px x light and dark, including D-9 target sizes after #387) and cleanupVerified true. Not verified: physical devices and real human users. Readiness unchanged.",
-        "2026-10-27 UTC, live signed-in workspace smoke against the test platform after the review schema cutovers to whumpo-control-2026-10-27 and whumpo-control-2026-10-27c (receipts, PR #419): RUN_LIVE_WORKSPACE_SMOKE=1 node tests/workspace-smoke-live.mjs exited 0 with cleanupVerified true. Not verified: physical devices and real human users. Readiness unchanged."
+        "2026-10-27 UTC, live signed-in workspace smoke against the test platform after the review schema cutovers to whumpo-control-2026-10-27 and whumpo-control-2026-10-27c (receipts, PR #419): RUN_LIVE_WORKSPACE_SMOKE=1 node tests/workspace-smoke-live.mjs exited 0 with cleanupVerified true. Not verified: physical devices and real human users. Readiness unchanged.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #350 (zemdregon/whumpo) is the merged change(s) behind the evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -301,7 +303,7 @@
       "title": "Add privacy-safe operational health and maintenance diagnostics",
       "phase": "F0",
       "priority": "P0",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [],
@@ -336,7 +338,8 @@
       "owner": null,
       "evidence": [
         "2026-10-01T03:21:25.142Z: read-only live report confirms natural daily run at 03:17:59.757 UTC, all configured daily jobs complete, unconfigured GitHub/hosting skipped, and prior hourly health complete. All 27 queues and five receipt families readable; 26 queues empty, one known historical AI hold still actionable. No manual cleanup/retry or new automation. Three offline maintenance suites pass against 113 migrations. Acceptance complete; see docs/maintenance.md and issue #6. This is scheduler/diagnostic acceptance, not provider activation, scanner detection, or a waiver of unresolved work.",
-        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #6 (zemdregon/whumpo) for scheduler and diagnostic acceptance; provider activation and scanner detection are not part of it, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place."
+        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #6 (zemdregon/whumpo) for scheduler and diagnostic acceptance; provider activation and scanner detection are not part of it, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #24, #438 (zemdregon/whumpo) is the merged change(s) behind the evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -344,7 +347,7 @@
       "title": "Write and exercise incident, spend and provider-outage runbooks",
       "phase": "F1",
       "priority": "P0",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "verification",
       "size": "M",
       "dependsOn": [
@@ -387,7 +390,8 @@
       "evidence": [
         "2026-10-04: runbooks (docs/incident-runbooks.md) and a written desk-check (docs/incident-tabletop.md) added against source 1343111; documentation only, no live drill, deployed control, alert injection or external message. Offline suites for maintenance, standard AI recovery, secret custody, release manifest and identity recovery passed on Node 22.22.0 (repository requires 24). Open: live/facilitated exercise, alert delivery, per-tenant operator controls, stolen-kit takeover path, off-device key custody and counsel/restricted safety handling (gaps G1-G12). Acceptance not complete.",
         "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): readiness planned to ready. Every dependency (WH-006, WH-113) is accepted in its own evidence, so this is an open planning candidate; its acceptance is unchanged and not claimed.",
-        "2026-10-29 UTC, WH-007 operational runbooks (docs/operational-runbooks.md, linked from docs/incident-runbooks.md): seven command-level runbooks (failed/partial Workers Builds deploy with docs-only and red-main cases, stuck deploy lease, D1 and cutover/forward recovery, OpenCode Go down or rate-limited with user-visible messages, spend spike with cost-events/cost-reconcile and the caps that exist, Stripe/Cloudflare/GitHub outage, leaked secret with owner-only rotation steps). Exercised locally or read-only on Node 24.21.0 only: release-lock, deploy-ci, release-manifest, release-provider, probe-health, cost-reconcile, standard-ai-recovery, standard-ai-chat, gateway-spend, maintenance, secret-custody, stripe-sandbox-cleanup, operator-containment, account-closure-inventory, recovery-drill, tenant-classification suites pass; read-only remote probe-health (200), report-maintenance (--counters all normal; full report exit 2: daily jobs unobserved after the October 29 cutover and the review_turnover backlog unavailable), account-closure-inventory (all zero), report-gateway (0 unresolved), secret-custody (names only), cost-reconcile --remote with a synthetic statement (unexplained-residual equal to the invoice because cost_events is empty); gh run list and check-runs on main. tests/ai-gateway.mjs fails on main. No deploy, no deploy status/prepare/apply, no secret read or rotation, no remote write, no live drill, no external message. New gaps RB-1..RB-7 are recorded in the runbook (no read-only live-commit or lease view, review_turnover unavailable, ai-gateway suite failing, cost_events empty, no live drill, build ordering, provider contacts). Acceptance is not complete: live/facilitated exercise, alert delivery and the earlier gaps G1-G12 remain open."
+        "2026-10-29 UTC, WH-007 operational runbooks (docs/operational-runbooks.md, linked from docs/incident-runbooks.md): seven command-level runbooks (failed/partial Workers Builds deploy with docs-only and red-main cases, stuck deploy lease, D1 and cutover/forward recovery, OpenCode Go down or rate-limited with user-visible messages, spend spike with cost-events/cost-reconcile and the caps that exist, Stripe/Cloudflare/GitHub outage, leaked secret with owner-only rotation steps). Exercised locally or read-only on Node 24.21.0 only: release-lock, deploy-ci, release-manifest, release-provider, probe-health, cost-reconcile, standard-ai-recovery, standard-ai-chat, gateway-spend, maintenance, secret-custody, stripe-sandbox-cleanup, operator-containment, account-closure-inventory, recovery-drill, tenant-classification suites pass; read-only remote probe-health (200), report-maintenance (--counters all normal; full report exit 2: daily jobs unobserved after the October 29 cutover and the review_turnover backlog unavailable), account-closure-inventory (all zero), report-gateway (0 unresolved), secret-custody (names only), cost-reconcile --remote with a synthetic statement (unexplained-residual equal to the invoice because cost_events is empty); gh run list and check-runs on main. tests/ai-gateway.mjs fails on main. No deploy, no deploy status/prepare/apply, no secret read or rotation, no remote write, no live drill, no external message. New gaps RB-1..RB-7 are recorded in the runbook (no read-only live-commit or lease view, review_turnover unavailable, ai-gateway suite failing, cost_events empty, no live drill, build ordering, provider contacts). Acceptance is not complete: live/facilitated exercise, alert delivery and the earlier gaps G1-G12 remain open.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #106, #448 (zemdregon/whumpo) is the merged change(s) behind the evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -443,7 +447,7 @@
       "title": "Define retention, deletion and account-export contracts",
       "phase": "F1",
       "priority": "P0",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "decision",
       "size": "M",
       "dependsOn": [],
@@ -490,7 +494,8 @@
         "2026-09-30 source/local evidence: commit 2dcbb7a adds a proposed lifecycle contract and explicit catalog covering all 133 control tables across 29 classes; schema and account-closure inventory checks passed with 107 migrations. Retention choices remain proposed; no closure/export activation or legal-compliance claim. See docs/data-lifecycle.md.",
         "2026-10-01 UTC reconciliation against source 0002632 / migrations 0001\u20130113: all 148 tables classified into 31 groups, including full configuration copies, separate save/activation receipts and planning provenance; 21 direct non-cascading owner references identified. Read-only closure inventory includes the new retained records. Lifecycle catalog, account-closure inventory, specification journey and service-client activation tests passed with synthetic local data; future guest/brand/lead/staging/connector requirements are explicit. Cloudflare retention references rechecked. Policy choices remain proposed; no live data access, runtime deployment, provider activation or deletion was performed. Execution/completion evidence belongs in issue #7.",
         "2026-10-01 alignment: foundation completion remains historical. WH-116 and each new Chat/module/connector/member feature must register new data classes, retention/export/deletion and key custody; they do not inherit complete coverage from issue #7.",
-        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #7 (zemdregon/whumpo) for the retention, deletion and export contract; new data classes still register under WH-116 and each feature, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place."
+        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #7 (zemdregon/whumpo) for the retention, deletion and export contract; new data classes still register under WH-116 and each feature, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #19 (zemdregon/whumpo) is the merged change(s) behind the evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -498,7 +503,7 @@
       "title": "Map safety coverage and specify the remaining fail-closed boundaries",
       "phase": "F1",
       "priority": "P0",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "decision",
       "size": "M",
       "dependsOn": [],
@@ -545,7 +550,8 @@
       "evidence": [
         "2026-10-01 UTC source/local reconciliation against 4e91a8b through migrations 0001\u20130113: docs/safety-coverage.md inventories 17 path families, actual screening/risk callers, known specification/service holds, mandatory versus supplemental checks, legacy/context gaps and concrete WH-011\u2013017 handoff. Agent safety knowledge now accurately states the unconfigured detectors and remaining coverage gaps. pnpm check/build, specification journey, service-client activation, natural Chat, 68 local document references and roadmap validation/render checks passed. Benign scripted fixtures only; no detector, CMS feature testing, provider activation or safety-launch acceptance. Release and completion evidence belongs in issue #8 and the coverage document.",
         "2026-10-01 UTC test release 20d37ba0-fca6-4003-a9c8-280f2b23edff from source 3417ea2 deploys the corrected agent knowledge. Readback verified four candidate versions, unchanged service/secret-binding names and CMS registry, 113 applied migrations / none pending, 16 matching platform assets, home/health 200 and anonymous Chat/profile 401. See docs/safety-coverage.md and docs/releases.md. No real-model moderation evaluation, detector connection, CMS functional test or customer publication.",
-        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #8 (zemdregon/whumpo) for the safety coverage map and fail-closed specification; detector coverage and scanner operations stay with WH-011 to WH-017, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place."
+        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #8 (zemdregon/whumpo) for the safety coverage map and fail-closed specification; detector coverage and scanner operations stay with WH-011 to WH-017, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #20 (zemdregon/whumpo) is the merged change(s) behind the evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -642,7 +648,7 @@
       "title": "Extend exact-artifact media holds to CMS and all delivery aliases",
       "phase": "F1",
       "priority": "P0",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "implementation",
       "size": "L",
       "dependsOn": [
@@ -773,7 +779,7 @@
       "title": "Restricted safety case contract, current schema and account-scope preservation holds",
       "phase": "F1",
       "priority": "P0",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [
@@ -819,7 +825,7 @@
       "title": "Authenticated restricted case operations and remaining preservation paths",
       "phase": "F1",
       "priority": "P0",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "implementation",
       "size": "L",
       "dependsOn": [
@@ -853,7 +859,8 @@
         "2026-10-04 UTC: owner decision on issue #132, part (c), implemented in source with local verification only; not deployed, no schema change. New minimal read-only restricted case review page /workspace/operator-safety (frontend/src/operator-safety.tsx; client frontend/src/lib/operator-safety.ts) over the existing operator API. It calls only holds/list, cases/read, cases/audit and disclosures/read. It is not linked from customer navigation. Each section shows restricted, not found or the result; one passkey reauthentication per stale read; no caching or storage. Server-side role, fresh-proof and audit enforcement are unchanged. No operators are configured (owner decision), so there is no live reader. Write actions keep no UI. Local checks: node tests/operator-safety-review.mjs passed 17 checks on SQLite and with --d1 on local D1 (read-only action set, per-section role gating, customer and case-subject non-disclosure, single reauthentication, audited refusals, no navigation link, no state change). Also passed: pnpm check, node tools/verify.mjs fast and protection, pnpm build. Not exercised in a browser (Playwright not installed here). Activation remains blocked on the outside-hold-control procedure, counsel review (WH-133) and operator bootstrap.",
         "2026-10-04 UTC: owner decision on issue #132 (default one-year case/evidence retention with operator review at expiry, pending counsel) implemented in source with local verification only; not deployed, not configured, no operator bootstrapped, counsel review (WH-133) outstanding. Changes the composed schema (schema/platform.sql: retention_due_at on safety_cases and safety_evidence_objects, new append-only safety_retention_decisions, view safety_case_retention, three audit actions), so it rides the owner-run empty-D1 cutover held on PR #160; deploy ci refuses it. safetyRetentionDays=365 in src/safety-cases.ts sets each term at opening/capture. Past its due date (latest extension or own term, never earlier than any undisposed evidence term) a case is listed by retention/list as retention_review_due (released cases with stored evidence as released_pending_disposal); expiry changes and deletes nothing; self-cases are never listed. A preservation approver previews (retention/preview: facts plus reviewSha256 over the exact decision, reviewed due date, closure and evidence digests/terms) and applies (retention/apply) extend (1-366 days) or release; changes in between are refused, the schema re-checks the due date, exact retries are idempotent, every attempt is audited. Release is final and needs a closed case, no active hold on the case or its subject, no open disclosure and no unfinished capture; evidence disposal now also requires a release and no active hold on the case or subject. The read-only page /workspace/operator-safety lists the queue (retention/list added to its read actions) and shows each case's retention term and decisions; write actions have no UI. Lifecycle catalog maps 219 tables. Local checks: node tests/safety-case-operations.mjs 147 checks and tests/operator-safety-review.mjs 19 checks, both on SQLite and --d1; tests/safety-cases.mjs (+ --d1), lifecycle-catalog, restore-admission, account-closure-inventory, restore-inventory, shared-modules-records/files, guest-previews, contact-notifications, chat-interaction-storage (SQLite and --d1), node tools/safety-hold-inventory.mjs (93 sites, none unclassified), pnpm check, verify fast/protection, pnpm build. Not exercised in a browser. Remaining: counsel review of the term and of any closed-case metadata purge; write-action UI stays out of scope.",
         "2026-10-04 UTC: documentation correction only; no code or schema change. docs/content-safety.md quoted a stale 85 deletion sites; it now matches node tools/safety-hold-inventory.mjs at the WH-128 Remove from collection slice: 94 sites (14 blocked, 5 skips-held, 2 preserved, 2 hold-mechanism, 71 excluded, 10 other paths; none unclassified or stale), and the blocked summary names the module upload, contact destination and module record sites. Verified: node tools/safety-hold-inventory.mjs, tests/safety-case-operations.mjs, roadmap validate/alignment/render --check, git diff --check.",
-        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): readiness planned to ready. Every dependency (WH-131) is accepted in its own evidence, so this is an open planning candidate; its acceptance is unchanged and not claimed."
+        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): readiness planned to ready. Every dependency (WH-131) is accepted in its own evidence, so this is an open planning candidate; its acceptance is unchanged and not claimed.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #133 (zemdregon/whumpo) is the merged change(s) behind the evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -1227,7 +1234,7 @@
       "title": "Freeze the shadow cost-event contract and decompose WH-022",
       "phase": "F3",
       "priority": "P0",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "decision",
       "size": "S",
       "dependsOn": [
@@ -1269,7 +1276,8 @@
         "2026-10-08 UTC: contract and offline reference only, local commit 532aed0 on branch claude/wh-022-cost-event-contract, published for review as owner-approved PR #183 (https://github.com/Digifender-LLC/whumpo-website/pull/183) on 2026-10-08 UTC and not merged; issue not created or claimed from this session. Added docs/cost-events.md (planned), tools/prototypes/cost-events.mjs (imports only node:crypto) and tests/cost-events-contract.mjs, registered as pnpm test:cost-events-contract and in the fast verification profile. The suite passed 27 reference checks and 6 source-agreement/static checks against src/resource-economics.ts, src/task-cost-report.ts, schema/platform.sql and src/fair-use-finance.ts, and caught 87 of 87 deliberate mutants of the reference, each by its intended check. Review corrections (same slice): isolated read surfaces and a frozen registry snapshot, exact-or-refused integer amounts, released events consume nothing, revision identity/advance rules, idempotent period close, and a keyed-tombstone account-closure boundary that is pseudonymous (not anonymous) until the closure key is destroyed (retention decision open). Second-review corrections: the closure key is copied and validated at construction, cost references are pseudonymised at closure, closed-account ingress is canonicalised like a closed tenant event (with explicit platform-first/tenant-replay refusal), and erased owner/project/resource/task/provider IDs stay revision- and redelivery-checked through keyed digests; export records are documented as reports, not append envelopes. Synthetic identifiers and rates only; proves the frozen contract and reference, not D1 storage, producer emission, provider usage import, any real period's cost or WH-020's real-provider task cost. Cloudflare sources read from official pages on October 8, 2026; entitlement and pricing require verification. No table, schema input, binding, provider or deployment change.",
         "2026-10-09 UTC: ported (not pushed or merged) onto origin/main 4dea09c as local branch claude/wh-022-cost-event-contract-main by cherry-picking the three WH-022 commits; the original branch and closed PR #183 are untouched. Conflicts resolved by keeping main's WH-068/WH-077 entries and appending this packet's: alignment rules and handoff tests, roadmap README and alignment.md sections, and the verification profile lists (unchanged: after review the suite is run as a script only, because it takes about 27 s and the Workers Builds deploy command runs verify fast, so it would lengthen every deploy). Main changed schema/platform.sql only in operator containment, session-revocation and retention tables after the original base ca17c6a; src/model-costs.ts, src/gateway-spend.ts, src/storage-budget.ts, src/task-cost-report.ts, src/resource-economics.ts and src/fair-use-finance.ts are unchanged, so the agreement checks needed no edit and the contract and reference are unchanged. Re-run on the port: node tests/cost-events-contract.mjs (27 reference and 6 agreement checks, 87 of 87 mutants), pnpm check, tests/model-costs.mjs, tests/gateway-spend.mjs, tests/task-cost-report.mjs, roadmap validate/alignment/render --check, tests/roadmap-alignment.mjs, tests/verification-profiles.mjs, tests/boundary-audit.mjs and node tools/verify.mjs fast all passed. The suite measured about 27 seconds wall time on the 2-vCPU host, above the 2-second budget docs/verification.md now states for fast additions; it is registered as a package.json script and kept out of the verify profiles. The .gitleaks.toml synthetic-fixture allowlist covers its fake-key fixtures (two generic-api-key findings without it, none with it).",
         "2026-10-09 UTC: rebuilt as claude/wh-022-cost-event-contract-main-train2 on origin/main 89fa009 by cherry-picking only the six WH-022/WH-168 commits, because PR #249 (WH-169) had been squash-merged into this PR's branch instead of main. Main's WH-063 alignment entries are kept and this packet's appended; the transient fast-profile entry from the first commit was not re-added (the later commit removes it, so the verify profiles match main). Between 4dea09c and 89fa009 none of the mapped source (src/model-costs.ts, src/gateway-spend.ts, src/storage-budget.ts, src/task-cost-report.ts, src/resource-economics.ts, src/fair-use-finance.ts, schema/platform.sql) changed, and node tests/cost-events-contract.mjs again passed 27 reference and 6 agreement checks with 87 of 87 mutants caught.",
-        "2026-10-20 UTC, source and docs only, no live read and nothing re-run (WH-001 readiness reconciliation against main 52e885b; see docs/roadmap/readiness-reconciliation-2026-10-20.md): the not pushed/not merged wording above is superseded. docs/cost-events.md, tools/prototypes/cost-events.mjs and tests/cost-events-contract.mjs are on main, and tools/roadmap.mjs carries the WH-168..172 alignment rules. The merging PR was not identified (GitHub was not read). The header of docs/cost-events.md still calls WH-168 unmerged PR #183; that text is stale. Readiness stays ready because the schema has no completion value. Contract and offline reference only; WH-022 and WH-169..172 stay open."
+        "2026-10-20 UTC, source and docs only, no live read and nothing re-run (WH-001 readiness reconciliation against main 52e885b; see docs/roadmap/readiness-reconciliation-2026-10-20.md): the not pushed/not merged wording above is superseded. docs/cost-events.md, tools/prototypes/cost-events.mjs and tests/cost-events-contract.mjs are on main, and tools/roadmap.mjs carries the WH-168..172 alignment rules. The merging PR was not identified (GitHub was not read). The header of docs/cost-events.md still calls WH-168 unmerged PR #183; that text is stale. Readiness stays ready because the schema has no completion value. Contract and offline reference only; WH-022 and WH-169..172 stay open.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #438 (zemdregon/whumpo) is the reconciliation that recorded the acceptance evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -1277,7 +1285,7 @@
       "title": "Implement the cost-event envelope, registries and existing producer adapters",
       "phase": "F3",
       "priority": "P0",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [
@@ -1319,7 +1327,8 @@
         "2026-10-22 UTC (WH-001 static reconciliation at 7bf3cd2; git history and file existence only, no test, GitHub or Cloudflare call; supersedes the not-merged/not-pushed wording above): source merged to main with the WH-022 contract in PR #258 (57fccc4): src/cost-events.ts, src/cost-event-adapters.ts, tests/cost-event-adapters.mjs. Source only; not deployed or accepted; the task stays planned and no execution issue is claimed.",
         "2026-10-23 UTC (WH-001 verification at 3a12d53, local node tests and file/import checks only; no GitHub, Cloudflare or provider call; adds to the 2026-10-22 history-only entry): 57fccc4 is an ancestor of main; src/cost-events.ts, src/cost-event-adapters.ts and tests/cost-event-adapters.mjs exist, and no other src file imports them (unwired). node tests/cost-events-contract.mjs and node tests/cost-event-adapters.mjs pass. pnpm test:model-costs, test:gateway-spend and tests/task-cost-report.mjs were not re-run. Source slice verified delivered; storage, emission and live acceptance remain WH-170 to WH-172, WH-023. The task stays planned.",
         "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): readiness planned to ready. Every dependency (WH-168) is accepted in its own evidence, so this is an open planning candidate; its acceptance is unchanged and not claimed.",
-        "2026-10-29 UTC (WH-169 step-0 check at origin/main 12bd84b; local tests only, no deploy, provider call or schema change): the stated acceptance is met in source. The envelope validator, closed registries, canonical idempotency key and the three pure adapters (inference_calls, gateway_spend_attempts, storage_project_usage) are on main, and since WH-170 (#424) they are wired through src/cost-event-emission.ts, so the 'unwired' wording above is superseded; an empty live cost_events table is not for lack of producers (live state not read; WH-170 needs the owner-run empty-D1 cutover and a deploy). Re-run: node tests/cost-events-contract.mjs (27 reference, 6 agreement, 87/87 mutants), tests/cost-event-adapters.mjs (17 checks, 51/51 mutants), tests/cost-events-store.mjs on SQLite and --d1 (13 cases each), tests/cost-reconcile.mjs (10 cases). Two static scope checks had been failing on main since WH-171 (#441) because src/cost-reconcile.ts is a legitimate consumer of the contract and its header comment named the prototype path; the comment is reworded and the allowed-importer list in tests/cost-event-adapters.mjs now names the report. Not built, by design: Workers, D1, R2 write and Stripe sandbox producers. The registry marks cloudflare-usage-import and connector-call as planned with no table, Cloudflare gives no per-project attribution for shared Workers and D1 (gaps G-C7, G-C8, G-C11), and a Stripe dimension would be a new registry decision; none can be added without inventing attribution or a contract change, so they stay open for a later slice (usage import under WH-171/WH-023)."
+        "2026-10-29 UTC (WH-169 step-0 check at origin/main 12bd84b; local tests only, no deploy, provider call or schema change): the stated acceptance is met in source. The envelope validator, closed registries, canonical idempotency key and the three pure adapters (inference_calls, gateway_spend_attempts, storage_project_usage) are on main, and since WH-170 (#424) they are wired through src/cost-event-emission.ts, so the 'unwired' wording above is superseded; an empty live cost_events table is not for lack of producers (live state not read; WH-170 needs the owner-run empty-D1 cutover and a deploy). Re-run: node tests/cost-events-contract.mjs (27 reference, 6 agreement, 87/87 mutants), tests/cost-event-adapters.mjs (17 checks, 51/51 mutants), tests/cost-events-store.mjs on SQLite and --d1 (13 cases each), tests/cost-reconcile.mjs (10 cases). Two static scope checks had been failing on main since WH-171 (#441) because src/cost-reconcile.ts is a legitimate consumer of the contract and its header comment named the prototype path; the comment is reworded and the allowed-importer list in tests/cost-event-adapters.mjs now names the report. Not built, by design: Workers, D1, R2 write and Stripe sandbox producers. The registry marks cloudflare-usage-import and connector-call as planned with no table, Cloudflare gives no per-project attribution for shared Workers and D1 (gaps G-C7, G-C8, G-C11), and a Stripe dimension would be a new registry decision; none can be added without inventing attribution or a contract change, so they stay open for a later slice (usage import under WH-171/WH-023).",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #259, #454 (zemdregon/whumpo) is the merged change(s) behind the evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -1327,7 +1336,7 @@
       "title": "Store cost events append-only and emit them at existing receipt transitions",
       "phase": "F3",
       "priority": "P0",
-      "readiness": "planned",
+      "readiness": "done",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [
@@ -1373,7 +1382,7 @@
       "title": "Import provider usage and invoices and report aggregate cost reconciliation",
       "phase": "F3",
       "priority": "P0",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [
@@ -1407,7 +1416,8 @@
       "owner": null,
       "evidence": [
         "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): readiness planned to ready. Every dependency (WH-170) is accepted in its own evidence, so this is an open planning candidate; its acceptance is unchanged and not claimed.",
-        "2026-10-29 UTC (branch wh-171-cost-reconcile from origin/main; source and disposable-D1 verification only, no deploy, schema change, secret, provider call or live read): src/cost-reconcile.ts validates and dedupes exported statements by (provider, invoiceId, lineKey), keeps a liability register with explicit unknown amounts and produces the aggregate per provider and period reconciliation report (shadow excluded, account-wide floors and allowances never split across tenants, no identifiers in the output). tools/cost-reconcile.mjs reads CSV or JSON statements and the cost_events heads read-only (local D1 or --remote) and writes nothing. tests/cost-reconcile.mjs passes on in-memory SQLite and local D1 (dedupe, unknown amounts, shadow exclusion, floor and allowance non-splitting, mismatch reporting, malformed, tenant-bearing and content-bearing rows rejected). No statement table, period-close table, live billing call or retention of company totals; lateAfterClose is reported as null until a period-close table exists. WH-171 stays open until the PR merges."
+        "2026-10-29 UTC (branch wh-171-cost-reconcile from origin/main; source and disposable-D1 verification only, no deploy, schema change, secret, provider call or live read): src/cost-reconcile.ts validates and dedupes exported statements by (provider, invoiceId, lineKey), keeps a liability register with explicit unknown amounts and produces the aggregate per provider and period reconciliation report (shadow excluded, account-wide floors and allowances never split across tenants, no identifiers in the output). tools/cost-reconcile.mjs reads CSV or JSON statements and the cost_events heads read-only (local D1 or --remote) and writes nothing. tests/cost-reconcile.mjs passes on in-memory SQLite and local D1 (dedupe, unknown amounts, shadow exclusion, floor and allowance non-splitting, mismatch reporting, malformed, tenant-bearing and content-bearing rows rejected). No statement table, period-close table, live billing call or retention of company totals; lateAfterClose is reported as null until a period-close table exists. WH-171 stays open until the PR merges.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #441 (zemdregon/whumpo) is the merged change(s) behind the evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -1512,7 +1522,7 @@
       "title": "Audit the supported owner journey for usability and accessibility",
       "phase": "F1",
       "priority": "P1",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "verification",
       "size": "M",
       "dependsOn": [],
@@ -2067,7 +2077,7 @@
       "title": "Freeze the domain purchase contract and decompose WH-034",
       "phase": "F3",
       "priority": "P1",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "decision",
       "size": "S",
       "dependsOn": [
@@ -2105,7 +2115,8 @@
       "owner": null,
       "evidence": [
         "2026-10-09 UTC: contract and offline reference only, first committed on branch claude/wh-034-registrar-purchase-contract and ported onto origin/main d3ebaf2 as claude/wh-034-registrar-purchase-contract-main (PR #236, closed unmerged for merge conflicts), then re-ported the same day as claude/wh-034-registrar-purchase-contract-r2 onto origin/main 4dea09c, where src/domain-purchase-quote.ts, src/plans.ts, src/domain-hosting.ts, src/domains.ts and the domain schema are unchanged and the same checks pass, then rebuilt as claude/wh-034-registrar-purchase-contract-r2-train2 onto origin/main 89fa009 without the WH-193 squash that PR #246 had merged into the r2 branch, where that mapped source is still unchanged and the same checks pass (not merged; issue not created or claimed from this session). Added docs/domain-purchases.md (planned), tools/prototypes/domain-purchase.mjs (imports only node:crypto) and tests/domain-purchase-contract.mjs, registered as pnpm test:domain-purchase-contract and in the fast verification profile. node tests/domain-purchase-contract.mjs passed 20 reference checks and 3 source-agreement/static checks, and caught 26 of 26 deliberate mutants of the reference, each by its intended check. Synthetic registrar, names and prices only; proves the frozen contract and reference, not D1 storage, payment holds, a registrar adapter or any purchase. Registrar facts read from official pages on October 9, 2026 (the OpenSRS register command page returned 404 and is marked unverified); eligibility, pricing and reseller terms require verification. No src/, schema, binding, registrar, payment or deployment change.",
-        "2026-10-20 UTC, source and docs only, no live read and nothing re-run (WH-001 readiness reconciliation against main 52e885b; see docs/roadmap/readiness-reconciliation-2026-10-20.md): the not merged wording above is superseded. docs/domain-purchases.md, src/domain-purchase/order.ts and tests/domain-purchase-contract.mjs are on main. tools/prototypes/domain-purchase.mjs, cited above, is no longer on main: docs/domain-purchases.md says WH-193 removed it, and the harness now checks the src/domain-purchase/ source. The merging PR was not identified (GitHub was not read). Readiness stays ready because the schema has no completion value. Contract only; WH-034 and WH-193..198 stay open, and no registrar, payment or purchase is shown."
+        "2026-10-20 UTC, source and docs only, no live read and nothing re-run (WH-001 readiness reconciliation against main 52e885b; see docs/roadmap/readiness-reconciliation-2026-10-20.md): the not merged wording above is superseded. docs/domain-purchases.md, src/domain-purchase/order.ts and tests/domain-purchase-contract.mjs are on main. tools/prototypes/domain-purchase.mjs, cited above, is no longer on main: docs/domain-purchases.md says WH-193 removed it, and the harness now checks the src/domain-purchase/ source. The merging PR was not identified (GitHub was not read). Readiness stays ready because the schema has no completion value. Contract only; WH-034 and WH-193..198 stay open, and no registrar, payment or purchase is shown.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #256 (zemdregon/whumpo) is the merged change(s) behind the evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -2113,7 +2124,7 @@
       "title": "Source domain quote engine and purchase state machine with a synthetic registrar",
       "phase": "F3",
       "priority": "P1",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [
@@ -2150,7 +2161,8 @@
         "2026-10-22 UTC (WH-001 static reconciliation at 7bf3cd2; git history and file existence only, no test, GitHub or Cloudflare call; supersedes the not-merged/not-pushed wording above): quote state machine source merged to main with the WH-192 contract in PR #256 (d948f06): src/domain-purchase/quote.ts, registrar.ts, renewal.ts, tests/domain-purchase-quote.mjs. Source only; nothing wired or purchased; WH-034 and its other children stay open.",
         "2026-10-23 UTC (WH-001 verification at 3a12d53, local node tests and file/import checks only; no GitHub, Cloudflare or provider call; adds to the 2026-10-22 history-only entry): d948f06 is an ancestor of main; src/domain-purchase/quote.ts, order.ts, registrar.ts, renewal.ts and tests/domain-purchase-quote.mjs exist, and no other src file imports src/domain-purchase (unwired). node tests/domain-purchase-quote.mjs and node tests/domain-purchase-contract.mjs pass. Quote state machine verified delivered in source only; no purchase path exists. The task stays planned.",
         "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): readiness planned to ready. Every dependency (WH-192, WH-122) is accepted in its own evidence, so this is an open planning candidate; its acceptance is unchanged and not claimed.",
-        "2026-10-29 UTC, evidence only, no src change (re-run against origin/main 12bd84b, local node only; no GitHub, Cloudflare or provider call): acceptance is already met in source. node tests/domain-purchase-contract.mjs passed 20 source checks and 3 policy/static checks with 26/26 source mutants caught; node tests/domain-purchase-quote.mjs passed (closed v1 quote, exact review and consent digest binding, registrable-name check, caller authority refusal); node tests/tenant-sql-surface.mjs and node tests/boundary-audit.mjs passed. No src file outside src/domain-purchase imports it, so no customer-reachable route can buy anything; the synthetic registrar is in-memory only. These suites touch no database, so there is nothing to run on SQLite or with --d1. No schema change is needed. Real registrar selection (WH-195) stays blocked on the owner; WH-034 and WH-194..198 stay open."
+        "2026-10-29 UTC, evidence only, no src change (re-run against origin/main 12bd84b, local node only; no GitHub, Cloudflare or provider call): acceptance is already met in source. node tests/domain-purchase-contract.mjs passed 20 source checks and 3 policy/static checks with 26/26 source mutants caught; node tests/domain-purchase-quote.mjs passed (closed v1 quote, exact review and consent digest binding, registrable-name check, caller authority refusal); node tests/tenant-sql-surface.mjs and node tests/boundary-audit.mjs passed. No src file outside src/domain-purchase imports it, so no customer-reachable route can buy anything; the synthetic registrar is in-memory only. These suites touch no database, so there is nothing to run on SQLite or with --d1. No schema change is needed. Real registrar selection (WH-195) stays blocked on the owner; WH-034 and WH-194..198 stay open.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #257, #453 (zemdregon/whumpo) is the merged change(s) behind the evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -3148,7 +3160,7 @@
       "title": "Choose durable job orchestration from current requirements",
       "phase": "F0",
       "priority": "P1",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "decision",
       "size": "S",
       "dependsOn": [
@@ -3198,7 +3210,8 @@
         "2026-09-30 source/local evidence: docs/background-jobs.md selects D1-owned receipts and bounded scheduled passes initially, with dated provider cost/retry/retention comparison. File-backed SQLite prototype tests pass for uncertain scans and resumable cleanup; production D1 integration, connected load evidence and provider/operator activation remain separate gates. No new service or schedule enabled.",
         "2026-10-02 UTC: WH-052 reconciled against current workspace identity and WH-071 resource pins. docs/job-envelope.md freezes bounded current envelopes, domain/attempt/delivery identity, current-authority requirements and synthetic email/rule/push examples. Passed 40 envelope cases, 60 placement cases and file-backed SQLite outbox/restart/fencing/uncertain-effect/cancellation/expiry/cleanup checks. Public Cloudflare cost/retry/retention facts refreshed; current maintenance readback at 04:44:30 UTC returned no recorded passes, so no load/capacity claim. D1 scheduled passes remain the initial design; no runtime dispatcher, new service, provider/scanner call or schedule change. Implementing adapters retain D1/current-authority/load/activation gates.",
         "2026-10-29 UTC, docs only (branch wh-052-job-orchestration-decision from origin/main bf261a2; no code, schema, binding, schedule or deploy): docs/job-orchestration.md scores existing cron + D1 job tables, Queues, Durable Objects, Workflows and a D1 + Queues-wake hybrid against the requirements WH-069/145/154/156/036/086/018/074/075 and the batch-builder study state (idempotency, leases, retries, unknown outcomes, tenant fairness, cost, observability, recovery, latency, surface). Decision: D1 job tables and receipts advanced by the already-configured * * * * * trigger as the single dispatcher tick with per-lane/per-owner claim caps and a 20 s admission deadline; claim-time limits (WH-145 use count, notice caps, ceiling) counted in the claim batch; WH-156 G-N10 resolved as one envelope per attempt with envelope v1 unchanged; Durable Objects and Workflows not adopted; Queues kept as a pre-approved wake-up path behind measured triggers. Cloudflare Workers/D1/Queues/DO/Workflows limits and prices re-read from official pages on 2026-10-29: $0 marginal on the owner-authorized Workers Paid plan, with a Free-plan fallback and overage flagged as an owner call. Follow-up proposals P-1 to P-8 listed in the ADR, not yet admitted to the backlog. No account usage was read and no prototype was re-run.",
-        "2026-10-29 UTC, code only (branch wh-052-p1-job-registry from origin/main after the ADR merged; no schema, binding, schedule, secret, dependency or deploy change): ADR follow-up P-1 implemented. src/job-dispatcher.ts is the one dispatcher with a typed registry of {type,run}; the * * * * * branch of scheduled() registers contact_delivery (WH-036) through it with unchanged delivery behaviour and the stale no-cron comment replaced. Bounds: at most 10 claims per type per run, 2 per owner (the cap skips the owner, others are still served), 2 provider calls at once across types, no new claims after 20 s wall time, types rotated by minute and settled independently with the first failure escaping raw as before. tests/job-registry.mjs passes on SQLite and --d1 (caps, fairness, provider concurrency, deadline, rotation, settlement). Existing maintenance, maintenance-scheduled, maintenance-inventory, contact-notifications (SQLite and --d1), contacts, boundary-contact-* and build-jobs suites pass unchanged. Left out: hourly/daily maintenance and build-job reconcile stay on their own crons (no every-minute claim path exists for them); per-lane diagnostics and the journal-backed claim need schema (P-2/P-3), so only in-memory per-run counters exist."
+        "2026-10-29 UTC, code only (branch wh-052-p1-job-registry from origin/main after the ADR merged; no schema, binding, schedule, secret, dependency or deploy change): ADR follow-up P-1 implemented. src/job-dispatcher.ts is the one dispatcher with a typed registry of {type,run}; the * * * * * branch of scheduled() registers contact_delivery (WH-036) through it with unchanged delivery behaviour and the stale no-cron comment replaced. Bounds: at most 10 claims per type per run, 2 per owner (the cap skips the owner, others are still served), 2 provider calls at once across types, no new claims after 20 s wall time, types rotated by minute and settled independently with the first failure escaping raw as before. tests/job-registry.mjs passes on SQLite and --d1 (caps, fairness, provider concurrency, deadline, rotation, settlement). Existing maintenance, maintenance-scheduled, maintenance-inventory, contact-notifications (SQLite and --d1), contacts, boundary-contact-* and build-jobs suites pass unchanged. Left out: hourly/daily maintenance and build-job reconcile stay on their own crons (no every-minute claim path exists for them); per-lane diagnostics and the journal-backed claim need schema (P-2/P-3), so only in-memory per-run counters exist.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #440, #446 (zemdregon/whumpo) is the merged change(s) behind the evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -3425,7 +3438,7 @@
       "title": "Freeze the common connector contract and decompose WH-056",
       "phase": "F3",
       "priority": "P1",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "decision",
       "size": "S",
       "dependsOn": [
@@ -3474,7 +3487,7 @@
       "title": "Shared connector catalog, typed request builder and operation admission in source",
       "phase": "F3",
       "priority": "P1",
-      "readiness": "planned",
+      "readiness": "done",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [
@@ -3526,7 +3539,7 @@
       "title": "Adapt GitHub and Cloudflare handlers to the common connector contract",
       "phase": "F3",
       "priority": "P1",
-      "readiness": "planned",
+      "readiness": "done",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [
@@ -3960,7 +3973,7 @@
       "title": "Freeze the review and receipt retention contract and decompose WH-061",
       "phase": "F2",
       "priority": "P1",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "decision",
       "size": "S",
       "dependsOn": [
@@ -3996,7 +4009,8 @@
       "owner": null,
       "evidence": [
         "2026-10-09 UTC: contract and offline reference only, not deployed. Written at ca17c6a and ported on 2026-10-09 UTC as claude/wh-061-review-retention-design-main onto origin/main d3ebaf2 (640 triggers to 88 capped tables, unchanged); closed unmerged (PR #234) and re-ported the same day as claude/wh-061-review-retention-design-r2 onto origin/main 4dea09c, after WH-050 (#186) added reviewed operator retention: --inventory now reports 648 triggers to 90 capped tables (new R5 operator evidence rows operator_retention_receipts and operator_session_revocations; operator_containments now deleted by the operator_retention_apply trigger; ceiling, shared-ceiling and other-lifetime sets unchanged), with the inventory pins and registry updated; rebuilt on 2026-10-10 UTC as claude/wh-061-review-retention-design-train5 onto origin/main d948f06 (no schema input changed since 89fa009; --inventory and the contract test reproduced 648 triggers to 90 capped tables over 221 tables); not merged: docs/review-retention.md (planned), tools/prototypes/review-retention.mjs (node builtins only, no Worker import) and tests/review-retention-contract.mjs (15 reference and 3 static checks; 25/25 mutants caught), added to the fast profile. Proves the documented inventory and the synthetic model only, not D1 triggers, routes or deployment. Open owner decisions OD-1 to OD-8 are listed in the contract.",
-        "2026-10-20 UTC, source and docs only, no live read and nothing re-run (WH-001 readiness reconciliation against main 52e885b; see docs/roadmap/readiness-reconciliation-2026-10-20.md): the not merged wording above is superseded. docs/review-retention.md, tools/prototypes/review-retention.mjs and tests/review-retention-contract.mjs are on main, and tools/roadmap.mjs carries the WH-180..185 alignment rules. The merging PR was not identified (GitHub was not read). Readiness stays ready because the schema has no completion value. Design and offline reference only; no trigger or cutover is implemented, OD-1 to OD-8 stay open, and WH-061 and WH-181..185 stay open."
+        "2026-10-20 UTC, source and docs only, no live read and nothing re-run (WH-001 readiness reconciliation against main 52e885b; see docs/roadmap/readiness-reconciliation-2026-10-20.md): the not merged wording above is superseded. docs/review-retention.md, tools/prototypes/review-retention.mjs and tests/review-retention-contract.mjs are on main, and tools/roadmap.mjs carries the WH-180..185 alignment rules. The merging PR was not identified (GitHub was not read). Readiness stays ready because the schema has no completion value. Design and offline reference only; no trigger or cutover is implemented, OD-1 to OD-8 stay open, and WH-061 and WH-181..185 stay open.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #275 (zemdregon/whumpo) is the merged change(s) behind the evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -4004,7 +4018,7 @@
       "title": "Active-only review capacity, sealed receipts and capacity-exempt withdrawals in the current schema",
       "phase": "F2",
       "priority": "P1",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [
@@ -4052,7 +4066,7 @@
       "title": "Operator-free review turnover at admission and in daily maintenance",
       "phase": "F2",
       "priority": "P1",
-      "readiness": "planned",
+      "readiness": "done",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [
@@ -4093,7 +4107,7 @@
       "title": "Directory live-snapshot identity, custom-host directory paths and health wiring",
       "phase": "F2",
       "priority": "P1",
-      "readiness": "planned",
+      "readiness": "done",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [
@@ -4137,7 +4151,7 @@
       "title": "Connected local acceptance for sustainable directory and review retention",
       "phase": "F2",
       "priority": "P1",
-      "readiness": "planned",
+      "readiness": "done",
       "kind": "verification",
       "size": "S",
       "dependsOn": [
@@ -4308,7 +4322,7 @@
       "title": "Freeze the verified email change and compromise-response contract and decompose WH-063",
       "phase": "F2",
       "priority": "P1",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "decision",
       "size": "S",
       "dependsOn": [
@@ -4348,7 +4362,8 @@
       "owner": null,
       "evidence": [
         "2026-10-09 UTC: contract and offline reference only, local commit on branch claude/wh-063-email-change-contract (not pushed or merged; issue not created or claimed from this session). Added docs/email-change-and-compromise.md (planned), tools/prototypes/email-change.mjs (imports only node:crypto) and tests/email-change-contract.mjs, registered as pnpm test:email-change-contract and in the fast verification profile (1.0 to 1.5 s wall on the 2-vCPU host). The harness passed 25 reference checks and 5 read-only source-agreement checks and caught 32 of 32 deliberate mutants, each by its intended check. Synthetic accounts, addresses, kit keys, mailer and provider only; proves the frozen contract and reference, not D1 storage, delivery, devices or acceptance. NIST SP 800-63B-4 and OWASP cheat-sheet text read October 9, 2026. No table, route, binding, provider, DNS or deployment change.",
-        "2026-10-20 UTC, source and docs only, no live read and nothing re-run (WH-001 readiness reconciliation against main 52e885b; see docs/roadmap/readiness-reconciliation-2026-10-20.md): the local commit/not pushed wording above is superseded. docs/email-change-and-compromise.md, src/email-change/compromise.ts and tests/email-change-contract.mjs are on main, and tools/roadmap.mjs carries the WH-199..205 alignment rules. tools/prototypes/email-change.mjs, cited above, is not on main: docs/email-change-and-compromise.md says the harness now runs the src/email-change/ source (WH-200, WH-203). The merging PR was not identified (GitHub was not read). Readiness stays ready because the schema has no completion value. Contract only; WH-063 and WH-200..205 stay open, and nothing is wired, sent or accepted."
+        "2026-10-20 UTC, source and docs only, no live read and nothing re-run (WH-001 readiness reconciliation against main 52e885b; see docs/roadmap/readiness-reconciliation-2026-10-20.md): the local commit/not pushed wording above is superseded. docs/email-change-and-compromise.md, src/email-change/compromise.ts and tests/email-change-contract.mjs are on main, and tools/roadmap.mjs carries the WH-199..205 alignment rules. tools/prototypes/email-change.mjs, cited above, is not on main: docs/email-change-and-compromise.md says the harness now runs the src/email-change/ source (WH-200, WH-203). The merging PR was not identified (GitHub was not read). Readiness stays ready because the schema has no completion value. Contract only; WH-063 and WH-200..205 stay open, and nothing is wired, sent or accepted.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #254 (commit b4453a6; the PR shows as closed, the commit is on main) (zemdregon/whumpo) is the merged change(s) behind the evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -4611,7 +4626,7 @@
       "title": "Define versioned project specifications and supported change operations",
       "phase": "F5",
       "priority": "P0",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "decision",
       "size": "M",
       "dependsOn": [],
@@ -4650,7 +4665,8 @@
       "owner": null,
       "evidence": [
         "2026-10-01 alignment: live GitHub completion evidence re-read. Decision contract completed in d27b46a, issue #12; closed-schema/offline operation evidence only. Reuse it; service delivery remains separate.",
-        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #12 (zemdregon/whumpo) for the decision contract and closed-schema operation evidence; service delivery stays with WH-067 to WH-069, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place."
+        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #12 (zemdregon/whumpo) for the decision contract and closed-schema operation evidence; service delivery stays with WH-067 to WH-069, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #40, #438 (zemdregon/whumpo) is the merged change(s) behind the evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -4658,7 +4674,7 @@
       "title": "Build a versioned capability catalog and composition planner",
       "phase": "F5",
       "priority": "P0",
-      "readiness": "planned",
+      "readiness": "done",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [
@@ -4699,7 +4715,8 @@
       "owner": null,
       "evidence": [
         "2026-10-01 alignment: live GitHub completion evidence re-read. Catalog/planner implementation completed in b457f6b and issue #13 with local and deployed readback evidence. General service modules remain WH-067\u2013069.",
-        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #13 (zemdregon/whumpo) for the catalog and planner; general service modules stay with WH-067 to WH-069, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place."
+        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #13 (zemdregon/whumpo) for the catalog and planner; general service modules stay with WH-067 to WH-069, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #438 (zemdregon/whumpo) is the reconciliation that recorded the acceptance evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -4707,7 +4724,7 @@
       "title": "Compile specification changes into deterministic previews and releases",
       "phase": "F5",
       "priority": "P0",
-      "readiness": "planned",
+      "readiness": "done",
       "kind": "implementation",
       "size": "L",
       "dependsOn": [
@@ -4882,7 +4899,7 @@
       "title": "Freeze the shared notification contract and decompose WH-068",
       "phase": "F5",
       "priority": "P1",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "decision",
       "size": "S",
       "dependsOn": [
@@ -4930,7 +4947,7 @@
       "title": "Source notification catalog and renderer with contact notices expressed through it",
       "phase": "F5",
       "priority": "P1",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [
@@ -4966,7 +4983,8 @@
         "2026-10-22 UTC: source slice on the session branch from main 8699937, local verification only. Not merged, deployed or accepted. No mapped issue exists, so nothing was claimed. Added src/notification-catalog.ts, a frozen v1 catalog that matches the reference value for value, holding four templates, the verified whumpo-notify sender with its DNS review reference, and the cloudflare-email provider facts. It also has closed template, catalog and configuration validators, a plain-text segment renderer and provider error classification, and imports nothing. src/contact-email.ts now renders both contact notices through the catalog and takes the sender, display name and error classes from it. src/contact-notifications.ts takes the 14,285-call ceiling from the catalog, bounded by the $5 contactMonthlyCeilingCents (the lower applies on drift; the harness asserts they agree). This closes G-N1 to G-N3 in source. tests/notifications-contract.mjs now compares both notices with golden literals of the pre-WH-155 text, so the baseline no longer reads the source. The source catalog must equal the reference, with identical digests and renders and the same refusal codes for 24 template, 8 catalog and 36 configuration cases (open relay, secret fields, URLs, header and template-syntax injection, content in notices, stale, withdrawn or platform pins, unverified senders, unpriced providers). A static check confirms contact-email.ts no longer hard-codes notice text or provider facts. 10 of 10 source mutants were caught. Ran: node tests/notifications-contract.mjs (31 reference and 14 source-agreement/static checks, 20 of 20 reference and 10 of 10 source mutants caught); node tests/contacts.mjs and node tests/contact-notifications.mjs, both passing unchanged; node tools/verify.mjs fast, passing. pnpm check ran as its constituent commands, all passing (the four generator --check tools, tsc --noEmit and tsc -p tsconfig.frontend.json --noEmit), because pnpm's dependency-status check attempted a reinstall that aborted without a TTY. No schema, table, binding, provider, sender, DNS, cron or customer-visible change.",
         "2026-10-24 UTC (WH-001 static reconciliation at 5a0e21e; git ancestry only, no test re-run for this entry, no GitHub, Cloudflare or provider call; supersedes the not-merged wording in the 2026-10-22 entry above): the WH-155 source slice merged to main in #333 (7bf3cd2): src/notification-catalog.ts, the contact-email.ts and contact-notifications.ts rewiring and tests/notifications-contract.mjs are on main. Deployment and acceptance are not established by this entry. Readiness unchanged.",
         "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): readiness planned to ready. Every dependency (WH-154) is accepted in its own evidence, so this is an open planning candidate; its acceptance is unchanged and not claimed.",
-        "2026-10-29 UTC, verification only on origin/main db72ccc, no source change (branch wh-155-notification-catalog): the catalog (src/notification-catalog.ts), the plain-text renderer and the contact-email.ts and contact-notifications.ts rewiring were already on main via #333 (7bf3cd2); this pass found nothing left to build and added no code. Re-ran with local synthetic fixtures: node tests/notifications-contract.mjs (31 reference and 14 source-agreement/static checks, 20/20 reference and 10/10 source mutants caught), node tests/contact-notifications.mjs and node tests/contacts.mjs (both fixtures use local D1 and pass), node tests/tenant-sql-surface.mjs and node tests/boundary-audit.mjs, all passing. Open PR #446 (claim/provider/scan hooks on runContactDelivery) is not on main and was not touched, so there was nothing to rebase over. No schema, provider, sender, binding, cron, DNS or customer-visible change. Not deployed or accepted."
+        "2026-10-29 UTC, verification only on origin/main db72ccc, no source change (branch wh-155-notification-catalog): the catalog (src/notification-catalog.ts), the plain-text renderer and the contact-email.ts and contact-notifications.ts rewiring were already on main via #333 (7bf3cd2); this pass found nothing left to build and added no code. Re-ran with local synthetic fixtures: node tests/notifications-contract.mjs (31 reference and 14 source-agreement/static checks, 20/20 reference and 10/10 source mutants caught), node tests/contact-notifications.mjs and node tests/contacts.mjs (both fixtures use local D1 and pass), node tests/tenant-sql-surface.mjs and node tests/boundary-audit.mjs, all passing. Open PR #446 (claim/provider/scan hooks on runContactDelivery) is not on main and was not touched, so there was nothing to rebase over. No schema, provider, sender, binding, cron, DNS or customer-visible change. Not deployed or accepted.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #447 (zemdregon/whumpo) is the merged change(s) behind the evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -5267,7 +5285,7 @@
       "title": "Specify workload placement and bounded custom execution paths",
       "phase": "F5",
       "priority": "P0",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "decision",
       "size": "M",
       "dependsOn": [
@@ -5313,7 +5331,8 @@
       "evidence": [
         "2026-10-01 WH-071 decision/source evidence against d9f5d26: docs/workload-placement.md freezes logical project/resource and exact module/schema identities, scoped adapter obligations, lifecycle/export descriptors and fenced migration handoff. Offline reference and 60 synthetic checks verify compatibility/rejections and marginal container examples; current official provider prices/limits reviewed. Existing shared D1/private R2/QuickJS remain. No production imports, runtime/config/schema changes, provider activation, customer migration or export acceptance. Execution/completion evidence belongs in issue #47.",
         "2026-10-01 WH-120 amendment: offline descriptors remove read/restore compatibility lists; retired fields and mismatched schema versions/digests reject. docs/workload-placement.md removes the proposed legacy placement adapter and specifies forward repair/current-schema restoration. All 60 offline checks pass; no production consumer, provider call, deployment or CMS functional test.",
-        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #47 (zemdregon/whumpo) for the workload placement and bounded execution specification, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place."
+        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #47 (zemdregon/whumpo) for the workload placement and bounded execution specification, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #48 (zemdregon/whumpo) is the merged change(s) behind the evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -5633,7 +5652,7 @@
       "title": "Freeze the portable export contract and decompose WH-077",
       "phase": "F5",
       "priority": "P1",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "decision",
       "size": "S",
       "dependsOn": [
@@ -5674,7 +5693,8 @@
       "owner": null,
       "evidence": [
         "2026-10-09 UTC: contract and offline reference only, local commit on branch claude/wh-077-portable-export-contract (not pushed or merged; issue not created or claimed from this session). Added docs/portable-exports.md (planned), tools/prototypes/portable-export.mjs (builtins only) and tests/portable-export-contract.mjs, registered as pnpm test:portable-export-contract. node tests/portable-export-contract.mjs passed 12 reference checks, 2 clean-environment boot checks (permission-restricted child processes with an empty environment and in-process outbound refusal; not OS-level network isolation) and 1 static check, and caught 28 of 28 deliberate mutants, each by its intended check. Not added to pnpm verify fast: measured 2.1 to 3.7 seconds wall time under load, above its 2-second budget. Synthetic data only; proves the frozen contract and reference, not a D1/R2 builder, a standalone runtime or acceptance. Provider facts read from official pages on October 9, 2026; customer-side pricing and entitlement require verification.",
-        "2026-10-20 UTC, source and docs only, no live read and nothing re-run (WH-001 readiness reconciliation against main 52e885b; see docs/roadmap/readiness-reconciliation-2026-10-20.md): the local commit/not pushed wording above is superseded. docs/portable-exports.md, tools/prototypes/portable-export.mjs and tests/portable-export-contract.mjs are on main. docs/portable-migration-guides.md and the WH-190 evidence both record the WH-186 contract as merged. The merging PR was not identified (GitHub was not read). Readiness stays ready because the schema has no completion value. Contract and offline reference only; WH-077 and WH-187..191 stay open."
+        "2026-10-20 UTC, source and docs only, no live read and nothing re-run (WH-001 readiness reconciliation against main 52e885b; see docs/roadmap/readiness-reconciliation-2026-10-20.md): the local commit/not pushed wording above is superseded. docs/portable-exports.md, tools/prototypes/portable-export.mjs and tests/portable-export-contract.mjs are on main. docs/portable-migration-guides.md and the WH-190 evidence both record the WH-186 contract as merged. The merging PR was not identified (GitHub was not read). Readiness stays ready because the schema has no completion value. Contract and offline reference only; WH-077 and WH-187..191 stay open.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #225 (zemdregon/whumpo) is the merged change(s) behind the evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -5796,7 +5816,7 @@
       "title": "Document managed-service adapters and migration paths per shared capability",
       "phase": "F5",
       "priority": "P1",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "decision",
       "size": "M",
       "dependsOn": [
@@ -6015,7 +6035,7 @@
       "title": "Define Android owner journeys and freeze the native API contract",
       "phase": "F6",
       "priority": "P1",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "decision",
       "size": "M",
       "dependsOn": [
@@ -6070,7 +6090,8 @@
         "2026-09-30: docs/android-app.md records the accepted product/architecture baseline and current service mapping against f90bf5f plus the working tree. Exact v1 wire contracts and native implementation acceptance remain this lane's future work; no Android execution issue or release is claimed.",
         "2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.",
         "2026-10-04: docs/mobile-api-v1.md freezes the /api/mobile/v1 contract (34 operations mapped to existing handlers or declared new adapters, native bearer/handoff/revocation model, client_update_required admission, four admitted review controls, idempotency, pagination, exclusions, journey/evidence matrix and source gaps) against b4671f9, with synthetic fixtures and an offline contract test. docs/android-app.md is refreshed against current source. Planned only: no mobile route, native session, Android code, FCM adapter or device acceptance. Owner decisions (minimum Android version, Play distribution/identity, Play Integrity, session cap, native take-down, push default, stale-client status code) are listed in the contract. Live issue/dependency state was not re-checked offline.",
-        "2026-10-29 platform ADR (docs only, no app code, build, Play action or deployment): docs/android-app-platform.md selects Kotlin Multiplatform + Compose Multiplatform, Android first (scored 45/50 against native Compose 40, Flutter 37, React Native/Expo + react-native-macos 36, Capacitor/Tauri 29; code reuse excluded by owner direction 2026-10-29). Android behaviour is unchanged because CMP on Android is Jetpack Compose; Credential Manager, FCM and Keystore stay first-party in androidMain. Mac path: PWA now, CMP Desktop (JVM) target after WH-087 using the frozen browser handoff for sign-in. docs/android/app-ux.md adds the IA, six core journeys, Material 3 mapping from tokens.json (primary = link, brand Sky Blue = primaryContainer; contrast pairs computed), type, motion, haptics, dark/dynamic-colour policy, accessibility targets, states, adaptive layouts and an 8-package plan. Facts checked against official docs on 2026-10-29 (CMP iOS and Desktop Stable; passkeys on Android 9+; Play target API 36 since 2026-08-31; 12 testers for 14 days for new personal accounts). The v1 wire contract is unchanged; its owner decisions remain open."
+        "2026-10-29 platform ADR (docs only, no app code, build, Play action or deployment): docs/android-app-platform.md selects Kotlin Multiplatform + Compose Multiplatform, Android first (scored 45/50 against native Compose 40, Flutter 37, React Native/Expo + react-native-macos 36, Capacitor/Tauri 29; code reuse excluded by owner direction 2026-10-29). Android behaviour is unchanged because CMP on Android is Jetpack Compose; Credential Manager, FCM and Keystore stay first-party in androidMain. Mac path: PWA now, CMP Desktop (JVM) target after WH-087 using the frozen browser handoff for sign-in. docs/android/app-ux.md adds the IA, six core journeys, Material 3 mapping from tokens.json (primary = link, brand Sky Blue = primaryContainer; contrast pairs computed), type, motion, haptics, dark/dynamic-colour policy, accessibility targets, states, adaptive layouts and an 8-package plan. Facts checked against official docs on 2026-10-29 (CMP iOS and Desktop Stable; passkeys on Android 9+; Play target API 36 since 2026-08-31; 12 testers for 14 days for new personal accounts). The v1 wire contract is unchanged; its owner decisions remain open.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #118, #445 (zemdregon/whumpo) is the merged change(s) behind the evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -7540,7 +7561,7 @@
       "title": "Persist and submit typed Chat interactions with exact readback",
       "phase": "F2",
       "priority": "P1",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [
@@ -7616,7 +7637,8 @@
         "2026-10-02 UTC: same-task project-intake corrections now reuse shared guarded replacement storage. Immutable prior submissions, carried user defaults across untouched chains, fresh copied-project ownership, revision/retention/authority fences and exact lost-response replay connect through metadata-only agent lookup and the current mobile renderer. This also fixes content correction chains losing earlier user text. No schema, public arbitrary issuer, automatic work or deployment; original broader acceptance remains open.",
         "2026-10-02 cleared-draft correction: current reads distinguish no draft (null) from a saved complete empty snapshot. Renderer and replacement handlers never merge omitted answers back from defaults; blank required text can be carried as a user default but still fails submission, and native resource clearing omits the UUID key. Regression reproduced before fix. 69 protocol cases, 20 intake cases on SQLite/local D1, 38 content-storage cases on local D1, 20 scripted agent cases on SQLite and full built-workspace HTTP/local-D1 mobile lost-response/reload/correction checks pass. Type/compiler and current history/client/prompt checks pass. Source/local only; no deployment. See docs/chat-interactions.md and docs/verification.md. Original WH-106 acceptance still governs closure; WH-107/108 own broader renderer and custom agent composition.",
         "2026-10-02 final WH-106 original-scope audit: the shared storage/receipt/privacy/lifecycle foundation is accepted on the current disposable schema. The audit reproduced account deletion erasing pending continuation custody; a pre-delete current-schema guard now preserves pending/unknown receipts until explicit reconciliation and permits unrelated or terminal-account cascades. All 39 storage scenarios and 21 scripted Chat agent scenarios pass on SQLite/local D1, including rejected/uncertain model follow-up with immutable answer/receipt recovery and no redispatch. Type/compiler, lifecycle catalogue and closure-inventory checks pass; unchanged renderer/cache behavior retains the 291baf4 browser evidence. Six original acceptance criteria map to source/tests in docs/chat-interactions.md; deployment was not required by the fixture option. General renderer/custom composition remain WH-107/108; whole-account closure/restore remain WH-018/008. No deployment, external inference, paid activation, CMS functional testing, CSAM or Daybreak.",
-        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #87 (zemdregon/whumpo) for the original-scope storage audit of 2026-10-02, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place."
+        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #87 (zemdregon/whumpo) for the original-scope storage audit of 2026-10-02, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #52 (zemdregon/whumpo) is the merged change(s) behind the evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -7624,7 +7646,7 @@
       "title": "Render accessible Chat forms and maintained interaction templates",
       "phase": "F2",
       "priority": "P1",
-      "readiness": "planned",
+      "readiness": "done",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [
@@ -7696,7 +7718,8 @@
         "2026-10-02 UTC: mobile history sheets track visible bottom/scroll and layout-resizing keyboards, preserve reading space and avoid zoom/transition lag. Heading entry, reverse Tab/arrow navigation, inline cancel/return, removed-action result focus and delayed-response focus custody have connected browser checks. The opt-in isolated Orca 50.2 runner passes seven real speech-generation checkpoints through the actual built workspace/local HTTP/D1/R2 journey; phone keyboards are simulated, with inspected 360/390px and enlarged-text screenshots. This is not human listening or physical-device acceptance. No protocol/schema, deployment, provider, CMS, scanner or Daybreak change; original remaining WH-107 acceptance and WH-108/109/112 scope remain open. See docs/verification.md and tests/chat-screen-reader.mjs.",
         "2026-10-02 UTC: coordinated test release 8542278b-700b-4816-8c83-ec8b61333188 deploys source be2152a, all four Workers, 172-table/785-object current schema and 39 exact assets. Signed HTTP and live 390px Chromium verify draft reload/exact replay, private preview/exact save, writing choices, history focus and photo-handoff metadata; no model call, image upload or publication. Verified key-capsule policy and PKCE start/cancel remain intact. Synthetic data cleanup counted all 172 tables; all 14 account Workers had no obsolete-DB reference before confirmed retirement. New private owner invitation issued. This supersedes pending-cutover statements, not remaining WH-107 physical-device/product acceptance; CSAM, Daybreak and CMS testing remain deferred.",
         "2026-10-02 UTC original-scope audit at 6b2c062 maps every WH-107 scope item and all five criteria to inspected current source, connected local/browser/Orca evidence and the verified Chat test release. Runtime matches deployed be2152a. The 69-case protocol and current-history suites pass again. Original renderer/inspected-evidence scope is accepted; earlier notes conflating physical-device/customer acceptance with this packet are corrected. WH-024/112 retain those explicit broader gates; WH-108 retains custom semantic admission/prose proposals/continuations and WH-109 views. No scope, criteria or dependency changed. See docs/chat-renderer-acceptance.md; issue #90 owns closure.",
-        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #90 (zemdregon/whumpo) for the original-scope renderer audit of 2026-10-02, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place."
+        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #90 (zemdregon/whumpo) for the original-scope renderer audit of 2026-10-02, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #438 (zemdregon/whumpo) is the reconciliation that recorded the acceptance evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -7704,7 +7727,7 @@
       "title": "Let the agent compose bounded custom forms and use task-scoped answers",
       "phase": "F2",
       "priority": "P1",
-      "readiness": "planned",
+      "readiness": "done",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [
@@ -7777,7 +7800,8 @@
         "2026-10-03 UTC source/local: custom presentation forms admit up to four currently approved same-project photos. Explicit IDs only are retained; selected metadata is minimized, and current ownership/digest/clearance guards fence draft/submit/correction, model dispatch and final effects. Seven resource scenarios pass on SQLite/local D1; 44 scripted continuation cases and the built 360/390px HTTP/D1/R2 journey pass. No image bytes/scanner/real inference/publication. This source addition awaits scoped platform deployment. Original WH-108 representative interaction selection and broader WH-112 quality/device acceptance remain open; see docs/verification.md.",
         "2026-10-03 03:01 UTC: a992f95 deployed as platform 8164406e-5bde-4565-8662-1b34edb3fa0a. Exact 39 assets, all platform bindings, unchanged 173-table/791-object schema and other three Workers verify. Signed 390px synthetic photo selection/draft reload/revocation/reselection/submission and previous private review/recovery journeys pass. No image bytes/scanner/inference/publication, fixtures removed. Original model-selection and broader acceptance remain open; detailed evidence in docs/chat-test-release.md.",
         "2026-10-03 UTC original-scope audit at a992f95: all five scope bullets, six criteria and three verification bullets mapped in docs/chat-composition-acceptance.md. Seven frozen real Muse selection requests passed objective checks and inspected rubrics without product/prompt changes; all fourteen real calls including the earlier harness-failed attempt are retained. Plain/template/custom/known-fact/unavailable/prohibited/ambiguous selection, connected private task changes, typed conditional/resource admission, prose correction, bounded task state, replay and authority guards are accepted within the original packet. WH-020/024/109\u2013112 retain full journeys, broader model reliability (including the unresolved earlier live follow-up), complete economics and physical-device acceptance. No MVP, scanner or commercial acceptance is claimed.",
-        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #93 (zemdregon/whumpo) for the original-scope composition audit of 2026-10-03, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place."
+        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #93 (zemdregon/whumpo) for the original-scope composition audit of 2026-10-03, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #438 (zemdregon/whumpo) is the reconciliation that recorded the acceptance evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -7785,7 +7809,7 @@
       "title": "Compose and maintain dashboards and custom views through the agent",
       "phase": "F2",
       "priority": "P1",
-      "readiness": "planned",
+      "readiness": "done",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [
@@ -7833,7 +7857,8 @@
         "2026-10-03 UTC: current root claims execution in #94 on codex/identity-admission after inspecting current source and upstream closures. Planned implementation contract is committed separately from runtime; first code work is shared current view definitions/bindings and atomic layout history/receipt preparation.",
         "2026-10-03 UTC: shared exact website review queues/comparisons are locally verified in 03fa3cf; WH-109 remains open for full lifecycle/cutover/audit. The current tool inventory has no callable quality-manager browser runner; verification uses maintained Playwright fixtures with the actual Worker, built client, current D1 and inspected narrow-screen images. This updates tooling wording without reducing the connected browser or original acceptance scope.",
         "2026-10-03 UTC: original six-criterion audit accepted. Frozen b765913 local real-Muse and deployed 81a7b9f eight-step mobile lifecycles pass, preserving unrelated views and exact replay. Release 0955f19c-b69e-4dae-b7e7-972e5df3aa3c verifies four Workers, current 175-table/796-object schema, 39 assets, shared exact review comparisons, current permission loss, zero-inference rendering and settled 360/390px images. Synthetic fixtures removed, all 14 account Worker inventories checked and obsolete DB retired. Retired layout route/undo argument rejected. Earlier model failures and separate acknowledgment uncertainty remain WH-020; physical devices and full owner/beta/commercial acceptance remain separate. Full evidence: docs/workspace-views-acceptance.md and docs/workspace-view-release.md; execution closure in #94.",
-        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #94 (zemdregon/whumpo) for the original-scope audit of 2026-10-03, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place."
+        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #94 (zemdregon/whumpo) for the original-scope audit of 2026-10-03, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #438 (zemdregon/whumpo) is the reconciliation that recorded the acceptance evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -7841,7 +7866,7 @@
       "title": "Complete routine owner workflows within Chat",
       "phase": "F2",
       "priority": "P1",
-      "readiness": "planned",
+      "readiness": "done",
       "kind": "implementation",
       "size": "L",
       "dependsOn": [
@@ -7902,7 +7927,8 @@
         "2026-10-03 UTC WH-110C task-scoped saved connection status is implemented and locally accepted, not deployed. Terminal interaction.connectionStatus uses existing provider readers after inference; only exact-task provider locators enter model context. Fresh admission/origin/metadata guards fence the reply; previous task memory is preserved and the result is excluded from later inference. Both SQLite and local D1 pass 21 cases (83 main/30 ack each), combined nine-call browser passes after fixing older returned-card locator loss on message send, and two frozen real-Muse conversations pass at three calls each. Existing 150 continuation, seven focused consent, 32 agent cases, account status, type/build checks pass. Pending 177-table/806-object candidate schema is unchanged. Test deployment, broader outages and provider/device/customer acceptance remain open; #98/#99/#95 stay open. Details: docs/chat-connection-handoffs.md.",
         "2026-10-03 13:51 UTC: current Chat connection release 5dfb930c-7241-4516-97fd-dff9f461de1e, runtime 577702e, passes exact four-Worker/binding/schema/39-asset verification and eight-stage real-Muse/deployed-browser acceptance: scoped controls, signed reauth/lost-start recovery, cancelled-consent return, older-history/multi-tab recovery, terminal same-task saved status, unavailable-read recovery, revoked access/reload and two-key identity. Inspected 360/390px captures and synthetic cleanup pass; first synthetic-page timeout is preserved and corrected verifier passes on unchanged runtime. Current 177-table/806-object schema cut over without migration; old empty DB retired after all 14 account Worker binding checks, other DBs preserved, current key policy and fresh private invitation verified. One uncertain acknowledgment remains WH-020; actual provider/device/customer acceptance, broader recovery and #98/#99/#95 remain open. Evidence: docs/chat-routine-release.md and docs/chat-connection-handoffs.md.",
         "2026-10-03 UTC: original-scope audit accepts WH-110/#95 and remaining children #98/#99 against all six scope items, six acceptance criteria and three verification requirements. Runtime remains deployed 577702e / release 5dfb930c; this audit adds tests/docs only. Fresh actual Worker/current D1/built-browser full journey passes 22 scripted calls; exact publication/reopen/confirm/restore/withdrawal passes 19; new adverse recovery passes ten, including AI-unavailable private save, saved-answer explicit resume, rejected/unknown/pending outcomes and timeout fencing of late results with uncertain costs retained. Onboarding, first-draft, customer-site, workspace-read, natural-chat and compiler/type checks pass. Phone/desktop captures inspected; earlier interrupted/terminated browser attempts retained. Existing exact-source handler, bounded real-Muse and deployed adapter evidence are mapped individually. No direct routes removed, runtime/visitor authority added, provider activation, remote publication, physical-device/customer admission, CMS/scanner work or real billing. WH-024 precedes WH-111 navigation/continuity; model, provider, safety, protection, device and commercial gates remain separate. See docs/chat-routine-acceptance.md.",
-        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #95 (zemdregon/whumpo) for the original-scope audit of 2026-10-03, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place."
+        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #95 (zemdregon/whumpo) for the original-scope audit of 2026-10-03, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #438 (zemdregon/whumpo) is the reconciliation that recorded the acceptance evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -7981,7 +8007,7 @@
       "title": "Freeze the daily-workspace audit and contract and decompose WH-111",
       "phase": "F2",
       "priority": "P1",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "decision",
       "size": "S",
       "dependsOn": [
@@ -8020,7 +8046,8 @@
       "owner": null,
       "evidence": [
         "2026-10-11 UTC: audit, contract and decomposition only; local commit on branch claude/wh-111-daily-workspace-audit against d948f06 (not pushed or merged; issue #100 not edited). Added docs/chat-daily-workspace.md (planned), tests/chat-inference-outage.mjs (24 checks, passes on SQLite and --d1, and a model-configured mutation fails its first guard) and alignment rules for WH-206 to WH-213. Findings: direct POST /api/projects completes onboarding without welcome (probe: 201, no welcome row, onboardingComplete true); node tests/workspace-identity-browser.mjs --support fails at baseline on the lockout mailto link (44px check, run twice); no Orca or axe evidence for the Help sheet, Saved work, Support or Site & app safety. No src/, frontend/, schema, binding, provider or deployment change; no remote operation.",
-        "2026-10-20 UTC, source and docs only, no live read and nothing re-run (WH-001 readiness reconciliation against main 52e885b; see docs/roadmap/readiness-reconciliation-2026-10-20.md): the local commit/not pushed wording above is superseded. docs/chat-daily-workspace.md and tests/chat-inference-outage.mjs are on main, and tools/roadmap.mjs carries the WH-206..213 alignment rules (WH-111 requires WH-206 and WH-213). The merging PR was not identified (GitHub was not read). Readiness stays ready because the schema has no completion value. Audit and contract only; the audit findings are not fixed here, and WH-111 and WH-207..213 stay open."
+        "2026-10-20 UTC, source and docs only, no live read and nothing re-run (WH-001 readiness reconciliation against main 52e885b; see docs/roadmap/readiness-reconciliation-2026-10-20.md): the local commit/not pushed wording above is superseded. docs/chat-daily-workspace.md and tests/chat-inference-outage.mjs are on main, and tools/roadmap.mjs carries the WH-206..213 alignment rules (WH-111 requires WH-206 and WH-213). The merging PR was not identified (GitHub was not read). Readiness stays ready because the schema has no completion value. Audit and contract only; the audit findings are not fixed here, and WH-111 and WH-207..213 stay open.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #290 (zemdregon/whumpo) is the merged change(s) behind the evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -8028,7 +8055,7 @@
       "title": "Require the completed welcome before direct project creation",
       "phase": "F2",
       "priority": "P1",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "implementation",
       "size": "S",
       "dependsOn": [
@@ -8120,7 +8147,7 @@
       "title": "Apply the approved workspace navigation shape",
       "phase": "F2",
       "priority": "P1",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [
@@ -8167,7 +8194,7 @@
       "title": "Uniform project locators and the last saved-work source fixture",
       "phase": "F2",
       "priority": "P1",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "implementation",
       "size": "S",
       "dependsOn": [
@@ -8209,7 +8236,7 @@
       "title": "Composer draft durability",
       "phase": "F2",
       "priority": "P1",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [
@@ -8756,7 +8783,7 @@
       "title": "Evaluate passkey-backed encryption compatibility and usability",
       "phase": "F4",
       "priority": "P2",
-      "readiness": "planned",
+      "readiness": "done",
       "kind": "decision",
       "size": "M",
       "dependsOn": [
@@ -8806,7 +8833,7 @@
       "title": "Make the dashboard an installable PWA",
       "phase": "F2",
       "priority": "P1",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [
@@ -8849,7 +8876,8 @@
       "evidence": [
         "2026-10-01 local/source: installable workspace manifest, elephant 192/512px icons, Settings install/manual guidance and public-only offline worker implemented. Type/build, PWA cache/routing/version checks, build/release snapshot and lazy-loading checks pass. Disposable Chromium with actual local platform/D1 reports zero manifest/installability errors and verifies mobile layout, install dismissal, offline/reconnect and worker updates preserving an unsent draft. Deployment evidence follows in docs/dashboard-pwa.md and issue #49; physical-phone OS install remains unverified.",
         "2026-10-01T16:55:49.916Z test acceptance: corrected release e6edca89-4021-494c-a4b0-0875531e3132, source aa8b2c38b4c69e1a4dba76fb01b0fe0bea544778, deployed and reconciled. Twenty selected assets match archive bytes; live Chromium reports zero manifest/installability errors, active worker, four public cached files and successful offline/reconnect to sign-in. Health 200, anonymous session 401/no-store. No new migration/service/paid activation. Physical-phone OS installation remains unverified. See docs/dashboard-pwa.md and issue #49.",
-        "2026-10-27 UTC, local only, not deployed, no device: PR #348 (merged 2026-10-26T14:46:03Z, merge commit a42c626) is docs only (docs/dashboard-pwa.md, new 'Local revalidation - October 2026' section) and records a re-acceptance on origin/main 2e74dc7 with Node 24.21.0, pnpm 11.19.0 and the installed Chromium. Reported: node tests/dashboard-pwa.mjs exit 0 (needs dist/ from pnpm build), node tests/dashboard-pwa-browser.mjs exit 0, pnpm check exit 0, pnpm build exit 0 (existing chunk-size warnings). The browser test covers zero manifest and installability errors (CDP), offline reload and Try again reconnect, unsent draft and the exact 4-entry cache surviving a worker update, revoked identity refused after offline reconnect, and no overflow at 390px. Gaps stated by the PR: deployed or test-domain checks, physical phones, installed-PWA/standalone behavior; the install prompt is a synthetic event (dismiss path only), the worker update is a synthetic byte append, and screenshots were not inspected. Read from gh pr view and the PR body; nothing re-run here. Readiness unchanged."
+        "2026-10-27 UTC, local only, not deployed, no device: PR #348 (merged 2026-10-26T14:46:03Z, merge commit a42c626) is docs only (docs/dashboard-pwa.md, new 'Local revalidation - October 2026' section) and records a re-acceptance on origin/main 2e74dc7 with Node 24.21.0, pnpm 11.19.0 and the installed Chromium. Reported: node tests/dashboard-pwa.mjs exit 0 (needs dist/ from pnpm build), node tests/dashboard-pwa-browser.mjs exit 0, pnpm check exit 0, pnpm build exit 0 (existing chunk-size warnings). The browser test covers zero manifest and installability errors (CDP), offline reload and Try again reconnect, unsent draft and the exact 4-entry cache surviving a worker update, revoked identity refused after offline reconnect, and no overflow at 390px. Gaps stated by the PR: deployed or test-domain checks, physical phones, installed-PWA/standalone behavior; the install prompt is a synthetic event (dismiss path only), the worker update is a synthetic byte append, and screenshots were not inspected. Read from gh pr view and the PR body; nothing re-run here. Readiness unchanged.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #50 (zemdregon/whumpo) is the merged change(s) behind the evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -8857,7 +8885,7 @@
       "title": "Remove existing legacy compatibility paths",
       "phase": "F0",
       "priority": "P0",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "implementation",
       "size": "L",
       "dependsOn": [],
@@ -8910,7 +8938,8 @@
         "2026-10-01 current identity release foundation: review v3/archive v2 pins the complete 156-table schema and exact database bindings, removes numbered SQL replay from deployment/local initialization, refuses occupied or active-database reset targets, and initializes only a distinct empty database. Actual local D1/SQLite catalog and current identity invariants, no-write reinitialization, drift refusal, release interruption/no-replay and build/lifecycle checks pass. No remote mutation; fixture/operator conversion, external cleanup, new database selection, coordinated live cutover and owner/device acceptance remain open in #72. See docs/releases.md and draft PR #79.",
         "2026-10-02: Removed 120 retired platform migrations and preservation-only fixture; complete-schema initialization passes SQLite/local D1. Current content-risk/operator, eligibility, 728 feature-inclusion decisions (SQLite/D1), website specification and signed probe-loader checks pass. Deferred CMS/scanner setup is source-aligned and syntax-checked only, not functionally accepted. Imported exact already-shipped Stripe pricing overlay 18e9e88 as 0c8fa8c and reconciled live JSON. See docs/verification.md and docs/identity-web.md. New empty database selection, coordinated test cutover and physical-device acceptance remain open under #72.",
         "2026-10-02: #72 current-only test cutover completed with release 40e45c39-037a-42da-802c-5eacc75bde77 (6c73ac5). New empty D1 has exact 156-table/702-object schema; four Workers, all 39 served assets and binding/secret inventories pass independent readback. Live signed synthetic two-key login, welcome/first-project, logout and revocation pass with fixture cleanup and zero inference. Mobile entry screenshot inspected. Old test account/database and PASSWORD_PEPPER retired, remaining script/bindings unchanged; fresh owner invite saved privately. Physical-device enrollment, human Turnstile/live recovery and native/parent beta gates remain open. CSAM, Daybreak and CMS testing remain deferred. See docs/identity-web.md final release evidence.",
-        "2026-10-29: legacy sweep of src, frontend/src, tools and tests found the current-only inventory already removed; every remaining legacy/compat/alias hit is a rejection guard, a negative test or a provider term. Last tolerance removed: directory serving and the site health check accepted a live directory row without an approved digest (src/directory.ts, src/site-health.ts); both now fail closed. Kept: the project-specification/v2/json helper module name (shared canonical JSON utilities, not a schema reader; renaming would move compiler lock inputs), plan-features unknown-ID rejection, CMS legacy-draft refusals (CMS testing deferred). Needs schema change, not done: tighten directories.live_digest CHECK so a live row requires a digest. Gate: check, verify fast/protection, build, directories/site-health/domain-hosting plain and --d1, review-receipts, boundary-audit pass; tests/tenant-sql-surface.mjs fails on unrelated src/email-change/review-store.ts SQL sites already on main."
+        "2026-10-29: legacy sweep of src, frontend/src, tools and tests found the current-only inventory already removed; every remaining legacy/compat/alias hit is a rejection guard, a negative test or a provider term. Last tolerance removed: directory serving and the site health check accepted a live directory row without an approved digest (src/directory.ts, src/site-health.ts); both now fail closed. Kept: the project-specification/v2/json helper module name (shared canonical JSON utilities, not a schema reader; renaming would move compiler lock inputs), plan-features unknown-ID rejection, CMS legacy-draft refusals (CMS testing deferred). Needs schema change, not done: tighten directories.live_digest CHECK so a live row requires a digest. Gate: check, verify fast/protection, build, directories/site-health/domain-hosting plain and --d1, review-receipts, boundary-audit pass; tests/tenant-sql-surface.mjs fails on unrelated src/email-change/review-store.ts SQL sites already on main.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #442 (zemdregon/whumpo) is the merged change(s) behind the evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -8918,7 +8947,7 @@
       "title": "Accept inference privacy and offline benchmark handoff",
       "phase": "F1",
       "priority": "P0",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "decision",
       "size": "M",
       "dependsOn": [],
@@ -8954,7 +8983,8 @@
       "evidence": [
         "2026-10-02 UTC: extracted from open WH-020/#9 to supply its privacy foundation to WH-116. Current seven-family cohort at 9d64b9a passed with unchanged sources, 35 retained receipts and zero real-provider samples. Official model/privacy terms were rechecked. Current source adds closed evidence validation and compiler-lock fingerprinting; final connected rerun is recorded in the execution issue. Real-model comparison, confidential-route approval and provider activation remain open under WH-020/021.",
         "2026-10-02 UTC final acceptance: strict report admission rejected 19 malformed/contradictory inputs; full current cohort passed 7/7 at 04:58:18\u201305:01:04 UTC with unchanged 542-file fingerprint and 35 receipts (7 acknowledgments, 1 uncertain, 1 released). Real-provider samples remain zero; actual cost/latency remain unknown. Source digest and private run ID are in docs/customer-benchmarks.md. Fourteen roadmap dependency regressions and current graph checks passed. No runtime/provider activation or confidential-customer approval.",
-        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #80 (zemdregon/whumpo) for the inference privacy and offline benchmark handoff; real-provider samples remain zero and stay with WH-020, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place."
+        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #80 (zemdregon/whumpo) for the inference privacy and offline benchmark handoff; real-provider samples remain zero and stay with WH-020, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #438 (zemdregon/whumpo) is the reconciliation that recorded the acceptance evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -8962,7 +8992,7 @@
       "title": "Accept shared feature admission foundation for implementing adapters",
       "phase": "F3",
       "priority": "P1",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "verification",
       "size": "M",
       "dependsOn": [
@@ -9001,7 +9031,8 @@
       "owner": null,
       "evidence": [
         "2026-10-02 UTC: maps the already completed WH-090C/#65 handoff without reopening it or expanding its historical acceptance. e21a106 verified current schema/identity/provider boundaries and live cleanup; e27e088 later changed only favicon assets. Future tier/collaboration adapters remain required by parent WH-090/#62.",
-        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #65 (zemdregon/whumpo) for the shared feature admission foundation; cumulative adapters stay with WH-090, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place."
+        "2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #65 (zemdregon/whumpo) for the shared feature admission foundation; cumulative adapters stay with WH-090, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place.",
+        "2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #66, #67, #73 (zemdregon/whumpo) is the merged change(s) behind the evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open."
       ]
     },
     {
@@ -9009,7 +9040,7 @@
       "title": "Freeze the shared module contract and decompose WH-067",
       "phase": "F5",
       "priority": "P0",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "decision",
       "size": "S",
       "dependsOn": [
@@ -9057,7 +9088,7 @@
       "title": "Cut over to specification schema 3 with module pins and data classes",
       "phase": "F5",
       "priority": "P0",
-      "readiness": "ready",
+      "readiness": "done",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [

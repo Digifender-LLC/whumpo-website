@@ -45,7 +45,7 @@ export async function validateRoadmap(data){
   for(const key of ['title','outcome'])if(!nonempty(task[key]))fail(`${label}.${key} must be nonempty`);
   if(!phases.has(task.phase))fail(`${label}: unknown phase ${task.phase}`);
   oneOf(task.priority,priorities,`${label}.priority`);
-  oneOf(task.readiness,['ready','planned','blocked','deferred'],`${label}.readiness`);
+  oneOf(task.readiness,['ready','planned','blocked','deferred','done'],`${label}.readiness`);
   oneOf(task.kind,['implementation','verification','decision','release'],`${label}.kind`);
   oneOf(task.size,['S','M','L'],`${label}.size`);
   for(const key of ['scope','acceptance','verification','references'])strings(task[key],`${label}.${key}`,true);
@@ -57,6 +57,7 @@ export async function validateRoadmap(data){
    issueURLs.add(task.issue);
   }
   if(task.readiness==='ready'&&task.blockers.length)fail(`${label}: ready tasks cannot have blockers`);
+  if(task.readiness==='done'&&(!task.evidence.length||task.blockers.length))fail(`${label}: done tasks need evidence and no blockers`);
   if(task.readiness==='blocked'&&!task.blockers.length)fail(`${label}: blocked tasks need a concrete blocker`);
   for(const reference of task.references){
    if(isAbsolute(reference)||reference.includes('\\')||reference.split('/').some(part=>part==='..'||part===''))fail(`${label}: reference must be a repository-relative path: ${reference}`);
@@ -167,7 +168,7 @@ export function taskMarkdown(data,task,{local=false}={}){
  const phase=data.phases.find(item=>item.id===task.phase);
  return [
   `## ${text(task.id)} — ${text(task.title)}`,
-  `Phase: **${text(phase.title)}** (${text(task.phase)}). Priority: **${task.priority}**. Planning readiness: **${task.readiness}**. Kind: ${task.kind}. Size: ${task.size}.`,
+  `Phase: **${text(phase.title)}** (${text(task.phase)}). Priority: **${task.priority}**. Planning readiness: **${task.readiness}**${task.readiness==='done'?' (complete; see Evidence)':''}. Kind: ${task.kind}. Size: ${task.size}.`,
   `Reviewed: ${data.reviewedAt}. Source baseline: \`${data.sourceCommit}\`. This is a planning snapshot, not current execution or deployment status.`,
   `Follow the [agent execution contract](${link('docs/roadmap/execution.md')}) and [canonical backlog](${link('docs/roadmap/backlog.json')}). Re-read the current feature contracts before work.`,
   '### Outcome',task.outcome,
@@ -194,7 +195,11 @@ export function renderRoadmap(data){
  ];
  for(const phase of data.phases){
   lines.push(`# ${text(phase.id)} — ${text(phase.title)}`,phase.outcome);
-  for(const task of ordered(data.tasks.filter(item=>item.phase===phase.id)))lines.push(taskMarkdown(data,task,{local:true}).trimEnd());
+  const inPhase=ordered(data.tasks.filter(item=>item.phase===phase.id));
+  const open=inPhase.filter(item=>item.readiness!=='done'),done=inPhase.filter(item=>item.readiness==='done');
+  for(const task of open)lines.push(taskMarkdown(data,task,{local:true}).trimEnd());
+  if(done.length)lines.push(`# ${text(phase.id)} — Done (${done.length})`,'Verified complete with recorded evidence; kept for history and dependency context. Not candidates for new work.');
+  for(const task of done)lines.push(taskMarkdown(data,task,{local:true}).trimEnd());
  }
  return lines.join('\n\n')+'\n';
 }
@@ -219,10 +224,12 @@ async function main(args){
   process.stdout.write(taskMarkdown(data,task));return;
  }
  if(command==='next'){
-  console.log('Ready planning candidates only. Check live issue state/claims and completion evidence for every dependency before execution. No external state was read.');
+  const byId=new Map(data.tasks.map(task=>[task.id,task]));
+  console.log('Ready planning candidates only (done tasks excluded; done dependencies count as met). Check live issue state/claims and completion evidence for every dependency before execution. No external state was read.');
+  const unmet=task=>task.dependsOn.filter(id=>byId.get(id).readiness!=='done');
   const candidates=ordered(data.tasks.filter(task=>task.readiness==='ready'));
   if(!candidates.length)console.log('No ready candidates. Resolve a recorded blocker or refine a planned task.');
-  for(const task of candidates)console.log(`${task.priority} ${task.id} ${task.title}\n  ${task.dependsOn.length?`Verify prerequisites: ${task.dependsOn.join(', ')}`:'Planning root; still requires live coordination.'} | ${task.issue??'No issue linked'}`);
+  for(const task of candidates)console.log(`${task.priority} ${task.id} ${task.title}\n  ${unmet(task).length?`Verify prerequisites: ${unmet(task).join(', ')}`:task.dependsOn.length?'All dependencies done; still requires live coordination.':'Planning root; still requires live coordination.'} | ${task.issue??'No issue linked'}`);
   return;
  }
  const rendered=renderRoadmap(data);

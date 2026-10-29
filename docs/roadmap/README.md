@@ -36,6 +36,8 @@ node tools/roadmap.mjs next
 node tools/roadmap.mjs show WH-001
 ```
 
+Readiness values: `ready` (candidate), `planned`, `blocked` (needs a recorded blocker), `deferred`, and `done`. `done` means the task's own acceptance or contract freeze is met on `main`; it requires at least one evidence entry citing the merged PR and no blockers, and anything out of scope stays in the evidence text or a child task. `next` skips `done` tasks and treats a `done` dependency as met; `render` lists done tasks last in each phase under a "Done" heading. Partially live work stays `ready` or `planned`.
+
 `next` shows **planning candidates**, not live availability. Read the mapped GitHub issue and dependency evidence before claiming work. GitHub Issues owns current execution state; JSON owns the specification, sequencing and readiness. There is no automatic deployment, issue synchronization or external call in this tool.
 
 ## Product direction and boundaries
