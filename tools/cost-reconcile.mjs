@@ -36,4 +36,5 @@ try {
   if(heads.length>10000)throw Error('bound');
   console.log(JSON.stringify(reconciliationReport(statements,heads.map(r=>JSON.parse(r.event_json)),{toleranceMicros:tolerance}),null,2));
  }finally{await dispose();}
-} catch(error) { console.error('Cost reconciliation unavailable ('+(error?.code??error?.message??'error')+'). '+usage+' Check the files, the schema and authorization. Nothing was written.');process.exitCode=1; }
+} catch(error) { // A SyntaxError message quotes the start of the private statement file, so only a code is printed.
+ console.error('Cost reconciliation unavailable ('+(error instanceof SyntaxError?'INVALID_JSON':error?.code??error?.message??'error')+'). '+usage+' Check the files, the schema and authorization. Nothing was written.');process.exitCode=1; }
