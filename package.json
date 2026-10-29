@@ -134,6 +134,7 @@
     "test:cost-events-contract": "node tests/cost-events-contract.mjs",
     "test:cost-event-adapters": "node tests/cost-event-adapters.mjs",
     "test:cost-events-store": "node tests/cost-events-store.mjs && node tests/cost-events-store.mjs --d1",
+    "test:cost-reconcile": "node tests/cost-reconcile.mjs && node tests/cost-reconcile.mjs --d1",
     "test:email-change-store": "node tests/email-change-store.mjs && node tests/email-change-store.mjs --d1",
     "test:connector-rule-authority": "node tests/connector-rule-authority.mjs",
     "test:connector-records-store": "node tests/connector-records-store.mjs && node tests/connector-records-store.mjs --d1",

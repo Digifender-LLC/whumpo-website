@@ -6101,6 +6101,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 ### Evidence
 
 - 2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): readiness planned to ready. Every dependency (WH-170) is accepted in its own evidence, so this is an open planning candidate; its acceptance is unchanged and not claimed.
+- 2026-10-29 UTC (branch wh-171-cost-reconcile from origin/main; source and disposable-D1 verification only, no deploy, schema change, secret, provider call or live read): src/cost-reconcile.ts validates and dedupes exported statements by (provider, invoiceId, lineKey), keeps a liability register with explicit unknown amounts and produces the aggregate per provider and period reconciliation report (shadow excluded, account-wide floors and allowances never split across tenants, no identifiers in the output). tools/cost-reconcile.mjs reads CSV or JSON statements and the cost_events heads read-only (local D1 or --remote) and writes nothing. tests/cost-reconcile.mjs passes on in-memory SQLite and local D1 (dedupe, unknown amounts, shadow exclusion, floor and allowance non-splitting, mismatch reporting, malformed, tenant-bearing and content-bearing rows rejected). No statement table, period-close table, live billing call or retention of company totals; lateAfterClose is reported as null until a period-close table exists. WH-171 stays open until the PR merges.
 
 ## WH-172 — Accept shadow cost events end to end locally
 

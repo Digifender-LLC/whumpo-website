@@ -8786,6 +8786,14 @@
      ]
     },
     {
+     "file": "tools/cost-reconcile.mjs",
+     "kind": "tool",
+     "match": "wrangler-remote",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
      "file": "tools/database.mjs",
      "kind": "tool",
      "match": "via-import",
