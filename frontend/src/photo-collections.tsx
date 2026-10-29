@@ -1,8 +1,9 @@
 import {useRef,useState} from 'react';
+import {useQuery,useQueryClient} from '@tanstack/react-query';
 import type {OwnerFileCollections} from '../../src/shared-modules/shape';
 import {Button} from './components/ui/button';
 import {api,message} from './lib/api';
-import {candidateOf,collectionFiler,collectionRemover,collectionKey,collectionLabel,collectionOf,fileableCollections,filesActivationAction,filesSetupAction,galleryReady,galleryReviewAction} from './lib/photo-collections';
+import {ownerCollectionsPath,candidateOf,collectionFiler,collectionRemover,collectionKey,collectionLabel,collectionOf,fileableCollections,filesActivationAction,filesSetupAction,galleryReady,galleryReviewAction} from './lib/photo-collections';
 import {useWorkspace} from './workspace';
 
 const states={inactive:'Disabled',active:'Active',suspended:'Suspended',migrating:'Migrating'} as const;
@@ -33,6 +34,19 @@ export function PhotoCollectionControl({project,fileId,data,onFiled}:{project:st
   {options.length>1&&<label className="flex flex-col gap-1 text-xs font-medium">Collection<select value={collectionKey(selected)} onChange={e=>setChoice(e.target.value)} className="h-11 px-3 border rounded-md bg-card">{options.map(c=><option key={collectionKey(c)} value={collectionKey(c)}>{collectionLabel(c)}</option>)}</select></label>}
   <Button type="button" variant="secondary" size="sm" className="min-h-11" disabled={busy} onClick={()=>void add()}>{options.length>1?'Add to collection':`Add to ${selected.collectionId}`}</Button>
   {error&&<p role="alert" className="w-full text-xs">{error}</p>}
+ </div>;
+}
+
+/** WH-128 Chat upload handoff: after the Chat uploader saves a photo, the owner can confirm filing it into one of their
+ * active owner collections. It is the same owner `files.putBytes` request as the Photos panel (one request id kept until
+ * confirmed, so a lost reply replays the receipt); the server repeats project, instance and collection checks and refuses
+ * foreign or non-owner collections. Nothing is published and no safety state changes. */
+export function ChatUploadHandoff({owner,project,name,fileId}:{owner:string;project:string;name:string;fileId:string}){
+ const key=['photo-collections',owner,project],qc=useQueryClient(),q=useQuery({queryKey:key,queryFn:()=>api<OwnerFileCollections>(ownerCollectionsPath(project)),gcTime:0});
+ if(!q.data||!collectionOf(q.data,fileId)&&!(candidateOf(q.data,fileId)&&fileableCollections(q.data).length))return null;
+ return <div className="space-y-2 rounded-md border bg-secondary/40 p-3" data-chat-upload-handoff={fileId}>
+  <p className="text-sm break-words">Add <strong>{name}</strong> to a photo collection? Filing does not publish it or change your website.</p>
+  <PhotoCollectionControl project={project} fileId={fileId} data={q.data} onFiled={()=>void qc.invalidateQueries({queryKey:key})}/>
  </div>;
 }
 

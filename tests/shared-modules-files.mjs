@@ -339,6 +339,40 @@ try{
   const prompt=m.agentPrompt({})+m.agentPrompt({},'website');for(const word of ['module-files','Add to collection','Prepare gallery page'])assert.ok(!prompt.includes(word),word);
  });
 
+ await check('Chat upload handoff: confirm, replay, foreign collection refusal and lost reply',async()=>{
+  const built=await build({entryPoints:['frontend/src/lib/photo-collections.ts'],bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
+  const ui=await import('data:text/javascript;base64,'+Buffer.from(built.outputFiles[0].text).toString('base64'));
+  const c=await owner(),workspace=(o,path,init={})=>m.worker.fetch(new Request('https://whumpo.com/api'+path,{...init,headers:{cookie:`__Host-whumpo_session=${o.token}`,origin:'https://whumpo.com','content-type':'application/json'}}),{...(fixture.env??{}),...env},{waitUntil(){}});
+  const facts=async o=>(await (await workspace(o,ui.ownerCollectionsPath(o.project))).json());
+  let drop=false;const sends=[];
+  const send=o=>async(path,init)=>{sends.push(JSON.parse(init.body));const r=await workspace(o,path,init),body=await r.json();if(drop){drop=false;throw Error('Connection lost');}if(!r.ok)throw Object.assign(Error(body.error??body.code),{code:body.code});return body;};
+  await configureFixtureModules(c.scope,c.user,c.project,[accessInstance,filesInstance]);await activation(c,'members');await activation(c,'media');
+  // The Chat uploader's own route (uploadPhoto) saves the photo; the handoff then files it by id and exact digest.
+  const chatPhoto=async name=>{const fileId=id(),r=await m.uploadPhoto(new Request('https://whumpo.com/',{method:'PUT',headers:{'content-type':'image/jpeg','x-whumpo-photo-handoff':'null','x-photo-name':encodeURIComponent(name)},body:jpegA}),{...env,DB:c.scope},c.user,c.project,fileId);assert.equal(r.status,'ready');return fileId;};
+  const p1=await chatPhoto('Chat one'),p2=await chatPhoto('Chat two');
+  let state=await facts(c);const library=ui.fileableCollections(state)[0];
+  // Lost reply: the first confirm commits but its answer is lost; the retry reuses the request id and replays the receipt.
+  const file=ui.collectionFiler(send(c));
+  drop=true;await assert.rejects(file(c.project,library,ui.candidateOf(state,p1)),/Connection lost/);
+  const replay=await file(c.project,library,ui.candidateOf(state,p1));
+  assert.equal(replay.receipt.replayed,true);assert.equal(sends[0].requestId,sends[1].requestId);
+  assert.equal((await row('SELECT count(*) n FROM module_files WHERE file_id=?',p1)).n,1);
+  // Confirm after the confirmation: a fresh request for an already-filed photo is refused, so no second row appears.
+  const again=await ownerCall(c,envelope(await instance(c,'media'),'files.putBytes',{target:{collectionId:'library'},input:{fileId:p1,sha256:ui.candidateOf(state,p1).sha256}}));
+  assert.notEqual(again.status,200);assert.equal((await row('SELECT count(*) n FROM module_files WHERE file_id=?',p1)).n,1);
+  // Foreign collection: another owner's files instance is refused for this project's photo and nothing is filed.
+  const foreign=await ownerCall(c,envelope(await instance(a,'media'),'files.putBytes',{target:{collectionId:'library'},input:{fileId:p2,sha256:ui.candidateOf(state,p2).sha256}}));
+  assert.notEqual(foreign.status,200);assert.equal(await row('SELECT 1 FROM module_files WHERE file_id=?',p2),null);
+  // A staff-only collection of the owner's own instance is refused too.
+  const staffOnly=await ownerCall(c,envelope(await instance(c,'media'),'files.putBytes',{target:{collectionId:'private'},input:{fileId:p2,sha256:ui.candidateOf(state,p2).sha256}}));
+  assert.notEqual(staffOnly.status,200);assert.equal(await row('SELECT 1 FROM module_files WHERE file_id=?',p2),null);
+  state=await facts(c);assert.equal(ui.collectionOf(state,p1).collectionId,'library');assert.ok(ui.candidateOf(state,p2));
+  // The Chat uploader wires the confirmation; the handoff adds no route, reads no bytes and reaches no model.
+  const chatSource=await readFile('frontend/src/chat-interaction.tsx','utf8'),controls=await readFile('frontend/src/photo-collections.tsx','utf8');
+  assert.ok(chatSource.includes('<ChatUploadHandoff')&&chatSource.includes('onSaved='));assert.ok(controls.includes('export function ChatUploadHandoff')&&!/fetch\(/.test(controls));
+  assert.equal(network,0);
+ });
+
  await check('owner photo collection setup: the typed control prepares the exact standard website review; saving and activation stay separate',async()=>{
   const built=await build({entryPoints:['frontend/src/lib/photo-collections.ts'],bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
   const ui=await import('data:text/javascript;base64,'+Buffer.from(built.outputFiles[0].text).toString('base64'));
