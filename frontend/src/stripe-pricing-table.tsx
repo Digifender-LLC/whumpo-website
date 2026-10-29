@@ -1,6 +1,8 @@
-import { createElement, useEffect, useState } from 'react';
+import { createElement, useEffect, useRef, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Button } from './components/ui/button';
+import { Skeleton } from './components/ui/skeleton';
+import { PlanCards } from './plan-features';
 
 type Config = {
   publishableKey: string;
@@ -109,6 +111,32 @@ export function StripePricingTable({
     };
   }, [attempt]);
 
+  const host = useRef<HTMLDivElement>(null);
+  const [painted, setPainted] = useState(false);
+  const isReady = state.status === 'ready';
+  useEffect(() => {
+    setPainted(false);
+    const el = host.current;
+    if (!el || !isReady) return;
+    // shortcut: breaks if Stripe changes its DOM; drop when Stripe exposes a title prop
+    const label = 'Whumpo plans and pricing';
+    const mark = () => {
+      const table = el.querySelector('stripe-pricing-table');
+      const frames = [
+        ...el.querySelectorAll('iframe'),
+        ...(table?.shadowRoot?.querySelectorAll('iframe') ?? []),
+      ];
+      for (const frame of frames) if (frame.title !== label) frame.title = label;
+      if (frames.length) setPainted(true);
+    };
+    const observer = new MutationObserver(mark);
+    observer.observe(el, { childList: true, subtree: true });
+    const shadow = el.querySelector('stripe-pricing-table')?.shadowRoot;
+    if (shadow) observer.observe(shadow, { childList: true, subtree: true });
+    mark();
+    return () => observer.disconnect();
+  }, [isReady, audience, billingInterval]);
+
   const tableKey =
     `${audience}${billingInterval === 'monthly' ? 'Monthly' : 'Annual'}TableId` as const;
   const tableId = state.status === 'ready' ? state.config[tableKey] : '';
@@ -119,7 +147,13 @@ export function StripePricingTable({
       aria-label={`${audience === 'personal' ? 'Personal' : 'Business'} ${billingInterval} plans`}
     >
       {state.status === 'ready' && tableId ? (
-        <>
+        <div ref={host} className="relative min-h-225">
+          {!painted && (
+            <div aria-hidden="true" className="absolute inset-x-0 top-24 grid gap-6 md:grid-cols-2">
+              <Skeleton className="h-96 rounded-xl" />
+              <Skeleton className="h-96 rounded-xl" />
+            </div>
+          )}
           {audience === 'personal' && (
             <p className="text-center text-sm font-semibold text-ink">
               7-day free trial · Payment method required
@@ -133,15 +167,22 @@ export function StripePricingTable({
             'pricing-table-id': tableId,
             'publishable-key': state.config.publishableKey,
           })}
-        </>
+        </div>
+      ) : state.status === 'loading' ? (
+        <div className="min-h-160">
+          <p role="status" className="mb-6 text-center text-heading font-bold">
+            Loading plans…
+          </p>
+          <div aria-hidden="true" className="grid gap-6 md:grid-cols-2">
+            <Skeleton className="h-96 rounded-xl" />
+            <Skeleton className="h-96 rounded-xl" />
+          </div>
+        </div>
       ) : (
-        <div className="flex h-full min-h-80 flex-col items-center justify-center rounded-xl border border-line bg-surface-raised p-8 text-center">
-          <p role="status" className="text-xl font-bold">
-            {state.status === 'loading'
-              ? 'Loading plans…'
-              : state.status === 'error'
-                ? 'Plans could not load'
-                : 'Plans are coming soon'}
+        <div className="grid gap-8">
+        <div className="flex flex-col items-center justify-center rounded-xl border border-line bg-surface-raised p-8 text-center">
+          <p role="status" className="text-heading font-bold">
+            {state.status === 'error' ? 'Plans could not load' : 'Plans are coming soon'}
           </p>
           <p className="mt-4 max-w-md text-sm text-ink-muted">
             The invite-only preview is free. Explore Whumpo while we prepare our paid plans.
@@ -164,6 +205,8 @@ export function StripePricingTable({
               Explore with an invite
             </Link>
           </Button>
+        </div>
+        <PlanCards audience={audience} billingInterval={billingInterval} />
         </div>
       )}
     </div>
