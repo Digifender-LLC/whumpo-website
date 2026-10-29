@@ -19,6 +19,7 @@ export async function readDirectory(db:D1Database,user:string,project:string){
 }
 import {requireRebuiltReply,rebuiltGuard} from './reviewed-rebuild';
 import {receiptStatement,reviewedReply,reviewChangedMessage} from './chat-review-receipts';
+import {compactedReview,turnoverStatements} from './review-turnover';
 const directoryReply=(name:string,change:string,kind:string,review:string,digest:string)=>`${name}\n\n${change}\n\n${kind==='edit'?'Your existing public snapshot will not change. ':''}Review ${review}\nSnapshot SHA-256: ${digest}\nNothing changes until you use this review’s confirmation button within 10 minutes.`;
 /** The reply a directory review shows, rebuilt from the saved row; undefined for edit, remove and restore, whose text embeds the
  * draft at review time (not saved on the row), so they cannot be rebuilt without a schema change. */
@@ -88,6 +89,7 @@ export async function directoryAction(db:D1Database,user:string,turn:string,acti
  const digest=await hashToken(snapshot);
  const reply=directoryReply(p.name,change,kind,turn,digest);
  return result(reply,[
+  ...await turnoverStatements(db,'directory_reviews',{user,project}),
   db.prepare('INSERT OR IGNORE INTO directories(project_id) SELECT ? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(project,turn,user),
   db.prepare('INSERT INTO directory_reviews(id,user_id,project_id,kind,snapshot_json,digest,expected_revision,publication_revision,expires_at,source_review_id) SELECT ?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(turn,user,project,kind,snapshot,digest,p.revision,p.current_publication??-1,new Date(Date.now()+600000).toISOString(),source,turn,user),
   await receiptStatement(db,user,turn,'directory',turn,reply)
@@ -102,7 +104,7 @@ export async function directoryCommand(db:D1Database,user:string,turn:string,com
    if(!uuid.test(rest))throw new DirectoryError(400,"Choose the exact directory review using its confirmation control.");
    if(!await reviewedReply(db,user,'directory',rest))throw new DirectoryError(409,reviewChangedMessage);
    const r=await db.prepare('SELECT r.*,p.name FROM directory_reviews r JOIN projects p ON p.id=r.project_id WHERE r.id=? AND r.user_id=?').bind(rest,user).first<{id:string;status:string;kind:string;project_id:string;expires_at:string;snapshot_json:string;digest:string;source_review_id:string|null;name:string}>();
-   if(!r)throw new DirectoryError(404,'Directory review not found.');
+   if(!r)throw await compactedReview(db,'directory_reviews',rest,user,(s,m)=>new DirectoryError(s,m))??new DirectoryError(404,'Directory review not found.');
    if(r.status==='applied')return result("That review was already applied. Ask to read the current directory for project "+r.project_id+' for current state.');
    if(r.expires_at<=new Date().toISOString())throw new DirectoryError(409,'This review expired. Prepare a fresh review.');
    const expected=rebuiltDirectoryReply(r),g=rebuiltGuard(user,expected===undefined?undefined:await requireRebuiltReply(db,user,rest,expected));

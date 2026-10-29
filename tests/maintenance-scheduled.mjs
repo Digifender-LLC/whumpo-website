@@ -17,6 +17,11 @@ try{
  sql.prepare("INSERT INTO identity_sessions VALUES(?,?,?,1,1,'web','ready-key','passkey',unixepoch()-7200,unixepoch()-7200,unixepoch()-1),(?,?,?,1,1,'web','ready-key','passkey',unixepoch(),unixepoch(),unixepoch()+3600)").run(expired,'b'.repeat(64),ready,current,'c'.repeat(64),ready);
  sql.prepare("INSERT INTO identity_grants VALUES(?,?,?,1,1,'web','enrollment',?,'registration',unixepoch()-3600,0,'pending-key',NULL,unixepoch()-3600,unixepoch()-1800)").run(grant,'d'.repeat(64),enrolling,attempt);
 
+ // WH-182: an expired, never-applied review of an idle project, and a live pending one that must stay.
+ const reviewProject=crypto.randomUUID(),lapsedReview=crypto.randomUUID(),liveReview=crypto.randomUUID();
+ sql.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Synthetic','Synthetic review turnover','draft','2026-10-01','2026-10-01')").run(reviewProject,ready);
+ sql.prepare('INSERT INTO directories(project_id) VALUES(?)').run(reviewProject);
+ for(const [review,at] of [[lapsedReview,'2000-01-01T00:00:00.000Z'],[liveReview,new Date(Date.now()+600000).toISOString()]])sql.prepare("INSERT INTO directory_reviews(id,user_id,project_id,kind,snapshot_json,digest,expected_revision,publication_revision,expires_at) VALUES(?,?,?,'edit','[]',?,?,0,?)").run(review,ready,reviewProject,'a'.repeat(64),review===lapsedReview?1:2,at);
  let listCalls=0;
  const env={DB:db,FILES:{list:async()=>{listCalls++;return {objects:[]};},delete:async()=>assert.fail('Empty photo fixture must not delete')}};
  await assert.rejects(worker.scheduled({cron:'17 3 * * *'},env),/Scheduled maintenance or telemetry failed/);
@@ -26,6 +31,10 @@ try{
  assert.equal(sql.prepare('SELECT count(*) n FROM identity_grants WHERE id=?').get(grant).n,0);
  assert.equal(sql.prepare('SELECT status FROM identity_attempts WHERE id=?').get(attempt).status,'open');
  assert.equal(sql.prepare("SELECT status FROM identity_credentials WHERE id='pending-key'").get().status,'staged');
+ // The daily pass sealed the lapsed review into a receipt and removed it; the live pending review stays.
+ assert.equal(sql.prepare('SELECT count(*) n FROM directory_reviews WHERE id=?').get(lapsedReview).n,0);
+ assert.equal(sql.prepare('SELECT outcome FROM review_receipts WHERE family=? AND id=?').get('directory_reviews',lapsedReview).outcome,'expired');
+ assert.equal(sql.prepare('SELECT count(*) n FROM directory_reviews WHERE id=?').get(liveReview).n,1);
  let report=await maintenanceReport(db);
  assert.equal(report.jobs.find(j=>j.job==='traffic').state,'failed');
  for(const name of ['identity','chat_drafts','imports','fair_use','guest_previews','applications','contacts','photos'])assert.equal(report.jobs.find(j=>j.job===name).state,'completed',name);

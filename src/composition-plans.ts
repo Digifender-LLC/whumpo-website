@@ -1,6 +1,7 @@
 import {capabilityRequest,composeCapabilities,capabilityCatalogDigest,type CapabilityRequest} from './capability-catalog';
 import {BackendError} from './backend-versions';
 import {hashToken} from './security';
+import {admitWithTurnover,compactedReview} from './review-turnover';
 
 type PlanRow={id:string;user_id:string;project_id:string;request_hash:string;catalog_digest:string;plan_json:string;details_revision:number;backend_count:number;backend_revision:number;extension_scope:string;expires_at:number};
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
@@ -24,6 +25,7 @@ export async function prepareCompositionPlan(db:D1Database,user:string,id:string
   return {reply:describePlan(plan),inspection:JSON.stringify({type:'capability_plan',planId:id,catalogDigest:row.catalog_digest,expiresAt:row.expires_at,projectId:row.project_id,...plan}),statements:[] as D1PreparedStatement[]};
  };
  const previous=await read();if(previous)return result(previous);
+ const gone=await compactedReview(db,'composition_plans',id,user,(s,m)=>new BackendError(s,m),requestHash);if(gone)throw gone;
  const plan=composeCapabilities(request),digest=await capabilityCatalogDigest();
  if(plan.extension){
   const base=plan.extension.baseVersionId;
@@ -31,7 +33,7 @@ export async function prepareCompositionPlan(db:D1Database,user:string,id:string
   if(base&&!await db.prepare('SELECT id FROM backend_versions WHERE id=? AND project_id=?').bind(base,request.projectId).first())throw new BackendError(404,'Base backend version not found');
  }
  const json=JSON.stringify(plan),expires=Math.floor(Date.now()/1000)+900;
- try{await db.prepare('INSERT INTO composition_plans(id,user_id,project_id,request_hash,catalog_digest,plan_json,details_revision,backend_count,backend_revision,extension_scope,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)').bind(id,user,request.projectId,requestHash,digest,json,state.details_revision,state.backend_count,state.backend_revision,plan.extension?.scope??'none',expires).run();}
+ try{await admitWithTurnover(db,'composition_plans',{user,project:request.projectId},db.prepare('INSERT INTO composition_plans(id,user_id,project_id,request_hash,catalog_digest,plan_json,details_revision,backend_count,backend_revision,extension_scope,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)').bind(id,user,request.projectId,requestHash,digest,json,state.details_revision,state.backend_count,state.backend_revision,plan.extension?.scope??'none',expires));}
  catch{const saved=await read();if(saved)return result(saved);throw new BackendError(409,'The project or planning allowance changed. Request a fresh capability plan.');}
  const saved=await read();if(!saved)throw new BackendError(503,'Saved capability plan unavailable');return result(saved);
 }
@@ -41,7 +43,7 @@ export async function requireExtensionPlan(db:D1Database,user:string,project:str
  if(typeof planId!=='string'||!uuid.test(planId))throw new BackendError(409,'Inspect the capability catalog and save a missing-capability plan before generating custom code.');
  const state=await ownedProject(db,user,project);
  const row=await db.prepare('SELECT * FROM composition_plans WHERE id=? AND user_id=? AND project_id=?').bind(planId,user,project).first<PlanRow>();
- if(!row)throw new BackendError(404,'Capability plan not found');
+ if(!row)throw await compactedReview(db,'composition_plans',planId,user,(s,m)=>new BackendError(s,m))??new BackendError(404,'Capability plan not found');
  if(row.extension_scope!==scope)throw new BackendError(409,'This plan does not allow that custom extension. Use its supported configuration or library actions.');
  if(row.expires_at<=Math.floor(Date.now()/1000)||row.catalog_digest!==await capabilityCatalogDigest()||row.details_revision!==state.details_revision||row.backend_revision!==state.backend_revision)throw new BackendError(409,'The capability plan is stale. Inspect the current project and prepare a new plan.');
  const plan=JSON.parse(row.plan_json) as ReturnType<typeof composeCapabilities>;

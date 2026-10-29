@@ -1,6 +1,7 @@
 import {projectRuntime} from './runtime-lane';
 import {hashToken} from './security';
 import {BackendError,listBackends,testBackend} from './backend-versions';
+import {admitWithTurnover,compactedReview} from './review-turnover';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const bytes=(s:string)=>new TextEncoder().encode(s).length;
 type Review={id:string;user_id:string;project_id:string;version_id:string;base_revision:number;before_json:string;input_json:string;after_json:string|null;result_json:string|null;status:string;expires_at:string;restore_review_id:string|null;restore_side:'before'|'after'|null};
@@ -20,11 +21,12 @@ export async function prepareBackendState(db:D1Database,service:Fetcher,user:str
  const read=()=>db.prepare('SELECT * FROM backend_state_reviews WHERE id=?').bind(id).first<Review>();
  let review=await read();
  if(!review){
+  const gone=await compactedReview(db,'backend_state_reviews',id,user,(s,m)=>new BackendError(s,m));if(gone)throw gone;
   await db.prepare("INSERT OR IGNORE INTO backend_state(project_id) SELECT id FROM projects WHERE id=? AND owner_user_id=?").bind(project,user).run();
   const state=await db.prepare('SELECT revision,state_json FROM backend_state WHERE project_id=?').bind(project).first<{revision:number;state_json:string}>();
   if(!state)throw new BackendError(404,'Project not found');
   if(bytes(JSON.stringify({state:JSON.parse(state.state_json),input}))>8192)throw new BackendError(400,'Combined state and input exceed the execution limit');
-  try{await db.prepare('INSERT INTO backend_state_reviews(id,user_id,project_id,version_id,base_revision,before_json,input_json) VALUES(?,?,?,?,?,?,?)').bind(id,user,project,version,state.revision,state.state_json,inputJson).run();}catch{/* Recover an exact reservation after a lost acknowledgment. */}
+  try{await admitWithTurnover(db,'backend_state_reviews',{user,project},db.prepare('INSERT INTO backend_state_reviews(id,user_id,project_id,version_id,base_revision,before_json,input_json) VALUES(?,?,?,?,?,?,?)').bind(id,user,project,version,state.revision,state.state_json,inputJson));}catch{/* Recover an exact reservation after a lost acknowledgment. */}
   review=await read();if(!review)throw new BackendError(409,'Data review unavailable; state changed or review storage is full');
  }
  if(review.restore_review_id!==null||review.user_id!==user||review.project_id!==project||review.version_id!==version||review.input_json!==inputJson)throw new BackendError(409,'Review ID already used');
@@ -39,7 +41,8 @@ export async function prepareBackendState(db:D1Database,service:Fetcher,user:str
 }
 // Call only from an authenticated user confirmation route/command, never an AI action.
 export async function confirmBackendState(db:D1Database,user:string,id:string){
- const before=await readBackendReview(db,user,id);if(before.status==='applied')return before;
+ let before;try{before=await readBackendReview(db,user,id);}catch(error){throw (error as {status?:number}).status===404?await compactedReview(db,'backend_state_reviews',id,user,(s,m)=>new BackendError(s,m))??error:error;}
+ if(before.status==='applied')return before;
  if(before.status!=='ready')throw new BackendError(409,'This data review is not ready to apply');
  try{await db.prepare("UPDATE backend_state_reviews SET status='applied' WHERE id=? AND user_id=? AND status='ready'").bind(id,user).run();}catch{
   const found=await readBackendReview(db,user,id);if(found.status==='applied')return found;
@@ -71,9 +74,10 @@ export async function restoreBackendState(db:D1Database,user:string,id:string,sn
  const read=()=>db.prepare('SELECT * FROM backend_state_reviews WHERE id=?').bind(id).first<Review>();
  let review=await read();
  if(!review){
+  const gone=await compactedReview(db,'backend_state_reviews',id,user,(s,m)=>new BackendError(s,m));if(gone)throw gone;
   const current=await db.prepare('SELECT revision,state_json FROM backend_state WHERE project_id=?').bind(source.project_id).first<{revision:number;state_json:string}>();
   if(!current)throw new BackendError(404,'Project data not found');
-  try{await db.prepare("INSERT INTO backend_state_reviews(id,user_id,project_id,version_id,base_revision,before_json,input_json,restore_review_id,restore_side) VALUES(?,?,?,?,?,?,'null',?,?)").bind(id,user,source.project_id,source.version_id,current.revision,current.state_json,snapshot,side).run();}catch{/* Recover a committed reservation without changing its snapshot. */}
+  try{await admitWithTurnover(db,'backend_state_reviews',{user,project:source.project_id},db.prepare("INSERT INTO backend_state_reviews(id,user_id,project_id,version_id,base_revision,before_json,input_json,restore_review_id,restore_side) VALUES(?,?,?,?,?,?,'null',?,?)").bind(id,user,source.project_id,source.version_id,current.revision,current.state_json,snapshot,side));}catch{/* Recover a committed reservation without changing its snapshot. */}
   review=await read();if(!review)throw new BackendError(409,'Restore review unavailable; data changed or review storage is full');
  }
  if(review.user_id!==user||review.project_id!==source.project_id||review.restore_review_id!==snapshot||review.restore_side!==side)throw new BackendError(409,'Review ID already used');

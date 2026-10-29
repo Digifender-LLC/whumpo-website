@@ -1,4 +1,5 @@
 import {reviewedReplyGuard,type ReviewedReply} from './chat-review-receipts';
+import {admitWithTurnover,compactedReview} from './review-turnover';
 import {ConnectionError,type GitHubConfig} from './github-connection';
 import type {GitHubGrantReview} from './github-grant-shape';
 export type {GitHubGrantReview} from './github-grant-shape';
@@ -12,7 +13,7 @@ const view=(r:Review):GitHubGrantReview=>({id:r.id,state:r.state==='review'&&r.e
 async function owned(db:D1Database,user:string,id:string){
  if(!validID(id))throw new ConnectionError(400,'Choose a saved GitHub access review.');
  const row=await db.prepare('SELECT * FROM github_grant_revocations WHERE id=? AND user_id=?').bind(id,user).first<Review>();
- if(!row)throw new ConnectionError(404,'GitHub access review not found.');return row;
+ if(!row)throw await compactedReview(db,'github_grant_revocations',id,user,(s,m)=>new ConnectionError(s,m))??new ConnectionError(404,'GitHub access review not found.');return row;
 }
 export async function githubGrantReviews(db:D1Database,user:string){
  const {results}=await db.prepare('SELECT * FROM github_grant_revocations WHERE user_id=? ORDER BY created_at DESC,id DESC LIMIT 100').bind(user).all<Review>();return {reviews:results.map(view)};
@@ -21,12 +22,13 @@ export async function readGitHubGrant(db:D1Database,user:string,id:string){retur
 export async function reviewGitHubGrant(db:D1Database,user:string,id:string,config:GitHubConfig|undefined){
  if(!validID(id))throw new ConnectionError(400,'Choose a unique GitHub access review ID.');
  const old=await db.prepare('SELECT * FROM github_grant_revocations WHERE id=? AND user_id=?').bind(id,user).first<Review>();if(old)return view(old);
+ const gone=await compactedReview(db,'github_grant_revocations',id,user,(s,m)=>new ConnectionError(s,m));if(gone)throw gone;
  if(!config)throw new ConnectionError(503,'GitHub connection is not configured.');
  const current=await db.prepare("SELECT c.github_user_id,c.login,t.id FROM github_connections c JOIN github_token_vault t ON t.id=c.active_token_id JOIN github_refresh_custody r ON r.token_id=t.id WHERE c.user_id=? AND t.user_id=? AND t.state='active' AND t.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND r.client_id=? AND r.github_user_id=c.github_user_id").bind(user,user,config.clientId).first<{github_user_id:string;login:string;id:string}>();
  if(!current)throw changed();
  const rows=await db.prepare('SELECT token_id FROM github_refresh_custody WHERE user_id=? AND client_id=? AND github_user_id=? ORDER BY token_id').bind(user,config.clientId,current.github_user_id).all<{token_id:string}>();
  const created=new Date().toISOString(),expires=new Date(Date.now()+600000).toISOString();
- try{await db.prepare("INSERT INTO github_grant_revocations(id,user_id,client_id,github_user_id,login,token_id,token_ids,state,created_at,expires_at) VALUES(?,?,?,?,?,?,?,'review',?,?)").bind(id,user,config.clientId,current.github_user_id,current.login,current.id,JSON.stringify(rows.results.map(r=>r.token_id)),created,expires).run();}
+ try{await admitWithTurnover(db,'github_grant_revocations',{user},db.prepare("INSERT INTO github_grant_revocations(id,user_id,client_id,github_user_id,login,token_id,token_ids,state,created_at,expires_at) VALUES(?,?,?,?,?,?,?,'review',?,?)").bind(id,user,config.clientId,current.github_user_id,current.login,current.id,JSON.stringify(rows.results.map(r=>r.token_id)),created,expires));}
  catch{const saved=await db.prepare('SELECT * FROM github_grant_revocations WHERE id=? AND user_id=? AND client_id=? AND token_id=? AND token_ids=?').bind(id,user,config.clientId,current.id,JSON.stringify(rows.results.map(r=>r.token_id))).first<Review>();if(saved)return view(saved);throw changed();}
  return view(await owned(db,user,id));
 }

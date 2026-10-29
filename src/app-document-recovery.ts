@@ -1,5 +1,6 @@
 import {reviewedReplyGuard,type ReviewedReply} from './chat-review-receipts';
 import {BackendError} from './backend-versions';
+import {admitWithTurnover,compactedReview} from './review-turnover';
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 async function owner(db:D1Database,user:string,project:string){
  if(!uuid.test(project))throw new BackendError(400,'Choose an application');
@@ -23,14 +24,15 @@ type Review={id:string;user_id:string;project_id:string;point_id:string;base_rev
 async function readReview(db:D1Database,user:string,project:string,id:string){
  await owner(db,user,project);
  const row=await db.prepare('SELECT r.*,p.created_at AS point_created_at,p.version_id,project.name AS project_name FROM app_restore_reviews r JOIN app_recovery_points p ON p.id=r.point_id JOIN projects project ON project.id=r.project_id WHERE r.id=? AND r.user_id=? AND r.project_id=? AND r.restore_program=0').bind(id,user,project).first<Review>();
- if(!row)throw new BackendError(404,'Restore review not found');return row;
+ if(!row)throw await compactedReview(db,'app_restore_reviews',id,user,(s,m)=>new BackendError(s,m))??new BackendError(404,'Restore review not found');return row;
 }
 const summary=(r:Review)=>({id:r.id,projectId:r.project_id,pointId:r.point_id,status:r.status,documents:JSON.parse(r.roster_json).length as number,expiresAt:r.expires_at,pointCreatedAt:r.point_created_at,versionId:r.version_id,projectName:r.project_name});
 export async function prepareAppRestore(db:D1Database,user:string,project:string,point:string,id:string){
  if(!uuid.test(id)||!uuid.test(point))throw new BackendError(400,'Choose a recovery point and review ID');
  await owner(db,user,project);
  const previous=await db.prepare('SELECT id FROM app_restore_reviews WHERE id=?').bind(id).first();
- if(!previous)try{await db.prepare('INSERT INTO app_restore_reviews(id,user_id,project_id,point_id,base_revision,roster_json) SELECT ?,?,?,?,a.revision,r.roster_json FROM app_spaces a JOIN app_recovery_rosters r ON r.project_id=a.project_id WHERE a.project_id=? AND a.owner_user_id=?').bind(id,user,project,point,project,user).run();}catch{/* Exact saved review is the only successful result. */}
+ if(!previous){const gone=await compactedReview(db,'app_restore_reviews',id,user,(s,m)=>new BackendError(s,m));if(gone)throw gone;}
+ if(!previous)try{await admitWithTurnover(db,'app_restore_reviews',{user,project},db.prepare('INSERT INTO app_restore_reviews(id,user_id,project_id,point_id,base_revision,roster_json) SELECT ?,?,?,?,a.revision,r.roster_json FROM app_spaces a JOIN app_recovery_rosters r ON r.project_id=a.project_id WHERE a.project_id=? AND a.owner_user_id=?').bind(id,user,project,point,project,user));}catch{/* Exact saved review is the only successful result. */}
  let row:Review;try{row=await readReview(db,user,project,id);}catch{throw new BackendError(409,'Disable the app first and choose a recovery point for the current program containing every active visitor');}
  if(row.point_id!==point)throw new BackendError(409,'Restore request ID already used');return summary(row);
 }

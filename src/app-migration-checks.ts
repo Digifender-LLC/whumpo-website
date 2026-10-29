@@ -1,12 +1,13 @@
 import {projectRuntime} from './runtime-lane';
 import {BackendError,callBackend} from './backend-versions';
 import {hashToken} from './security';
+import {admitWithTurnover,compactedReview} from './review-turnover';
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 type Check={id:string;user_id:string;project_id:string;from_version:string;to_version:string;transform_version:string;test_id:string;base_revision:number;roster_json:string;expires_at:string};
 async function owned(db:D1Database,user:string,id:string){
  if(!uuid.test(id))throw new BackendError(400,'Choose a migration check');
  const m=await db.prepare('SELECT m.* FROM app_migration_checks m JOIN projects p ON p.id=m.project_id AND p.owner_user_id=m.user_id JOIN app_spaces a ON a.project_id=m.project_id AND a.owner_user_id=m.user_id WHERE m.id=? AND m.user_id=?').bind(id,user).first<Check>();
- if(!m)throw new BackendError(404,'Migration check not found');return m;
+ if(!m)throw await compactedReview(db,'app_migration_checks',id,user,(s,m)=>new BackendError(s,m))??new BackendError(404,'Migration check not found');return m;
 }
 export async function readMigrationCheck(db:D1Database,user:string,id:string){
  const m=await owned(db,user,id);
@@ -19,9 +20,10 @@ export async function beginMigrationCheck(db:D1Database,user:string,project:stri
  if(![project,id,target,transform,test].every(v=>uuid.test(v)))throw new BackendError(400,'Provide application, saved versions, test and request IDs');
  const previous=await db.prepare('SELECT * FROM app_migration_checks WHERE id=?').bind(id).first<Check>();
  if(previous){if(previous.user_id!==user||previous.project_id!==project||previous.to_version!==target||previous.transform_version!==transform||previous.test_id!==test)throw new BackendError(409,'Migration request ID already used');return readMigrationCheck(db,user,id);}
+ const gone=await compactedReview(db,'app_migration_checks',id,user,(s,m)=>new BackendError(s,m));if(gone)throw gone;
  const a=await db.prepare('SELECT a.version_id,a.revision,r.roster_json FROM app_spaces a JOIN projects p ON p.id=a.project_id AND p.owner_user_id=a.owner_user_id JOIN app_recovery_rosters r ON r.project_id=a.project_id WHERE a.project_id=? AND a.owner_user_id=? AND a.enabled=0').bind(project,user).first<{version_id:string;revision:number;roster_json:string}>();
  if(!a)throw new BackendError(409,'Disable the owned application before preparing a migration');
- try{await db.batch([
+ try{await admitWithTurnover(db,'app_migration_checks',{user,project},[
   db.prepare('INSERT INTO app_recovery_points(id,user_id,project_id,version_id) VALUES(?,?,?,?)').bind(id,user,project,a.version_id),
   db.prepare('INSERT INTO app_migration_checks(id,user_id,project_id,from_version,to_version,transform_version,test_id,base_revision,roster_json) VALUES(?,?,?,?,?,?,?,?,?)').bind(id,user,project,a.version_id,target,transform,test,a.revision,a.roster_json)
  ]);}catch{

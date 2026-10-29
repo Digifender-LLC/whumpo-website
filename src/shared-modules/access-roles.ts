@@ -4,6 +4,7 @@ import {FeatureInclusionError,featureRequest} from '../feature-inclusion';
 import {assertWorkspace} from '../workspace-identity/admission';
 import {chatTurnGroups} from '../chat-turn-groups';
 import {ModuleError} from './policy';
+import {compactedReview,turnoverStatements} from '../review-turnover';
 import {registeredInstances} from './registry';
 import {linkedReviewedReply,reviewedReplyGuard} from '../chat-review-receipts';
 
@@ -57,7 +58,8 @@ export async function prepareAccessRoleCommand(db:D1Database,user:string,turn:st
   request_hash:await jsonDigest({kind:'accessRoleReview',projectId:project,instanceId:localId,visitorId:visitor,action}),created_at:now,expires_at:now+600};
  const saved:SavedReview={...review,review_digest:await reviewDigest(review)},keys=Object.keys(saved) as (keyof SavedReview)[],reply=describe(review);
  return {reply,statements:[
-  // Expired unapplied reviews no longer count against capacity; WH-182 compacts them into sealed receipts.
+  // Expired unapplied reviews no longer count against capacity; this batch first seals and removes the project's eligible rows (WH-182).
+  ...await turnoverStatements(db,'module_access_role_reviews',{user,project}),
   db.prepare(`INSERT INTO module_access_role_reviews(${keys.join(',')}) VALUES(${keys.map(()=>'?').join(',')})`).bind(...keys.map(k=>saved[k])),
   db.prepare('INSERT INTO module_access_role_links(turn_id,review_id,reply_digest) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(turn,turn,await sha256(reply),turn,user)
  ]};
@@ -65,7 +67,7 @@ export async function prepareAccessRoleCommand(db:D1Database,user:string,turn:st
 
 async function pendingReview(db:D1Database,user:string,id:string){
  const r=await db.prepare('SELECT r.* FROM module_access_role_reviews r JOIN projects p ON p.id=r.project_id AND p.owner_user_id=r.user_id WHERE r.id=? AND r.user_id=?').bind(id,user).first<SavedReview>();
- if(!r)throw new ModuleError('not_found','Staff role review not found.');
+ if(!r)throw await compactedReview(db,'module_access_role_reviews',id,user,(s,m)=>new ModuleError(s===503?'unresolved':'stale_configuration',m))??new ModuleError('not_found','Staff role review not found.');
  const {review_digest,...fields}=r;
  if(await db.prepare('SELECT 1 FROM module_access_role_applies WHERE review_id=?').bind(id).first())throw changed();
  if(r.expires_at<=Math.floor(Date.now()/1000)||await reviewDigest(fields)!==review_digest)throw changed();

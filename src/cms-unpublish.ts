@@ -4,14 +4,16 @@ import {readCMSDraft} from './cms-content';
 import {cmsConnection} from './cms-status';
 import {callCMS} from './cms-bridge';
 import {CMSProjectError} from './cms-projects';
+import {admitWithTurnover,compactedReview} from './review-turnover';
 type Removal={id:string;publication_id:string;user_id:string;revision:string;status:string;expires_at:string};
-export async function readCMSUnpublish(db:D1Database,user:string,id:string){const row=await db.prepare('SELECT u.* FROM cms_unpublish_reviews u JOIN cms_publication_reviews r ON r.id=u.publication_id JOIN projects p ON p.id=r.project_id WHERE u.id=? AND u.user_id=? AND r.user_id=? AND p.owner_user_id=?').bind(id,user,user,user).first<Removal>();if(!row)throw new CMSProjectError(404,'CMS unpublish review not found');return row;}
+export async function readCMSUnpublish(db:D1Database,user:string,id:string){const row=await db.prepare('SELECT u.* FROM cms_unpublish_reviews u JOIN cms_publication_reviews r ON r.id=u.publication_id JOIN projects p ON p.id=r.project_id WHERE u.id=? AND u.user_id=? AND r.user_id=? AND p.owner_user_id=?').bind(id,user,user,user).first<Removal>();if(!row)throw await compactedReview(db,'cms_unpublish_reviews',id,user,(s,m)=>new CMSProjectError(s,m))??new CMSProjectError(404,'CMS unpublish review not found');return row;}
 export async function prepareCMSUnpublish(db:D1Database,user:string,publication:string,id:string,env:Record<string,unknown>){
  if(!/^[0-9a-f-]{36}$/.test(id))throw new CMSProjectError(400,'Invalid review ID');
  if(await db.prepare('SELECT id FROM cms_unpublish_reviews WHERE id=?').bind(id).first()){const row=await readCMSUnpublish(db,user,id);if(row.publication_id!==publication)throw new CMSProjectError(409,'Review ID already used');return row;}
+ const gone=await compactedReview(db,'cms_unpublish_reviews',id,user,(s,m)=>new CMSProjectError(s,m));if(gone)throw gone;
  const published=await readCMSPublication(db,user,publication);if(published.status!=='published'||published.withdrawn)throw new CMSProjectError(409,'This publication is not currently public');
  const current=await readCMSDraft(db,user,published.project_id,published.draft_request_id,env);if(current.item.status!=='published'||typeof current.revision!=='string')throw new CMSProjectError(409,'Native CMS publication state could not be verified');
- try{await db.prepare('INSERT INTO cms_unpublish_reviews(id,publication_id,user_id,revision) VALUES(?,?,?,?)').bind(id,publication,user,current.revision).run();}catch{}
+ try{await admitWithTurnover(db,'cms_unpublish_reviews',{user},db.prepare('INSERT INTO cms_unpublish_reviews(id,publication_id,user_id,revision) VALUES(?,?,?,?)').bind(id,publication,user,current.revision));}catch{}
  return readCMSUnpublish(db,user,id);
 }
 export async function confirmCMSUnpublish(db:D1Database,user:string,id:string,env:Record<string,unknown>){

@@ -46,6 +46,15 @@ try{
  assert.equal(await active(attacker.user),99);
  assert.equal((await form(attacker,own[4])).status,'pending');
  assert.equal(await active(attacker.user),100);
+ // WH-182: storage is bounded too. Once the attacker's pending reviews lapse (test-only: the immutability trigger forbids moving
+ // expiry), the next admission seals them into receipts and removes the rows, so the table does not keep them.
+ const stored=project=>raw.prepare('SELECT count(*) n FROM backend_form_reviews WHERE project_id=?').bind(project).first().then(r=>r.n);
+ assert.ok(await stored(own[0])>=25);
+ await raw.prepare('DROP TRIGGER backend_form_immutable').run();
+ await raw.prepare("UPDATE backend_form_reviews SET expires_at='2000-01-01T00:00:00.000Z' WHERE project_id=? AND status='pending'").bind(own[0]).run();
+ await form(attacker,own[0]);
+ assert.equal(await stored(own[0]),2,'the applied review and the new one remain');
+ assert.equal((await raw.prepare("SELECT count(*) n FROM review_receipts WHERE family='backend_form_reviews' AND project_id=? AND outcome='expired'").bind(own[0]).first()).n,24);
  console.log('B1 not reproduced: review capacity is isolated per tenant (25 per project, 100 per owner, withdrawals exempt, applied rows free capacity).');
 }catch(error){console.error(error.stack??error.message);process.exitCode=1;}
 finally{await store.close?.();}

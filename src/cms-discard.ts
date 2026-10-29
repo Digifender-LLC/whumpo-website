@@ -4,19 +4,21 @@ import {readCMSDraft} from './cms-content';
 import {cmsConnection} from './cms-status';
 import {callCMS} from './cms-bridge';
 import {CMSProjectError} from './cms-projects';
+import {admitWithTurnover,compactedReview} from './review-turnover';
 type Review={id:string;publication_id:string;user_id:string;revision:string;snapshot:string;status:string;expires_at:string};
 export async function readCMSDiscard(db:D1Database,user:string,id:string){
  const row=await db.prepare('SELECT d.* FROM cms_discard_reviews d JOIN cms_publication_reviews p ON p.id=d.publication_id JOIN projects project ON project.id=p.project_id WHERE d.id=? AND d.user_id=? AND p.user_id=? AND project.owner_user_id=?').bind(id,user,user,user).first<Review>();
- if(!row)throw new CMSProjectError(404,'CMS discard review not found');return row;
+ if(!row)throw await compactedReview(db,'cms_discard_reviews',id,user,(s,m)=>new CMSProjectError(s,m))??new CMSProjectError(404,'CMS discard review not found');return row;
 }
 export async function prepareCMSDiscard(db:D1Database,user:string,publication:string,id:string,env:Record<string,unknown>){
  if(!/^[0-9a-f-]{36}$/.test(id))throw new CMSProjectError(400,'Invalid review ID');
  if(await db.prepare('SELECT id FROM cms_discard_reviews WHERE id=?').bind(id).first()){const row=await readCMSDiscard(db,user,id);if(row.publication_id!==publication)throw new CMSProjectError(409,'Review ID already used');return row;}
+ const gone=await compactedReview(db,'cms_discard_reviews',id,user,(s,m)=>new CMSProjectError(s,m));if(gone)throw gone;
  const pub=await readCMSPublication(db,user,publication);if(pub.status!=='published'||pub.withdrawn)throw new CMSProjectError(409,'Choose the current live publication');
  const snap=await readCMSDraft(db,user,pub.project_id,pub.draft_request_id,env);
  if(snap.item.status!=='published'||!snap.item.draftRevisionId||!snap.item.liveData||typeof snap.revision!=='string')throw new CMSProjectError(409,'This live article has no staged changes to discard');
  if(JSON.stringify(snap.item.liveData)!==JSON.stringify(JSON.parse(pub.snapshot).item.data))throw new CMSProjectError(409,'Native live content needs reconciliation before discarding changes');
- try{await db.prepare('INSERT INTO cms_discard_reviews(id,publication_id,user_id,revision,snapshot) VALUES(?,?,?,?,?)').bind(id,publication,user,snap.revision,JSON.stringify(snap)).run();}catch{}
+ try{await admitWithTurnover(db,'cms_discard_reviews',{user},db.prepare('INSERT INTO cms_discard_reviews(id,publication_id,user_id,revision,snapshot) VALUES(?,?,?,?,?)').bind(id,publication,user,snap.revision,JSON.stringify(snap)));}catch{}
  return readCMSDiscard(db,user,id);
 }
 export async function confirmCMSDiscard(db:D1Database,user:string,id:string,env:Record<string,unknown>){

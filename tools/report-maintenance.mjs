@@ -4,6 +4,7 @@ import {maintenanceJobs} from '../src/maintenance.ts';
 import {cloudflareClient,remoteD1} from './cms-cloudflare.mjs';
 
 import {backlogInventory,operationInventory,platformCounterInventory,counterThresholds} from './maintenance-inventory.mjs';
+import {reviewFamilies,eligibleSql} from '../src/review-turnover.generated.ts';
 
 const integer=n=>Number.isSafeInteger(n)&&n>=0;
 /** WH-050 F8: each shared platform counter against its ceiling, flagged at 50% (warn) and 80% (act). Pull-based; no alert is delivered. */
@@ -20,6 +21,20 @@ export async function counterReport(db,now=Date.now()){
  return {observedAt:new Date(now).toISOString(),thresholds:{warnPercent:counterThresholds.warn*100,actPercent:counterThresholds.act*100},counters,
   attention:counters.some(c=>['act','exhausted','unavailable'].includes(c.state)),
   scope:'Operator-only read of platform totals; no project, account or visitor identifiers. Nothing is delivered: run on the owner-set cadence (runbook G1). Ceilings are local schema limits, not Cloudflare limits or spend.'};
+}
+/** WH-182: per review family, the rows waiting to be sealed (the schema guard would let them leave) and the sealed receipts held for retry replay. Counts only; no identifiers or payloads. */
+export async function reviewReport(db,now=Date.now()){
+ if(!integer(now))throw Error('Invalid observation time');
+ const families=await Promise.all(Object.entries(reviewFamilies).map(async([family,f])=>{
+  try{
+   const due=f.unix?"strftime('%Y-%m-%dT%H:%M:%fZ',r.expires_at,'unixepoch')":'r.expires_at';
+   const waiting=await db.prepare(`SELECT COUNT(*) AS count,MIN(${due}) AS oldest FROM ${f.table} r WHERE ${eligibleSql(f)}`).first(),sealed=await db.prepare('SELECT COUNT(*) AS count FROM review_receipts WHERE family=?').bind(family).first();
+   if(!waiting||!integer(waiting.count)||!sealed||!integer(sealed.count)||(waiting.count>0&&(typeof waiting.oldest!=='string'||!Number.isFinite(Date.parse(waiting.oldest)))))throw Error('Invalid review counts');
+   const age=waiting.count?Math.max(0,now-Date.parse(waiting.oldest)):null;
+   return {family,state:waiting.count===0?'current':age>=25*3600000?'attention':'pending',waiting:waiting.count,oldestWaitingAgeMs:age,sealedReceipts:sealed.count};
+  }catch{return {family,state:'unavailable'};}
+ }));
+ return {observedAt:new Date(now).toISOString(),families,attention:families.some(f=>['attention','unavailable'].includes(f.state)),scope:'Operator-only counts of review rows awaiting sealed turnover and of sealed receipts; no identifiers, payloads or customer content.'};
 }
 export async function maintenanceReport(db,now=Date.now()){
  if(!integer(now))throw Error('Invalid observation time');
@@ -51,8 +66,8 @@ export async function maintenanceReport(db,now=Date.now()){
    return {kind,state:'available',limit:100,items:results.map(r=>({id:r.id,state:r.state,observedAt:r.observed_at})),timeBasis:time,recoveryGuide:guide};
   }catch{return {kind,state:'unavailable'};}
  }));
- const capacity=await counterReport(db,now);
- return {observedAt:new Date(now).toISOString(),jobs,backlogs,operations,counters:capacity.counters,attention:jobs.some(j=>!['completed','skipped','running'].includes(j.state))||backlogs.some(q=>['attention','unavailable'].includes(q.state))||operations.some(o=>o.state==='unavailable')||capacity.attention,scope:'Operator-only read; completion is a scheduler pass, not proof every item succeeded. No repairs, billing changes or provider dispatch.'};
+ const capacity=await counterReport(db,now),reviews=await reviewReport(db,now);
+ return {observedAt:new Date(now).toISOString(),jobs,backlogs,operations,counters:capacity.counters,reviews:reviews.families,attention:reviews.attention||jobs.some(j=>!['completed','skipped','running'].includes(j.state))||backlogs.some(q=>['attention','unavailable'].includes(q.state))||operations.some(o=>o.state==='unavailable')||capacity.attention,scope:'Operator-only read; completion is a scheduler pass, not proof every item succeeded. No repairs, billing changes or provider dispatch.'};
 }
 
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){

@@ -1,5 +1,6 @@
 import {reviewedReply,reviewChangedMessage} from './chat-review-receipts';
 import {CMSProjectError} from './cms-error';
+import {admitWithTurnover,compactedReview} from './review-turnover';
 export {CMSProjectError} from './cms-error';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 type Review={id:string;project_id:string;user_id:string;title:string;tagline:string;status:string;expires_at:string};
@@ -9,14 +10,14 @@ export async function listCMS(db:D1Database,user:string,project?:string){
  const {results}=await db.prepare('SELECT c.project_id,p.name,c.state,r.title,r.tagline,c.created_at,(SELECT count(*) FROM cms_resource_jobs j WHERE j.project_id=c.project_id AND j.state=\'complete\') AS recorded_resources FROM cms_instances c JOIN projects p ON p.id=c.project_id JOIN cms_setup_reviews r ON r.id=c.review_id WHERE c.user_id=? AND p.owner_user_id=? AND (? IS NULL OR c.project_id=?) ORDER BY c.created_at DESC LIMIT 5').bind(user,user,project??null,project??null).all();return results;
 }
 export async function readCMSReview(db:D1Database,user:string,id:string){
- const review=await db.prepare('SELECT r.* FROM cms_setup_reviews r JOIN projects p ON p.id=r.project_id WHERE r.id=? AND r.user_id=? AND p.owner_user_id=?').bind(id,user,user).first<Review>();if(!review)throw new CMSProjectError(404,'CMS setup review not found');return review;
+ const review=await db.prepare('SELECT r.* FROM cms_setup_reviews r JOIN projects p ON p.id=r.project_id WHERE r.id=? AND r.user_id=? AND p.owner_user_id=?').bind(id,user,user).first<Review>();if(!review)throw await compactedReview(db,'cms_setup_reviews',id,user,(s,m)=>new CMSProjectError(s,m))??new CMSProjectError(404,'CMS setup review not found');return review;
 }
 export async function prepareCMS(db:D1Database,user:string,id:string,project:string,title:string,tagline:string){
  await own(db,user,project);
  if(!uuid.test(id)||!title.trim()||title.length>100||tagline.length>200)throw new CMSProjectError(400,'Choose a title of 1–100 characters and a tagline up to 200 characters');
  const read=()=>db.prepare('SELECT * FROM cms_setup_reviews WHERE id=?').bind(id).first<Review>();
  let row=await read();
- if(!row){try{await db.prepare('INSERT INTO cms_setup_reviews(id,project_id,user_id,title,tagline) VALUES(?,?,?,?,?)').bind(id,project,user,title,tagline).run();}catch{/* Read back a possibly committed exact review. */}row=await read();}
+ if(!row){const gone=await compactedReview(db,'cms_setup_reviews',id,user,(s,m)=>new CMSProjectError(s,m));if(gone)throw gone;try{await admitWithTurnover(db,'cms_setup_reviews',{user,project},db.prepare('INSERT INTO cms_setup_reviews(id,project_id,user_id,title,tagline) VALUES(?,?,?,?,?)').bind(id,project,user,title,tagline));}catch{/* Read back a possibly committed exact review. */}row=await read();}
  if(!row)throw new CMSProjectError(409,'CMS is already requested for this project or review storage is full');
  if(row.user_id!==user||row.project_id!==project||row.title!==title||row.tagline!==tagline)throw new CMSProjectError(409,'CMS review ID already used');return row;
 }

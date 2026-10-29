@@ -1,4 +1,5 @@
 import {BackendError} from '../../backend-error';
+import {turnoverStatements} from '../../review-turnover';
 import {chatTurnGroups} from '../../chat-turn-groups';
 import {contentPolicyVersion} from '../../content-policy';
 import {contentRiskPolicyVersion} from '../../content-risk';
@@ -56,6 +57,7 @@ export async function prepareServiceClientActivation(db:D1Database,user:string,t
    db.prepare('INSERT OR IGNORE INTO contact_settings(project_id) SELECT ? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(row.project_id,turn,user),
    db.prepare('INSERT INTO contact_reviews(id,user_id,project_id,enabled,expected_revision,publication_revision,expires_at) VALUES(?,?,?,?,?,?,?)').bind(turn,user,row.project_id,enabled,target.contact.revision,target.publication.versionId?target.publication.revision:-1,row.expires_at)
   ]:[
+   ...await turnoverStatements(db,'backend_form_reviews',{user,project:row.project_id}),
    db.prepare('INSERT OR IGNORE INTO backend_form_settings(project_id) SELECT ? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(row.project_id,turn,user),
    db.prepare('INSERT INTO backend_form_reviews(id,user_id,project_id,enabled,config_json,site_revision,backend_publication_id,base_revision,expires_at) VALUES(?,?,?,?,?,?,?,?,?)').bind(turn,user,row.project_id,enabled,enabled?canonicalJSON(compiled.specification.statelessForm!.config,4096):null,enabled?target.publication.revision:-1,enabled?target.backend!.reviewId:null,target.form.revision,row.expires_at)
   ];

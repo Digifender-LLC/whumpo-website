@@ -1,5 +1,6 @@
 import {DomainError,hostname,verifyDNS} from './domains';
 import {hashToken} from './security';
+import {admitWithTurnover,compactedReview} from './review-turnover';
 export type HostingConfig={token:string;zone:string;target:string};
 // Activation also asserts the operator verified the fallback origin, route exclusions and included allowance.
 export function hostingConfig(env:{CLOUDFLARE_DOMAINS_TOKEN?:string;DOMAIN_HOSTING_READY?:string}):HostingConfig|undefined{
@@ -9,7 +10,7 @@ type Connection={id:string;user_id:string;claim_id:string;project_id:string;host
 const idPattern=/^[a-f0-9-]{36}$/;
 function configured(config:HostingConfig|undefined){if(!config||!config.token||!/^[a-f0-9]{32}$/.test(config.zone)||config.target!=='hosting.whumpo.site')throw new DomainError(503,'Domain hosting is awaiting platform configuration.');return config;}
 function view(c:Connection){return {id:c.id,claimId:c.claim_id,projectId:c.project_id,hostname:c.hostname,state:c.state==='review'&&c.expires_at<=new Date().toISOString()?'expired':c.state==='active'&&(!c.serve_until||c.serve_until<=new Date().toISOString())?'needs_check':c.state,connected:c.state==='active'&&!!c.serve_until&&c.serve_until>new Date().toISOString(),target:c.target,providerStatus:c.provider_status,certificateStatus:c.ssl_status,detail:c.detail,expiresAt:c.expires_at,checkedAt:c.checked_at};}
-async function owned(db:D1Database,user:string,id:string){const c=await db.prepare('SELECT c.* FROM domain_connections c JOIN projects p ON p.id=c.project_id WHERE c.id=? AND c.user_id=? AND p.owner_user_id=?').bind(id,user,user).first<Connection>();if(!c)throw new DomainError(404,'Domain connection not found.');return c;}
+async function owned(db:D1Database,user:string,id:string){const c=await db.prepare('SELECT c.* FROM domain_connections c JOIN projects p ON p.id=c.project_id WHERE c.id=? AND c.user_id=? AND p.owner_user_id=?').bind(id,user,user).first<Connection>();if(!c)throw await compactedReview(db,'domain_connections',id,user,(s,m)=>new DomainError(s,m))??new DomainError(404,'Domain connection not found.');return c;}
 export async function hostingConnections(db:D1Database,user:string){const {results}=await db.prepare('SELECT * FROM domain_connections WHERE user_id=? ORDER BY created_at DESC LIMIT 100').bind(user).all<Connection>();return results.map(view);}
 async function readJSON(response:Response){
  if(!response.ok||!response.body){await response.body?.cancel();throw new DomainError(503,'Cloudflare could not complete the hostname request.');}
@@ -30,8 +31,9 @@ async function currentProof(db:D1Database,user:string,claim:string){const c=awai
 export async function reviewHosting(db:D1Database,user:string,id:string,claimId:string,configuration:HostingConfig|undefined){
  const config=configured(configuration);if(!idPattern.test(id)||!idPattern.test(claimId))throw new DomainError(400,'Choose a domain ownership claim.');
  const prior=await db.prepare('SELECT * FROM domain_connections WHERE id=? AND user_id=?').bind(id,user).first<Connection>();if(prior){if(prior.claim_id!==claimId)throw new DomainError(409,'Review ID was already used.');return view(prior);}
+ const gone=await compactedReview(db,'domain_connections',id,user,(s,m)=>new DomainError(s,m));if(gone)throw gone;
  const claim=await currentProof(db,user,claimId),now=new Date().toISOString();
- try{await db.prepare("INSERT INTO domain_connections(id,user_id,claim_id,project_id,hostname,zone_id,target,proof_hash,state,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,'review',?,?)").bind(id,user,claimId,claim.project_id,claim.hostname,config.zone,config.target,await hashToken(claim.token),now,new Date(Date.now()+600000).toISOString()).run();}catch(cause){const saved=await db.prepare('SELECT * FROM domain_connections WHERE id=? AND user_id=? AND claim_id=?').bind(id,user,claimId).first<Connection>();if(saved)return view(saved);if(String(cause).includes('domain_connection_reviews'))throw new DomainError(409,'This account reached its 100 hosting-review test limit.');throw cause;}return view(await owned(db,user,id));
+ try{await admitWithTurnover(db,'domain_connections',{user,project:claim.project_id},db.prepare("INSERT INTO domain_connections(id,user_id,claim_id,project_id,hostname,zone_id,target,proof_hash,state,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,'review',?,?)").bind(id,user,claimId,claim.project_id,claim.hostname,config.zone,config.target,await hashToken(claim.token),now,new Date(Date.now()+600000).toISOString()));}catch(cause){const saved=await db.prepare('SELECT * FROM domain_connections WHERE id=? AND user_id=? AND claim_id=?').bind(id,user,claimId).first<Connection>();if(saved)return view(saved);if(String(cause).includes('domain_connection_reviews'))throw new DomainError(409,'This account reached its 100 hosting-review test limit.');throw cause;}return view(await owned(db,user,id));
 }
 export async function confirmHosting(db:D1Database,user:string,id:string,configuration:HostingConfig|undefined,transport:typeof fetch=fetch){
  const config=configured(configuration),c=await owned(db,user,id);if(c.zone_id!==config.zone||c.target!==config.target)throw new DomainError(409,'Hosting configuration changed.');

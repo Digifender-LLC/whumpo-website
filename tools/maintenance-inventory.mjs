@@ -1,3 +1,4 @@
+import {reviewFamilies,eligibleSql} from '../src/review-turnover.generated.ts';
 // Fixed, reviewed SQL only. due_at means eligible since, not customer content.
 const daily=25*3600000;
 const queue=(table,predicate,column,threshold= daily)=>({sql:`SELECT ${column??'NULL'} AS due_at FROM ${table} WHERE ${predicate}`,threshold});
@@ -50,6 +51,11 @@ export const backlogInventory={
  // WH-074: unfinished build jobs past their deadline, and finished jobs whose capacity cleanup is not yet released.
  build_jobs_expired:queue('build_jobs',"state='running' AND expires_at<=?1",'expires_at',600000),
  build_cleanup:queue('build_jobs',"state<>'running' AND cleanup<>'released'",'finished_at',600000),
+ // WH-182: review rows the schema guard would let leave (terminal, unreferenced, unheld, outside the history window) that no admission or daily pass has sealed yet.
+ // due_at is the row's own expiry, so a project whose daily pass keeps missing it shows as attention after 25 hours.
+ review_turnover:{sql:Object.values(reviewFamilies).map(f=>`SELECT ${f.unix?"strftime('%Y-%m-%dT%H:%M:%fZ',r.expires_at,'unixepoch')":'r.expires_at'} AS due_at FROM ${f.table} r WHERE ${eligibleSql(f)}`).join(' UNION ALL '),threshold:daily},
+ // Sealed receipts past the 30-day replay horizon, outside a safety hold.
+ review_receipts:queue('review_receipts q',`${date('q.sealed_at','+30 days')}<=?1 AND NOT EXISTS(SELECT 1 FROM safety_preservation_holds WHERE released_at IS NULL AND scope='account' AND subject_user_id=q.owner_user_id) AND (q.project_id IS NULL OR NOT EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=q.project_id))`,date('q.sealed_at','+30 days')),
 };
 export const operationInventory={
  standard_ai:{table:'standard_ai_requests',state:'state',states:['reserved','dispatched','uncertain'],time:'updated_at',guide:'docs/standard-ai-accounting.md'},
@@ -76,5 +82,6 @@ export const platformCounterInventory={
  photo_files:{sql:'SELECT (SELECT count(*) FROM project_files)+(SELECT count(*) FROM file_cleanup) AS used',ceiling:500,window:'retained',enforcedBy:'project_file_cleanup_capacity',evidence:'(SELECT COUNT(*) FROM project_files)+(SELECT COUNT(*) FROM file_cleanup)>=500'},
  build_job_pool:{sql:"SELECT count(*) AS used FROM build_jobs WHERE state='running' OR cleanup<>'released'",ceiling:16,window:'concurrent',enforcedBy:'build_job_admit',evidence:"(SELECT count(*) FROM build_jobs WHERE state='running' OR cleanup<>'released')>=16",note:'Shared build capacity in use; a slot is held until its cleanup is released (WH-074).'},
  operator_containments:{sql:'SELECT count(*) AS used FROM operator_containments',ceiling:10000,window:'retained',enforcedBy:'operator_containment_admit',evidence:'(SELECT count(*) FROM operator_containments)>=10000',note:'Containment and serving-stop audit rows are deleted only by reviewed cleanup 90 days after an explicit lift or close; at the ceiling new containment fails closed.'},
+ ...Object.fromEntries(Object.values(reviewFamilies).filter(f=>f.active).map(f=>[`${f.table}_active`,{sql:`SELECT count(*) AS used FROM ${f.table} t WHERE ${f.active}`,ceiling:5000,window:'active',enforcedBy:f.capTrigger,evidence:`(SELECT count(*) FROM ${f.table} t WHERE ${f.active})>=5000`,note:'Pending and in-flight non-withdrawal rows only (WH-181); an owner already at 25 is refused from 2,500 (50%).'}])),
  operator_session_revocations:{sql:'SELECT count(*) AS used FROM operator_session_revocations',ceiling:10000,window:'retained',enforcedBy:'operator_session_revocation_admit',evidence:'(SELECT count(*) FROM operator_session_revocations)>=10000',note:'Revocation receipts are deleted only by reviewed cleanup 90 days after revocation; at the ceiling new revocation fails closed.'},
 };

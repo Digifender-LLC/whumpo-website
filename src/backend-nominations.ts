@@ -1,17 +1,19 @@
 import {BackendError} from './backend-versions';
 import {hashToken} from './security';
 import {requireReviewedReply} from './chat-review-receipts';
+import {admitWithTurnover,compactedReview} from './review-turnover';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 type Nomination={id:string;version_id:string;digest:string;state:'review'|'nominated'|'withdrawn';expires_at:string;consent_at:string|null;withdrawn_at:string|null};
 export async function readNomination(db:D1Database,user:string,id:string){
  const row=await db.prepare('SELECT n.id,n.version_id,n.digest,n.state,n.expires_at,n.consent_at,n.withdrawn_at FROM backend_nominations n JOIN backend_versions v ON v.id=n.version_id JOIN projects p ON p.id=v.project_id WHERE n.id=? AND n.user_id=? AND p.owner_user_id=?').bind(id,user,user).first<Nomination>();
- if(!row)throw new BackendError(404,'Nomination not found');return row;
+ if(!row)throw await compactedReview(db,'backend_nominations',id,user,(s,m)=>new BackendError(s,m))??new BackendError(404,'Nomination not found');return row;
 }
 export async function prepareNomination(db:D1Database,user:string,id:string,version:string){
  if(!uuid.test(id)||!uuid.test(version))throw new BackendError(400,'Choose a saved backend version');
  const prior=await db.prepare('SELECT user_id,version_id FROM backend_nominations WHERE id=?').bind(id).first<{user_id:string;version_id:string}>();if(prior){if(prior.user_id!==user||prior.version_id!==version)throw new BackendError(409,'Nomination ID already used');return readNomination(db,user,id);}
+ const gone=await compactedReview(db,'backend_nominations',id,user,(s,m)=>new BackendError(s,m));if(gone)throw gone;
  const source=await db.prepare('SELECT v.source,v.digest FROM backend_versions v JOIN projects p ON p.id=v.project_id WHERE v.id=? AND p.owner_user_id=?').bind(version,user).first<{source:string;digest:string}>();if(!source)throw new BackendError(404,'Backend version not found');if(await hashToken(source.source)!==source.digest)throw new BackendError(409,'Saved source integrity check failed');
- const now=new Date();try{await db.prepare('INSERT INTO backend_nominations(id,user_id,version_id,digest,created_at,expires_at) VALUES(?,?,?,?,?,?)').bind(id,user,version,source.digest,now.toISOString(),new Date(now.getTime()+600000).toISOString()).run();}catch{
+ const now=new Date();try{await admitWithTurnover(db,'backend_nominations',{user},db.prepare('INSERT INTO backend_nominations(id,user_id,version_id,digest,created_at,expires_at) VALUES(?,?,?,?,?,?)').bind(id,user,version,source.digest,now.toISOString(),new Date(now.getTime()+600000).toISOString()));}catch{
   const saved=await db.prepare('SELECT user_id,version_id FROM backend_nominations WHERE id=?').bind(id).first<{user_id:string;version_id:string}>();if(saved?.user_id!==user||saved.version_id!==version)throw new BackendError(409,"An open nomination already exists or the nomination allowance is full. Ask an operator to inspect your saved nomination records.");
  }
  return readNomination(db,user,id);

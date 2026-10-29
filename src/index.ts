@@ -87,6 +87,7 @@ import {listGuestPreviews,revokeGuestPreview,deleteGuestPreview,listGuestFeedbac
 import {GuestPreviewError} from './guest-previews/policy';
 import {prepareGuestPreviewIssue,confirmGuestPreviewIssue} from './guest-previews/bindings';
 import {guestPreviewOrigin} from './hosts';
+import {maintainReviews} from './review-turnover';
 import { StorageLimitError } from './storage-budget';
 import {uploadPhoto,listPhotos,readPhotoUpload,readPhoto,cleanupPhotos} from './files';
 import {parsePhotoHandoff} from './chat-interactions/photo-handoff';
@@ -649,7 +650,8 @@ export default {
       {name:'fair_use',run:()=>cleanupFairUseObservations(env.DB)},
       {name:'traffic',run:async()=>{await cleanupTraffic(env.DB);await cleanupPublicClients(env.DB);}},
       {name:'funnel',run:()=>maintainFunnelEvents(env.DB)},
-      {name:'applications',run:async()=>{await cleanupAppLifecycle(env.DB);await reconcileBuildJobs(env.DB);}},
+      // WH-182: the bounded review turnover pass runs in this daily job. maintenance_health admits no `reviews` row yet (a schema CHECK), so it reports here.
+      {name:'applications',run:async()=>{try{await cleanupAppLifecycle(env.DB);await reconcileBuildJobs(env.DB);}finally{await maintainReviews(env.DB);}}},
       // Form-submission expiry: the contact inbox and WH-127 module records (both skip safety-held projects), then content-free
       // module request receipts past their 30-day replay window.
       {name:'contacts',run:async()=>{await cleanupContacts(env.DB);await cleanupModuleRecords(env.DB);await cleanupModuleRequestReceipts(env.DB);}},

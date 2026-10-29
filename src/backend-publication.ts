@@ -3,6 +3,7 @@ import {projectRuntime} from './runtime-lane';
 import {publicClientKey,reservePublicClient,PublicClientLimitError} from './public-admission';
 import {BackendError,listBackends,callBackend} from './backend-versions';
 import {hashToken} from './security';
+import {admitWithTurnover,compactedReview} from './review-turnover';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 type Review={id:string;user_id:string;project_id:string;operation:'publish'|'unpublish';version_id:string;run_id:string|null;base_revision:number;status:string;expires_at:string;source:string;digest:string};
 export const backendEndpoint=(project:string)=>`https://${project}.whumpo.site/backend`;
@@ -13,7 +14,7 @@ export async function readBackendPublication(db:D1Database,user:string,project:s
 }
 export async function readBackendPublicationReview(db:D1Database,user:string,id:string){
  const row=await db.prepare('SELECT r.*,v.source,v.digest FROM backend_publication_reviews r JOIN projects p ON p.id=r.project_id AND p.owner_user_id=r.user_id JOIN backend_versions v ON v.id=r.version_id AND v.project_id=r.project_id WHERE r.id=? AND r.user_id=?').bind(id,user).first<Review>();
- if(!row)throw new BackendError(404,'Backend publication review not found');
+ if(!row)throw await compactedReview(db,'backend_publication_reviews',id,user,(s,m)=>new BackendError(s,m))??new BackendError(404,'Backend publication review not found');
  // Withdrawal grants no execution or serving authority. Damaged source must
  // not prevent an owner from taking its endpoint offline.
  if(row.operation==='publish'&&await hashToken(row.source)!==row.digest)throw new BackendError(409,'Backend integrity check failed');
@@ -24,9 +25,10 @@ export async function prepareBackendPublication(db:D1Database,user:string,projec
  await listBackends(db,user,project);
  const previous=await db.prepare('SELECT id FROM backend_publication_reviews WHERE id=?').bind(id).first();
  if(!previous){
+  const gone=await compactedReview(db,'backend_publication_reviews',id,user,(s,m)=>new BackendError(s,m));if(gone)throw gone;
   await db.prepare('INSERT OR IGNORE INTO backend_publications(project_id) VALUES(?)').bind(project).run();
   const current=await readBackendPublication(db,user,project);
-  try{await db.prepare('INSERT INTO backend_publication_reviews(id,user_id,project_id,operation,version_id,run_id,base_revision) VALUES(?,?,?,?,?,?,?)').bind(id,user,project,operation,version,run,expectedRevision??current.revision).run();}catch{/* Read an exact committed review after an uncertain acknowledgment. */}
+  try{await admitWithTurnover(db,'backend_publication_reviews',{user,project},db.prepare('INSERT INTO backend_publication_reviews(id,user_id,project_id,operation,version_id,run_id,base_revision) VALUES(?,?,?,?,?,?,?)').bind(id,user,project,operation,version,run,expectedRevision??current.revision));}catch{/* Read an exact committed review after an uncertain acknowledgment. */}
  }
  let row:Review;try{row=await readBackendPublicationReview(db,user,id);}catch{throw new BackendError(409,'Review unavailable: check the successful test receipt, current publication and review allowance');}
  if(row.project_id!==project||row.operation!==operation||row.version_id!==version||row.run_id!==run||expectedRevision!==undefined&&row.base_revision!==expectedRevision)throw new BackendError(409,'Review ID already used');
