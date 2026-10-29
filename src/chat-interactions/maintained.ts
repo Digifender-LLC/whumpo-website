@@ -39,6 +39,15 @@ export function connectionIntakeProvider(d:Definition):'github'|'cloudflare'|nul
  return null;
 }
 
+/** WH-143 lookup-consent handoff. The card's reviewId is the consent ID; generated text cannot choose the lookup, credential or destination. */
+export function lookupConsentDefinition(consentId:string):Definition{
+ return {version:1,kind:'view',template:'status@1',title:'Confirm a lookup',summary:'Whumpo asks to run one exact lookup in your connected account. Confirming allows it once, for 15 minutes. It does not connect anything or change your account.',presentation:'inline',fields:[],cards:[{id:'lookup-consent',binding:'connector.lookup-consent@1',display:'consent',limit:1,reviewId:consentId}],submitBinding:null,continuationBinding:null};
+}
+export function lookupConsentCard(d:Definition):{cardId:string;consentId:string}|null{
+ const id=d.cards[0]?.reviewId;
+ return typeof id==='string'&&JSON.stringify(sortKeys(d))===JSON.stringify(sortKeys(lookupConsentDefinition(id)))?{cardId:'lookup-consent',consentId:id}:null;
+}
+
 /** WH-035 Chat help intake. Whumpo may suggest the statement; only the owner's explicit
  * submission saves it as a support request. No continuation, project or credential field. */
 export const supportStatementLimit=950;

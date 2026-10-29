@@ -7,7 +7,7 @@ import type {ProjectSpecification} from '../project-specification/v3/types';
 import {InteractionError,contentFieldLimit,sealDefinition,verifyEnvelope,validateMutation,mutationHeader,validateAnswers,validateDefinition,isFieldVisible} from './protocol';
 import type {Answers,Continuation,Definition,Field,InteractionRead,InteractionReceipt} from './types';
 import {draftRetentionDue} from './retention';
-import {connectionIntakeDefinition,connectionIntakeProvider,isPhotoIntakeDefinition,photoIntakeDefinition,isProjectIntakeTemplate,projectIntakeDefinition,isSupportRequestDefinition,isSupportStatusDefinition,supportRequestDefinition,supportStatusDefinition,type ProjectIntakeTemplate} from './maintained';
+import {connectionIntakeDefinition,connectionIntakeProvider,lookupConsentCard,lookupConsentDefinition,isPhotoIntakeDefinition,photoIntakeDefinition,isProjectIntakeTemplate,projectIntakeDefinition,isSupportRequestDefinition,isSupportStatusDefinition,supportRequestDefinition,supportStatusDefinition,type ProjectIntakeTemplate} from './maintained';
 import {supportHistoryCapacity} from '../support';
 import {informationDefinition,informationQuestions,isInformationDefinition,type InformationPurpose,type QuestionRequest} from './composition';
 import {readOwnedResourceOptions} from './resource-options';
@@ -140,6 +140,16 @@ export async function prepareConnectionIntake(db:D1Database,user:string,input:{o
  if(prior){if(prior.issue_hash!==issueHash)throw new InteractionStoreError(409,'request_conflict');await readInteraction(db,user,prior.id);return {interactionId:prior.id,originTurnId:request.originTurnId,issueHash,statements:[]};}
  await assertFeature(db,feature(user,request.projectId));
  return prepareIssuedInteraction(db,user,request,connectionIntakeDefinition(request.provider),issueHash,null,request.projectId?[interactionGuard(db,'EXISTS(SELECT 1 FROM projects WHERE id=? AND owner_user_id=?)',[request.projectId,user])]:[]);
+}
+
+/** WH-143: the Chat card for one issued lookup consent of this owner. Account scope; the guard ties it to the owner's own unexpired row. */
+export async function prepareLookupConsentIntake(db:D1Database,user:string,input:{originTurnId:string;consentId:string}):Promise<InteractionPlan>{
+ await assertWorkspace(db,user);const request=copyJSON(input,4096);
+ if(!request||Object.keys(request).sort().join(',')!=='consentId,originTurnId'||!identifier(request.originTurnId)||!identifier(request.consentId))throw new InteractionError('SHAPE');
+ const issueHash=await jsonDigest({operation:'lookup-consent',...request}),prior=await db.prepare('SELECT id,issue_hash FROM chat_interactions WHERE origin_turn_id=? AND user_id=?').bind(request.originTurnId,user).first<{id:string;issue_hash:string}>();
+ if(prior){if(prior.issue_hash!==issueHash)throw new InteractionStoreError(409,'request_conflict');await readInteraction(db,user,prior.id);return {interactionId:prior.id,originTurnId:request.originTurnId,issueHash,statements:[]};}
+ await assertFeature(db,feature(user,null));
+ return prepareIssuedInteraction(db,user,{originTurnId:request.originTurnId,projectId:null},lookupConsentDefinition(request.consentId),issueHash,null,[interactionGuard(db,"EXISTS(SELECT 1 FROM lookup_consents WHERE consent_id=? AND owner_id=? AND state='issued' AND expires_at>unixepoch()*1000)",[request.consentId,user])]);
 }
 
 export async function replaceProjectIntake(db:D1Database,user:string,input:ReplacementIdentity){
@@ -420,7 +430,7 @@ export async function mutateInteraction(db:D1Database,user:string,input:unknown)
  const {request}=await validateMutation(raw,envelope).catch(async error=>{throw await rejected(error);});
  // Each admitted adapter must enforce its complete current question policy.
  const support=isSupportRequestDefinition(envelope.definition)&&envelope.scope.projectId===null;
- if(envelope.definition.template!=='content-change@1'&&!isProjectIntakeTemplate(envelope.definition.template)&&!support&&!(envelope.scope.projectId&&isInformationDefinition(envelope.definition))&&!((isPhotoIntakeDefinition(envelope.definition)||connectionIntakeProvider(envelope.definition)||isWorkspaceViewDefinition(envelope.definition)||isSupportStatusDefinition(envelope.definition))&&request.operation==='cancel'))throw new InteractionStoreError(409,'adapter_unavailable');
+ if(envelope.definition.template!=='content-change@1'&&!isProjectIntakeTemplate(envelope.definition.template)&&!support&&!(envelope.scope.projectId&&isInformationDefinition(envelope.definition))&&!((isPhotoIntakeDefinition(envelope.definition)||connectionIntakeProvider(envelope.definition)||lookupConsentCard(envelope.definition)||isWorkspaceViewDefinition(envelope.definition)||isSupportStatusDefinition(envelope.definition))&&request.operation==='cancel'))throw new InteractionStoreError(409,'adapter_unavailable');
  // The owner's explicit submit is the only path from this form to the existing support store.
  const supportStatements:D1PreparedStatement[]=[];
  if(support&&request.operation==='submit'){

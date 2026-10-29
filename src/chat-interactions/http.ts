@@ -4,6 +4,7 @@ import {BillingError} from '../billing';
 import {continueInformationTask,stopInformationTask,reconcileInformationTask} from './model-continuation';
 import {readTemporaryViewComponent} from './view-cards';
 import {readInteractionCard} from './cards';
+import {LookupConsentError,confirmLookupConsent,readLookupConsentSummary} from '../lookup-consent';
 import {SpecificationError} from '../project-specification/v2/json';
 import {readInteractionInput} from './input';
 import {InteractionError,requireCurrentClient} from './protocol';
@@ -27,6 +28,12 @@ export async function handleInteractionRequest(request:Request,db:D1Database,use
   if(action==='list')return respond(await listInteractions(db,user,data));
   if(action==='view-component')return respond(await readTemporaryViewComponent(db,user,data));
   if(action==='card')return respond(await readInteractionCard(db,user,data));
+  if(action==='lookup-consent'||action==='lookup-consent-confirm'){
+   exact(data,['version','interactionId','definitionDigest','cardId']);id(data.interactionId);
+   const card={interactionId:data.interactionId,definitionDigest:String(data.definitionDigest),cardId:String(data.cardId)};
+   if(action==='lookup-consent-confirm')await confirmLookupConsent(db,user,card);
+   return respond(await readLookupConsentSummary(db,user,card));
+  }
   if(action==='resources')return respond(await listInteractionResources(db,user,data));
   if(action==='read'){
    exact(data,['version','interactionId','client']);id(data.interactionId);
@@ -53,6 +60,7 @@ export async function handleInteractionRequest(request:Request,db:D1Database,use
    const update=['VERSION','CLIENT_UPDATE_REQUIRED'].includes(error.code),stale=['DIGEST','REFERENCE'].includes(error.code),status=update||stale?409:error.fieldId?422:400;
    return respond({error:update?'Update Whumpo to continue.':error.fieldId?'Check the highlighted answer.':'Read the current form and try again.',code:update?'client_update_required':error.code.toLowerCase(),...(error.fieldId?{fieldId:error.fieldId}:{})},status);
   }
+  if(error instanceof LookupConsentError)return respond({error:'This lookup cannot be confirmed.',code:'lookup_consent_'+error.code.toLowerCase()},error.code==='NOT_FOUND'?404:error.code==='INVALID'?400:409);
   if(error instanceof SpecificationError)return respond({error:'A bounded current JSON request is required.',code:'invalid_request'},400);
   throw error;
  }

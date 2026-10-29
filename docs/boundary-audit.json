@@ -1450,6 +1450,22 @@
     {
      "file": "src/chat-interactions/http.ts",
      "kind": "exact",
+     "match": "lookup-consent",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/chat-interactions/http.ts",
+     "kind": "exact",
+     "match": "lookup-consent-confirm",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/chat-interactions/http.ts",
+     "kind": "exact",
      "match": "resources",
      "methods": [
       "POST"

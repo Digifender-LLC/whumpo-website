@@ -24,6 +24,8 @@ export const bindings:Readonly<Record<string,{mode:string;feature:'core.editing'
   'workspace.projects@1': {mode:'read',feature:viewComponents.projects.feature,source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'account',displays:['workspace','summary','table']},
   'connection.github@1': {mode:'read',feature:'core.editing',source:'src/chat-interactions/connection-handoff.ts',handler:'readConnectionHandoff',scope:'account',displays:['consent']},
   'connection.cloudflare@1': {mode:'read',feature:'core.editing',source:'src/chat-interactions/connection-handoff.ts',handler:'readConnectionHandoff',scope:'account',displays:['consent']},
+  // WH-143: the card's reviewId is the lookup-consent ID; confirmation is a separate owner-only route (src/lookup-consent.ts).
+  'connector.lookup-consent@1': {mode:'read',feature:'core.editing',source:'src/lookup-consent.ts',handler:'readLookupConsentSummary',scope:'consent',displays:['consent']},
   'project.photos@1': {mode:'read',feature:'core.editing',source:'src/files.ts',handler:'readPhotoUpload',scope:'project',displays:['photos']},
   'project.status@1': {mode:'read',feature:viewComponents.projects.feature,source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'project',displays:['workspace','status','key-values']},
   'project.traffic@1': {mode:'read',feature:viewComponents.traffic.feature,source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'workspace',displays:['workspace','summary','table']},
@@ -148,7 +150,7 @@ export function validateDefinition(input:unknown):Definition {
     shape(c,['id','binding','display','limit','reviewId']);identifier(c.id);
     const b=own(bindings,c.binding)?bindings[c.binding]:null;
     check(b?.mode==='read'&&b.displays?.includes(c.display),'BINDING');integer(c.limit,1,20);
-    check(b.scope==='review'?typeof c.reviewId==='string'&&uuid.test(c.reviewId):c.reviewId===null,'REFERENCE');
+    check(b.scope==='review'||b.scope==='consent'?typeof c.reviewId==='string'&&uuid.test(c.reviewId):c.reviewId===null,'REFERENCE');
   }
   if(!own(d,'workspaceView'))check(!d.cards.some(c=>c.display==='workspace'),'TEMPLATE');
   if(d.kind==='view')check(d.template==='status@1'&&d.fields.length===0&&d.cards.length>0&&d.submitBinding===null&&d.continuationBinding===null,'TEMPLATE');
