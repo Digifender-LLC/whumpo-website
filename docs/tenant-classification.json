@@ -6,9 +6,9 @@
  "evidence": "docs/workspace-collaboration-evidence.md",
  "baseline": {
   "sourceCommit": "4dea09c",
-  "reviewedSchemaSha256": "19b55cb56f2247d90bbfa6ee9be861980703b8a01dc00bebc090d0a0a5f847d6",
-  "tables": 230,
-  "usersForeignKeyColumns": 119
+  "reviewedSchemaSha256": "86cb494657d3c2909f36f676722a8ca2a3b7e023089de407af61cd519247b5af",
+  "tables": 233,
+  "usersForeignKeyColumns": 120
  },
  "vocabulary": {
   "classes": {
@@ -128,6 +128,7 @@
   {"column":"inference_budgets.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id"},"status":"undecided","evidenceLevel":"review-spike","basis":"Budget is a workspace envelope; composite FK target of inference_calls(user_id,period)","evidence":["docs/workspace-collaboration.md#engineering-decision-c2-a-dedicated-workspaces-tenant-proposed-engineering-not-an-owner-question"],"questions":["funded-workspace-bound"]},
   {"column":"inference_calls.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace+actor","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id","actor":"actor_ref"},"status":"undecided","evidenceLevel":"review-spike","basis":"Composite FK (user_id,period)->inference_budgets; tenant half follows budgets, actor needed for attribution","evidence":["docs/workspace-collaboration.md#actor-references-chat-identity-and-receipt-principals"],"questions":["funded-workspace-bound"]},
   {"column":"invitations.used_by","sourceFile":"src/workspace-identity/canonical-inputs.sql","onDelete":"SET NULL","class":"account","subject":"account","retarget":"keep","roles":{"account":"used_by"},"status":"proposed","evidenceLevel":"review-spike","basis":"docs/workspace-collaboration.md source-baseline row: platform signup invitations are a different record/namespace","evidence":["docs/workspace-collaboration.md#terms-and-who-is-not-a-member"]},
+  {"column":"job_journal.owner_user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id"},"status":"proposed","evidenceLevel":"source-reading","basis":"A journal job runs on the tenant's behalf (the envelope names the owner and, for project work, the project), so owner_user_id becomes workspace_id; account closure deletes it","evidence":["docs/job-orchestration.md"]},
   {"column":"lookup_consents.owner_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id"},"status":"proposed","evidenceLevel":"source-reading","basis":"A lookup consent authorizes one read on the tenant's connection, so owner_id becomes workspace_id; account closure deletes it","evidence":["docs/connectors.md#request-bound-lookup-and-data-use-consent"]},
   {"column":"module_access_role_applies.user_id","sourceFile":"src/shared-modules/schema.sql","onDelete":"CASCADE","class":"workspace+actor","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id","actor":"actor_ref"},"status":"proposed","evidenceLevel":"review-spike","basis":"Preparer and confirmer provenance on every review type","evidence":["docs/workspace-collaboration.md#approvals-and-release-authority"]},
   {"column":"module_access_role_reviews.user_id","sourceFile":"src/shared-modules/schema.sql","onDelete":"CASCADE","class":"workspace+actor","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id","actor":"actor_ref"},"status":"proposed","evidenceLevel":"review-spike","basis":"Preparer and confirmer provenance on every review type","evidence":["docs/workspace-collaboration.md#approvals-and-release-authority"]},
@@ -241,6 +242,8 @@
    "identity_kit_offers",
    "identity_recovery_reviews",
    "identity_sessions",
+   "job_journal_events",
+   "job_outbox",
    "module_access_role_links",
    "module_activation_links",
    "module_activations",

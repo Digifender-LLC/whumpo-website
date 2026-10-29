@@ -116,10 +116,13 @@ const c:Record<string,[string,string,Disposition]>={
  openConnectorReceipts:['connector_receipts','connector-receipts','cancel'],
  ruleApprovals:['rule_approvals','connector-receipts','delete'],
  activeRuleApprovals:['rule_approvals','connector-receipts','cancel'],
+ jobJournal:['job_journal','job-journal','delete'],
+ openJobJournal:['job_journal','job-journal','cancel'],
+ unresolvedJobs:['job_journal','job-journal','cancel'],
 };
 export const closureCategories:Readonly<Record<string,readonly [string,string,Disposition]>>=Object.freeze(c);
 /** Open provider work: closure refuses until each settles (cancelling a local row never settles a provider effect). */
-export const settleFirstKeys:readonly string[]=Object.freeze(['unresolvedStandardAI','unresolvedConnectionExchanges','githubGrantUncertain','githubPendingRevocations','cloudflarePendingRevocations','unresolvedDomainRecords','unresolvedChatInteractionContinuations','openConnectorReceipts']);
+export const settleFirstKeys:readonly string[]=Object.freeze(['unresolvedStandardAI','unresolvedConnectionExchanges','githubGrantUncertain','githubPendingRevocations','cloudflarePendingRevocations','unresolvedDomainRecords','unresolvedChatInteractionContinuations','unresolvedJobs','openConnectorReceipts']);
 
 export const isCount=(v:unknown):v is number=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0;
 /** Every category present as a non-negative integer, nothing unknown. */
