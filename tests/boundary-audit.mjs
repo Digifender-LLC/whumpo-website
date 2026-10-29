@@ -85,7 +85,7 @@ assert.ok(noOrigin.some(p=>p.startsWith('src/app-gateway.ts exact account/delete
 assert.ok(noOrigin.length>=10&&noOrigin.every(p=>p.includes('beforeOriginGate')),noOrigin.join('\n'));
 // Mutation 10: dropping the POST-only refusal inside the module upload handler admits GET as well.
 const upload=mutate('src/app-gateway.ts',"if(path==='modules/upload'){\n   if(method!=='POST')return json({error:'Not found'},404);","if(path==='modules/upload'){");
-assert.deepEqual(upload.map(strip).sort(),['registered route no longer mounted: src/app-gateway.ts exact modules/upload [POST] (family visitor-modules)','unregistered route: src/app-gateway.ts exact modules/upload [GET,POST]']);
+assert.deepEqual(upload.map(strip).sort(),['registered route no longer mounted: src/app-gateway.ts exact modules/upload [POST] (family visitor-modules)','unregistered route: src/app-gateway.ts exact modules/upload [GET,HEAD,POST]']);
 // Mutation 11: the runtime accepting any method on /execute is reported.
 const runtime=mutate('src/runtime/worker.ts',"if(request.method!=='POST'||new URL(request.url).pathname!=='/execute')","if(new URL(request.url).pathname!=='/execute')");
 assert.deepEqual(runtime.map(strip).sort(),['registered route no longer mounted: src/runtime/worker.ts exact /execute [POST] (family runtime-execute)','unregistered route: src/runtime/worker.ts exact /execute [ANY]']);

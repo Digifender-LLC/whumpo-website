@@ -11,6 +11,7 @@ import {ModuleError,moduleRequest} from './shared-modules/policy';
 import {publicClientKey,reservePublicClient,PublicClientLimitError} from './public-admission';
 import {verifyTurnstile} from './turnstile';
 import {servingStopped} from './operator-serving';
+import {moduleCompositions} from './module-compositions';
 import type {AuthenticationResponseJSON,RegistrationResponseJSON} from '@simplewebauthn/server';
 
 type AppEnv = Pick<Env,'DB'|'ENVIRONMENT'|'AUTH_LIMITER'|'API_LIMITER'|'BACKEND_RUNTIME'|'TURNSTILE_SECRET'> & {FILES?:R2Bucket};
@@ -60,11 +61,22 @@ export async function applicationGateway(request:Request,env:AppEnv,fetcher:type
   const match=url.pathname.match(route);if(!match)return json({error:'Not found'},404);
   const project=match[1],path=match[2],method=request.method;
   if(url.search)return json({error:'Query parameters are not supported'},400);
-  if(!['GET','POST'].includes(method))return json({error:'Method not allowed'},405);
+  if(!['GET','HEAD','POST'].includes(method))return json({error:'Method not allowed'},405);
   if(request.headers.get('sec-fetch-site')==='cross-site'||(request.headers.has('origin')&&request.headers.get('origin')!==origin)||method==='POST'&&request.headers.get('origin')!==origin)return json({error:'Origin check failed'},403);
   const ip=request.headers.get('cf-connecting-ip')??'unknown';
   if(!(await env.API_LIMITER.limit({key:'app:'+ip})).success)return json({error:'Too many requests. Try again in a minute.'},429);
   const session=token(request,project,'session',local);
+  // WH-070: read-only composition source for the project's own visitor page. Published or live only, never a draft;
+  // the project must own an access module instance. It carries no identity: every decision stays in POST modules.
+  const composition=path.match(/^compositions\/([a-z-]{1,40})\.js$/);
+  if(composition){
+   if(method!=='GET'&&method!=='HEAD')return json({error:'Method not allowed'},405);
+   const found=Object.hasOwn(moduleCompositions,composition[1])?moduleCompositions[composition[1]]:null;
+   if(!found||found.status==='draft'||await servingStopped(env.DB,project)||!await env.DB.prepare("SELECT 1 FROM module_instances WHERE project_id=? AND kind='access'").bind(project).first())return json({error:'Not found'},404);
+   const result=new Headers(headers);result.set('content-type','text/javascript; charset=utf-8');
+   return new Response(method==='HEAD'?null:found.source,{headers:result});
+  }
+  if(method==='HEAD')return json({error:'Method not allowed'},405);
   // Exact deletion receipts remain checkable after withdrawal or sign-out.
   // They prove only this request's completion, never restore authorization.
   if(method==='POST'&&path==='account/delete'){
