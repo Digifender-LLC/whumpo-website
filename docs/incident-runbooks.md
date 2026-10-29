@@ -2,6 +2,8 @@
 
 **WH-007 — written October 4, 2026 against source `1343111`.** Status: **documentation, desk-checked against current source and docs; not live-drilled.** The [desk-check record](incident-tabletop.md) lists what was traced and what was not. Nothing here was run against the deployed test environment, no provider was called, and no external message was sent. Read it with [maintenance diagnostics](maintenance.md), the [release protocol](releases.md), [standard AI accounting](standard-ai-accounting.md), the [security decision register](security-risk-actions.md) and the [workspace identity contract](workspace-identity.md). The current environment is the private `test` environment with a sole tester; every severity, role and communication below is written so it still holds when a real cohort exists, but it must be re-read before one does.
 
+**Command-level runbooks:** deploy failures and a red `main`, a stuck deploy lease, D1 and cutover recovery, the AI provider, spend spikes, Stripe/Cloudflare/GitHub outages and leaked secrets are in [operational runbooks](operational-runbooks.md), with an October 29, 2026 local and read-only exercise record.
+
 Rules for using this document:
 
 - **Only controls that exist are described as available.** Section 2 lists them, and Section 3 lists the controls this runbook needs that do **not** exist. A gap is an open work item with an owner (see [the roadmap tasks it names](roadmap/README.md)), not a step to improvise.
