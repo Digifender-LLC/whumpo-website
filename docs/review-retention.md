@@ -350,7 +350,7 @@ It does not prove D1 trigger behavior, the real deleting statements, Worker rout
 | WH-180 | Retention contract and offline reference (this document) | WH-009, WH-004 | Planning and offline reference only |
 | WH-181 | Active-only caps, sealed receipts, withdrawal exemption and delete guards in the canonical schema | WH-180 | Implemented in source October 27, 2026; cutover only with explicit owner authorization |
 | WH-182 | Admission-time turnover, the daily `reviews` maintenance job and capacity counters | WH-181 | Source and local; no operator edits |
-| WH-183 | Directory live-review identity, custom-host directory paths and health wiring (local fixtures) | WH-181, WH-037 | Does not activate hosting; does not depend on WH-033 |
+| WH-183 | Directory live-review identity, custom-host directory paths and health wiring (local fixtures) | WH-181, WH-037 | Implemented in source October 28, 2026 (local fixtures): active custom hosts serve `/directory(.json)` with an `ETag` of `live_digest`; health compares `directory_review_id` and verifies the served digest; history labels compacted snapshots digest-only. Does not activate hosting; does not depend on WH-033 |
 | WH-184 | Connected local acceptance: long-lived directory journey, B1 regression, withdrawal at capacity, restore/export after compaction | WH-182, WH-183 | Local acceptance only; live custom-host acceptance stays in WH-061 |
 | WH-185 | Bounded directory bulk import and schema expansion | WH-184 | Deferred; separate scoped review |
 

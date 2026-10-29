@@ -33,14 +33,19 @@ function summary(items:Listing[]){return items.length?items.map(x=>`${x.title}\n
 export async function directorySnapshot(db:D1Database,user:string,project:string,review:string){
  if(!uuid.test(project)||!uuid.test(review))throw new DirectoryError(400,"Choose a saved snapshot from this project’s directory history.");
  const row=await db.prepare("SELECT r.id,r.snapshot_json,r.digest,r.kind,r.source_review_id,t.created_at AS applied_at,p.name FROM directory_reviews r JOIN projects p ON p.id=r.project_id AND p.owner_user_id=r.user_id JOIN chat_turns t ON t.id=r.confirmed_by AND t.user_id=r.user_id WHERE r.id=? AND r.project_id=? AND r.user_id=? AND r.status='applied' AND r.kind IN ('edit','publish')").bind(review,project,user).first<{id:string;snapshot_json:string;digest:string;kind:string;source_review_id:string|null;applied_at:string;name:string}>();
- if(!row)throw new DirectoryError(404,'Saved directory snapshot not found.');
+ if(!row){
+  if(await db.prepare("SELECT 1 FROM review_receipts WHERE family='directory_reviews' AND id=? AND project_id=? AND owner_user_id=? AND kind='change' AND outcome='applied'").bind(review,project,user).first())throw new DirectoryError(404,'This snapshot is digest-only: its listings were compacted, so it can no longer be restored or exported.');
+  throw new DirectoryError(404,'Saved directory snapshot not found.');
+ }
  if(await hashToken(row.snapshot_json)!==row.digest)throw new DirectoryError(409,'The saved directory snapshot failed its integrity check.');
  return {...row,listings:entries(row.snapshot_json)};
 }
 export async function directoryHistory(db:D1Database,user:string,project:string){
  const p=await readDirectory(db,user,project);
  const {results}=await db.prepare("SELECT r.id,r.kind,r.expected_revision+1 AS revision,r.digest,r.source_review_id AS restoredFrom,t.created_at AS appliedAt,json_array_length(r.snapshot_json) AS listingCount FROM directory_reviews r JOIN chat_turns t ON t.id=r.confirmed_by AND t.user_id=r.user_id WHERE r.project_id=? AND r.user_id=? AND r.status='applied' AND r.kind IN ('edit','publish') ORDER BY r.expected_revision DESC LIMIT 100").bind(project,user).all<{id:string;kind:string;revision:number;digest:string;restoredFrom:string|null;appliedAt:string;listingCount:number}>();
- return {projectId:project,name:p.name,currentRevision:p.revision,snapshots:results};
+ // Snapshots compacted out of the history window survive only as sealed receipts (kind 'change', outcome 'applied' = edit or publish): digest only, never restorable.
+ const {results:gone}=await db.prepare("SELECT id,payload_digest AS digest,applied_at AS appliedAt FROM review_receipts WHERE family='directory_reviews' AND project_id=? AND owner_user_id=? AND kind='change' AND outcome='applied' AND id NOT IN (SELECT id FROM directory_reviews WHERE project_id=?) ORDER BY sealed_at DESC LIMIT 100").bind(project,user,project).all<{id:string;digest:string;appliedAt:string|null}>();
+ return {projectId:project,name:p.name,currentRevision:p.revision,snapshots:[...results.map(r=>({...r,digestOnly:false as const})),...gone.map(r=>({...r,digestOnly:true as const}))].slice(0,100)};
 }
 export async function exportDirectory(db:D1Database,user:string,project:string,review:string){
  const r=await directorySnapshot(db,user,project,review);
@@ -66,7 +71,7 @@ export async function directoryAction(db:D1Database,user:string,turn:string,acti
  const fields=['title','description','url'];
  if(!['restore','export'].includes(String(op))&&'snapshotId'in action||['restore','export'].includes(String(op))&&(typeof action.snapshotId!=='string'||!uuid.test(action.snapshotId))||!['add','edit'].includes(String(op))&&fields.some(k=>k in action)||!['edit','remove'].includes(String(op))&&'listingId'in action)throw new DirectoryError(400,'Unexpected directory fields.');
  const p=await readDirectory(db,user,project),result=(reply:string,statements:D1PreparedStatement[]=[])=>({reply,statements});
- if(op==='history'){const h=await directoryHistory(db,user,project);return result(`${h.name} · saved directory snapshots\nCurrent draft revision: ${h.currentRevision}\n\n`+(h.snapshots.map(r=>`Revision ${r.revision} · ${r.kind}${r.restoredFrom?' (restored from '+r.restoredFrom+')':''} · ${r.listingCount} listings\nSnapshot: ${r.id}\nApplied: ${r.appliedAt}\nListings SHA-256: ${r.digest}`).join('\n\n')||'No applied snapshots yet.')+"\n\nAsk to review restoring a snapshot to the private draft, or download its saved data. Neither action publishes it.");}
+ if(op==='history'){const h=await directoryHistory(db,user,project);return result(`${h.name} · saved directory snapshots\nCurrent draft revision: ${h.currentRevision}\n\n`+(h.snapshots.map(r=>r.digestOnly?`Digest-only (listings compacted; not restorable or exportable)\nSnapshot: ${r.id}\nApplied: ${r.appliedAt??'unknown'}\nListings SHA-256: ${r.digest}`:`Revision ${r.revision} · ${r.kind}${r.restoredFrom?' (restored from '+r.restoredFrom+')':''} · ${r.listingCount} listings\nSnapshot: ${r.id}\nApplied: ${r.appliedAt}\nListings SHA-256: ${r.digest}`).join('\n\n')||'No applied snapshots yet.')+"\n\nAsk to review restoring a snapshot to the private draft, or download its saved data. Neither action publishes it.");}
  if(op==='export'){const r=await directorySnapshot(db,user,project,String(action.snapshotId));return result(`Download the saved directory data for ${p.name}.\nSnapshot: ${r.id}\nListings SHA-256: ${r.digest}\nThis private JSON export contains the saved listings and recovery metadata. It does not contain credentials or a deployable backend.`,[db.prepare('INSERT INTO directory_exports(turn_id,review_id) SELECT ?,? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(turn,r.id,turn,user)]);}
  if(op==='list')return result(`${p.name} directory · ${p.published?'published':'private / offline'}\nDraft revision: ${p.revision}\n\n${summary(p.draft)}\n\n${p.published?'Published page: '+directoryURL(project)+'\nPublic JSON: '+directoryURL(project)+'.json\nDraft edits do not change this public snapshot.':'No directory is publicly served.'}\nAsk to review publishing this snapshot or taking the directory offline.`);
  let draft=[...p.draft],change='',source:string|null=null;
@@ -110,6 +115,9 @@ export async function directoryCommand(db:D1Database,user:string,turn:string,com
  }catch(cause){if(cause instanceof DirectoryError)return result(cause.message);throw cause;}
 }
 export async function publicDirectory(db:D1Database,project:string){
- const p=await db.prepare('SELECT p.name,d.live_json,d.published_at FROM directories d JOIN projects p ON p.id=d.project_id JOIN publications s ON s.project_id=d.project_id WHERE d.project_id=? AND d.live_json IS NOT NULL AND s.version_id IS NOT NULL AND d.publication_revision=s.revision').bind(project).first<{name:string;live_json:string;published_at:string}>();
- return p?{name:p.name,publishedAt:p.published_at,listings:entries(p.live_json)}:null;
+ const p=await db.prepare('SELECT p.name,d.live_json,d.live_digest,d.published_at FROM directories d JOIN projects p ON p.id=d.project_id JOIN publications s ON s.project_id=d.project_id WHERE d.project_id=? AND d.live_json IS NOT NULL AND s.version_id IS NOT NULL AND d.publication_revision=s.revision').bind(project).first<{name:string;live_json:string;live_digest:string|null;published_at:string}>();
+ if(!p)return null;
+ // WH-183: the served listings must still hash to the digest the approved review recorded; legacy rows without one hash their own bytes.
+ const digest=await hashToken(p.live_json);if(p.live_digest&&p.live_digest!==digest)throw new DirectoryError(503,'The live directory failed its integrity check.');
+ return {name:p.name,publishedAt:p.published_at,listings:entries(p.live_json),digest};
 }

@@ -31,7 +31,7 @@ const serving = {
   try{
    if(!(local||!!project)){
     const mapping=await env.DB.prepare("SELECT c.project_id FROM domain_connections c JOIN projects p ON p.id=c.project_id AND p.owner_user_id=c.user_id WHERE c.hostname=? AND c.state='active' AND c.serve_until>? AND c.provider_id IS NOT NULL").bind(url.hostname,new Date().toISOString()).first<{project_id:string}>();
-    if(!mapping||!/^\/(?:assets\/[0-9a-f-]{36}\.jpg)?$/.test(url.pathname))return new Response('Site not found',{status:404,headers});
+    if(!mapping||!/^\/(?:assets\/[0-9a-f-]{36}\.jpg|directory(?:\.json)?)?$/.test(url.pathname))return new Response('Site not found',{status:404,headers});
     url.pathname='/s/'+mapping.project_id+url.pathname;
    }
    // Operator serving stop: every page, article, directory and photo of the project, same generic response as an outage.
@@ -44,7 +44,7 @@ const serving = {
    const cms=url.pathname.match(/^\/s\/([0-9a-f-]{36})\/cms\/(posts|pages)\/([0-9A-HJKMNP-TV-Z]{26})$/);
    if(cms){const row=await env.DB.prepare("SELECT public_html,digest FROM cms_live_articles WHERE project_id=? AND collection=? AND item_id=?").bind(cms[1],cms[2],cms[3]).first<{public_html:string;digest:string}>();if(!row)return new Response('Article not found',{status:404,headers});if(await hashToken(row.public_html)!==row.digest)return new Response('Article unavailable',{status:503,headers});return new Response(request.method==='HEAD'?null:row.public_html,{headers:{...headers,'content-security-policy':headers['content-security-policy']+"; img-src 'self'"}});}
    const directory=url.pathname.match(/^\/s\/([0-9a-f-]{36})\/directory(\.json)?$/);
-   if(directory){const data=await publicDirectory(env.DB,directory[1]);if(!data)return new Response('Directory not found',{status:404,headers});const json=!!directory[2];return new Response(request.method==='HEAD'?null:json?JSON.stringify(data):directoryPage(data),{headers:{...headers,...(json?{'content-type':'application/json; charset=utf-8','access-control-allow-origin':'*','cross-origin-resource-policy':'cross-origin'}:{})}});}
+   if(directory){const data=await publicDirectory(env.DB,directory[1]);if(!data)return new Response('Directory not found',{status:404,headers});const json=!!directory[2],{digest,...body}=data;return new Response(request.method==='HEAD'?null:json?JSON.stringify(body):directoryPage(data),{headers:{...headers,etag:'"'+digest+'"',...(json?{'content-type':'application/json; charset=utf-8','access-control-allow-origin':'*','cross-origin-resource-policy':'cross-origin'}:{})}});}
    const asset=url.pathname.match(/^\/s\/([0-9a-f-]{36})\/assets\/([0-9a-f-]{36})\.jpg$/);
    if(asset){
     const photo=await env.DB.prepare(`SELECT s.version_id,f.object_key,f.size,f.digest FROM publications s JOIN version_photos v ON v.version_id=s.version_id JOIN project_files f ON f.id=v.file_id AND f.project_id=s.project_id WHERE s.project_id=? AND f.id=? AND f.status='ready' AND ${approvedPhotoSQL}`).bind(asset[1],asset[2]).first<{version_id:string;object_key:string;size:number;digest:string}>();

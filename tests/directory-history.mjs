@@ -40,6 +40,14 @@ try{
  await assert.rejects(()=>insertReview(new Date(Date.now()+600000).toISOString()),/directory_capacity/);
  const capState=(await readChat(scope(a.user),a.user)).state.revision;assert.equal((await sendChat(scope(a.user),a.user,{id:crypto.randomUUID(),revision:capState,content:`/directory-restore ${a.project} ${first}`})).status,409);
  const off=await chat(a.user,'/directory-off '+a.project);await confirm(a.user,off);assert.equal((await pub(a)).status,404);assert.equal((await exportDirectory(scope(a.user),a.user,a.project,first)).listings[0].title,'Garden Club');
+ // WH-183: a snapshot compacted to its sealed receipt is listed digest-only; restore and export of it say so, retained ones still work.
+ {const c=await fixture(),kept=await chat(c.user,`/directory-add ${c.project} | Garden Club | Kept | https://example.com/k`);await confirm(c.user,kept);const gone=await chat(c.user,`/directory-add ${c.project} | Compacted | Gone soon | https://example.com/c`);await confirm(c.user,gone);const row=await db.prepare('SELECT digest,confirmed_by FROM directory_reviews WHERE id=?').bind(gone).first();
+  await db.prepare("INSERT INTO review_receipts(family,id,owner_user_id,project_id,kind,target,outcome,payload_digest,request_hash,confirmed_by,applied_at,lifecycle_class,sealed_at,seal) VALUES('directory_reviews',?,?,?,'change',?,'applied',?,?,?,?,'directories',?,?)").bind(gone,c.user,c.project,c.project,row.digest,'b'.repeat(64),row.confirmed_by,stamp(),stamp(),'c'.repeat(64)).run();
+  await db.prepare('DROP TRIGGER directory_review_retained').run();await db.prepare('DELETE FROM directory_reviews WHERE id=?').bind(gone).run();
+  const h=await history(c),entry=h.snapshots.find(r=>r.id===gone);assert.equal(entry.digestOnly,true);assert.equal(entry.digest,row.digest);assert.ok(h.snapshots.filter(r=>r.id!==gone).every(r=>r.digestOnly===false));
+  await assert.rejects(exportDirectory(scope(c.user),c.user,c.project,gone),{status:404,message:/digest-only/});await assert.rejects(directorySnapshot(scope(c.user),c.user,c.project,gone),{status:404,message:/digest-only/});
+  await chat(c.user,`/directory-history ${c.project}`);assert.match((await readChat(scope(c.user),c.user)).turns.at(-1).assistant_text,/Digest-only/);
+  assert.equal((await exportDirectory(scope(c.user),c.user,c.project,kept)).listings[0].title,'Garden Club');await chat(c.user,`/directory-restore ${c.project} ${kept}`);}
  await db.prepare('DELETE FROM users WHERE id=?').bind(a.user).run();assert.equal(await db.prepare('SELECT turn_id FROM directory_exports WHERE turn_id=?').bind(exportTurn).first(),null);
  console.log('Directory history passed: applied-only provenance, cross-owner/project isolation, exact restored listings/digest, private/public separation, replay, stale revision rollback, empty recovery, pinned exports, model review-only behavior, immutable ancestry, offline controls at capacity and cascade cleanup.');
 }finally{await store.close();}
