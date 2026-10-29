@@ -201,3 +201,60 @@ export async function restoreDiscrepancies(candidateDb,sourceDb){
  for(const [key,row] of current)if(!restored.has(key))add('lostSinceSnapshot',row.table);
  return {...fenced,sourceAvailable:true,candidateRecords:candidate.length,sourceRecords:source.length,counts,tables};
 }
+
+// WH-008 refresh (2026-10-29): coverage, key-version and interrupted-cutover inventories.
+// Capture is the whole logical control database, so every table is captured and restored unless it is
+// named here with a rationale. Today nothing is excluded: restored rows stay fenced and are reconciled
+// by WH-019 rather than dropped, because dropping a ledger would hide the very rows reconciliation needs.
+// A new table fails the drill until the lifecycle catalog classifies it (docs/data-lifecycle.json).
+export const recoveryExclusions=Object.freeze({});
+
+/** Per-table disposition: captured and restored, or excluded with a rationale. Hold codes only. */
+export async function recoveryCoverage(snapshot,countRows,catalog,exclusions=recoveryExclusions){
+ const owner=new Map();for(const c of catalog.classes)for(const t of c.tables)owner.set(t,c.id);
+ const captured=new Map(snapshot.tables.filter(t=>t.name!=='sqlite_sequence').map(t=>[t.name,t.rows.length])),holds=new Set(),classes={};
+ for(const t of Object.keys(exclusions))if(!captured.has(t))holds.add('coverage-stale-exclusion');
+ let restored=0,excluded=0,empty=0;
+ for(const [table,rows] of captured){
+  const cls=owner.get(table);if(!cls){holds.add('coverage-unclassified-table');continue;}
+  classes[cls]??={tables:0,rows:0};classes[cls].tables++;classes[cls].rows+=rows;
+  if(Object.hasOwn(exclusions,table)){excluded++;continue;}
+  if(await countRows(table)!==rows)holds.add('coverage-restore-mismatch');else{restored++;if(!rows)empty++;}
+ }
+ return {...fenced,status:holds.size?'held':'complete',holds:[...holds].sort(),tables:captured.size,restored,excluded,emptyTables:empty,populatedTables:restored-empty,classes:Object.keys(classes).length,perClass:classes};
+}
+
+const keyStores=[['github_token_vault','ciphertext'],['cloudflare_token_vault','ciphertext'],['github_refresh_custody','ciphertext'],['github_oauth_states','verifier_ciphertext'],['cloudflare_oauth_states','verifier_ciphertext']];
+/** WH-117 key versions: registered ids, the active id, ciphertext rows per key id, and any rotation left running.
+ * Key ids and counts only, never fingerprints or key material. A running rotation or an in-use unregistered id holds. */
+export async function inventoryKeyVersions(db){
+ const q=query(db),holds=new Set();
+ const registered=(await q('SELECT id FROM connection_key_registry ORDER BY id')).map(r=>r.id);
+ const policy=await q('SELECT active_key,revision FROM connection_key_policy');
+ const rotations=await q('SELECT id,source_key,target_key,revision,state FROM connection_key_rotations ORDER BY revision');
+ const guards=(await q('SELECT count(*) n FROM connection_rotation_guards'))[0].n;
+ const inUse={};
+ for(const [table,column] of keyStores)for(const r of await q(`SELECT CASE WHEN substr(${ident(column)},1,4)='wv2.' THEN substr(${ident(column)},5,instr(substr(${ident(column)},5),'.')-1) ELSE '' END k,count(*) n FROM ${ident(table)} GROUP BY 1`)){
+  inUse[r.k||'unrecognized']=(inUse[r.k||'unrecognized']??0)+r.n;
+  if(!registered.includes(r.k))holds.add('key-version-unregistered');
+ }
+ if(policy.length!==1||!registered.includes(policy[0]?.active_key))holds.add('key-policy');
+ const running=rotations.filter(r=>r.state==='running').map(r=>({id:r.id,source:r.source_key,target:r.target_key,revision:r.revision}));
+ if(running.length||guards)holds.add('key-rotation-unsettled');
+ return {...fenced,status:holds.size?'held':'settled',holds:[...holds].sort(),registered,active:policy[0]?.active_key??null,policyRevision:policy[0]?.revision??null,rotations:{complete:rotations.length-running.length,running},rotationGuards:guards,ciphertextByKey:inUse};
+}
+
+const stepStates=new Set(['pending','running','unknown','confirmed']),journalStates=new Set(['prepared','applying','needs-reconciliation','deployed']);
+/** Interrupted cutovers: release journals (tools/release-manifest.mjs) left mid-apply. A running or unknown
+ * step is never retried from here; the inventory only names it so the operator reconciles against live state. */
+export function inventoryCutovers(journals){
+ const holds=new Set(),releases=[];
+ for(const j of journals){
+  if(!j||typeof j.release!=='string'||!journalStates.has(j.status)||!j.steps||typeof j.steps!=='object'||!Object.values(j.steps).every(s=>stepStates.has(s?.status))){holds.add('journal-format');continue;}
+  const stuck=Object.entries(j.steps).filter(([,s])=>s.status==='running'||s.status==='unknown').map(([step,s])=>({step,status:s.status,operationConfirmed:s.operationConfirmed===true}));
+  const interrupted=j.status==='applying'||j.status==='needs-reconciliation'||stuck.length>0;
+  if(interrupted)holds.add('cutover-interrupted');
+  releases.push({release:j.release,status:j.status,interrupted,stuck,pending:Object.values(j.steps).filter(s=>s.status==='pending').length});
+ }
+ return {...fenced,status:holds.size?'held':'settled',holds:[...holds].sort(),journals:journals.length,interrupted:releases.filter(r=>r.interrupted).length,releases};
+}
