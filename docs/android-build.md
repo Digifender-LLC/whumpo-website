@@ -92,3 +92,11 @@ Standard GitHub-hosted runners are free for public repositories. Private reposit
 - **October 4, 2026 (original shell):** Gradle wrapper hashes matched; `:core:test` passed 19/19 locally; the Android modules were CI-only.
 - **October 29, 2026 (WP4):** `:shared:jvmTest` (including `MobileApiClientTest`) and `:shared:compileKotlinJvm` passed locally on Temurin 21; the Android targets are verified in GitHub Actions only (see the PR). The client is not wired into the app yet and the shell still has no `INTERNET` permission.
 - **October 29, 2026 (WP1):** the dev machine still has no Android SDK, and no SDK license was accepted locally. The restructure was verified in GitHub Actions on the pull request: see the PR for the run. The Gradle wrapper JAR is unchanged (SHA-256 `7a9ce74c…262c5d`); only the distribution URL and checksum moved to 9.8.2.
+
+## Theme (WP2)
+
+- `android/shared/src/commonMain/kotlin/com/whumpo/android/ui/theme/WhumpoTokens.kt` is **generated** by `node tools/design-tokens.mjs` from `docs/design/whumpo-design-system/tokens.json` (palettes, the mapped Material 3 scheme for light and dark, type, radii, spacing, motion). `--check` (part of `pnpm check`) fails when the file is stale. The same run asserts 4.5:1 for every mapped text pair and 3:1 for outline and focus ring in both themes, and that light `primary` is not Sky Blue. `WhumpoTheme.kt` and `WhumpoButtons.kt` are hand-written and contain no hex.
+- Fonts: `composeResources/font/*.ttf` (Poppins Medium and Bold, Inter Regular, Medium and SemiBold) are lossless TTF conversions of the design system's `.woff2` files, so the app and the web ship the same glyphs. Licences (SIL OFL 1.1): `composeResources/files/OFL-Poppins.txt` and `OFL-Inter.txt`.
+- Material 3 for Compose Multiplatform is versioned apart from Compose: `composeMaterial3 = 1.9.0` in the catalog.
+- Roborazzi is not introduced in WP2 (it needs Robolectric and the Android SDK, which only CI has). Verification is `WhumpoTokensTest` (JVM, `:shared:jvmTest`) plus the generator check. Screenshot tests belong with WP3.
+- `overline` is exposed as `WhumpoTheme.overline`; callers apply uppercase to the text (a `TextStyle` cannot).
