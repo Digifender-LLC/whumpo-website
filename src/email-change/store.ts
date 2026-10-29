@@ -73,7 +73,7 @@ const added=(before:readonly number[],after:readonly number[]|undefined)=>{
  for(const t of after??[]){const i=remaining.indexOf(t);if(i>=0)remaining.splice(i,1);else fresh.push(t);}
  return fresh;
 };
-function writeChange(db:Database,change:EmailChange){
+export function writeChange(db:Database,change:EmailChange){
  const previous=change.previous;
  return db.prepare('UPDATE owner_email_changes SET state=?,revision=?,history=?,token_verifier=?,previous_address=?,previous_verified_at=?,previous_verified_via=?,receipt_verified_at=?,undo_until=? WHERE change_id=?')
   .bind(change.state,change.revision,JSON.stringify(change.history),change.tokenVerifier,previous?.address??null,previous?.verifiedAt??null,previous?.verifiedVia??null,change.receipt?.verifiedAt??null,change.undoUntil,change.changeId);
