@@ -919,7 +919,7 @@ await checkOnce('the source module is pure, and no Worker entry reaches it',asyn
   assert.ok(Object.hasOwn(inputs,worker)&&(worker!=='src/index.ts'||reached.size>100),`${worker}: ${reached.size} modules`);
   // WH-201: only the main Worker reaches the module, and only through the trusted adapter. The site, app and runtime Workers never do.
   const reachedModule=[...reached].filter(p=>/email-change/.test(p));
-  if(worker==='src/index.ts')assert.ok(reachedModule.includes('src/email-change/http.ts')&&reachedModule.every(p=>p==='src/email-change/http.ts'||p==='src/email-change/store.ts'||moduleFiles.includes(p)),`${worker} reaches ${reachedModule}`);
+  if(worker==='src/index.ts')assert.ok(reachedModule.includes('src/email-change/http.ts')&&reachedModule.every(p=>p==='src/email-change/http.ts'||p==='src/email-change/store.ts'||p==='src/email-change/maintenance.ts'||moduleFiles.includes(p)),`${worker} reaches ${reachedModule}`);
   else assert.deepEqual(reachedModule,[],`${worker} reaches the email-change module`);
  }
  // No Chat, agent, model or other module imports it: the only importer outside the folder is the main Worker's route table.

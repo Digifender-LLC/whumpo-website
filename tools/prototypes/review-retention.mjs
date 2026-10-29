@@ -114,6 +114,10 @@ export const lifecycleTable=table=>({app_migration_current:'app_migration_checks
 // withdrawal: the rows that withdraw/disable/revoke and must be exempt from capacity (proposal).
 const R=(cls,lane,turnover,lifecycle,withdrawal=null)=>Object.freeze({class:cls,lane,turnover,lifecycle,withdrawal});
 export const capRegistry=Object.freeze({
+ // WH-170/WH-201 tables with trigger caps: shadow cost evidence (deleted with the account), address-change rate evidence and compromise reviews.
+ cost_events:R('inventory','R6','lifetime','cost-events'),
+ owner_email_change_limits:R('rate','R6','expiring','owner-email-change-limits'),
+ owner_security_reviews:R('inventory','R6','expiring','owner-security-reviews'),
  app_activation_reviews:R('review','R1','active-only','visitor-app-data','enabled=0'),
  app_auth_challenges:R('inventory','R6','expiring','visitor-identity'),
  app_daily_usage:R('rate','R6','window','visitor-app-data'),

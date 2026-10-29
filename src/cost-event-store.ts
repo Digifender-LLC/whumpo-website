@@ -1,7 +1,7 @@
 // WH-170: the durable, append-only store of the shadow cost-event contract (docs/cost-events.md, version 1) over the `cost_events`
 // table. Evidence about consumption only: nothing here charges, credits, admits or throttles, no route reads it, and a refused or
-// failed append never changes the receipt that produced it. The append rules are the reference ledger's (tools/prototypes/
-// cost-events.mjs) minus account-closure tombstones: closure deletes the owner's rows with the account (owner decision, October
+// failed append never changes the receipt that produced it. The append rules are the reference ledger's (the WH-168 offline
+// prototype) minus account-closure tombstones: closure deletes the owner's rows with the account (owner decision, October
 // 28, 2026), so an owner or project that no longer exists is refused (`TENANT_MISMATCH`, `UNKNOWN_PROJECT`) and no closure key exists.
 import { canonical, CostEventError, validateCostEvent, type CostEvent } from './cost-events';
 
