@@ -28,5 +28,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "whumpo-android"
 
-include(":core")
-include(":app")
+include(":shared")
+include(":androidApp")
