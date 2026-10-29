@@ -41,11 +41,20 @@ try{
  await check('no measured response is cacheable and the repeat request does the same work',async()=>{
   for(const r of inventory.routes){
    if(r.assetsStub&&r.cacheControl===null){assert.equal(r.key,'platform.asset.get');continue;}
-   assert.match(r.cacheControl,/no-store/,r.key);assert.ok(!cacheable.test(r.cacheControl),r.key+' '+r.cacheControl);assert.deepEqual(r.validators,[],r.key);
+   assert.match(r.cacheControl,/no-store/,r.key);assert.ok(!cacheable.test(r.cacheControl),r.key+' '+r.cacheControl);assert.deepEqual(r.validators,r.key.startsWith('site.directory.')&&r.key.endsWith('.live')?['etag']:[],r.key+' (a published directory carries its snapshot digest as an ETag, still no-store)');
    assert.equal(r.repeatRequest.sameWork,true,r.key+' repeat work differs: an in-isolate cache appeared');assert.equal(r.repeatRequest.status,r.status,r.key);
   }
   assert.equal(inventory.routes.find(r=>r.key==='contact.form.get').repeatRequest.bodyIdentical,false,'Each contact form render carries a fresh message id');
   for(const key of ['site.root.get','site.photo.get','custom.root.get','custom.photo.get'])assert.equal(inventory.routes.find(r=>r.key===key).repeatRequest.bodyIdentical,true,key);
+ });
+ await check('the successful directory, CMS, backend form and visitor app routes are measured, not only their 404/400 forms',async()=>{
+  const route=key=>inventory.routes.find(r=>r.key===key),ok=['site.directory.json.live','site.directory.html.live','site.cms.index.live','site.cms.article.get','site.root.backend-form','site.backend.post','app.page.live','app.module.access.me'];
+  for(const key of ok){assert.equal(route(key).status,200,key);assert.equal(route(key).firstRequest.subrequests.length,0,key);}
+  for(const key of ['site.directory.json','site.directory.html','site.cms.index'])assert.equal(route(key).status,404,key+' stays as the unpublished contrast');
+  assert.equal(route('site.backend.post').firstRequest.serviceBindings.BACKEND_RUNTIME,1,'The backend form runs the customer program once');
+  assert.ok(route('site.root.backend-form').revocationInputs.includes('live backend form'));
+  assert.ok(route('site.cms.index.live').revocationInputs.includes('live CMS article'));
+  assert.ok(route('app.page.live').revocationInputs.includes('live visitor application page'));
  });
  await check('published content reads its revocation inputs on every request',async()=>{
   const inputs=key=>inventory.routes.find(r=>r.key===key).revocationInputs;

@@ -4,6 +4,8 @@ import {currentFixtureModules} from './helpers/current-modules.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
 import {ownerFunding,uncacheable} from './helpers/owner-funding.mjs';
 import {inferenceModules,inferenceReach} from './helpers/maintainer-inference.mjs';
+import {currentSiteFixtureHandlers} from './current-site-fixture.mjs';
+import {seedSuccessPaths,publishedFixtureSite} from './helpers/success-paths.mjs';
 Error.stackTraceLimit=0;
 // WH-073 slice 1 (verification only): published content, visitor application, guest preview, contact and scheduled
 // maintenance routes dispatch zero owner-maintenance model inference, with the maintainer absent (no AI keys) or present
@@ -14,11 +16,11 @@ Error.stackTraceLimit=0;
 // loudly. Local synthetic evidence only: no cache or delivery change, no request-path cost measurement, no live Worker.
 const modules=await currentFixtureModules(['src/index.ts','src/publications.ts','src/contacts.ts','src/ai-chat.ts','src/project-specification/store.ts','src/site-host.ts','src/app-host.ts','src/model-costs.ts','src/gateway-spend.ts','src/inference-routing.ts']);
 const [{default:platform},pub,contacts,{configuredAI},site,{default:siteHost},{default:appHost}]=await Promise.all(['src/index.ts','src/publications.ts','src/contacts.ts','src/ai-chat.ts','src/project-specification/store.ts','src/site-host.ts','src/app-host.ts'].map(async path=>{const m=await modules.module(path);return path==='src/ai-chat.ts'?{configuredAI:m.configuredAI}:m;}));
-const fixture=await databaseFixture(),{db}=fixture,id=()=>crypto.randomUUID(),run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
+const fixture=await databaseFixture(),{db}=fixture,site_=await currentSiteFixtureHandlers(),id=()=>crypto.randomUUID(),run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
 // Owner-side admission and funding fixtures, used only to seed exhausted balances and to prove they really refuse owner maintenance.
 const {account,standardAllowance,gatewayFunding,reserveGateway,reserveStandard,funding,exhausted}=await ownerFunding({db,modules});
 const consoleMethods=['log','info','warn','error','debug'],originals=Object.fromEntries(consoleMethods.map(k=>[k,console[k]])),logs=[];
-const originalFetch=globalThis.fetch;let network=0,providerStatus=null,cases=0,requests=0;
+const originalFetch=globalThis.fetch;let network=0,providerStatus=null,cases=0,requests=0,backendRuns=0,success;
 // Counting transport (below): attempted network calls are counted, then refused (no maintainer) or answered 503 (failing).
 const urls=[];let probes=0,env_;
 // Site health re-reads each published site at its own whumpo.site origin; that closed loop is served by the real sites
@@ -31,7 +33,8 @@ globalThis.fetch=async(input,init)=>{
 const files={get:async()=>null,head:async()=>null,list:async()=>({objects:[],truncated:false}),delete:async()=>{},put:async()=>assert.fail('Standard service routes write no object')};
 // Traffic measurement is the only background work a visitor route queues; it is awaited so its effects are counted.
 const background=[],ctx={waitUntil:promise=>{background.push(promise);}};
-const base={DB:db,FILES:files,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})},TURNSTILE_SECRET:'fixture',TURNSTILE_SITE_KEY:'fixture',ASSETS:{fetch:async()=>new Response('asset')}};
+// The customer's own backend program runtime (a service binding, not a provider): counted apart from the network.
+const base={DB:db,FILES:files,BACKEND_RUNTIME:{fetch:async()=>{backendRuns++;return Response.json({ok:true,value:{}});}},ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})},TURNSTILE_SECRET:'fixture',TURNSTILE_SITE_KEY:'fixture',ASSETS:{fetch:async()=>new Response('asset')}};
 const variants={
  'maintainer unavailable (no AI binding or key)':base,
  'maintainer configured but failing (provider 503)':{...base,AI_BASE_URL:'https://opencode.ai/zen/go/v1',AI_MODEL:'muse-spark-1.3-contributor',AI_API_KEY:'synthetic-not-a-secret',AI_PROTOCOL:'responses'}
@@ -62,10 +65,13 @@ try{
  for(const [maintainer,env] of Object.entries(variants))for(const [balance,fund] of Object.entries(exhausted))await check(maintainer+' / '+balance,async()=>{
   const configured=!!env.AI_API_KEY;providerStatus=configured?503:null;
   assert.equal(!!configuredAI(env),configured,'The variant really has (or lacks) a usable maintainer');
-  network=0;requests=0;probes=0;env_={siteHost,env};
+  network=0;requests=0;probes=0;backendRuns=0;env_={siteHost,env};
   const a=await owner('Garden '+id().slice(0,8)),b=await owner('Revoked '+id().slice(0,8));await enableContact(a);
+  // WH-073: the services behind the successful routes (directory, CMS article, live backend form, visitor app), seeded through the real owner paths.
+  // Seeded once: the platform admits only five CMS projects, so one project serves every variant.
+  success??=await publishedFixtureSite({db,m:site_}).then(async w=>({w,live:await seedSuccessPaths({db,m:site_,o:w})}));const {w,live}=success;
   // Both site owners' funding is exhausted in the durable rows before any visitor arrives; none of it may change.
-  a.task=id();b.task=id();for(const o of [a,b]){await fund.seed?.(o);await fund.verify?.(o);}
+  a.task=id();b.task=id();w.task=id();for(const o of [a,b,w]){await fund.seed?.(o);await fund.verify?.(o);}
   const seeded=await funding(),start=await counters(),page=(project,path='/')=>get(siteHost,`https://${project}.whumpo.site${path}`,env);
 
   // Published content: served by the sites Worker alone, never cacheable.
@@ -83,6 +89,18 @@ try{
   const appPage=await get(appHost,`https://app-${a.project}.whumpo.site/`,env);assert.equal(appPage.status,404);assert.match(appPage.headers.get('cache-control'),/no-store/);
   const appApi=await get(appHost,`https://app-${a.project}.whumpo.site/modules`,env,{method:'POST',headers:{'content-type':'application/json',origin:`https://app-${a.project}.whumpo.site`},body:'{}'});assert.ok(appApi.status>=400&&appApi.status<500,String(appApi.status));assert.match(appApi.headers.get('cache-control'),/no-store/);
   const viaSites=await get(siteHost,`https://app-${a.project}.whumpo.site/`,{...env,APP_HOST:{fetch:request=>get(appHost,request,env)}});assert.equal(viaSites.status,404);
+
+  // WH-073 successful paths of those services: each is served with 200 and never cacheable, with no provider or maintainer dispatch.
+  const ok=async(url,env,init)=>{const r=await get(siteHost,url,env,init);assert.equal(r.status,200,url);if(url.includes('/directory'))assert.match(r.headers.get('cache-control'),/no-store/);else uncacheable(r);return r;}; // a published directory carries its snapshot digest as an ETag, still no-store
+  const site=`https://${w.project}.whumpo.site`;
+  assert.equal((await (await ok(site+'/directory.json',env)).json()).listings[0].title,'Garden club');
+  assert.ok((await (await ok(site+'/directory',env)).text()).includes('Garden club'));
+  assert.ok((await (await ok(site+'/cms',env)).text()).includes('A quieter corner'));await ok(site+live.article,env);
+  assert.ok((await (await ok(site+'/',env)).text()).includes('whumpo-backend-form'),'The live backend form is on the published page');
+  assert.equal(backendRuns,0,'Reading the form runs no program');
+  const sent=await ok(`${site}/backend/${live.publication}`,env,{method:'POST',headers:{'content-type':'application/json'},body:'{"quantity":2}'});assert.equal((await sent.json()).ok,true);assert.equal(backendRuns,1,'A form submission runs the customer program once (its own runtime binding, not a provider)');
+  const appOrigin=`https://app-${w.project}.whumpo.site`,livePage=await get(appHost,appOrigin+'/',env);assert.equal(livePage.status,200);assert.match(livePage.headers.get('cache-control'),/no-store/);
+  const me=await get(appHost,appOrigin+'/modules',env,{method:'POST',headers:{'content-type':'application/json',origin:appOrigin,cookie:live.cookie},body:JSON.stringify(live.me)});assert.equal(me.status,200);assert.match(me.headers.get('cache-control'),/no-store/);
 
   // Contact: the form and its submission are deterministic. Verification (Turnstile) is network, so the submission
   // runs in the local environment that skips it; the page itself is also read in the test environment.
@@ -108,14 +126,14 @@ try{
 
   const end=await counters();
   assert.deepEqual(await funding(),seeded,'No funding row moved: no new attempt, reservation, dispatch or balance change');
-  for(const o of [a,b])await fund.verify?.(o);
+  for(const o of [a,b,w])await fund.verify?.(o);
   assert.equal(network,0,'No visitor, service or scheduled route reached the network (so no maintainer provider): '+urls.splice(0).join(', '));
   assert.deepEqual({...end,turns:0},{...start,turns:0},'No inference call, gateway spend or standard-AI request was recorded');
   assert.equal(end.turns,before.turns,'Scheduled drains create no Chat turns');
   assert.ok(probes>=1,'Scheduled site health re-read a published site through the sites Worker');
-  assert.equal(requests,23,'The journey exercised its whole route inventory');
+  assert.equal(requests,31,'The journey exercised its whole route inventory');
   // Contrast: with the same rows, owner maintenance is refused, so the exhaustion above was real and merely irrelevant to visitors.
-  for(const o of [a,b])await fund.refused?.(o);
+  for(const o of [a,b,w])await fund.refused?.(o);
   assert.deepEqual(await funding(),seeded,'A refused owner admission leaves every funding row unchanged');
   providerStatus=null;
  });
@@ -131,6 +149,6 @@ try{
  });
  assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
  assert.ok(!logs.some(line=>/synthetic-not-a-secret/.test(line)),'No credential reached logs');
- process.stdout.write(`Standard service independence passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — import graphs of site-host, app-host, app-gateway, runtime worker and contact page reach no inference module (the platform entry is detected as a positive control); published site, directory, CMS, asset, method, host, guest-preview, visitor-app, contact form and submission, unpublish and safety-hold routes plus all three cron schedules ran with the maintainer absent and with it failing (503), each with the owners' funding unset, with the standard usage allowance spent to its ceiling, and with premium credit, premium approval and task, account and platform operator buckets all spent to their limits, with zero network calls, inference_calls, gateway_spend_attempts, standard-AI or gateway requests and Chat turns, every seeded budget and bucket row byte-for-byte unchanged (no new attempt, reservation, dispatch or balance movement), and no cacheable response; the same exhausted rows refuse owner maintenance admission (inference_budget trigger, gateway reservation 409) while funded controls are admitted. Local synthetic verification only; no cache or delivery change, request-path cost measurement, purchased credits, real provider outage or live Worker evidence.\n`);
+ process.stdout.write(`Standard service independence passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — import graphs of site-host, app-host, app-gateway, runtime worker and contact page reach no inference module (the platform entry is detected as a positive control); published site, successful published directory, CMS index and article, live backend form and its submission, visitor app page and signed-in module call (plus the unpublished 404 forms), asset, method, host, guest-preview, visitor-app, contact form and submission, unpublish and safety-hold routes plus all three cron schedules ran with the maintainer absent and with it failing (503), each with the owners' funding unset, with the standard usage allowance spent to its ceiling, and with premium credit, premium approval and task, account and platform operator buckets all spent to their limits, with zero network calls, inference_calls, gateway_spend_attempts, standard-AI or gateway requests and Chat turns, every seeded budget and bucket row byte-for-byte unchanged (no new attempt, reservation, dispatch or balance movement), and no cacheable response; the same exhausted rows refuse owner maintenance admission (inference_budget trigger, gateway reservation 409) while funded controls are admitted. Local synthetic verification only; no cache or delivery change, request-path cost measurement, purchased credits, real provider outage or live Worker evidence.\n`);
 }catch(error){originals.error(String(error.stack||error));process.exitCode=1;}
 finally{for(const k of consoleMethods)console[k]=originals[k];globalThis.fetch=originalFetch;await fixture.close?.();}
