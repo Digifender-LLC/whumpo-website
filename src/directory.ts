@@ -119,7 +119,7 @@ export async function directoryCommand(db:D1Database,user:string,turn:string,com
 export async function publicDirectory(db:D1Database,project:string){
  const p=await db.prepare('SELECT p.name,d.live_json,d.live_digest,d.published_at FROM directories d JOIN projects p ON p.id=d.project_id JOIN publications s ON s.project_id=d.project_id WHERE d.project_id=? AND d.live_json IS NOT NULL AND s.version_id IS NOT NULL AND d.publication_revision=s.revision').bind(project).first<{name:string;live_json:string;live_digest:string|null;published_at:string}>();
  if(!p)return null;
- // WH-183: the served listings must still hash to the digest the approved review recorded; legacy rows without one hash their own bytes.
- const digest=await hashToken(p.live_json);if(p.live_digest&&p.live_digest!==digest)throw new DirectoryError(503,'The live directory failed its integrity check.');
+ // WH-183: the served listings must still hash to the digest the approved review recorded; a row without one fails closed.
+ const digest=await hashToken(p.live_json);if(!p.live_digest||p.live_digest!==digest)throw new DirectoryError(503,'The live directory failed its integrity check.');
  return {name:p.name,publishedAt:p.published_at,listings:entries(p.live_json),digest};
 }
