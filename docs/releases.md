@@ -244,3 +244,17 @@ Workers Builds redeploys main through `deploy ci` after an owner `apply`, so the
 | Catalog objects / tables | 1083 / 222 | 1124 / 226 |
 
 Both digests are the output of `tools/current-schema.mjs` (`currentSchemaArtifact()`); the tenant registry baseline (`docs/tenant-classification.json`, `reviewedSchemaSha256`) carries the inventory digest as printed by the tool. The change adds four tables, two columns, one scheduled-job name and their indexes and triggers; it adds no migration, legacy reader or password field. No provider, secret, deployment or spend is involved. Nothing is migrated: as for every earlier schema change, the cutover initialises a new empty database, and test data in the old one is not carried over.
+
+## Test-platform cutover — October 29, 2026 UTC
+
+Owner-instructed test-platform cutover for the WH-203 review-cap fix and the WH-143 `lookup_consents` and `connector_receipts` tables. Source `aad33a5` (#435); the binding commit `408230f` merged as PR #436 (main `93e1aad`). Main's Workers build succeeded on the #436 merge.
+
+- Release: `8124aa4c-7094-47a0-a7a7-384d1d755f17`.
+- New empty database: `whumpo-control-2026-10-29` (`655854de-5a26-463d-af1e-82d539dd0181`). Complete-SQL sha256 `d6a39d55b4227787c9caeb1afd0f79d7e6d90d9321c3378a50b732afcbcb4d8b`; inventory sha256 `7e27e43ce3f39bcefecf28a50e2f83bec6190b774522c76f7792eabd7075b5bc`: 228 tables, 1136 objects.
+- Platform version `cdd7b5be-8972-4ad5-bddd-6c60b4b84131`; all four candidate tags matched. CMS registry empty.
+- Preflight on the old database `whumpo-control-2026-10-28`: every account-closure count zero.
+- Key policy `test-20261026` registered, review `wh117d-20261029`.
+- Live checks: `/` and `/api/health` 200; anonymous `/api/chat` and `/api/profile` 401; the signed-in workspace smoke and guest-preview live suites passed with `cleanupVerified: true`.
+- Owner invitation file (private, never the code): `invitation-f27e0485484f.txt`.
+- Superseded databases `whumpo-control-2026-10-27`, `-27b` and `-27c` were deleted on owner approval (Q-003, 2026-10-29). `whumpo-control-2026-10-28` is kept.
+- Not done: owner re-enrollment.

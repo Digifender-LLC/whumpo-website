@@ -7535,7 +7535,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-29 UTC (branch wh-145-rule-authority from 93e1aad; synthetic data, no schema, deploy or secrets): added the pure, unwired src/connector-catalog/rule-authority.ts (admitRuleAction). It binds a rule approval to {operation, destination digest, template digest, limit, credential} and refuses any mismatch with the reference codes (RULE_READ_FORBIDDEN, OWNER_REQUEST_ONLY, RULE_APPROVAL_REQUIRED, ADAPTER_NOT_ACCEPTED, RULE_DESTINATION_MISMATCH, RULE_LIMIT) plus RULE_CREDENTIAL_MISMATCH; every adapter refuses today because none is live-accepted. tests/connector-rule-authority.mjs checks every code and bound field against tools/prototypes/connectors.mjs. Not done: approval storage, WH-069 job-runner wiring, live adapters, SQLite/local-D1 job tests; WH-145 stays open.
 
 ## WH-146 — Connected synthetic connector acceptance and privacy/rate-limit review
 
