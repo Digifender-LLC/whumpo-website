@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {ciCommit,ciReview,ciPreflight,ciRelease,scrubCIOverrides} from '../tools/deploy-ci.mjs';
+import {execFileSync} from 'node:child_process';
+import {ciCommit,ciReview,ciPreflight,ciRelease,ciRefusal,ciSupersession,scrubCIOverrides} from '../tools/deploy-ci.mjs';
 import {validateCompatibility} from '../tools/release-manifest.mjs';
 
 // Synthetic only: no provider, credential or remote call.
@@ -40,7 +41,7 @@ const raceError=()=>Error('Worker changed outside this release');
 const prepareError=()=>Error('Build or remote baseline changed during preparation');
 const race=async(outcomes,prepareErrors=[])=>{
  const prepares=[],logs=[];let n=0,p=0,observes=0;
- const deps={env:{WORKERS_CI:'1'},log:m=>logs.push(m),commit:()=>source,snapshot:async()=>({inputs:{sha256:'b'.repeat(64)}}),schema:async()=>artifact,
+ const deps={env:{WORKERS_CI:'1'},log:m=>logs.push(m),commit:()=>source,supersession:()=>'current',snapshot:async()=>({inputs:{sha256:'b'.repeat(64)}}),schema:async()=>artifact,
   prepare:async()=>{const e=prepareErrors[p++];if(e)throw e;const directory=mkdtempSync(join(tmpdir(),'ci-race-'));prepares.push(directory);return {directory,manifest:{id:'r'+prepares.length,schema:{mode:'none'}}};},
   apply:async directory=>{const o=outcomes[n++];if(o.journal)writeFileSync(join(directory,'journal.json'),JSON.stringify({steps:o.journal}));if(o.error)throw o.error;}};
  const result=await ciRelease(process.cwd(),{observe:async()=>{observes++;return observed();},configs:driver.configs},deps).then(r=>({r}),error=>({error}));
@@ -73,4 +74,28 @@ out=await race([{error:raceError(),journal:pending},{}]);
 assert.ok(out.r&&out.applies===2&&out.observes===2);
 out=await race([{error:raceError(),journal:pending}],[prepareError()]);
 assert.equal(out.error?.message,'Worker changed outside this release');assert.equal(out.prepareCalls,2);assert.equal(out.applies,1);
+// Superseded-build guard against a real (shallow) clone of a throwaway origin.
+{
+ const dir=mkdtempSync(join(tmpdir(),'ci-super-')),sh=(cwd,...a)=>execFileSync('git',a,{cwd,encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim();
+ const origin=join(dir,'origin');sh(dir,'init','-q','-b','main',origin);
+ const commit=n=>{writeFileSync(join(origin,'f'),n);sh(origin,'add','f');sh(origin,'-c','user.name=t','-c','user.email=t@e.invalid','commit','-qm',n);return sh(origin,'rev-parse','HEAD');};
+ const old=commit('1'),mid=commit('2'),tip=commit('3');
+ sh(origin,'checkout','-q','-b','side',old);const side=commit('side');sh(origin,'checkout','-q','main');
+ const guard=sha=>{
+  const c=join(dir,'c'+Math.random().toString(36).slice(2));sh(dir,'clone','-q','--depth=1','file://'+origin,c);if(sha===side)sh(c,'fetch','-q','--depth=1','origin','side');
+  return ciSupersession(sha,(args,{status}={})=>{try{const out=sh(c,...args);return status?0:out;}catch(error){if(status&&Number.isInteger(error.status))return error.status;throw error;}});
+ };
+ assert.equal(guard(tip),'current');
+ assert.equal(guard(mid),'superseded');
+ assert.equal(guard(old),'superseded');
+ assert.throws(()=>guard(side),/not on the main branch/);
+ // Unreachable origin never deploys.
+ assert.throws(()=>ciSupersession(old,args=>{if(args[0]==='fetch')throw Error('offline');return '';}),/could not be fetched/);
+ // A superseded run exits successfully without touching the snapshot, schema, driver or release steps.
+ let used=false;const logs=[];const touch=async()=>{used=true;};
+ const skipped=await ciRelease(process.cwd(),{observe:touch},{env:{WORKERS_CI:'1'},log:m=>logs.push(m),commit:()=>source,supersession:()=>'superseded',snapshot:touch,schema:touch,prepare:touch,apply:touch});
+ assert.deepEqual(skipped,{superseded:true});assert.equal(used,false);assert.match(logs.join(),/Superseded by newer main/);
+ // An unknown answer from the guard propagates as a refusal, never a deploy.
+ await assert.rejects(()=>ciRelease(process.cwd(),{observe:touch},{env:{WORKERS_CI:'1'},commit:()=>source,supersession:()=>{throw ciRefusal('x');}}),/CI release refused/);
+}
 console.log('CI release: commit identity, generated schema-unchanged review, schema/database/CMS refusals and Workers Builds name-override removal, the Workers Builds-only guard and the single retry (prepare baseline or pending-only apply) after a concurrent merge passed. No provider calls.');

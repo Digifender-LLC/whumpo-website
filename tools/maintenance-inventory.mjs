@@ -56,7 +56,8 @@ export const backlogInventory={
  build_cleanup:queue('build_jobs',"state<>'running' AND cleanup<>'released'",'finished_at',600000),
  // WH-182: review rows the schema guard would let leave (terminal, unreferenced, unheld, outside the history window) that no admission or daily pass has sealed yet.
  // due_at is the row's own expiry, so a project whose daily pass keeps missing it shows as attention after 25 hours.
- review_turnover:{sql:Object.values(reviewFamilies).map(f=>`SELECT ${f.unix?"strftime('%Y-%m-%dT%H:%M:%fZ',r.expires_at,'unixepoch')":'r.expires_at'} AS due_at FROM ${f.table} r WHERE ${eligibleSql(f)}`).join(' UNION ALL '),threshold:daily},
+ // D1 refuses a compound SELECT of more than 5 terms (HTTP 400 live; local SQLite allows 500), so the families are grouped 5 per nested union.
+ review_turnover:{sql:(terms=>{const groups=[];for(let i=0;i<terms.length;i+=5)groups.push(`SELECT due_at FROM (${terms.slice(i,i+5).join(' UNION ALL ')})`);return groups.join(' UNION ALL ');})(Object.values(reviewFamilies).map(f=>`SELECT ${f.unix?"strftime('%Y-%m-%dT%H:%M:%fZ',r.expires_at,'unixepoch')":'r.expires_at'} AS due_at FROM ${f.table} r WHERE ${eligibleSql(f)}`)),threshold:daily},
  // Sealed receipts past the 30-day replay horizon, outside a safety hold.
  review_receipts:queue('review_receipts q',`${date('q.sealed_at','+30 days')}<=?1 AND NOT EXISTS(SELECT 1 FROM safety_preservation_holds WHERE released_at IS NULL AND scope='account' AND subject_user_id=q.owner_user_id) AND (q.project_id IS NULL OR NOT EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=q.project_id))`,date('q.sealed_at','+30 days')),
  // WH-201: pending address changes past their expiry, closed changes still holding a plaintext address, closed changes past their

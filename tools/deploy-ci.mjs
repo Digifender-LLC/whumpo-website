@@ -31,6 +31,25 @@ export function scrubCIOverrides(env,linked='whumpo-platform'){
  return env;
 }
 
+/**
+ * Workers Builds for an older commit can finish after a newer one. Compare against the fetched tip of origin/main:
+ * 'current' (deploy), 'superseded' (an ancestor of a newer tip: skip, not a failure) or throw (unknown: fail closed).
+ * The checkout may be shallow, so the history is deepened before ancestry is judged; a failed fetch never deploys.
+ */
+export function ciSupersession(commit,git=(args,{status=false}={})=>{try{const out=execFileSync('git',args,{encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim();return status?0:out;}catch(error){if(status&&Number.isInteger(error.status))return error.status;throw error;}}){
+ let tip;
+ try{
+  git(['fetch','--quiet','origin','main']);
+  tip=git(['rev-parse','FETCH_HEAD']);
+  if(tip.startsWith(commit))return 'current';
+  if(git(['rev-parse','--is-shallow-repository'])==='true')git(['fetch','--quiet','--unshallow','origin','main']);
+ }catch{throw ciRefusal('origin/main could not be fetched, so this commit cannot be shown to be current.');}
+ const ancestor=(a,b)=>{const code=git(['merge-base','--is-ancestor',a,b],{status:true});if(code!==0&&code!==1)throw ciRefusal('the commit history could not be compared with origin/main.');return code===0;};
+ if(ancestor(commit,tip))return 'superseded';
+ if(ancestor(tip,commit))return 'current';
+ throw ciRefusal('the commit is not on the main branch.');
+}
+
 export function ciReview(snapshot,artifact,source){
  return {
   version:3,environment:'test',buildInputs:snapshot.inputs.sha256,
@@ -56,10 +75,12 @@ export const baselineMoved=(error,journal)=>{
  return error?.message==='Worker changed outside this release'&&steps.length>0&&steps.every(step=>step.status==='pending');
 };
 
-export async function ciRelease(root,driver,{env=process.env,log=console.log,commit=ciCommit,snapshot:snap=verifyBuildSnapshot,schema=currentSchemaArtifact,prepare=prepareRelease,apply=applyRelease}={}){
+export async function ciRelease(root,driver,{env=process.env,log=console.log,commit=ciCommit,snapshot:snap=verifyBuildSnapshot,schema=currentSchemaArtifact,prepare=prepareRelease,apply=applyRelease,supersession=ciSupersession}={}){
  if(env.WORKERS_CI!=='1')throw Error('The ci release runs only in Cloudflare Workers Builds after a merge to main. Do not deploy by hand.');
  scrubCIOverrides(process.env);
- const source=commit(env),snapshot=await snap(root),artifact=await schema(root);
+ const source=commit(env);
+ if(supersession(source.commit)==='superseded'){log("Superseded by newer main: commit "+source.commit+" is older than the tip of origin/main, so nothing was deployed. The newer commit's build releases it.");return {superseded:true};}
+ const snapshot=await snap(root),artifact=await schema(root);
  ciPreflight(driver,await driver.observe(),artifact);
  const review=ciReview(snapshot,artifact,source);
  for(let retried=false;;){
