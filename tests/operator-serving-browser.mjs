@@ -18,7 +18,7 @@ const m=await currentSiteFixtureHandlers(),store=await databaseFixture({d1:proce
 const id=()=>crypto.randomUUID(),origin='http://localhost:8787';
 const OPERATOR='human:PRIVATE-OPERATOR-CANARY',REASON='PRIVATE-REASON-CANARY abusive visitor application';
 const service={fetch:async(_url,init)=>{const body=JSON.parse(init.body);return Response.json({ok:true,value:{state:body.input.input,result:'saved'}});}};
-const assets={fetch:async request=>{const p=new URL(request.url).pathname,file=['/visitor.js','/visitor.css'].includes(p)?p:'/index.html';return new Response(await readFile('public-app'+file),{headers:{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'}});}};
+const assets={fetch:async request=>{const p=new URL(request.url).pathname,file=['/visitor.js','/visitor.css','/design-tokens.css'].includes(p)?p:'/index.html';return new Response(await readFile('public-app'+file),{headers:{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'}});}};
 const env={DB:db,ENVIRONMENT:'local',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})},BACKEND_RUNTIME:service,ASSETS:assets};
 const originalFetch=globalThis.fetch;globalThis.fetch=async()=>{throw Error('No external request allowed');};
 let phase='setup',server,browser;const seen=[],external=[];

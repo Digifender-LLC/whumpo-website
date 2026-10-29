@@ -9,7 +9,7 @@ export default {
   try{
    const url=new URL(request.url),local=String(env.ENVIRONMENT)==='local',project=visitorProject(url.hostname),origin=local?'http://localhost:8787':project?visitorOrigin(project):'';
    if(url.origin!==origin)return secure(new Response('Application host required',{status:404}));
-   if(['/visitor.js','/visitor.css'].includes(url.pathname)&&request.method==='GET'&&!url.search)return secure(await env.ASSETS.fetch(request));
+   if(['/visitor.js','/visitor.css','/design-tokens.css'].includes(url.pathname)&&request.method==='GET'&&!url.search)return secure(await env.ASSETS.fetch(request));
    const page=(local?url.pathname:'/apps/'+project+url.pathname).match(/^\/apps\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/$/);
    if(page&&request.method==='GET'&&!url.search){
     if(!(await env.API_LIMITER.limit({key:'page:'+(request.headers.get('cf-connecting-ip')??'unknown')})).success)return secure(new Response('Please try again in a minute.',{status:429}));

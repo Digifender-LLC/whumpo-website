@@ -25,7 +25,7 @@ const server=createServer(async(req,res)=>{
    res.setHeader('content-type','text/html');res.end('<!doctype html><title>Disposable deletion controls</title><h1>Synthetic deletion fixture</h1><p>Current browser account: '+name+'</p><form method="post">'+['A','B','C'].map(n=>'<button name="actor" value="'+n+'">Switch to '+n+'</button>').join(' ')+'</form><form method="post">'+['pass','drop-before','drop-after'].map(n=>'<button name="mode" value="'+n+'">'+n+'</button>').join(' ')+'</form><a href="/">Open visitor page</a><pre>'+JSON.stringify(await state(),null,2)+'</pre>');return;
   }
   if(url.pathname==='/fixture/state'){res.setHeader('content-type','application/json');res.end(JSON.stringify(await state()));return;}
-  if(['/','/visitor.js','/visitor.css'].includes(url.pathname)){
+  if(['/','/visitor.js','/visitor.css','/design-tokens.css'].includes(url.pathname)){
    const file=url.pathname==='/'?'index.html':url.pathname.slice(1);res.setHeader('content-type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');res.end(await readFile('public-app/'+file));return;
   }
   if(req.method==='POST'&&req.headers.origin!=='http://'+address)throw Error('Fixture origin mismatch');
