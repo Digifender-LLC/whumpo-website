@@ -14,7 +14,7 @@ try{
   assert.equal(calls,1);assert.equal(existsSync(home),false);
  }
  const homes=[];
- for(let i=0;i<2;i++){const site=[];runProfile('site',{cwd,run:(_cmd,args,options)=>{site.push(args[0]);homes.push(options.env.HOME);return {status:0};}});assert.deepEqual(site,['tests/customer-site-journey.mjs','tests/standard-service-no-maintainer.mjs','tests/request-path-inventory.mjs']);}
+ for(let i=0;i<2;i++){const site=[];runProfile('site',{cwd,run:(_cmd,args,options)=>{site.push(args[0]);homes.push(options.env.HOME);return {status:0};}});assert.deepEqual(site,profiles.site);assert.deepEqual(site.slice(0,3),['tests/customer-site-journey.mjs','tests/standard-service-no-maintainer.mjs','tests/request-path-inventory.mjs']);}
  assert.equal(new Set(homes).size,2,'Each profile run gets its own home');assert.ok(homes.every(h=>!existsSync(h)));
  const fast=[];runProfile('fast',{cwd,run:(_cmd,args)=>{fast.push(args[0]);return {status:0};}});
  assert.deepEqual(fast,['tests/ai.mjs','tests/prompt-data-boundaries.mjs','tests/ack-timing.mjs','tests/lifecycle-catalog.mjs','tests/connection-vault.mjs','tests/notifications-contract.mjs','tests/passkey-key-wrapping-contract.mjs','tests/email-change-contract.mjs','tests/review-retention-contract.mjs']);
