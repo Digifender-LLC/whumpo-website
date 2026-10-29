@@ -5,6 +5,7 @@ import type {RecordsSummaryFacts} from '../../src/shared-modules/shape';
 import {api,message} from './lib/api';
 import {Button} from './components/ui/button';
 import {Section} from './workspace-layout';
+import {StateNote} from './view-states';
 import {ConfirmButton,ProjectSelect,QueryStatus,StaleProject,useProjectSelection} from './workspace-controls';
 
 type Item=RecordsSummaryFacts['items'][number];
@@ -18,14 +19,14 @@ const shown=(v:unknown)=>typeof v==='boolean'?(v?'Yes':'No'):String(v);
 /** WH-127 `records.summary@1` card: counts per records instance and schema, never a value. Opening the private records
  * panel is a navigation only; values are read there from the owner list route, not through Chat or this binding. */
 export function RecordsSummaryCard({facts,projectId}:{facts:RecordsSummaryFacts;projectId:string}){
- if(!facts.items.length)return <p className="text-sm text-muted-foreground">No records module is registered for this project.</p>;
- return <div className="space-y-4">{facts.items.map(i=><section key={i.localId} aria-label={i.localId+' records'} className="space-y-2 rounded-md bg-background p-4 text-sm">
+ if(!facts.items.length)return <StateNote title="No records module is registered for this project.">Ask Whumpo in Chat to add a form that collects records.</StateNote>;
+ return <div className="space-y-4">{facts.items.map(i=><section key={i.localId} aria-label={i.localId+' records'} className="space-y-2 rounded-md bg-surface-sunken p-4 text-body-sm">
    <p className="font-semibold break-words">{i.localId} · {states[i.state]} · kept {i.retentionDays} days</p>
    <ul className="space-y-1">{i.schemas.map(s=><li key={s.recordId}>{s.recordId}: {total(s)} record{total(s)===1?'':'s'} ({s.records.public} anonymous, {s.records.visitor} visitor, {s.records.staff} staff)</li>)}</ul>
-   {i.forms.length>0&&<p className="text-muted-foreground">Forms: {i.forms.map(f=>`${f.formId} (${f.submit})`).join(', ')}</p>}
+   {i.forms.length>0&&<p className="text-ink-muted">Forms: {i.forms.map(f=>`${f.formId} (${f.submit})`).join(', ')}</p>}
   </section>)}
   <Button asChild variant="secondary" className="min-h-11"><Link to="/workspace/$view" params={{view:'records'}} search={{project:projectId}}>Open form records</Link></Button>
-  <p className="text-xs text-muted-foreground">Submitted values stay in the private records panel. They are not shown in Chat or sent to AI.</p>
+  <p className="text-caption text-ink-muted">Submitted values stay in the private records panel. They are not shown in Chat or sent to AI.</p>
  </div>;
 }
 
@@ -40,11 +41,11 @@ export function RecordsPanel(){
  const current=options.some(o=>o.value===selected)?selected:options[0]?.value??'';
  return <div className="space-y-6 max-w-[900px]"><ProjectSelect value={project} onChange={v=>{setSelected('');choose(v);}}/><StaleProject stale={stale}/>
   {project&&<><QueryStatus pending={summary.isPending} error={summary.error}/>
-   {summary.data&&!options.length&&<p className="text-sm text-muted-foreground">No records module is registered for this project.</p>}
-   {options.length>0&&<label className="flex flex-col gap-2 text-sm font-medium">Records<select value={current} onChange={e=>setSelected(e.target.value)} className="h-11 px-3 border rounded-md bg-card">{options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select></label>}
+   {summary.data&&!options.length&&<StateNote title="No records module is registered for this project.">Ask Whumpo in Chat to add a form that collects records.</StateNote>}
+   {options.length>0&&<label className="flex flex-col gap-2 text-body-sm font-medium">Records<select value={current} onChange={e=>setSelected(e.target.value)} className="h-11 px-3 border border-line rounded-md bg-surface-raised">{options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select></label>}
    {current&&<RecordList key={project+current} project={project} resourceId={current.split('/')[0]} recordId={current.split('/')[1]} onChanged={()=>void summary.refetch()}/>}
   </>}
-  <p className="text-xs text-muted-foreground">Records are private to you and expire after the module's retention period. They are not shown in Chat or sent to AI.</p>
+  <p className="text-caption text-ink-muted">Records are private to you and expire after the module's retention period. They are not shown in Chat or sent to AI.</p>
  </div>;
 }
 
@@ -61,11 +62,11 @@ function RecordList({project,resourceId,recordId,onChanged}:{project:string;reso
  }
  return <div className="space-y-4"><QueryStatus pending={q.isPending} error={q.error}/>
   {q.data?.items.map(item=><Section key={item.entryId} title={who[item.submittedBy]+' · '+new Date(item.createdAt).toLocaleString()}>
-   <dl className="space-y-2 text-sm">{q.data.fields.map(f=><div key={f.key} className="flex flex-wrap gap-x-3"><dt className="text-muted-foreground">{f.label}</dt><dd className="whitespace-pre-wrap break-words">{Object.hasOwn(item.values,f.key)?shown(item.values[f.key]):'—'}</dd></div>)}</dl>
+   <dl className="space-y-2 text-body-sm">{q.data.fields.map(f=><div key={f.key} className="flex flex-wrap gap-x-3"><dt className="text-ink-muted">{f.label}</dt><dd className="whitespace-pre-wrap break-words">{Object.hasOwn(item.values,f.key)?shown(item.values[f.key]):'—'}</dd></div>)}</dl>
    <div className="mt-4"><ConfirmButton label="Delete record" description="Permanently delete this record? It cannot be restored." run={()=>remove(item.entryId)}/></div>
   </Section>)}
-  {q.data&&!q.data.items.length&&<p className="text-sm text-muted-foreground">{cursor?'No more records.':'No records yet.'}</p>}
-  {error&&<p role="alert" className="text-sm">{error}</p>}
+  {q.data&&!q.data.items.length&&<StateNote title={cursor?'No more records.':'No records yet.'}>{cursor?'':'Submitted form entries will appear here.'}</StateNote>}
+  {error&&<p role="alert" className="text-body-sm">{error}</p>}
   <div className="flex flex-wrap gap-2">{cursor&&<Button variant="secondary" onClick={()=>setCursor(null)}>Newest records</Button>}{q.data?.next&&<Button variant="secondary" onClick={()=>setCursor(q.data!.next)}>Older records</Button>}</div>
  </div>;
 }
