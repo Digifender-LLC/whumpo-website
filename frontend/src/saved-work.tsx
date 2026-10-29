@@ -6,7 +6,8 @@ import {History} from 'lucide-react';
 import {savedWorkKinds,type SavedWorkItem,type SavedWorkKind,type SavedWorkList} from '../../src/saved-work-shape';
 import {api,APIError,message} from './lib/api';
 import {identityGeneration} from './lib/identity-invalidation';
-import {isSavedWorkKind,readSavedTurn,readSavedWorkList,savedWorkDestination,savedWorkExpiry,savedWorkPath,savedWorkStatus,type SavedWorkView} from './lib/saved-work';
+import {isSavedWorkKind,readSavedTurn,readSavedWorkList,savedWorkDestination,savedWorkDeadline,savedWorkPath,savedWorkStatus,type SavedWorkView} from './lib/saved-work';
+import {Deadline} from './lib/time-ago';
 import {Brand} from './components/brand';
 import {Button} from './components/ui/button';
 import {AccountHelp} from './account-help';
@@ -81,12 +82,12 @@ export function SavedWorkPage(){
 // Status colour follows the design system; the phase word stays the signal.
 const phaseStatus:Record<SavedWorkItem['phase'],Status>={review:'attention',form:'attention',working:'working',uncertain:'working',attention:'attention',finished:'ready',expired:'idle'};
 function SavedWorkEntry({item,owner}:{item:SavedWorkItem;owner:string}){
- const status=savedWorkStatus(item),expiry=savedWorkExpiry(item),destination=savedWorkDestination(item),place=item.projectName??'Your account',id='saved-work-'+item.kind+'-'+item.id;
+ const status=savedWorkStatus(item),expiry=savedWorkDeadline(item),destination=savedWorkDestination(item),place=item.projectName??'Your account',id='saved-work-'+item.kind+'-'+item.id;
  return <article data-saved-work-key={item.key} tabIndex={-1} aria-labelledby={id} className="rounded-lg border bg-surface-raised p-4 sm:p-5 space-y-2 min-w-0">
   <h4 id={id} className="font-semibold break-words">{place}<span className="sr-only">, {savedWorkKinds[item.kind]}</span></h4>
   <p className="text-body-sm font-medium" data-saved-work-phase={item.phase}><StatusBadge status={phaseStatus[item.phase]}>{status.label}</StatusBadge></p>
   <p className="text-body-sm text-ink-muted">{status.detail}</p>
-  {expiry&&<p className="text-body-sm">{expiry}</p>}
+  {expiry&&<p className="text-body-sm">{expiry.label} <Deadline value={expiry.time}/></p>}
   {destination?<Button asChild variant="secondary" className={wrap}>{destination.kind==='safety'
    ?<Link to="/workspace/$view" params={{view:'safety'}} search={destination.search}>{destination.label}<span className="sr-only"> for {savedWorkKinds[item.kind]}, {place}</span></Link>
    :<Link to="/workspace" search={destination.search}>{destination.label}<span className="sr-only"> for {savedWorkKinds[item.kind]}, {place}</span></Link>}</Button>

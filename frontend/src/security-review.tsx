@@ -45,9 +45,9 @@ export function SecurityReviewView({v,on}:{v:View;on:Handlers}){
  const head=useRef<HTMLHeadingElement>(null),first=useRef(true);
  useEffect(()=>{if(first.current){first.current=false;return;}head.current?.focus();},[v.step]);
  const snap=v.snap,rotating=!!v.kit&&v.kitSaved,ready=v.kitSaved||v.kitSkipped;
- const h=(t:string)=><h3 ref={head} tabIndex={-1} className={heading}>{t}</h3>;
+ const h=(t:string,hide=false)=><h3 ref={head} tabIndex={-1} className={heading+(hide?' sr-only':'')}>{t}</h3>;
  return <div className="grid gap-5 min-w-0">
-  {v.step==='start'&&<div className="grid gap-3">{h('Secure my account')}
+  {v.step==='start'&&<div className="grid gap-3">{h('Secure my account',true)}
    <p className="text-body-sm">Use this if you think a passkey, recovery kit, email account or connection may be exposed. You will check your passkey, choose what to remove, and be signed out everywhere.</p>
    <details className="text-body-sm text-ink-muted"><summary className="min-h-11 cursor-pointer py-3 font-medium text-ink">What to know</summary><p>This restores control of your account. It does not recover encrypted content.</p></details>
    {v.resume&&<p className="text-body-sm">A security review may not have finished. Check its result; the same request is safe to repeat.</p>}

@@ -1,4 +1,5 @@
 import {ProjectStatusFacts,CheckedAt} from './workspace-view-components';
+import {StateNote} from './view-states';
 import {useState} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import {readProjectStatusCard} from '../../src/chat-interactions/card-shape';
@@ -9,7 +10,7 @@ import {Button} from './components/ui/button';
 export function ProjectStatusDisplay({value}:{value:unknown}){
  const card=readProjectStatusCard(value);
  if(!card)return <p role="alert" className="text-sm">Update Whumpo to read this status.</p>;
- if(card.status!=='ready')return <p role="status" className="text-sm">{card.status==='denied'?'This status is not available with your current access.':'Project status is temporarily unavailable. Try refreshing it.'}</p>;
+ if(card.status!=='ready')return card.status==='denied'?<StateNote title="You don’t have access to this yet.">The owner of this workspace can grant it. Ask them, or ask Whumpo in Chat who can.</StateNote>:<p role="status" className="text-sm">Project status is temporarily unavailable. Try refreshing it.</p>;
  return <div className="space-y-3 text-sm"><ProjectStatusFacts value={card.data}/><CheckedAt value={card.asOf}/></div>;
 }
 function ProjectStatusRead({owner,interactionId,digest,projectId}:{owner:string;interactionId:string;digest:string;projectId:string}){

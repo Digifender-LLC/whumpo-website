@@ -106,7 +106,6 @@
  .landing h2{font-size:clamp(30px,8vw,40px);line-height:1.12}
  .landing #how article{padding:24px}
  .landing #how article h3{margin-top:16px}
- .landing #pricing article{padding:24px}
 }
 @media(max-width:760px){
  .cms-writing-tools>label{flex-basis:100%}
