@@ -924,7 +924,7 @@ await checkOnce('the source module is pure, and no Worker entry reaches it',asyn
   else assert.deepEqual(reachedModule,[],`${worker} reaches the email-change module`);
  }
  // No Chat, agent, model or other module imports it: the only importer outside the folder is the main Worker's route table.
- const importers=readdirSync(join(root,'src'),{recursive:true}).filter(f=>/\.tsx?$/.test(f)).map(f=>join('src',f)).filter(f=>!f.startsWith('src/email-change/')&&/email-change/.test(read(f)));
+ const importers=readdirSync(join(root,'src'),{recursive:true}).filter(f=>/\.tsx?$/.test(f)).map(f=>join('src',f)).filter(f=>!f.startsWith('src/email-change/')&&/from\s+['"][^'"]*email-change\//.test(read(f)));
  assert.deepEqual(importers,['src/index.ts'],'the adapter is mounted by the main Worker only; no agent action reaches it');
  for(const file of wiringFiles){assert.ok(!/ai-chat|site-agent|workspace-agent|agent-|chat-interactions/.test(read(file).split('\n').filter(l=>/^import /.test(l)).join('\n')),`${file} imports no Chat or agent module`);}
  assert.ok(!/email-change|accountEmail/.test(read('src/ai-chat.ts')+read('src/site-agent.ts')),'no agent action can prepare, confirm, cancel or read a change');

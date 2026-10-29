@@ -209,6 +209,7 @@
     "test:identity-kits": "node tests/identity-kits.mjs",
     "test:identity-recovery": "node tests/identity-recovery.mjs",
     "test:passkey-key-wrapping-contract": "node tests/passkey-key-wrapping-contract.mjs",
+    "test:account-closure-contract": "node tests/account-closure-contract.mjs",
     "test:email-change-contract": "node tests/email-change-contract.mjs",
     "test:email-change-revokers": "node tests/email-change-revokers.mjs",
     "test:identity-http": "node tests/identity-http.mjs",

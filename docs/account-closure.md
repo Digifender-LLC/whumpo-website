@@ -4,6 +4,7 @@
 
 **Implemented:** read-only operator inventory in `tools/account-closure-inventory.mjs`.
 **Implemented (source, local tests only):** account-, project- and object-scope preservation holds enforced at the database layer, with an authenticated operator case surface (WH-132) ([WH-015](content-safety.md#restricted-safety-cases-and-preservation-holds--source-foundation-local-only)).
+**Implemented (source, unwired, local tests only; WH-018 slice 1, October 29, 2026):** the closure review and the stop-new-work state machine in `src/account-closure/` (see [Slice 1](#slice-1-review-state-machine-and-guards-wh-018--october-29-2026-utc)). No route, table, binding, provider call or schema change.
 **Not implemented:** customer platform-account closure, external-resource teardown, legal-hold decisions (named human/counsel responsibilities), or deletion reconciliation after recovery. Visitor-account deletion is a separate feature documented in [app-data.md](app-data.md).
 
 The [proposed data lifecycle contract](data-lifecycle.md) maps all 148 control tables into 31 explicit classes at migration 0113 and defines export, backup and restore-suppression requirements. Full configuration copies and metadata receipts have separate classes. Proposed retention windows remain unapproved. `node tools/lifecycle-catalog.mjs` checks schema coverage without reading account data. The [background-job decision](background-jobs.md) traces resumable cleanup; its local prototype does not enable account deletion.
@@ -47,3 +48,33 @@ October 4, 2026: the inventory also counts WH-025 `funnelEvents` (opt-in, conten
 October 1, 2026: the read-only inventory also counts staged GitHub credentials (`githubStagedCredentials`) separately. They remain included in the total encrypted credential count and must be disconnected/revoked before any future account closure; a missing connection pointer does not mean no provider credential is retained. This adds no deletion capability.
 
 October 29, 2026: the inventory also counts the WH-143 `lookupConsents`, `openLookupConsents` (unexpired and unused), `connectorReceipts` and `openConnectorReceipts` (review, dispatching or uncertain); all cascade with the account. October 28, 2026: the inventory also counts WH-170 `costEvents` and the WH-201 `emailChanges`, `openEmailChanges` (pending, or confirmed inside the seven-day undo window), `emailChangeLimits` and `securityReviews`. All four tables cascade with the account (cost events also with the project), with no tombstone and no closure key: closing an account deletes its shadow cost events, and a later append for the closed owner or project is refused. An open change and its undo reservation disappear with the account, which also releases the previous address. `node tests/account-closure-inventory.mjs` verifies the counts and isolation with synthetic data.
+
+## Slice 1: review, state machine and guards (WH-018 — October 29, 2026 UTC)
+
+Pure source in `src/account-closure/review.ts` and `machine.ts`, in the style of the WH-200 email-change modules. Nothing imports it; it reads no database and calls no provider. The inventory counts and the `docs/data-lifecycle.json` classes are passed in as plain data.
+
+- **Review.** `buildReview(counts, classes)` maps every inventory key to its table, lifecycle class and a disposition: `cancel` (open or in-flight work, revoked or withdrawn first), `delete` (purged with the account) or `retain` (safety evidence, blocked media, preservation holds, redeemed invitations). Each item carries a reason and the class's proposed retention text, or `unapproved`; no window is invented. Zero-count categories are omitted. The digest is a canonical text of key, count and disposition, so a changed inventory changes it. An unknown or missing key, a non-integer count, or a class that does not own the table is refused.
+- **State machine.** `requested → reviewed → confirmed → quiescing → closed`, plus `cancelled` (owner, any time before `closed`) and `failed` (system, from `confirmed` or `quiescing`). `closed`, `cancelled` and `failed` are terminal; resuming a failed closure is a later slice. Every event carries an expected revision. Only the owner reviews, confirms or cancels; a `model` or `system` actor is refused. Confirm needs passkey proof within 10 minutes, the digest the owner saw, and an inventory that still matches the review.
+- **Guards.** An active preservation hold refuses confirm and close. Open provider work (unresolved AI, OAuth exchanges, uncertain grant revocation, pending credential revocations, unresolved domains, Chat continuations, open connector receipts) and pending billing refuse close only, because they settle while quiescing. The close facts must be observed at or after the quiesce time. Billing has no inventory counter yet, so `pendingBilling` is a caller input.
+- **Refusal codes.** `invalid-input`, `invalid-inventory`, `unknown-category`, `unknown-class`, `invalid-lifecycle`, `invalid-transition`, `terminal-state`, `stale-revision`, `owner-required`, `fresh-auth-required`, `review-mismatch`, `preservation-hold`, `provider-work-open`, `billing-pending`, `inventory-stale`.
+
+`node tests/account-closure-contract.mjs` bundles the source with esbuild and checks every edge, guard and refusal code, the agreement of every category with the inventory SQL and the lifecycle classes, purity and non-wiring, and 30 deliberate mutants that must each be caught.
+
+### Schema for a later batch (not created here)
+
+The durable closure table is **not** part of this slice and needs a schema batch. It would be platform-scoped and must survive the account cascade, so there is no `ON DELETE CASCADE` to `users`:
+
+```sql
+CREATE TABLE account_closures(
+ closure_id TEXT PRIMARY KEY,
+ account_id TEXT NOT NULL,            -- no foreign key: outlives the account
+ state TEXT NOT NULL CHECK(state IN ('requested','reviewed','confirmed','quiescing','closed','cancelled','failed')),
+ revision INTEGER NOT NULL CHECK(revision>=1),
+ requested_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+ review_digest TEXT, quiesced_at INTEGER, closed_at INTEGER,
+ failure_code TEXT, history TEXT NOT NULL    -- JSON list of states
+);
+CREATE UNIQUE INDEX account_closures_open ON account_closures(account_id) WHERE state IN ('requested','reviewed','confirmed','quiescing');
+```
+
+Triggers would enforce forward-only transitions and terminal immutability, as the source does. Later batches add the stop-new-work flag read by every write path, per-step cleanup receipts, and the deletion tombstones replayed on restore (WH-018 restore acceptance).
