@@ -60,7 +60,7 @@ export async function verifyLiveWorkspaceViews({db,id,browser,workspaceToken,rel
   const saved=()=>page.locator('[data-view-component="projects"]');
   await openPage('Garden desk');await saved().getByText('Meadow Garden',{exact:true}).waitFor();assert.equal(await page.getByRole('textbox',{name:'Message Whumpo'}).count(),0);
   const reads=await calls();const refreshed=page.waitForResponse(r=>r.url()==='https://whumpo.com/api/workspace/views/v1/component'&&r.request().postDataJSON()?.kind==='projects');await saved().getByRole('button',{name:'Refresh projects',exact:true}).click();assert.equal((await refreshed).status(),200);await saved().getByText('Meadow Garden',{exact:true}).waitFor();assert.deepEqual(await calls(),reads);
-  await page.getByText('This information is not available with your current access.',{exact:true}).waitFor();
+  await page.getByText('You don’t have access to this yet.',{exact:true}).waitFor();
   for(const width of [360,390]){await page.setViewportSize({width,height:844});await saved().getByText('Meadow Garden',{exact:true}).waitFor();await page.waitForFunction(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent==='Your pages');const r=b?.getBoundingClientRect();return r&&r.top>=0&&r.bottom<=innerHeight});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:evidenceDirectory+'/saved-'+width+'.png'});}
   await chat('update-view','Add recent activity to Garden desk, keeping its existing project status and page requests. Leave all my other pages and my dashboard as they are.',async()=>{
    savedPage=(await current()).layout.tabs.find(t=>t.id===savedPage.id);assertView(savedPage.view,['projects','traffic','activity']);assert.deepEqual((await current()).layout.dashboard,originalLayout.dashboard);
@@ -104,8 +104,8 @@ export async function verifyLiveWorkspaceViews({db,id,browser,workspaceToken,rel
   await page.getByRole('link',{name:'Chat',exact:true}).click();const chatReviews=()=>page.locator('[data-interaction-id="'+plan.interactionId+'"]').locator('[data-view-component="reviews"]');
   await chatReviews().getByText('Meadow Garden',{exact:true}).waitFor();await chatReviews().locator('summary').focus();await page.keyboard.press('Enter');await chatReviews().getByText('Garden together',{exact:true}).waitFor();assert.equal(await chatReviews().locator('ol').innerText(),comparison);
   await db.prepare("UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE user_id=? AND project_id=? AND feature_id='core.editing' AND operation='read'").bind(id,project).run();
-  await chatReviews().getByRole('button',{name:'Refresh website reviews',exact:true}).click();await chatReviews().getByText('This information is not available with your current access.',{exact:true}).waitFor();assert.equal(await chatReviews().getByText('Garden together',{exact:true}).count(),0);
-  await openPage('Website reviews');await reviews().getByText('This information is not available with your current access.',{exact:true}).waitFor();assert.equal(await reviews().getByText('Garden together',{exact:true}).count(),0);
+  await chatReviews().getByRole('button',{name:'Refresh website reviews',exact:true}).click();await chatReviews().getByText('You don’t have access to this yet.',{exact:true}).waitFor();assert.equal(await chatReviews().getByText('Garden together',{exact:true}).count(),0);
+  await openPage('Website reviews');await reviews().getByText('You don’t have access to this yet.',{exact:true}).waitFor();assert.equal(await reviews().getByText('Garden together',{exact:true}).count(),0);
   assert.deepEqual(await calls(),reviewCalls);assert.equal((await site.readSpecification(scope,id,project)).revision,1);assert.equal((await row('SELECT count(*) n FROM publications')).n,0);assert.deepEqual(errors,[]);success=true;
  }finally{
   if(!success)await page.screenshot({path:evidenceDirectory+'/failure.png'}).catch(()=>{});

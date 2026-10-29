@@ -11,5 +11,5 @@ const statuses:Record<Status,{icon:IconName;label:string;className:string}>={
 };
 export function StatusBadge({status='idle',children,className}:{status?:Status;children?:ReactNode;className?:string}){
  const s=statuses[status];
- return <span className={cn('inline-flex h-6 items-center gap-1 whitespace-nowrap rounded-full pl-1.5 pr-2 text-xs font-medium',s.className,className)}><Icon name={s.icon} size={14}/>{children??s.label}</span>;
+ return <span className={cn('inline-flex h-6 items-center gap-1 whitespace-nowrap rounded-full pl-1.5 pr-2 text-caption font-medium',s.className,className)}><Icon name={s.icon} size={14}/>{children??s.label}</span>;
 }
