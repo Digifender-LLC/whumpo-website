@@ -1,5 +1,7 @@
 # Paused Whumpo roadmap handoff
 
+> **Superseded 2026-10-30:** the October 3 pause below is historical. The roadmap has been running unattended since; current status lives in `backlog.json` (reviewed 2026-10-30 against 475a3a9). The branch, worktree and counts below are the October 3 checkpoint, not current.
+
 Owner requested a stopping point, all pending source saved to GitHub, and the active goal paused on October 3, 2026. This handoff is a checkpoint, not task, beta or MVP completion. Resume only on the owner's instruction.
 
 ## Authoritative development and release state
