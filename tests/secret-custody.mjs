@@ -7,7 +7,7 @@ import {copyTree,fileInventory} from '../tools/release-manifest.mjs';
 import {archivedConfig,prepareRelease} from '../tools/prepare-release.mjs';
 import {deployPlatform} from '../tools/deploy-platform.mjs';
 
-const report=await validateSecretCustody();assert.equal(report.secrets.length,9);assert.equal(report.backupCustodyVerified,false);assert.equal(report.retirementAllowed,false);
+const report=await validateSecretCustody();assert.equal(report.secrets.length,10);assert.equal(report.backupCustodyVerified,false);assert.equal(report.retirementAllowed,false);
 const canary='PRIVATE_CUSTODY_VALUE_CANARY';let refused=0;
 function reject(fn){assert.throws(fn,e=>!e.message.includes(canary));refused++;}
 for(const secret of secretCustody){
