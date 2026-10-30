@@ -1,5 +1,7 @@
 # Android notifications: client, FCM seam and owner steps
 
+**Firebase project (2026-10-30):** `whumpo-18331`, FCM v1 only. `google-services.json` (both apps) is held in the owner secret store and is git-ignored (`android/.gitignore`); copy it to `android/androidApp/google-services.json` for local builds.
+
 **Status, October 29, 2026 (WP7).** The mobile API client for devices and events is built and tested. Push delivery is not: it needs a Firebase project that only the owner can create. The app ships a no-op provider, adds no Firebase dependency and holds no `google-services.json` or any other Firebase config.
 
 ## What is built
