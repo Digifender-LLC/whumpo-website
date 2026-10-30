@@ -70,7 +70,7 @@ export async function securityReviewRoute(request:Request,env:Environment,db:D1D
     const step=await commitCompromiseReview({principal:owner,account,request:input,prior:await readSavedReceipt(db,userId,input.requestId),review:found?.review??null,
      offer:input.rotateKit?found?.offer??null:null,pending:await readPendingChange(db,userId),connections:await readConnections(db,userId,now),now});
     if(step.receipt)await persistCommit(db,{review:found!.review,offer:found!.offer,step,request:input,account});
-    await options.delivery?.queue(step.notices,null);
+    await options.delivery?.queue(step.notices,null,{accountId:userId,eventRef:input.reviewId});
     const response=respond({version:1,receipt:step.result});
     // Every session is revoked, including this one.
     if(step.receipt)response.headers.append('set-cookie',`${identityCookies.session}=; Path=/; Secure; HttpOnly; SameSite=Lax; Expires=Thu, 01 Jan 1970 00:00:00 GMT`);

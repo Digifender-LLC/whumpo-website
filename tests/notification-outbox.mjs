@@ -227,7 +227,7 @@ try{
   const unverified=await account({verified:false}),uq=await accountNotice(unverified,'e-unverified',T);
   const r=await pass(p,T+9);
   assert.equal(p.calls.length,0);
-  for(const [q,reason] of [[staff,'template-withdrawn'],[confirm,'template-withdrawn'],[uq,'recipient-revoked']]){const n=await notice(q.id);assert.deepEqual([n.state,n.reason],['cancelled',reason]);assert.equal((await job(n.job_id)).state,'cancelled');}
+  for(const [q,reason] of [[staff,'template-withdrawn'],[confirm,'record-removed'],[uq,'recipient-revoked']]){const n=await notice(q.id);assert.deepEqual([n.state,n.reason],['cancelled',reason]);assert.equal((await job(n.job_id)).state,'cancelled');}
   assert.equal(r.cancelled>=3,true);
  });
  await check('unknown-outcome leaves only for evidence, or for unresolved at three lookups or past its bound',async()=>{

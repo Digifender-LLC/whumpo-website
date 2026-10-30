@@ -2,8 +2,8 @@ import {BillingError} from './billing';
 import {listUsageReviewRequests,markReadStatement,type UsageReviewRequest} from './usage-review-requests';
 import {parseSupportReference,operationReference,supportStatusLinks,type SupportConfigView,type SupportKind,type SupportOperation,type SupportOverview,type SupportRequest,type SupportDeliveryState} from './support-shape';
 export type SupportEnv={SUPPORT_HOURS?:string;SUPPORT_NOTIFICATION_PROVIDER?:string;SUPPORT_NOTIFICATION_REVIEW?:string};
-/** Notification senders implemented in this repository. None is selected or implemented yet. */
-export const implementedNotificationProviders:readonly string[]=[];
+/** Notification senders implemented in this repository: the shared platform sender (WH-202). The lane stays inactive unless SUPPORT_NOTIFICATION_PROVIDER and SUPPORT_NOTIFICATION_REVIEW are set and the email binding exists. */
+export const implementedNotificationProviders:readonly string[]=['cloudflare-email'];
 export type NotificationSettings={provider:string;review:string};
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 const cleaned=(value:unknown,max:number)=>typeof value==='string'&&value.trim()&&value.trim().length<=max&&!/[\u0000-\u001f\u007f]/.test(value)?value.trim():null;

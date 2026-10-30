@@ -3,21 +3,22 @@
  * prepare, confirm, cancel or read a change. Origin, content type, body size and rate-limit checks run here as well as at the
  * Worker edge. Addresses and tokens appear only in request bodies, are never logged and never enter model context.
  *
- * While platform delivery is not active (WH-202 supplies the sender and outbox) a change request returns `delivery_unavailable`
+ * While platform delivery is not active (provider vars or binding absent) a change request returns `delivery_unavailable`
  * after the authority check and stores nothing: not a change, not a limit row, not a notice. The seam is `options.delivery`;
- * production passes `emailChangeDelivery(env)`, which is null today. */
+ * production passes `emailChangeDelivery(env)`, which is null until the platform provider is configured (WH-202: notices go to the shared outbox, src/email-change/notices.ts). */
 import {IdentityError,type IdentityPrincipal} from '../workspace-identity/authority';
 import {requireFreshWorkspace} from '../workspace-identity/admission';
 import {EmailChangeError} from './policy';
 import {parseChangeReference,parseChangeRequest,parseConfirmation,cancelEmailChange,confirmEmailChange,readAccountEmail,requestEmailChange,undoEmailChange} from './change';
 import type {ChangeStep,EmailChange,NoticeDraft} from './change';
 import {tokenVerifier} from './token';
+import {accountDeliveryLane,accountNoticeDelivery} from './notices';
 import {ownerPrincipal,persistStep,readAccount,readChange,readChangeByRequest,readChangeByVerifier,readHolders,readLimits,readPendingChange,readUndoableChange,storeError} from './store';
 
-/** Where the module's notice drafts go once a step has committed. WH-202 replaces this with the shared outbox written in the same
- * batch; until it exists there is no sender, so `emailChangeDelivery` is null and nothing is ever queued. */
-export interface EmailChangeDelivery {queue(drafts:NoticeDraft[],changeId:string|null):Promise<void>}
-export const emailChangeDelivery=(_env:unknown):EmailChangeDelivery|null=>null;
+/** Where the module's notice drafts go once a step has committed: the shared outbox (src/email-change/notices.ts). */
+export interface EmailChangeDelivery {queue(drafts:NoticeDraft[],changeId:string|null,context?:{accountId:string;eventRef?:string}):Promise<void>}
+export const emailChangeDelivery=(env:unknown):EmailChangeDelivery|null=>accountNoticeDelivery(env as Parameters<typeof accountNoticeDelivery>[0]);
+export {accountDeliveryLane};
 type Environment={AUTH_LIMITER:{limit(options:{key:string}):Promise<{success:boolean}>}};
 export type EmailChangeOptions={delivery?:EmailChangeDelivery|null;now?:()=>number};
 
@@ -93,7 +94,7 @@ export async function accountEmailRoute(request:Request,env:Environment,db:D1Dat
      const step=await requestEmailChange({principal:owner,account,request:input,deliveryActive:delivery!==null,prior:await readChangeByRequest(db,userId,input.requestId),
       pending:await readPendingChange(db,userId),holders:await readHolders(db,input.newAddress),limits:{requests:limits.requests,addressSends:limits.addressSends},changeId:crypto.randomUUID(),now});
      await persistStep(db,step,{accountId:userId,address:input.newAddress,seen:limits,now});
-     await delivery?.queue(step.notices,step.changes.at(-1)?.changeId??null);
+     await delivery?.queue(step.notices,step.changes.at(-1)?.changeId??null,{accountId:userId});
      return respond({version:1,...step.result});
     }
     if(action==='confirm'){
@@ -103,7 +104,7 @@ export async function accountEmailRoute(request:Request,env:Environment,db:D1Dat
      await persistStep(db,step,{accountId:userId,address:null,seen:limits,now});
      if(step.refusal)throw new EmailChangeError(step.refusal.code,step.refusal.detail);
      if(!step.result)throw new EmailChangeError('CHANGE_CLOSED');
-     await delivery?.queue(step.notices,change?.changeId??null);
+     await delivery?.queue(step.notices,change?.changeId??null,{accountId:userId});
      return respond({version:1,...step.result});
     }
     const {changeId}=parseChangeReference(body),change=await readChange(db,userId,changeId);
@@ -111,7 +112,7 @@ export async function accountEmailRoute(request:Request,env:Environment,db:D1Dat
     if(action==='cancel')step=cancelEmailChange({principal:owner,account,changeId,change,now});
     else{await requireFreshWorkspace(db,userId);step=undoEmailChange({principal:owner,account,changeId,change,now});}
     await persistStep(db,step,{accountId:userId,address:null,seen:{requests:[],failures:[],addressSends:[]},now});
-    await delivery?.queue(step.notices,changeId);
+    await delivery?.queue(step.notices,changeId,{accountId:userId});
     return respond({version:1,...step.result as Record<string,unknown>});
    }catch(cause){
     // A lost race (another tab, the engine advancing the epoch) rereads once and decides again from the new state.
