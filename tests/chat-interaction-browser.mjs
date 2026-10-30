@@ -25,10 +25,10 @@ const originalFetch=globalThis.fetch,requests=[],errors=[],modelSteps=[],backgro
 try{
  await writeFile(html,'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content"><link rel="icon" type="image/svg+xml" href="/brand/whumpo-favicon-rounded.svg"><title>Whumpo form acceptance</title></head><body><div id="root"></div><script type="module" src="/@fs/'+resolve('frontend/src/main.tsx')+'"></script><script type="module">import {queryClient} from "/@fs/'+resolve('frontend/src/lib/api.ts')+'";window.fixtureQueryKeys=()=>queryClient.getQueryCache().getAll().map(q=>q.queryKey);</script></body></html>');
  await viteBuild({build:{outDir:dir+'/web',rollupOptions:{input:resolve(html)}},logLevel:'error'});
- const modules=await currentFixtureModules(['src/index.ts','src/chat-interactions/store.ts','src/project-specification/store.ts','src/site-host.ts']);
+ const modules=await currentFixtureModules(['src/index.ts','src/chat-interactions/store.ts','src/project-specification/store.ts','src/site-host.ts','src/usage-review-requests.ts']);
  const host=(await modules.module('src/site-host.ts')).default;let siteChecks=0;
  const worker=(await modules.module('src/index.ts')).default,store=await modules.module('src/chat-interactions/store.ts'),site=await modules.module('src/project-specification/store.ts');
- fixture=await databaseFixture({r2:true,allowedArguments:['--saved-turns','--selection-only','--intake-only','--reviews-only','--publications-only','--observations-only','--media-only','--consent-only','--recovery-only']});const db=fixture.db,run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
+ fixture=await databaseFixture({r2:true,allowedArguments:['--saved-turns','--selection-only','--intake-only','--reviews-only','--publications-only','--observations-only','--media-only','--consent-only','--recovery-only','--support-only','--site-health-only']});const db=fixture.db,run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
  async function owner(){
   const authority=await workspaceFixture(db,modules.identity),user=authority.account,scope=await authority.scope(),project=crypto.randomUUID();
   await run("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')",user);
@@ -41,7 +41,7 @@ try{
   await scope.batch([scope.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,1,'Create my website',?,datetime('now'),'ai','pending')").bind(turn,user,prepared.reply),...prepared.statements,scope.prepare("UPDATE chat_turns SET status='completed' WHERE id=?").bind(turn),scope.prepare('UPDATE workspace_state SET revision=1 WHERE user_id=?').bind(user)]);
   return {authority,user,scope,project,resourcesGrant,statusGrant};
  }
- const a=await owner(),b=await owner(),u=await owner(),c=await owner(),d=await owner();
+ const a=await owner(),b=await owner(),u=await owner(),c=await owner(),d=await owner(),e=await owner(),f=await owner();
  async function issue(o,previous,template,changes){
   const turn=crypto.randomUUID();await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at) SELECT ?,user_id,revision+1,'Change my page','Please review the text.',datetime('now') FROM workspace_state WHERE user_id=?",turn,o.user);await run('UPDATE workspace_state SET revision=revision+1 WHERE user_id=?',o.user);
   if(changes&&previous)return store.proposeAnswers(o.scope,o.user,{originTurnId:turn,previousInteractionId:previous.envelope.id,definitionDigest:previous.envelope.definitionDigest,expectedAnswerRevision:previous.answerRevision,changes});
@@ -62,7 +62,7 @@ try{
  const root=resolve(dir+'/web');let origin;
  server=createServer(async(req,res)=>{let finish;const pending=new Promise(done=>{finish=done;});activeRequests.add(pending);try{
   const url=new URL(req.url,origin);if(req.headers.host!==new URL(origin).host){res.writeHead(403).end();return;}
-  if(url.pathname.startsWith('/_fixture/')){const selected=url.pathname==='/_fixture/other'?b:url.pathname==='/_fixture/photos'?u:url.pathname==='/_fixture/custom'?c:url.pathname==='/_fixture/intake'?d:a;res.writeHead(302,{'set-cookie':'__Host-whumpo_session='+selected.authority.token+'; Secure; HttpOnly; SameSite=Lax; Path=/',location:'/workspace'}).end();return;}
+  if(url.pathname.startsWith('/_fixture/')){const selected=url.pathname==='/_fixture/other'?b:url.pathname==='/_fixture/photos'?u:url.pathname==='/_fixture/custom'?c:url.pathname==='/_fixture/intake'?d:url.pathname==='/_fixture/support'?e:url.pathname==='/_fixture/health'?f:a;res.writeHead(302,{'set-cookie':'__Host-whumpo_session='+selected.authority.token+'; Secure; HttpOnly; SameSite=Lax; Path=/',location:'/workspace'}).end();return;}
   if(url.pathname.startsWith('/api/')){
    const chunks=[];for await(const chunk of req)chunks.push(chunk);const body=Buffer.concat(chunks),input=body.length&&req.headers['content-type']?.includes('application/json')?JSON.parse(body):null;const observed={path:url.pathname,method:req.method,operation:input?.operation,startedAt:Date.now()};requests.push(observed);
    if(savedTurnUnavailable&&url.pathname.startsWith('/api/chat/turns/')){res.writeHead(503,{'content-type':'application/json'}).end(JSON.stringify({error:'Saved message could not be checked.'}));return;}
@@ -398,10 +398,92 @@ try{
  const directRequests=continuations();await page.reload();await page.getByText('Created your project “Seasonal Studio” and its first private website draft.',{exact:false}).waitFor();assert.equal(modelCalls,startCalls+10);assert.equal(continuations(),directRequests);assert.equal((await row('SELECT count(*) n FROM projects WHERE owner_user_id=?',d.user)).n,3);assert.equal((await row('SELECT count(*) n FROM projects WHERE id=?',direct.task_id)).n,1);assert.equal((await row('SELECT count(*) n FROM publications')).n,0);
  await page.setViewportSize({width:390,height:844});await page.getByText('Created your project “Seasonal Studio” and its first private website draft.',{exact:false}).scrollIntoViewIfNeeded();await page.screenshot({path:'/tmp/whumpo-new-project-result-390.png'});env.ENVIRONMENT='local';
  }
+
+ const aiOn=()=>Object.assign(env,{ENVIRONMENT:'test',AI_BASE_URL:'https://opencode.ai/zen/go/v1',AI_MODEL:'muse-spark-1.3-contributor',AI_PROTOCOL:'responses',AI_API_KEY:'synthetic-only'});
+ const say=async text=>{await keyboard.enter(page.getByRole('textbox',{name:'Message Whumpo'}),text);await keyboard.activate(page.getByRole('button',{name:'Send message',exact:true}));};
+ const noOverflow=async()=>assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+ // WH-035: the agent prepares the Chat support form, only the owner's keyboard submit saves it, and the Chat support view
+ // shows the saved response; opening it records the one customer read. Scripted model, 390px, keyboard only.
+ async function supportJourney(){
+  phase='Chat support form: agent prepares, owner submits by keyboard, card shows response state and records a read';
+  aiOn();await page.setViewportSize({width:390,height:844});await page.goto(origin+'/_fixture/support');
+  const prepared='My website publication has said uncertain for an hour. I did not retry it.',edited=prepared+' OWNER-EDITED-STATEMENT',response='OPERATOR-VISIBLE-RESPONSE: the publication finished; no action needed.';
+  const rows=()=>row('SELECT count(*) n FROM usage_review_requests WHERE user_id=?',e.user),calls=modelCalls;
+  const detail=async id=>(await (await context.request.get(origin+'/api/support/v1/requests/'+id,{headers:{origin}})).json()).request;
+  modelSteps.push({kind:'interaction',operation:'requestSupport',statement:prepared});
+  await say('Please ask the Whumpo team about my stuck publication.');
+  const form=page.locator('section[aria-label="Ask Whumpo support"]');await form.waitFor({timeout:60000});
+  const statement=form.getByRole('textbox',{name:/What do you need help with/});
+  assert.equal(await statement.inputValue(),prepared);assert.equal((await rows()).n,0,'preparing a form saves no request');assert.equal(modelCalls,calls+1);
+  await noOverflow();
+  await keyboard.enter(statement,edited);
+  assert.equal((await rows()).n,0,'editing saves no request');
+  const submitCalls=modelCalls;await keyboard.activate(form.getByRole('button',{name:'Send to support',exact:true}));
+  await form.getByText('Your help request is saved for a platform operator.',{exact:true}).waitFor();
+  const saved=await row("SELECT id,kind,source,statement,state FROM usage_review_requests WHERE user_id=?",e.user);
+  assert.deepEqual({kind:saved.kind,source:saved.source,statement:saved.statement,state:saved.state},{kind:'help',source:'chat_form',statement:edited,state:'open'});
+  assert.equal(modelCalls,submitCalls,'submitting calls no model');assert.equal((await detail(saved.id)).response.saved,false);
+  const service=await modules.module('src/usage-review-requests.ts');await service.answerUsageReview(db,e.user,saved.id,response,'fixture-operator');
+  modelSteps.push({kind:'interaction',operation:'showSupport'});
+  await say('Did support answer me?');
+  const view=page.locator('section[aria-label="Your support requests"]');await view.getByText('Response saved in Whumpo',{exact:true}).waitFor({timeout:60000});
+  await view.getByText('You have not opened the response yet',{exact:true}).waitFor();
+  assert.equal((await detail(saved.id)).read.state,'unread','showing the card is not a read');assert.equal(await view.locator('[data-support-response]').count(),0,'the response text is not shown until opened');
+  assert.equal(modelCalls,submitCalls+1,'the view itself calls no model');
+  await keyboard.activate(view.getByRole('button',{name:'Open response',exact:true}));
+  await view.locator('[data-support-response]').getByText(response,{exact:true}).waitFor();
+  await view.getByText('You read the response',{exact:false}).waitFor();
+  const after=await detail(saved.id);assert.equal(after.read.state,'read');assert.equal(after.delivery.state,'none','read is not delivery');
+  assert.equal(await view.getByText(/delivered/i).count(),0);assert.equal(modelCalls,submitCalls+1);
+  await noOverflow();for(const [role,name] of [['button','Hide details'],['button','Refresh'],['link','Open Support']])assert((await view.getByRole(role,{name,exact:true}).boundingBox()).height>=43,name);
+  assert.equal((await rows()).n,1);
+  env.ENVIRONMENT='local';
+ }
+ // WH-037: a model-shown Chat site-health view renders the saved publication, domain and evidence times, labels partial then
+ // delayed telemetry from the data, and neither the model nor merely showing the view starts a check.
+ async function siteHealthJourney(){
+  phase='site-health view shows version, domain, evidence times and partial then delayed telemetry; the model starts no check';
+  aiOn();await page.setViewportSize({width:390,height:844});await page.goto(origin+'/_fixture/health');
+  const version=(await site.readSpecification(f.scope,f.user,f.project)).versionId,iso=ms=>new Date(Date.now()-ms).toISOString(),claim=crypto.randomUUID();
+  await run('INSERT INTO publications(project_id,version_id,revision) VALUES(?,?,1)',f.project,version);
+  await run("INSERT INTO domain_claims(id,project_id,hostname,token,expires_at,created_at,verified_at) VALUES(?,?,?,?,?,?,?)",claim,f.project,'www.example.test','T',iso(-86400000),iso(5000),iso(4000));
+  const connection=crypto.randomUUID();await run("INSERT INTO domain_connections(id,user_id,claim_id,project_id,hostname,zone_id,target,proof_hash,state,detail,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,'review','',?,?)",connection,f.user,claim,f.project,'www.example.test','8d46ee4e394514402479acf16579f7b5','hosting.whumpo.site','p',iso(3000),iso(-86400000));
+  await run("UPDATE domain_connections SET state='active',provider_id=?,provider_status='active',ssl_status='active',checked_at=?,serve_until=? WHERE id=?",crypto.randomUUID(),iso(2000),iso(-3600000),connection);
+  await run("UPDATE site_traffic_metadata SET enabled_at=? WHERE id=1",iso(2*86400000));
+  const checks=()=>requests.filter(r=>/^\/api\/projects\/[^/]+\/health$/.test(r.path)).length,checkRows=()=>row('SELECT count(*) n FROM site_health_checks WHERE project_id=?',f.project),views=()=>row("SELECT count(*) n FROM chat_interactions WHERE user_id=? AND json_extract(envelope_json,'$.definition.kind')='view'",f.user);
+  const show=view=>({kind:'interaction',operation:'showView',view:{version:1,projectId:f.project,widgets:['site-health'],shortcuts:[],...view}});
+  // A model-supplied shortcut (the way a check could be requested) is refused: temporary views are read components only.
+  modelSteps.push(show({shortcuts:['checkWebsite']}));await say('Show my site health and check it now.');
+  for(let i=0;modelSteps.length&&i<300;i++)await new Promise(done=>setTimeout(done,100));
+  await page.waitForLoadState('networkidle');
+  assert.equal((await views()).n,0,'a view with a check shortcut is not issued');assert.equal((await checkRows()).n,0);assert.equal(checks(),0);
+  const calls=modelCalls;modelSteps.push(show({}));await say('Show my site health.');
+  const health=page.locator('[data-view-component="site-health"]'),card=health.locator('section[aria-label="Garden site health"]');await card.waitFor({timeout:60000});
+  const line=name=>card.locator('dt',{hasText:name}).locator('xpath=..');
+  assert.match(await line('Publication').innerText(),new RegExp('Published · version '+version+' · revision 1'));
+  assert.match(await line('Publication').innerText(),/Version saved: /);assert(await line('Publication').locator('time[datetime]').count());
+  assert.match(await line('Domain').innerText(),/active · www\.example\.test · TLS active/);assert.match(await line('Domain').innerText(),/Last status: /);assert(await line('Domain').locator('time[datetime]').count());
+  assert.match(await line('Traffic').innerText(),/^Traffic\s*partial · /);await card.getByText('Needs attention · traffic.',{exact:false}).waitFor();
+  assert.equal(await card.getByText(/delayed/i).count(),0);
+  // A recent missed measurement recorded by the Worker's own counters: the same view, refreshed, now says delayed (a lower bound).
+  await run("INSERT INTO site_traffic_quality(project_id,day,excluded_requests,missed_measurements,updated_at) VALUES(?,date('now'),0,2,?)",f.project,iso(1000));
+  await keyboard.activate(health.getByRole('button',{name:'Refresh website health',exact:true}));
+  await page.waitForFunction(()=>/Traffic\s*delayed ·/.test(document.querySelector('[data-view-component="site-health"]')?.innerText??''),null,{timeout:30000});
+  assert.match(await line('Traffic').innerText(),/2 missed/);assert.match(await card.innerText(),/lower bound/);
+  await noOverflow();assert.equal(modelCalls,calls+1,'rendering and refreshing the view call no model');
+  assert.equal(checks(),0,'showing or refreshing the view starts no check');assert.equal((await checkRows()).n,0);
+  env.ENVIRONMENT='local';
+ }
  if(process.argv.includes('--saved-turns')){
   await savedChatTurnJourney({page,context,origin,db,site,modules,owner:a,interactionId:form.envelope.id,requests,keyboard,setUnavailable:value=>{savedTurnUnavailable=value;},setHeld:value=>{holdSavedTurn=value;},release:async mode=>{if(mode==='wait'){for(let i=0;!releaseHeld&&i<100;i++)await new Promise(done=>setTimeout(done,20));assert(releaseHeld);}else{releaseHeld();releaseHeld=null;}},phase:value=>{phase=value;console.log('Saved-message stage:',value);}});
   assert.equal(network,0);assert.equal(modelCalls,0);assert.deepEqual(errors,[]);
   resultSummary='Saved-message browser passed: current Worker/local D1/built UI, history beyond 100 messages, exact fresh review/result reopening, one renderer, navigation/reload/separate tab, private composer retention, outage clearing, signed exact private save with zero model calls, result after proposal cleanup, keyboard/focus, responsive/large-text/reduced-motion/soft-keyboard checks, other-account denial and signed-out late-response fencing. No publication or external inference; physical-device acceptance remains separate.';
+ }else if(process.argv.includes('--support-only')){
+  await supportJourney();assert.equal(network,0);assert.deepEqual(errors,[]);
+  resultSummary='Chat support browser passed: actual Worker/current D1/built UI at 390px by keyboard only; the scripted agent prepares the support form (nothing saved), the owner edits and sends it, the Chat support view shows the saved response with notification none, and opening it records one read. Two scripted main calls.';
+ }else if(process.argv.includes('--site-health-only')){
+  await siteHealthJourney();assert.equal(network,0);assert.deepEqual(errors,[]);
+  resultSummary='Site-health browser passed: actual Worker/current D1/built UI at 390px; a scripted showView renders publication version, domain/TLS state and evidence times, partial then delayed telemetry labels from the data, and a model-supplied check shortcut is refused with no check run.';
  }else if(process.argv.includes('--recovery-only')){
   await recoveryJourney();assert.equal(network,0);assert.deepEqual(errors,[]);
   resultSummary='Task recovery browser passed: actual current Worker/local D1/built UI, private save with inference unavailable and lost committed response, unstarted saved answers/explicit resume, rejected and unknown replies, pending reload/duplicate/stop/timeout with late-result refusal, unchanged unrelated work. Ten scripted main calls; 360/390/1280px captures. No external inference or publication.';
@@ -663,8 +745,9 @@ try{
  phase='foreign reopened locator has no saved-form authority';await page.goto(origin+'/workspace?interaction='+form.envelope.id);await page.locator('[data-interaction-id="'+form.envelope.id+'"]').getByText('This Chat item is no longer available.',{exact:false}).waitFor();assert.equal(await field().count(),0);
  phase='sign-out during a held response';await page.goto(origin+'/_fixture/start');await field().waitFor();await page.goto(origin+'/workspace?interaction='+form.envelope.id);await field().waitFor();await field().fill('Private pending draft');holdOperation='save-draft';await card().getByRole('button',{name:'Save draft',exact:true}).click();for(let i=0;!releaseHeld&&i<50;i++)await new Promise(done=>setTimeout(done,20));assert(releaseHeld);
  assert.equal((await post('/api/auth/identity/v1/logout',{version:1})).status(),200);await page.evaluate(()=>window.dispatchEvent(new Event('whumpo:identity-changed')));await page.getByRole('button',{name:'Sign in with a passkey',exact:true}).waitFor();releaseHeld();releaseHeld=null;await page.waitForLoadState('networkidle');assert.equal(await page.evaluate(()=>sessionStorage.getItem('whumpo.chat-forms.v1')),null);assert.equal(await page.evaluate(()=>sessionStorage.getItem('whumpo.chat-location')),null);assert.equal(await page.locator('section[aria-label="Website change brief"]').count(),0);
+ await supportJourney();await siteHealthJourney();
  assert.equal(network,0);assert.deepEqual(errors,[]);
- resultSummary=(`Chat form browser passed (${process.argv.includes('--d1')?'local D1':'SQLite'}): real current HTTP/built workspace, 360/390px layouts, keyboard error focus, collapse/navigation/reload, draft and submission response loss, concurrent edit refusal, linked correction, visibly suggested prose answers with local edit/reload/explicit draft save and no automatic effect, private compiler preview/exact HTTP save, current history and paged resume beyond 100 turns, private query eviction, dialog heading/Tab containment/close-return, simulated phone keyboard resize and scroll, magnification/large text/reduced motion, inline cancellation/result focus and no late-reply focus stealing, reopened current/older form locator across navigation/reload/another tab with no redispatch or duplicate editor, locator expiry/isolation/clearing, late discard, native project intake/selection with linked corrections, blank text and cleared selections retained across lost responses/reloads/revisions, immutable earlier submissions, response-loss recovery and no automatic continuation, maintained writing-style radio choices with grouped names, required/error focus, keyboard selection, clearing/correction, mobile touch rows and lost-response recovery, expandable scoped status cards and exact website comparisons with keyboard open, refresh, outage/denial clearing, 360/390px layouts, private cache eviction and no approval on rendering, composed project service form with typed conditional error focus, hidden-draft reload and hidden-answer exclusion through actual HTTP submission, shared Chat photo uploader with actual local R2, pre-dispatch storage-failure refusal, accepted-response loss/reload/readback without resend, exact same-file retry, wrong-file refusal, dismissal retention, metadata-only recovery, held-image non-display and account clearing, account switch and sign-out fencing. Twenty-two scripted model calls including new-project intake, clarification, stable project creation, corrections and lost-creation recovery, plus selected-project issuance, save-and-continue, lost-result readback, same-task resumption and 360/390/1280px rendering; approved-photo selection, conditional resource reads, selection caps, saved-draft reload, revoked-choice refusal and same-task metadata-only continuation; custom task continuation and two natural-language resumptions, question reload, bounded saved memory and no reload redispatch; no external inference/provider calls or publication; synthetic identity, no physical-device/screen-reader ceremony acceptance.`);
+ resultSummary=(`Chat form browser passed (${process.argv.includes('--d1')?'local D1':'SQLite'}): real current HTTP/built workspace, 360/390px layouts, keyboard error focus, collapse/navigation/reload, draft and submission response loss, concurrent edit refusal, linked correction, visibly suggested prose answers with local edit/reload/explicit draft save and no automatic effect, private compiler preview/exact HTTP save, current history and paged resume beyond 100 turns, private query eviction, dialog heading/Tab containment/close-return, simulated phone keyboard resize and scroll, magnification/large text/reduced motion, inline cancellation/result focus and no late-reply focus stealing, reopened current/older form locator across navigation/reload/another tab with no redispatch or duplicate editor, locator expiry/isolation/clearing, late discard, native project intake/selection with linked corrections, blank text and cleared selections retained across lost responses/reloads/revisions, immutable earlier submissions, response-loss recovery and no automatic continuation, maintained writing-style radio choices with grouped names, required/error focus, keyboard selection, clearing/correction, mobile touch rows and lost-response recovery, expandable scoped status cards and exact website comparisons with keyboard open, refresh, outage/denial clearing, 360/390px layouts, private cache eviction and no approval on rendering, composed project service form with typed conditional error focus, hidden-draft reload and hidden-answer exclusion through actual HTTP submission, shared Chat photo uploader with actual local R2, pre-dispatch storage-failure refusal, accepted-response loss/reload/readback without resend, exact same-file retry, wrong-file refusal, dismissal retention, metadata-only recovery, held-image non-display and account clearing, account switch and sign-out fencing. Twenty-two scripted model calls including new-project intake, clarification, stable project creation, corrections and lost-creation recovery, plus selected-project issuance, save-and-continue, lost-result readback, same-task resumption and 360/390/1280px rendering; approved-photo selection, conditional resource reads, selection caps, saved-draft reload, revoked-choice refusal and same-task metadata-only continuation; custom task continuation and two natural-language resumptions, question reload, bounded saved memory and no reload redispatch; no external inference/provider calls or publication; synthetic identity, no physical-device/screen-reader ceremony acceptance. Also the keyboard-only Chat support form/card (WH-035) and site-health view (WH-037) at 390px.`);
  }
 }catch(error){console.error('Phase:',phase);console.error(JSON.stringify({errors,requests:requests.slice(-12)}));if(page)await page.screenshot({path:'/tmp/whumpo-chat-form-failure.png',fullPage:true}).catch(()=>{});throw error;}
 finally{releaseHeld?.();await browser?.close();if(server){server.closeAllConnections();await new Promise(done=>server.close(done));}await Promise.allSettled([...activeRequests]);await Promise.allSettled(background);globalThis.fetch=originalFetch;await fixture?.close();await rm(html,{force:true});await rm(dir,{recursive:true,force:true});}
