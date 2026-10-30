@@ -1,7 +1,25 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
 }
+
+// Version scheme (docs/android/release-checklist.md): versionName comes from version.properties; versionCode is
+// versionCodeBase + the CI run number (-Pwhumpo.runNumber=N, passed by the release job), so every CI upload is
+// strictly higher than the last. A local build without the property gets versionCodeBase + 1.
+// Read through a provider so the configuration cache notices edits to the file.
+val versionProps = Properties().apply {
+    load(providers.fileContents(rootProject.layout.projectDirectory.file("version.properties")).asText.get().reader())
+}
+val runNumber = providers.gradleProperty("whumpo.runNumber").map(String::toInt).getOrElse(1)
+
+// Upload signing comes from the environment, never from the repo. Without all four values the release build
+// is signed with the debug key and labelled "-debugsigned": Play rejects it, so it cannot be uploaded by mistake.
+fun uploadEnv(name: String) = providers.environmentVariable(name).orNull?.takeIf { it.isNotBlank() }
+val uploadStore = uploadEnv("WHUMPO_UPLOAD_STORE_FILE")
+val uploadSigned = listOf("WHUMPO_UPLOAD_STORE_PASSWORD", "WHUMPO_UPLOAD_KEY_ALIAS", "WHUMPO_UPLOAD_KEY_PASSWORD")
+    .all { uploadEnv(it) != null } && uploadStore != null
 
 android {
     namespace = "com.whumpo.android"
@@ -13,8 +31,8 @@ android {
         applicationId = "com.whumpo.android"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "0.1.0-shell"
+        versionCode = versionProps.getProperty("versionCodeBase").toInt() + runNumber
+        versionName = versionProps.getProperty("versionName")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -37,10 +55,28 @@ android {
         }
     }
 
+    signingConfigs {
+        if (uploadSigned) {
+            create("upload") {
+                storeFile = file(uploadStore!!)
+                storePassword = uploadEnv("WHUMPO_UPLOAD_STORE_PASSWORD")
+                keyAlias = uploadEnv("WHUMPO_UPLOAD_KEY_ALIAS")
+                keyPassword = uploadEnv("WHUMPO_UPLOAD_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // No signing config: signed releases are WH-087 and need owner-held keys.
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (uploadSigned) {
+                signingConfig = signingConfigs.getByName("upload")
+            } else {
+                signingConfig = signingConfigs.getByName("debug")
+                versionNameSuffix = "-debugsigned"
+            }
         }
     }
 

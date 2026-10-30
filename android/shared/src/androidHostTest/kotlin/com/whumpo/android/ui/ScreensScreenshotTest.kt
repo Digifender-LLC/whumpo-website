@@ -172,4 +172,13 @@ class ScreensScreenshotTest : RobolectricUiTest() {
     fun projectDetailAtLargeText() {
         capture("project-detail", Screen.Compact, dark = false, fontScale = 2f, content = scenes.first { it.first == "project-detail" }.second)
     }
+
+    /** Play listing images: synthetic content only, phone and two tablet sizes, light and dark. */
+    @Test
+    fun storeListing() {
+        for ((file, scene) in listOf("2-projects" to "projects-list", "3-project-detail" to "project-detail", "4-activity" to "activity")) {
+            val content = scenes.first { it.first == scene }.second
+            for (device in StoreDevice.entries) for (dark in listOf(false, true)) captureStore(file, device, dark, content)
+        }
+    }
 }

@@ -11,3 +11,6 @@ local.properties
 # Signing material must never enter the repository
 *.jks
 *.keystore
+# Keystores are decoded to the CI runner temp dir only
+*.p12
+*.p12

@@ -119,4 +119,16 @@ class ChatScreenshotTest : RobolectricUiTest() {
         sheet("review-receipt", s.flow(ReviewStep.Done, "Published. Your site is live."))
         sheet("review-stale", s.flow(ReviewStep.NoLongerCurrent, "This review is no longer current. Nothing was changed."))
     }
+
+    /** Play listing image 1: the conversation with a draft, synthetic content from the frozen fixtures. */
+    @Test
+    fun storeListing() {
+        val s = ChatScenes
+        for (device in StoreDevice.entries) for (dark in listOf(false, true)) {
+            val width = WidthClass.of(device.widthDp.dp)
+            captureStore("1-chat", device, dark) {
+                ChatLayout(s.screen(s.ready, draft = "Add a ceramic coating service for $300."), width, NoChatActions, animated = false)
+            }
+        }
+    }
 }

@@ -46,6 +46,16 @@ internal enum class Screen(val label: String, val widthDp: Int, val heightDp: In
     Expanded("expanded", 1000, 700),
 }
 
+/**
+ * Play listing sizes, in dp at a given density: phone 360x640 at 3x is 1080x1920; the 7" tablet 600x960 at 2x is
+ * 1200x1920; the 10" tablet 800x1280 at 2x is 1600x2560. Used only by the store-listing captures.
+ */
+internal enum class StoreDevice(val label: String, val widthDp: Int, val heightDp: Int, val density: String) {
+    Phone("phone", 360, 640, "xxhdpi"),
+    Tablet7("tablet7", 600, 960, "xhdpi"),
+    Tablet10("tablet10", 800, 1280, "xhdpi"),
+}
+
 /** Robolectric host-test base: launches [ShellTestActivity] at a given window size, in a given theme. */
 abstract class RobolectricUiTest {
     @get:Rule
@@ -65,7 +75,16 @@ abstract class RobolectricUiTest {
         content: @Composable () -> Unit,
     ): ActivityScenario<ShellTestActivity> {
         // Only width and height are set here; density stays at the Robolectric default (xhdpi in the qualifier).
-        RuntimeEnvironment.setQualifiers("w${screen.widthDp}dp-h${screen.heightDp}dp-xhdpi")
+        return launchAt("w${screen.widthDp}dp-h${screen.heightDp}dp-xhdpi", dark, fontScale, content)
+    }
+
+    private fun launchAt(
+        qualifiers: String,
+        dark: Boolean,
+        fontScale: Float,
+        content: @Composable () -> Unit,
+    ): ActivityScenario<ShellTestActivity> {
+        RuntimeEnvironment.setQualifiers(qualifiers)
         ShellTestActivity.content = {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
@@ -89,6 +108,14 @@ abstract class RobolectricUiTest {
         val scale = if (fontScale == 1f) "" else "-font${fontScale.toInt()}"
         launch(screen, dark, fontScale, content).use {
             compose.onRoot().captureRoboImage("src/androidHostTest/screenshots/$name-${screen.label}-$theme$scale.png")
+        }
+    }
+
+    /** Records or verifies one Play listing image under docs/android/store-listing/screenshots (path is relative to :shared). */
+    internal fun captureStore(name: String, device: StoreDevice, dark: Boolean, content: @Composable () -> Unit) {
+        val theme = if (dark) "dark" else "light"
+        launchAt("w${device.widthDp}dp-h${device.heightDp}dp-${device.density}", dark, 1f, content).use {
+            compose.onRoot().captureRoboImage("../../docs/android/store-listing/screenshots/${device.label}/$name-$theme.png")
         }
     }
 }
