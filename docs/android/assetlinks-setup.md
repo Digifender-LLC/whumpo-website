@@ -11,6 +11,11 @@ One file serves two features of the app:
 
 The server also needs the same identity as an approved origin for passkey challenges (contract: "Origin binding for passkeys", WH-083). That is server configuration, not part of this file.
 
+## Known fingerprints
+
+- **Upload key** (owner-held, created 2026-10-30): SHA-256 `26:39:DF:A4:76:DC:6A:A5:BE:7F:E4:76:24:47:A2:B9:22:2F:7C:D8:14:FD:B6:81:E6:5F:47:58:1E:73:C0:63`, SHA-1 `E3:59:40:EB:F8:F0:F0:07:8B:B0:D9:8E:C0:A8:22:27:15:56:21:46`. Used for Firebase and to verify bundles. **Never put it in `assetlinks.json`.**
+- **App signing key** (Google's): after first upload. Only this one goes in the file.
+
 ## Steps
 
 1. **Enrol in Play App Signing** at the first upload and keep custody of the upload key. Google then signs the release with the app-signing key. Only that certificate belongs in the file. Never list a debug or upload certificate: the contract says debug identities must not acquire release authority.
