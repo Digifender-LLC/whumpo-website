@@ -15,6 +15,8 @@ interface Env {
   STRIPE_SANDBOX_CATALOG?: string;
   STRIPE_TEST_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
+  // WH-086 FCM sender service-account JSON (send-only role); read by the push adapter once it lands.
+  FCM_SERVICE_ACCOUNT_JSON?: string;
   // Owner-supplied, non-secret support values. Unset means not configured; never invent defaults.
   SUPPORT_HOURS?: string;
   SUPPORT_NOTIFICATION_PROVIDER?: string;

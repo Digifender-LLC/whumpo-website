@@ -32,18 +32,18 @@ export async function reserveGuestPreviewPhotoReads(db:D1Database,request:Reques
 }
 /** `count` project reads, each with its platform read, in one batch: all are charged or none. */
 async function chargeProjectReads(db:D1Database,project:string,count:number){
- const statements:D1PreparedStatement[]=[];
+ const statements:D1PreparedStatement[]=[];let results:D1Result[];
  for(let n=0;n<count;n++)statements.push(
-  db.prepare("INSERT INTO storage_project_usage(project_id,period,read_ops) VALUES(?,strftime('%Y-%m','now'),1) ON CONFLICT(project_id,period) DO UPDATE SET read_ops=read_ops+1").bind(project),
+  db.prepare("INSERT INTO storage_project_usage(project_id,period,read_ops) VALUES(?,strftime('%Y-%m','now'),1) ON CONFLICT(project_id,period) DO UPDATE SET read_ops=read_ops+1 RETURNING read_ops").bind(project),
   db.prepare("INSERT INTO storage_usage(period,read_ops) VALUES(strftime('%Y-%m','now'),1) ON CONFLICT(period) DO UPDATE SET read_ops=read_ops+1")
  );
  try{
-  await db.batch(statements);
+  results=await db.batch(statements);
  }catch(cause){
   if(String(cause).includes('storage_project_quota'))throw new StorageLimitError('This site’s monthly photo allowance has been reached. Please try again after the monthly reset.');
   if(/CHECK constraint failed/i.test(String(cause)))throw new StorageLimitError();
   throw cause;
  }
  // After the receipt batch has committed, in its own statements; a failure is logged and never reaches the reader.
- await emitProjectStorageRead(db,project);
+ await emitProjectStorageRead(db,project,Number((results[(count-1)*2].results[0] as {read_ops?:number}|undefined)?.read_ops)||undefined);
 }
