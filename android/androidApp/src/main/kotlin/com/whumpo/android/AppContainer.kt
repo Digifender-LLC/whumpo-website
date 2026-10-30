@@ -1,6 +1,11 @@
 package com.whumpo.android
 
+import com.whumpo.android.ui.chat.ReauthHook
 import com.whumpo.core.account.AccountStateStore
+import com.whumpo.core.api.ClientInfo
+import com.whumpo.core.api.MobileApiClient
+import com.whumpo.core.api.SessionProvider
+import com.whumpo.core.api.okHttpEngine
 import com.whumpo.core.data.AccountRepository
 import com.whumpo.core.data.ActivityRepository
 import com.whumpo.core.data.ChatDraftRepository
@@ -22,4 +27,16 @@ class AppContainer(
     val chatDrafts: ChatDraftRepository = StoredChatDraftRepository(accountState, io)
     val projects: ProjectsRepository = ShellProjectsRepository(accountState)
     val activity: ActivityRepository = ShellActivityRepository(accountState)
+
+    // shortcut: WP5 (native sign-in) replaces these two with the real session store and Credential Manager reauth;
+    // until then the client has no bearer token, so Chat reports "Sign in to continue".
+    val clientInfo: ClientInfo = ClientInfo.current(BuildConfig.VERSION_CODE)
+    val mobileApi = MobileApiClient(okHttpEngine(), environment.mobileApiBase, clientInfo, NoSession)
+    val reauth: ReauthHook = ReauthHook { false }
+}
+
+private object NoSession : SessionProvider {
+    override suspend fun bearerToken(): String? = null
+
+    override suspend fun onSessionRejected() = Unit
 }
