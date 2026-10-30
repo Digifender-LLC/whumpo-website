@@ -6,8 +6,8 @@
  "evidence": "docs/workspace-collaboration-evidence.md",
  "baseline": {
   "sourceCommit": "4dea09c",
-  "reviewedSchemaSha256": "bc854b898ac07fa2a72f004ec7600d32599a2144d2cc79227f78495f5fcc3a29",
-  "tables": 234,
+  "reviewedSchemaSha256": "119bb4bb071e332f4676caf9f4eb02cf056345855f0dde91b286bf9d1d4b513f",
+  "tables": 236,
   "usersForeignKeyColumns": 120
  },
  "vocabulary": {
@@ -252,7 +252,9 @@
    "publication_chat_links",
    "service_client_activation_links",
    "service_client_chat_links",
-   "version_photos"
+   "staff_notification_optins",
+   "version_photos",
+   "visitor_notification_addresses"
   ],
   "noTenantPath": [
    "account_closures",

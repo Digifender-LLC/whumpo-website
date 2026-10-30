@@ -82,11 +82,13 @@ function event(db:D1Database,context:ModuleContext,entryId:string,kind:'form.acc
 /** Optional `input.attachments`: up to four distinct ids of the submitter's own uploads into the form's upload collection,
  * only on a form that has one. Whose files they are, the collection, the 60-second window and the cap are decided by
  * `module_record_file_admit` inside the commit. The rest is the values-only input. */
-function splitAttachments(form:{uploadCollectionId:string|null},raw:unknown):{attachments:string[];input:unknown}{
- if(!plain(raw)||!Object.hasOwn(raw,'attachments'))return {attachments:[],input:raw};
- const {attachments,...input}=raw;
- if(form.uploadCollectionId===null||!Array.isArray(attachments)||attachments.length>4||!attachments.every(uuid)||new Set(attachments).size!==attachments.length)throw invalid();
- return {attachments,input};
+function splitAttachments(form:{uploadCollectionId:string|null;submit:string},raw:unknown):{attachments:string[];receiptConsent:0|1;input:unknown}{
+ if(!plain(raw))return {attachments:[],receiptConsent:0,input:raw};
+ const {attachments=[],receiptConsent=false,...input}=raw as Record<string,unknown>;
+ // WH-157: the per-submission "email me a receipt" choice exists only on non-public forms; an anonymous submitter never consents.
+ if(typeof receiptConsent!=='boolean'||receiptConsent&&form.submit==='public')throw invalid();
+ if(Object.hasOwn(raw,'attachments')&&(form.uploadCollectionId===null||!Array.isArray(attachments)||attachments.length>4||!attachments.every(uuid)||new Set(attachments).size!==attachments.length))throw invalid();
+ return {attachments:attachments as string[],receiptConsent:receiptConsent?1:0,input};
 }
 
 /** forms.submit — visitor and staff intake through the access session, and anonymous intake on `public` forms. An
@@ -100,12 +102,12 @@ const submit:ModuleWriteHandler=async(db,context)=>{
  if(!exact(context.request.target,['formId']))throw invalid();
  const form=config(context).forms.find(f=>f.id===context.request.target!.formId);if(!form)throw new ModuleError('not_found');
  if(!visitor&&form.submit!=='public')throw new ModuleError('forbidden');
- const {attachments,input}=splitAttachments(form,context.request.input),schema=schemaOf(context,form.recordId),values=submittedValues(schema,input);
+ const {attachments,receiptConsent,input}=splitAttachments(form,context.request.input),schema=schemaOf(context,form.recordId),values=submittedValues(schema,input);
  const entryId=crypto.randomUUID(),now=Math.floor(Date.now()/1000),retention=config(context).retentionDays*86400;
  const submitter=visitor?(visitor.roles.length?'staff':'visitor'):'public';
  return {statements:[
-  db.prepare('INSERT INTO module_records(id,instance_id,project_id,schema_id,form_id,fields_revision,submitter_kind,visitor_id,values_json,revision,created_request_id,last_request_id,created_at,updated_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,1,?,?,?,?,?)')
-   .bind(entryId,context.resource.resourceId,context.resource.projectId,schema.id,form.id,schema.fieldsRevision,submitter,visitor?.visitorId??null,canonicalJSON(values,8192),context.request.requestId,context.request.requestId,now,now,now+retention),
+  db.prepare('INSERT INTO module_records(id,instance_id,project_id,schema_id,form_id,fields_revision,submitter_kind,visitor_id,values_json,revision,created_request_id,last_request_id,created_at,updated_at,expires_at,receipt_consent) VALUES(?,?,?,?,?,?,?,?,?,1,?,?,?,?,?,?)')
+   .bind(entryId,context.resource.resourceId,context.resource.projectId,schema.id,form.id,schema.fieldsRevision,submitter,visitor?.visitorId??null,canonicalJSON(values,8192),context.request.requestId,context.request.requestId,now,now,now+retention,receiptConsent),
   event(db,context,entryId,'form.accepted',1,now),
   ...attachments.map(fileId=>db.prepare('INSERT INTO module_record_files(entry_id,file_id,instance_id,project_id,request_id) VALUES(?,?,?,?,?)')
    .bind(entryId,fileId,context.resource.resourceId,context.resource.projectId,context.request.requestId))
