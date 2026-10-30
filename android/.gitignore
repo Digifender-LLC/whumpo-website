@@ -11,3 +11,5 @@ local.properties
 # Signing material must never enter the repository
 *.jks
 *.keystore
+# Firebase app config (project identifiers); injected at build time, never committed
+google-services.json
