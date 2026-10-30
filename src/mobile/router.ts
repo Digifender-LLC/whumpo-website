@@ -6,6 +6,7 @@ import {config,loginOptionsOperation,loginVerifyOperation,logoutOperation,reauth
 import {handoffExchangeOperation,handoffStartOperation} from './handoff';
 import {bootstrap,chatList,chatTurn,confirmReview,reviewList,sendMessage,type MobileDeps} from './workspace';
 import {interaction} from './interactions';
+import {photoBytes,photoList,photoStatus,photoUpload} from './photos';
 import {activityList,projectList,projectRead,projectVersions} from './projects';
 import {MobileError,admitClient,refusal,signin,type MobileEnvironment} from './transport';
 
@@ -76,6 +77,12 @@ export async function handleMobileRequest(request:Request,env:MobileEnvironment,
   const projectId=/^projects\/([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})(\/versions)?$/.exec(action);
   if(method==='GET'&&projectId&&!projectId[2])return await authenticated(request,env,p=>projectRead(env,p,projectId[1]));
   if(method==='GET'&&projectId)return await authenticated(request,env,p=>projectVersions(request,env,p,projectId[1]),true);
+  const photos=/^projects\/([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})\/photos(?:\/([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}))?$/.exec(action);
+  if(method==='GET'&&photos&&!photos[2])return await authenticated(request,env,p=>photoList(env,p,photos[1]));
+  if(method==='GET'&&photos)return await authenticated(request,env,p=>photoStatus(env,p,photos[1],photos[2]));
+  if(method==='PUT'&&photos&&photos[2])return await authenticated(request,env,p=>photoUpload(request,env,p,photos[1],photos[2]));
+  const photoId=/^photos\/([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})$/.exec(action);
+  if(method==='GET'&&photoId)return await authenticated(request,env,p=>photoBytes(env,p,photoId[1]));
   if(method==='GET'&&action==='activity')return await authenticated(request,env,p=>activityList(request,env,p),true);
   throw new MobileError('not_found');
  }catch(error){

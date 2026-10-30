@@ -105,6 +105,8 @@ The interaction operations are thin authenticated aliases for the frozen [WH-105
 | `GET /projects/{projectId}/photos/{uploadId}` | bearer | `photo`; the upload readback | `readPhotoUpload` | none |
 | `GET /photos/{photoId}` | bearer | JPEG bytes for approved, owned media only | `readPhoto` | none |
 
+**Server (implemented).** The four routes run the web `files.ts` path unchanged behind the workspace gate, so scanning, JPEG validation, metadata stripping, the 1 MiB bound and the web quotas still apply and the client is never trusted. A native upload is always a direct upload (no Chat handoff). Status `404 not_found` means nothing committed, so the same bytes may be resent with the same ID; a stored-but-unconfirmed upload reads back as `status:"pending"` and completes by resending. Errors: over 1 MiB `413 payload_too_large`, a non-`image/jpeg` type `415 unsupported_media_type`, bytes that are not an accepted baseline JPEG `400 invalid_request`, a reused ID with other bytes, name or project `409 request_conflict`, and a web quota or storage allowance `503 unavailable` with the web's plain message. Bytes for held, blocked or foreign media are `404 not_found`; success carries the web route's headers unchanged.
+
 Preparation follows the [photo contract](photos.md): at most 10 MiB input, orientation-correct resize within 1600 x 1600, baseline JPEG within 1 MiB; the exact prepared bytes, name and ID persist for retry. `status:"ready"` with `safetyStatus:"pending"` or `"blocked"` is never rendered as usable media. The [safety gates](photos.md) are unchanged; Android receives no bucket credential.
 
 ### Push (WH-086)

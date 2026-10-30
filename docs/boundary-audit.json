@@ -1281,6 +1281,193 @@
    }
   },
   {
+   "id": "mobile-photos",
+   "title": "Native /api/mobile/v1 photos (WH-085 server): list, upload, status and bytes",
+   "privileged": [
+    "data-change"
+   ],
+   "authorityClass": "bearer android session only; each operation runs the web files.ts path (listPhotos, uploadPhoto, readPhotoUpload, readPhoto) behind the M2 workspace gate (admitWorkspace + workspaceBindings + assertWorkspace) with the bearer principal; no browser Origin rule, cookies refused",
+   "entries": [
+    {
+     "file": "src/mobile/router.ts",
+     "kind": "regex",
+     "match": "/^projects\\/([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})\\/photos(?:\\/([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}))?$/",
+     "methods": [
+      "GET",
+      "PUT"
+     ]
+    },
+    {
+     "file": "src/mobile/router.ts",
+     "kind": "regex",
+     "match": "/^photos\\/([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})$/",
+     "methods": [
+      "GET"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "The principal is the bearer's android session and the scope is the web dispatcher's own. The web photo functions filter by the owner in every statement (project by id and owner, photo joined to its project's owner), and bytes are served only for approved, owned, ready media.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/photos.ts",
+       "contains": "workspace(env,p,true,(scoped,user)=>guarded(()=>readPhoto(scoped,user,id)))"
+      },
+      {
+       "file": "src/files.ts",
+       "contains": "WHERE f.id=? AND p.owner_user_id=? AND f.status='ready'"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-photos.mjs",
+       "contains": "assert.equal((await get('/photos/'+up,sb.token)).status,404);",
+       "asserts": "owner B cannot fetch owner A photo bytes"
+      },
+      {
+       "file": "tests/mobile-photos.mjs",
+       "contains": "const foreign=await get(`/projects/${a.project}/photos`,sb.token);assert.equal(foreign.status,404);",
+       "asserts": "owner B cannot list owner A photos"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Same transport as M1 to M4: no Origin rule, a Cookie header is 400, the strict Whumpo-Client header is required (426 for an unsupported build), no query keys are accepted. The upload body is the only binary request: image/jpeg, at most 1 MiB, read from the stream by the web path so a lying Content-Length cannot bypass the cap. Only content-type, content-length and X-Photo-Name reach the web path; a native caller cannot name a Chat handoff.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/photos.ts",
+       "contains": "for(const k of ['content-type','content-length','x-photo-name'])"
+      },
+      {
+       "file": "src/files.ts",
+       "contains": "Photos must be at most 1 MiB"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-photos.mjs",
+       "contains": "r=await put(sa.token,a.project,id(),big);assert.equal(r.status,413);",
+       "asserts": "an upload over 1 MiB is payload_too_large"
+      },
+      {
+       "file": "tests/mobile-photos.mjs",
+       "contains": "r=await put(sa.token,a.project,id(),original,{type:'image/png'});assert.equal(r.status,415);",
+       "asserts": "a non-JPEG media type is unsupported_media_type"
+      },
+      {
+       "file": "tests/mobile-photos.mjs",
+       "contains": "assert.equal((await mobile('/photos/'+fresh,{token:sa.token,headers:{cookie:'__Host-whumpo_session='+sa.token}})).status,400);",
+       "asserts": "a cookie beside a valid bearer is refused"
+      },
+      {
+       "file": "tests/mobile-photos.mjs",
+       "contains": "assert.equal(r.status,200,r.text);assert.equal((await one('SELECT handoff_json h FROM project_files WHERE id=?',fresh)).h,'null');",
+       "asserts": "a native upload is always a direct upload, never a Chat handoff"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "n/a",
+     "detail": "A private photo upload carries no web recent-authentication requirement, so none is invented."
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "No request field names an account. The project and the photo are resolved by id AND owner; a foreign or unknown project, upload or photo is not_found, and held or blocked media is indistinguishable from absent.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/photos.ts",
+       "contains": "if(s===404||s===423)return new MobileError('not_found');"
+      },
+      {
+       "file": "src/files.ts",
+       "contains": "SELECT id FROM projects WHERE id=? AND owner_user_id=?"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-photos.mjs",
+       "contains": "const intrude=await put(sb.token,a.project,id(),original);assert.equal(intrude.status,404);",
+       "asserts": "owner B cannot upload into owner A project"
+      },
+      {
+       "file": "tests/mobile-photos.mjs",
+       "contains": "assert.equal((await get(`/projects/${a.project}/photos/${up}`,sb.token)).status,404);",
+       "asserts": "owner B cannot read an owner A upload status"
+      },
+      {
+       "file": "tests/mobile-photos.mjs",
+       "contains": "const held=await get('/photos/'+fresh,sa.token);assert.equal(held.status,404,'pending safety review is not displayable');",
+       "asserts": "media pending its safety check is not served"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "The caller-owned upload ID is the idempotency key. The same ID with the same bytes and name returns the committed photo and writes nothing; a different digest, name or project is request_conflict. A lost reply is resolved by the status route, and an unfinished reservation completes only by resending the same bytes.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/photos.ts",
+       "contains": "return new MobileError('request_conflict'"
+      },
+      {
+       "file": "src/files.ts",
+       "contains": "ON CONFLICT(id) DO NOTHING"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-photos.mjs",
+       "contains": "assert.equal(again.status,200,again.text);same(again.data,first.data);",
+       "asserts": "same-ID replay returns the original result"
+      },
+      {
+       "file": "tests/mobile-photos.mjs",
+       "contains": "assert.equal(r.status,409,label);assert.equal(r.data.error.code,'request_conflict',label);",
+       "asserts": "same ID with different bytes or name is request_conflict"
+      },
+      {
+       "file": "tests/mobile-photos.mjs",
+       "contains": "assert.equal(s.data.photo.status,'pending','the reservation is visible');",
+       "asserts": "a lost reply is resolved by status readback"
+      }
+     ]
+    },
+    "stale": {
+     "state": "n/a",
+     "detail": "A photo has no revision; the bytes are bound to the stored digest, and readPhoto refuses an object whose size or SHA-256 no longer matches."
+    },
+    "admission": {
+     "state": "evidenced",
+     "detail": "Bearer routes keep the M1 per-IP and per-account limits and welcome must be complete. The web quotas (20 per project, 50 per account, 500 platform, cleanup and monthly storage allowances) are enforced by the same database guards and refuse with unavailable and the web's plain message, leaving no partial upload.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/workspace.ts",
+       "contains": "throw new MobileError('onboarding_required',{next:'browser'})"
+      },
+      {
+       "file": "src/files.ts",
+       "contains": "Photo test limit reached: 20 per project, 50 per account, 500 across the platform"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-photos.mjs",
+       "contains": "assert.notEqual(last.status,200,'the 21st photo in one project is refused');",
+       "asserts": "the per-project photo quota applies"
+      },
+      {
+       "file": "tests/mobile-photos.mjs",
+       "contains": "assert.equal(await count('SELECT 1 FROM project_files WHERE project_id=?',a.project),1,'refusals store nothing');",
+       "asserts": "refused uploads store nothing"
+      }
+     ]
+    }
+   }
+  },
+  {
    "id": "identity",
    "title": "Workspace identity: sign-up, login, passkeys, recovery kit, recovery and logout",
    "privileged": [
