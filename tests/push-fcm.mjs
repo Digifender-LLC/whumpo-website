@@ -94,7 +94,7 @@ await check('the source is unwired and holds no credential: nothing outside the 
  const files=(await readdir('src',{recursive:true})).filter(f=>f.endsWith('.ts')).map(f=>'src/'+f);
  const users=[];for(const f of files){const t=await readFile(f,'utf8');if(/push-fcm|push-provider|pushSender|fcmSender/.test(t))users.push(f);}
  assert.deepEqual(users.sort(),['src/push-fcm.ts','src/push-provider.ts'],'only the adapter and its activation seam; no Worker path calls it');
- for(const f of [...files,'tests/push-fcm.mjs'])assert(!/BEGIN (?:RSA )?PRIVATE KEY-----\s*[A-Za-z0-9+/]{40}/.test(await readFile(f,'utf8')),f+' holds no key');
+ for(const f of [...files,'tests/push-fcm.mjs'])assert(!/BEGIN (?:RSA )?PRIVATE KEY-{5}\s*[A-Za-z0-9+/]{40}/.test(await readFile(f,'utf8')),f+' holds no key');
 });
 
 console.log(`Push FCM adapter: ${cases} checks against a fake transport and a synthetic key.`);
