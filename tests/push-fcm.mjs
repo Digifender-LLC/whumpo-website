@@ -52,8 +52,19 @@ await check('the access token is reused until shortly before it expires, then mi
 
 await check('outcomes: accepted; a dead registration is invalid-token; refusals retry; a send with no answer is uncertain and never retried blind; a failed token exchange sends nothing',async()=>{
  const reply=status=>transportFor(url=>url.includes('oauth2')?tokenReply():new Response('{"error":{"status":"X"}}',{status}));
- for(const [status,result] of [[200,'accepted'],[404,'invalid-token'],[400,'invalid-token'],[429,'retry'],[500,'retry'],[503,'retry'],[403,'retry']])
+ for(const [status,result] of [[200,'accepted'],[429,'retry'],[500,'retry'],[503,'retry'],[403,'retry'],[401,'retry']])
   assert.equal((await m.fcmSender(account(),reply(status)).send(message)).result,result,String(status));
+ // Classified by the FCM error code, not the HTTP status.
+ const coded=(status,errorStatus,errorCode,msg='x')=>transportFor(url=>url.includes('oauth2')?tokenReply():Response.json({error:{code:status,message:msg,status:errorStatus,...(errorCode?{details:[{'@type':'type.googleapis.com/google.firebase.fcm.v1.FcmError',errorCode}]}:{})}},{status}));
+ const outcome=async t=>(await m.fcmSender(account(),t).send(message)).result;
+ assert.equal(await outcome(coded(404,'NOT_FOUND','UNREGISTERED')),'invalid-token','UNREGISTERED');
+ assert.equal(await outcome(coded(404,'NOT_FOUND')),'invalid-token','a bare 404 NOT_FOUND');
+ assert.equal(await outcome(coded(400,'INVALID_ARGUMENT','INVALID_ARGUMENT','The registration token is not a valid FCM registration token')),'invalid-token','INVALID_ARGUMENT about the registration token');
+ assert.equal(await outcome(coded(403,'PERMISSION_DENIED','SENDER_ID_MISMATCH','SenderId mismatch')),'config-error','SENDER_ID_MISMATCH is a permanent configuration error');
+ assert.equal(await outcome(coded(400,'INVALID_ARGUMENT','INVALID_ARGUMENT','Invalid JSON payload received. Unknown name "x"')),'payload-error','INVALID_ARGUMENT about the payload is not a token problem');
+ assert.equal(await outcome(coded(400,'INVALID_ARGUMENT',null,'bad request')),'payload-error','any other 400');
+ assert.equal(await outcome(transportFor(url=>url.includes('oauth2')?tokenReply():new Response('not json',{status:400}))),'payload-error','an unreadable 400 body');
+ assert.equal(await outcome(coded(503,'UNAVAILABLE','UNAVAILABLE')),'retry');assert.equal(await outcome(coded(429,'RESOURCE_EXHAUSTED','QUOTA_EXCEEDED')),'retry');
  const lost=transportFor(url=>url.includes('oauth2')?tokenReply():new Error('timeout'));
  assert.deepEqual(await m.fcmSender(account(),lost).send(message),{result:'uncertain'});
  const noToken=transportFor(()=>new Response('{"error":"invalid_grant"}',{status:400}));

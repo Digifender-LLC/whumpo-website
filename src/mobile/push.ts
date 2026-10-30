@@ -1,7 +1,7 @@
 // WH-086: owner device registration, withdrawal and the opaque event readback. Same gate as M2/M4 (workspace()); a device is bound to the native
 // session LINEAGE, so a native reauthentication keeps it and logout, revocation or the account cascade end it (schema push_devices / push_live_devices).
 // Registration needs the explicit activation PUSH_NOTIFICATION_PROVIDER=fcm: until then no delivery address is stored (interim privacy default).
-import {seal} from '../connection-vault';
+import {sealConnectionWrite} from '../connection-write-policy';
 import {hashToken} from '../security';
 import type {IdentityPrincipal} from '../workspace-identity/authority';
 import {MobileError,ok,readJson,signin,type MobileEnvironment} from './transport';
@@ -23,7 +23,7 @@ export const registerDevice=async(request:Request,env:MobileEnvironment,p:Identi
  return workspace(env,p,false,async(scoped,user)=>{
   const s=await scoped.DB.prepare("SELECT lineage_id FROM identity_sessions WHERE id=? AND account_id=? AND client='android'").bind(p.authorityId,user).first<Row>();
   if(!s)throw signin();
-  const id=crypto.randomUUID(),sealed=await seal(env.CONNECTION_ENCRYPTION_KEYRING!,`whumpo:push:token:${user}:${s.lineage_id}`,token),hash=await hashToken(token);
+  const id=crypto.randomUUID(),sealed=await sealConnectionWrite(env.DB,env.CONNECTION_ENCRYPTION_KEYRING!,`whumpo:push:token:${user}:${s.lineage_id}`,token),hash=await hashToken(token);
   const [,,written]=await scoped.DB.batch([
    // A token has one owner: a re-used or rotated token moves to this lineage. A revoked row is replaced, never revived.
    scoped.DB.prepare('DELETE FROM push_devices WHERE token_hash=? AND lineage_id!=?').bind(hash,s.lineage_id),

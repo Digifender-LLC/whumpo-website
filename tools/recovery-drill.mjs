@@ -224,7 +224,7 @@ export async function recoveryCoverage(snapshot,countRows,catalog,exclusions=rec
  return {...fenced,status:holds.size?'held':'complete',holds:[...holds].sort(),tables:captured.size,restored,excluded,emptyTables:empty,populatedTables:restored-empty,classes:Object.keys(classes).length,perClass:classes};
 }
 
-const keyStores=[['github_token_vault','ciphertext'],['cloudflare_token_vault','ciphertext'],['github_refresh_custody','ciphertext'],['github_oauth_states','verifier_ciphertext'],['cloudflare_oauth_states','verifier_ciphertext']];
+const keyStores=[['github_token_vault','ciphertext'],['cloudflare_token_vault','ciphertext'],['github_refresh_custody','ciphertext'],['github_oauth_states','verifier_ciphertext'],['cloudflare_oauth_states','verifier_ciphertext'],['push_devices','token_sealed']];
 /** WH-117 key versions: registered ids, the active id, ciphertext rows per key id, and any rotation left running.
  * Key ids and counts only, never fingerprints or key material. A running rotation or an in-use unregistered id holds. */
 export async function inventoryKeyVersions(db){

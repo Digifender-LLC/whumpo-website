@@ -3,17 +3,20 @@ import {assertMaintenanceDatabase} from './workspace-identity/admission';
 
 // Fixed actual stores; operator input never becomes an SQL identifier.
 const stores=[
- {table:'github_refresh_custody',provider:'github',purpose:'refresh',id:'token_id',cipher:'ciphertext',fields:['token_id','user_id','client_id','github_user_id','ciphertext','expires_at','access_revoked_at']},
- {table:'github_token_vault',provider:'github',purpose:'token',id:'id',cipher:'ciphertext',fields:['id','user_id','ciphertext','expires_at','state']},
- {table:'cloudflare_token_vault',provider:'cloudflare',purpose:'token',id:'id',cipher:'ciphertext',fields:['id','user_id','ciphertext','expires_at','created_at','revoke_attempt','revoke_after','state']},
- {table:'github_oauth_states',provider:'github',purpose:'pkce',id:'state_hash',cipher:'verifier_ciphertext',fields:['user_id','state_hash','authority_id','verifier_ciphertext','expires_at','claimed']},
- {table:'cloudflare_oauth_states',provider:'cloudflare',purpose:'pkce',id:'state_hash',cipher:'verifier_ciphertext',fields:['user_id','state_hash','authority_id','verifier_ciphertext','expires_at','claimed','cancelled']},
+ {table:'github_refresh_custody',owner:'user_id',provider:'github',purpose:'refresh',id:'token_id',cipher:'ciphertext',fields:['token_id','user_id','client_id','github_user_id','ciphertext','expires_at','access_revoked_at']},
+ {table:'github_token_vault',owner:'user_id',provider:'github',purpose:'token',id:'id',cipher:'ciphertext',fields:['id','user_id','ciphertext','expires_at','state']},
+ {table:'cloudflare_token_vault',owner:'user_id',provider:'cloudflare',purpose:'token',id:'id',cipher:'ciphertext',fields:['id','user_id','ciphertext','expires_at','created_at','revoke_attempt','revoke_after','state']},
+ {table:'github_oauth_states',owner:'user_id',provider:'github',purpose:'pkce',id:'state_hash',cipher:'verifier_ciphertext',fields:['user_id','state_hash','authority_id','verifier_ciphertext','expires_at','claimed']},
+ {table:'cloudflare_oauth_states',owner:'user_id',provider:'cloudflare',purpose:'pkce',id:'state_hash',cipher:'verifier_ciphertext',fields:['user_id','state_hash','authority_id','verifier_ciphertext','expires_at','claimed','cancelled']},
+// WH-086: one sealed FCM token per native session lineage; its owner column is account_id (aliased to user_id below) and its record id is the lineage.
+ {table:'push_devices',owner:'account_id',provider:'push',purpose:'token',id:'lineage_id',cipher:'token_sealed',fields:['id','account_id','lineage_id','token_hash','token_sealed','notifications_enabled','last_seen_at']},
 ] as const;
 const identifier=/^[a-z0-9][a-z0-9-]{0,127}$/;
 function input(...values:string[]){if(values.some(v=>typeof v!=='string'||!identifier.test(v)))throw new Error('Invalid connection-key review identity.');}
 const denied=()=>new Error('Connection-key operation unavailable; inspect current operator readback.');
 const prefix=(column:string)=>`substr(${column},1,length(?))!=?`;
-const remainingSQL=stores.map(s=>`SELECT COUNT(*) AS n FROM ${s.table} WHERE ${prefix(s.cipher)}`).join(' UNION ALL ');
+// Scalar subqueries, not UNION ALL: D1 caps a compound SELECT at five terms and there are six stores.
+const remainingSQL='SELECT '+stores.map(s=>`(SELECT COUNT(*) FROM ${s.table} WHERE ${prefix(s.cipher)})`).join('+')+' AS n';
 const absentSQL=stores.map(s=>`NOT EXISTS(SELECT 1 FROM ${s.table} WHERE ${prefix(s.cipher)})`).join(' AND ');
 function remainingParams(id:string){return stores.flatMap(()=>['wv2.'+id+'.','wv2.'+id+'.']);}
 type Policy={active_key:string;revision:number;review_id:string};
@@ -64,7 +67,7 @@ export async function rotateConnectionBatch(db:D1Database,secret:string,rotation
  const selected: {store:typeof stores[number];row:Record<string,string|number|null>;next:string}[]=[];
  let bytesBefore=0,bytesAfter=0,cryptoMs=0;
  for(const store of stores){
-  const rows=await db.prepare(`SELECT ${store.fields.join(',')} FROM ${store.table} WHERE ${prefix(store.cipher)} ORDER BY user_id,${store.id} LIMIT ?`).bind('wv2.'+run.target_key+'.','wv2.'+run.target_key+'.',limit-selected.length).all<Record<string,string|number|null>>();
+  const rows=await db.prepare(`SELECT ${store.fields.map(f=>f===store.owner&&f!=='user_id'?f+' AS user_id':f).join(',')} FROM ${store.table} WHERE ${prefix(store.cipher)} ORDER BY ${store.owner},${store.id} LIMIT ?`).bind('wv2.'+run.target_key+'.','wv2.'+run.target_key+'.',limit-selected.length).all<Record<string,string|number|null>>();
   for(const row of rows.results){
    const ciphertext=String(row[store.cipher]);connectionCiphertextKeyId(ciphertext);
    const context=`whumpo:${store.provider}:${store.purpose}:${row.user_id}:${row[store.id]}`;
@@ -76,7 +79,7 @@ export async function rotateConnectionBatch(db:D1Database,secret:string,rotation
  const statements=[db.prepare("INSERT INTO connection_rotation_batches(id,rotation_id,selected_count,bytes_before,bytes_after,crypto_ms) SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM connection_key_rotations r JOIN connection_key_policy p ON p.revision=r.revision AND p.active_key=r.target_key WHERE r.id=? AND r.state='running')").bind(batchId,rotationId,selected.length,bytesBefore,bytesAfter,Math.ceil(cryptoMs),rotationId)];
  for(const {store,row,next} of selected){
   statements.push(db.prepare('INSERT INTO connection_rotation_guards(batch_id,store,owner_id,record_id,old_ciphertext,new_ciphertext) VALUES(?,?,?,?,?,?)').bind(batchId,store.table,row.user_id,row[store.id],row[store.cipher],next));
-  statements.push(db.prepare(`UPDATE ${store.table} SET ${store.cipher}=? WHERE ${store.fields.map(f=>`${f} IS ?`).join(' AND ')}`).bind(next,...store.fields.map(f=>row[f])));
+  statements.push(db.prepare(`UPDATE ${store.table} SET ${store.cipher}=? WHERE ${store.fields.map(f=>`${f} IS ?`).join(' AND ')}`).bind(next,...store.fields.map(f=>row[f===store.owner?'user_id':f])));
  }
  statements.push(db.prepare('DELETE FROM connection_rotation_guards WHERE batch_id=?').bind(batchId));
  statements.push(db.prepare(`UPDATE connection_key_rotations SET state='complete',completed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND state='running' AND ${absentSQL}`).bind(rotationId,...remainingParams(run.target_key)));
@@ -86,7 +89,7 @@ export async function rotateConnectionBatch(db:D1Database,secret:string,rotation
 /** Metadata only; never returns owner IDs, ciphertext, fingerprints or provider secrets. */
 export async function connectionRotationStatus(db:D1Database,id:string){
  assertMaintenanceDatabase(db);input(id);const run=await rotation(db,id);if(!run)throw denied();
- const current=await policy(db),remaining=await db.prepare(`SELECT SUM(n) AS n FROM (${remainingSQL})`).bind(...remainingParams(run.target_key)).first<{n:number}>();
+ const current=await policy(db),remaining=await db.prepare(remainingSQL).bind(...remainingParams(run.target_key)).first<{n:number}>();
  const totals=await db.prepare('SELECT COUNT(*) AS batches,COALESCE(SUM(changed_count),0) AS rotated,COALESCE(SUM(selected_count-changed_count),0) AS skipped FROM connection_rotation_batches WHERE rotation_id=?').bind(id).first<{batches:number;rotated:number;skipped:number}>();
  return {id:run.id,state:run.state,targetKey:run.target_key,revision:run.revision,current:current?.revision===run.revision,remaining:current?.revision===run.revision?remaining?.n??0:null,...totals};
 }
@@ -94,8 +97,8 @@ export async function connectionRotationStatus(db:D1Database,id:string){
  * evidence exists (WH-117C). A zero live count alone is never retirement approval. */
 export async function connectionKeyRetirementStatus(db:D1Database,id:string){
  assertMaintenanceDatabase(db);input(id);if(!await db.prepare('SELECT 1 FROM connection_key_registry WHERE id=?').bind(id).first())throw denied();
- const countSQL=stores.map(s=>`SELECT COUNT(*) AS n FROM ${s.table} WHERE substr(${s.cipher},1,length(?))=?`).join(' UNION ALL ');
- const rows=await db.prepare(`SELECT SUM(n) AS n FROM (${countSQL})`).bind(...remainingParams(id)).first<{n:number}>();
+ const countSQL='SELECT '+stores.map(s=>`(SELECT COUNT(*) FROM ${s.table} WHERE substr(${s.cipher},1,length(?))=?)`).join('+')+' AS n';
+ const rows=await db.prepare(countSQL).bind(...remainingParams(id)).first<{n:number}>();
  const exchanges=await db.prepare('SELECT COUNT(*) AS n FROM connection_oauth_exchanges WHERE key_id=?').bind(id).first<{n:number}>();
  return {keyId:id,active:(await policy(db))?.active_key===id,liveReferences:rows?.n??0,unsettledExchanges:exchanges?.n??0,retirementAllowed:false,independentRestoreEvidence:'required' as const};
 }

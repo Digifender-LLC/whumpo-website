@@ -13,12 +13,14 @@ for(const u of [account,other])await run("INSERT INTO users(id,email,created_at)
 await run("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Fixture','Testing','draft','2026-10-30','2026-10-30')",project,account);
 for(const u of [account,other])await run("INSERT INTO identity_accounts(account_id,policy_version,stage,auth_epoch,kit_generation,kit_verifier,completion_receipt_id) VALUES(?,1,'ready',1,1,?,?)",u,'a'.repeat(64),id());
 await run("INSERT INTO identity_credentials VALUES(?,?,?,0,'Synthetic','active',NULL,unixepoch(),NULL)",credential,account,new Uint8Array(32));
+await run("INSERT INTO connection_key_registry(id,fingerprint,review_id) VALUES('k1',?,'review')",hex(64));
+await run("INSERT INTO connection_key_policy(singleton,active_key,revision,review_id) VALUES(1,'k1',1,'review')");
 const session=(o={})=>{
  const row={id:id(),token_hash:hex(64),account_id:account,policy_version:1,auth_epoch:1,client:'android',credential_id:credential,proof_method:"passkey",proof_at:Math.floor(Date.now()/1000)-5,issued_at:Math.floor(Date.now()/1000),expires_at:Math.floor(Date.now()/1000)+3600,...o};
  const keys=Object.keys(row);return run(`INSERT INTO identity_sessions(${keys.join(',')}) VALUES(${keys.map(()=>'?').join(',')})`,...keys.map(k=>row[k])).then(()=>row);
 };
 const device=(o={})=>{
- const row={id:id(),account_id:account,lineage_id:id(),platform:'android',token_hash:hex(64),token_sealed:'wv2.'+hex(30),notifications_enabled:1,created_at:1000,last_seen_at:1000,...o};
+ const row={id:id(),account_id:account,lineage_id:id(),platform:'android',token_hash:hex(64),token_sealed:'wv2.k1.'+hex(30),notifications_enabled:1,created_at:1000,last_seen_at:1000,...o};
  const keys=Object.keys(row);return run(`INSERT INTO push_devices(${keys.join(',')}) VALUES(${keys.map(()=>'?').join(',')})`,...keys.map(k=>row[k])).then(()=>row);
 };
 try{
@@ -31,7 +33,7 @@ try{
   const unique=(await all("SELECT il.name,group_concat(ii.name) cols FROM pragma_index_list('push_devices') il JOIN pragma_index_info(il.name) ii WHERE il.\"unique\"=1 AND il.origin!='pk' GROUP BY il.name")).map(r=>r.cols).sort();
   assert.deepEqual(unique,['lineage_id','token_hash'],'one registration per lineage, one owner per token');
   assert.deepEqual((await all("SELECT name,tbl_name FROM sqlite_master WHERE type='trigger' AND name LIKE 'push\\_%' ESCAPE '\\' ORDER BY name")).map(r=>r.name+'@'+r.tbl_name),
-   ['push_device_immutable@push_devices','push_device_limit@push_devices','push_event_immutable@push_events','push_event_limit@push_events']);
+   ['push_device_immutable@push_devices','push_device_limit@push_devices','push_devices_rotation_count@push_devices','push_devices_write_key_insert@push_devices','push_devices_write_key_update@push_devices','push_event_immutable@push_events','push_event_limit@push_events']);
   assert.deepEqual((await all("SELECT name FROM sqlite_master WHERE type='view' AND name='push_live_devices'")).length,1);
  });
 
@@ -63,6 +65,19 @@ try{
   await session({lineage_id:l2,client:'web'});assert.equal(await live2(),false,'a web session of the same lineage does not count');
   const l3=id();await session({lineage_id:l3,account_id:account});const foreign=await device({lineage_id:l3,account_id:other});
   assert.equal((await all('SELECT id FROM push_live_devices WHERE id=?',foreign.id)).length,0,'a device and a session of different accounts never match');
+ });
+
+ await check('the device cap: a new lineage is refused at 20, an existing lineage can still be upserted; the write-key fence and the rotation count trigger exist',async()=>{
+  const a=id();await run("INSERT INTO users(id,email,created_at) VALUES(?,?,'2026-10-30')",a,a+'@example.test');
+  const first=await device({account_id:a});for(let i=1;i<20;i++)await device({account_id:a});
+  await assert.rejects(()=>device({account_id:a}),/push_device_limit/);
+  const upsert=(lineage,hash)=>run("INSERT INTO push_devices(id,account_id,lineage_id,platform,token_hash,token_sealed,notifications_enabled,created_at,last_seen_at) VALUES(?,?,?,'android',?,?,1,2000,2000) ON CONFLICT(lineage_id) DO UPDATE SET token_hash=excluded.token_hash,token_sealed=excluded.token_sealed,last_seen_at=excluded.last_seen_at",id(),a,lineage,hash,'wv2.k1.'+hex(30));
+  await upsert(first.lineage_id,hex(64));
+  assert.equal((await all('SELECT last_seen_at FROM push_devices WHERE id=?',first.id))[0].last_seen_at,2000,'an existing lineage updates at the cap');
+  await assert.rejects(()=>upsert(id(),hex(64)),/push_device_limit/);
+  await assert.rejects(()=>device({account_id:a,lineage_id:id(),token_sealed:'wv2.other.'+hex(30)}),/connection_write_key_changed|push_device_limit/);
+  await assert.rejects(()=>run('UPDATE push_devices SET token_sealed=? WHERE id=?','wv2.other.'+hex(30),first.id),/connection_write_key_changed/);
+  assert.deepEqual((await all("SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='push_devices' ORDER BY name")).map(r=>r.name),['push_device_immutable','push_device_limit','push_devices_rotation_count','push_devices_write_key_insert','push_devices_write_key_update']);
  });
 
  await check('the account cascade removes devices and events; a deleted project keeps the event with no target',async()=>{

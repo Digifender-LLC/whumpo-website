@@ -11,7 +11,7 @@ import {authenticator} from './helpers/webauthn-authenticator.mjs';
 const bundle=await build({stdin:{contents:[
  "export {default as worker} from './src/index';export {androidPasskeyOrigins} from './src/android-signing';",
  "export {resolveIdentity} from './src/workspace-identity/authority';export {cleanIdentityCeremonies} from './src/workspace-identity/ceremonies';",
- "export {newSessionToken,hashToken} from './src/security';export {maintainNotices} from './src/notification-outbox';export {unseal} from './src/connection-vault';export {recordPushEvent} from './src/mobile/push';"
+ "export {newSessionToken,hashToken} from './src/security';export {maintainNotices} from './src/notification-outbox';export {initializeConnectionKeys,registerConnectionKeys,beginConnectionRotation,rotateConnectionBatch,connectionKeyRetirementStatus,connectionRotationStatus} from './src/connection-rotation';export {unseal} from './src/connection-vault';export {recordPushEvent} from './src/mobile/push';"
  ].join(''),resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
 const m=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
 crypto.subtle.timingSafeEqual=(a,b)=>timingSafeEqual(Buffer.from(a),Buffer.from(b));
@@ -28,6 +28,7 @@ const keyring=JSON.stringify({version:2,active:'push-test',keys:[{id:'push-test'
 const env={DB:db,ENVIRONMENT:'test',MOBILE_MINIMUM_BUILD:'40',TURNSTILE_SECRET:'synthetic-only',CONNECTION_ENCRYPTION_KEYRING:keyring,
  AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})}};
 const active={...env,PUSH_NOTIFICATION_PROVIDER:'fcm'};
+await m.initializeConnectionKeys(db,keyring,'push-review');
 const ctx={waitUntil(){}};
 const same=(live,fixture)=>assert.deepEqual(live,fixture);
 function shaped(live,fixture,at='body'){
@@ -136,6 +137,18 @@ try{
   await m.cleanIdentityCeremonies(db);assert.equal(await count('push_devices','id=?',e.data.deviceId),1,'a current-epoch-less device waits for its session to leave');
  });
 
+ await check('the device cap exempts an existing lineage: at 20 devices it can still re-register and rotate its token, a new lineage is refused',async()=>{
+  const c=await owner({project:false}),first=await native(c),r=await put(first.token,{fcmRegistrationToken:'cap-fcm-token-0000000000001'});assert.equal(r.status,200,r.text);
+  const sealed='wv2.push-test.'+'x'.repeat(30);
+  for(let i=1;i<20;i++)await run('INSERT INTO push_devices(id,account_id,lineage_id,platform,token_hash,token_sealed,notifications_enabled,created_at,last_seen_at) VALUES(?,?,?,?,?,?,1,1,1)',id(),c.account,id(),'android',await m.hashToken('cap-filler-'+i),sealed);
+  assert.equal(await count('push_devices','account_id=?',c.account),20);
+  const again=await put(first.token,{fcmRegistrationToken:'cap-fcm-token-0000000000001',notificationsEnabled:false});assert.equal(again.status,200,again.text);assert.equal(again.data.deviceId,r.data.deviceId);
+  const rotated=await put(first.token,{fcmRegistrationToken:'cap-fcm-token-rotated-00002'});assert.equal(rotated.status,200,rotated.text);assert.equal(rotated.data.deviceId,r.data.deviceId);
+  assert.equal((await one('SELECT token_hash FROM push_devices WHERE id=?',r.data.deviceId)).token_hash,await m.hashToken('cap-fcm-token-rotated-00002'));
+  const second=await native(c),blocked=await put(second.token,{fcmRegistrationToken:'cap-fcm-token-new-lineage-3'});assert.equal(blocked.status,503,blocked.text);assert.equal(await count('push_devices','account_id=?',c.account),20,'a new lineage is still refused');
+  await run('DELETE FROM push_devices WHERE account_id=?',c.account);
+ });
+
  await check('the account cascade removes devices and events; deleting a user is not blocked by them',async()=>{
   const c=await owner(),s=await native(c);await put(s.token,{fcmRegistrationToken:'cascade-fcm-token-00000000001'});
   await m.recordPushEvent(db,{accountId:c.account,kind:'operation_completed',projectId:c.project});
@@ -145,10 +158,10 @@ try{
  });
 
  await check('rows are constrained: platform, hash, immutability, the per-account device cap and the event caps',async()=>{
-  const c=await owner({project:true}),h=await m.hashToken('constraint-token'),base=[id(),c.account,id(),'android',h,'x'.repeat(30),1,1,1];
+  const c=await owner({project:true}),h=await m.hashToken('constraint-token'),base=[id(),c.account,id(),'android',h,'wv2.push-test.'+'x'.repeat(30),1,1,1];
   const ins=(o={})=>{const v=[...base];for(const [i,x] of Object.entries(o))v[i]=x;return run('INSERT INTO push_devices(id,account_id,lineage_id,platform,token_hash,token_sealed,notifications_enabled,created_at,last_seen_at) VALUES(?,?,?,?,?,?,?,?,?)',...v);};
   await assert.rejects(()=>ins({3:'ios'}),/CHECK/);await assert.rejects(()=>ins({4:'ABC'}),/CHECK/);await assert.rejects(()=>ins({6:2}),/CHECK/);await assert.rejects(()=>ins({2:'short'}),/CHECK/);
-  await ins();await assert.rejects(()=>ins({0:id(),2:id()}),/UNIQUE/,'the same token twice');
+  await assert.rejects(()=>ins({5:'wv2.other-key.'+'x'.repeat(30)}),/connection_write_key_changed/,'a ciphertext under a key that is not the active write key');await ins();await assert.rejects(()=>ins({0:id(),2:id()}),/UNIQUE/,'the same token twice');
   await assert.rejects(()=>run('UPDATE push_devices SET account_id=? WHERE account_id=?',b.account,c.account),/push_device_immutable/);
   await assert.rejects(()=>run('UPDATE push_devices SET lineage_id=? WHERE account_id=?',id(),c.account),/push_device_immutable/);
   for(let i=1;i<20;i++){const th=await m.hashToken('t'+i);await ins({0:id(),2:id(),4:th});}
@@ -200,6 +213,28 @@ try{
   const columns=(await all("SELECT name FROM pragma_table_info('push_events')")).map(c=>c.name);
   assert.deepEqual(columns,['id','account_id','kind','project_id','review_id','created_at','expires_at'],'ids and a kind only');
   assert.deepEqual((await all("SELECT name FROM pragma_table_info('push_live_devices')")).map(c=>c.name),['id','account_id','lineage_id','token_hash','token_sealed','last_seen_at']);
+ });
+
+ await check('vault custody: a stale writer cannot seal, key rotation re-seals push tokens, counts them for completion and retirement',async()=>{
+  const ringB=JSON.stringify({version:2,active:'push-next',keys:[{id:'push-next',secret:'cd'.repeat(32)},{id:'push-test',secret:'ab'.repeat(32)}]});
+  const g=await owner({project:false}),s=await native(g),tok='rotation-fcm-token-000000001',context=`whumpo:push:token:${g.account}:${s.lineage}`;
+  assert.equal((await put(s.token,{fcmRegistrationToken:tok})).status,200);
+  assert.match((await one('SELECT token_sealed FROM push_devices WHERE lineage_id=?',s.lineage)).token_sealed,/^wv2\.push-test\./);
+  const before=(await m.connectionKeyRetirementStatus(db,'push-test')).liveReferences;assert(before>=1,'push tokens count as live references for key retirement');
+  await m.registerConnectionKeys(db,ringB,'next-review');
+  const begun=await m.beginConnectionRotation(db,ringB,{id:'push-rotation',reviewId:'review-push',expectedRevision:1});assert.equal(begun.revision,2);
+  assert.equal((await put(s.token,{fcmRegistrationToken:tok},{...active,CONNECTION_ENCRYPTION_KEYRING:keyring})).status,503,'a writer holding the old key is refused after activation');
+  assert((await m.connectionRotationStatus(db,'push-rotation')).remaining>=1,'push tokens are counted as remaining ciphertext');
+  assert.equal((await one("SELECT 1 x FROM push_devices WHERE substr(token_sealed,1,length('wv2.push-test.'))='wv2.push-test.' AND lineage_id=?",s.lineage)).x,1);
+  let batches=0,changed=0;
+  for(let status=await m.connectionRotationStatus(db,'push-rotation');status.state!=='complete'&&batches<10;status=await m.connectionRotationStatus(db,'push-rotation')){const r=await m.rotateConnectionBatch(db,ringB,'push-rotation','push-batch-'+(++batches),20);changed+=r.changed_count;}
+  const done=await m.connectionRotationStatus(db,'push-rotation');assert.equal(done.state,'complete');assert.equal(done.remaining,0);assert(changed>=1&&done.rotated===changed,'the batch receipts count the re-sealed push rows');
+  const row=await one('SELECT token_sealed,token_hash,id FROM push_devices WHERE lineage_id=?',s.lineage);
+  assert.match(row.token_sealed,/^wv2\.push-next\./);assert.equal(await m.unseal(ringB,context,row.token_sealed),tok,'same token, same context, new key');assert.equal(row.token_hash,await m.hashToken(tok));
+  assert.equal((await m.connectionKeyRetirementStatus(db,'push-test')).liveReferences,0,'no push token still references the old key');
+  assert.equal((await one("SELECT count(*) n FROM push_devices WHERE substr(token_sealed,1,length('wv2.push-test.'))='wv2.push-test.'")).n,0);
+  await assert.rejects(()=>run("UPDATE push_devices SET token_sealed='wv2.push-test.'||'y'||'z'||'z'||'z'||'z'||'z'||'z'||'z'||'z'||'z'||'z' WHERE lineage_id=?",s.lineage),/connection_write_key_changed/,'the SQL fence refuses a ciphertext under a retired write key');
+  const registered=await put(s.token,{fcmRegistrationToken:tok},{...active,CONNECTION_ENCRYPTION_KEYRING:ringB});assert.equal(registered.status,200,registered.text);
  });
 
  console.log(`Mobile push M5: ${cases} checks over the three operations on ${process.argv.includes('--d1')?'local D1':'SQLite'}.`);

@@ -175,7 +175,7 @@ WHEN NEW.id IS NOT OLD.id OR NEW.browser_token_hash IS NOT OLD.browser_token_has
 BEGIN SELECT RAISE(ABORT,'identity_handoff_transition'); END;
 
 -- Schema batch 4 (WH-086). One registration per native session lineage (a native reauthentication re-inserts the session row but keeps its lineage).
--- The FCM registration token is a delivery address, not authentication: it is stored sealed (connection vault, context 'push-device') and by hash; the
+-- The FCM registration token is a delivery address, not authentication: it is stored sealed (connection vault, context 'whumpo:push:token:<account>:<lineage>', written through sealConnectionWrite, fenced by the write-key triggers below and rotated with the other vault stores) and by hash; the
 -- hash enforces one registration per token (a rotated or re-used token moves, it never doubles). A device is LIVE only while a current android session
 -- of its lineage exists (push_live_devices), so logout, revocation, passkey removal, recovery, a security-review commit and an epoch change disable it
 -- in the same statements that end the session; maintenance deletes the rest. The account cascade removes the row.
@@ -193,12 +193,26 @@ CREATE TABLE push_devices (
 ) STRICT;
 CREATE INDEX push_devices_account ON push_devices(account_id);
 CREATE TRIGGER push_device_limit BEFORE INSERT ON push_devices
+-- BEFORE INSERT also fires for INSERT ... ON CONFLICT DO UPDATE, so an existing lineage (re-registration, token rotation) is exempt from the cap.
 WHEN (SELECT count(*) FROM push_devices WHERE account_id=NEW.account_id)>=20
+ AND NOT EXISTS(SELECT 1 FROM push_devices WHERE lineage_id=NEW.lineage_id)
 BEGIN SELECT RAISE(ABORT,'push_device_limit'); END;
 CREATE TRIGGER push_device_immutable BEFORE UPDATE ON push_devices
 WHEN NEW.id!=OLD.id OR NEW.account_id!=OLD.account_id OR NEW.lineage_id!=OLD.lineage_id OR NEW.platform!=OLD.platform OR NEW.created_at!=OLD.created_at
  OR (OLD.revoked_at IS NOT NULL AND NEW.revoked_at IS NOT OLD.revoked_at)
 BEGIN SELECT RAISE(ABORT,'push_device_immutable'); END;
+CREATE TRIGGER push_devices_write_key_insert BEFORE INSERT ON push_devices
+WHEN NOT EXISTS(SELECT 1 FROM connection_key_policy WHERE substr(NEW.token_sealed,1,length('wv2.'||active_key||'.'))='wv2.'||active_key||'.')
+BEGIN SELECT RAISE(ABORT,'connection_write_key_changed'); END;
+CREATE TRIGGER push_devices_write_key_update BEFORE UPDATE OF token_sealed ON push_devices
+WHEN NEW.token_sealed!=OLD.token_sealed AND NOT EXISTS(SELECT 1 FROM connection_key_policy WHERE substr(NEW.token_sealed,1,length('wv2.'||active_key||'.'))='wv2.'||active_key||'.')
+BEGIN SELECT RAISE(ABORT,'connection_write_key_changed'); END;
+-- A rotation batch counts the rows it re-sealed; an ordinary re-registration matches no guard and counts nothing.
+CREATE TRIGGER push_devices_rotation_count AFTER UPDATE OF token_sealed ON push_devices
+WHEN NEW.token_sealed!=OLD.token_sealed
+BEGIN UPDATE connection_rotation_batches SET changed_count=changed_count+1 WHERE id IN (
+ SELECT g.batch_id FROM connection_rotation_guards g JOIN connection_rotation_batches b ON b.id=g.batch_id
+ JOIN connection_key_rotations r ON r.id=b.rotation_id JOIN connection_key_policy p ON p.singleton=1 WHERE g.store='push_devices' AND g.owner_id=OLD.account_id AND g.record_id=OLD.lineage_id AND g.old_ciphertext=OLD.token_sealed AND g.new_ciphertext=NEW.token_sealed AND r.state='running' AND p.revision=r.revision AND p.active_key=r.target_key); END;
 CREATE VIEW push_live_devices AS
 SELECT d.id,d.account_id,d.lineage_id,d.token_hash,d.token_sealed,d.last_seen_at
 FROM push_devices d

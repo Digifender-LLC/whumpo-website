@@ -4704,7 +4704,7 @@ CREATE TABLE connection_rotation_batches (
 -- a failed or interrupted transaction cannot leave a capability behind.
 CREATE TABLE connection_rotation_guards (
  batch_id TEXT NOT NULL REFERENCES connection_rotation_batches(id),
- store TEXT NOT NULL CHECK(store IN ('github_token_vault','github_refresh_custody','cloudflare_token_vault','github_oauth_states','cloudflare_oauth_states')),
+ store TEXT NOT NULL CHECK(store IN ('github_token_vault','github_refresh_custody','cloudflare_token_vault','github_oauth_states','cloudflare_oauth_states','push_devices')),
  owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
  record_id TEXT NOT NULL,
  old_ciphertext TEXT NOT NULL,

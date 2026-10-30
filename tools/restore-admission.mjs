@@ -27,6 +27,7 @@ const stores=[
  ['cloudflare_token_vault','ciphertext','id','cloudflare','token'],
  ['github_oauth_states','verifier_ciphertext','state_hash','github','pkce'],
  ['cloudflare_oauth_states','verifier_ciphertext','state_hash','cloudflare','pkce'],
+ ['push_devices','token_sealed','lineage_id','push','token'],
 ];
 // Only current, durable domain receipts can settle an external-effect constraint.
 // A token row, arbitrary user row or echoed approval flag is never such a receipt.
@@ -276,7 +277,7 @@ async function checkKeys(state,contract,keyring){
  requireCheck(metadata.keyIds.includes(policy[0].active_key),'missing-keys');
  let credentials=0;
  for(const [table,column,identity,provider,purpose] of stores)for(const row of state.rows.get(table)){
-  const context=`whumpo:${provider}:${purpose}:${row.user_id}:${row[identity]}`;
+  const context=`whumpo:${provider}:${purpose}:${row.user_id??row.account_id}:${row[identity]}`;
   try{await contract.vault.unseal(keyring,context,row[column]);}catch{throw new Hold('credential-authentication');}
   credentials++;
  }

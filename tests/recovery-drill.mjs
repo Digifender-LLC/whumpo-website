@@ -144,7 +144,8 @@ try{
    // WH-083 native handoff (schema batch 3d): a code-issued handoff bound to the owner's browser session. Hashes only; the restore grants no native session.
    await run("INSERT INTO identity_handoffs(id,browser_token_hash,purpose,state,code_challenge,redirect_uri,created_at,expires_at,account_id,source_session_id,auth_epoch,code_hash,code_issued_at,code_expires_at) VALUES(?,?,'signin',?,?,'https://whumpo.com/app/return',?,?,?,?,1,?,?,?)",id(),hash('drill-handoff-token'),'drill-state-'+'s'.repeat(20),'c'.repeat(43),at,at+300,owner.account,owner.authority,hash('drill-handoff-code'),at,at+60);
    // WH-086 push (schema batch 4): a sealed-token device on the owner's session lineage and an opaque event. A restore holds the rows but sends nothing: the device is live only with a current session.
-   await run("INSERT INTO push_devices(id,account_id,lineage_id,platform,token_hash,token_sealed,notifications_enabled,created_at,last_seen_at) VALUES(?,?,(SELECT lineage_id FROM identity_sessions WHERE id=?),'android',?,?,1,?,?)",id(),owner.account,owner.authority,hash('drill-push-token'),'wv2.drill-sealed-token-not-a-real-credential',at,at);
+   const pushLineage=(await db.prepare('SELECT lineage_id FROM identity_sessions WHERE id=?').bind(owner.authority).first()).lineage_id;
+   await run("INSERT INTO push_devices(id,account_id,lineage_id,platform,token_hash,token_sealed,notifications_enabled,created_at,last_seen_at) VALUES(?,?,?,'android',?,?,1,?,?)",id(),owner.account,pushLineage,hash('drill-push-token'),await fixtureCiphertext(keyring,`whumpo:push:token:${owner.account}:${pushLineage}`,'drill-synthetic-fcm-token-000001'),at,at);
    await run("INSERT INTO push_events(id,account_id,kind,project_id,created_at,expires_at) VALUES(?,?,'operation_completed',?,?,?)",id(),owner.account,app,at,at+86400);
   }
   // Workspace layout cap (B11): 52 revisions leave the newest 50, and the newest receipt is never pruned.
@@ -213,7 +214,7 @@ try{
  const admitted=await phase('inspectIsolatedRestore',()=>inspect());
  assert.equal(admitted.status,'verified',JSON.stringify(admitted));
  assert.deepEqual([admitted.servingAllowed,admitted.providerDispatchAllowed,admitted.retirementAllowed],[false,false,false]);
- assert.equal(admitted.keys.credentials,4);assert.equal(admitted.objects,3);
+ assert.equal(admitted.keys.credentials,5);assert.equal(admitted.objects,3);
  const artifacts=await phase('reconcileArtifacts',()=>reconcileArtifacts(target.DRILL_A));
  assert.equal(artifacts.status,'consistent',JSON.stringify(artifacts));assert.equal(artifacts.publishedSites,1);assert.equal(artifacts.enabledApplications,1);assert.equal(artifacts.applicationDocuments,2);
  restoredRuntime=await workerd(restoredBuild);
@@ -235,7 +236,7 @@ try{
  refusals+=3;
  // WH-117 key versions in the restored candidate: one registered key, all 4 credential rows under it, no running rotation.
  const keyVersions=await phase('inventoryKeyVersions',()=>inventoryKeyVersions(target.DRILL_A));
- assert.equal(keyVersions.status,'settled',JSON.stringify(keyVersions.holds));assert.deepEqual(keyVersions.ciphertextByKey,{[keyVersions.active]:4});assert.equal(keyVersions.registered.length,1);
+ assert.equal(keyVersions.status,'settled',JSON.stringify(keyVersions.holds));assert.deepEqual(keyVersions.ciphertextByKey,{[keyVersions.active]:5});assert.equal(keyVersions.registered.length,1);
  const rto=Math.round(performance.now()-restoreStart);
  const loss=await phase('restoreDiscrepancies',()=>restoreDiscrepancies(target.DRILL_A,db));
  assert.deepEqual(loss.counts.resurrected,{});assert.deepEqual(loss.counts.rolledBack,{});assert.deepEqual(loss.tables.lostSinceSnapshot,{project_files:1});

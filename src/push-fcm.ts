@@ -7,7 +7,8 @@ const tokenUrl='https://oauth2.googleapis.com/token',scope='https://www.googleap
 export type PushTransport=(url:string,init:RequestInit)=>Promise<Response>;
 export type PushMessage={token:string;eventId:string;kind:'review_pending'|'operation_completed'|'attention_required'};
 /** accepted: FCM took it (not a display or delivery receipt). invalid-token: the registration is dead, withdraw it. retry: refused for certain, try later. uncertain: no answer, never blind-redispatch. */
-export type PushOutcome={result:'accepted'|'invalid-token'|'retry'|'uncertain';status?:number};
+/** config-error (SENDER_ID_MISMATCH) and payload-error (any other 400) are permanent: never retried, and never a reason to withdraw the registration. */
+export type PushOutcome={result:'accepted'|'invalid-token'|'config-error'|'payload-error'|'retry'|'uncertain';status?:number};
 export interface PushSender{send(message:PushMessage):Promise<PushOutcome>}
 const encoder=new TextEncoder();
 const b64url=(bytes:Uint8Array|string)=>btoa(String.fromCharCode(...(typeof bytes==='string'?encoder.encode(bytes):bytes))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
@@ -21,6 +22,14 @@ function account(json:string):Account{
 async function signingKey(pem:string){
  const der=Uint8Array.from(atob(pem.replace(/-----[A-Z ]+-----/g,'').replace(/\s+/g,'')),c=>c.charCodeAt(0));
  return crypto.subtle.importKey('pkcs8',der,{name:'RSASSA-PKCS1-v1_5',hash:'SHA-256'},false,['sign']);
+}
+/** The FCM v1 error code (details[].errorCode, else error.status) and message; empty when the body is not the documented shape. */
+async function errorOf(response:Response){
+ try{
+  const e=(await response.json() as {error?:{status?:unknown;message?:unknown;details?:{errorCode?:unknown}[]}}).error;
+  const detail=e?.details?.find(d=>typeof d?.errorCode==='string')?.errorCode,code=typeof detail==='string'?detail:typeof e?.status==='string'?e.status:'';
+  return {code,message:typeof e?.message==='string'?e.message:''};
+ }catch{return {code:'',message:''};}
 }
 export function fcmSender(serviceAccountJson:string,transport:PushTransport,now:()=>number=()=>Date.now()):PushSender{
  const sa=account(serviceAccountJson);
@@ -46,8 +55,11 @@ export function fcmSender(serviceAccountJson:string,transport:PushTransport,now:
   catch{return {result:'uncertain'};} // the request may have reached FCM
   if(response.ok)return {result:'accepted',status:response.status};
   if(response.status===401)cached=null;
-  // 404 UNREGISTERED and 400 INVALID_ARGUMENT name a dead or malformed registration token; 429/5xx/401 are refusals before acceptance.
-  if(response.status===404||response.status===400)return {result:'invalid-token',status:response.status};
+  // Classify by the FCM error code, not the HTTP status. 429/5xx/401/403 are refusals before acceptance and are retried.
+  const {code,message}=await errorOf(response);
+  if(code==='UNREGISTERED'||code==='NOT_FOUND'||(response.status===404&&!code))return {result:'invalid-token',status:response.status};
+  if(code==='SENDER_ID_MISMATCH')return {result:'config-error',status:response.status};
+  if(code==='INVALID_ARGUMENT'||response.status===400)return {result:/registration token/i.test(message)&&code==='INVALID_ARGUMENT'?'invalid-token':'payload-error',status:response.status};
   return {result:'retry',status:response.status};
  }};
 }
