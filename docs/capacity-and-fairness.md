@@ -49,6 +49,20 @@ The harness replaces the Workers rate-limit bindings with an exact in-memory fix
 | Visitor app page | 1 | 0 | 17 ms |
 | Visitor transition | 8 | 1 | 127 ms |
 
+#### D1 statements per public request (2026-10-29, pinned in `tools/capacity.mjs`)
+
+`CAP_TRACE=1 node tools/capacity.mjs --smoke` prints every statement of each unit-cost request. `pnpm capacity` fails if a unit cost differs from the pin, so an increase must be deliberate: update the pin and this table together.
+
+| Path | Now | Statements | Added by |
+| --- | ---: | --- | --- |
+| Site page | 5 (was 6) | serving-stop check; published site + contact flag; spec format/compiler/hold (one statement); live backend form; daily traffic counter | stop: #186 (Oct 9); spec checks: 816fd1d (Oct 1), merged into one statement here; traffic: 791b4de; form: f756782 |
+| Photo | 6 steady, 6.8 mean of first 20 (was 8 steady, 8.5) | serving-stop check; photo row; spec format/compiler/hold (one); per-client daily counter; project and platform read counters (one atomic batch of 2) | client counter and batch: #129 (Oct 3); stop: #186; cost-event reread of the counter on every read: #424 (Oct 28), now taken from the batch's `RETURNING` |
+| Contact POST | 5 (was 6) | contact settings + publication; serving-stop check; per-client counter; receipt lookup; insert (its trigger writes the receipt) | counter: #129; stop: #186; the final receipt re-read now runs only when the insert wrote no row |
+| Backend | 3 (was 2) | published backend; per-client counter; project usage counter (its trigger enforces the project and contained-project allowance) | per-client counter: #129 |
+| Contact GET | 2 | settings; serving-stop check | #186 |
+
+Photo means above 6 are the cost events: when a project's monthly read counter reaches 1, 2, 4, 8 or 16 the request also reads the owner and appends an event (3 more statements, at most 16 times per project and month). The serving-stop, spec-hold, per-client and read-counter statements are security, tenant, hold and quota checks and stay separate statements: the stop must run before any lookup, the hold must be read at serve time, and the two read counters must charge or refuse together.
+
 Statements are not billable D1 rows (see [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/): rows read/written, including indexes and triggers). They indicate relative work per path only.
 
 ### QuickJS runtime bounds (direct to the runtime Worker)

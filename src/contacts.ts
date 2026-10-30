@@ -41,9 +41,11 @@ export async function saveContact(db:D1Database,projectId:string,revision:number
  const hash=await hashToken(JSON.stringify(values)),now=new Date();
  const existing=await db.prepare('SELECT request_hash,expires_at FROM contact_receipts WHERE id=? AND project_id=?').bind(id,projectId).first<{request_hash:string;expires_at:string}>();
  if(existing){if(existing.request_hash!==hash||existing.expires_at<=now.toISOString())throw new ContactError(409,'This form was already used. Reload it to send another message.');return;}
- try{await db.prepare('INSERT INTO contact_submissions(id,project_id,settings_revision,request_hash,name,email,message,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING').bind(id,projectId,revision,hash,name.trim(),email.trim(),message.trim(),now.toISOString(),new Date(now.getTime()+30*86400000).toISOString()).run();}
+ let inserted:D1Result;
+ try{inserted=await db.prepare('INSERT INTO contact_submissions(id,project_id,settings_revision,request_hash,name,email,message,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING').bind(id,projectId,revision,hash,name.trim(),email.trim(),message.trim(),now.toISOString(),new Date(now.getTime()+30*86400000).toISOString()).run();}
  catch(cause){if(String(cause).includes('contact_received')){const retry=await db.prepare('SELECT request_hash FROM contact_receipts WHERE id=? AND project_id=?').bind(id,projectId).first<{request_hash:string}>();if(retry?.request_hash===hash)return;throw new ContactError(409,'This form was already used. Reload it.');}if(/contact_(capacity|rate)/.test(String(cause)))throw new ContactError(429,'This inbox is temporarily full. Please try again later.');if(String(cause).includes('contact_unavailable'))throw new ContactError(409,'This form changed or is no longer available. Please reload the website.');throw cause;}
- // A concurrent duplicate or lost acknowledgement must never be reported as a different payload's success.
+ // The insert wrote the row, and its trigger wrote the receipt with this hash: nothing to verify. Zero changes means a concurrent duplicate or lost acknowledgement, which must never be reported as a different payload's success.
+ if(inserted.meta.changes>0)return;
  const saved=await db.prepare('SELECT request_hash FROM contact_receipts WHERE id=? AND project_id=?').bind(id,projectId).first<{request_hash:string}>();
  if(saved?.request_hash!==hash)throw new ContactError(409,'This form was already used. Reload it to send another message.');
 }
