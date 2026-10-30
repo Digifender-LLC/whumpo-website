@@ -3,6 +3,7 @@ import {readFile,writeFile} from 'node:fs/promises';
 import {resolve,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {currentSchema} from './current-schema.mjs';
+import {seedSuccessPaths} from '../tests/helpers/success-paths.mjs';
 
 // WH-073 slice 2 (measurement only): an offline request-path inventory for every visitor-facing route class. Routing and
 // static-asset facts are derived from the wrangler configuration; per-request work is measured by running the real Worker
@@ -139,7 +140,8 @@ export async function measure({allowedArguments=[]}={}){
  const background=[],ctx={waitUntil:p=>{if(active)active.waitUntil++;background.push(p);},passThroughOnException(){}};
  const limiter=name=>({limit:async()=>{tally.limiter(name);return {success:true};}});
  const assets={fetch:async()=>{tally.assets();return new Response('synthetic asset',{headers:{'content-type':'text/plain'}});}};
- const runtime={fetch:async()=>{tally.service('BACKEND_RUNTIME');return new Response('{}',{status:503});}};
+ // The customer's own backend runtime: a synthetic successful execution (visitor backend calls only; no model or provider).
+ const runtime={fetch:async()=>{tally.service('BACKEND_RUNTIME');return Response.json({ok:true,value:{}});}};
  const appsEnv={DB:db,FILES:files,ENVIRONMENT:'test',API_LIMITER:limiter('apps.API_LIMITER'),AUTH_LIMITER:limiter('apps.AUTH_LIMITER'),ASSETS:assets,BACKEND_RUNTIME:runtime,TURNSTILE_SECRET:'fixture'};
  const apps={fetch:async request=>{tally.service('APP_HOST');tally.invoke('whumpo-apps');return m.appHost.fetch(request,appsEnv,ctx);}};
  const sitesEnv={DB:db,FILES:files,BACKEND_RUNTIME:runtime,APP_HOST:apps};
@@ -187,6 +189,9 @@ export async function measure({allowedArguments=[]}={}){
  try{
   console.warn=()=>{};console.error=()=>{};
   const a=await site({contact:true,domain:true});
+  // WH-073: a second published site carries a live directory, CMS article, backend form and visitor app, so the successful
+  // routes are measured without changing what the first site's routes read.
+  const b=await site(),served=await seedSuccessPaths({db:raw,m,o:b}),live=`https://${b.project}.whumpo.site`,liveApp=`https://app-${b.project}.whumpo.site`;
   const project=a.project,sub=`https://${project}.whumpo.site`,app=`https://app-${project}.whumpo.site`;
   const classes=[
    ['site.root.get','Published site root','GET',sub+'/',{}],
@@ -196,6 +201,12 @@ export async function measure({allowedArguments=[]}={}){
    ['site.directory.json','Directory JSON (none published)','GET',sub+'/directory.json',{}],
    ['site.directory.html','Directory page (none published)','GET',sub+'/directory',{}],
    ['site.cms.index','CMS index (none published)','GET',sub+'/cms',{}],
+   ['site.directory.json.live','Directory JSON (published)','GET',live+'/directory.json',{}],
+   ['site.directory.html.live','Directory page (published)','GET',live+'/directory',{}],
+   ['site.cms.index.live','CMS index (published article)','GET',live+'/cms',{}],
+   ['site.cms.article.get','CMS article (published)','GET',live+served.article,{}],
+   ['site.root.backend-form','Published site root with a live backend form','GET',live+'/',{}],
+   ['site.backend.post','Backend form submission (published backend)','POST',`${live}/backend/${served.publication}`,{headers:{'content-type':'application/json','cf-connecting-ip':'192.0.2.30'},body:'{"quantity":2}'}],
    ['site.path.unknown','Unknown path','GET',sub+'/missing',{}],
    ['site.method.post','Non-GET method','POST',sub+'/',{body:'x'}],
    ['site.project.unknown','Unknown project subdomain','GET',`https://${id()}.whumpo.site/`,{}],
@@ -205,8 +216,10 @@ export async function measure({allowedArguments=[]}={}){
    ['preview.shell.get','Guest-preview shell','GET','https://preview.whumpo.site/',{}],
    ['preview.link.post','Guest-preview link (unknown bearer)','POST','https://preview.whumpo.site/api/link',{headers:{'content-type':'application/json',origin:'https://preview.whumpo.site'},body:JSON.stringify({token:'0'.repeat(64)})}],
    ['app.page.get','Visitor app page (no live page)','GET',app+'/',{}],
+   ['app.page.live','Visitor app page (live page)','GET',liveApp+'/',{}],
    ['app.script.get','Visitor app script','GET',app+'/visitor.js',{}],
    ['app.module.post','Visitor app module call (unauthenticated)','POST',app+'/modules',{headers:{'content-type':'application/json',origin:app},body:'{}'}],
+   ['app.module.access.me','Visitor app module call (signed-in visitor, access.me)','POST',liveApp+'/modules',{headers:{'content-type':'application/json',origin:liveApp,cookie:served.cookie,'cf-connecting-ip':'192.0.2.31'},body:JSON.stringify(served.me)}],
    ['contact.form.get','Contact form','GET',`https://whumpo.com/contact/${project}`,{}],
    ['contact.form.post','Contact submission','POST',`https://whumpo.com/contact/${project}`,{contact:true}],
    ['platform.asset.get','Workspace app shell (control: platform asset)','GET','https://whumpo.com/',{}]
@@ -220,7 +233,7 @@ export async function measure({allowedArguments=[]}={}){
     runs.push(await send(url,init,{via:options.via}));turnstile=null;
    }
    const [cold,warm]=runs,derivedEntry=cold.routed;
-   const template=url.replaceAll(project,'<project>').replace(a.host,'<custom-host>').replace(a.photo,'<photo>').replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g,'<uuid>');
+   const template=url.replaceAll(project,'<project>').replaceAll(b.project,'<project>').replace(a.host,'<custom-host>').replace(a.photo,'<photo>').replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g,'<uuid>');
    const description=describe(cold),repeat=describe(warm);
    routes.push({key,label,method,url:template,
     entry:derivedEntry?{worker:derivedEntry.worker,route:derivedEntry.route,config:workers[derivedEntry.worker].config}:{worker:null,route:null,note:'no configured route reaches this host; the '+cold.worker+' code path was invoked directly'},

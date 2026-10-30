@@ -48,7 +48,7 @@ class SettingsViewModelTest {
     // Main is deliberately not reset: a request still in flight when a test ends must not resume on a missing Main.
 
     private fun viewModel(push: PushMessaging = NoOpPushMessaging) = SettingsViewModel(
-        account, api.client, api.sessions, themes, DeviceNotifications(api.client, push), push,
+        account, api.client, themes, DeviceNotifications(api.client, push), push,
         WhumpoEnvironment.from("local", "http://127.0.0.1:8787"), "0.1.0-test",
     )
 
@@ -90,7 +90,7 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun signOutEndsTheServerSessionClearsTheTokenAndErasesTheDevice() = runTest {
+    fun signOutDropsThePushTokenAndHandsOffToTheAccountRepository() = runTest {
         val push = FakePush(available = false, token = null)
         val vm = viewModel(push)
         val job = backgroundScope.launch { vm.state.collect {} }
@@ -98,16 +98,13 @@ class SettingsViewModelTest {
         vm.signOut()
         vm.state.first { !it.signedIn }
 
-        assertEquals(1, api.requests.count { it.method == HttpMethod.Post && it.url.encodedPath.endsWith("/session/logout") })
-        assertEquals(1, api.sessions.rejected)
         assertEquals(1, push.deleted)
         assertEquals(1, account.signOutCalls)
         job.cancel()
     }
 
     @Test
-    fun signOutStillErasesTheDeviceWhenTheServerCannotBeReached() = runTest {
-        api.override = { throw IOException("offline") }
+    fun signingOutIsNotRepeatedWhileItRuns() = runTest {
         val vm = viewModel()
         val job = backgroundScope.launch { vm.state.collect {} }
 

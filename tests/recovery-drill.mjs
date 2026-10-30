@@ -97,6 +97,12 @@ try{
   await run("INSERT INTO owner_email_change_limits(kind,address_key,at) VALUES('send',?,?)",hash('new@example.test'),ms);
   await run("INSERT INTO owner_email_changes(change_id,account_id,request_id,request_hash,new_address,new_address_hash,epoch,created_at,expires_at,state,revision,history,deliverable) VALUES(?,?,?,?,'new@example.test',?,1,?,?,'pending',1,'[\"pending\"]',1)",id(),owner.account,id(),hash('email-request'),hash('new@example.test'),ms,ms+3600000);
   await run("INSERT INTO owner_security_reviews(review_id,account_id,epoch,credential_revision,kit_generation,credentials,connections,created_at,expires_at,state,revision) SELECT ?,account_id,auth_epoch,credential_revision,kit_generation,'[]','[]',?,?,'open',1 FROM identity_accounts WHERE account_id=?",id(),ms,ms+600000,owner.account);
+  // WH-052 P-2 job journal: one job through admission, claim, intent and result, so its job, four events and outbox entry are archived and restored.
+  const job=id(),jobEnvelope=JSON.stringify({jobId:job,limits:{maxAttempts:3},ownerAccountId:owner.account,purpose:'platform-email',schedule:{createdAt:0,expiresAt:604800000,notBefore:0}});
+  await run("INSERT INTO job_journal(id,owner_user_id,purpose,envelope_json,envelope_digest,created_at,expires_at,max_attempts,due,initial_due,last_event,last_at) VALUES(?,?,'platform-email',?,?,0,604800000,3,0,0,'enqueued',0)",job,owner.account,jobEnvelope,hash('job-envelope'));
+  await run("UPDATE job_journal SET state='leased',fence=1,lease_until=60000,last_event='claimed',last_at=0 WHERE id=?",job);
+  await run("UPDATE job_journal SET state='awaiting',attempt=1,attempt_id=id||'.1',last_event='intent',last_at=1,last_ref=id||'.1' WHERE id=?",job);
+  await run("UPDATE job_journal SET state='complete',result_ref='drill-result',lease_until=0,last_event='external_result',last_at=2,last_ref='drill-result' WHERE id=?",job);
   // Workspace layout cap (B11): 52 revisions leave the newest 50, and the newest receipt is never pruned.
   await run("INSERT INTO workspace_preferences(user_id,revision,layout_json,updated_at) VALUES(?,0,'{\"version\":1,\"n\":0}',?) ON CONFLICT(user_id) DO NOTHING",owner.account,iso);
   for(let n=0;n<52;n++){
@@ -104,7 +110,7 @@ try{
    await run("INSERT INTO workspace_layout_receipts(request_id,user_id,request_hash,request_json,from_revision,to_revision,previous_json,layout_json,created_at) VALUES(?,?,?,'{}',?,?,?,?,?)",id(),owner.account,hash('layout'+n),previous.revision,previous.revision+1,previous.layout_json,next,iso);
    await run('UPDATE workspace_preferences SET revision=?,layout_json=?,updated_at=? WHERE user_id=?',previous.revision+1,next,iso,owner.account);
   }
-  for(const t of ['review_receipts','cost_events','lookup_consents','connector_receipts','account_closures','rule_approvals','owner_email_changes','owner_email_change_limits','owner_security_reviews','workspace_layout_receipts'])seeded[t]=(await db.prepare(`SELECT count(*) n FROM ${t}`).first()).n;
+  for(const t of ['review_receipts','cost_events','lookup_consents','connector_receipts','account_closures','rule_approvals','owner_email_changes','owner_email_change_limits','owner_security_reviews','workspace_layout_receipts','job_journal','job_journal_events','job_outbox'])seeded[t]=(await db.prepare(`SELECT count(*) n FROM ${t}`).first()).n;
   assert.ok(Object.values(seeded).every(n=>n>=1)&&seeded.workspace_layout_receipts===50,JSON.stringify(seeded));
  }
  const reference=async(database,runtime)=>{
@@ -173,7 +179,7 @@ try{
  const catalog=JSON.parse(await readFile('docs/data-lifecycle.json','utf8')),{snapshot:pointSnapshot}=await verifyRecoveryPoint(pointA,pointDigestA);
  const countRestored=async table=>(await target.DRILL_A.prepare(`SELECT count(*) n FROM "${table}"`).first()).n;
  const coverage=await phase('recoveryCoverage',()=>recoveryCoverage(pointSnapshot,countRestored,catalog));
- assert.equal(coverage.status,'complete',JSON.stringify(coverage.holds));assert.equal(coverage.tables,230);assert.equal(coverage.excluded,0);
+ assert.equal(coverage.status,'complete',JSON.stringify(coverage.holds));assert.equal(coverage.tables,233);assert.equal(coverage.excluded,0);
  for(const table of Object.keys(seeded))assert.equal(await countRestored(table),seeded[table],table+' restored with its archived rows');
  // A new table, a table that vanished from the restore, a stale exclusion and a mismatched count each fail until classified.
  const withTable=structuredClone(pointSnapshot);withTable.tables.push({name:'new_personal_data',columns:['id'],rows:[]});
@@ -181,7 +187,7 @@ try{
  holds.restoreMismatch=(await recoveryCoverage(pointSnapshot,async()=>-1,catalog)).holds;assert.deepEqual(holds.restoreMismatch,['coverage-restore-mismatch']);
  holds.staleExclusion=(await recoveryCoverage(pointSnapshot,countRestored,catalog,{retired_table:'none'})).holds;assert.deepEqual(holds.staleExclusion,['coverage-stale-exclusion']);
  const excludedCoverage=await recoveryCoverage(pointSnapshot,async()=>-1,catalog,Object.fromEntries(pointSnapshot.tables.filter(t=>t.name!=='sqlite_sequence').map(t=>[t.name,'drill rationale'])));
- assert.equal(excludedCoverage.status,'complete');assert.equal(excludedCoverage.excluded,230);
+ assert.equal(excludedCoverage.status,'complete');assert.equal(excludedCoverage.excluded,233);
  refusals+=3;
  // WH-117 key versions in the restored candidate: one registered key, all 4 credential rows under it, no running rotation.
  const keyVersions=await phase('inventoryKeyVersions',()=>inventoryKeyVersions(target.DRILL_A));

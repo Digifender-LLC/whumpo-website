@@ -18,8 +18,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "whumpo-control-2026-10-30",
-      "database_id": "ecad1001-f1a7-4a92-be3e-17adb8e9b23c"
+      "database_name": "whumpo-control-2026-10-30b",
+      "database_id": "51975ea5-bb61-4f56-9de5-9e28b8585f08"
     }
   ],
   "r2_buckets": [

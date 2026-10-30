@@ -2979,6 +2979,53 @@
           "DP-05"
         ]
       }
+    },
+    {
+      "id": "job-journal",
+      "tables": [
+        "job_journal",
+        "job_journal_events",
+        "job_outbox"
+      ],
+      "scope": "owner",
+      "purpose": "The shared durable job journal (WH-052 P-2): one row per admitted job holding the immutable closed envelope (opaque identifiers, digests, schedule and limits; no message, token or payload), its digest, the lease/fence/attempt state, an immutable event per transition, and one outbox entry whose stable delivery id names the wake. It is control state, not authority: a claim, lease or restored row grants no access and never replaces the domain adapter's own admission.",
+      "currentRetention": "Tables exist; no adapter admits jobs yet and contact delivery stays on its own outbox (P-4). A job is deleted only once it is finished (complete, cancelled or expired), and the nightly `jobs` maintenance job (src/job-journal.ts) removes finished jobs with their events and outbox entry 30 days after their last transition (jobJournalRetentionMs, interim default pending an owner decision). Ready, leased, awaiting, uncertain and operator jobs are never pruned while the account exists; events are immutable and deletable only with a finished job. Account closure cascades through all three tables.",
+      "proposedRetention": "Same as current until the owner sets the journal retention; an unresolved uncertain or operator job is held for reconciliation, not aged out.",
+      "deletionAuthority": "The `jobs` maintenance job for finished jobs past the window, or the account closure cascade. No route, model, visitor or operator tool edits a journal row; transitions go through the guarded statements in src/job-journal.ts and the schema triggers.",
+      "exportPolicy": "Allowlist job purpose, state and times. Never the envelope, digests, attempt or result references, or another account's rows.",
+      "references": [
+        "schema/platform.sql",
+        "src/job-journal.ts",
+        "src/job-dispatcher.ts",
+        "docs/job-orchestration.md",
+        "docs/background-jobs.md",
+        "docs/job-envelope.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "The dispatcher lanes and the restricted operator diagnostics; no support, model or Chat reader"
+        ],
+        "processors": [
+          "Deterministic dispatcher and domain adapters; no model"
+        ],
+        "remainingExposure": [
+          "Rows link an opaque account identifier to the fact, purpose and timing of a job and to opaque receipt references; no message or customer content."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
     }
   ],
   "protectionContract": "docs/data-protection.md",

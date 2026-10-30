@@ -7,14 +7,14 @@ import com.whumpo.core.environment.WhumpoEnvironment
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import java.io.File
 
 class WhumpoApplication : Application() {
     lateinit var container: AppContainer
         private set
 
-    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // Main.immediate: the sign-in controller touches the UI thread only through the browser and Credential Manager.
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     override fun onCreate() {
         super.onCreate()
@@ -23,9 +23,10 @@ class WhumpoApplication : Application() {
             environment = WhumpoEnvironment.from(BuildConfig.WHUMPO_ENVIRONMENT, BuildConfig.WHUMPO_ORIGIN),
             accountState = store,
             io = Dispatchers.IO,
-            context = this,
+            app = this,
+            scope = appScope,
         )
-        appScope.launch { store.restore() }
+        container.auth.start()
     }
 
     companion object {

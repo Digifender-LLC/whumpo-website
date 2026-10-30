@@ -6,8 +6,8 @@
       Backups are disabled and every domain is excluded for both cloud backup and
       device-to-device transfer: account-scoped state (drafts, sessions, pending
       operations) lives in no-backup storage and its Keystore key is not exportable.
-      INTERNET is for the mobile API only (WP7); the build still has no storage, camera or location permission.
-      Photos arrive through the system photo picker.
+      WP5 added INTERNET: the app calls /api/mobile/v1 and nothing else. Photos arrive through the system photo picker,
+      so there is still no storage, camera or location permission.
     -->
     <uses-permission android:name="android.permission.INTERNET" />
 
@@ -27,10 +27,25 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!--
+              Verified App Link: the browser hand-off returns here. Only this path is claimed (WP7 adds the Activity and
+              Projects deep links). Verification needs https://whumpo.com/.well-known/assetlinks.json, an owner task:
+              docs/android/assetlinks-setup.md.
+            -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="whumpo.com"
+                    android:path="/app/return" />
             </intent-filter>
         </activity>
     </application>

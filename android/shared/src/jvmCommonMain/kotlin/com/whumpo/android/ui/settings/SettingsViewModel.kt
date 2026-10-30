@@ -6,7 +6,6 @@ import com.whumpo.android.ui.theme.ThemePreference
 import com.whumpo.android.ui.theme.ThemeStore
 import com.whumpo.core.api.MobileApiClient
 import com.whumpo.core.api.MobileApiException
-import com.whumpo.core.api.SessionProvider
 import com.whumpo.core.data.AccountRepository
 import com.whumpo.core.environment.EnvironmentKind
 import com.whumpo.core.environment.WhumpoEnvironment
@@ -38,7 +37,6 @@ data class SettingsUi(
 class SettingsViewModel(
     private val account: AccountRepository,
     private val api: MobileApiClient,
-    private val sessions: SessionProvider,
     private val themes: ThemeStore,
     private val notifications: DeviceNotifications,
     private val push: PushMessaging,
@@ -114,23 +112,14 @@ class SettingsViewModel(
     }
 
     /**
-     * Ends the session on the server, then erases everything on this device. The server call is best effort: sign-out
-     * must work offline, and the server revokes the session on its own expiry. [SessionProvider.onSessionRejected]
-     * is the interface's hook for dropping the local bearer token (WP5 implements it).
+     * `AccountRepository.signOut` is WP5's: it tells the server (best effort, so sign-out works offline), clears the
+     * session through the SessionManager and erases account state. Only the local push token is this screen's to drop.
      */
     fun signOut() {
         if (signingOut.value) return
         signingOut.value = true
         viewModelScope.launch {
             try {
-                try {
-                    api.logout()
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: MobileApiException) {
-                    // Offline or already rejected: the local erase below still runs.
-                }
-                sessions.onSessionRejected()
                 push.deleteToken()
                 account.signOut()
             } finally {

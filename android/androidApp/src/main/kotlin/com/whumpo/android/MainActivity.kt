@@ -1,5 +1,6 @@
 package com.whumpo.android
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -14,12 +15,35 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        val container = (application as WhumpoApplication).container
         setContent {
             val preference by container.themes.preference.collectAsState()
             WhumpoTheme(darkTheme = preference.isDark(isSystemInDarkTheme())) {
                 WhumpoApp(container)
             }
         }
+        handleLink(intent)
+    }
+
+    private val container get() = (application as WhumpoApplication).container
+
+    // Passkey and Custom Tabs need the activity that is on screen.
+    override fun onStart() {
+        super.onStart()
+        container.activities.started(this)
+    }
+
+    override fun onStop() {
+        container.activities.stopped(this)
+        super.onStop()
+    }
+
+    // The verified App Link https://whumpo.com/app/return comes back here (launchMode singleTask).
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleLink(intent)
+    }
+
+    private fun handleLink(intent: Intent?) {
+        if (intent?.action == Intent.ACTION_VIEW) intent.dataString?.let(container.auth::onReturn)
     }
 }
