@@ -19,6 +19,8 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TestTimeSource
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -469,6 +471,102 @@ class MobileApiClientTest {
         assertEquals(MobileApiException.ProofRequired.Proof.FRESH_PASSKEY, e.proof)
         assertEquals(1, calls)
         assertEquals("completed", c.confirmReview(id, 5, control).turnStatus)
+    }
+
+    // ---- identity_changed after the client's own reauth ---------------------------------------------------------------------
+
+    private val reauthBody get() = operations.first { it.str("operation") == "session.reauthVerify" }["response"]!!.jsonObject["body"].toString()
+    private val identityChanged get() = errorCases.getValue("identity_changed").jsonObject
+    private val credential = buildJsonObject { put("id", "AAAA") }
+    private val challenge = "cccccccc-cccc-4ccc-8ccc-000000000001"
+    private val sendId = "dddddddd-dddd-4ddd-8ddd-000000000001"
+
+    /** Reauth verify succeeds; the first [failures] other requests fail identity_changed, later ones succeed. Records request bodies. */
+    private class Race(val failures: Int) {
+        val bodies = mutableListOf<String>()
+    }
+
+    private fun raceClient(race: Race, sessions: SessionProvider, time: TestTimeSource) =
+        MobileApiClient(
+            MockEngine { r ->
+                if (r.url.encodedPath.endsWith("/session/reauth/verify")) {
+                    reply(200, reauthBody)
+                } else {
+                    race.bodies += r.body.toByteArray().decodeToString()
+                    if (race.bodies.size <= race.failures) {
+                        reply(identityChanged.num("status"), identityChanged["body"].toString())
+                    } else {
+                        reply(200, """{"version":1,"requestId":"$sendId","accepted":true,"revision":6,"turnStatus":"completed"}""")
+                    }
+                }
+            },
+            base, current, sessions, time,
+        )
+
+    @Test
+    fun identityChangedIsRetriedOnceWithTheSameRequestIdAfterTheClientsOwnReauth() = runTest {
+        val sessions = FakeSessions(token)
+        val time = TestTimeSource()
+        val race = Race(failures = 1)
+        val c = raceClient(race, sessions, time)
+        c.reauthVerify(challenge, credential)
+        time += 3.seconds
+        assertEquals("completed", c.sendMessage(sendId, 5, "hello").turnStatus)
+        assertEquals(2, race.bodies.size)
+        assertEquals(race.bodies[0], race.bodies[1])
+        assertTrue(race.bodies[1].contains(sendId))
+        assertEquals(0, sessions.rejected)
+    }
+
+    @Test
+    fun identityChangedIsNotRetriedWithoutARecentReauth() = runTest {
+        for (reauthFirst in listOf(false, true)) {
+            val sessions = FakeSessions(token)
+            val time = TestTimeSource()
+            val race = Race(failures = 5)
+            val c = raceClient(race, sessions, time)
+            if (reauthFirst) {
+                c.reauthVerify(challenge, credential)
+                time += 11.seconds
+            }
+            assertFailsWith<MobileApiException.IdentityChanged> { c.sendMessage(sendId, 5, "hello") }
+            assertEquals(1, race.bodies.size, "reauthFirst=$reauthFirst")
+            assertEquals(1, sessions.rejected)
+        }
+    }
+
+    @Test
+    fun onlyOneRetryEverHappens() = runTest {
+        val sessions = FakeSessions(token)
+        val race = Race(failures = 5)
+        val c = raceClient(race, sessions, TestTimeSource())
+        c.reauthVerify(challenge, credential)
+        assertFailsWith<MobileApiException.IdentityChanged> { c.sendMessage(sendId, 5, "hello") }
+        assertEquals(2, race.bodies.size)
+        assertEquals(race.bodies[0], race.bodies[1])
+        assertEquals(1, sessions.rejected)
+    }
+
+    @Test
+    fun otherCodesAreNeverRetriedAfterAReauth() = runTest {
+        for (name in listOf("proof_required_signin", "proof_required_fresh", "stale_revision")) {
+            var calls = 0
+            val case = errorCases.getValue(name).jsonObject
+            val c = MobileApiClient(
+                MockEngine { r ->
+                    if (r.url.encodedPath.endsWith("/session/reauth/verify")) {
+                        reply(200, reauthBody)
+                    } else {
+                        calls++
+                        reply(case.num("status"), case["body"].toString())
+                    }
+                },
+                base, current, FakeSessions(token), TestTimeSource(),
+            )
+            c.reauthVerify(challenge, credential)
+            assertFailsWith<MobileApiException> { c.sendMessage(sendId, 5, "hello") }
+            assertEquals(1, calls, name)
+        }
     }
 
     // ---- Session provider ---------------------------------------------------------------------------------------------------
