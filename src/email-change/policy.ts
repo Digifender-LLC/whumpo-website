@@ -58,7 +58,7 @@ export function normalizeAddress(value:unknown):string {
  * identity engine's seconds. A restricted enrollment or recovery grant has kind `grant`. */
 export type OwnerPrincipal={
  accountId:string;kind:'session'|'grant';purpose:'workspace'|'enrollment'|'recovery';authEpoch:number;
- proof:{method:'passkey'|'registration'|'recovery-key'|'recovery-commit';verifiedAt:number};
+ proof:{method:'passkey'|'handoff'|'registration'|'recovery-key'|'recovery-commit';verifiedAt:number};
 };
 /** The account's current email state, read with the principal. `authEpoch` is identity_accounts.auth_epoch. */
 export type AccountEmail={

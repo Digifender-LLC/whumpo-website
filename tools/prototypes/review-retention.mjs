@@ -183,6 +183,7 @@ export const capRegistry=Object.freeze({
  identity_credentials:R('inventory','R6','owner-removable','owner-identity-progress'),
  identity_effect_receipts:R('receipt','R2','expiring','owner-identity-receipts'),
  identity_grants:R('inventory','R6','expiring','owner-identity-admission'),
+ identity_handoffs:R('inventory','R6','expiring','owner-identity-admission'),
  module_access_role_reviews:R('review','R1','active-only','project-roles',"action='revoke'"),
  module_activation_reviews:R('review','R1','active-only','module-registry',"action='disable'"),
  module_files:R('inventory','R6','window','module-files'),
