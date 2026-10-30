@@ -24,17 +24,14 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.backhandler.PredictiveBackHandler
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -78,13 +75,11 @@ enum class WidthClass {
  * shortcut: no foldable hinge handling and no permanent drawer at 1200dp or more; add both with WindowInfoTracker
  * when a foldable or desktop pass needs them.
  */
-// shortcut: PredictiveBackHandler is deprecated for NavigationEventHandler (navigationevent-compose); it still works
-// on CMP 1.12, so move to the new API when the dependency is bumped or removal is announced.
-@Suppress("DEPRECATION")
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun WhumpoShell(
     modifier: Modifier = Modifier,
+    /** A destination another part of the app asks for (a deep link). Selecting it is the shell's job; clearing it is the caller's. */
+    requested: TopDestination? = null,
     offline: Boolean = false,
     offlineMessage: String = "You're offline. We'll be ready when you're back.",
     content: @Composable (TopDestination, WidthClass) -> Unit = { destination, width ->
@@ -93,17 +88,10 @@ fun WhumpoShell(
 ) {
     var selectedIndex by rememberSaveable { mutableIntStateOf(0) }
     val selected = TopDestination.entries[selectedIndex]
-    var backProgress by remember { mutableFloatStateOf(0f) }
     val stateHolder = rememberSaveableStateHolder()
+    LaunchedEffect(requested) { if (requested != null) selectedIndex = requested.ordinal }
 
-    PredictiveBackHandler(enabled = selected != TopDestination.Chat) { progress ->
-        try {
-            progress.collect { backProgress = it.progress }
-            selectedIndex = 0
-        } finally {
-            backProgress = 0f
-        }
-    }
+    val backProgress = rememberBackProgress(enabled = selected != TopDestination.Chat) { selectedIndex = 0 }
 
     BoxWithConstraints(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         val width = WidthClass.of(maxWidth)

@@ -4,6 +4,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -83,6 +84,16 @@ class ChatBehaviorTest : RobolectricUiTest() {
         }
         assertEquals(listOf(StarterPrompts[1]), actions.drafts)
         assertEquals(0, actions.sends)
+    }
+
+    @Test
+    fun turnsShowRelativeTimesAndSpeakTheAbsoluteTime() {
+        launch(Screen.Compact) {
+            ChatLayout(ChatScenes.screen(ChatScenes.ready.copy(turns = ChatScenes.turns.take(1))), WidthClass.Compact, Recorder(), animated = false)
+        }.use {
+            val time = compose.onNodeWithTag("turn-time-${ChatScenes.turns[0].id}")
+            time.assertContentDescriptionEquals("5 min ago, 4 Oct 2026, 12:00 UTC")
+        }
     }
 
     @Test

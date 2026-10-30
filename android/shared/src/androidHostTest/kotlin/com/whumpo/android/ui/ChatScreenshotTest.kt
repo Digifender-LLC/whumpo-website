@@ -25,6 +25,7 @@ import com.whumpo.android.ui.chat.SendStatus
 import com.whumpo.android.ui.shell.WidthClass
 import com.whumpo.core.api.ChatPage
 import com.whumpo.core.api.ChatTurn
+import kotlin.time.Instant
 import kotlinx.serialization.json.Json
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -40,7 +41,7 @@ internal object ChatScenes {
     val siteTurn = turns[2]
 
     fun screen(chat: ChatState, draft: String = ""): ChatScreenState =
-        ChatScreenState(signedIn = true, draft = draft, composerEnabled = true, chat = chat)
+        ChatScreenState(signedIn = true, draft = draft, composerEnabled = true, chat = chat, now = Instant.parse("2026-10-04T12:05:00Z"))
 
     val ready = ChatState(phase = Phase.Ready, turns = turns, revision = page.revision)
 
