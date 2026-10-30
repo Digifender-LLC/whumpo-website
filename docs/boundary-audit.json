@@ -581,13 +581,13 @@
       },
       {
        "file": "src/mobile/router.ts",
-       "contains": "key:'mobile-authority:'+principal.authorityId"
+       "contains": "key:'mobile-account:'+principal.accountId"
       }
      ],
      "tests": [
       {
        "file": "tests/mobile-identity.mjs",
-       "contains": "assert.deepEqual([limits.auth,limits.api],[[],['mobile:203.0.113.9','mobile-authority:'+s.authority]]);",
+       "contains": "assert.deepEqual([limits.auth,limits.api],[[],['mobile:203.0.113.9','mobile-account:'+a.account]]);",
        "asserts": "bearer routes are limited per IP and per authority"
       },
       {

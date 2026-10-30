@@ -216,7 +216,7 @@ try{
   }
   const anon=await mobile('/session/login/options',{body:{version:1},headers:{cookie:'x=1'}});assert.equal(anon.status,400);
   assert.equal((await mobile('/config',{method:'GET',headers:{cookie:'x=1'}})).status,400);
-  assert.equal(limits.api.concat(limits.auth).filter(k=>k.startsWith('mobile-authority:')&&k.includes('undefined')).length,0);
+  assert.equal(limits.api.concat(limits.auth).filter(k=>k.startsWith('mobile-account:')&&k.includes('undefined')).length,0);
  });
 
  await check('bearer tokens work only on mobile routes; a web token fails on mobile and an android token fails on web',async()=>{
@@ -238,12 +238,12 @@ try{
   const anon=await mobile('/session/login/options',{body:{version:1},token:s.token});assert.equal(anon.status,400);
  });
 
- await check('rate limits: anonymous routes use AUTH_LIMITER per IP; bearer routes use API_LIMITER per IP and per authorityId',async()=>{
+ await check('rate limits: anonymous routes use AUTH_LIMITER per IP; bearer routes use API_LIMITER per IP and per account (a reauth does not reset the budget)',async()=>{
   const s=await nativeSession(a);limits.auth.length=0;limits.api.length=0;
   await mobile('/config',{method:'GET',headers:{'cf-connecting-ip':'203.0.113.9'}});
   assert.deepEqual([limits.auth,limits.api],[['mobile:203.0.113.9'],[]]);
   limits.auth.length=0;await mobile('/session',{method:'GET',token:s.token,headers:{'cf-connecting-ip':'203.0.113.9'}});
-  assert.deepEqual([limits.auth,limits.api],[[],['mobile:203.0.113.9','mobile-authority:'+s.authority]]);
+  assert.deepEqual([limits.auth,limits.api],[[],['mobile:203.0.113.9','mobile-account:'+a.account]]);
   limits.api.length=0;await mobile('/session',{method:'GET',token:'e'.repeat(64)});assert.deepEqual(limits.api,['mobile:local'],'an unknown token is limited per IP only');
  });
 
