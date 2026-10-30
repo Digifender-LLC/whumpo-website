@@ -73,3 +73,12 @@ export async function exchangeHandoff(env:IdentityEnvironment,input:{handoffId:s
  if(!session)throw denied();
  return {token,expiresAt:session.expires_at};
 }
+
+/** Read-only, for the consent page: what an open handoff asks for. Needs an ordinary session; reveals only the purpose of an unbound, unexpired handoff. */
+export async function previewHandoff(env:IdentityEnvironment,p:IdentityPrincipal,input:unknown){
+ const data=identityRecord(input,['version','browserToken']),browserToken=shape(data.browserToken,/^[a-f0-9]{64}$/);
+ if(p.kind!=='session'||p.purpose!=='workspace'||p.client!=='web')throw new IdentityError(403,'identity_incomplete','Finish setting up your account in the browser before returning to the app.');
+ const row=await env.DB.prepare('SELECT purpose FROM identity_handoffs WHERE browser_token_hash=? AND account_id IS NULL AND expires_at>unixepoch()').bind(await hashToken(browserToken)).first<{purpose:string}>();
+ if(!row)throw identityChanged();
+ return {purpose:row.purpose};
+}

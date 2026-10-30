@@ -15,7 +15,18 @@ function admit(request:Request,env:MobileEnvironment,isConfig:boolean,query=fals
  if(!query&&new URL(request.url).search)throw new MobileError('unknown_field');
  if(request.method==='GET'&&(request.body||(request.headers.get('content-length')??'0')!=='0'))throw new MobileError('invalid_request');
 }
-const ipOf=(request:Request)=>request.headers.get('cf-connecting-ip')??'local';
+/** The client address as a limiter key. An IPv6 host is keyed by its /64 (one subscriber owns the whole prefix), so rotating addresses inside it buys no extra budget. */
+function ipOf(request:Request){
+ const ip=(request.headers.get('cf-connecting-ip')??'local').toLowerCase();
+ if(!ip.includes(':')||ip.includes('.'))return ip; // IPv4, 'local', or an IPv4-mapped form
+ const [head,tail=''] = ip.split('::'),a=head?head.split(':'):[],b=tail?tail.split(':'):[];
+ const groups=ip.includes('::')?[...a,...Array(Math.max(0,8-a.length-b.length)).fill('0'),...b]:a;
+ return groups.slice(0,4).map(g=>g.replace(/^0+(?=.)/,'')).join(':')+'::/64';
+}
+/** `start` writes a row that lives 300s in a 2000-row table: it costs three AUTH_LIMITER units on its own key, so one /64 (or IPv4 host) may start 3 per minute. */
+async function startBudget(request:Request,env:MobileEnvironment){
+ for(let i=0;i<3;i++)if(!(await env.AUTH_LIMITER.limit({key:'handoff:'+ipOf(request)})).success)throw new MobileError('rate_limited');
+}
 /** No authority: refuses a bearer, limited per IP by AUTH_LIMITER. */
 async function anonymous(request:Request,env:MobileEnvironment,isConfig:boolean,run:()=>Response|Promise<Response>){
  admit(request,env,isConfig);
@@ -44,7 +55,7 @@ export async function handleMobileRequest(request:Request,env:MobileEnvironment,
   if(method==='GET'&&action==='config')return await anonymous(request,env,true,()=>config(env));
   if(method==='POST'&&action==='session/login/options')return await anonymous(request,env,false,()=>loginOptionsOperation(request,env));
   if(method==='POST'&&action==='session/login/verify')return await anonymous(request,env,false,()=>loginVerifyOperation(request,env));
-  if(method==='POST'&&action==='session/handoff/start')return await anonymous(request,env,false,()=>handoffStartOperation(request,env));
+  if(method==='POST'&&action==='session/handoff/start')return await anonymous(request,env,false,async()=>{await startBudget(request,env);return handoffStartOperation(request,env);});
   if(method==='POST'&&action==='session/handoff/exchange')return await anonymous(request,env,false,()=>handoffExchangeOperation(request,env));
   if(method==='POST'&&action==='session/reauth/options')return await authenticated(request,env,p=>reauthOptionsOperation(request,env,p));
   if(method==='POST'&&action==='session/reauth/verify')return await authenticated(request,env,(p,token)=>reauthVerifyOperation(request,env,p,token));

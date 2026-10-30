@@ -24,9 +24,9 @@ const id=()=>crypto.randomUUID(),run=(sql,...v)=>db.prepare(sql).bind(...v).run(
 const count=async(table,where='1=1',...v)=>(await one(`SELECT count(*) n FROM ${table} WHERE ${where}`,...v)).n;
 const androidOrigin=m.androidPasskeyOrigins[0],base='https://whumpo.com',sessionCookie='__Host-whumpo_session',challengeCookie='__Secure-whumpo_identity_challenge',grantCookie='__Secure-whumpo_identity_grant';
 let cases=0;const check=async(name,fn)=>{try{await fn();cases++;}catch(e){console.error('FAILED:',name);throw e;}};
-const limits={auth:[]};
+const limits={auth:[],counts:null};
 const env={DB:db,ENVIRONMENT:'test',MOBILE_MINIMUM_BUILD:'40',TURNSTILE_SECRET:'synthetic-only',
- AUTH_LIMITER:{limit:async({key})=>{limits.auth.push(key);return {success:true};}},API_LIMITER:{limit:async()=>({success:true})}};
+ AUTH_LIMITER:{limit:async({key})=>{limits.auth.push(key);if(!limits.counts)return {success:true};limits.counts[key]=(limits.counts[key]??0)+1;return {success:limits.counts[key]<=10};}},API_LIMITER:{limit:async()=>({success:true})}};
 const ctx={waitUntil(){}};
 const same=(live,fixture)=>assert.deepEqual(live,fixture);
 function shaped(live,fixture,at='body'){
@@ -78,6 +78,8 @@ async function owner({keys=2,project=false}={}){
 }
 // A genuine web sign-in: options, an independently signed assertion at the web origin, verify. Returns the session cookie value.
 async function webSignIn(o,key=o.key){
+ // The shared 10-session cap evicts by (issued_at,id), a tie within one second: start every sign-in from an empty account so no check races it.
+ await run("DELETE FROM identity_sessions WHERE account_id=? AND NOT (client='android' AND proof_method='passkey')",o.account);
  const options=await web('login/options');assert.equal(options.status,200,options.text);
  const verify=await web('login/verify',{cookies:{[challengeCookie]:options.set[challengeCookie]},body:{version:1,credential:o.webAssert(options.data.options,key)}});
  assert.equal(verify.status,200,verify.text);return verify.set[sessionCookie];
@@ -110,7 +112,7 @@ try{
   limits.auth.length=0;
   const h=await start('signup');fixtureCall('session.handoffStart',h.r);
   assert.match(h.id,/^[0-9a-f-]{36}$/);assert.match(h.r.data.browserPath,/^\/workspace\/native\/[0-9a-f]{64}$/);
-  assert.deepEqual(limits.auth,['mobile:local'],'anonymous route limited by AUTH_LIMITER');
+  assert.deepEqual(limits.auth,['mobile:local','handoff:local','handoff:local','handoff:local'],'anonymous route limited by AUTH_LIMITER, start on its own tighter key');
   const row=await one('SELECT * FROM identity_handoffs WHERE id=?',h.id);
   assert.equal(row.browser_token_hash,await m.hashToken(h.token));assert.equal(await count('identity_handoffs','browser_token_hash=?',h.token),0,'the browser token itself is never stored');
   assert.equal(row.purpose,'signup');assert.equal(row.state,h.state);assert.equal(row.code_challenge,sha256(h.verifier));assert.equal(row.redirect_uri,'https://whumpo.com/app/return');
@@ -292,6 +294,32 @@ try{
    assert(!r.text.includes(code)&&!r.text.includes(h.token)&&!logged.join('').includes(code));
    const w=await complete(h,cookie);assert(!w.text.includes(code)&&!w.text.includes(h.token));
   }finally{console.error=original;}
+ });
+
+ await check('start has its own 3 per minute budget per client, IPv6 is keyed by /64, and start is limited before login is',async()=>{
+  const body=()=>({version:1,purpose:'signin',state:randomBytes(24).toString('base64url'),codeChallenge:sha256('v'.repeat(43)),codeChallengeMethod:'S256',redirectUri:'https://whumpo.com/app/return'});
+  const from=(ip,path='/session/handoff/start',b=body())=>mobile(path,{body:b,headers:{'cf-connecting-ip':ip}});
+  limits.counts={};limits.auth.length=0;
+  try{
+   assert.equal((await from('2001:db8:1:2::1')).status,200);
+   assert.equal((await from('2001:0DB8:0001:0002:aaaa:bbbb:cccc:dddd')).status,200,'expanded, upper-case form of the same /64');
+   assert.equal((await from('2001:db8:1:2:ffff::9')).status,200);
+   const blocked=await from('2001:db8:1:2:1234::5');assert.equal(blocked.status,429,blocked.text);same(blocked.data,errors.rate_limited.body);
+   assert(limits.auth.includes('handoff:2001:db8:1:2::/64'),'keyed by the /64 prefix');
+   assert.equal((await from('2001:db8:1:3::1')).status,200,'a neighbouring /64 has its own budget');
+   assert.equal((await from('203.0.113.7')).status,200);
+   // login is not yet limited for the blocked /64: start trips first (3 starts cost 9 of its 10 units on the mobile key).
+   assert.equal((await from('2001:db8:1:2::77','/session/login/options',{version:1})).status,200,'login still works where start is blocked');
+   assert((limits.counts['mobile:2001:db8:1:2::/64']??0)<=10);
+  }finally{limits.counts=null;}
+ });
+
+ await check('preview (consent page): shows only the purpose of an open handoff to a signed-in session; bound, unknown and anonymous are refused',async()=>{
+  const h=await start('recovery'),cookie=await webSignIn(a),preview=t=>web('handoff/preview',{cookies:{[sessionCookie]:cookie},body:{version:1,browserToken:t}});
+  const r=await preview(h.token);assert.equal(r.status,200,r.text);same(r.data,{version:1,purpose:'recovery'});
+  assert.equal((await web('handoff/preview',{body:{version:1,browserToken:h.token}})).status,401);
+  assert.equal((await preview(randomBytes(32).toString('hex'))).status,409);
+  assert.equal((await complete(h,cookie)).status,200);assert.equal((await preview(h.token)).status,409,'a bound handoff reveals nothing');
  });
 
  await check('the 2000 row cap: a full table refuses a new handoff with unavailable and writes nothing',async()=>{

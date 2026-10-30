@@ -822,11 +822,11 @@
     },
     "admission": {
      "state": "evidenced",
-     "detail": "start and exchange are limited per IP by AUTH_LIMITER; complete uses the identity router's limiters. The table holds at most 2000 handoffs (database trigger); a full table is 503 unavailable and expired rows are swept on each start.",
+     "detail": "start and exchange are limited per client by AUTH_LIMITER, an IPv6 client by its /64; start also spends three units on its own handoff: key (3 per minute) so one prefix cannot fill the table, and trips before login does. complete uses the identity router's limiters. The table holds at most 2000 handoffs (database trigger); a full table is 503 unavailable and expired rows are swept on each start.",
      "enforcedAt": [
       {
        "file": "src/mobile/router.ts",
-       "contains": "anonymous(request,env,false,()=>handoffStartOperation(request,env))"
+       "contains": "for(let i=0;i<3;i++)if(!(await env.AUTH_LIMITER.limit({key:'handoff:'+ipOf(request)})).success)throw new MobileError('rate_limited');"
       },
       {
        "file": "src/workspace-identity/handoff.ts",
@@ -836,13 +836,18 @@
      "tests": [
       {
        "file": "tests/mobile-handoff.mjs",
-       "contains": "assert.deepEqual(limits.auth,['mobile:local'],'anonymous route limited by AUTH_LIMITER');",
+       "contains": "'anonymous route limited by AUTH_LIMITER, start on its own tighter key'",
        "asserts": "start is limited by AUTH_LIMITER"
       },
       {
        "file": "tests/mobile-handoff.mjs",
        "contains": "const full=await mobile('/session/handoff/start',{body});assert.equal(full.status,503,full.text);",
        "asserts": "the 2000 row cap refuses a new handoff"
+      },
+      {
+       "file": "tests/mobile-handoff.mjs",
+       "contains": "assert(limits.auth.includes('handoff:2001:db8:1:2::/64'),'keyed by the /64 prefix');",
+       "asserts": "IPv6 hosts in one /64 share the start budget and the fourth start is rate limited"
       }
      ]
     }
@@ -1258,6 +1263,14 @@
      "file": "src/workspace-identity/http.ts",
      "kind": "exact",
      "match": "passkey/remove",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/workspace-identity/http.ts",
+     "kind": "exact",
+     "match": "handoff/preview",
      "methods": [
       "POST"
      ]

@@ -1,14 +1,24 @@
-import {useState} from 'react';
-import {ArrowRight,Smartphone} from 'lucide-react';
+import {useEffect,useRef,useState} from 'react';
+import {ShieldAlert,Smartphone} from 'lucide-react';
 import {Button} from './components/ui/button';
 import {Brand} from './components/brand';
 import {IdentityGate} from './identity/flow';
-import {IdentityClientError,identityCeremony,identityRequest} from './lib/identity';
+import {IdentityClientError,identityCeremony,identityRequest,identityState} from './lib/identity';
 
 // /workspace/native/{token}: the browser half of the Android handoff. IdentityGate does sign-in, signup, enrollment and recovery exactly as on the web;
-// only a ready account reaches the button. The one-time code is issued by the server and is never shown, stored or logged here.
+// only a ready account reaches the consent below. The one-time code is issued by the server and is never shown, stored or logged here.
+const purposes:Record<string,string>={signin:'Sign in',signup:'Create your account',recovery:'Recover your account'};
 function Return({token}:{token:string}){
- const [busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [busy,setBusy]=useState(false),[error,setError]=useState(''),[email,setEmail]=useState(''),[purpose,setPurpose]=useState(''),[loaded,setLoaded]=useState(false);
+ const heading=useRef<HTMLHeadingElement>(null);
+ useEffect(()=>{
+  let live=true;
+  void Promise.all([identityState().then(r=>r.identity?.email??''),identityRequest<{purpose:string}>('handoff/preview',{browserToken:token}).then(r=>r.purpose)])
+   .then(([e,pu])=>{if(live){setEmail(e);setPurpose(pu);}})
+   .catch(()=>{if(live)setError('This link has expired or was already used. Go back to the app and start again.');})
+   .finally(()=>{if(live){setLoaded(true);heading.current?.focus();}});
+  return()=>{live=false;};
+ },[token]);
  async function open(){
   setBusy(true);setError('');
   try{
@@ -27,11 +37,17 @@ function Return({token}:{token:string}){
   }
  }
  return <main className="auth-screen min-h-dvh grid place-items-center px-4 py-12"><div className="max-w-md w-full space-y-6"><Brand/>
-  <span className="inline-flex rounded-md bg-action-soft p-3"><Smartphone className="size-6"/></span>
-  <h1 className="text-display">Continue in the Whumpo app.</h1>
-  <p className="text-ink-muted">Verify your passkey, then your phone opens the app signed in. Whumpo never shows or stores the sign-in code.</p>
+  <span className="inline-flex rounded-md bg-action-soft p-3"><Smartphone className="size-6" aria-hidden="true"/></span>
+  <h1 ref={heading} tabIndex={-1} className="text-display">Sign in the Whumpo app on this phone?</h1>
+  {!loaded?<p role="status" className="text-ink-muted">Checking this request…</p>:<>
+   <dl className="rounded-md border p-4 space-y-3 text-sm">
+    <div><dt className="text-ink-muted">Account</dt><dd className="font-medium break-words">{email||'Your signed-in account'}</dd></div>
+    {purpose&&<div><dt className="text-ink-muted">Request</dt><dd className="font-medium">{purposes[purpose]??purpose} in the Whumpo app</dd></div>}
+   </dl>
+   <div className="flex gap-3 rounded-md border border-attention-ink/30 bg-attention-soft p-4 text-sm"><ShieldAlert className="size-5 shrink-0" aria-hidden="true"/><p><strong>Only continue if you just started signing in to the Whumpo app on this phone.</strong> If someone else sent you this link, close this page.</p></div>
+  </>}
   {error&&<p role="alert" className="rounded-md border border-attention-ink/30 bg-attention-soft p-4 text-sm">{error}</p>}
-  <Button className="w-full h-12" disabled={busy} onClick={()=>void open()}>Open the Whumpo app <ArrowRight className="size-4"/></Button>
+  <Button className="w-full min-h-12 whitespace-normal" disabled={busy||!loaded||!purpose} onClick={()=>void open()}>Sign in the Whumpo app on this phone</Button>
  </div></main>;
 }
 export function NativeHandoff({token}:{token:string}){
