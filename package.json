@@ -146,6 +146,7 @@
     "test:schema-batch-3a": "node tests/schema-batch-3a.mjs && node tests/schema-batch-3a.mjs --d1",
     "test:schema-batch-3b": "node tests/schema-batch-3b.mjs && node tests/schema-batch-3b.mjs --d1",
     "test:schema-batch-3c": "node tests/schema-batch-3c.mjs && node tests/schema-batch-3c.mjs --d1",
+    "test:schema-batch-3d": "node tests/schema-batch-3d.mjs && node tests/schema-batch-3d.mjs --d1",
     "test:notification-recipients": "node tests/notification-recipients.mjs && node tests/notification-recipients.mjs --d1",
     "test:form-attachments": "node tests/form-attachments.mjs && node tests/form-attachments.mjs --d1",
     "test:job-journal": "node tests/job-journal.mjs && node tests/job-journal.mjs --d1",

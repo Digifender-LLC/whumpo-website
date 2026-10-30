@@ -102,6 +102,7 @@ export const deletionSites={
  'src/workspace-identity/ceremonies.ts::identity_challenges':excluded(credential),
  'src/workspace-identity/ceremonies.ts::identity_effect_receipts':excluded(credential),
  'src/workspace-identity/ceremonies.ts::identity_grants':excluded(credential),
+ 'src/workspace-identity/ceremonies.ts::identity_handoffs':excluded(credential),
  'src/workspace-identity/ceremonies.ts::identity_kit_offers':excluded(credential),
  'src/workspace-identity/ceremonies.ts::identity_sessions':excluded(credential),
  'src/workspace-identity/http.ts::${table}':excluded(credential),

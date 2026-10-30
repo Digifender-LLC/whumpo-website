@@ -140,11 +140,12 @@
       "tables": [
         "identity_sessions",
         "identity_grants",
-        "identity_challenges"
+        "identity_challenges",
+        "identity_handoffs"
       ],
       "scope": "mixed",
-      "purpose": "Hashed ordinary sessions, restricted grants and one-use browser ceremonies.",
-      "currentRetention": "Expiry denies authority immediately. Daily maintenance removes at most 500 expired rows per table. Sessions last at most seven days from proof, grants thirty minutes, challenges five minutes. User deletion explicitly clears bound challenges; credential/account deletion cascades sessions/grants.",
+      "purpose": "Hashed ordinary sessions (web and, from WH-083, android), restricted web-only grants, one-use browser and android passkey ceremonies, and WH-083 native handoffs (a hashed browser token, then one hashed sixty-second code bound to a ready account's browser session, then consumed once). Native never holds a grant.",
+      "currentRetention": "Expiry denies authority immediately. Daily maintenance removes at most 500 expired rows per table. Sessions last at most seven days from proof, grants thirty minutes, challenges five minutes, handoffs five minutes (the code sixty seconds). User deletion explicitly clears bound challenges; credential/account deletion cascades sessions/grants; account, source-session or credential removal cascades handoffs, so passkey removal, recovery and security-review commit (which clear the account's sessions) also remove native sessions and pending handoffs.",
       "proposedRetention": "Retain only current authority; any restore must discard these records and require fresh verification. Never rehydrate browser sessions from backups.",
       "deletionAuthority": "Verified logout, shared revocation engine and bounded expiry maintenance.",
       "exportPolicy": "No bearer hashes, tokens, challenges, challenge payloads, proof bodies or authority IDs in customer exports, Chat or telemetry.",

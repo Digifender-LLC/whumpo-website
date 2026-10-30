@@ -11,6 +11,7 @@ const metrics={
  identityAttempts:['identity_attempts','account_id'],
  identityCredentials:['identity_credentials','account_id'],
  identitySessions:['identity_sessions','account_id'],
+ identityHandoffs:['identity_handoffs','account_id'],
  identityGrants:['identity_grants','account_id'],
  identityChallenges:['identity_challenges','account_id'],
  identityCeremonyReceipts:['identity_ceremony_receipts','account_id'],

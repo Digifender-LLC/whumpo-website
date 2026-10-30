@@ -3,16 +3,17 @@ import {hashToken} from '../security';
 type Database=Pick<D1Database,'prepare'>;
 type AuthorityKind='session'|'grant';
 type Purpose='workspace'|'enrollment'|'recovery';
-type ProofMethod='passkey'|'registration'|'recovery-key'|'recovery-commit';
+type ProofMethod='passkey'|'handoff'|'registration'|'recovery-key'|'recovery-commit';
+type Client='web'|'android';
 export type IdentityProof=Readonly<{method:ProofMethod;verifiedAt:number;attemptRevision:number|null;credentialId:string|null}>;
 export type IdentityPrincipal=Readonly<{
- accountId:string;authorityId:string;kind:AuthorityKind;purpose:Purpose;policyVersion:1;authEpoch:number;client:'web';
+ accountId:string;authorityId:string;kind:AuthorityKind;purpose:Purpose;policyVersion:1;authEpoch:number;client:Client;
  stage:'enrolling'|'ready'|'recovering';credentialRevision:number;
  attempt:Readonly<{id:string;revision:number}>|null;proof:IdentityProof;expiresAt:number;
 }>;
 export type IdentityPolicy=Readonly<{purpose:Purpose;freshPasskey:boolean;bindIdentityRevision:boolean}>;
 type Row={authority_id:string;kind:AuthorityKind;token_hash:string;account_id:string;purpose:Purpose;policy_version:1;
- auth_epoch:number;client:'web';stage:IdentityPrincipal['stage'];credential_revision:number;attempt_id:string|null;
+ auth_epoch:number;client:Client;stage:IdentityPrincipal['stage'];credential_revision:number;attempt_id:string|null;
  attempt_revision:number|null;proof_method:ProofMethod;proof_at:number;proof_revision:number|null;credential_id:string|null;expires_at:number};
 
 // The object returned by the resolver is a server capability for this DB connection.
@@ -32,10 +33,10 @@ function exactRecord(value:unknown,keys:readonly string[]):value is Record<strin
 export async function resolveIdentity(db:Database,input:unknown):Promise<IdentityPrincipal>{
  if(!exactRecord(input,['version','client','kind','token']))throw new IdentityError(400,'invalid_identity_request','Invalid identity request.');
  if(input.version!==1)throw new IdentityError(409,'client_upgrade_required','Update Whumpo to continue.');
- if(input.client!=='web'||(input.kind!=='session'&&input.kind!=='grant'))throw new IdentityError(400,'invalid_identity_request','Invalid identity request.');
+ if((input.client!=='web'&&input.client!=='android')||(input.kind!=='session'&&input.kind!=='grant')||(input.client==='android'&&input.kind!=='session'))throw new IdentityError(400,'invalid_identity_request','Invalid identity request.');
  if(typeof input.token!=='string'||! /^[a-f0-9]{64}$/.test(input.token))throw proofRequired();
  const tokenHash=await hashToken(input.token);
- const row=await db.prepare('SELECT * FROM identity_current_authorities WHERE token_hash=? AND kind=?').bind(tokenHash,input.kind).first<Row>();
+ const row=await db.prepare('SELECT * FROM identity_current_authorities WHERE token_hash=? AND kind=? AND client=?').bind(tokenHash,input.kind,input.client).first<Row>();
  if(!row)throw proofRequired();
  const principal:IdentityPrincipal=Object.freeze({accountId:row.account_id,authorityId:row.authority_id,kind:row.kind,purpose:row.purpose,
   policyVersion:row.policy_version,authEpoch:row.auth_epoch,client:row.client,stage:row.stage,credentialRevision:row.credential_revision,
