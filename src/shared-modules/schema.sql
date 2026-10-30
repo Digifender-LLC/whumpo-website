@@ -480,7 +480,8 @@ CREATE INDEX module_record_events_entry ON module_record_events(entry_id);
 CREATE TRIGGER module_record_admit BEFORE INSERT ON module_records BEGIN
  SELECT RAISE(ABORT,'module_request_unavailable') WHERE NOT EXISTS(SELECT 1 FROM module_instances i JOIN module_activations a ON a.instance_id=i.id AND a.state='active'
   WHERE i.id=NEW.instance_id AND i.project_id=NEW.project_id AND i.kind='records'
-  AND EXISTS(SELECT 1 FROM json_each(i.config_json,'$.forms') f WHERE json_extract(f.value,'$.id')=NEW.form_id AND json_extract(f.value,'$.recordId')=NEW.schema_id AND json_extract(f.value,'$.uploadCollectionId') IS NULL
+  AND EXISTS(SELECT 1 FROM json_each(i.config_json,'$.forms') f WHERE json_extract(f.value,'$.id')=NEW.form_id AND json_extract(f.value,'$.recordId')=NEW.schema_id
+   AND (json_extract(f.value,'$.uploadCollectionId') IS NULL OR json_extract(f.value,'$.submit')!='public') -- decision D6: a public form never takes uploads
    AND (NEW.submitter_kind!='public' OR json_extract(f.value,'$.submit')='public'))
   AND EXISTS(SELECT 1 FROM json_each(i.config_json,'$.schemas') s WHERE json_extract(s.value,'$.id')=NEW.schema_id AND json_extract(s.value,'$.fieldsRevision')=NEW.fields_revision)
   AND NEW.expires_at=NEW.created_at+86400*json_extract(i.config_json,'$.retentionDays'))
@@ -516,6 +517,39 @@ CREATE TRIGGER module_record_event_admit BEFORE INSERT ON module_record_events B
   WHEN 'form.accepted' THEN NOT EXISTS(SELECT 1 FROM module_records WHERE id=NEW.entry_id AND instance_id=NEW.instance_id AND project_id=NEW.project_id AND revision=1 AND created_request_id=NEW.request_id AND NEW.revision=1)
   WHEN 'record.updated' THEN NOT EXISTS(SELECT 1 FROM module_records WHERE id=NEW.entry_id AND instance_id=NEW.instance_id AND project_id=NEW.project_id AND revision=NEW.revision AND last_request_id=NEW.request_id)
   ELSE EXISTS(SELECT 1 FROM module_records WHERE id=NEW.entry_id) END;
+END;
+-- WH-127 form attachments (schema batch 3b; docs/shared-modules.md#form-attachments-wh-127--october-29-2026-utc). A record created through a form
+-- with an `uploadCollectionId` may link up to four of the submitter's own module uploads, written in the same batch as the
+-- record. The links cascade with the record; file_id is unique so one upload is attached once. Removing the record
+-- (owner removal, retention expiry, visitor erasure, instance/project deletion) also deletes the attached photo rows
+-- (interim default pending an owner retention decision; module_record_files_removed).
+CREATE TABLE module_record_files (
+ entry_id TEXT NOT NULL REFERENCES module_records(id) ON DELETE CASCADE,
+ file_id TEXT NOT NULL UNIQUE REFERENCES module_files(file_id) ON DELETE CASCADE,
+ instance_id TEXT NOT NULL REFERENCES module_instances(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ request_id TEXT NOT NULL CHECK(length(request_id)=36),
+ PRIMARY KEY(entry_id,file_id)
+) STRICT;
+CREATE INDEX module_record_files_project ON module_record_files(project_id);
+CREATE INDEX module_record_files_instance ON module_record_files(instance_id);
+-- The link repeats, inside the commit: the record is this request's new record on a non-public form with an upload
+-- collection; the file is the submitter's own staff/visitor upload into exactly that collection, in a files instance that
+-- is a declared dependency of the records instance, written within the last 60 seconds; at most four per record.
+CREATE TRIGGER module_record_file_admit BEFORE INSERT ON module_record_files BEGIN
+ SELECT RAISE(ABORT,'module_request_forbidden') WHERE NOT EXISTS(SELECT 1 FROM module_records r JOIN module_instances i ON i.id=r.instance_id AND i.project_id=r.project_id
+   JOIN json_each(i.config_json,'$.forms') f ON json_extract(f.value,'$.id')=r.form_id AND json_extract(f.value,'$.uploadCollectionId') IS NOT NULL AND json_extract(f.value,'$.submit')!='public'
+   JOIN module_files mf ON mf.file_id=NEW.file_id AND mf.project_id=r.project_id AND mf.visitor_id=r.visitor_id AND mf.uploader_kind=r.submitter_kind AND mf.collection_id=json_extract(f.value,'$.uploadCollectionId')
+   JOIN module_instances fi ON fi.id=mf.instance_id AND fi.project_id=r.project_id AND fi.kind='files' AND fi.id IN (SELECT value FROM json_each(i.dependencies_json))
+  WHERE r.id=NEW.entry_id AND r.instance_id=NEW.instance_id AND r.project_id=NEW.project_id AND r.revision=1 AND r.created_request_id=NEW.request_id AND r.visitor_id IS NOT NULL);
+ SELECT RAISE(ABORT,'module_request_stale') WHERE NOT EXISTS(SELECT 1 FROM module_files WHERE file_id=NEW.file_id AND created_at>unixepoch()-60 AND created_at<=unixepoch()+60);
+ SELECT RAISE(ABORT,'module_request_limited') WHERE (SELECT count(*) FROM module_record_files WHERE entry_id=NEW.entry_id)>=4;
+END;
+CREATE TRIGGER module_record_file_immutable BEFORE UPDATE ON module_record_files BEGIN SELECT RAISE(ABORT,'module_request_immutable'); END;
+-- BEFORE, not AFTER: SQLite runs the foreign-key cascade (which removes the links) before AFTER triggers, so an AFTER
+-- trigger would find nothing to delete. A held file refuses the photo delete (safety_hold_file_retained), aborting the record delete.
+CREATE TRIGGER module_record_files_removed BEFORE DELETE ON module_records BEGIN
+ DELETE FROM project_files WHERE id IN (SELECT file_id FROM module_record_files WHERE entry_id=OLD.id);
 END;
 CREATE TRIGGER module_record_event_immutable BEFORE UPDATE ON module_record_events BEGIN SELECT RAISE(ABORT,'module_request_immutable'); END;
 

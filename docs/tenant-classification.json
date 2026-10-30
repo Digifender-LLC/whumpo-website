@@ -6,8 +6,8 @@
  "evidence": "docs/workspace-collaboration-evidence.md",
  "baseline": {
   "sourceCommit": "4dea09c",
-  "reviewedSchemaSha256": "86cb494657d3c2909f36f676722a8ca2a3b7e023089de407af61cd519247b5af",
-  "tables": 233,
+  "reviewedSchemaSha256": "bc854b898ac07fa2a72f004ec7600d32599a2144d2cc79227f78495f5fcc3a29",
+  "tables": 234,
   "usersForeignKeyColumns": 120
  },
  "vocabulary": {
@@ -195,6 +195,7 @@
    "module_files",
    "module_instances",
    "module_record_events",
+   "module_record_files",
    "module_records",
    "module_request_receipts",
    "project_files",

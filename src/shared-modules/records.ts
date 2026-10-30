@@ -79,25 +79,36 @@ function event(db:D1Database,context:ModuleContext,entryId:string,kind:'form.acc
   .bind(context.resource.resourceId,context.request.requestId,context.resource.projectId,entryId,kind,revision,now);
 }
 
+/** Optional `input.attachments`: up to four distinct ids of the submitter's own uploads into the form's upload collection,
+ * only on a form that has one. Whose files they are, the collection, the 60-second window and the cap are decided by
+ * `module_record_file_admit` inside the commit. The rest is the values-only input. */
+function splitAttachments(form:{uploadCollectionId:string|null},raw:unknown):{attachments:string[];input:unknown}{
+ if(!plain(raw)||!Object.hasOwn(raw,'attachments'))return {attachments:[],input:raw};
+ const {attachments,...input}=raw;
+ if(form.uploadCollectionId===null||!Array.isArray(attachments)||attachments.length>4||!attachments.every(uuid)||new Set(attachments).size!==attachments.length)throw invalid();
+ return {attachments,input};
+}
+
 /** forms.submit — visitor and staff intake through the access session, and anonymous intake on `public` forms. An
  * anonymous submission reaches this handler only after the engine ran the visitor gateway's public admission (the contact
  * form's Turnstile Siteverify and per-connection allowance); `module_record_admit` repeats the public form, live
- * publication and the contact-equivalent atomic caps inside the commit. Forms with an upload collection wait for the
- * files module (WH-128). Result: opaque entry id only. */
+ * publication and the contact-equivalent atomic caps inside the commit. A form with an upload collection (never a `public` one) may carry
+ * `input.attachments`: up to four of the submitter's own recent uploads, linked in the same batch. Result: opaque entry id only. */
 const submit:ModuleWriteHandler=async(db,context)=>{
  const visitor=visitorOf(context.principal);
  if(!visitor&&context.principal.kind!=='public')throw new ModuleError('forbidden');
  if(!exact(context.request.target,['formId']))throw invalid();
  const form=config(context).forms.find(f=>f.id===context.request.target!.formId);if(!form)throw new ModuleError('not_found');
  if(!visitor&&form.submit!=='public')throw new ModuleError('forbidden');
- if(form.uploadCollectionId!==null)throw new ModuleError('unavailable','Attachments for this form are not available yet.');
- const schema=schemaOf(context,form.recordId),values=submittedValues(schema,context.request.input);
+ const {attachments,input}=splitAttachments(form,context.request.input),schema=schemaOf(context,form.recordId),values=submittedValues(schema,input);
  const entryId=crypto.randomUUID(),now=Math.floor(Date.now()/1000),retention=config(context).retentionDays*86400;
  const submitter=visitor?(visitor.roles.length?'staff':'visitor'):'public';
  return {statements:[
   db.prepare('INSERT INTO module_records(id,instance_id,project_id,schema_id,form_id,fields_revision,submitter_kind,visitor_id,values_json,revision,created_request_id,last_request_id,created_at,updated_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,1,?,?,?,?,?)')
    .bind(entryId,context.resource.resourceId,context.resource.projectId,schema.id,form.id,schema.fieldsRevision,submitter,visitor?.visitorId??null,canonicalJSON(values,8192),context.request.requestId,context.request.requestId,now,now,now+retention),
-  event(db,context,entryId,'form.accepted',1,now)
+  event(db,context,entryId,'form.accepted',1,now),
+  ...attachments.map(fileId=>db.prepare('INSERT INTO module_record_files(entry_id,file_id,instance_id,project_id,request_id) VALUES(?,?,?,?,?)')
+   .bind(entryId,fileId,context.resource.resourceId,context.resource.projectId,context.request.requestId))
  ],result:{accepted:true,formId:form.id,entryId}};
 };
 
