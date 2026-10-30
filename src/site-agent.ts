@@ -24,6 +24,8 @@ import {directoryAction,DirectoryError} from './directory';
 import {prepareComparison} from './version-diff';
 import {contactCommand} from './contacts';
 import {contactNotificationCommand} from './contact-notifications';
+import {notificationSetupCommand} from './notification-configurations';
+import {ModuleError} from './shared-modules/policy';
 import {versionRemovalCommand} from './version-removal';
 import {healthChatCommand} from './site-health';
 import {githubGrantAction} from './github-grant-chat';
@@ -95,6 +97,7 @@ Reviews:
 - {"kind":"versionRemovalReview","versionId":ID}: explicit permanent removal request; explicit user approval of that review. Live, pending-publication and backed-up versions retained; original photos/newer versions remain.
 - {"kind":"contactReview","projectId":ID,"enabled":true}: true/false; explicit user approval of that review. Requires published site to enable; republication disables intake. Collects name/email/message in owner inbox for30 days; content is never emailed. Never read visitor messages into AI; Dashboard → Contact inbox opens the private panel.
 - {"kind":"contactNotificationReview","projectId":ID,"address":"owner@example.com"}: only when the user gives the exact address that should receive content-free new-message notices. Prepares an exact review; the user confirms, then verifies a code in Dashboard → Contact inbox. Never guess or reuse an address.
+- {"kind":"notificationSetupReview","projectId":ID,"instanceId":"requests","formId":"appointment","notices":["owner","staff","receipt"],"businessName":"Plain name"}: only when the user asks for email notices when an appointment request arrives. Prepares an exact review of the standard appointment notices (any of owner, staff, receipt; [] turns them off); the user confirms with the button. Nothing is sent until Whumpo turns on delivery. Never invent a business name.
 Directory action {"kind":"directory","operation":OP,"projectId":ID}, OP:
 list: private draft/status; history: applied snapshot IDs; export: add snapshotId for private JSON; restore: add applied same-project snapshotId for draft replacement review; add: title(max100),description(max500),optional url(HTTPS,max250); edit: same fields plus listingId; remove: listingId; publish/unpublish: no extra fields. Discover listing/snapshot IDs first, never use pending snapshots. All except list/history/export require explicit user approval of the exact review. Draft edits/restoration never change public snapshot or website HTML. Publication exposes all reviewed listings/links via page+JSON. Parent website publication disables directory serving until reviewed again. Shared backend excluded from static ZIP.
 Domains action {"kind":"domain","operation":"prepare","projectId":ID,"hostname":"user-supplied hostname"}: prepares/renews TXT ownership proof only. {"kind":"domain","operation":"check","claimId":ID}: verifies proof. {"kind":"domain","operation":"reviewRemoval","claimId":ID} prepares removal of an unused proof. Only the USER can confirm with the corresponding explicit review control. Hosting/DNS recovery records are retained. These actions never register, change DNS, host or issue TLS. Never infer live state from metadata.
@@ -177,6 +180,13 @@ export async function prepareSiteAction(db:D1Database,userId:string,turnId:strin
  if(action.kind==='contactNotificationReview'){
   if(Object.keys(action).some(k=>!['kind','projectId','address'].includes(k))||typeof action.projectId!=='string'||!/^[0-9a-f-]{36}$/.test(action.projectId)||typeof action.address!=='string'||!/^[^\s]{3,254}$/.test(action.address.trim()))throw new ProposalError();
   return (await contactNotificationCommand(db,userId,turnId,'/contact-notify '+action.projectId+' '+action.address.trim().toLowerCase()))!;
+ }
+ if(action.kind==='notificationSetupReview'){
+  const names=['owner','staff','receipt'],local=(v:unknown)=>typeof v==='string'&&/^[a-z][a-z0-9-]{0,39}$/.test(v);
+  if(Object.keys(action).some(k=>!['kind','projectId','instanceId','formId','notices','businessName'].includes(k))||typeof action.projectId!=='string'||!/^[0-9a-f-]{36}$/.test(action.projectId)||!local(action.instanceId)||!local(action.formId)
+   ||!Array.isArray(action.notices)||action.notices.length>3||new Set(action.notices).size!==action.notices.length||action.notices.some((n:unknown)=>!names.includes(n as string))||typeof action.businessName!=='string')throw new ProposalError();
+  try{return (await notificationSetupCommand(db,userId,turnId,`/review-notification-setup ${action.projectId} ${action.instanceId} ${action.formId} ${[...action.notices].sort().join(',')||'none'} ${action.businessName.trim()}`))!;}
+  catch(cause){if(cause instanceof ModuleError)return {reply:cause.message,statements:[] as D1PreparedStatement[]};throw cause;}
  }
  if(action.kind==='photoRemovalReview'){
   if(Object.keys(action).some(k=>!['kind','fileId'].includes(k))||typeof action.fileId!=='string'||!/^[0-9a-f-]{36}$/.test(action.fileId))throw new ProposalError();

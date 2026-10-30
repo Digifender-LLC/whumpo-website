@@ -2,6 +2,7 @@ import {beginStatement,canonicalEnvelopeJson,cancelStatement,envelopeDigest,mark
 import {dispatchJobs,journalLane,type JobContext,type JobType} from './job-dispatcher';
 import {notificationCatalog,notificationDigest,type RecipientScope} from './notification-catalog';
 import {hashToken} from './security';
+import {isConfiguredTemplate,resolveConfiguredNotice,type ConfiguredSend} from './notification-configurations';
 import type {ContactNotice,ContactNotificationSettings,ContactProviderOutcome,ContactSender} from './contact-notifications';
 /**
  * WH-156 shared notification outbox (schema/platform.sql `notification_notices`, `notification_send_ledger`; docs/notifications.md).
@@ -82,7 +83,7 @@ type Due={id:string;user_id:string;scope:string;project_id:string|null;destinati
 const addressKey=(address:string)=>hashToken(`email-change-address:${address}`);
 const mintConfirmationToken=()=>btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
 /** Notices this adapter can render: contact notices, the email-change confirmation (its token is minted in the claimed attempt) and any template without variables. */
-const sendable=(template:string)=>{const t=notificationCatalog.templates[template]?.template;return !!t&&(template==='owner.destination-verification@1'||template===confirmTemplate||Object.keys(t.variables).length===0);};
+const sendable=(template:string)=>{const t=notificationCatalog.templates[template]?.template;return !!t&&(template==='owner.destination-verification@1'||template===confirmTemplate||isConfiguredTemplate(template)||Object.keys(t.variables).length===0);};
 const confirmTemplate='account.email-confirm@1';
 /**
  * The address an account-scope notice goes to, decided from the change row at the moment of sending (docs/email-change-and-compromise.md decision 4).
@@ -109,7 +110,7 @@ async function accountRecipient(n:Due,now:number):Promise<{address:string;confir
   default:return own;
  }
 }
-const kindOf=(template:string):ContactNotice['kind']=>template==='owner.destination-verification@1'?'verification':template==='contact.new-message@1'?'new_message':'account';
+const kindOf=(template:string):ContactNotice['kind']=>template==='owner.destination-verification@1'?'verification':template==='contact.new-message@1'?'new_message':isConfiguredTemplate(template)?'configured':'account';
 
 /** Provider calls recorded in the 32 UTC days ending `now` (the spending-ceiling window), across every notice kind. */
 export async function noticeSendsInWindow(db:Pick<D1Database,'prepare'>,provider:string,now:number){
@@ -130,7 +131,7 @@ async function attempt(db:Db,deps:DeliveryDeps,job:JobRow,lease:JobLease,ctx:Job
   FROM notification_notices n JOIN users u ON u.id=n.user_id LEFT JOIN contact_notification_destinations d ON d.id=n.destination_id LEFT JOIN owner_email_changes c ON c.change_id=n.event_ref AND c.account_id=n.user_id AND n.scope='account-email' WHERE n.job_id=?`).bind(job.id).first<Due>();
  // A job whose notice is gone, finished or not waiting for this attempt carries no work: stop it, send nothing.
  if(!n||(n.state!=='queued'&&n.state!=='deferred')){await cancelStatement(db,owner,job.id,now).first();return;}
- const deny=async(reason:'rejected'|'expired'|'suppressed'|'contained'|'ceiling'|'recipient-revoked'|'record-removed'|'template-withdrawn')=>{
+ const deny=async(reason:'rejected'|'expired'|'suppressed'|'contained'|'ceiling'|'recipient-revoked'|'record-removed'|'template-withdrawn'|'ceiling-unset'|'configuration-changed')=>{
   const [moved]=await db.batch([
    db.prepare("UPDATE notification_notices SET state='cancelled',reason=?1,outcome_at=?2 WHERE id=?3 AND state IN ('queued','deferred') AND job_id=?4 RETURNING id").bind(reason,now,n.id,job.id),
    cancelStatement(db,owner,job.id,now)]);
@@ -138,7 +139,15 @@ async function attempt(db:Db,deps:DeliveryDeps,job:JobRow,lease:JobLease,ctx:Job
  };
  if(n.expires_at<=now)return deny('expired');
  if(!sendable(n.template)||notificationCatalog.templates[n.template]?.state!=='available')return deny('template-withdrawn');
- let recipient:string,code:string|undefined,confirm=false;
+ // WH-158 customer-configured notices (D3): nothing is sent until the owner sets the monthly spending limit; checked first, before any recipient is read or any attempt is claimed.
+ const spendingLimit=Math.max(0,Math.floor(settings.customerCeilingCents??0));
+ let recipient:string,code:string|undefined,confirm=false,configured:ConfiguredSend|undefined;
+ if(isConfiguredTemplate(n.template)){
+  if(spendingLimit<=0)return deny('ceiling-unset');
+  const r=await resolveConfiguredNotice(db,n);
+  if(typeof r==='string')return deny(r);
+  configured=r;
+ }
  if(n.scope==='owner-destination'){
   if(n.d_state==='suppressed'||n.suppressed)return deny('suppressed');
   if(n.contained)return deny('contained');
@@ -157,9 +166,12 @@ async function attempt(db:Db,deps:DeliveryDeps,job:JobRow,lease:JobLease,ctx:Job
   // A support notice is only for a response the customer has not read yet.
   if(n.template==='support.response-saved@1'&&!n.support_unread)return deny('record-removed');
   recipient=to.address;confirm=to.confirm;
- }else return deny('recipient-revoked'); // staff and submitter delivery arrives with WH-158.
+ }else if(configured?.recipient)recipient=configured.recipient; // project-staff and submitter: resolved from current records just now (WH-158)
+ else return deny('recipient-revoked');
  const ceiling=Math.max(0,Math.min(100000,Math.floor(settings.sendCeiling)));
- if(await noticeSendsInWindow(db,noticeProvider,now)>=ceiling)return deny('ceiling');
+ // The owner's limit for configured notices is a dollar figure; the catalog price turns it into calls. The ledger above keeps the platform ceiling, so a low limit never throttles contact notices.
+ const limitCalls=configured?Math.floor(spendingLimit*10000/notificationCatalog.providers[noticeProvider].price!.microsPerCall):ceiling;
+ if(await noticeSendsInWindow(db,noticeProvider,now)>=Math.min(ceiling,limitCalls))return deny('ceiling');
  const day=new Date(now).toISOString().slice(0,10);
  // Claim the attempt and count it against the ceiling in one transaction BEFORE the call. The ledger row keeps the lowest ceiling any run applied;
  // the notice trigger counts the send; the ledger trigger refuses the whole claim (journal intent included) past the 32-day ceiling.
@@ -189,7 +201,7 @@ async function attempt(db:Db,deps:DeliveryDeps,job:JobRow,lease:JobLease,ctx:Job
  }
  let outcome:ContactProviderOutcome;
  try{
-  outcome=await ctx.provider(()=>withTimeout(sender({outboxId:n.id,idempotencyKey:`${n.template}:${n.event_ref}${n.recipient_ref?':'+n.recipient_ref.slice(0,8):''}`.slice(0,120),kind:kindOf(n.template),template:n.template,projectId:n.project_id,recipient,...(code?{verificationCode:code}:{}),...(token?{confirmationToken:token}:{})},settings),deps.timeoutMs??noticeSendTimeoutMs));
+  outcome=await ctx.provider(()=>withTimeout(sender({outboxId:n.id,idempotencyKey:`${n.template}:${n.event_ref}${n.recipient_ref?':'+n.recipient_ref.slice(0,8):''}`.slice(0,120),kind:kindOf(n.template),template:n.template,projectId:n.project_id,recipient,...(configured?{configured:{variables:configured.variables,fields:configured.fields}}:{}),...(code?{verificationCode:code}:{}),...(token?{confirmationToken:token}:{})},settings),deps.timeoutMs??noticeSendTimeoutMs));
  }catch{outcome={accepted:false,retryable:false,uncertain:true};}
  const at=deps.now();
  // A definite non-delivery of the confirmation clears the verifier (a retry mints a new token); a permanent one closes the change as undeliverable.

@@ -35,7 +35,7 @@ try{
    ['contact_destination_reviews','contact_notification_destinations','contact_notification_suppression_resets','contact_notification_suppressions','job_journal']);
  });
  await check('every trigger is present and each one is on the table it names',async()=>{
-  const triggers=(await all("SELECT name,tbl_name FROM sqlite_master WHERE type='trigger' AND (name LIKE 'notification\\_%' ESCAPE '\\' OR name LIKE 'safety\\_hold\\_notification%' ESCAPE '\\') ORDER BY name")).map(r=>r.name+'@'+r.tbl_name);
+  const triggers=(await all("SELECT name,tbl_name FROM sqlite_master WHERE type='trigger' AND (name LIKE 'notification\\_%' ESCAPE '\\' AND name NOT LIKE 'notification\\_configuration%' ESCAPE '\\' OR name LIKE 'safety\\_hold\\_notification%' ESCAPE '\\') ORDER BY name")).map(r=>r.name+'@'+r.tbl_name);
   assert.deepEqual(triggers,[
    'notification_notices_counted@notification_notices','notification_notices_destination_removed@contact_notification_destinations','notification_notices_job_cancelled@notification_notices',
    'notification_notices_new@notification_notices','notification_notices_project_removed@projects','notification_notices_retained@notification_notices','notification_notices_suppressed@contact_notification_suppressions',

@@ -5403,6 +5403,14 @@
     {
      "id": "confirm:directory",
      "recentAuth": false
+    },
+    {
+     "id": "confirm:notificationConfiguration",
+     "recentAuth": false
+    },
+    {
+     "id": "notificationSetupReview",
+     "recentAuth": false
     }
    ],
    "cells": {

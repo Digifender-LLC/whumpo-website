@@ -1788,7 +1788,7 @@ CREATE TABLE cloudflare_revocation_health (
 CREATE TABLE chat_review_receipts (
  turn_id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
  user_id TEXT NOT NULL REFERENCES users(id),
- kind TEXT NOT NULL CHECK(kind IN ('githubGrant','application','appPage','appRestore','backendPublication','backendForm','directory','contactNotification','backendState','cmsImport','cmsDiscard','cmsUnpublish','cmsPublish','cmsSetup','backup','dns','hosting','backendNomination')),
+ kind TEXT NOT NULL CHECK(kind IN ('githubGrant','application','appPage','appRestore','backendPublication','backendForm','directory','contactNotification','backendState','cmsImport','cmsDiscard','cmsUnpublish','cmsPublish','cmsSetup','backup','dns','hosting','backendNomination','notificationConfiguration')),
  review_id TEXT NOT NULL,
  reply_digest TEXT NOT NULL CHECK(length(reply_digest)=64)
 );
@@ -4213,7 +4213,8 @@ CREATE TRIGGER chat_review_receipt_admit BEFORE INSERT ON chat_review_receipts B
   (NEW.kind='backup' AND EXISTS(SELECT 1 FROM github_backups WHERE id=NEW.review_id AND user_id=NEW.user_id)) OR
   (NEW.kind='dns' AND EXISTS(SELECT 1 FROM cloudflare_dns_actions WHERE id=NEW.review_id AND user_id=NEW.user_id)) OR
   (NEW.kind='hosting' AND EXISTS(SELECT 1 FROM domain_connections WHERE id=NEW.review_id AND user_id=NEW.user_id)) OR
-  (NEW.kind='backendNomination' AND EXISTS(SELECT 1 FROM backend_nominations WHERE id=NEW.review_id AND user_id=NEW.user_id))
+  (NEW.kind='backendNomination' AND EXISTS(SELECT 1 FROM backend_nominations WHERE id=NEW.review_id AND user_id=NEW.user_id)) OR
+  (NEW.kind='notificationConfiguration' AND EXISTS(SELECT 1 FROM notification_configuration_reviews WHERE id=NEW.review_id AND user_id=NEW.user_id))
  );
 END;
 
@@ -6351,7 +6352,7 @@ CREATE TABLE notification_notices (
  dispatched_at INTEGER CHECK(dispatched_at IS NULL OR dispatched_at>=created_at),
  outcome_at INTEGER CHECK(outcome_at IS NULL OR outcome_at>0),
  provider_ref TEXT CHECK(provider_ref IS NULL OR length(provider_ref) BETWEEN 1 AND 100),
- reason TEXT CHECK(reason IS NULL OR reason IN ('rejected','unavailable','exhausted','suppressed','expired','contained','uncertain','ceiling','recipient-revoked','record-removed','template-withdrawn','unreconciled')),
+ reason TEXT CHECK(reason IS NULL OR reason IN ('rejected','unavailable','exhausted','suppressed','expired','contained','uncertain','ceiling','recipient-revoked','record-removed','template-withdrawn','unreconciled','ceiling-unset','configuration-changed')),
  lookups INTEGER NOT NULL DEFAULT 0 CHECK(lookups BETWEEN 0 AND 3),
  reconcile_until INTEGER CHECK(reconcile_until IS NULL OR reconcile_until>0),
  UNIQUE(template,event_ref,recipient_key),

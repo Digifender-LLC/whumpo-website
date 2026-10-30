@@ -77,6 +77,8 @@ export {cleanPhoto} from './src/photo-format';
   export * as contacts from './src/contacts';
   export * as contactNotifications from './src/contact-notifications';
   export * as notificationRecipients from './src/notification-recipients';
+  export * as notificationConfigurations from './src/notification-configurations';
+  export * as notificationOutbox from './src/notification-outbox';
   export * as contactEmail from './src/contact-email';
   export * as directory from './src/directory';
   export * as reviewTurnover from './src/review-turnover';

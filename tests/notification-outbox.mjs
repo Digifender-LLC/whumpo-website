@@ -220,14 +220,14 @@ try{
   // The sender is given only its own recipient and nothing from another account.
   assert.ok(p.calls.every(call=>call.projectId===a.project||call.projectId===b.project));
  });
- await check('unsupported scopes and templates are cancelled before any call',async()=>{
+ await check('configured notices without the owner spending limit, and unsupported templates, are cancelled before any call',async()=>{
   const a=await account(),p=provider();
   const staff=await m.enqueueNotice(db,{userId:a.user,scope:'project-staff',projectId:a.project,recipientRef:id(),template:'appointment.staff-notice@1',eventRef:'e-staff',now:T});
   const confirm=await accountNotice(a,'e-confirm',T,'account.email-confirm@1');
   const unverified=await account({verified:false}),uq=await accountNotice(unverified,'e-unverified',T);
   const r=await pass(p,T+9);
   assert.equal(p.calls.length,0);
-  for(const [q,reason] of [[staff,'template-withdrawn'],[confirm,'record-removed'],[uq,'recipient-revoked']]){const n=await notice(q.id);assert.deepEqual([n.state,n.reason],['cancelled',reason]);assert.equal((await job(n.job_id)).state,'cancelled');}
+  for(const [q,reason] of [[staff,'ceiling-unset'],[confirm,'record-removed'],[uq,'recipient-revoked']]){const n=await notice(q.id);assert.deepEqual([n.state,n.reason],['cancelled',reason]);assert.equal((await job(n.job_id)).state,'cancelled');}
   assert.equal(r.cancelled>=3,true);
  });
  await check('unknown-outcome leaves only for evidence, or for unresolved at three lookups or past its bound',async()=>{
