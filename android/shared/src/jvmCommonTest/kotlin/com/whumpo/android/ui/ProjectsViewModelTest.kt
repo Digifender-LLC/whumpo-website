@@ -190,6 +190,19 @@ class ProjectsViewModelTest {
     }
 
     @Test
+    fun aFullPhotoQuotaShowsTheServersMessage() = runTest {
+        val quota = "Your project has no room for more photos."
+        api.override = {
+            if (it.method == HttpMethod.Put) reply(503, """{"version":1,"error":{"code":"unavailable","message":"$quota"}}""") else null
+        }
+        val vm = viewModel()
+        vm.select(PROJECT)
+        vm.addPhoto("content://media/picker/1")
+
+        assertEquals(quota, vm.photos.first { it.uploads.any { u -> u.phase == UploadPhase.Failed } }.uploads.single().message)
+    }
+
+    @Test
     fun aPhotoThatCannotBePreparedNeverReachesTheServer() = runTest {
         val rejecting = FakePreparer { throw PhotoRejected("Choose a photo under 10 MB.") }
         val vm = ProjectsViewModel(api.client, rejecting) { ApiFixtures.NOW }

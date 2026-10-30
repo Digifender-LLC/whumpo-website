@@ -214,6 +214,7 @@ class ProjectsViewModel(
         is MobileApiException.UnsupportedMediaType, is MobileApiException.ValidationFailed -> "That photo can't be used."
         is MobileApiException.RateLimited -> e.userMessage("the photo").let { "${it.first} ${it.second}" }
         is MobileApiException.ProofRequired, is MobileApiException.IdentityChanged -> "You've been signed out. Sign in again to add photos."
+        is MobileApiException.Unavailable -> e.message ?: "The photo wasn't added. Nothing was changed." // the server's plain quota/storage message (contract: 503 unavailable)
         else -> "The photo wasn't added. Nothing was changed."
     }
 
