@@ -389,9 +389,24 @@ async function sourceSuite(S){
   for(const [key,e] of Object.entries(S.notificationCatalog.templates))assert.equal(await S.notificationTemplateDigest(e.template),real.templateDigest(real.notificationCatalog.templates[key].template),key);
   assert.equal(await S.notificationDigest(S.notificationCatalog),real.digest(real.notificationCatalog));
  });
+ await test('account notices (WH-202) are platform obligations to the account email, content-free and planned until delivery is wired',()=>{
+  const keys=Object.keys(S.notificationCatalog.templates).filter(k=>k.startsWith('account.'));
+  assert.equal(keys.length,10);
+  for(const k of keys){
+   const e=S.notificationCatalog.templates[k],t=e.template;
+   assert.equal(e.readiness,'planned');assert.equal(t.authority,'platform-obligation');assert.deepEqual(t.audiences,['account-email']);
+   const out=S.renderCatalogNotification(k,k==='account.email-confirm@1'?{confirmationCode:'B'.repeat(43)}:{});
+   assert.ok(!/@[a-z]/i.test(out.text+out.subject),k+' names no address');
+   if(k!=='account.email-confirm@1')assert.deepEqual(Object.keys(t.variables),[],k+' carries no variable');
+   assert.match(out.text,/https:\/\/whumpo\.com\/workspace\/settings/);
+  }
+  assert.throws(()=>S.renderCatalogNotification('account.email-confirm@1',{confirmationCode:'short'}),/INVALID_VARIABLE/);
+  const bad=JSON.parse(JSON.stringify(S.notificationCatalog.templates['contact.new-message@1'].template));bad.variables={confirmationCode:{source:'platform',type:'token'}};bad.body.push({var:'confirmationCode'});
+  assert.throws(()=>S.validateNotificationTemplate(bad),/INVALID_VARIABLE/,'a token variable is only for account notices');
+ });
  await test('source renders every template exactly as the reference',()=>{
   const f={service:{options:['Exterior wash','Full detail']},day:{options:['Monday','Tuesday']}};
-  const cases={'contact.new-message@1':{},'owner.destination-verification@1':{code:'ABCD2345'},'appointment.staff-notice@1':{businessName:'Shine Detailing'},'appointment.request-receipt@1':{businessName:'Shine Detailing',reference:'ABCDEF12',service:'Full detail',day:'Tuesday'}};
+  const cases={'contact.new-message@1':{},'owner.destination-verification@1':{code:'ABCD2345'},'appointment.staff-notice@1':{businessName:'Shine Detailing'},'appointment.request-receipt@1':{businessName:'Shine Detailing',reference:'ABCDEF12',service:'Full detail',day:'Tuesday'},'account.email-confirm@1':{confirmationCode:'A'.repeat(43)},...Object.fromEntries(Object.keys(S.notificationCatalog.templates).filter(k=>k.startsWith('account.')&&k!=='account.email-confirm@1').map(k=>[k,{}]))};
   for(const [key,values] of Object.entries(cases))assert.deepEqual(S.renderCatalogNotification(key,values,f),real.render(real.notificationCatalog.templates[key].template,values,f),key);
   assert.deepEqual(S.renderCatalogNotification('contact.new-message@1'),goldenNewMessage);
   assert.equal(S.renderCatalogNotification('appointment.staff-notice@1',{businessName:'{{x}} ${y}'}).subject,'New appointment request for {{x}} ${y}','values are data, never template syntax');

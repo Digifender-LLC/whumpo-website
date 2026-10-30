@@ -105,6 +105,8 @@ try{
  });
  await test('delivery retries are bounded, content-free and distinct from saved and read',async()=>{
   const settings={provider:'fixture-provider',review:'review-1'},c=await owner();await run("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')",c.user);
+  // Verification normally moves only through a confirmed email change (users_email_lockstep); this fixture drops that trigger to set it directly.
+  await run('DROP TRIGGER users_email_lockstep');const verify=who=>run("UPDATE users SET email_verified_at=?,email_verified_via='notify@whumpo.com' WHERE id=?",Date.now(),who.user);await verify(c);
   async function answered(who,text='Reply'){const request={version:1,id:id(),kind:'help',statement:'PRIVATE-DELIVERY-STATEMENT'};await api(who,'/requests','POST',request);await service.answerUsageReview(db,who.user,request.id,text+' PRIVATE-DELIVERY-REPLY','PRIVATE-DELIVERY-OPERATOR');return request.id;}
   const first=await answered(c),t0=new Date(),seen=[];
   let mode='down';const sender=async n=>{seen.push(n);return mode==='down'?{accepted:false,retryable:true}:mode==='reject'?{accepted:false,retryable:false}:mode==='throw'?(()=>{throw Error('PRIVATE-PROVIDER-ERROR');})():{accepted:true};};
@@ -129,6 +131,10 @@ try{
   // Concurrent drains cannot double send one attempt.
   const fifth=await answered(c);mode='up';let sends=0;const counting=async()=>{sends++;return {accepted:true};};
   await Promise.all([delivery.runSupportDelivery(db,settings,counting,{now:new Date(at+2*86400000)}),delivery.runSupportDelivery(db,settings,counting,{now:new Date(at+2*86400000)})]);assert.equal(sends,1,'One claim wins');assert.equal((await row('SELECT state FROM support_deliveries WHERE request_id=?',fifth)).state,'delivered');
+  // G-E5: an account without a verified address is never emailed; it keeps the in-app response.
+  const u=await owner();await run("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')",u.user);const sixth=await answered(u);const sentBefore=seen.length+sends;
+  r=await delivery.runSupportDelivery(db,settings,sender,{now:new Date(at+3*86400000)});assert.equal(seen.length+sends,sentBefore,'nothing is sent to an unverified address');assert.equal(r.cancelled,1);
+  assert.equal((await row('SELECT state FROM support_deliveries WHERE request_id=?',sixth)).state,'cancelled');assert.equal((await api(u,'/requests/'+sixth)).request.response.saved,true);
  });
  await test('outage and deletion: support survives Chat failure; account deletion cascades',async()=>{
   const chat=await worker.fetch(new Request('https://whumpo.com/api/chat',{method:'POST',headers:{cookie:'__Host-whumpo_session='+a.auth.token,origin:'https://whumpo.com','content-type':'application/json'},body:JSON.stringify({id:id(),revision:0,content:'hello'})}),env,ctx);

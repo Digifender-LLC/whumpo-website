@@ -3971,8 +3971,7 @@ Confirmation messages and content-free account notices leave only through the pl
 
 Planning dependencies: WH-201, WH-156, WH-036. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
-- WH-036 sender activation and its live canary to explicitly approved addresses (not done as of October 9, 2026)
-- Owner decision on security notices to an unverified account email (docs/email-change-and-compromise.md decision 4)
+- Shared outbox schema (WH-156): the contact outbox is bound to contact destinations and cannot hold account notices; goes in the next schema batch with an owner-run empty-D1 cutover
 
 ### References
 
@@ -3987,7 +3986,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-30 UTC, code and docs only (branch wh-202-account-email-notices from origin/main after #492; no schema, binding, secret, dependency, deploy or live send): first blocker cleared (the platform sender was proven live: a verification email from notify@whumpo.com was accepted within 11 s and verified through the real Dashboard route; the new_message notice is untested live because it needs a real Turnstile token). Second blocker cleared: decision 4 decided by the orchestrator under delegated authority (verified account email only; unverified accounts see in-app security events; the new-address confirmation is the one exception), recorded with its reason in docs/email-change-and-compromise.md. Done: ten planned account.*@1 templates, the account-email scope, the account.notice trigger and a token variable type in the source catalog and the frozen reference (notifications-contract passes); the inactive support notice now cancels before the provider call unless users.email_verified_at is set (G-E5; support-access passes). NOT done: delivery wiring. The only outbox (contact_notification_outbox) requires project_id and a contact destination, checks kind IN (verification,new_message) and has no dispatching or unknown-outcome state, so the email-change flow still returns delivery_unavailable and stores nothing. This needs the shared outbox (WH-156) in the next schema batch. Readiness stays blocked.
 
 ## WH-203 — Coordinated compromise review across passkeys, sessions, recovery kit, pending changes and provider connections
 
