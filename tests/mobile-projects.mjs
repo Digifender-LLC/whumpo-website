@@ -48,7 +48,7 @@ const handleOf=account=>Buffer.from(account).toString('base64url');
 let counter=0;
 async function session(o,{proofAge=5,method='passkey',lifetime=3600}={}){
  const token=m.newSessionToken(),authority=id();
- await run("INSERT INTO identity_sessions VALUES(?,?,?,1,(SELECT auth_epoch FROM identity_accounts WHERE account_id=?),'android',?,?,unixepoch()-?,unixepoch(),unixepoch()+?)",authority,await m.hashToken(token),o.account,o.account,o.key.id,method,proofAge,lifetime);
+ await run("INSERT INTO identity_sessions(id,token_hash,account_id,policy_version,auth_epoch,client,credential_id,proof_method,proof_at,issued_at,expires_at) VALUES(?,?,?,1,(SELECT auth_epoch FROM identity_accounts WHERE account_id=?),'android',?,?,unixepoch()-?,unixepoch(),unixepoch()+?)",authority,await m.hashToken(token),o.account,o.account,o.key.id,method,proofAge,lifetime);
  return {token,authority};
 }
 // An owner with a ready account, a real passkey, a private website and a core.editing read grant.

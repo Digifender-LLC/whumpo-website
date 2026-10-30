@@ -17,6 +17,8 @@ interface Env {
   STRIPE_WEBHOOK_SECRET?: string;
   // WH-086 FCM sender service-account JSON (send-only role); read by the push adapter once it lands.
   FCM_SERVICE_ACCOUNT_JSON?: string;
+  // Owner activation of push delivery and device registration. Only the value 'fcm' activates; unset means inactive (WH-086).
+  PUSH_NOTIFICATION_PROVIDER?: string;
   // Owner-supplied, non-secret support values. Unset means not configured; never invent defaults.
   SUPPORT_HOURS?: string;
   SUPPORT_NOTIFICATION_PROVIDER?: string;

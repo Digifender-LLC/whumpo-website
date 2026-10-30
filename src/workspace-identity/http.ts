@@ -87,6 +87,8 @@ async function logout(request:Request,env:IdentityEnvironment){
  if(proof){
   const table=proof.kind==='session'?'identity_sessions':'identity_grants',hash=await hashToken(proof.token);
   statements.push(env.DB.prepare(`DELETE FROM identity_challenges WHERE authority_kind=? AND authority_id IN (SELECT id FROM ${table} WHERE token_hash=?)`).bind(proof.kind,hash));
+  // A native session minted by handoff from this web lineage ends with it (its source link survives web reauthentication).
+  if(proof.kind==='session')statements.push(env.DB.prepare("DELETE FROM identity_sessions WHERE client='android' AND source_lineage_id IN (SELECT lineage_id FROM identity_sessions WHERE token_hash=? AND client='web') AND account_id=(SELECT account_id FROM identity_sessions WHERE token_hash=? AND client='web')").bind(hash,hash));
   statements.push(env.DB.prepare(`DELETE FROM ${table} WHERE token_hash=?`).bind(hash));
  }
  if(challenge)statements.push(env.DB.prepare('DELETE FROM identity_challenges WHERE token_hash=?').bind(await hashToken(challenge)));

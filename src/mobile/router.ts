@@ -8,6 +8,7 @@ import {bootstrap,chatList,chatTurn,confirmReview,reviewList,sendMessage,type Mo
 import {interaction} from './interactions';
 import {photoBytes,photoList,photoStatus,photoUpload} from './photos';
 import {activityList,projectList,projectRead,projectVersions} from './projects';
+import {readEvent,registerDevice,removeDevice} from './push';
 import {MobileError,admitClient,refusal,signin,type MobileEnvironment} from './transport';
 
 const base='/api/mobile',prefix='/api/mobile/v1/';
@@ -84,6 +85,10 @@ export async function handleMobileRequest(request:Request,env:MobileEnvironment,
   const photoId=/^photos\/([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})$/.exec(action);
   if(method==='GET'&&photoId)return await authenticated(request,env,p=>photoBytes(env,p,photoId[1]));
   if(method==='GET'&&action==='activity')return await authenticated(request,env,p=>activityList(request,env,p),true);
+  if(method==='PUT'&&action==='devices/current')return await authenticated(request,env,p=>registerDevice(request,env,p));
+  if(method==='DELETE'&&action==='devices/current')return await authenticated(request,env,p=>removeDevice(env,p));
+  const eventId=/^events\/([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})$/.exec(action);
+  if(method==='GET'&&eventId)return await authenticated(request,env,p=>readEvent(env,p,eventId[1]));
   throw new MobileError('not_found');
  }catch(error){
   // Unexpected failures may carry SQL or provider detail and a token-bearing request: never serialized, never logged.

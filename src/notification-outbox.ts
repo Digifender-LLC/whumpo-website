@@ -268,6 +268,8 @@ export async function recordNoticeLookup(db:Pick<D1Database,'prepare'>,id:string
 export async function maintainNotices(db:Pick<D1Database,'prepare'>,now:number=Date.now()){
  const expired=await db.prepare("UPDATE notification_notices SET state='cancelled',reason='expired',outcome_at=?1 WHERE state IN ('queued','deferred') AND expires_at<=?1 RETURNING id").bind(now).all();
  const unresolved=await db.prepare("UPDATE notification_notices SET state='unresolved',reason='unreconciled',outcome_at=?1 WHERE state='unknown-outcome' AND (reconcile_until<=?1 OR lookups>=3) RETURNING id").bind(now).all();
+ // WH-086: expired push events (an event never outlives seven days; the readback already treats an expired one as unavailable).
+ await db.prepare('DELETE FROM push_events WHERE id IN (SELECT id FROM push_events WHERE expires_at<=unixepoch() ORDER BY expires_at LIMIT 500)').run();
  return {expired:expired.results.length,unresolved:unresolved.results.length};
 }
 /** Daily retention: finished notices 30 days after their outcome, unresolved ones 90 days (held projects are skipped; the schema refuses open ones). */

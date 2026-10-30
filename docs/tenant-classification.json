@@ -6,9 +6,9 @@
  "evidence": "docs/workspace-collaboration-evidence.md",
  "baseline": {
   "sourceCommit": "4dea09c",
-  "reviewedSchemaSha256": "a791a620fe2eff708cbfc16d2c82ba7329d76ca959c00549882402355c6639fd",
-  "tables": 236,
-  "usersForeignKeyColumns": 120
+  "reviewedSchemaSha256": "31c7856c34c5c36edaeb2c651852b89087766e0dc5d16571af3abd36cc4cb88c",
+  "tables": 238,
+  "usersForeignKeyColumns": 122
  },
  "vocabulary": {
   "classes": {
@@ -136,6 +136,8 @@
   {"column":"module_activation_reviews.user_id","sourceFile":"src/shared-modules/schema.sql","onDelete":"CASCADE","class":"workspace+actor","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id","actor":"actor_ref"},"status":"proposed","evidenceLevel":"review-spike","basis":"Preparer and confirmer provenance on every review type","evidence":["docs/workspace-collaboration.md#approvals-and-release-authority"]},
   {"column":"owner_email_change_limits.account_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"account","subject":"account","retarget":"keep","roles":{"account":"account_id"},"status":"proposed","evidenceLevel":"source-reading","basis":"Rate evidence for a person's own address-change requests and failed confirmations; deleted with the person","evidence":["docs/email-change-and-compromise.md#4-data-classes-and-retention-wh-116--wh-009-extension"]},
   {"column":"owner_email_changes.account_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"account","subject":"account","retarget":"keep","roles":{"account":"account_id"},"status":"proposed","evidenceLevel":"source-reading","basis":"The sign-in email is personal, never workspace data; a change and its undo reservation belong to the person","evidence":["docs/email-change-and-compromise.md#4-data-classes-and-retention-wh-116--wh-009-extension"]},
+  {"column":"push_devices.account_id","sourceFile":"src/workspace-identity/schema.sql","onDelete":"CASCADE","class":"account","subject":"account","retarget":"keep","roles":{"account":"account_id"},"status":"proposed","evidenceLevel":"source-reading","basis":"A push device (WH-086) is one FCM registration bound to a native session lineage: account authority and a delivery address, never workspace data; it ends with its session and the account","evidence":["docs/mobile-api-v1.md","docs/android-notifications.md"]},
+  {"column":"push_events.account_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id"},"status":"proposed","evidenceLevel":"source-reading","basis":"A push event (WH-086) is a content-free opaque id for committed work on the owner's project or review; the readback joins the owner's own project, so it follows the workspace and account closure deletes it","evidence":["docs/mobile-api-v1.md"]},
   {"column":"identity_handoffs.account_id","sourceFile":"src/workspace-identity/schema.sql","onDelete":"CASCADE","class":"account","subject":"account","retarget":"keep","roles":{"account":"account_id"},"status":"proposed","evidenceLevel":"source-reading","basis":"A native handoff binds one ready person's browser session to the app (WH-083, mobile-api-v1.md); it is account authority, never workspace data","evidence":["docs/mobile-api-v1.md"]},
   {"column":"owner_security_reviews.account_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"account","subject":"account","retarget":"keep","roles":{"account":"account_id"},"status":"proposed","evidenceLevel":"source-reading","basis":"A compromise review secures one person's passkeys, sessions and kit; it is account authority, not workspace data","evidence":["docs/email-change-and-compromise.md#4-data-classes-and-retention-wh-116--wh-009-extension"]},
   {"column":"photo_removals.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace+actor","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id","actor":"actor_ref"},"status":"proposed","evidenceLevel":"review-spike","basis":"Preparer and confirmer provenance on every review type","evidence":["docs/workspace-collaboration.md#approvals-and-release-authority"]},

@@ -1468,6 +1468,157 @@
    }
   },
   {
+   "id": "mobile-push",
+   "title": "Native /api/mobile/v1 push (WH-086): device registration, withdrawal and the opaque event readback",
+   "privileged": [
+    "data-change"
+   ],
+   "authorityClass": "bearer android session only; the workspace gate is the M2/M4 one (admitWorkspace + workspaceBindings + assertWorkspace); no browser Origin rule, cookies refused; the device is bound to the session lineage and ends with the session",
+   "entries": [
+    {
+     "file": "src/mobile/router.ts",
+     "kind": "exact",
+     "match": "devices/current",
+     "methods": [
+      "PUT"
+     ]
+    },
+    {
+     "file": "src/mobile/router.ts",
+     "kind": "exact",
+     "match": "devices/current",
+     "methods": [
+      "DELETE"
+     ]
+    },
+    {
+     "file": "src/mobile/router.ts",
+     "kind": "regex",
+     "match": "/^events\\/([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})$/",
+     "methods": [
+      "GET"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "The registration is written for the bearer's own android session lineage (a web session or a grant resolves to nothing); withdrawal and readback use the principal's account, never a request field. A device is live only while a current session of its lineage exists.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/push.ts",
+       "contains": "WHERE id=? AND account_id=? AND client='android'"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-push.mjs",
+       "contains": "assert.equal((await put(web.token,{})).status,401,'a web session is not a native bearer')",
+       "asserts": "a web session token cannot register a device"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Same transport as M1 to M4: no Origin rule, a Cookie header is 400, the strict Whumpo-Client header is required; the body is exact-key JSON bounded at 16 KiB and the token is a bounded URL-safe string.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/router.ts",
+       "contains": "if(request.headers.has('cookie'))throw new MobileError('invalid_request');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-push.mjs",
+       "contains": "headers:{cookie:'x=1'}",
+       "asserts": "a cookie beside a valid bearer is refused and stores nothing"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "n/a",
+     "detail": "Registering or withdrawing a delivery address changes no project, review or credential, so it needs no recent passkey; a notification never approves or sends anything (the app only reads the event)."
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "An event is read by id AND owner; another owner's id and an unknown id are the same not_found, and the destination is returned only for the owner's own live project.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/push.ts",
+       "contains": "WHERE e.id=? AND e.account_id=?"
+      },
+      {
+       "file": "src/mobile/push.ts",
+       "contains": "if(!e)throw new MobileError('not_found');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-push.mjs",
+       "contains": "assert.equal(foreign.status,404);same(foreign.data,unknown.data);",
+       "asserts": "a foreign event is indistinguishable from an unknown one"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "One registration per session lineage: the same call again updates the preference and token in place and returns the same deviceId; a token has one owner, so re-registering it moves it.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/push.ts",
+       "contains": "ON CONFLICT(lineage_id) DO UPDATE SET"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-push.mjs",
+       "contains": "assert.equal(again.data.deviceId,r.data.deviceId,'one registration per session')",
+       "asserts": "the same registration returns the same device"
+      },
+      {
+       "file": "tests/mobile-push.mjs",
+       "contains": "assert.equal(await count('push_devices','token_hash=?',await m.hashToken(tok)),1);",
+       "asserts": "a token is never registered twice"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "An expired event, or one whose project is gone, answers state unavailable with no destination; the sweep removes expired events and devices of ended sessions.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/push.ts",
+       "contains": "const live=!!e.project_id&&e.expires_at>Math.floor(Date.now()/1000);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-push.mjs",
+       "contains": "assert.deepEqual(expired.data.event,{id:old,kind:'attention_required',destination:null,state:'unavailable'});",
+       "asserts": "an expired event has no destination"
+      }
+     ]
+    },
+    "admission": {
+     "state": "evidenced",
+     "detail": "Registration is inactive (503 unavailable, nothing stored) until the owner sets PUSH_NOTIFICATION_PROVIDER=fcm and the connection keyring exists; the per-IP and per-account bearer limits and the 20-device and 20-per-hour event caps bound the rest.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/push.ts",
+       "contains": "if(!pushActive(env)||!env.CONNECTION_ENCRYPTION_KEYRING)throw new MobileError('unavailable');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-push.mjs",
+       "contains": "const r=await put(s.token,{},env);assert.equal(r.status,503,r.text);assert.equal(await count('push_devices'),0);",
+       "asserts": "nothing is stored while push is inactive"
+      }
+     ]
+    }
+   }
+  },
+  {
    "id": "identity",
    "title": "Workspace identity: sign-up, login, passkeys, recovery kit, recovery and logout",
    "privileged": [

@@ -2,6 +2,8 @@
 
 **Firebase project (2026-10-30):** `whumpo-18331`, FCM v1 only. `google-services.json` (both apps) is held in the owner secret store and is git-ignored (`android/.gitignore`); copy it to `android/androidApp/google-services.json` for local builds.
 
+**Server, October 30, 2026 (WH-086, schema batch 4).** The three routes (`PUT`/`DELETE /devices/current`, `GET /events/{id}`), the `push_devices`/`push_events` tables and a tested but unwired FCM HTTP v1 sender exist; registration stays refused until the owner sets `PUSH_NOTIFICATION_PROVIDER=fcm` and delivery needs a reviewed dispatcher lane ([notifications](notifications.md#owner-push-wh-086-schema-batch-4)). The `event.destination` object is `{type,id}`.
+
 **Status, October 29, 2026 (WP7).** The mobile API client for devices and events is built and tested. Push delivery is not: it needs a Firebase project that only the owner can create. The app ships a no-op provider, adds no Firebase dependency and holds no `google-services.json` or any other Firebase config.
 
 ## What is built

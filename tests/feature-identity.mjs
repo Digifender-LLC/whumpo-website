@@ -147,7 +147,7 @@ try{
  const fresh=await workspaceSession(db,m,aged);await httpStatus(await dispatch(base+'/api/connections/github/start',{method:'POST',body:JSON.stringify({handoff:null}),headers:{'content-type':'application/json',origin:base,cookie:identityCookies.session+'='+fresh.token}}),200);
  // Historical session fixture, without mutating an immutable proof/expiry record.
  const expired=m.newSessionToken(),account=await row('SELECT policy_version,auth_epoch FROM identity_accounts WHERE account_id=?',aged.account);
- await run("INSERT INTO identity_sessions VALUES(?,?,?,?,?,'web',?,'passkey',unixepoch()-3600,unixepoch()-3600,unixepoch()-1)",id(),await m.hashToken(expired),aged.account,account.policy_version,account.auth_epoch,aged.credential);
+ await run("INSERT INTO identity_sessions(id,token_hash,account_id,policy_version,auth_epoch,client,credential_id,proof_method,proof_at,issued_at,expires_at) VALUES(?,?,?,?,?,'web',?,'passkey',unixepoch()-3600,unixepoch()-3600,unixepoch()-1)",id(),await m.hashToken(expired),aged.account,account.policy_version,account.auth_epoch,aged.credential);
  assert.equal((await inclusion.resolveFeatureInclusion(db,request(aged.account,null,'github','connect'))).included,true);
  await refused(()=>m.resolveIdentity(db,{version:1,client:'web',kind:'session',token:expired}),'proof_required');
  await httpStatus(await dispatch(base+'/api/connections/github/start',{method:'POST',body:JSON.stringify({handoff:null}),headers:{'content-type':'application/json',origin:base,cookie:identityCookies.session+'='+expired}}),401);

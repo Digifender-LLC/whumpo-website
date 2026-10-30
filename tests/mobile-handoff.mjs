@@ -67,7 +67,7 @@ async function owner({keys=2,project=false}={}){
  o.nativeAssert=options=>o.key.assertion(options,++o.n,{atOrigin:androidOrigin,handle:handleOf(account)});
  if(project){
   const token=m.newSessionToken();
-  await run("INSERT INTO identity_sessions VALUES(?,?,?,1,1,'android',?,'passkey',unixepoch()-5,unixepoch(),unixepoch()+3600)",id(),await m.hashToken(token),account,o.key.id);
+  await run("INSERT INTO identity_sessions(id,token_hash,account_id,policy_version,auth_epoch,client,credential_id,proof_method,proof_at,issued_at,expires_at) VALUES(?,?,?,1,1,'android',?,'passkey',unixepoch()-5,unixepoch(),unixepoch()+3600)",id(),await m.hashToken(token),account,o.key.id);
   o.scope=async()=>m.admitWorkspace(db,await m.resolveIdentity(db,{version:1,client:'android',kind:'session',token}));
   o.project=id();const now=new Date().toISOString();
   await run("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Garden','Landscaping','draft',?,?)",o.project,account,now,now);
@@ -269,9 +269,41 @@ try{
   const ok=await confirm(session.token);assert.equal(ok.status,200,ok.text);assert.equal(await versions(),before+1);
  });
 
+ await check('schema batch 4: web sign-out of the source lineage deletes the native sessions minted from it; reauthentication keeps the link; unrelated sessions stay',async()=>{
+  const e=await owner(),x=await owner(),cookie=await webSignIn(e),h=await start(),{code}=codeOf(await complete(h,cookie)),minted=(await exchange(h,code)).data.session;
+  const source=await sourceOf(cookie),native=await one('SELECT * FROM identity_sessions WHERE token_hash=?',await m.hashToken(minted.token));
+  assert.equal(source.lineage_id,source.id,'a fresh sign-in starts its own lineage');assert.equal(native.source_lineage_id,source.lineage_id,'the handoff session records the source lineage');
+  assert.notEqual(native.lineage_id,source.lineage_id);
+  // Unrelated: a native passkey session of the same account, and another account's web session with its own handoff-minted native session.
+  const other=m.newSessionToken();
+  await run("INSERT INTO identity_sessions(id,token_hash,account_id,policy_version,auth_epoch,client,credential_id,proof_method,proof_at,issued_at,expires_at) VALUES(?,?,?,1,1,'android',?,'passkey',unixepoch()-5,unixepoch(),unixepoch()+3600)",id(),await m.hashToken(other),e.account,e.key.id);
+  const xCookie=await webSignIn(x),xh=await start(),xCode=codeOf(await complete(xh,xCookie)).code,xNative=(await exchange(xh,xCode)).data.session;
+  // Web reauthentication re-inserts the web row with a new id; the lineage and the native link survive it.
+  const options=await web('reauth/options',{cookies:{[sessionCookie]:cookie}});assert.equal(options.status,200,options.text);
+  const verified=await web('reauth/verify',{cookies:{[sessionCookie]:cookie,[challengeCookie]:options.set[challengeCookie]},body:{version:1,credential:e.webAssert(options.data.options)}});assert.equal(verified.status,200,verified.text);
+  const renewed=verified.set[sessionCookie],after=await sourceOf(renewed);
+  assert.notEqual(after.id,source.id,'reauthentication replaced the row');assert.equal(after.lineage_id,source.lineage_id,'the lineage was copied forward');
+  assert.equal(await count('identity_sessions','id=?',source.id),0);assert.equal((await mobile('/session',{method:'GET',token:minted.token})).status,200,'the minted session survives web reauthentication');
+  // Native reauthentication keeps the native lineage and its source link too.
+  const nOptions=await mobile('/session/reauth/options',{token:minted.token,body:{version:1}});assert.equal(nOptions.status,200,nOptions.text);
+  const nDone=await mobile('/session/reauth/verify',{token:minted.token,body:{version:1,challengeId:nOptions.data.challengeId,credential:e.nativeAssert(nOptions.data.options)}});assert.equal(nDone.status,200,nDone.text);
+  const nAfter=await one('SELECT * FROM identity_sessions WHERE token_hash=?',await m.hashToken(minted.token));
+  assert.notEqual(nAfter.id,native.id);assert.equal(nAfter.lineage_id,native.lineage_id);assert.equal(nAfter.source_lineage_id,source.lineage_id);
+  // Sign-out of the (renewed) web session ends the minted native session and only that one.
+  assert.equal((await web('logout',{cookies:{[sessionCookie]:renewed}})).status,200);
+  assert.equal((await mobile('/session',{method:'GET',token:minted.token})).status,401,'web sign-out revoked the native session minted from it');
+  assert.equal(await count('identity_sessions','source_lineage_id=?',source.lineage_id),0);
+  assert.equal((await mobile('/session',{method:'GET',token:other})).status,200,'an unrelated native session of the same account is untouched');
+  assert.equal((await mobile('/session',{method:'GET',token:xNative.token})).status,200,'another account\'s handoff session is untouched');
+  assert.equal(await count('identity_sessions',"client='web' AND account_id=?",x.account),1);
+  // The schema refuses a source link on anything but a handoff-minted native session.
+  const otherHash=await m.hashToken(other);
+  await assert.rejects(()=>run("UPDATE identity_sessions SET source_lineage_id=? WHERE token_hash=?",source.lineage_id,otherHash),/identity_session_immutable|CHECK/);
+ });
+
  await check('web completion needs a fresh web passkey: a stale proof is proof_required until the page reauthenticates',async()=>{
   const g=await owner(),h=await start(),old=m.newSessionToken();
-  await run("INSERT INTO identity_sessions VALUES(?,?,?,1,1,'web',?,'passkey',unixepoch()-3000,unixepoch()-3000,unixepoch()+3000)",id(),await m.hashToken(old),g.account,g.key.id);
+  await run("INSERT INTO identity_sessions(id,token_hash,account_id,policy_version,auth_epoch,client,credential_id,proof_method,proof_at,issued_at,expires_at) VALUES(?,?,?,1,1,'web',?,'passkey',unixepoch()-3000,unixepoch()-3000,unixepoch()+3000)",id(),await m.hashToken(old),g.account,g.key.id);
   const refused=await complete(h,old);assert.equal(refused.status,401,refused.text);assert.equal(refused.data.code,'proof_required');
   assert.equal((await one('SELECT account_id FROM identity_handoffs WHERE id=?',h.id)).account_id,null);
   const options=await web('reauth/options',{cookies:{[sessionCookie]:old}});assert.equal(options.status,200,options.text);

@@ -106,7 +106,7 @@ Request notification permission in context and keep every core workflow availabl
 | WH-087 | Signed private Android beta with real-device evidence, support and release recovery. | WH-084, WH-085, WH-086 and WH-048. |
 | WH-088 | Evidence-led native expansion and a separately reviewed public Play release. | WH-087; deferred. |
 
-**WH-083 backlog evidence, October 30, 2026:** a native session minted by the browser handoff survives web sign-out (bound only to the source session's expiry, at most seven days). The schema fix, a stable source link that survives web reauthentication so sign-out can cascade, is queued for the next schema batch; see [handoff limits](mobile-api-v1.md#auth-and-session-model).
+**WH-083 backlog evidence, October 30, 2026:** web sign-out of the source session now deletes the native sessions minted from it (schema batch 4: `identity_sessions.lineage_id` is copied forward by web reauthentication and a handoff-minted session records `source_lineage_id`); see [handoff limits](mobile-api-v1.md#auth-and-session-model).
 
 These are acceptance-based milestones, not calendar promises. The F6 lane does not require finishing F3–F5 before foundation work starts and does not delay web beta admission by making WH-048 depend on Android. Split the larger identity/core/push packets into reviewable implementation, connected verification and activation slices without losing their parent exit criteria. Coordinate shared auth/Chat handlers and migration numbers with other work.
 

@@ -66,8 +66,8 @@ export async function exchangeHandoff(env:IdentityEnvironment,input:{handoffId:s
    AND EXISTS(SELECT 1 FROM identity_current_authorities c WHERE c.authority_id=identity_handoffs.source_session_id AND c.kind='session' AND c.client='web'
     AND c.account_id=identity_handoffs.account_id AND c.auth_epoch=identity_handoffs.auth_epoch)
    AND (SELECT count(*) FROM identity_credentials WHERE account_id=identity_handoffs.account_id AND status='active')>=2`).bind(sessionId,input.handoffId,codeHash),
-  db.prepare(`INSERT INTO identity_sessions SELECT ?,?,h.account_id,1,h.auth_epoch,'android',s.credential_id,'handoff',s.proof_at,unixepoch(),s.expires_at
-   FROM identity_handoffs h JOIN identity_sessions s ON s.id=h.source_session_id WHERE h.id=? AND h.native_session_id=? RETURNING expires_at`).bind(sessionId,await hashToken(token),input.handoffId,sessionId)
+  db.prepare(`INSERT INTO identity_sessions SELECT ?,?,h.account_id,1,h.auth_epoch,'android',s.credential_id,'handoff',s.proof_at,unixepoch(),s.expires_at,?,s.lineage_id
+   FROM identity_handoffs h JOIN identity_sessions s ON s.id=h.source_session_id WHERE h.id=? AND h.native_session_id=? RETURNING expires_at`).bind(sessionId,await hashToken(token),sessionId,input.handoffId,sessionId)
  ]);
  const session=minted.results[0] as {expires_at:number}|undefined;
  if(!session)throw denied();
