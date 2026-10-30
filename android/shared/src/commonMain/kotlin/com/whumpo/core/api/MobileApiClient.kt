@@ -15,6 +15,9 @@ import io.ktor.http.content.ByteArrayContent
 import io.ktor.http.content.TextContent
 import io.ktor.http.encodeURLParameter
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import kotlinx.serialization.KSerializer
@@ -47,7 +50,7 @@ fun newRequestId(): String = Uuid.random().toString()
 /**
  * Typed client for `/api/mobile/v1` (docs/mobile-api-v1.md). One method per operation.
  *
- * The client never auto-retries or regenerates IDs. A write takes the caller's request ID; after [MobileApiException.Transport]
+ * The client never regenerates IDs and auto-retries only one case: `identity_changed` right after its own reauth (see [exec]). A write takes the caller's request ID; after [MobileApiException.Transport]
  * with `outcomeUnknown`, resolve with a read ([resolveSend], [getChatTurn], [interactionReceipt], [getPhotoUpload]) and retry only
  * as an explicit owner action with the same ID and payload. Cookies and redirects are never used.
  *
@@ -58,7 +61,11 @@ class MobileApiClient(
     private val mobileApiBase: String,
     private val client: ClientInfo,
     private val sessions: SessionProvider,
+    private val timeSource: TimeSource = TimeSource.Monotonic,
 ) : AutoCloseable {
+    // Set when this client's own reauthVerify succeeded; lets exec tell a reauth race from a genuinely changed identity.
+    private var lastReauth: TimeMark? = null
+
     private val http = HttpClient(engine) {
         followRedirects = false
         expectSuccess = false
@@ -101,6 +108,7 @@ class MobileApiClient(
 
     suspend fun reauthVerify(challengeId: String, credential: JsonObject): ReauthResponse =
         post(ReauthResponse.serializer(), "/session/reauth/verify", PasskeyVerifyRequest.serializer(), PasskeyVerifyRequest(uuid(challengeId), credential))
+            .also { lastReauth = timeSource.markNow() }
 
     suspend fun getSession(): SessionReadResponse = get(SessionReadResponse.serializer(), "/session")
 
@@ -319,7 +327,40 @@ class MobileApiClient(
     private fun <B> encodeBody(serializer: KSerializer<B>, body: B) =
         TextContent(wire.encodeToString(serializer, body), JSON_UTF8)
 
+    /**
+     * A reauth replaces the session row (same token, new authority), so a request that resolved its identity just before the
+     * commit fails with `identity_changed`. After this client's own reauth (within [REAUTH_RACE_WINDOW]) that is repeated
+     * exactly once, with the identical body and request ID; any other `identity_changed` is a rejected session.
+     */
     private suspend fun exec(
+        method: HttpMethod,
+        path: String,
+        auth: Boolean,
+        params: List<Pair<String, String?>> = emptyList(),
+        body: io.ktor.http.content.OutgoingContent? = null,
+        extraHeaders: List<Pair<String, String>> = emptyList(),
+        write: Boolean = false,
+    ): Raw {
+        val first = try {
+            return execOnce(method, path, auth, params, body, extraHeaders, write)
+        } catch (e: MobileApiException.IdentityChanged) {
+            e
+        }
+        val reauth = lastReauth
+        if (!auth || reauth == null || reauth.elapsedNow() > REAUTH_RACE_WINDOW) return reject(first)
+        return try {
+            execOnce(method, path, auth, params, body, extraHeaders, write)
+        } catch (e: MobileApiException.IdentityChanged) {
+            reject(e)
+        }
+    }
+
+    private suspend fun reject(e: MobileApiException.IdentityChanged): Nothing {
+        sessions.onSessionRejected()
+        throw e
+    }
+
+    private suspend fun execOnce(
         method: HttpMethod,
         path: String,
         auth: Boolean,
@@ -359,9 +400,10 @@ class MobileApiClient(
             val error = MobileApiException.fromResponse(
                 response.status.value, bytes.decodeToString(), response.headers[HttpHeaders.RetryAfter],
             )
-            val rejected = (error is MobileApiException.ProofRequired && error.proof == MobileApiException.ProofRequired.Proof.SIGN_IN) ||
-                error is MobileApiException.IdentityChanged
-            if (auth && rejected) sessions.onSessionRejected()
+            // identity_changed is reported by [exec], which may retry it first.
+            if (auth && error is MobileApiException.ProofRequired && error.proof == MobileApiException.ProofRequired.Proof.SIGN_IN) {
+                sessions.onSessionRejected()
+            }
             throw error
         }
         return Raw(bytes, response.headers[HttpHeaders.ContentType].orEmpty())
@@ -373,6 +415,7 @@ class MobileApiClient(
     }
 
     private companion object {
+        val REAUTH_RACE_WINDOW = 10.seconds
         const val CLIENT_HEADER = "Whumpo-Client"
         val JSON_UTF8 = ContentType.parse("application/json; charset=utf-8")
         const val BROWSER_RETURN = "https://whumpo.com/app/return"
