@@ -154,13 +154,16 @@ fun ChatPane(
         }
         // The composer stays while the conversation is unavailable: the draft is protected and is never lost to an outage.
         if (screen.signedIn) Composer(screen, actions)
-        // Invisible polite live region: new replies and review outcomes are read out once.
-        Box(
-            Modifier.size(1.dp).testTag("chat-announcement").semantics {
-                liveRegion = LiveRegionMode.Polite
-                contentDescription = chat.announcement
-            },
-        )
+        // Invisible polite live region: new replies and review outcomes are read out once. It only exists while it has words,
+        // because an empty one fails the accessibility check for speakable text.
+        if (chat.announcement.isNotEmpty()) {
+            Box(
+                Modifier.size(1.dp).testTag("chat-announcement").semantics {
+                    liveRegion = LiveRegionMode.Polite
+                    contentDescription = chat.announcement
+                },
+            )
+        }
     }
 }
 
