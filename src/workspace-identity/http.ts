@@ -2,6 +2,7 @@ import {hashToken} from '../security';
 import {IdentityError,assertCurrentIdentity,identityPredicate,resolveIdentity,type IdentityPrincipal} from './authority';
 import {identityRecord,identityRequestContext,identityUnavailable,invalidIdentityRequest,identityChanged,type IdentityEnvironment} from './protocol';
 import {signupOptions,signupVerify,loginOptions,loginVerify,addPasskeyOptions,addPasskeyVerify,reauthenticationOptions,reauthenticationVerify} from './ceremonies';
+import {completeHandoff} from './handoff';
 import {readKitState,prepareKit,acknowledgeKit,rotateKit,completeEnrollment,cancelEnrollment} from './kits';
 import {startRecovery,readRecoveryState,reviewRecovery,secureRecovery,recoveryCompletionOptions,recoveryCompletionVerify,removePasskey} from './recovery';
 import type {IdentityState,IdentityKey} from './presentation';
@@ -131,6 +132,7 @@ export async function handleIdentityRequest(request:Request,env:Environment):Pro
    case 'add/verify':return respond({version:1,...await addPasskeyVerify(request,env,p,token(request,'challenge'),data)});
    case 'reauth/options':return respond(challenged(headers,await reauthenticationOptions(request,env,p,data)));
    case 'reauth/verify':return respond(issued(headers,await reauthenticationVerify(request,env,p,token(request,'challenge'),data)));
+   case 'handoff/complete':return respond({version:1,...await completeHandoff(env,p,data)});
    case 'kit/prepare':return respond({version:1,...await prepareKit(request,env,p,data)});
    case 'kit/save':return respond({version:1,...await acknowledgeKit(request,env,p,data)});
    case 'kit/rotate':return respond(effect(headers,await rotateKit(request,env,p,data)));

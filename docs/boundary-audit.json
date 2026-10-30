@@ -600,6 +600,255 @@
    }
   },
   {
+   "id": "mobile-handoff",
+   "title": "Native browser handoff (WH-083 M3): start, exchange and the browser's handoff/complete",
+   "privileged": [
+    "credential"
+   ],
+   "authorityClass": "anonymous PKCE-bound capability (start, exchange) plus the ordinary cookie web session of a ready account (complete); mounted in the native router and the identity router, no bearer",
+   "entries": [
+    {
+     "file": "src/mobile/router.ts",
+     "kind": "exact",
+     "match": "session/handoff/start",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/mobile/router.ts",
+     "kind": "exact",
+     "match": "session/handoff/exchange",
+     "methods": [
+      "POST"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "start and exchange are anonymous: the capabilities are the 256-bit browser token and the 256-bit one-time code (both stored only as SHA-256) plus the PKCE verifier and state held by the app; a bearer or cookie on them is refused. complete runs on the ordinary web session cookie of a ready account with two active passkeys; a recovery or enrollment grant, a bearer and a missing cookie are refused.",
+     "enforcedAt": [
+      {
+       "file": "src/workspace-identity/handoff.ts",
+       "contains": "if(p.kind!=='session'||p.purpose!=='workspace'||p.client!=='web')throw new IdentityError(403,'identity_incomplete'"
+      },
+      {
+       "file": "src/mobile/router.ts",
+       "contains": "anonymous(request,env,false,()=>handoffExchangeOperation(request,env))"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-handoff.mjs",
+       "contains": "const hr=await start('recovery'),g=await web('handoff/complete'",
+       "asserts": "a recovery grant cannot complete a handoff (identity_incomplete)"
+      },
+      {
+       "file": "tests/mobile-handoff.mjs",
+       "contains": "assert.equal(bearer.status,401,'a bearer is no browser session');",
+       "asserts": "a bearer is not a browser session"
+      },
+      {
+       "file": "tests/mobile-handoff.mjs",
+       "contains": "const one1=await owner({keys:1})",
+       "asserts": "a one-key account is refused at complete"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "complete is an identity-router POST and enforces the exact configured Origin; start and exchange are native routes that refuse any Cookie header and need the strict Whumpo-Client header. The redirect URI is the single constant https://whumpo.com/app/return, enforced at start and by the table CHECK.",
+     "enforcedAt": [
+      {
+       "file": "src/workspace-identity/protocol.ts",
+       "contains": "if(request.method!=='POST'||request.headers.get('origin')!==origin||new URL(request.url).origin!==origin)throw invalidIdentityRequest();"
+      },
+      {
+       "file": "src/mobile/handoff.ts",
+       "contains": "d.redirectUri!==handoffReturn"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-handoff.mjs",
+       "contains": "assert.equal((await complete(h,cookie,{origin:'https://elsewhere.invalid'})).status,400);",
+       "asserts": "a cross-origin complete is refused"
+      },
+      {
+       "file": "tests/mobile-handoff.mjs",
+       "contains": "['other host',{redirectUri:'https://evil.example/app/return'}]",
+       "asserts": "a wrong redirect URI is refused at start"
+      },
+      {
+       "file": "tests/mobile-handoff.mjs",
+       "contains": "assert.equal((await mobile('/session/handoff/start',{body:good,headers:{cookie:",
+       "asserts": "a cookie on start is refused"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "evidenced",
+     "detail": "complete needs a web passkey proof under ten minutes old. The exchange copies the SOURCE session proof time into a session whose proof_method is 'handoff', so the passkey-only freshness predicate never accepts it and the response carries freshUntil null: a handoff session must run native reauthentication before any fresh-passkey control.",
+     "enforcedAt": [
+      {
+       "file": "src/workspace-identity/handoff.ts",
+       "contains": "freshPasskey:true,bindIdentityRevision:true};"
+      },
+      {
+       "file": "src/workspace-identity/handoff.ts",
+       "contains": "'handoff',s.proof_at"
+      },
+      {
+       "file": "src/workspace-identity/authority.ts",
+       "contains": "proof_method='passkey' AND proof_at>unixepoch()-600"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-handoff.mjs",
+       "contains": "const refused=await complete(h,old);assert.equal(refused.status,401,refused.text);",
+       "asserts": "a stale web passkey cannot complete a handoff"
+      },
+      {
+       "file": "tests/mobile-handoff.mjs",
+       "contains": "same(refused.data,errors.proof_required_fresh.body);",
+       "asserts": "a handoff session confirming a fresh-passkey review is proof_required fresh_passkey until native reauthentication"
+      },
+      {
+       "file": "tests/mobile-handoff.mjs",
+       "contains": "assert.equal(s.freshUntil,null,'a handoff creates no freshness');",
+       "asserts": "the exchange reports no freshness"
+      }
+     ]
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "No request field selects an account: complete binds the account and source session of the cookie to the handoff named by the browser token; the exchange requires the matching handoff id, code, state and S256 verifier. A bound handoff cannot be bound again, and another handoff's code or verifier is refused.",
+     "enforcedAt": [
+      {
+       "file": "src/workspace-identity/handoff.ts",
+       "contains": "row.state!==input.state||row.code_challenge!==challenge"
+      },
+      {
+       "file": "src/workspace-identity/handoff.ts",
+       "contains": "WHERE browser_token_hash=? AND account_id IS NULL"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-handoff.mjs",
+       "contains": "const steal=await complete(h,cookieB);assert.equal(steal.status,409,steal.text);",
+       "asserts": "another account cannot bind a bound handoff"
+      },
+      {
+       "file": "tests/mobile-handoff.mjs",
+       "contains": "denied(await exchange(h,second.code),'another handoff code under this id');",
+       "asserts": "a code only works under its own handoff id"
+      },
+      {
+       "file": "tests/mobile-handoff.mjs",
+       "contains": "denied(await exchange(hb,code));",
+       "asserts": "another account's verifier cannot spend the code"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "The code is single use: the claim and the native session are one transaction guarded by native_session_id IS NULL and the schema's issue-then-consume trigger. A wrong state or verifier deletes the handoff so there is no second guess. The code lives sixty seconds and the handoff five minutes.",
+     "enforcedAt": [
+      {
+       "file": "src/workspace-identity/handoff.ts",
+       "contains": "native_session_id IS NULL AND code_expires_at>unixepoch() AND expires_at>unixepoch()"
+      },
+      {
+       "file": "src/workspace-identity/handoff.ts",
+       "contains": "DELETE FROM identity_handoffs WHERE id=? AND code_hash=? AND native_session_id IS NULL"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-handoff.mjs",
+       "contains": "assert.deepEqual([x.status,y.status].sort(),[200,401]);",
+       "asserts": "two concurrent exchanges mint exactly one session"
+      },
+      {
+       "file": "tests/mobile-handoff.mjs",
+       "contains": "denied(await exchange(late,lateCode));",
+       "asserts": "an expired handoff denies a live code"
+      },
+      {
+       "file": "tests/mobile-handoff.mjs",
+       "contains": "denied(await exchange(stale,staleCode));",
+       "asserts": "an expired code is refused"
+      },
+      {
+       "file": "tests/mobile-handoff.mjs",
+       "contains": "assert.equal(await count('identity_handoffs','id=?',h.id),0,name+': the code is burned');",
+       "asserts": "a wrong verifier or state burns the code"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "The exchange claims the handoff only while its source session is a current web authority at the bound epoch (identity_current_authorities) and the account still has two active passkeys; signing the source out deletes the handoff by foreign key cascade, and an epoch change or a removed key denies.",
+     "enforcedAt": [
+      {
+       "file": "src/workspace-identity/handoff.ts",
+       "contains": "FROM identity_current_authorities c WHERE c.authority_id=identity_handoffs.source_session_id"
+      },
+      {
+       "file": "src/workspace-identity/schema.sql",
+       "contains": "source_session_id TEXT REFERENCES identity_sessions(id) ON DELETE CASCADE"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-handoff.mjs",
+       "contains": "assert.equal(await count('identity_handoffs','id=?',h.id),0,'the foreign key cascade removes the handoff with its source session');",
+       "asserts": "source sign-out before the exchange removes the handoff"
+      },
+      {
+       "file": "tests/mobile-handoff.mjs",
+       "contains": "await run('UPDATE identity_accounts SET auth_epoch=auth_epoch+1 WHERE account_id=?',e.account);",
+       "asserts": "a changed epoch denies the exchange"
+      },
+      {
+       "file": "tests/mobile-handoff.mjs",
+       "contains": "await run('DELETE FROM identity_credentials WHERE id=? AND account_id=?',two.all[1].id,two.account);",
+       "asserts": "a removed key denies the exchange"
+      }
+     ]
+    },
+    "admission": {
+     "state": "evidenced",
+     "detail": "start and exchange are limited per IP by AUTH_LIMITER; complete uses the identity router's limiters. The table holds at most 2000 handoffs (database trigger); a full table is 503 unavailable and expired rows are swept on each start.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/router.ts",
+       "contains": "anonymous(request,env,false,()=>handoffStartOperation(request,env))"
+      },
+      {
+       "file": "src/workspace-identity/handoff.ts",
+       "contains": "throw identityUnavailable(); // includes the 2000-row cap"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-handoff.mjs",
+       "contains": "assert.deepEqual(limits.auth,['mobile:local'],'anonymous route limited by AUTH_LIMITER');",
+       "asserts": "start is limited by AUTH_LIMITER"
+      },
+      {
+       "file": "tests/mobile-handoff.mjs",
+       "contains": "const full=await mobile('/session/handoff/start',{body});assert.equal(full.status,503,full.text);",
+       "asserts": "the 2000 row cap refuses a new handoff"
+      }
+     ]
+    }
+   }
+  },
+  {
    "id": "mobile-workspace",
    "title": "Native /api/mobile/v1 workspace slice (WH-084 M2): bootstrap, Chat list, turn readback and send, review list and confirm",
    "privileged": [
@@ -1012,6 +1261,14 @@
      "methods": [
       "POST"
      ]
+    },
+    {
+     "file": "src/workspace-identity/http.ts",
+     "kind": "exact",
+     "match": "handoff/complete",
+     "methods": [
+      "POST"
+     ]
     }
    ],
    "cells": {
@@ -1061,7 +1318,7 @@
     },
     "freshness": {
      "state": "evidenced",
-     "detail": "Kit, enrollment, recovery and passkey changes require a passkey proof under ten minutes old in the committing predicate.",
+     "detail": "Kit, enrollment, recovery and passkey changes require a passkey proof under ten minutes old in the committing predicate and the native handoff completion (WH-083 M3), which also needs two active passkeys.",
      "enforcedAt": [
       {
        "file": "src/workspace-identity/kits.ts",
@@ -1070,6 +1327,10 @@
       {
        "file": "src/workspace-identity/recovery.ts",
        "contains": "const restricted=p.purpose==='recovery',policy:IdentityPolicy={purpose:p.purpose,freshPasskey:true,bindIdentityRevision:true};"
+      },
+      {
+       "file": "src/workspace-identity/handoff.ts",
+       "contains": "const policy={purpose:'workspace' as const,freshPasskey:true,bindIdentityRevision:true};"
       }
      ],
      "tests": [
@@ -1082,6 +1343,11 @@
        "file": "tests/identity-kits.mjs",
        "contains": "const oldProof=await current(exp.access);await denies(()=>completeEnrollment(request(),env,oldProof,offered(oldProof,expKit)),'proof_required');",
        "asserts": "an old proof is refused"
+      },
+      {
+       "file": "tests/mobile-handoff.mjs",
+       "contains": "const refused=await complete(h,old);assert.equal(refused.status,401,refused.text);",
+       "asserts": "handoff completion with a stale web passkey is proof_required until the page reauthenticates"
       }
      ]
     },

@@ -3,6 +3,7 @@
 import type {IdentityPrincipal} from '../workspace-identity/authority';
 import {bearerToken,mobilePrincipal} from './auth';
 import {config,loginOptionsOperation,loginVerifyOperation,logoutOperation,reauthOptionsOperation,reauthVerifyOperation,sessionOperation} from './identity';
+import {handoffExchangeOperation,handoffStartOperation} from './handoff';
 import {bootstrap,chatList,chatTurn,confirmReview,reviewList,sendMessage,type MobileDeps} from './workspace';
 import {MobileError,admitClient,refusal,signin,type MobileEnvironment} from './transport';
 
@@ -43,6 +44,8 @@ export async function handleMobileRequest(request:Request,env:MobileEnvironment,
   if(method==='GET'&&action==='config')return await anonymous(request,env,true,()=>config(env));
   if(method==='POST'&&action==='session/login/options')return await anonymous(request,env,false,()=>loginOptionsOperation(request,env));
   if(method==='POST'&&action==='session/login/verify')return await anonymous(request,env,false,()=>loginVerifyOperation(request,env));
+  if(method==='POST'&&action==='session/handoff/start')return await anonymous(request,env,false,()=>handoffStartOperation(request,env));
+  if(method==='POST'&&action==='session/handoff/exchange')return await anonymous(request,env,false,()=>handoffExchangeOperation(request,env));
   if(method==='POST'&&action==='session/reauth/options')return await authenticated(request,env,p=>reauthOptionsOperation(request,env,p));
   if(method==='POST'&&action==='session/reauth/verify')return await authenticated(request,env,(p,token)=>reauthVerifyOperation(request,env,p,token));
   if(method==='GET'&&action==='session')return await authenticated(request,env,p=>sessionOperation(env,p));
