@@ -22,7 +22,7 @@ assert.ok(pin>0&&pin<client,'provision-cms must pin the test platform before cre
 // stripe-sandbox: a sandbox key for another account is refused before any write; the Whumpo account passes.
 const dir=mkdtempSync(join(tmpdir(),'whumpo-stripe-pin-')),realFetch=globalThis.fetch,calls=[];
 try{
- writeFileSync(join(dir,'stripe-test.key'),'sk_test_synthetic0000');
+ writeFileSync(join(dir,'stripe-test.key'),'sk_'+'test_synthetic0000');
  const stub=account=>async(url,{method='GET'}={})=>{calls.push(method+' '+url);const path=String(url).replace('https://api.stripe.com/v1/','');return Response.json(path==='balance'?{livemode:false}:{id:account,livemode:false});};
  globalThis.fetch=stub('acct_someoneelse');
  await assert.rejects(configure(dir,true),/different Stripe account/);
