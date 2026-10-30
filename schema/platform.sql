@@ -1590,22 +1590,6 @@ CREATE TABLE usage_review_requests (
  CHECK(source='support' OR (source='chat' AND kind='usage_review' AND reference IS NULL) OR (source='chat_form' AND kind='help' AND reference IS NULL))
 );
 
--- External notification of a saved response. A row exists only when an owner-selected,
--- reviewed provider is configured; it records provider acceptance, never the content or customer read.
-CREATE TABLE support_deliveries (
- request_id TEXT PRIMARY KEY REFERENCES usage_review_requests(id) ON DELETE CASCADE,
- user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
- provider TEXT NOT NULL CHECK(length(provider) BETWEEN 1 AND 60),
- review TEXT NOT NULL CHECK(length(review) BETWEEN 1 AND 200),
- state TEXT NOT NULL DEFAULT 'queued' CHECK(state IN ('queued','delivered','failed','cancelled')),
- attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts BETWEEN 0 AND 20),
- created_at TEXT NOT NULL,
- next_attempt_at TEXT NOT NULL,
- delivered_at TEXT,
- last_error TEXT CHECK(last_error IS NULL OR last_error IN ('rejected','unavailable','exhausted')),
- CHECK((state='delivered' AND delivered_at IS NOT NULL) OR (state!='delivered' AND delivered_at IS NULL))
-);
-
 -- WH-036: provider-neutral contact notification outbox. The inbox (contact_submissions) stays the source of truth;
 -- nothing here carries a visitor name, email or message. Rows are created only when a selected, implemented and
 -- reviewed provider is configured (src/contact-notifications.ts); no provider is implemented or enabled.
@@ -1635,28 +1619,6 @@ CREATE TABLE contact_notification_suppressions (
  PRIMARY KEY(user_id,address)
 );
 
-CREATE TABLE contact_notification_outbox (
- id TEXT PRIMARY KEY,
- user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
- project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
- destination_id TEXT NOT NULL REFERENCES contact_notification_destinations(id) ON DELETE CASCADE,
- kind TEXT NOT NULL CHECK(kind IN ('verification','new_message')),
- submission_id TEXT CHECK(submission_id IS NULL OR length(submission_id)=36),
- idempotency_key TEXT NOT NULL UNIQUE CHECK(length(idempotency_key) BETWEEN 10 AND 120),
- provider TEXT NOT NULL CHECK(length(provider) BETWEEN 1 AND 60),
- review TEXT NOT NULL CHECK(length(review) BETWEEN 1 AND 200),
- state TEXT NOT NULL DEFAULT 'queued' CHECK(state IN ('queued','accepted','failed','cancelled','bounced','complained')),
- attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts BETWEEN 0 AND 10),
- created_at TEXT NOT NULL,
- next_attempt_at TEXT NOT NULL,
- expires_at TEXT NOT NULL,
- accepted_at TEXT,
- provider_ref TEXT CHECK(provider_ref IS NULL OR length(provider_ref) BETWEEN 1 AND 100),
- last_error TEXT CHECK(last_error IS NULL OR last_error IN ('rejected','unavailable','exhausted','suppressed','expired','contained','uncertain','ceiling')),
- CHECK((kind='new_message')=(submission_id IS NOT NULL)),
- CHECK((state IN ('accepted','bounced','complained'))=(accepted_at IS NOT NULL))
-);
-
 -- WH-036 exact Chat review of the owner's notification address (owner decision, October 4, 2026). The review id is the
 -- preparing chat turn; confirmation by a later turn replaces the project's destination atomically (contact_destination_review_apply).
 CREATE TABLE contact_destination_reviews (
@@ -1667,14 +1629,6 @@ CREATE TABLE contact_destination_reviews (
  expires_at TEXT NOT NULL,
  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','applied')),
  confirmed_by TEXT UNIQUE
-);
-
--- WH-036 spending ceiling: provider calls per UTC day. A send is refused (contact_send_ceiling) when the 32 most recent
--- UTC days would exceed the day's ceiling (it can only be lowered), so any billing cycle of up to 31 days stays within it.
-CREATE TABLE contact_notification_send_ledger (
- day TEXT PRIMARY KEY CHECK(length(day)=10),
- sends INTEGER NOT NULL DEFAULT 0 CHECK(sends>=0),
- ceiling INTEGER NOT NULL CHECK(ceiling BETWEEN 0 AND 100000)
 );
 
 -- WH-036 operator-reviewed reset of one permanent suppression (owner decision, October 4, 2026). Inserted only by the
@@ -2224,11 +2178,6 @@ CREATE UNIQUE INDEX usage_review_one_open ON usage_review_requests(user_id,kind)
 
 CREATE INDEX usage_review_queue ON usage_review_requests(state,created_at,id);
 
-CREATE INDEX support_delivery_due ON support_deliveries(state,next_attempt_at);
-CREATE INDEX contact_notification_outbox_due ON contact_notification_outbox(state,next_attempt_at);
-CREATE INDEX contact_notification_outbox_destination ON contact_notification_outbox(destination_id,kind,created_at);
-CREATE INDEX contact_notification_outbox_user ON contact_notification_outbox(user_id,kind,created_at);
-CREATE INDEX contact_notification_outbox_expiry ON contact_notification_outbox(expires_at);
 CREATE INDEX contact_notification_destinations_address ON contact_notification_destinations(user_id,address);
 CREATE INDEX contact_destination_reviews_owner ON contact_destination_reviews(user_id,project_id);
 
@@ -4060,14 +4009,6 @@ CREATE TRIGGER usage_review_delete BEFORE DELETE ON usage_review_requests
 WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
 BEGIN SELECT RAISE(ABORT,'usage_review_immutable'); END;
 
-CREATE TRIGGER support_delivery_insert BEFORE INSERT ON support_deliveries BEGIN
- SELECT RAISE(ABORT,'support_delivery_initial') WHERE NEW.state!='queued' OR NEW.attempts!=0 OR NOT EXISTS(SELECT 1 FROM usage_review_requests r WHERE r.id=NEW.request_id AND r.user_id=NEW.user_id AND r.state='answered');
-END;
-
-CREATE TRIGGER support_delivery_update BEFORE UPDATE ON support_deliveries BEGIN
- SELECT RAISE(ABORT,'support_delivery_final') WHERE OLD.state!='queued' OR NEW.request_id IS NOT OLD.request_id OR NEW.user_id IS NOT OLD.user_id OR NEW.provider IS NOT OLD.provider OR NEW.review IS NOT OLD.review OR NEW.created_at IS NOT OLD.created_at OR NEW.attempts<OLD.attempts;
-END;
-
 CREATE TRIGGER contact_destination_insert BEFORE INSERT ON contact_notification_destinations BEGIN
  SELECT RAISE(ABORT,'contact_destination_initial') WHERE NEW.state!='unverified' OR NEW.verification_code IS NOT NULL OR NEW.verification_failures!=0 OR NEW.verified_at IS NOT NULL OR NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id AND owner_user_id=NEW.user_id);
  SELECT RAISE(ABORT,'contact_destination_suppressed') WHERE EXISTS(SELECT 1 FROM contact_notification_suppressions WHERE user_id=NEW.user_id AND address=NEW.address);
@@ -4111,36 +4052,9 @@ CREATE TRIGGER contact_destination_review_apply AFTER UPDATE ON contact_destinat
  INSERT INTO activity_events(id,user_id,project_id,action,summary,created_at) VALUES('contact-notify:'||NEW.id,NEW.user_id,NEW.project_id,'contact.notifications','Set the reviewed contact notification address (verification required)',strftime('%Y-%m-%dT%H:%M:%fZ','now'));
 END;
 
-CREATE TRIGGER contact_send_ledger_insert BEFORE INSERT ON contact_notification_send_ledger BEGIN
- SELECT RAISE(ABORT,'contact_send_final') WHERE NEW.sends!=0;
-END;
-CREATE TRIGGER contact_send_ledger_update BEFORE UPDATE ON contact_notification_send_ledger BEGIN
- SELECT RAISE(ABORT,'contact_send_final') WHERE NEW.day IS NOT OLD.day OR NEW.ceiling>OLD.ceiling OR NEW.sends<OLD.sends;
- SELECT RAISE(ABORT,'contact_send_ceiling') WHERE NEW.sends>OLD.sends AND (SELECT coalesce(sum(sends),0) FROM contact_notification_send_ledger WHERE day>date(NEW.day,'-32 days') AND day<=NEW.day)-OLD.sends+NEW.sends>NEW.ceiling;
-END;
-
 -- Suppression is atomic with its effect: the destination becomes final-suppressed and unsent notices are cancelled.
 CREATE TRIGGER contact_suppression_apply AFTER INSERT ON contact_notification_suppressions BEGIN
- UPDATE contact_notification_outbox SET state='cancelled',last_error='suppressed' WHERE state='queued' AND destination_id IN(SELECT id FROM contact_notification_destinations WHERE user_id=NEW.user_id AND address=NEW.address);
  UPDATE contact_notification_destinations SET state='suppressed',verification_code=NULL,verification_expires_at=NULL WHERE user_id=NEW.user_id AND address=NEW.address AND state!='suppressed';
-END;
-
-CREATE TRIGGER contact_outbox_insert BEFORE INSERT ON contact_notification_outbox BEGIN
- SELECT RAISE(ABORT,'contact_outbox_initial') WHERE NEW.state!='queued' OR NEW.attempts!=0 OR NEW.accepted_at IS NOT NULL OR NEW.provider_ref IS NOT NULL OR NEW.last_error IS NOT NULL;
- SELECT RAISE(ABORT,'contact_outbox_destination') WHERE NOT EXISTS(SELECT 1 FROM contact_notification_destinations d WHERE d.id=NEW.destination_id AND d.user_id=NEW.user_id AND d.project_id=NEW.project_id AND d.state=CASE NEW.kind WHEN 'verification' THEN 'unverified' ELSE 'verified' END);
- SELECT RAISE(ABORT,'contact_outbox_submission') WHERE NEW.kind='new_message' AND NOT EXISTS(SELECT 1 FROM contact_submissions WHERE id=NEW.submission_id AND project_id=NEW.project_id);
- SELECT RAISE(ABORT,'contact_outbox_rate') WHERE NEW.kind='verification' AND ((SELECT count(*) FROM contact_notification_outbox WHERE destination_id=NEW.destination_id AND kind='verification' AND created_at>strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at,'-1 day'))>=3
-  OR (SELECT count(*) FROM contact_notification_outbox WHERE user_id=NEW.user_id AND kind='verification' AND created_at>strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at,'-1 day'))>=10);
- SELECT RAISE(ABORT,'contact_outbox_rate') WHERE NEW.kind='new_message' AND ((SELECT count(*) FROM contact_notification_outbox WHERE destination_id=NEW.destination_id AND kind='new_message' AND created_at>strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at,'-1 hour'))>=10
-  OR (SELECT count(*) FROM contact_notification_outbox WHERE destination_id=NEW.destination_id AND kind='new_message' AND created_at>strftime('%Y-%m-%dT%H:%M:%fZ',NEW.created_at,'-1 day'))>=50);
-END;
-
--- Terminal states (failed, cancelled, bounced, complained) are final. Provider acceptance can only later become a bounce or complaint.
-CREATE TRIGGER contact_outbox_update BEFORE UPDATE ON contact_notification_outbox BEGIN
- SELECT RAISE(ABORT,'contact_outbox_final') WHERE OLD.state IN ('failed','cancelled','bounced','complained') OR (OLD.state='accepted' AND NEW.state NOT IN ('accepted','bounced','complained'))
-  OR NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.project_id IS NOT OLD.project_id OR NEW.destination_id IS NOT OLD.destination_id OR NEW.kind IS NOT OLD.kind OR NEW.submission_id IS NOT OLD.submission_id
-  OR NEW.idempotency_key IS NOT OLD.idempotency_key OR NEW.provider IS NOT OLD.provider OR NEW.review IS NOT OLD.review OR NEW.created_at IS NOT OLD.created_at OR NEW.expires_at IS NOT OLD.expires_at
-  OR NEW.attempts<OLD.attempts OR (OLD.accepted_at IS NOT NULL AND (NEW.accepted_at IS NOT OLD.accepted_at OR NEW.attempts IS NOT OLD.attempts OR NEW.provider_ref IS NOT OLD.provider_ref));
 END;
 
 CREATE TRIGGER backend_import_owner BEFORE INSERT ON backend_imports WHEN NOT EXISTS(
@@ -5700,9 +5614,6 @@ BEGIN SELECT RAISE(ABORT,'safety_preservation_hold'); END;
 CREATE TRIGGER safety_hold_contact_destination_retained BEFORE DELETE ON contact_notification_destinations
 WHEN EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
 BEGIN SELECT RAISE(ABORT,'safety_preservation_hold'); END;
-CREATE TRIGGER safety_hold_contact_outbox_retained BEFORE DELETE ON contact_notification_outbox
-WHEN EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
-BEGIN SELECT RAISE(ABORT,'safety_preservation_hold'); END;
 -- Photo removal (and its R2 cleanup queue entry), saved-version removal and visitor deletion/owner erasure.
 CREATE TRIGGER safety_hold_file_retained BEFORE DELETE ON project_files
 WHEN EXISTS(SELECT 1 FROM safety_held_files WHERE file_id=OLD.id)
@@ -6415,3 +6326,156 @@ BEGIN SELECT RAISE(ABORT,'job_outbox_identity'); END;
 CREATE TRIGGER job_outbox_retained BEFORE DELETE ON job_outbox
 WHEN EXISTS(SELECT 1 FROM job_journal j JOIN users u ON u.id=j.owner_user_id WHERE j.id=OLD.job_id AND j.state NOT IN ('complete','cancelled','expired'))
 BEGIN SELECT RAISE(ABORT,'job_outbox_retained'); END;
+
+-- WH-156 shared notification outbox (docs/notifications.md; schema batch 3e). One receipt row per (template, event, recipient) for every notice kind;
+-- each provider attempt is ONE `platform-email` job-journal envelope (maxAttempts 1), so the journal supplies the lease/fence and the `uncertain`
+-- handling. Times are epoch milliseconds, like the journal. A template is validated against the source catalog in code (src/notification-outbox.ts),
+-- not by a CHECK list here. This replaces the contact outbox, the contact send ledger and the support delivery table (current-version
+-- policy: no legacy reader; the cutover resets data). Destinations, reviews and suppressions are unchanged.
+CREATE TABLE notification_notices (
+ id TEXT PRIMARY KEY CHECK(length(id)=36 AND id NOT GLOB '*[^0-9a-f-]*'),
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ scope TEXT NOT NULL CHECK(scope IN ('owner-destination','account-email','project-staff','submitter')),
+ project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+ destination_id TEXT REFERENCES contact_notification_destinations(id) ON DELETE CASCADE,
+ recipient_ref TEXT CHECK(recipient_ref IS NULL OR length(recipient_ref) BETWEEN 1 AND 128),
+ recipient_key TEXT NOT NULL,
+ template TEXT NOT NULL CHECK(length(template)<=80 AND template GLOB '*@[0-9]*'),
+ event_ref TEXT NOT NULL CHECK(length(event_ref) BETWEEN 1 AND 128),
+ provider TEXT NOT NULL DEFAULT 'cloudflare-email' CHECK(provider='cloudflare-email'),
+ state TEXT NOT NULL DEFAULT 'queued' CHECK(state IN ('queued','dispatching','deferred','accepted','delivered','unknown-outcome','bounced','complained','failed','cancelled','unresolved')),
+ attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts BETWEEN 0 AND 6),
+ job_id TEXT UNIQUE REFERENCES job_journal(id) ON DELETE SET NULL,
+ created_at INTEGER NOT NULL CHECK(created_at>0),
+ expires_at INTEGER NOT NULL CHECK(expires_at>created_at AND expires_at<=created_at+86400000),
+ dispatched_at INTEGER CHECK(dispatched_at IS NULL OR dispatched_at>=created_at),
+ outcome_at INTEGER CHECK(outcome_at IS NULL OR outcome_at>0),
+ provider_ref TEXT CHECK(provider_ref IS NULL OR length(provider_ref) BETWEEN 1 AND 100),
+ reason TEXT CHECK(reason IS NULL OR reason IN ('rejected','unavailable','exhausted','suppressed','expired','contained','uncertain','ceiling','recipient-revoked','record-removed','template-withdrawn','unreconciled')),
+ lookups INTEGER NOT NULL DEFAULT 0 CHECK(lookups BETWEEN 0 AND 3),
+ reconcile_until INTEGER CHECK(reconcile_until IS NULL OR reconcile_until>0),
+ UNIQUE(template,event_ref,recipient_key),
+ CHECK((scope='owner-destination' AND project_id IS NOT NULL AND destination_id IS NOT NULL AND recipient_ref IS NULL)
+  OR (scope='account-email' AND project_id IS NULL AND destination_id IS NULL)
+  OR (scope IN ('project-staff','submitter') AND project_id IS NOT NULL AND destination_id IS NULL AND recipient_ref IS NOT NULL)),
+ CHECK(recipient_key=scope||':'||coalesce(destination_id,recipient_ref,user_id)),
+ CHECK((state IN ('queued','dispatching'))=(outcome_at IS NULL)),
+ CHECK((state IN ('deferred','failed','cancelled','unknown-outcome','unresolved'))=(reason IS NOT NULL)),
+ CHECK(provider_ref IS NULL OR state IN ('accepted','delivered','bounced','complained')),
+ CHECK(state!='queued' OR (dispatched_at IS NULL AND attempts=0)),
+ CHECK(state IN ('queued','cancelled') OR (dispatched_at IS NOT NULL AND attempts>0)),
+ CHECK(state!='unknown-outcome' OR (reconcile_until IS NOT NULL AND outcome_at IS NOT NULL)),
+ CHECK(reconcile_until IS NULL OR outcome_at IS NULL OR reconcile_until<=outcome_at+259200000)
+) STRICT;
+CREATE INDEX notification_notices_recipient ON notification_notices(recipient_key,created_at);
+CREATE INDEX notification_notices_user ON notification_notices(user_id,template,created_at);
+CREATE INDEX notification_notices_open ON notification_notices(state,reconcile_until);
+CREATE INDEX notification_notices_destination ON notification_notices(destination_id);
+CREATE INDEX notification_notices_project ON notification_notices(project_id);
+CREATE INDEX notification_notices_expiry ON notification_notices(expires_at);
+
+-- One ledger and ceiling per provider across ALL notice kinds (the $5/month bound). A provider call is counted by notification_notices_counted
+-- when its notice enters `dispatching`; the 32 most recent UTC days may never exceed the day's ceiling (which can only be lowered).
+CREATE TABLE notification_send_ledger (
+ provider TEXT NOT NULL CHECK(provider='cloudflare-email'),
+ day TEXT NOT NULL CHECK(length(day)=10),
+ sends INTEGER NOT NULL DEFAULT 0 CHECK(sends>=0),
+ ceiling INTEGER NOT NULL CHECK(ceiling BETWEEN 0 AND 100000),
+ PRIMARY KEY(provider,day)
+) STRICT;
+
+CREATE TRIGGER notification_send_ledger_insert BEFORE INSERT ON notification_send_ledger BEGIN
+ SELECT RAISE(ABORT,'notification_send_final') WHERE NEW.sends!=0;
+END;
+CREATE TRIGGER notification_send_ledger_update BEFORE UPDATE ON notification_send_ledger BEGIN
+ SELECT RAISE(ABORT,'notification_send_final') WHERE NEW.provider IS NOT OLD.provider OR NEW.day IS NOT OLD.day OR NEW.ceiling>OLD.ceiling OR NEW.sends<OLD.sends;
+ SELECT RAISE(ABORT,'notification_send_ceiling') WHERE NEW.sends>OLD.sends AND (SELECT coalesce(sum(sends),0) FROM notification_send_ledger WHERE provider=NEW.provider AND day>date(NEW.day,'-32 days') AND day<=NEW.day)-OLD.sends+NEW.sends>NEW.ceiling;
+END;
+
+-- Admission: queued only, owned, with the recipient the scope names. Caps of 10 an hour and 50 a day per recipient_key are a backstop behind the
+-- guarded INSERT ... SELECT in src/notification-outbox.ts. job_id is linked in the same batch by the admission of the attempt's journal envelope.
+CREATE TRIGGER notification_notices_new BEFORE INSERT ON notification_notices BEGIN
+ SELECT RAISE(ABORT,'notification_notice_initial') WHERE NEW.state!='queued' OR NEW.attempts!=0 OR NEW.lookups!=0 OR NEW.dispatched_at IS NOT NULL OR NEW.outcome_at IS NOT NULL
+  OR NEW.provider_ref IS NOT NULL OR NEW.reason IS NOT NULL OR NEW.reconcile_until IS NOT NULL OR NEW.job_id IS NOT NULL;
+ SELECT RAISE(ABORT,'notification_notice_scope') WHERE
+  (NEW.scope='owner-destination' AND NOT EXISTS(SELECT 1 FROM contact_notification_destinations d WHERE d.id=NEW.destination_id AND d.user_id=NEW.user_id AND d.project_id=NEW.project_id AND d.state IN ('unverified','verified')))
+  OR (NEW.scope IN ('project-staff','submitter') AND NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id AND owner_user_id=NEW.user_id));
+ SELECT RAISE(ABORT,'notification_notice_rate') WHERE (SELECT count(*) FROM notification_notices WHERE recipient_key=NEW.recipient_key AND created_at>NEW.created_at-3600000)>=10
+  OR (SELECT count(*) FROM notification_notices WHERE recipient_key=NEW.recipient_key AND created_at>NEW.created_at-86400000)>=50;
+END;
+
+-- The frozen state table (docs/notifications.md). Nothing leaves unknown-outcome for queued, deferred or dispatching; it goes to an evidence state,
+-- or to unresolved once three lookups are used or reconcile_until has passed. Identity never changes; only job_id (linked once, replaced when a refused
+-- attempt is deferred, or cleared by the journal's ON DELETE SET NULL) and lookups move without a state change.
+CREATE TRIGGER notification_notices_transition BEFORE UPDATE ON notification_notices BEGIN
+ SELECT RAISE(ABORT,'notification_notice_identity') WHERE NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.scope IS NOT OLD.scope OR NEW.project_id IS NOT OLD.project_id
+  OR NEW.destination_id IS NOT OLD.destination_id OR NEW.recipient_ref IS NOT OLD.recipient_ref OR NEW.recipient_key IS NOT OLD.recipient_key OR NEW.template IS NOT OLD.template
+  OR NEW.event_ref IS NOT OLD.event_ref OR NEW.provider IS NOT OLD.provider OR NEW.created_at IS NOT OLD.created_at OR NEW.expires_at IS NOT OLD.expires_at;
+ SELECT RAISE(ABORT,'notification_notice_transition') WHERE NEW.state=OLD.state AND NOT (
+  NEW.attempts=OLD.attempts AND NEW.dispatched_at IS OLD.dispatched_at AND NEW.outcome_at IS OLD.outcome_at AND NEW.provider_ref IS OLD.provider_ref AND NEW.reason IS OLD.reason
+  AND NEW.reconcile_until IS OLD.reconcile_until
+  AND ((OLD.state='unknown-outcome' AND NEW.job_id IS OLD.job_id AND NEW.lookups=OLD.lookups+1)
+   OR (NEW.lookups=OLD.lookups AND (NEW.job_id IS OLD.job_id OR NEW.job_id IS NULL OR (OLD.job_id IS NULL AND OLD.state='queued')))));
+ SELECT RAISE(ABORT,'notification_notice_transition') WHERE NEW.state!=OLD.state AND NOT (
+  (OLD.state||'>'||NEW.state) IN ('queued>dispatching','queued>cancelled','deferred>dispatching','deferred>cancelled','deferred>failed','dispatching>accepted','dispatching>deferred',
+   'dispatching>failed','dispatching>unknown-outcome','dispatching>cancelled','accepted>delivered','accepted>bounced','accepted>complained','delivered>complained',
+   'unknown-outcome>accepted','unknown-outcome>delivered','unknown-outcome>bounced','unknown-outcome>complained','unknown-outcome>unresolved')
+  AND NEW.attempts=OLD.attempts+(NEW.state='dispatching')
+  AND (NEW.state='dispatching' OR NEW.dispatched_at IS OLD.dispatched_at)
+  AND (NEW.job_id IS OLD.job_id OR (OLD.state='dispatching' AND NEW.state='deferred' AND NEW.job_id IS NOT NULL))
+  AND (NEW.state='unknown-outcome' OR NEW.reconcile_until IS OLD.reconcile_until)
+  AND (OLD.provider_ref IS NULL OR NEW.provider_ref IS OLD.provider_ref)
+  AND (NEW.lookups=OLD.lookups OR (OLD.state='unknown-outcome' AND NEW.state='unresolved' AND NEW.lookups=OLD.lookups+1))
+  AND (NEW.state!='unresolved' OR NEW.lookups>=3 OR NEW.outcome_at>=OLD.reconcile_until)
+  AND (NEW.state!='dispatching' OR (NEW.job_id IS NOT NULL AND NEW.dispatched_at<NEW.expires_at)));
+END;
+
+-- No provider call goes uncounted: entering dispatching adds one send to the day's ledger row (which the claim creates first), and the ledger's
+-- own trigger refuses the whole claim past the 32-day ceiling.
+CREATE TRIGGER notification_notices_counted AFTER UPDATE OF state ON notification_notices
+WHEN NEW.state='dispatching' AND OLD.state!='dispatching'
+BEGIN
+ SELECT RAISE(ABORT,'notification_ledger_missing') WHERE NOT EXISTS(SELECT 1 FROM notification_send_ledger WHERE provider=NEW.provider AND day=date(NEW.dispatched_at/1000,'unixepoch'));
+ UPDATE notification_send_ledger SET sends=sends+1 WHERE provider=NEW.provider AND day=date(NEW.dispatched_at/1000,'unixepoch');
+END;
+
+-- An interrupted worker or a lost reply: when the journal holds a platform-email attempt as uncertain, its notice moves from dispatching to
+-- unknown-outcome in the same statement, with the 72-hour reconciliation bound. It is never redispatched.
+CREATE TRIGGER notification_notices_uncertain AFTER UPDATE OF state ON job_journal
+WHEN NEW.state='uncertain' AND OLD.state!='uncertain' AND NEW.purpose='platform-email'
+BEGIN
+ UPDATE notification_notices SET state='unknown-outcome',outcome_at=NEW.last_at,reason='uncertain',reconcile_until=NEW.last_at+259200000 WHERE job_id=NEW.id AND state='dispatching';
+END;
+
+-- A notice stopped before any attempt takes its still-unclaimed envelope with it, so a cancelled notice never costs a dispatcher slot.
+CREATE TRIGGER notification_notices_job_cancelled AFTER UPDATE OF state ON notification_notices
+WHEN NEW.state='cancelled' AND OLD.state IN ('queued','deferred') AND NEW.job_id IS NOT NULL
+BEGIN
+ UPDATE job_journal SET cancel_requested=1,fence=fence+1,last_event='cancel_requested',last_at=NEW.outcome_at,last_ref=NULL,state='cancelled'
+  WHERE id=NEW.job_id AND state IN ('ready','leased') AND cancel_requested=0;
+END;
+
+-- Cancel on suppression (owner-destination and account-email) using the existing per-account list; contact_suppression_apply marks the destination.
+CREATE TRIGGER notification_notices_suppressed AFTER INSERT ON contact_notification_suppressions BEGIN
+ UPDATE notification_notices SET state='cancelled',reason='suppressed',outcome_at=CAST(strftime('%s','now') AS INTEGER)*1000
+  WHERE state IN ('queued','deferred') AND user_id=NEW.user_id AND (
+   (scope='owner-destination' AND destination_id IN (SELECT id FROM contact_notification_destinations WHERE user_id=NEW.user_id AND address=NEW.address))
+   OR (scope='account-email' AND recipient_ref IS NULL AND EXISTS(SELECT 1 FROM users WHERE id=NEW.user_id AND lower(email)=NEW.address)));
+END;
+-- A removed or replaced destination, or a removed project, stops its unsent notices; a notice with an attempt in flight blocks the delete (below).
+CREATE TRIGGER notification_notices_destination_removed BEFORE DELETE ON contact_notification_destinations BEGIN
+ UPDATE notification_notices SET state='cancelled',reason='recipient-revoked',outcome_at=CAST(strftime('%s','now') AS INTEGER)*1000 WHERE destination_id=OLD.id AND state IN ('queued','deferred');
+END;
+CREATE TRIGGER notification_notices_project_removed BEFORE DELETE ON projects BEGIN
+ UPDATE notification_notices SET state='cancelled',reason='record-removed',outcome_at=CAST(strftime('%s','now') AS INTEGER)*1000 WHERE project_id=OLD.id AND state IN ('queued','deferred');
+END;
+
+-- No delete while a notice is open; unresolved evidence is kept at least 90 days (interim default pending an owner decision). A deleted account
+-- takes its notices with it, like the job journal. Held projects keep their notices (WH-015).
+CREATE TRIGGER notification_notices_retained BEFORE DELETE ON notification_notices
+WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+ AND (OLD.state IN ('queued','dispatching','deferred','unknown-outcome') OR (OLD.state='unresolved' AND OLD.outcome_at>CAST(strftime('%s','now') AS INTEGER)*1000-7776000000))
+BEGIN SELECT RAISE(ABORT,'notification_notice_retained'); END;
+CREATE TRIGGER safety_hold_notification_notices_retained BEFORE DELETE ON notification_notices
+WHEN EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
+BEGIN SELECT RAISE(ABORT,'safety_preservation_hold'); END;

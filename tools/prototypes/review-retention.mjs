@@ -164,7 +164,7 @@ export const capRegistry=Object.freeze({
  cms_unpublish_reviews:R('review','R1','active-only','cms-content','every row'),
  cms_wordpress_sources:R('inventory','R6','lifetime','cms-media-imports'),
  composition_plans:R('review','R1','active-only','backend-artifacts'),
- contact_notification_outbox:R('operation','R3','window','contact-notifications'),
+ notification_notices:R('operation','R3','window','contact-notifications'),
  contact_receipts:R('receipt','R2','expiring','contacts'),
  content_risk_evidence:R('evidence','R5','restricted','safety-cases'),
  content_screening_decisions:R('evidence','R5','restricted','safety-checks'),

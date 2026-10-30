@@ -49,7 +49,7 @@ try{
   const destination=await N.proposeContactDestination(db,a.id,a.project,'  Owner@Example.COM ');assert.deepEqual({address:destination.address,state:destination.state},{address:'owner@example.com',state:'unverified'});
   assert.deepEqual(await N.requestContactVerification(db,null,a.id,a.project),{status:'provider_not_configured'});
   assert.deepEqual(await N.runContactDelivery(db,null,fake.send),{enabled:false,queued:0,accepted:0,retried:0,failed:0,cancelled:0,refused:0});
-  assert.equal((await N.runContactDelivery(db,null,fake.send)).enabled,false);assert.equal(fake.calls.length,0);assert.equal((await row('SELECT count(*) n FROM contact_notification_outbox')).n,0);
+  assert.equal((await N.runContactDelivery(db,null,fake.send)).enabled,false);assert.equal(fake.calls.length,0);assert.equal((await row('SELECT count(*) n FROM notification_notices')).n,0);
   await assert.rejects(N.confirmContactDestination(db,a.id,a.project,'ABCDEFGH'),e=>e.status===400);
   assert.equal((await N.contactNotificationStatus(db,a.id,a.project)).destination.state,'unverified','Without a provider the destination stays unverified');
   assert.equal((await contactInbox(scope(a.id),a.id,a.project)).messages.length,1,'The inbox is unchanged');
@@ -62,13 +62,13 @@ try{
   await N.requestContactVerification(db,settings,a.id,a.project);const code=(await row('SELECT verification_code c FROM contact_notification_destinations WHERE project_id=?',a.project)).c;
   await assert.rejects(N.confirmContactDestination(db,a.id,a.project,code),e=>e.status===400,'The code cannot be used before the provider accepted its notice');
   let r=await N.runContactDelivery(db,settings,fake.send);assert.equal(r.accepted,1);
-  const sent=fake.calls[0];assert.equal(sent.kind,'verification');assert.equal(sent.verificationCode,code);assert.equal(sent.recipient,'owner-a@example.com');assert.deepEqual(Object.keys(sent).sort(),['idempotencyKey','kind','outboxId','projectId','recipient','verificationCode']);
+  const sent=fake.calls[0];assert.equal(sent.kind,'verification');assert.equal(sent.verificationCode,code);assert.equal(sent.recipient,'owner-a@example.com');assert.deepEqual(Object.keys(sent).sort(),['idempotencyKey','kind','outboxId','projectId','recipient','template','verificationCode']);
   await assert.rejects(N.confirmContactDestination(db,b.id,a.project,code),e=>e.status===404);
   const wrong=code[0]==='A'?'B'+code.slice(1):'A'+code.slice(1);for(let i=0;i<5;i++)await assert.rejects(N.confirmContactDestination(db,a.id,a.project,wrong),e=>e.status===400);
   await assert.rejects(N.confirmContactDestination(db,a.id,a.project,code),e=>e.status===400,'Five wrong guesses lock the code');
   assert.equal((await N.contactNotificationStatus(db,a.id,a.project)).destination.state,'unverified');
   await N.requestContactVerification(db,settings,a.id,a.project);const code2=(await row('SELECT verification_code c FROM contact_notification_destinations WHERE project_id=?',a.project)).c;assert.notEqual(code2,code);
-  await N.runContactDelivery(db,settings,fake.send);assert.equal((await row("SELECT state FROM contact_notification_outbox WHERE idempotency_key LIKE ?",'%:'+code)).state,'accepted');
+  await N.runContactDelivery(db,settings,fake.send);assert.equal((await row("SELECT state FROM notification_notices WHERE event_ref LIKE ?",'%:'+code)).state,'accepted');
   await assert.rejects(N.confirmContactDestination(db,a.id,a.project,code),e=>e.status===400,'A superseded code is dead');
   const confirmed=await N.confirmContactDestination(db,a.id,a.project,code2.toLowerCase());assert.equal(confirmed.state,'verified');assert.equal((await row('SELECT verification_code c FROM contact_notification_destinations WHERE project_id=?',a.project)).c,null);
   await assert.rejects(N.confirmContactDestination(db,a.id,a.project,code2),e=>e.status===409);await assert.rejects(()=>run("UPDATE contact_notification_destinations SET state='unverified',verified_at=NULL WHERE project_id=?",a.project),/destination_final/);
@@ -79,19 +79,21 @@ try{
   const d=await account();await enable(d);await N.proposeContactDestination(db,d.id,d.project,'late@example.com');await N.requestContactVerification(db,settings,d.id,d.project,new Date(Date.now()-7200000));
   await N.runContactDelivery(db,settings,fake.send,{now:new Date(Date.now()-7100000)});const late=(await row('SELECT verification_code c FROM contact_notification_destinations WHERE project_id=?',d.project)).c;
   await assert.rejects(N.confirmContactDestination(db,d.id,d.project,late),e=>e.status===400);
+  // The dispatcher serves at most two notices per owner in a run: drain what this test left behind so later counts start clean.
+  for(let i=0;i<4;i++)await N.runContactDelivery(db,settings,async()=>({accepted:true}),{now:new Date(Date.now()+i)});
  });
  await test('notices are content-free, deduplicated across replay and a provider timeout is never resent',async()=>{
   const a=await account(),fake=provider(),{revision}=await verified(a,'owner-b@example.com',fake);fake.calls.length=0;const base=fake.sent.size;
   const first=msg();await Promise.all([saveContact(db,a.project,revision,first),saveContact(db,a.project,revision,first)]);
   const t=Date.now();fake.hang=true;
-  let r=await N.runContactDelivery(db,settings,fake.send,{now:new Date(t),timeoutMs:25});assert.equal(r.queued,1);assert.equal(r.failed,1,'A timeout is uncertain and final');assert.equal(fake.sent.size,base+1,'The provider did take the first attempt');
-  let out=await row("SELECT state,attempts,last_error,idempotency_key FROM contact_notification_outbox WHERE kind='new_message'");assert.deepEqual({state:out.state,attempts:out.attempts,last_error:out.last_error},{state:'failed',attempts:1,last_error:'uncertain'});
+  let r=await N.runContactDelivery(db,settings,fake.send,{now:new Date(t),timeoutMs:25});assert.equal(r.queued,1);assert.equal(r.failed,1,'A timeout is held as unknown-outcome');assert.equal(fake.sent.size,base+1,'The provider did take the first attempt');
+  let out=await row("SELECT id,state,attempts,reason,reconcile_until,outcome_at,event_ref FROM notification_notices WHERE template='contact.new-message@1'");assert.deepEqual({state:out.state,attempts:out.attempts,reason:out.reason},{state:'unknown-outcome',attempts:1,reason:'uncertain'});assert.equal(out.reconcile_until-out.outcome_at,72*3600000,'Held for at most 72 hours of reconciliation');
   for(const later of [6*60000,3600000,86400000])await N.runContactDelivery(db,settings,fake.send,{now:new Date(t+later)});assert.equal(fake.calls.length,1,'The provider has no idempotency key, so an uncertain call is never resent');assert.equal(fake.sent.size,base+1);
   // Replays: the same drain, the same message and another process cannot create or send a second notice.
-  await saveContact(db,a.project,revision,first);r=await N.runContactDelivery(db,settings,fake.send,{now:new Date(t+3600000)});assert.equal(r.queued+r.accepted+r.retried,0);assert.equal((await row("SELECT count(*) n FROM contact_notification_outbox WHERE kind='new_message'")).n,1);
-  const idem=out.idempotency_key;await assert.rejects(()=>run("INSERT INTO contact_notification_outbox(id,user_id,project_id,destination_id,kind,submission_id,idempotency_key,provider,review,created_at,next_attempt_at,expires_at) SELECT ?,user_id,project_id,destination_id,kind,submission_id,idempotency_key,provider,review,created_at,next_attempt_at,expires_at FROM contact_notification_outbox WHERE idempotency_key=?",crypto.randomUUID(),idem),/UNIQUE/);
-  for(const n of fake.calls){assert.equal(n.kind,'new_message');assert.deepEqual(Object.keys(n).sort(),['idempotencyKey','kind','outboxId','projectId','recipient']);assert.ok(!JSON.stringify(n).includes('PRIVATE'));assert.ok(!JSON.stringify(n).includes('visitor-canary'));}
-  assert.ok(!JSON.stringify(await rows('SELECT * FROM contact_notification_outbox')).includes('PRIVATE-VISITOR'),'The outbox stores no visitor content');
+  await saveContact(db,a.project,revision,first);r=await N.runContactDelivery(db,settings,fake.send,{now:new Date(t+3600000)});assert.equal(r.queued+r.accepted+r.retried,0);assert.equal((await row("SELECT count(*) n FROM notification_notices WHERE template='contact.new-message@1'")).n,1);
+  await assert.rejects(()=>run("INSERT INTO notification_notices(id,user_id,scope,project_id,destination_id,recipient_key,template,event_ref,created_at,expires_at) SELECT ?,user_id,scope,project_id,destination_id,recipient_key,template,event_ref,created_at,expires_at FROM notification_notices WHERE id=?",crypto.randomUUID(),out.id),/UNIQUE/);
+  for(const n of fake.calls){assert.equal(n.kind,'new_message');assert.deepEqual(Object.keys(n).sort(),['idempotencyKey','kind','outboxId','projectId','recipient','template']);assert.ok(!JSON.stringify(n).includes('PRIVATE'));assert.ok(!JSON.stringify(n).includes('visitor-canary'));}
+  assert.ok(!JSON.stringify(await rows('SELECT * FROM notification_notices')).includes('PRIVATE-VISITOR'),'The outbox stores no visitor content');
   // Concurrent drains cannot double send one attempt.
   const second=msg();await saveContact(db,a.project,revision,second);fake.calls.length=0;const t2=t+2*3600000;
   await Promise.all([N.runContactDelivery(db,settings,fake.send,{now:new Date(t2)}),N.runContactDelivery(db,settings,fake.send,{now:new Date(t2)})]);assert.equal(fake.calls.length,1,'One claim wins');
@@ -100,32 +102,33 @@ try{
  await test('failure is bounded: rejection and exhaustion are terminal and terminal states cannot reverse',async()=>{
   const a=await account(),fake=provider(),{revision}=await verified(a,'owner-c@example.com',fake);const t0=Date.now();
   await saveContact(db,a.project,revision,msg());fake.mode='reject';let r=await N.runContactDelivery(db,settings,fake.send,{now:new Date(t0)});assert.equal(r.failed,1);
-  const rejected=await row("SELECT id,state,last_error FROM contact_notification_outbox WHERE project_id=? AND kind='new_message'",a.project);assert.deepEqual({state:rejected.state,last_error:rejected.last_error},{state:'failed',last_error:'rejected'});
-  await assert.rejects(()=>run("UPDATE contact_notification_outbox SET state='queued' WHERE id=?",rejected.id),/final/);await assert.rejects(()=>run("UPDATE contact_notification_outbox SET state='accepted',accepted_at=? WHERE id=?",now(),rejected.id),/final/);
+  const rejected=await row("SELECT id,state,reason FROM notification_notices WHERE project_id=? AND template='contact.new-message@1'",a.project);assert.deepEqual({state:rejected.state,reason:rejected.reason},{state:'failed',reason:'rejected'});
+  await assert.rejects(()=>run("UPDATE notification_notices SET state='queued' WHERE id=?",rejected.id),/notification_notice_transition/);await assert.rejects(()=>run("UPDATE notification_notices SET state='accepted',reason=NULL WHERE id=?",rejected.id),/notification_notice_transition/);
   const calls=fake.calls.length;r=await N.runContactDelivery(db,settings,fake.send,{now:new Date(t0+86400000)});assert.equal(fake.calls.length,calls,'A failed notice is never sent again');
   // A thrown provider call is uncertain and final after one call.
   await saveContact(db,a.project,revision,msg());fake.mode='throw';const before=fake.calls.length;r=await N.runContactDelivery(db,settings,fake.send,{now:new Date(t0+3600000)});assert.equal(r.failed,1);assert.equal(fake.calls.length,before+1);
-  await N.runContactDelivery(db,settings,fake.send,{now:new Date(t0+2*86400000)});assert.equal(fake.calls.length,before+1,'Never resent');assert.ok(!JSON.stringify(await rows('SELECT * FROM contact_notification_outbox')).includes('PRIVATE-PROVIDER-ERROR'));
+  await N.runContactDelivery(db,settings,fake.send,{now:new Date(t0+2*86400000)});assert.equal(fake.calls.length,before+1,'Never resent');assert.ok(!JSON.stringify(await rows('SELECT * FROM notification_notices')).includes('PRIVATE-PROVIDER-ERROR'));
   await saveContact(db,a.project,revision,msg());fake.mode='down';let at=t0+3*3600000,failed=0,sends=0;
-  for(let i=0;i<8&&!failed;i++){const before=fake.calls.length;failed+=(await N.runContactDelivery(db,settings,fake.send,{now:new Date(at)})).failed;sends+=fake.calls.length-before;at+=7*3600000;}
-  assert.equal(failed,1);assert.equal(sends,N.maxContactDeliveryAttempts);const ex=await row("SELECT attempts,last_error FROM contact_notification_outbox WHERE state='failed' AND last_error='exhausted'");assert.equal(ex.attempts,N.maxContactDeliveryAttempts);
+  for(let i=0;i<8&&!failed;i++){const before=fake.calls.length;failed+=(await N.runContactDelivery(db,settings,fake.send,{now:new Date(at)})).failed;sends+=fake.calls.length-before;at+=3*3600000;}
+  assert.equal(failed,1);assert.equal(sends,N.maxContactDeliveryAttempts);const ex=await row("SELECT attempts,reason FROM notification_notices WHERE state='failed' AND reason='exhausted'");assert.equal(ex.attempts,N.maxContactDeliveryAttempts);
   // Accepted can only become a bounce or complaint, never go back.
   fake.mode='up';await saveContact(db,a.project,revision,msg());await N.runContactDelivery(db,settings,fake.send,{now:new Date(at+86400000)});
-  const accepted=await row("SELECT id FROM contact_notification_outbox WHERE state='accepted' AND kind='new_message'");
-  await assert.rejects(()=>run("UPDATE contact_notification_outbox SET state='queued',accepted_at=NULL WHERE id=?",accepted.id),/final/);await assert.rejects(()=>run("UPDATE contact_notification_outbox SET state='cancelled',accepted_at=NULL WHERE id=?",accepted.id),/final/);await assert.rejects(()=>run("UPDATE contact_notification_outbox SET provider_ref='other' WHERE id=?",accepted.id),/final/);
+  const accepted=await row("SELECT id FROM notification_notices WHERE state='accepted' AND template='contact.new-message@1'");
+  await assert.rejects(()=>run("UPDATE notification_notices SET state='queued' WHERE id=?",accepted.id),/notification_notice_transition/);await assert.rejects(()=>run("UPDATE notification_notices SET state='cancelled',reason='expired' WHERE id=?",accepted.id),/notification_notice_transition/);await assert.rejects(()=>run("UPDATE notification_notices SET provider_ref='other' WHERE id=?",accepted.id),/notification_notice_transition/);
  });
  await test('bounce, complaint and unsubscribe suppress permanently, idempotently, and the suppression cannot be reversed',async()=>{
   for(const type of ['bounce','complaint','unsubscribe']){
    const a=await account(),fake=provider(),{revision}=await verified(a,type+'@example.com',fake);await saveContact(db,a.project,revision,msg());
-   await N.runContactDelivery(db,settings,fake.send);const sentRow=await row("SELECT id FROM contact_notification_outbox WHERE project_id=? AND kind='new_message'",a.project);assert.ok(sentRow);
+   await N.runContactDelivery(db,settings,fake.send);const sentRow=await row("SELECT id FROM notification_notices WHERE project_id=? AND template='contact.new-message@1'",a.project);assert.ok(sentRow);
    await saveContact(db,a.project,revision,msg());await N.runContactDelivery(db,settings,async()=>({accepted:false,retryable:true}),{now:new Date(Date.now()+1000)});
-   const queuedBefore=await row("SELECT count(*) n FROM contact_notification_outbox WHERE project_id=? AND state='queued'",a.project);assert.equal(queuedBefore.n,1);
+   const queuedBefore=await row("SELECT count(*) n FROM notification_notices WHERE project_id=? AND state IN ('queued','deferred')",a.project);assert.equal(queuedBefore.n,1);
    assert.deepEqual(await N.applyContactDeliveryEvent(db,{outboxId:sentRow.id,type}),{applied:true});
-   const expected=type==='bounce'?'bounced':type==='complaint'?'complained':'accepted';assert.equal((await row('SELECT state FROM contact_notification_outbox WHERE id=?',sentRow.id)).state,expected);
-   assert.equal((await row("SELECT count(*) n FROM contact_notification_outbox WHERE project_id=? AND state='queued'",a.project)).n,0,'Unsent notices are cancelled');assert.equal((await row("SELECT last_error FROM contact_notification_outbox WHERE project_id=? AND state='cancelled'",a.project)).last_error,'suppressed');
+   const expected=type==='bounce'?'bounced':type==='complaint'?'complained':'accepted';assert.equal((await row('SELECT state FROM notification_notices WHERE id=?',sentRow.id)).state,expected);
+   assert.equal((await row("SELECT count(*) n FROM notification_notices WHERE project_id=? AND state IN ('queued','deferred')",a.project)).n,0,'Unsent notices are cancelled');assert.equal((await row("SELECT reason FROM notification_notices WHERE project_id=? AND state='cancelled'",a.project)).reason,'suppressed');
+   assert.equal((await row("SELECT count(*) n FROM job_journal j JOIN notification_notices n ON n.job_id=j.id WHERE n.project_id=? AND n.state='cancelled' AND j.state!='cancelled'",a.project)).n,0,'The cancelled notice takes its unclaimed envelope with it');
    assert.equal((await row('SELECT state FROM contact_notification_destinations WHERE project_id=?',a.project)).state,'suppressed');assert.equal((await row('SELECT reason FROM contact_notification_suppressions WHERE user_id=? AND address=?',a.id,type+'@example.com')).reason,type);
    await N.applyContactDeliveryEvent(db,{outboxId:sentRow.id,type});if(type!=='unsubscribe')await N.applyContactDeliveryEvent(db,{outboxId:sentRow.id,type:'complaint'});assert.equal((await rows('SELECT * FROM contact_notification_suppressions WHERE user_id=?',a.id)).length,1,'A replayed or later event does not rewrite suppression');
-   assert.equal((await row('SELECT state FROM contact_notification_outbox WHERE id=?',sentRow.id)).state,expected,'A terminal state does not change on replay');
+   assert.equal((await row('SELECT state FROM notification_notices WHERE id=?',sentRow.id)).state,expected,'A terminal state does not change on replay');
    await assert.rejects(()=>run("UPDATE contact_notification_destinations SET state='verified' WHERE project_id=?",a.project),/destination_final/);await assert.rejects(()=>run("UPDATE contact_notification_suppressions SET reason='bounce' WHERE user_id=?",a.id),/suppression_final/);await assert.rejects(()=>run("DELETE FROM contact_notification_suppressions WHERE user_id=?",a.id),/suppression_final/);
    await assert.rejects(N.proposeContactDestination(db,a.id,a.project,type+'@example.com'),e=>e.status===409);await assert.rejects(N.requestContactVerification(db,settings,a.id,a.project),e=>e.status===409);
    // Even removing and re-adding the address cannot resume delivery.
@@ -137,41 +140,44 @@ try{
  });
  await test('caps, no backfill, deleted messages, tenant and containment boundaries',async()=>{
   const a=await account(),fake=provider(),{revision}=await verified(a,'owner-d@example.com',fake);
-  for(let i=0;i<12;i++)await saveContact(db,a.project,revision,msg());let r=await N.runContactDelivery(db,settings,fake.send,{limit:25});assert.equal(r.queued,10,'At most 10 notices an hour per destination');assert.equal((await N.runContactDelivery(db,settings,fake.send,{limit:25})).queued,0);
+  for(let i=0;i<12;i++)await saveContact(db,a.project,revision,msg());let r=await N.runContactDelivery(db,settings,fake.send,{limit:25});assert.equal(r.queued,9,'At most 10 notices an hour per destination (the verification notice counts as one)');assert.equal((await N.runContactDelivery(db,settings,fake.send,{limit:25})).queued,0);
   assert.equal((await contactInbox(scope(a.id),a.id,a.project)).messages.length,12,'Throttled messages remain in the inbox');
-  await assert.rejects(()=>run("INSERT INTO contact_notification_outbox(id,user_id,project_id,destination_id,kind,submission_id,idempotency_key,provider,review,created_at,next_attempt_at,expires_at) SELECT ?,d.user_id,d.project_id,d.id,'new_message',(SELECT id FROM contact_submissions WHERE project_id=d.project_id LIMIT 1),'message:backstop-'||d.id,'p','r',?,?,? FROM contact_notification_destinations d WHERE d.project_id=?",crypto.randomUUID(),now(),now(),now(),a.project),/outbox_rate/);
+  await assert.rejects(()=>run("INSERT INTO notification_notices(id,user_id,scope,project_id,destination_id,recipient_key,template,event_ref,created_at,expires_at) SELECT ?,d.user_id,'owner-destination',d.project_id,d.id,'owner-destination:'||d.id,'contact.new-message@1','message:backstop-'||d.id,?,? FROM contact_notification_destinations d WHERE d.project_id=?",crypto.randomUUID(),Date.now(),Date.now()+3600000,a.project),/notification_notice_rate/);
   // A message deleted by the owner before sending is cancelled, not sent.
-  const b=await account(),fb=provider(),vb=await verified(b,'owner-e@example.com',fb),gone=msg();await saveContact(db,b.project,vb.revision,gone);const queued=await N.runContactDelivery(db,settings,async()=>({accepted:false,retryable:true}));assert.equal(queued.retried,1);await deleteContact(scope(b.id),b.id,gone.id);
-  fb.calls.length=0;r=await N.runContactDelivery(db,settings,fb.send,{now:new Date(Date.now()+86400000)});assert.equal(r.cancelled,1);assert.equal(fb.calls.length,0);
+  const b=await account(),fb=provider(),vb=await verified(b,'owner-e@example.com',fb),gone=msg();await saveContact(db,b.project,vb.revision,gone);const queued=await N.runContactDelivery(db,settings,async n=>n.projectId===b.project?{accepted:false,retryable:true}:{accepted:true});assert.equal(queued.retried,1);await deleteContact(scope(b.id),b.id,gone.id);
+  fb.calls.length=0;r=await N.runContactDelivery(db,settings,fb.send,{now:new Date(Date.now()+3600000)});assert.equal(r.cancelled,1);assert.equal(fb.calls.filter(n=>n.projectId===b.project).length,0);
   // Messages received before verification are never back-filled.
   const c=await account();const cRev=await enable(c);await saveContact(db,c.project,cRev,msg());await new Promise(r=>setTimeout(r,5));const fc=provider();await N.proposeContactDestination(db,c.id,c.project,'owner-f@example.com');await N.requestContactVerification(db,settings,c.id,c.project);await N.runContactDelivery(db,settings,fc.send);
   await N.confirmContactDestination(db,c.id,c.project,(await row('SELECT verification_code c FROM contact_notification_destinations WHERE project_id=?',c.project)).c);fc.calls.length=0;assert.equal((await N.runContactDelivery(db,settings,fc.send)).queued,0);
   // WH-050 containment of the contact scope stops notices while the inbox still works for the owner.
   const d=await account(),fd=provider(),vd=await verified(d,'owner-g@example.com',fd);await saveContact(db,d.project,vd.revision,msg());
   await run("INSERT INTO operator_containments(id,scope,subject_kind,subject_id,allowance,operator_ref,reason,request_digest,expires_at) VALUES(?,'contact','project',?,NULL,'human:test','reason',?,?)",crypto.randomUUID(),d.project,'f'.repeat(64),new Date(Date.now()+3600000).toISOString());
-  fd.calls.length=0;r=await N.runContactDelivery(db,settings,fd.send);assert.equal(r.queued,0);assert.equal(fd.calls.length,0);
+  fd.calls.length=0;r=await N.runContactDelivery(db,settings,fd.send);assert.equal(r.queued,0);assert.equal(fd.calls.filter(n=>n.projectId===d.project).length,0);
   // Another account's runner view is isolated: a notice always goes to its own project's destination.
-  const e=await account(),fe=provider(),ve=await verified(e,'owner-h@example.com',fe);fe.calls.length=0;await saveContact(db,e.project,ve.revision,msg());await N.runContactDelivery(db,settings,fe.send);assert.deepEqual(fe.calls.map(n=>[n.projectId,n.recipient]),[[e.project,'owner-h@example.com']]);
+  const e=await account(),fe=provider(),ve=await verified(e,'owner-h@example.com',fe);fe.calls.length=0;await saveContact(db,e.project,ve.revision,msg());await N.runContactDelivery(db,settings,fe.send);assert.deepEqual(fe.calls.filter(n=>n.projectId===e.project).map(n=>[n.projectId,n.recipient]),[[e.project,'owner-h@example.com']]);
  });
  await test('retention skips held projects and expiry removes only content-free outbox rows',async()=>{
   const a=await account(),b=await account();for(const [x,addr] of [[a,'owner-i@example.com'],[b,'owner-j@example.com']]){await enable(x);await N.proposeContactDestination(db,x.id,x.project,addr);}
   const destA=await row('SELECT id FROM contact_notification_destinations WHERE project_id=?',a.project),destB=await row('SELECT id FROM contact_notification_destinations WHERE project_id=?',b.project);
-  const old='2000-01-01T00:00:00.000Z';
-  for(const [x,d,k] of [[a,destA,'expired-a'],[b,destB,'expired-b']])await run("INSERT INTO contact_notification_outbox(id,user_id,project_id,destination_id,kind,idempotency_key,provider,review,created_at,next_attempt_at,expires_at) VALUES(?,?,?,?,'verification',?,'p','r',?,?,?)",crypto.randomUUID(),x.id,x.project,d.id,'verify:'+k+d.id,old,old,old);
+  const old=Date.parse('2000-01-01T00:00:00.000Z');
+  for(const [x,d,k] of [[a,destA,'expired-a'],[b,destB,'expired-b']]){const nid=crypto.randomUUID();await run("INSERT INTO notification_notices(id,user_id,scope,project_id,destination_id,recipient_key,template,event_ref,created_at,expires_at) VALUES(?,?,'owner-destination',?,?,?,'owner.destination-verification@1',?,?,?)",nid,x.id,x.project,d.id,'owner-destination:'+d.id,'verify:'+k+d.id,old,old+3600000);await run("UPDATE notification_notices SET state='cancelled',reason='expired',outcome_at=? WHERE id=?",old+3600000,nid);}
+  const open=crypto.randomUUID();await run("INSERT INTO notification_notices(id,user_id,scope,project_id,destination_id,recipient_key,template,event_ref,created_at,expires_at) VALUES(?,?,'owner-destination',?,?,?,'owner.destination-verification@1','verify:open',?,?)",open,b.id,b.project,destB.id,'owner-destination:'+destB.id,Date.now(),Date.now()+3600000);
+  await assert.rejects(()=>run('DELETE FROM notification_notices WHERE id=?',open),/notification_notice_retained/,'No delete while a notice is open');
   await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES('case-wh036',?,'intake-1','human:reviewer',unixepoch(),unixepoch()+31536000)",a.id);
   await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES('hold-wh036','case-wh036',?,'project',?,'basis-1','human:approver',unixepoch(),unixepoch()+86400)",a.id,a.project);
-  await cleanupContacts(db);assert.equal((await row("SELECT count(*) n FROM contact_notification_outbox WHERE idempotency_key LIKE 'verify:expired-%'")).n,1,'Only the unheld project expires');assert.equal((await row("SELECT project_id FROM contact_notification_outbox WHERE idempotency_key LIKE 'verify:expired-%'")).project_id,a.project);
-  await assert.rejects(N.removeContactDestination(db,a.id,a.project),e=>e.status===423&&!/safety_preservation_hold/.test(e.message));await assert.rejects(()=>run("DELETE FROM contact_notification_outbox WHERE project_id=?",a.project),/safety_preservation_hold/);
-  await N.removeContactDestination(db,b.id,b.project);assert.equal((await row('SELECT count(*) n FROM contact_notification_destinations WHERE project_id=?',b.project)).n,0);assert.equal((await row('SELECT count(*) n FROM contact_notification_outbox WHERE project_id=?',b.project)).n,0,'Removal cascades the unheld project\'s notices');
+  await cleanupContacts(db);assert.equal((await row("SELECT count(*) n FROM notification_notices WHERE event_ref LIKE 'verify:expired-%'")).n,1,'Only the unheld project expires');assert.equal((await row("SELECT project_id FROM notification_notices WHERE event_ref LIKE 'verify:expired-%'")).project_id,a.project);
+  await assert.rejects(N.removeContactDestination(db,a.id,a.project),e=>e.status===423&&!/safety_preservation_hold/.test(e.message));await assert.rejects(()=>run("DELETE FROM notification_notices WHERE project_id=?",a.project),/safety_preservation_hold/);
+  await N.removeContactDestination(db,b.id,b.project);assert.equal((await row('SELECT count(*) n FROM contact_notification_destinations WHERE project_id=?',b.project)).n,0);assert.equal((await row('SELECT count(*) n FROM notification_notices WHERE project_id=?',b.project)).n,0,'Removal cancels and cascades the unheld project\'s unsent notices');
  });
  await test('Cloudflare Email Service adapter: documented binding shape, content-free text and error mapping',async()=>{
   const E=m.contactEmail,sent=[];let failWith=null;
   const binding={send:async message=>{if(failWith)throw failWith;sent.push(message);return {messageId:'cf-'+sent.length};}};
-  const send=E.cloudflareEmailSender(binding),notice={outboxId:crypto.randomUUID(),idempotencyKey:'verify:x:ABCDEFGH',kind:'verification',projectId:crypto.randomUUID(),recipient:'owner@example.com',verificationCode:'ABCDEFGH'};
+  const send=E.cloudflareEmailSender(binding),notice={outboxId:crypto.randomUUID(),idempotencyKey:'verify:x:ABCDEFGH',kind:'verification',template:'owner.destination-verification@1',projectId:crypto.randomUUID(),recipient:'owner@example.com',verificationCode:'ABCDEFGH'};
   assert.deepEqual(await send(notice,settings),{accepted:true,providerRef:'cf-1'});
   assert.deepEqual(Object.keys(sent[0]).sort(),['from','headers','subject','text','to']);assert.deepEqual(sent[0].from,{email:'notify@whumpo.com',name:'Whumpo'});assert.equal(sent[0].to,'owner@example.com');
   assert.deepEqual(sent[0].headers,{'X-Whumpo-Notice-Id':notice.outboxId});assert.match(sent[0].text,/ABCDEFGH/);assert.ok(!('html' in sent[0])&&!('replyTo' in sent[0])&&!('cc' in sent[0])&&!('bcc' in sent[0]));
-  await send({...notice,kind:'new_message',verificationCode:undefined,idempotencyKey:'message:a:b'},settings);assert.match(sent[1].text,/https:\/\/whumpo\.com\/workspace\/inbox/);assert.match(sent[1].text,/does not include the message/);assert.ok(!/ABCDEFGH/.test(sent[1].text));
+  await send({...notice,kind:'new_message',template:'contact.new-message@1',verificationCode:undefined,idempotencyKey:'message:a:b'},settings);assert.match(sent[1].text,/https:\/\/whumpo\.com\/workspace\/inbox/);assert.match(sent[1].text,/does not include the message/);assert.ok(!/ABCDEFGH/.test(sent[1].text));
+  await send({...notice,kind:'account',template:'account.passkey-added@1',projectId:null,verificationCode:undefined,idempotencyKey:'account:x'},settings);assert.match(sent[2].subject,/passkey was added/);sent.length=2;
   await assert.rejects(async()=>E.contactEmailMessage({...notice,verificationCode:'bad code'}),/Invalid verification notice/);
   const coded=code=>Object.assign(Error('PRIVATE-PROVIDER-ERROR'),{code});
   const cases={E_RATE_LIMIT_EXCEEDED:{accepted:false,retryable:true},E_DAILY_LIMIT_EXCEEDED:{accepted:false,retryable:true},E_SENDER_NOT_VERIFIED:{accepted:false,retryable:true},E_RECIPIENT_SUPPRESSED:{accepted:false,retryable:false,suppressed:true},E_DELIVERY_FAILED:{accepted:false,retryable:false},E_RECIPIENT_NOT_ALLOWED:{accepted:false,retryable:false},E_INTERNAL_SERVER_ERROR:{accepted:false,retryable:false,uncertain:true},E_SOMETHING_NEW:{accepted:false,retryable:false,uncertain:true}};
@@ -188,10 +194,10 @@ try{
   await m.worker.scheduled({cron:'* * * * *'},env);assert.equal(mine().length,1);const code=/([A-Z0-9]{8})/.exec(mine()[0].text)[1];
   assert.equal((await N.confirmContactDestination(db,a.id,a.project,code)).state,'verified');
   await saveContact(db,a.project,revision,msg());await m.worker.scheduled({cron:'* * * * *'},env);assert.equal(mine().length,2);assert.equal(mine()[1].subject,'New contact-form message in Whumpo');assert.ok(!JSON.stringify(mine()).includes('PRIVATE-VISITOR')&&!JSON.stringify(mine()).includes('visitor-canary'));
-  assert.match((await row("SELECT provider_ref FROM contact_notification_outbox WHERE project_id=? AND kind='new_message'",a.project)).provider_ref,/^cf-\d+$/);
+  assert.match((await row("SELECT provider_ref FROM notification_notices WHERE project_id=? AND template='contact.new-message@1'",a.project)).provider_ref,/^cf-\d+$/);
   failWith=coded('E_RECIPIENT_SUPPRESSED');await saveContact(db,a.project,revision,msg());await m.worker.scheduled({cron:'* * * * *'},env);failWith=null;
   assert.equal((await row('SELECT reason FROM contact_notification_suppressions WHERE user_id=? AND address=?',a.id,'cf-owner@example.com')).reason,'provider');assert.equal((await row('SELECT state FROM contact_notification_destinations WHERE project_id=?',a.project)).state,'suppressed');
-  assert.equal((await row("SELECT count(*) n FROM contact_notification_outbox WHERE project_id=? AND state='cancelled' AND last_error='suppressed'",a.project)).n,1);
+  assert.equal((await row("SELECT count(*) n FROM notification_notices WHERE project_id=? AND state='failed' AND reason='rejected'",a.project)).n,1,'The refused notice failed; the destination is suppressed');
   await saveContact(db,a.project,revision,msg());await m.worker.scheduled({cron:'* * * * *'},env);assert.equal(mine().length,2,'Nothing more after provider suppression');
  });
  await test('exact Chat review sets the address; cross-owner, replay, expiry, suppression and holds are refused',async()=>{
@@ -232,7 +238,7 @@ try{
  await test('operator-reviewed suppression reset: preview digest, exact suppression, audit, holds',async()=>{
   const {runSuppressionReset,suppressionResetInput}=await import('../tools/contact-suppression-reset-input.mjs');
   const a=await account(),fake=provider();await verified(a,'reset-me@example.com',fake);
-  const sentRow=await row("SELECT id FROM contact_notification_outbox WHERE project_id=? AND kind='verification'",a.project);await N.applyContactDeliveryEvent(db,{outboxId:sentRow.id,type:'complaint'});
+  const sentRow=await row("SELECT id FROM notification_notices WHERE project_id=? AND template='owner.destination-verification@1'",a.project);await N.applyContactDeliveryEvent(db,{outboxId:sentRow.id,type:'complaint'});
   const status=await runSuppressionReset(db,{action:'status',account:a.id,address:'Reset-Me@example.com'});assert.equal(status.suppression.reason,'complaint');assert.deepEqual(status.destinations.map(d=>d.state),['suppressed']);assert.match(status.notice,/Cloudflare Email Service suppression list/);
   const request={action:'reset',id:crypto.randomUUID(),account:a.id,address:'reset-me@example.com',suppressedAt:status.suppression.suppressedAt,operator:'human:operator',reason:'Owner opted in again through support.'};
   for(const bad of [{...request,extra:1},{...request,id:'x'},{...request,operator:'has space'},{...request,suppressedAt:'yesterday'}])assert.throws(()=>suppressionResetInput(JSON.stringify(bad)));
@@ -245,7 +251,7 @@ try{
   // The owner must set and verify the address again; nothing resumes by itself.
   assert.equal((await N.contactNotificationStatus(db,a.id,a.project)).destination,null);assert.equal((await N.proposeContactDestination(db,a.id,a.project,'reset-me@example.com')).state,'unverified');
   // Without a reset the suppression is still permanent, and inside a hold the reset is refused.
-  const h=await account(),fh=provider();await verified(h,'held-reset@example.com',fh);const hs=await row("SELECT id FROM contact_notification_outbox WHERE project_id=? AND kind='verification'",h.project);await N.applyContactDeliveryEvent(db,{outboxId:hs.id,type:'bounce'});
+  const h=await account(),fh=provider();await verified(h,'held-reset@example.com',fh);const hs=await row("SELECT id FROM notification_notices WHERE project_id=? AND template='owner.destination-verification@1'",h.project);await N.applyContactDeliveryEvent(db,{outboxId:hs.id,type:'bounce'});
   await assert.rejects(()=>run('DELETE FROM contact_notification_suppressions WHERE user_id=?',h.id),/suppression_final/);
   await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES('case-wh036-reset',?,'intake-3','human:reviewer',unixepoch(),unixepoch()+31536000)",h.id);
   await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES('hold-wh036-reset','case-wh036-reset',?,'project',?,'basis-3','human:approver',unixepoch(),unixepoch()+86400)",h.id,h.project);
@@ -254,17 +260,17 @@ try{
   await assert.rejects(()=>run("INSERT INTO contact_notification_suppression_resets(id,user_id,address,suppression_reason,suppressed_at,operator_ref,reason,request_digest) VALUES(?,?,'held-reset@example.com','bounce',?,'human:x','r',?)",crypto.randomUUID(),h.id,hstatus.suppression.suppressedAt,'b'.repeat(64)),/safety_preservation_hold/,'The database refuses it too');
  });
  await test('spending ceiling: counted before each call, refused past the 32-day window, never raised mid-day',async()=>{
-  await run("UPDATE contact_notification_outbox SET state='cancelled' WHERE state='queued'");
+  await run("UPDATE notification_notices SET state='cancelled',reason='expired',outcome_at=1 WHERE state IN ('queued','deferred')");
   const F=Date.parse('2031-03-10T12:00:00.000Z'),tight={...settings,sendCeiling:2},owners=[];
   for(let i=0;i<3;i++){const a=await account();await enable(a);await N.proposeContactDestination(db,a.id,a.project,`ceiling-${i}@example.com`);await N.requestContactVerification(db,tight,a.id,a.project,new Date(F));owners.push(a);}
   const fake=provider();let r=await N.runContactDelivery(db,tight,fake.send,{now:new Date(F),limit:25});
   assert.equal(r.accepted,2);assert.equal(r.refused,1);assert.equal(fake.calls.length,2,'The third call is refused before reaching the provider');
-  assert.equal((await row("SELECT count(*) n FROM contact_notification_outbox WHERE state='cancelled' AND last_error='ceiling'")).n,1);assert.equal(await N.contactSendsInWindow(db,new Date(F)),2);
+  assert.equal((await row("SELECT count(*) n FROM notification_notices WHERE state='cancelled' AND reason='ceiling'")).n,1);assert.equal(await N.contactSendsInWindow(db,new Date(F)),2);
   // Still inside the window a later day is refused; a lower ceiling applies immediately and a higher one cannot be written into today's row.
   const late=owners.find(o=>true);await N.requestContactVerification(db,tight,late.id,late.project,new Date(F+20*86400000));
   r=await N.runContactDelivery(db,tight,fake.send,{now:new Date(F+20*86400000)});assert.equal(r.refused,1);assert.equal(fake.calls.length,2);
-  await assert.rejects(()=>run("UPDATE contact_notification_send_ledger SET ceiling=ceiling+1 WHERE day='2031-03-10'"),/contact_send_final/);await assert.rejects(()=>run("UPDATE contact_notification_send_ledger SET sends=0 WHERE day='2031-03-10'"),/contact_send_final/);
-  await assert.rejects(()=>run("UPDATE contact_notification_send_ledger SET sends=sends+1 WHERE day='2031-03-10'"),/contact_send_ceiling/,'The database refuses a direct increment past the ceiling');
+  await assert.rejects(()=>run("UPDATE notification_send_ledger SET ceiling=ceiling+1 WHERE day='2031-03-10'"),/notification_send_final/);await assert.rejects(()=>run("UPDATE notification_send_ledger SET sends=0 WHERE day='2031-03-10'"),/notification_send_final/);
+  await assert.rejects(()=>run("UPDATE notification_send_ledger SET sends=sends+1 WHERE day='2031-03-10'"),/notification_send_ceiling/,'The database refuses a direct increment past the ceiling');
   // After 32 days the window has moved on.
   const after=F+33*86400000;await N.requestContactVerification(db,tight,late.id,late.project,new Date(after));
   r=await N.runContactDelivery(db,tight,fake.send,{now:new Date(after)});assert.equal(r.accepted,1);assert.equal(fake.calls.length,3);

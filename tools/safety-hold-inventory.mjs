@@ -55,12 +55,12 @@ export const deletionSites={
  'src/review-turnover.ts::review_receipts':blocked('review_receipt_retained','WH-182 removes a sealed receipt only after the 30-day replay horizon and never inside an account or project hold; the statement repeats the trigger conditions.'),
  // WH-128 owner "Remove from collection": deletes one owner-filed photo's collection membership row only.
  'src/shared-modules/files-gallery.ts::module_files':excluded('Owner collection membership row (ids only) for an owner photo; the photo row, its R2 object, its safety receipt and every saved version stay, so the content stays covered by the project_files hold (safety_hold_file_retained). Staff/visitor upload rows are never deleted here.'),
- 'src/contacts.ts::contact_notification_outbox':{decision:'skips-held',mechanism:'cleanupContacts excludes safety_held_projects + safety_hold_contact_outbox_retained',note:'Content-free delivery metadata (no visitor name, email or message); expiry skips held projects and a direct delete is refused while held.'},
+ 'src/notification-outbox.ts::notification_notices':{decision:'skips-held',mechanism:'pruneNotices (daily contacts pass) excludes safety_held_projects + safety_hold_notification_notices_retained; notification_notices_retained refuses an open notice',note:'WH-156 content-free delivery receipts (no visitor name, email or message); retention skips held projects and a direct delete is refused while held.'},
  // WH-157 (schema batch 3c): consent and preference rows. Opt-out, address removal and role revocation must always work (a hold preserves customer content, not the right to stop receiving mail); the rows hold no content, only an address the person gave.
  'src/notification-recipients.ts::staff_notification_optins':excluded('WH-157 staff opt-out: a consent withdrawal must always succeed; the row is a visitor id, an access instance id and a timestamp.'),
  'src/notification-recipients.ts::visitor_notification_addresses':excluded('WH-157 visitor removal of their own notification address (a consent withdrawal, always allowed); the address is supplied by the visitor and carries no project content. The row also goes with the visitor identity, which a hold already protects (safety_hold_visitor_retained).'),
  'src/shared-modules/schema.sql::staff_notification_optins':excluded('WH-157 opt-in removed by staff role revocation (staff_notification_optin_revoked) or by a changed or removed address (visitor_notification_address_changed/removed); a consent withdrawal that must not be blocked, with no content beyond ids and a timestamp.'),
- 'src/contacts.ts::contact_notification_send_ledger':excluded('WH-036 content-free daily provider-call counters enforcing the spending ceiling; no customer content.'),
+ 'src/contacts.ts::notification_send_ledger':excluded('WH-156 content-free daily provider-call counters per provider enforcing the spending ceiling across every notice kind; no customer content.'),
  'schema/platform.sql::contact_notification_destinations':blocked('safety_hold_contact_destination_retained','A confirmed Chat review that replaces the address (contact_destination_review_apply) or an operator suppression reset that removes a suppressed address (contact_suppression_reset_apply) inside a held project is refused as a whole.'),
  'schema/platform.sql::contact_notification_suppressions':excluded('WH-036 delivery-control row (address and reason), removed only by an immutable operator-reviewed reset audit row; the reset fails as a whole when its held destination cannot be removed.'),
  'src/contact-notifications.ts::contact_notification_destinations':blocked('safety_hold_contact_destination_retained','Owner removal or replacement of a notification address inside a held project is refused; the destination carries only the owner-supplied address.'),
@@ -115,6 +115,8 @@ export const deletionSites={
  'src/workspace-identity/recovery.ts::identity_credentials':excluded(credential),
  'src/workspace-identity/recovery.ts::identity_kit_offers':excluded(credential),
  'src/workspace-identity/recovery.ts::identity_recovery_reviews':excluded(credential),
+ 'src/mobile/identity.ts::identity_challenges':excluded(credential),
+ 'src/mobile/identity.ts::identity_sessions':excluded(credential),
  'src/workspace-identity/schema.sql::identity_challenges':excluded(credential),
  'src/workspace-identity/schema.sql::identity_sessions':excluded(credential),
  // Owner email-change and connector maintenance/revocation sites: ids, digests and timestamps only, no customer content.

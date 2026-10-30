@@ -14,7 +14,7 @@ export function supportConfig(env:SupportEnv,implemented:readonly string[]=imple
  return {hours:cleaned(env.SUPPORT_HOURS,300),settings};
 }
 export const supportConfigView=(config:ReturnType<typeof supportConfig>):SupportConfigView=>({hours:config.hours,notifications:{enabled:config.settings!==null}});
-const columns="r.id,r.kind,r.reference,r.statement,r.created_at,r.state,r.public_response,r.answered_at,r.customer_read_at,d.state AS delivery_state";
+const columns="r.id,r.kind,r.reference,r.statement,r.created_at,r.state,r.public_response,r.answered_at,r.customer_read_at,CASE d.state WHEN 'accepted' THEN 'delivered' WHEN 'delivered' THEN 'delivered' WHEN 'failed' THEN 'failed' WHEN 'bounced' THEN 'failed' WHEN 'complained' THEN 'failed' WHEN 'unresolved' THEN 'failed' WHEN 'cancelled' THEN 'cancelled' WHEN 'queued' THEN 'queued' WHEN 'dispatching' THEN 'queued' WHEN 'deferred' THEN 'queued' WHEN 'unknown-outcome' THEN 'queued' END AS delivery_state";
 type Row=UsageReviewRequest&{delivery_state:Exclude<SupportDeliveryState,'none'>|null};
 export function supportRequest(row:Row):SupportRequest{
  const answered=row.state==='answered';
@@ -22,10 +22,10 @@ export function supportRequest(row:Row):SupportRequest{
   response:{saved:answered},delivery:{state:answered?row.delivery_state??'none':'none'},read:{state:answered?(row.customer_read_at?'read':'unread'):'not_applicable',at:row.customer_read_at}};
 }
 async function readOwned(db:Pick<D1Database,'prepare'>,user:string,id:string){
- return db.prepare(`SELECT ${columns} FROM usage_review_requests r LEFT JOIN support_deliveries d ON d.request_id=r.id WHERE r.id=? AND r.user_id=?`).bind(id,user).first<Row>();
+ return db.prepare(`SELECT ${columns} FROM usage_review_requests r LEFT JOIN notification_notices d ON d.template='support.response-saved@1' AND d.event_ref=r.id AND d.user_id=r.user_id WHERE r.id=? AND r.user_id=?`).bind(id,user).first<Row>();
 }
 async function listOwned(db:Pick<D1Database,'prepare'>,user:string,limit=25){
- return (await db.prepare(`SELECT ${columns} FROM usage_review_requests r LEFT JOIN support_deliveries d ON d.request_id=r.id WHERE r.user_id=? ORDER BY r.created_at DESC,r.id DESC LIMIT ?`).bind(user,limit).all<Row>()).results;
+ return (await db.prepare(`SELECT ${columns} FROM usage_review_requests r LEFT JOIN notification_notices d ON d.template='support.response-saved@1' AND d.event_ref=r.id AND d.user_id=r.user_id WHERE r.user_id=? ORDER BY r.created_at DESC,r.id DESC LIMIT ?`).bind(user,limit).all<Row>()).results;
 }
 /** Support history bound per account (test capacity), shared by the page and the Chat form. */
 export const supportHistoryCapacity=200;

@@ -16,17 +16,18 @@ const db=remoteD1(cloudflareClient(config.account_id),config.d1_databases.find(d
 const emailFor=id=>'contactemail-fixture-'+id+'@example.test';
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const saved=async()=>JSON.parse(await readFile(file,'utf8'));
-const outbox=(project,kind)=>db.prepare('SELECT state,last_error,attempts,provider_ref FROM contact_notification_outbox WHERE project_id=? AND kind=? ORDER BY created_at DESC LIMIT 1').bind(project,kind).first();
-const label=r=>!r?'none':r.state==='accepted'?'sent':r.last_error==='uncertain'?'uncertain':r.state==='queued'?'queued':'failed';
+const templateOf={verification:'owner.destination-verification@1',new_message:'contact.new-message@1'};
+const outbox=(project,kind)=>db.prepare('SELECT state,reason AS last_error,attempts,provider_ref FROM notification_notices WHERE project_id=? AND template=? ORDER BY created_at DESC LIMIT 1').bind(project,templateOf[kind]).first();
+const label=r=>!r?'none':r.state==='accepted'||r.state==='delivered'?'sent':r.state==='unknown-outcome'?'uncertain':['queued','dispatching','deferred'].includes(r.state)?'queued':'failed';
 async function wait(project,kind,minutes=5){
  const start=Date.now();let row;
- while(Date.now()-start<minutes*60000){row=await outbox(project,kind);if(row&&row.state!=='queued')break;await sleep(10000);}
+ while(Date.now()-start<minutes*60000){row=await outbox(project,kind);if(row&&!['queued','dispatching','deferred'].includes(row.state))break;await sleep(10000);}
  return {state:label(row),detail:row&&{state:row.state,last_error:row.last_error,attempts:row.attempts,provider_ref:row.provider_ref},seconds:Math.round((Date.now()-start)/1000)};
 }
 async function cleanup({id,project}){
  await db.prepare('DELETE FROM users WHERE id=? AND email=?').bind(id,emailFor(id)).run();
  for(const t of ['users WHERE id','identity_accounts WHERE account_id','identity_sessions WHERE account_id','identity_credentials WHERE account_id','projects WHERE owner_user_id'])assert.equal(await db.prepare('SELECT 1 FROM '+t+'=?').bind(id).first(),null,'Cleanup left rows in '+t.split(' ')[0]);
- for(const t of ['contact_notification_destinations','contact_notification_outbox','contact_settings'])assert.equal(await db.prepare('SELECT 1 FROM '+t+' WHERE project_id=?').bind(project).first(),null,'Cleanup left rows in '+t);
+ for(const t of ['contact_notification_destinations','notification_notices','contact_settings'])assert.equal(await db.prepare('SELECT 1 FROM '+t+' WHERE project_id=?').bind(project).first(),null,'Cleanup left rows in '+t);
  await rm(file,{force:true});console.log(JSON.stringify({cleanup:'verified'}));
 }
 await requireCurrentProbeSchema(db);

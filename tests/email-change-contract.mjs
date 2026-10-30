@@ -882,9 +882,10 @@ await checkOnce('the stored account email has verification state, change records
  assert.match(platform,/NEW\.kind='request'[^\n]*>=3\)/);assert.match(platform,/NEW\.kind='send'[^\n]*>=3\)/);assert.match(platform,/NEW\.kind='failure'[^\n]*-3600000\)>=5\)/);
 });
 await checkOnce('the support notice requires a verified account email before any provider sends (gap G-E5, decision 4)',()=>{
- const text=read('src/support-delivery.ts');
- assert.match(text,/u\.email_verified_at/);assert.match(text,/row\.email_verified_at===null/);
- assert.ok(text.indexOf('email_verified_at===null')<text.indexOf('await sender('),'the gate runs before the provider call');
+ const queue=read('src/support-delivery.ts'),adapter=read('src/notification-outbox.ts');
+ assert.match(queue,/u\.email_verified_at IS NOT NULL/,'an unverified account is never queued');
+ assert.match(adapter,/n\.recipient_ref!==null\|\|n\.email_verified_at===null/);
+ assert.ok(adapter.indexOf('n.email_verified_at===null')<adapter.indexOf('await ctx.provider('),'the gate runs before the provider call');
 });
 // G-E7: the review's emergency removal and epoch fence match the identity engine's own removal and kit rotation.
 await checkOnce('the review revokes the same authority rows the identity engine revokes, and allows zero keys (gap G-E7)',()=>{

@@ -103,6 +103,18 @@ try{
   await run("UPDATE job_journal SET state='leased',fence=1,lease_until=60000,last_event='claimed',last_at=0 WHERE id=?",job);
   await run("UPDATE job_journal SET state='awaiting',attempt=1,attempt_id=id||'.1',last_event='intent',last_at=1,last_ref=id||'.1' WHERE id=?",job);
   await run("UPDATE job_journal SET state='complete',result_ref='drill-result',lease_until=0,last_event='external_result',last_at=2,last_ref='drill-result' WHERE id=?",job);
+  // WH-156 shared outbox (schema batch 3e): a counted provider call whose reply was lost. The journal holds the attempt as uncertain and the trigger moves
+  // the notice to unknown-outcome with its 72-hour reconciliation bound; a restore never redispatches it. The ledger row is the 1970-01-01 day of the synthetic clock.
+  const noticeJob=id(),noticeId=id();
+  await run("INSERT INTO notification_send_ledger(provider,day,sends,ceiling) VALUES('cloudflare-email','1970-01-01',0,14285)");
+  await run("INSERT INTO job_journal(id,owner_user_id,purpose,envelope_json,envelope_digest,created_at,expires_at,max_attempts,due,initial_due,last_event,last_at) VALUES(?,?,'platform-email',?,?,1000,604800000,1,1000,1000,'enqueued',1000)",noticeJob,owner.account,JSON.stringify({jobId:noticeJob,limits:{maxAttempts:1},ownerAccountId:owner.account,purpose:'platform-email',schedule:{createdAt:1000,expiresAt:604800000,notBefore:1000}}),hash('notice-envelope'));
+  await run("INSERT INTO notification_notices(id,user_id,scope,recipient_key,template,event_ref,created_at,expires_at) VALUES(?,?,'account-email',?,'account.passkey-added@1','drill-notice',1000,86401000)",noticeId,owner.account,'account-email:'+owner.account);
+  await run('UPDATE notification_notices SET job_id=? WHERE id=?',noticeJob,noticeId);
+  await run("UPDATE job_journal SET state='leased',fence=1,lease_until=61000,last_event='claimed',last_at=1001 WHERE id=?",noticeJob);
+  await run("UPDATE job_journal SET state='awaiting',attempt=1,attempt_id=id||'.1',last_event='intent',last_at=1002,last_ref=id||'.1' WHERE id=?",noticeJob);
+  await run("UPDATE notification_notices SET state='dispatching',attempts=1,dispatched_at=1002 WHERE id=?",noticeId);
+  await run("UPDATE job_journal SET state='uncertain',last_event='uncertain',last_at=61002,last_ref=NULL WHERE id=?",noticeJob);
+  assert.equal((await db.prepare('SELECT state FROM notification_notices WHERE id=?').bind(noticeId).first()).state,'unknown-outcome');
   // WH-127 form attachments (schema batch 3b): a records form with an upload collection, one visitor record and its attached upload,
   // so the link, the record, the event, the upload and its photo row are archived and restored. Registry rows are written directly (the
   // reviewed activation path is tests/form-attachments.mjs); every admission trigger stays on.
@@ -139,7 +151,7 @@ try{
    await run("INSERT INTO workspace_layout_receipts(request_id,user_id,request_hash,request_json,from_revision,to_revision,previous_json,layout_json,created_at) VALUES(?,?,?,'{}',?,?,?,?,?)",id(),owner.account,hash('layout'+n),previous.revision,previous.revision+1,previous.layout_json,next,iso);
    await run('UPDATE workspace_preferences SET revision=?,layout_json=?,updated_at=? WHERE user_id=?',previous.revision+1,next,iso,owner.account);
   }
-  for(const t of ['review_receipts','cost_events','lookup_consents','connector_receipts','account_closures','rule_approvals','owner_email_changes','owner_email_change_limits','owner_security_reviews','workspace_layout_receipts','job_journal','job_journal_events','job_outbox','module_records','module_files','module_record_files','visitor_notification_addresses','staff_notification_optins','identity_handoffs'])seeded[t]=(await db.prepare(`SELECT count(*) n FROM ${t}`).first()).n;
+  for(const t of ['review_receipts','cost_events','lookup_consents','connector_receipts','account_closures','rule_approvals','owner_email_changes','owner_email_change_limits','owner_security_reviews','workspace_layout_receipts','job_journal','job_journal_events','job_outbox','module_records','module_files','module_record_files','visitor_notification_addresses','staff_notification_optins','identity_handoffs','notification_notices','notification_send_ledger'])seeded[t]=(await db.prepare(`SELECT count(*) n FROM ${t}`).first()).n;
   assert.ok(Object.values(seeded).every(n=>n>=1)&&seeded.workspace_layout_receipts===50,JSON.stringify(seeded));
  }
  const reference=async(database,runtime)=>{
@@ -208,7 +220,7 @@ try{
  const catalog=JSON.parse(await readFile('docs/data-lifecycle.json','utf8')),{snapshot:pointSnapshot}=await verifyRecoveryPoint(pointA,pointDigestA);
  const countRestored=async table=>(await target.DRILL_A.prepare(`SELECT count(*) n FROM "${table}"`).first()).n;
  const coverage=await phase('recoveryCoverage',()=>recoveryCoverage(pointSnapshot,countRestored,catalog));
- assert.equal(coverage.status,'complete',JSON.stringify(coverage.holds));assert.equal(coverage.tables,237);assert.equal(coverage.excluded,0);
+ assert.equal(coverage.status,'complete',JSON.stringify(coverage.holds));assert.equal(coverage.tables,236);assert.equal(coverage.excluded,0);
  for(const table of Object.keys(seeded))assert.equal(await countRestored(table),seeded[table],table+' restored with its archived rows');
  // A new table, a table that vanished from the restore, a stale exclusion and a mismatched count each fail until classified.
  const withTable=structuredClone(pointSnapshot);withTable.tables.push({name:'new_personal_data',columns:['id'],rows:[]});
@@ -216,7 +228,7 @@ try{
  holds.restoreMismatch=(await recoveryCoverage(pointSnapshot,async()=>-1,catalog)).holds;assert.deepEqual(holds.restoreMismatch,['coverage-restore-mismatch']);
  holds.staleExclusion=(await recoveryCoverage(pointSnapshot,countRestored,catalog,{retired_table:'none'})).holds;assert.deepEqual(holds.staleExclusion,['coverage-stale-exclusion']);
  const excludedCoverage=await recoveryCoverage(pointSnapshot,async()=>-1,catalog,Object.fromEntries(pointSnapshot.tables.filter(t=>t.name!=='sqlite_sequence').map(t=>[t.name,'drill rationale'])));
- assert.equal(excludedCoverage.status,'complete');assert.equal(excludedCoverage.excluded,237);
+ assert.equal(excludedCoverage.status,'complete');assert.equal(excludedCoverage.excluded,236);
  refusals+=3;
  // WH-117 key versions in the restored candidate: one registered key, all 4 credential rows under it, no running rotation.
  const keyVersions=await phase('inventoryKeyVersions',()=>inventoryKeyVersions(target.DRILL_A));

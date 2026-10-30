@@ -5,8 +5,8 @@ import {workspaceFixture} from './helpers/workspace-identity.mjs';
 import {runUsageReview} from '../tools/usage-review-input.mjs';
 Error.stackTraceLimit=0;
 // WH-035: independent support access, private tenant boundaries, distinct saved/delivered/read states, provider gating.
-const modules=await currentFixtureModules(['src/index.ts','src/support.ts','src/support-delivery.ts','src/support-shape.ts','src/usage-review-requests.ts']);
-const worker=(await modules.module('src/index.ts')).default,support=await modules.module('src/support.ts'),delivery=await modules.module('src/support-delivery.ts'),shape=await modules.module('src/support-shape.ts'),service=await modules.module('src/usage-review-requests.ts');
+const modules=await currentFixtureModules(['src/index.ts','src/support.ts','src/support-delivery.ts','src/notification-outbox.ts','src/support-shape.ts','src/usage-review-requests.ts']);
+const worker=(await modules.module('src/index.ts')).default,support=await modules.module('src/support.ts'),delivery=await modules.module('src/support-delivery.ts'),outbox=await modules.module('src/notification-outbox.ts'),shape=await modules.module('src/support-shape.ts'),service=await modules.module('src/usage-review-requests.ts');
 const fixture=await databaseFixture(),{db}=fixture,id=()=>crypto.randomUUID(),run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
 const originalFetch=globalThis.fetch;let network=0;globalThis.fetch=async()=>{network++;throw Error('No network call is permitted');};
 // No AI key, no provider, no support values: the baseline outage environment.
@@ -98,43 +98,52 @@ try{
   assert.equal(settings({SUPPORT_NOTIFICATION_PROVIDER:'other',SUPPORT_NOTIFICATION_REVIEW:'review-1'}),null,'not implemented');
   assert.equal(support.supportConfig({SUPPORT_NOTIFICATION_PROVIDER:'x',SUPPORT_NOTIFICATION_REVIEW:'r'}).settings,null,'No provider is implemented in the repository');
   assert.deepEqual(settings({SUPPORT_NOTIFICATION_PROVIDER:'fixture-provider',SUPPORT_NOTIFICATION_REVIEW:'review-1'}),{provider:'fixture-provider',review:'review-1'});
-  let sent=0;const result=await delivery.runSupportDelivery(db,null,async()=>{sent++;return {accepted:true};});assert.deepEqual(result,{enabled:false,queued:0,delivered:0,retried:0,failed:0,cancelled:0});assert.equal(sent,0);assert.equal((await row('SELECT count(*) n FROM support_deliveries')).n,0);
+  let sent=0;const result=await delivery.queueSupportNotices(db,null);assert.deepEqual(result,{enabled:false,queued:0});const idle=await outbox.runNotificationDelivery(db,null,async()=>{sent++;return {accepted:true};});assert.equal(idle.enabled,false);assert.equal(sent,0);assert.equal((await row("SELECT count(*) n FROM notification_notices WHERE template='support.response-saved@1'")).n,0);
   // Operator-supplied hours appear only when set, and as plain text.
   const configured=await http(a,'/api/support/v1','GET',undefined,200,{config:{...env,SUPPORT_HOURS:'OWNER-SUPPLIED-HOURS',SUPPORT_NOTIFICATION_PROVIDER:'fixture-provider',SUPPORT_NOTIFICATION_REVIEW:'r'}});
   assert.deepEqual(configured.config,{hours:'OWNER-SUPPLIED-HOURS',notifications:{enabled:false}},'Unimplemented provider keeps notifications off');
  });
- await test('delivery retries are bounded, content-free and distinct from saved and read',async()=>{
-  const settings={provider:'fixture-provider',review:'review-1'},c=await owner();await run("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')",c.user);
+
+ await test('delivery goes through the shared outbox: bounded, content-free and distinct from saved and read',async()=>{
+  const settings={provider:'fixture-provider',review:'review-1'},shared={provider:'cloudflare-email',review:'review-1',sendCeiling:1000},c=await owner();await run("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')",c.user);
   // Verification normally moves only through a confirmed email change (users_email_lockstep); this fixture drops that trigger to set it directly.
   await run('DROP TRIGGER users_email_lockstep');const verify=who=>run("UPDATE users SET email_verified_at=?,email_verified_via='notify@whumpo.com' WHERE id=?",Date.now(),who.user);await verify(c);
   async function answered(who,text='Reply'){const request={version:1,id:id(),kind:'help',statement:'PRIVATE-DELIVERY-STATEMENT'};await api(who,'/requests','POST',request);await service.answerUsageReview(db,who.user,request.id,text+' PRIVATE-DELIVERY-REPLY','PRIVATE-DELIVERY-OPERATOR');return request.id;}
+  const notice=request=>row("SELECT state,attempts,reason FROM notification_notices WHERE template='support.response-saved@1' AND event_ref=?",request);
   const first=await answered(c),t0=new Date(),seen=[];
-  let mode='down';const sender=async n=>{seen.push(n);return mode==='down'?{accepted:false,retryable:true}:mode==='reject'?{accepted:false,retryable:false}:mode==='throw'?(()=>{throw Error('PRIVATE-PROVIDER-ERROR');})():{accepted:true};};
-  let r=await delivery.runSupportDelivery(db,settings,sender,{now:t0});assert.equal(r.queued,1);assert.equal(r.retried,1);
-  let state=await row('SELECT state,attempts,last_error FROM support_deliveries WHERE request_id=?',first);assert.deepEqual({...state},{state:'queued',attempts:1,last_error:'unavailable'});
+  let mode='down';const sender=async n=>{seen.push(n);return mode==='down'?{accepted:false,retryable:true}:mode==='reject'?{accepted:false,retryable:false}:mode==='throw'?(()=>{throw Error('PRIVATE-PROVIDER-ERROR');})():{accepted:true,providerRef:'support-ref'};};
+  const drain=async at=>{const queued=await delivery.queueSupportNotices(db,settings,{now:at});const r=await outbox.runNotificationDelivery(db,shared,sender,{now:at});return {...r,queued:queued.queued};};
+  let r=await drain(t0);assert.equal(r.queued,1);assert.equal(r.retried,1);
+  assert.deepEqual({...await notice(first)},{state:'deferred',attempts:1,reason:'unavailable'});
   assert.equal((await api(c,'/requests/'+first)).request.delivery.state,'queued');assert.equal((await api(c,'/requests/'+first)).request.response.saved,true);
-  r=await delivery.runSupportDelivery(db,settings,sender,{now:new Date(t0.getTime()+60000)});assert.equal(seen.length,1,'Not retried before its backoff time');
-  mode='throw';r=await delivery.runSupportDelivery(db,settings,sender,{now:new Date(t0.getTime()+6*60000)});assert.equal(r.retried,1);assert.equal((await row('SELECT attempts FROM support_deliveries WHERE request_id=?',first)).attempts,2);
-  mode='up';r=await delivery.runSupportDelivery(db,settings,sender,{now:new Date(t0.getTime()+30*60000)});assert.equal(r.delivered,1);
+  r=await drain(new Date(t0.getTime()+60000));assert.equal(seen.length,1,'Not retried before its backoff time');
+  r=await drain(new Date(t0.getTime()+6*60000));assert.equal(r.retried,1);assert.equal((await notice(first)).attempts,2);
+  mode='up';r=await drain(new Date(t0.getTime()+30*60000));assert.equal(r.accepted,1);
   let seenView=(await api(c,'/requests/'+first)).request;assert.equal(seenView.delivery.state,'delivered');assert.equal(seenView.read.state,'unread','Delivery is not a read receipt');
-  r=await delivery.runSupportDelivery(db,settings,sender,{now:new Date(t0.getTime()+24*3600000)});assert.equal(r.delivered+r.retried+r.failed,0,'A delivered response is never sent again');
-  await assert.rejects(()=>run("UPDATE support_deliveries SET state='queued' WHERE request_id=?",first),/final/);
-  for(const n of seen){assert.deepEqual(Object.keys(n).sort(),['accountId','recipient','requestId','template']);assert.ok(!JSON.stringify(n).includes('PRIVATE'));}
+  r=await drain(new Date(t0.getTime()+23*3600000));assert.equal(r.accepted+r.retried+r.failed,0,'A delivered response is never sent again');
+  await assert.rejects(()=>run("UPDATE notification_notices SET state='queued' WHERE event_ref=?",first),/notification_notice_transition/);
+  for(const n of seen){assert.deepEqual(Object.keys(n).sort(),['idempotencyKey','kind','outboxId','projectId','recipient','template']);assert.equal(n.kind,'account');assert.equal(n.projectId,null);assert.ok(!JSON.stringify(n).includes('PRIVATE'));}
   // Rejection is terminal; exhaustion after the bounded number of attempts is terminal.
-  const second=await answered(c);mode='reject';r=await delivery.runSupportDelivery(db,settings,sender,{now:new Date(t0.getTime()+48*3600000)});assert.equal(r.failed,1);
-  assert.equal((await row('SELECT state,last_error FROM support_deliveries WHERE request_id=?',second)).last_error,'rejected');assert.equal((await api(c,'/requests/'+second)).request.delivery.state,'failed');assert.equal((await api(c,'/requests/'+second)).request.response.saved,true);
-  const third=await answered(c);mode='down';let at=t0.getTime()+72*3600000,failed=0;for(let i=0;i<6&&!failed;i++){failed+=(await delivery.runSupportDelivery(db,settings,sender,{now:new Date(at)})).failed;at+=7*3600000;}
-  assert.equal(failed,1);assert.deepEqual({...await row('SELECT attempts,last_error FROM support_deliveries WHERE request_id=?',third)},{attempts:delivery.maxSupportDeliveryAttempts,last_error:'exhausted'});
-  // A response read before delivery is cancelled, and a late provider enablement never notifies readers.
-  const fourth=await answered(c);await api(c,'/requests/'+fourth+'/read','POST',{version:1});mode='up';const before=seen.length;
-  r=await delivery.runSupportDelivery(db,settings,sender,{now:new Date(at+86400000)});assert.equal(seen.length,before);assert.equal((await row('SELECT count(*) n FROM support_deliveries WHERE request_id=?',fourth)).n,0);
+  const second=await answered(c);mode='reject';r=await drain(new Date(t0.getTime()+48*3600000));assert.equal(r.failed,1);
+  assert.deepEqual({...await notice(second)},{state:'failed',attempts:1,reason:'rejected'});assert.equal((await api(c,'/requests/'+second)).request.delivery.state,'failed');assert.equal((await api(c,'/requests/'+second)).request.response.saved,true);
+  const third=await answered(c);mode='down';let at=t0.getTime()+72*3600000,failed=0;for(let i=0;i<8&&!failed;i++){failed+=(await drain(new Date(at))).failed;at+=3*3600000;}
+  assert.equal(failed,1);assert.deepEqual({...await notice(third)},{state:'failed',attempts:outbox.maxNoticeAttempts,reason:'exhausted'});
+  // A lost reply is held as unknown-outcome and shown as still pending, never resent.
+  const lost=await answered(c);mode='throw';const beforeLost=seen.length;r=await drain(new Date(at));assert.equal(r.failed,1);assert.equal(seen.length,beforeLost+1);
+  assert.equal((await notice(lost)).state,'unknown-outcome');assert.equal((await api(c,'/requests/'+lost)).request.delivery.state,'queued');mode='up';await drain(new Date(at+3600000));assert.equal(seen.length,beforeLost+1,'An uncertain call is never resent');
+  // A response read before delivery is never queued, and one read after queueing is cancelled before any call (late provider enablement never notifies readers).
+  at+=86400000;const fourth=await answered(c);await api(c,'/requests/'+fourth+'/read','POST',{version:1});mode='up';const before=seen.length;
+  r=await drain(new Date(at));assert.equal(seen.length,before);assert.equal((await row('SELECT count(*) n FROM notification_notices WHERE event_ref=?',fourth)).n,0);
+  const late=await answered(c);await delivery.queueSupportNotices(db,settings,{now:new Date(at)});await api(c,'/requests/'+late+'/read','POST',{version:1});
+  r=await outbox.runNotificationDelivery(db,shared,sender,{now:new Date(at)});assert.equal(seen.length,before);assert.equal(r.cancelled,1);assert.equal((await notice(late)).state,'cancelled');assert.equal((await api(c,'/requests/'+late)).request.delivery.state,'cancelled');
   // Concurrent drains cannot double send one attempt.
-  const fifth=await answered(c);mode='up';let sends=0;const counting=async()=>{sends++;return {accepted:true};};
-  await Promise.all([delivery.runSupportDelivery(db,settings,counting,{now:new Date(at+2*86400000)}),delivery.runSupportDelivery(db,settings,counting,{now:new Date(at+2*86400000)})]);assert.equal(sends,1,'One claim wins');assert.equal((await row('SELECT state FROM support_deliveries WHERE request_id=?',fifth)).state,'delivered');
-  // G-E5: an account without a verified address is never emailed; it keeps the in-app response.
-  const u=await owner();await run("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')",u.user);const sixth=await answered(u);const sentBefore=seen.length+sends;
-  r=await delivery.runSupportDelivery(db,settings,sender,{now:new Date(at+3*86400000)});assert.equal(seen.length+sends,sentBefore,'nothing is sent to an unverified address');assert.equal(r.cancelled,1);
-  assert.equal((await row('SELECT state FROM support_deliveries WHERE request_id=?',sixth)).state,'cancelled');assert.equal((await api(u,'/requests/'+sixth)).request.response.saved,true);
+  at+=86400000;const fifth=await answered(c);mode='up';let sends=0;const counting=async()=>{sends++;return {accepted:true};};
+  await delivery.queueSupportNotices(db,settings,{now:new Date(at)});await Promise.all([outbox.runNotificationDelivery(db,shared,counting,{now:new Date(at)}),outbox.runNotificationDelivery(db,shared,counting,{now:new Date(at)})]);assert.equal(sends,1,'One claim wins');assert.equal((await notice(fifth)).state,'accepted');
+  // G-E5: an account without a verified address is never queued, and one whose address stops being verified after queueing is cancelled before any call.
+  at+=86400000;const u=await owner();await run("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')",u.user);const sixth=await answered(u);const sentBefore=seen.length+sends;
+  r=await drain(new Date(at));assert.equal(seen.length+sends,sentBefore,'nothing is sent to an unverified address');assert.equal((await row('SELECT count(*) n FROM notification_notices WHERE event_ref=?',sixth)).n,0);assert.equal((await api(u,'/requests/'+sixth)).request.response.saved,true);
+  const w=await owner();await run("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')",w.user);await verify(w);const seventh=await answered(w);await delivery.queueSupportNotices(db,settings,{now:new Date(at)});
+  await run('UPDATE users SET email_verified_at=NULL,email_verified_via=NULL WHERE id=?',w.user);r=await outbox.runNotificationDelivery(db,shared,sender,{now:new Date(at)});assert.equal(seen.length+sends,sentBefore,'nothing is sent once the address is no longer verified');assert.equal(r.cancelled,1);assert.equal((await notice(seventh)).state,'cancelled');
  });
  await test('outage and deletion: support survives Chat failure; account deletion cascades',async()=>{
   const chat=await worker.fetch(new Request('https://whumpo.com/api/chat',{method:'POST',headers:{cookie:'__Host-whumpo_session='+a.auth.token,origin:'https://whumpo.com','content-type':'application/json'},body:JSON.stringify({id:id(),revision:0,content:'hello'})}),env,ctx);

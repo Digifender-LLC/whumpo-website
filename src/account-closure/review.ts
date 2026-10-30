@@ -120,6 +120,7 @@ const c:Record<string,[string,string,Disposition]>={
  openConnectorReceipts:['connector_receipts','connector-receipts','cancel'],
  ruleApprovals:['rule_approvals','connector-receipts','delete'],
  activeRuleApprovals:['rule_approvals','connector-receipts','cancel'],
+ notificationNotices:['notification_notices','contact-notifications','delete'],
  jobJournal:['job_journal','job-journal','delete'],
  openJobJournal:['job_journal','job-journal','cancel'],
  unresolvedJobs:['job_journal','job-journal','cancel'],
