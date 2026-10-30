@@ -13,6 +13,7 @@ import {WorkspaceViewError} from './workspace-view-contract';
 import {handleInteractionRequest} from './chat-interactions/http';
 import {cleanIdentityCeremonies} from './workspace-identity/ceremonies';
 import {handleMobileRequest} from './mobile/router';
+import type {DNSChatOptions} from './dns-chat';
 import {handleIdentityRequest,workspaceIdentity} from './workspace-identity/http';
 import {handleSafetyCaseRequest} from './safety-case-http';
 import {IdentityError} from './workspace-identity/authority';
@@ -151,7 +152,7 @@ function sameOrigin(request: Request): boolean {
 async function handle(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const { pathname } = new URL(request.url);
   const method = request.method;
-  const mobile=await handleMobileRequest(request,env);if(mobile)return mobile;
+  const mobile=await handleMobileRequest(request,env,{chatOptions:(scoped,userId)=>chatOptions(scoped,ctx,userId)});if(mobile)return mobile;
   const identity=await handleIdentityRequest(request,env);if(identity)return identity;
   if (method === "GET" && pathname === "/api/health") return json({ status: "ok" });
   if (method === "POST" && pathname === "/api/stripe/webhook") return json(await stripeBillingWebhook(request, env.DB, env));
@@ -171,6 +172,11 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   if(pathname==='/api/account/security/review/commit'&&response.status===200&&response.headers.has('set-cookie'))return response;
   try{await assertWorkspace(scoped.DB,user.id);}catch(error){await response.body?.cancel().catch(()=>{});throw error;}
   return response;
+}
+/** Options every Chat send gets, shared by /api/chat and the native /api/mobile/v1 writes. `env` is the admitted workspace environment. */
+function chatOptions(env:Env,ctx:ExecutionContext,userId:string):DNSChatOptions{
+  const transport=workspaceTransport(env.DB,userId);
+  return {transport,githubTransport:transport,background:promise=>ctx.waitUntil(promise),cmsPublication:(turn,content)=>cmsWordPressCommand(env.DB,userId,turn,content,env as unknown as Record<string,unknown>)??cmsDiscardCommand(env.DB,userId,turn,content,env as unknown as Record<string,unknown>)??cmsUnpublishCommand(env.DB,userId,turn,content,env as unknown as Record<string,unknown>)??cmsPublicationCommand(env.DB,userId,turn,content,env as unknown as Record<string,unknown>),cmsContent:(action,id)=>cmsWordPressAction(env.DB,userId,action,id,env as unknown as Record<string,unknown>)??cmsContentAction(env.DB,userId,action,id,env as unknown as Record<string,unknown>),cms:project=>readCMSStatus(env.DB,userId,project,env as unknown as Record<string,unknown>),backendRuntime:env.BACKEND_RUNTIME,config:cloudflareConfig(env),hostingReady:!!hostingConfig(env),hosting:hostingConfig(env),github:githubConfig(env),files:env.FILES,healthChecks:String(env.ENVIRONMENT)!=='local'};
 }
 async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user:User):Promise<Response>{
   const {pathname}=new URL(request.url),method=request.method;
@@ -613,7 +619,7 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
       await requireFreshWorkspace(env.DB,user.id);
       if(!(await env.AUTH_LIMITER.limit({key:'app-recovery:'+user.id})).success)return error(429,'Too many recovery changes. Try again in a minute.');
     }
-    const result = await (explicitAction?sendChatControl:sendConversation)(env.DB, user.id, data, configuredAI(env),{transport,githubTransport:transport,background:promise=>ctx.waitUntil(promise),cmsPublication:(turn,content)=>cmsWordPressCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>)??cmsDiscardCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>)??cmsUnpublishCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>)??cmsPublicationCommand(env.DB,user.id,turn,content,env as unknown as Record<string,unknown>),cmsContent:(action,id)=>cmsWordPressAction(env.DB,user.id,action,id,env as unknown as Record<string,unknown>)??cmsContentAction(env.DB,user.id,action,id,env as unknown as Record<string,unknown>),cms:project=>readCMSStatus(env.DB,user.id,project,env as unknown as Record<string,unknown>),backendRuntime:env.BACKEND_RUNTIME,config:cloudflareConfig(env),hostingReady:!!hostingConfig(env),hosting:hostingConfig(env),github:githubConfig(env),files:env.FILES,healthChecks:String(env.ENVIRONMENT)!=='local'});
+    const result = await (explicitAction?sendChatControl:sendConversation)(env.DB, user.id, data, configuredAI(env),chatOptions(env,ctx,user.id));
     return result.error ? json({error:result.error,...(result.status===429?{support:supportLink('usage_limit')}:result.status===503?{support:supportLink('chat_unavailable')}:{})},result.status) : json(await readChat(env.DB, user.id, !!configuredAI(env)));
   }
   if (method === "GET" && pathname === "/api/projects") {
