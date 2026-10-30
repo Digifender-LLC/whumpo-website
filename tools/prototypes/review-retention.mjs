@@ -186,6 +186,7 @@ export const capRegistry=Object.freeze({
  module_access_role_reviews:R('review','R1','active-only','project-roles',"action='revoke'"),
  module_activation_reviews:R('review','R1','active-only','module-registry',"action='disable'"),
  module_files:R('inventory','R6','window','module-files'),
+ module_record_files:R('inventory','R6','lifetime','module-records'),
  module_records:R('inventory','R6','expiring','module-records'),
  module_request_receipts:R('receipt','R2','window','module-registry'),
  operator_containments:R('evidence','R5','restricted','operator-containment'),
