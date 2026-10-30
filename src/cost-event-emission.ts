@@ -36,7 +36,8 @@ export const emitGatewayAttempt = (db: D1Database, owner: string, id: string) =>
  * recorded only when the counter reaches a power of two (at most 16 events per project and month, the last at most half the true
  * count behind it): every reading would add a row and three statements to each anonymous photo request, and the exact counter stays in
  * `storage_project_usage` for WH-171 to read at period close. */
-export const emitProjectStorageRead = (db: D1Database, project: string) => emitCostEvent(async () => {
+export const emitProjectStorageRead = (db: D1Database, project: string, readOps?: number) => emitCostEvent(async () => {
+ if (readOps !== undefined && (readOps & (readOps - 1)) !== 0) return; // the caller's own counter reading (RETURNING) is not a power of two: nothing to record, no reread
  const row = await db.prepare("SELECT u.project_id,u.period,u.read_ops,p.owner_user_id FROM storage_project_usage u JOIN projects p ON p.id=u.project_id WHERE u.project_id=? AND u.period=strftime('%Y-%m','now')").bind(project).first<{ project_id: string; period: string; read_ops: number; owner_user_id: string }>();
  if (row && (row.read_ops & (row.read_ops - 1)) === 0) await appendCostEvent(db, await costEventFromProjectStorageUsage({ project_id: row.project_id, period: row.period, read_ops: row.read_ops }, { ownerId: row.owner_user_id, observedAt: `${row.period}-01T00:00:00.000Z` }));
 });

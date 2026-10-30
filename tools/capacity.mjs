@@ -26,6 +26,7 @@ import {readdirSync} from 'node:fs';
 import {monitorEventLoopDelay} from 'node:perf_hooks';
 import {fixtureEnvironment} from './verify.mjs';
 
+const TRACE=process.env.CAP_TRACE;
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 process.chdir(root);
 const argv=process.argv.slice(2),flag=name=>argv.includes('--'+name),value=(name,fallback)=>{const i=argv.indexOf('--'+name);return i<0?fallback:argv[i+1];};
@@ -82,9 +83,10 @@ function limiter(name,limit,period=60){
 }
 const stats={d1:0,runtime:0,runtimeInflight:0,runtimePeak:0,runtimeMs:[]};
 function countingDatabase(db){
- const originals=new WeakMap();
- const wrap=original=>{const w={bind:(...v)=>wrap(original.bind(...v)),first:(...v)=>{stats.d1++;return original.first(...v);},all:(...v)=>{stats.d1++;return original.all(...v);},run:(...v)=>{stats.d1++;return original.run(...v);},raw:(...v)=>{stats.d1++;return original.raw(...v);}};originals.set(w,original);return w;};
- return {prepare:q=>wrap(db.prepare(q)),batch:async s=>{stats.d1+=s.length;return db.batch(s.map(x=>originals.get(x)??x));},exec:(...a)=>db.exec(...a)};
+ const originals=new WeakMap(),sqlOf=new WeakMap();
+ const hit=(sql,n=1)=>{stats.d1+=n;stats.trace?.push(sql);};
+ const wrap=(original,sql)=>{const w={bind:(...v)=>wrap(original.bind(...v),sql),first:(...v)=>{hit(sql);return original.first(...v);},all:(...v)=>{hit(sql);return original.all(...v);},run:(...v)=>{hit(sql);return original.run(...v);},raw:(...v)=>{hit(sql);return original.raw(...v);}};originals.set(w,original);sqlOf.set(w,sql);return w;};
+ return {prepare:q=>wrap(db.prepare(q),q),batch:async s=>{stats.d1+=s.length;for(const x of s)stats.trace?.push('(batch) '+(sqlOf.get(x)??'?'));return db.batch(s.map(x=>originals.get(x)??x));},exec:(...a)=>db.exec(...a)};
 }
 
 store=await databaseFixture({d1:true,r2:true});
@@ -278,10 +280,17 @@ try{
  const unit={};
  for(const [name,fn] of Object.entries({site:()=>ops.site(victims[0],{phase:'unit'}),photo:()=>ops.photo(victims[0],{phase:'unit'}),contact_get:()=>ops.contactGet(victims[0],{phase:'unit'}),contact_post:()=>ops.contactPost(victims[0],{phase:'unit'}),backend:()=>ops.backend(victims[0],{phase:'unit'}),app_page:()=>ops.appPage(victims[0],{phase:'unit'}),visitor:()=>ops.visitor(victims[0],{phase:'unit'},victims[0].visitors[11],1)})){
   const n=name==='contact_post'?3:name==='backend'||name==='visitor'?3:20,d0=stats.d1,r0=stats.runtime,t=performance.now();
-  for(let i=0;i<n;i++)await fn();
+  if(TRACE)stats.trace=[];
+  if(TRACE)stats.trace=[];for(let i=0;i<n;i++){if(stats.trace)stats.trace.push('--- request '+i);await fn();}if(stats.trace){console.error('TRACE '+name+'\n'+stats.trace.map(q=>'  '+q.replace(/\s+/g,' ').slice(0,240)).join('\n'));stats.trace=null;}
+  if(stats.trace){console.error('TRACE '+name+' (all '+n+' reqs)\n'+stats.trace.map(q=>'  '+q.replace(/\s+/g,' ').slice(0,260)).join('\n'));stats.trace=null;}
   unit[name]={requests:n,d1PerRequest:round((stats.d1-d0)/n,1),runtimeCallsPerRequest:round((stats.runtime-r0)/n,1),sequentialMeanMs:round((performance.now()-t)/n)};
  }
  report.unitCost=unit;
+ // Regression pin: D1 statements per public request are a hot-path cost. A change here must be deliberate:
+ // update the table and the statement list in docs/capacity-and-fairness.md in the same commit. Photo is the mean of the first
+ // 20 reads, which includes the cost-event rows written when the project counter hits 1, 2, 4, 8 and 16 (steady state is 6).
+ const pinned={site:5,photo:6.8,contact_get:2,contact_post:5,backend:3,app_page:1,visitor:10};
+ for(const [name,expected] of Object.entries(pinned))if(unit[name].d1PerRequest!==expected)throw Error(`D1 statements per request changed for ${name}: ${unit[name].d1PerRequest}, pinned ${expected}. Re-run with CAP_TRACE=1 to list them, then update the pin deliberately.`);
  // The unit-cost run consumed a few quota units; reset nothing, but account for it below.
  log('Unit costs measured.');
 
