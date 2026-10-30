@@ -29,6 +29,9 @@ export function refusal(e:MobileError,env?:MobileEnvironment){
  return response;
 }
 
+/** A WH-105 interaction error keeps its own code and status inside the mobile envelope (the contract passes that vocabulary through). */
+export const passthrough=(status:number,error:{code:string;message:string;fieldId?:string})=>new Response(JSON.stringify({version:1,error}),{status,headers:headers()});
+
 const plain=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v)&&Object.getPrototypeOf(v)===Object.prototype;
 const controlsAllowed=['specification.apply','site.confirm','application.confirm','app.restore'];
 const fieldTypes=['text','long-text','choice','multi-choice','boolean','number','date','datetime','resource'];

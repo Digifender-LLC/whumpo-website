@@ -1076,6 +1076,211 @@
    }
   },
   {
+   "id": "mobile-projects",
+   "title": "Native /api/mobile/v1 projects and interactions (WH-084 M4): project list/read, versions, activity and the eight interaction aliases",
+   "privileged": [
+    "data-change"
+   ],
+   "authorityClass": "bearer android session only; each operation runs the web path (admitWorkspace + workspaceBindings + the existing project/version/activity statements or the WH-105/106 interaction handler + assertWorkspace) with the bearer principal; no browser Origin rule, cookies refused",
+   "entries": [
+    {
+     "file": "src/mobile/router.ts",
+     "kind": "regex",
+     "match": "/^interactions\\/(list|read|resources|mutate|receipt|continue|stop|reconcile)$/",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/mobile/router.ts",
+     "kind": "exact",
+     "match": "projects",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/mobile/router.ts",
+     "kind": "regex",
+     "match": "/^projects\\/([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})(\\/versions)?$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/mobile/router.ts",
+     "kind": "exact",
+     "match": "activity",
+     "methods": [
+      "GET"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "The principal is the bearer's android session and the workspace scope is the web dispatcher's own, shared with M2. Interaction aliases call handleInteractionRequest unchanged with that scoped database and owner; project, version and activity statements filter by the owner in every query.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/projects.ts",
+       "contains": "WHERE id = ? AND owner_user_id = ?"
+      },
+      {
+       "file": "src/mobile/interactions.ts",
+       "contains": "handleInteractionRequest(web,scoped.DB,user,"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-projects.mjs",
+       "contains": "assert.deepEqual((await get('/projects',sb.token)).data.items.map(p=>p.id),[b.project],'owner B sees only owner B projects');",
+       "asserts": "owner B lists only owner B projects"
+      },
+      {
+       "file": "tests/mobile-projects.mjs",
+       "contains": "const bActivity=(await get('/activity',sb.token)).data.items;assert(bActivity.every(x=>x.projectId!==a.project),'owner B never sees owner A activity');",
+       "asserts": "owner B never sees owner A activity"
+      },
+      {
+       "file": "tests/mobile-projects.mjs",
+       "contains": "assert.equal((await post('read',sb.token,{version:1,interactionId:f.envelope.id,client})).status,404,'owner B cannot read owner A form');",
+       "asserts": "owner B cannot read owner A form"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Same transport as M1/M2: no Origin rule, a Cookie header is 400, the strict Whumpo-Client header is required (426 for an unsupported build), only limit/cursor query keys are accepted on the list routes and none elsewhere. Interaction bodies are bounded at 32 KiB from the stream.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/router.ts",
+       "contains": "if(request.headers.has('cookie'))throw new MobileError('invalid_request');"
+      },
+      {
+       "file": "src/mobile/interactions.ts",
+       "contains": "Number(length)>limit"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-projects.mjs",
+       "contains": "assert.equal((await mobile('/interactions/receipt',{method:'POST',token:sa.token,headers:{cookie:'__Host-whumpo_session='+sa.token},body:{version:1,requestId:id()}})).status,400);",
+       "asserts": "a cookie beside a valid bearer is refused"
+      },
+      {
+       "file": "tests/mobile-projects.mjs",
+       "contains": "const big=await post('mutate',sa.token,{version:1,pad:'x'.repeat(33000)});assert.equal(big.status,413);",
+       "asserts": "a body over 32 KiB is payload_too_large"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "evidenced",
+     "detail": "Interaction answers and continuations carry no web recent-authentication requirement, so none is invented; the review a continuation prepares keeps its fresh-passkey control through reviews/confirm. A handoff session is never fresh.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/workspace.ts",
+       "contains": "try{await requireFreshWorkspace(scoped.DB,user);}catch(error)"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-projects.mjs",
+       "contains": "assert.equal(refused.status,401);same(refused.data,errors.proof_required_fresh.body);",
+       "asserts": "a handoff session cannot confirm the review its continuation prepared"
+      }
+     ]
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "No request field names an account. Projects, versions and activity are read by id AND owner; a foreign project is not_found. Interaction ids, submissions and request ids are resolved by the unchanged web store with the owner, so a foreign one is not_found.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/projects.ts",
+       "contains": "if(!row)throw new MobileError('not_found');"
+      },
+      {
+       "file": "src/mobile/interactions.ts",
+       "contains": "if(code==='not_found')throw new MobileError('not_found');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-projects.mjs",
+       "contains": "const miss=await get('/projects/'+a.project+'/versions',sb.token);assert.equal(miss.status,404);same(miss.data,errors.not_found.body);",
+       "asserts": "a foreign project has no versions"
+      },
+      {
+       "file": "tests/mobile-projects.mjs",
+       "contains": "const foreign=await post('receipt',sb.token,{version:1,requestId});assert.equal(foreign.status,404);same(foreign.data,errors.not_found.body);",
+       "asserts": "a foreign receipt is not_found"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "Owner-supplied interaction request and submission ids use the web store's uniqueness and immutable hash: the same id and payload reads the committed result, a changed payload is request_conflict.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/interactions.ts",
+       "contains": "if(code==='request_conflict')throw new MobileError('request_conflict');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-projects.mjs",
+       "contains": "same((await post('mutate',sa.token,body)).data,first.data);assert.equal(await rows('chat_interaction_requests',a.account),rowsBefore,'a replay writes nothing');",
+       "asserts": "same-ID replay returns the original result and writes nothing"
+      },
+      {
+       "file": "tests/mobile-projects.mjs",
+       "contains": "const conflict=await post('mutate',sa.token,{...body,answers:{...answers,name:'Changed'}});assert.equal(conflict.status,409);same(conflict.data,errors.request_conflict.body);",
+       "asserts": "same ID with a changed payload is request_conflict"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "The answer revision and definition digest fence mutations (the web 409 vocabulary passes through in the mobile envelope); a stale chat revision settles a continuation as failed/changed; a conversation-changed refusal from the model continuation is stale_revision with the current revision. Cursors are bound to account and endpoint.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/interactions.ts",
+       "contains": "message.includes('conversation changed')"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-projects.mjs",
+       "contains": "const stale=await post('mutate',sa.token,submit(f,answers,id(),saved.data.answerRevision,'cancel'));assert.equal(stale.status,409,stale.text);",
+       "asserts": "a stale answer revision is refused"
+      },
+      {
+       "file": "tests/mobile-projects.mjs",
+       "contains": "assert.equal(stale.data.continuation.state,'failed');assert.equal(stale.data.continuation.reason,'changed');",
+       "asserts": "a stale chat revision fails the continuation as changed"
+      }
+     ]
+    },
+    "admission": {
+     "state": "evidenced",
+     "detail": "Bearer routes keep the M1 per-IP and per-account limits; welcome must be complete for every M4 route. Read-only operations never call the model.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/workspace.ts",
+       "contains": "throw new MobileError('onboarding_required',{next:'browser'})"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-projects.mjs",
+       "contains": "assert.equal(await inference(),before,'read-only operations never call the model');",
+       "asserts": "read-only interaction operations leave inference_calls unchanged"
+      }
+     ]
+    }
+   }
+  },
+  {
    "id": "identity",
    "title": "Workspace identity: sign-up, login, passkeys, recovery kit, recovery and logout",
    "privileged": [

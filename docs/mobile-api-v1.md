@@ -90,6 +90,8 @@ All paths are relative to `/api/mobile/v1`. Fixtures: [operations.json](../tests
 
 The interaction operations are thin authenticated aliases for the frozen [WH-105/WH-106 payloads](chat-interactions.md#wire-objects-and-digest) and return their existing error vocabulary wrapped in the mobile error envelope. The native admission set is bounded:
 
+**M4 (implemented).** Projects, versions, activity and the eight interaction aliases run the web statements and WH-105/106 handler unchanged behind the M2 workspace gate. List cursors are account- and endpoint-bound offsets over the web's 100-row bound. Interaction errors keep their WH-105 `code` and HTTP status inside `{version,error}` except `client_update_required` (426), `not_found` and `request_conflict`, which use the mobile codes. Interaction answers and continuations have no web recent-authentication requirement, so none is added: the review a continuation prepares still needs a fresh passkey at `reviews/confirm`. A stale `expectedChatRevision` on a content-brief `continue` settles the continuation as `failed`/`changed` (the web outcome); the model-continuation path maps a conversation change to `409 stale_revision`.
+
 - **Field types:** `text`, `long-text`, `choice`, `multi-choice`, `boolean`, `number`, `date`, `datetime`, `resource`. `attachment` waits for WH-085.
 - **Bindings:** `answer.value@1`, `interaction.answers@1`, `owned.projects@1`, `site.content@1`, `agent.task-continue@1`, `site.content-prepare@1`. Photo, display, view, connection, comparison and preview bindings are excluded.
 - A definition needing anything else returns `426 client_update_required`. There is no simplified form, text projection or browser downgrade. `canApprove` is always false for generic forms.
