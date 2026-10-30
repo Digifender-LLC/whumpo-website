@@ -131,6 +131,20 @@ try{
   assert.equal((await gateway(a,{...submission(records),input:{values:{...values,role:'staff'}}},v1)).body.code,'invalid_request');
  });
 
+ await check('WH-157 receipt consent: stored only for a non-public form, a boolean, unticked by default',async()=>{
+  const values={name:value('name'),topic:'repair',note:value('note'),urgent:true,count:2};
+  const vc=await visitor(a),consent=async(input,who=vc,form='request-form')=>gateway(a,{...submission(records,form),input},who);
+  const sent=await consent({values,receiptConsent:true});assert.equal(sent.status,200,JSON.stringify(sent.body));
+  assert.equal((await row('SELECT receipt_consent n FROM module_records WHERE id=?',sent.body.result.entryId)).n,1);
+  const plain=await consent({values});assert.equal((await row('SELECT receipt_consent n FROM module_records WHERE id=?',plain.body.result.entryId)).n,0);
+  const off=await consent({values,receiptConsent:false});assert.equal((await row('SELECT receipt_consent n FROM module_records WHERE id=?',off.body.result.entryId)).n,0);
+  for(const bad of ['yes',1,null])assert.equal((await consent({values,receiptConsent:bad})).body.code,'invalid_request');
+  // An anonymous public form refuses consent before anything is stored (the table CHECK repeats it).
+  const before=await count(a);
+  assert.equal((await publicGateway(a,{...submission(records,'public-form'),input:{values:{name:value('name'),topic:'repair',urgent:true,count:2},receiptConsent:true}},{ip:'192.0.2.40',verify:async()=>Response.json({success:true,hostname:new URL(a.host).hostname,action:'public-form'})})).status>=400,true);
+  assert.equal(await count(a),before);
+ });
+
  await check('anonymous public intake reuses the contact admission: Turnstile, connection allowance, publication and atomic caps',async()=>{
   let calls=0;const siteverify=(answer)=>async(url,options)=>{calls++;assert.equal(url,'https://challenges.cloudflare.com/turnstile/v0/siteverify');assert.equal(options.redirect,'manual');
    const body=new URLSearchParams(options.body);assert.equal(body.get('secret'),'fixture-secret');assert.equal(body.get('response'),'fixture-token');return typeof answer==='function'?answer():Response.json(answer);};
@@ -312,7 +326,7 @@ try{
   const r=await row('SELECT * FROM module_records WHERE project_id=? LIMIT 1',a.project);
   await assert.rejects(()=>run('UPDATE module_records SET values_json=? WHERE id=?','{}',r.id),/module_request_stale/);
   await assert.rejects(()=>run("INSERT INTO module_record_events VALUES(?,?,?,?,'record.updated',99,unixepoch())",records.id,id(),a.project,r.id),/module_request_stale/);
-  await assert.rejects(()=>run("INSERT INTO module_records VALUES(?,?,?,'request','request-form',1,'visitor',?,'{}',1,?,?,unixepoch(),unixepoch(),unixepoch()+86400)",id(),theirs.id,a.project,v1.visitorId,id(),id()),/module_request_unavailable/);
+  await assert.rejects(()=>run("INSERT INTO module_records VALUES(?,?,?,'request','request-form',1,'visitor',?,'{}',1,?,?,unixepoch(),unixepoch(),unixepoch()+86400,0)",id(),theirs.id,a.project,v1.visitorId,id(),id()),/module_request_unavailable/);
  });
 
  await check('receipt windows: sliding instance cap, owner exemption, per-staff edit cap, replay and 30-day prune',async()=>{

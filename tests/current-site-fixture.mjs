@@ -76,6 +76,7 @@ export {cleanPhoto} from './src/photo-format';
   export {versionRemovalCommand} from './src/version-removal';
   export * as contacts from './src/contacts';
   export * as contactNotifications from './src/contact-notifications';
+  export * as notificationRecipients from './src/notification-recipients';
   export * as contactEmail from './src/contact-email';
   export * as directory from './src/directory';
   export * as reviewTurnover from './src/review-turnover';

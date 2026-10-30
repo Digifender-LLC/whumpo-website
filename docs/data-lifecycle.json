@@ -1046,13 +1046,15 @@
         "contact_notification_outbox",
         "contact_destination_reviews",
         "contact_notification_send_ledger",
-        "contact_notification_suppression_resets"
+        "contact_notification_suppression_resets",
+        "visitor_notification_addresses",
+        "staff_notification_optins"
       ],
       "scope": "owner",
-      "purpose": "Owner-reviewed (exact Chat review or Dashboard control), provider-verified address for content-free new-message notices; delivery outbox with at-most-once provider calls, bounded retries, bounce/complaint state and permanent suppression; content-free daily send counters enforcing the spending ceiling; immutable operator suppression-reset audit rows. The inbox stays the source of truth.",
-      "currentRetention": "Outbox rows expire 30 days after creation and daily maintenance removes them (skipping held projects). Destinations stay until the owner removes them or the project/account is removed. Suppressions are permanent per account unless an operator-reviewed reset removes one; reset audit rows and destination reviews cascade with the account. Daily send counters are removed after 40 days.",
+      "purpose": "Owner-reviewed (exact Chat review or Dashboard control), provider-verified address for content-free new-message notices; delivery outbox with at-most-once provider calls, bounded retries, bounce/complaint state and permanent suppression; content-free daily send counters enforcing the spending ceiling; immutable operator suppression-reset audit rows. WH-157 adds the staff and submitter scopes: a project visitor's own notification address with its hashed, short-lived verification code (`visitor_notification_addresses`) and staff opt-ins (`staff_notification_optins`), reused with the per-account suppression list across scopes; recipients are derived only by the `notification_recipients` view and nothing is sent until the WH-036/WH-202 sender exists. The inbox stays the source of truth.",
+      "currentRetention": "Outbox rows expire 30 days after creation and daily maintenance removes them (skipping held projects). Destinations stay until the owner removes them or the project/account is removed. Suppressions are permanent per account unless an operator-reviewed reset removes one; reset audit rows and destination reviews cascade with the account. Daily send counters are removed after 40 days. INTERIM DEFAULT pending an owner decision: a visitor address lives and dies with the visitor identity (deleted on erasure, instance, project or account removal); a staff opt-in is removed on opt-out, staff role revocation, or a changed or removed address. A verification code is never stored while delivery is unavailable.",
       "proposedRetention": "Keep as current. Suppression retention is a deliberate abuse/deliverability control and needs privacy review before any provider is enabled.",
-      "deletionAuthority": "Project owner removes the destination; account closure removes everything. Preservation holds refuse owner removal and expiry for held projects.",
+      "deletionAuthority": "Project owner removes the destination; a visitor removes their own address and a staff holder opts out at any time (consent withdrawal is never blocked by a hold); account closure removes everything. Preservation holds refuse owner removal and expiry for held projects.",
       "exportPolicy": "Owner's own address and verification state may be exported; no visitor content exists in these tables, and provider references and verification codes are excluded.",
       "references": [
         "src/contact-notifications.ts",

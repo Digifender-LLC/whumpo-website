@@ -449,7 +449,10 @@ CREATE TABLE module_records (
  last_request_id TEXT NOT NULL CHECK(length(last_request_id)=36),
  created_at INTEGER NOT NULL CHECK(created_at>0),
  updated_at INTEGER NOT NULL CHECK(updated_at>=created_at),
- expires_at INTEGER NOT NULL CHECK(expires_at>created_at AND expires_at<=created_at+31536000)
+ expires_at INTEGER NOT NULL CHECK(expires_at>created_at AND expires_at<=created_at+31536000),
+ -- WH-157: the submitter's explicit, unticked-by-default "email me a receipt" choice; an anonymous (public) record can never consent.
+ receipt_consent INTEGER NOT NULL DEFAULT 0 CHECK(receipt_consent IN (0,1)),
+ CHECK(submitter_kind!='public' OR receipt_consent=0)
 ) STRICT;
 CREATE INDEX module_records_list ON module_records(instance_id,schema_id,created_at DESC,id DESC);
 CREATE INDEX module_records_visitor ON module_records(visitor_id,instance_id,created_at);
@@ -505,7 +508,7 @@ END;
 CREATE TRIGGER module_record_update BEFORE UPDATE ON module_records
 WHEN NEW.id IS NOT OLD.id OR NEW.instance_id IS NOT OLD.instance_id OR NEW.project_id IS NOT OLD.project_id OR NEW.schema_id IS NOT OLD.schema_id OR NEW.form_id IS NOT OLD.form_id
  OR NEW.fields_revision IS NOT OLD.fields_revision OR NEW.submitter_kind IS NOT OLD.submitter_kind OR NEW.visitor_id IS NOT OLD.visitor_id OR NEW.created_request_id IS NOT OLD.created_request_id
- OR NEW.created_at IS NOT OLD.created_at OR NEW.expires_at IS NOT OLD.expires_at OR NEW.revision!=OLD.revision+1 OR NEW.last_request_id=OLD.last_request_id OR NEW.updated_at<OLD.updated_at
+ OR NEW.created_at IS NOT OLD.created_at OR NEW.expires_at IS NOT OLD.expires_at OR NEW.receipt_consent IS NOT OLD.receipt_consent OR NEW.revision!=OLD.revision+1 OR NEW.last_request_id=OLD.last_request_id OR NEW.updated_at<OLD.updated_at
  OR OLD.expires_at<=unixepoch()
 BEGIN SELECT RAISE(ABORT,'module_request_stale'); END;
 -- Ordinary removal and expiry never delete inside an active safety preservation hold (WH-132 inventory: blocked).
@@ -661,3 +664,83 @@ WHEN EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id AND t.user_id=NEW.user_
    AND i.local_id=json_extract(t.action_json,'$.instanceId') AND mf.collection_id=json_extract(t.action_json,'$.collectionId')))
  );
 END;
+
+-- WH-157 notification recipients (schema batch 3c; docs/notifications.md#recipient-scopes G-N7). Nothing here sends: the sender is
+-- blocked on WH-036/WH-202. Recipients derive only from these records; the suppression list is the existing per-account
+-- contact_notification_suppressions (decision D5: reused across scopes, keyed by the project owner, no rename).
+-- A project visitor's notification address lives and dies with the visitor identity (interim default pending an owner decision).
+-- The code is stored only as a hash; no code is stored while delivery is unavailable.
+CREATE TABLE visitor_notification_addresses (
+ visitor_id TEXT PRIMARY KEY REFERENCES app_visitors(id) ON DELETE CASCADE,
+ address TEXT NOT NULL CHECK(length(address) BETWEEN 3 AND 254 AND address=lower(address)),
+ code_hash TEXT CHECK(code_hash IS NULL OR (length(code_hash)=64 AND code_hash NOT GLOB '*[^0-9a-f]*')),
+ code_expires_at INTEGER,
+ code_failures INTEGER NOT NULL DEFAULT 0 CHECK(code_failures BETWEEN 0 AND 5),
+ verified_at INTEGER,
+ CHECK((code_hash IS NULL)=(code_expires_at IS NULL)),
+ CHECK(verified_at IS NULL OR code_hash IS NULL)
+) STRICT;
+-- Staff opt-in: granting the staff role never opts anyone in. Removed with the role (trigger below), the address or the visitor.
+CREATE TABLE staff_notification_optins (
+ instance_id TEXT NOT NULL REFERENCES module_instances(id) ON DELETE CASCADE,
+ visitor_id TEXT NOT NULL REFERENCES app_visitors(id) ON DELETE CASCADE,
+ opted_in_at INTEGER NOT NULL CHECK(opted_in_at>0),
+ PRIMARY KEY(instance_id,visitor_id)
+) STRICT;
+CREATE INDEX staff_notification_optins_visitor ON staff_notification_optins(visitor_id);
+CREATE TRIGGER visitor_notification_address_admit BEFORE INSERT ON visitor_notification_addresses BEGIN
+ SELECT RAISE(ABORT,'notification_address_state') WHERE NEW.code_hash IS NOT NULL OR NEW.verified_at IS NOT NULL OR NEW.code_failures!=0
+  OR NOT EXISTS(SELECT 1 FROM app_visitors WHERE id=NEW.visitor_id AND revoked=0);
+ SELECT RAISE(ABORT,'notification_address_suppressed') WHERE EXISTS(SELECT 1 FROM contact_notification_suppressions s JOIN app_visitors v ON v.id=NEW.visitor_id JOIN projects p ON p.id=v.project_id
+  WHERE s.user_id=p.owner_user_id AND s.address=NEW.address);
+END;
+CREATE TRIGGER visitor_notification_address_update BEFORE UPDATE ON visitor_notification_addresses BEGIN
+ SELECT RAISE(ABORT,'notification_address_state') WHERE NEW.visitor_id IS NOT OLD.visitor_id
+  OR NEW.address IS NOT OLD.address AND (NEW.verified_at IS NOT NULL OR NEW.code_hash IS NOT NULL)
+  OR NEW.verified_at IS NOT NULL AND NEW.verified_at IS NOT OLD.verified_at AND (OLD.verified_at IS NOT NULL OR OLD.code_hash IS NULL OR OLD.code_expires_at<=unixepoch());
+ SELECT RAISE(ABORT,'notification_address_suppressed') WHERE NEW.address IS NOT OLD.address AND EXISTS(SELECT 1 FROM contact_notification_suppressions s JOIN app_visitors v ON v.id=NEW.visitor_id JOIN projects p ON p.id=v.project_id
+  WHERE s.user_id=p.owner_user_id AND s.address=NEW.address);
+END;
+-- A changed or removed address drops the opt-in that was given for the old one.
+CREATE TRIGGER visitor_notification_address_changed AFTER UPDATE OF address ON visitor_notification_addresses WHEN NEW.address IS NOT OLD.address BEGIN
+ DELETE FROM staff_notification_optins WHERE visitor_id=OLD.visitor_id;
+END;
+CREATE TRIGGER visitor_notification_address_removed AFTER DELETE ON visitor_notification_addresses BEGIN
+ DELETE FROM staff_notification_optins WHERE visitor_id=OLD.visitor_id;
+END;
+CREATE TRIGGER staff_notification_optin_admit BEFORE INSERT ON staff_notification_optins BEGIN
+ SELECT RAISE(ABORT,'notification_optin_forbidden') WHERE NOT EXISTS(SELECT 1 FROM module_access_roles r JOIN app_visitors v ON v.id=r.visitor_id AND v.project_id=r.project_id AND v.access_id=r.instance_id AND v.revoked=0
+   JOIN visitor_notification_addresses a ON a.visitor_id=v.id AND a.verified_at IS NOT NULL
+  WHERE r.instance_id=NEW.instance_id AND r.visitor_id=NEW.visitor_id AND r.role='staff' AND r.state='granted');
+ SELECT RAISE(ABORT,'notification_address_suppressed') WHERE EXISTS(SELECT 1 FROM visitor_notification_addresses a JOIN app_visitors v ON v.id=a.visitor_id JOIN projects p ON p.id=v.project_id
+  JOIN contact_notification_suppressions s ON s.user_id=p.owner_user_id AND s.address=a.address WHERE a.visitor_id=NEW.visitor_id);
+END;
+CREATE TRIGGER staff_notification_optin_immutable BEFORE UPDATE ON staff_notification_optins BEGIN SELECT RAISE(ABORT,'notification_optin_forbidden'); END;
+-- Role revocation (also a visitor revocation, which revokes the grant) removes the opt-in, so a later re-grant does not silently opt in again.
+CREATE TRIGGER staff_notification_optin_revoked AFTER UPDATE OF state ON module_access_roles WHEN NEW.state='revoked' AND OLD.state='granted' BEGIN
+ DELETE FROM staff_notification_optins WHERE instance_id=NEW.instance_id AND visitor_id=NEW.visitor_id;
+END;
+-- A consenting receipt is refused for a suppressed address; the consent itself is only meaningful with a verified address (view below).
+CREATE TRIGGER module_record_consent_admit BEFORE INSERT ON module_records WHEN NEW.receipt_consent=1 BEGIN
+ SELECT RAISE(ABORT,'notification_address_suppressed') WHERE EXISTS(SELECT 1 FROM visitor_notification_addresses a JOIN projects p ON p.id=NEW.project_id
+  JOIN contact_notification_suppressions s ON s.user_id=p.owner_user_id AND s.address=a.address WHERE a.visitor_id=NEW.visitor_id);
+END;
+-- The single place recipients are derived (read at enqueue and again before every provider call): `ref` is the destination id (owner),
+-- the visitor id (staff) or the record id (submitter). Suppression is the project owner's, across all three scopes.
+CREATE VIEW notification_recipients(project_id,scope,ref,address) AS
+ SELECT d.project_id,'owner',d.id,d.address FROM contact_notification_destinations d
+  WHERE d.state='verified' AND NOT EXISTS(SELECT 1 FROM contact_notification_suppressions s WHERE s.user_id=d.user_id AND s.address=d.address)
+ UNION ALL
+ SELECT v.project_id,'staff',v.id,a.address FROM staff_notification_optins o
+  JOIN module_access_roles r ON r.instance_id=o.instance_id AND r.visitor_id=o.visitor_id AND r.role='staff' AND r.state='granted'
+  JOIN app_visitors v ON v.id=o.visitor_id AND v.project_id=r.project_id AND v.access_id=o.instance_id AND v.revoked=0
+  JOIN visitor_notification_addresses a ON a.visitor_id=v.id AND a.verified_at IS NOT NULL
+  JOIN projects p ON p.id=v.project_id
+  WHERE NOT EXISTS(SELECT 1 FROM contact_notification_suppressions s WHERE s.user_id=p.owner_user_id AND s.address=a.address)
+ UNION ALL
+ SELECT r.project_id,'submitter',r.id,a.address FROM module_records r
+  JOIN app_visitors v ON v.id=r.visitor_id AND v.project_id=r.project_id AND v.revoked=0
+  JOIN visitor_notification_addresses a ON a.visitor_id=v.id AND a.verified_at IS NOT NULL
+  JOIN projects p ON p.id=r.project_id
+  WHERE r.receipt_consent=1 AND r.submitter_kind!='public' AND r.expires_at>unixepoch()
+   AND NOT EXISTS(SELECT 1 FROM contact_notification_suppressions s WHERE s.user_id=p.owner_user_id AND s.address=a.address);
