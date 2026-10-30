@@ -13,4 +13,5 @@ local.properties
 *.keystore
 # Keystores are decoded to the CI runner temp dir only
 *.p12
-*.p12
+# Firebase app config (project identifiers); injected at build time, never committed
+google-services.json
