@@ -12,6 +12,7 @@
  },
  "gates": {
   "order": [
+   "handleMobileRequest",
    "handleIdentityRequest",
    "exact-origin-gate",
    "handleSafetyCaseRequest",
@@ -354,6 +355,245 @@
        "file": "tests/boundary-audit.mjs",
        "contains": "some(p=>p.startsWith('platform dispatch order changed'))",
        "asserts": "a router moved ahead of the exact-Origin gate is reported; every route is registered with beforeOriginGate"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "mobile-identity",
+   "title": "Native /api/mobile/v1 identity transport (WH-083 M1): config, passkey login, reauthentication, session and logout",
+   "privileged": [
+    "credential"
+   ],
+   "authorityClass": "anonymous native passkey ceremony (config, login) or bearer android session (reauth, session, logout); mounted first in handle(), own client admission and cookie refusal, no browser Origin rule",
+   "entries": [
+    {
+     "file": "src/mobile/router.ts",
+     "kind": "exact",
+     "match": "config",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/mobile/router.ts",
+     "kind": "exact",
+     "match": "session/login/options",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/mobile/router.ts",
+     "kind": "exact",
+     "match": "session/login/verify",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/mobile/router.ts",
+     "kind": "exact",
+     "match": "session/reauth/options",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/mobile/router.ts",
+     "kind": "exact",
+     "match": "session/reauth/verify",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/mobile/router.ts",
+     "kind": "exact",
+     "match": "session",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/mobile/router.ts",
+     "kind": "exact",
+     "match": "session/logout",
+     "methods": [
+      "POST"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "The bearer is a 256-bit hex token resolved by its SHA-256 against client 'android' sessions only: a web session token, a grant, an expired or revoked token and a missing header are proof_required. Bearer tokens are refused on every non-mobile route and a native token is not a web cookie.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/auth.ts",
+       "contains": "resolveIdentity(db,{version:1,client:'android',kind:'session',token})"
+      },
+      {
+       "file": "src/mobile/router.ts",
+       "contains": "return /^bearer\\s/i.test(request.headers.get('authorization')??'')"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-identity.mjs",
+       "contains": "const r=await mobile('/session',{method:'GET',token:web.token});assert.equal(r.status,401);",
+       "asserts": "a web session token is refused on a mobile route"
+      },
+      {
+       "file": "tests/mobile-identity.mjs",
+       "contains": "assert.equal((await call('/api/profile',{method:'GET',client:null,headers:{cookie:'__Host-whumpo_session='+s.token}})).status,401);",
+       "asserts": "an android token is refused as a web cookie"
+      },
+      {
+       "file": "tests/mobile-identity.mjs",
+       "contains": "const both=await call(path,{method:'GET',client:null,token:s.token,headers:{cookie}});assert.equal(both.status,401,path);",
+       "asserts": "a bearer is refused on web routes even beside a valid web cookie"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Native requests carry no Origin and the browser rule is not applied; instead the router refuses any Cookie header with 400, requires the strict Whumpo-Client header (426 for an unsupported contract, build or interaction version) and a passkey ceremony is bound to the allowlisted android:apk-key-hash origin with rpId whumpo.com.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/router.ts",
+       "contains": "if(request.headers.has('cookie'))throw new MobileError('invalid_request');"
+      },
+      {
+       "file": "src/workspace-identity/ceremonies.ts",
+       "contains": "if(c.client==='android'&&!androidPasskeyOrigins.includes(c.origin))throw proof();"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-identity.mjs",
+       "contains": "const r=await mobile('/session',{method:'GET',token:s.token,headers:{cookie}});assert.equal(r.status,400);",
+       "asserts": "a cookie on a mobile route is refused even with a valid bearer"
+      },
+      {
+       "file": "tests/mobile-identity.mjs",
+       "contains": "for(const origin of [unknown,'https://whumpo.com',base]){",
+       "asserts": "an assertion at an unknown apk-key-hash origin or the web origin is refused"
+      },
+      {
+       "file": "tests/mobile-identity.mjs",
+       "contains": "want(await mobile('/session',{method:'GET',token:s.token,client:clientWith({build:39})}),426,errors.client_update_required);",
+       "asserts": "a below-minimum build is update-required (426)"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "evidenced",
+     "detail": "Login and reauthentication record the real passkey verification time (freshUntil is that time plus ten minutes). Reauthentication keeps the same token and the same expires_at: a native session is never extended.",
+     "enforcedAt": [
+      {
+       "file": "src/workspace-identity/ceremonies.ts",
+       "contains": "native&&p?p.expiresAt:verifiedAt+604800"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-identity.mjs",
+       "contains": "assert.equal(after.expires_at,before.expires_at);assert(after.proof_at>before.proof_at);",
+       "asserts": "reauthentication moves the proof time and not the expiry"
+      }
+     ]
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "No request field selects an account or session: the principal comes from the bearer, and a reauthentication challenge is bound to the authority, epoch and credential revision that asked for it.",
+     "enforcedAt": [
+      {
+       "file": "src/workspace-identity/ceremonies.ts",
+       "contains": "export function boundIdentityChallenge(c:Challenge,p:IdentityPrincipal){"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-identity.mjs",
+       "contains": "const stolen=await mobile('/session/reauth/verify',{token:other.token",
+       "asserts": "a challenge issued to one session cannot be spent by another"
+      },
+      {
+       "file": "tests/mobile-identity.mjs",
+       "contains": "want(await mobile('/session/login/verify',{body:{version:1,challengeId:id(),credential:big}}),413,errors.payload_too_large);",
+       "asserts": "the credential JSON is bounded at 8 KiB"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "A challenge is consumed by the first verification attempt, valid or not, and lives five minutes; the ceremony receipt and the committing predicate admit one session per assertion.",
+     "enforcedAt": [
+      {
+       "file": "src/workspace-identity/ceremonies.ts",
+       "contains": "DELETE FROM identity_challenges WHERE id=? RETURNING *,unixepoch() AS consumed_at"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-identity.mjs",
+       "contains": "assert.equal(replay.status,401);",
+       "asserts": "a replayed login challenge is refused"
+      },
+      {
+       "file": "tests/mobile-identity.mjs",
+       "contains": "assert.equal(await count('identity_challenges','id=?',bad.data.challengeId),0,'a failed verification burns the challenge');",
+       "asserts": "a failed verification burns the challenge"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Every request resolves the current authority through identity_current_authorities (epoch, stage, credential, expiry). Logout, a security-review commit, recovery and passkey removal delete the account's sessions, so the next call is proof_required.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/identity.ts",
+       "contains": "DELETE FROM identity_sessions WHERE token_hash=? AND client='android'"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-identity.mjs",
+       "contains": "for(const token of [native.token,logged]){const r=await mobile('/session',{method:'GET',token});assert.equal(r.status,401);",
+       "asserts": "a committed security review kills native sessions"
+      },
+      {
+       "file": "tests/mobile-identity.mjs",
+       "contains": "assert.equal(await count('identity_sessions','id=?',s.authority),0);",
+       "asserts": "logout revokes the session"
+      }
+     ]
+    },
+    "admission": {
+     "state": "evidenced",
+     "detail": "Anonymous routes are limited per IP by AUTH_LIMITER; bearer routes by API_LIMITER per IP and per authority. A limited call is 429 rate_limited with retryAfterSeconds. The JSON body is capped at 16 KiB. The session cap of ten is shared with web in the database.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/router.ts",
+       "contains": "if(!(await env.AUTH_LIMITER.limit({key:'mobile:'+ipOf(request)})).success)throw new MobileError('rate_limited');"
+      },
+      {
+       "file": "src/mobile/router.ts",
+       "contains": "key:'mobile-authority:'+principal.authorityId"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-identity.mjs",
+       "contains": "assert.deepEqual([limits.auth,limits.api],[[],['mobile:203.0.113.9','mobile-authority:'+s.authority]]);",
+       "asserts": "bearer routes are limited per IP and per authority"
+      },
+      {
+       "file": "tests/mobile-identity.mjs",
+       "contains": "assert.equal(await count('identity_sessions','account_id=?',c.account),10);",
+       "asserts": "the session cap is shared with web"
       }
      ]
     }

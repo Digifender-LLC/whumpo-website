@@ -12,6 +12,7 @@ import {readLayout,readLayoutHistory,readLayoutReceipt,mutateLayout} from './wor
 import {WorkspaceViewError} from './workspace-view-contract';
 import {handleInteractionRequest} from './chat-interactions/http';
 import {cleanIdentityCeremonies} from './workspace-identity/ceremonies';
+import {handleMobileRequest} from './mobile/router';
 import {handleIdentityRequest,workspaceIdentity} from './workspace-identity/http';
 import {handleSafetyCaseRequest} from './safety-case-http';
 import {IdentityError} from './workspace-identity/authority';
@@ -150,6 +151,7 @@ function sameOrigin(request: Request): boolean {
 async function handle(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const { pathname } = new URL(request.url);
   const method = request.method;
+  const mobile=await handleMobileRequest(request,env);if(mobile)return mobile;
   const identity=await handleIdentityRequest(request,env);if(identity)return identity;
   if (method === "GET" && pathname === "/api/health") return json({ status: "ok" });
   if (method === "POST" && pathname === "/api/stripe/webhook") return json(await stripeBillingWebhook(request, env.DB, env));

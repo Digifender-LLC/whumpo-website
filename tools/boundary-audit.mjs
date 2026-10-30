@@ -43,6 +43,7 @@ export const surfaces={
 // that run before the dispatcher's own Origin/Sec-Fetch-Site refusal.
 export const dispatchers=[
  {id:'platform',worker:'whumpo-platform',file:'src/index.ts',pathVars:['pathname'],hosts:['fetch']},
+ {id:'mobile',file:'src/mobile/router.ts',fn:'handleMobileRequest',prefix:'/api/mobile/v1/',pathVars:['action']},
  {id:'identity',file:'src/workspace-identity/http.ts',fn:'handleIdentityRequest',prefix:'/api/auth/identity/v1/',pathVars:['action'],methods:['POST']},
  {id:'operator',file:'src/safety-case-http.ts',prefix:'/api/operator/safety-cases/v1/',tableKeys:'actions',methods:['POST']},
  {id:'interactions',file:'src/chat-interactions/http.ts',fn:'handleInteractionRequest',prefix:'/api/chat/interactions/v1/',pathVars:['action'],methods:['POST']},
@@ -206,7 +207,7 @@ function platformGates(file){
  let origin;walk(handle,n=>{if(!origin&&isKind(n,'IfStatement')&&calls(n.expression,'sameOrigin'))origin=n;});
  if(!origin)throw Error('The exact-Origin gate was not found in handle().');
  const order={'exact-origin-gate':origin.getStart()};
- walk(handle,n=>{if(isKind(n,'CallExpression')&&isKind(n.expression,'Identifier')&&['handleIdentityRequest','handleSafetyCaseRequest','workspaceIdentity','handleWorkspace'].includes(n.expression.text))order[n.expression.text]??=n.getStart();});
+ walk(handle,n=>{if(isKind(n,'CallExpression')&&isKind(n.expression,'Identifier')&&['handleMobileRequest','handleIdentityRequest','handleSafetyCaseRequest','workspaceIdentity','handleWorkspace'].includes(n.expression.text))order[n.expression.text]??=n.getStart();});
  return {origin:origin.getStart(),originLine:lineOf(file,origin),order};
 }
 function beforeOrigin(node,gates){
