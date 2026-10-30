@@ -34,6 +34,7 @@ export function contactEmailMessage(notice:ContactNotice){
   if(!notice.verificationCode||!/^[A-Z0-9]{8}$/.test(notice.verificationCode))throw Error('Invalid verification notice');
   return renderCatalogNotification('owner.destination-verification@1',{code:notice.verificationCode});
  }
+ if(notice.kind==='account')return renderCatalogNotification(notice.template);
  return renderCatalogNotification('contact.new-message@1');
 }
 export function cloudflareEmailSender(binding:ContactEmailBinding):ContactSender{

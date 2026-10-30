@@ -42,7 +42,21 @@ try{
  sql.prepare('INSERT INTO contact_receipts VALUES(?,?,?,?,?)').run(id(),project,'PRIVATE_HASH_CANARY',at(-5*day),at(-2*day));
  sql.prepare('INSERT INTO contact_receipts VALUES(?,?,?,?,?)').run(id(),project,'PRIVATE_HASH_CANARY',at(-day),at(day));
  const destination=id();sql.prepare("INSERT INTO contact_notification_destinations(id,user_id,project_id,address,created_at) VALUES(?,?,?,'owner@example.invalid',?)").run(destination,owner,project,at(-5*day));
- sql.prepare("INSERT INTO contact_notification_outbox(id,user_id,project_id,destination_id,kind,idempotency_key,provider,review,created_at,next_attempt_at,expires_at) VALUES(?,?,?,?,'verification','verify:PRIVATE_CANARY','fixture','review-1',?,?,?)").run(id(),owner,project,destination,at(-32*day),at(-2*day),at(-2*day));
+ // WH-156: a finished notice 32 days old (retention), a notice still waiting after two days (queue) and an unknown-outcome notice 5 days past its start (past its 72-hour bound).
+ for(const [key,created] of [['old',-32*day],['waiting',-2*day],['unknown',-5*day]]){
+  const nid=id(),when=Date.now()+created;
+  sql.prepare("INSERT INTO notification_notices(id,user_id,scope,project_id,destination_id,recipient_key,template,event_ref,created_at,expires_at) VALUES(?,?,'owner-destination',?,?,?,'owner.destination-verification@1',?,?,?)").run(nid,owner,project,destination,'owner-destination:'+destination,'PRIVATE_CANARY-'+key,when,when+3600000);
+  if(key==='old')sql.prepare("UPDATE notification_notices SET state='cancelled',reason='expired',outcome_at=? WHERE id=?").run(when+3600000,nid);
+  if(key==='unknown'){
+   const job=id();sql.prepare("INSERT INTO job_journal(id,owner_user_id,purpose,envelope_json,envelope_digest,created_at,expires_at,max_attempts,due,initial_due,last_event,last_at) VALUES(?,?,'platform-email',?,?,?,?,1,?,?,'enqueued',?)").run(job,owner,JSON.stringify({jobId:job,limits:{maxAttempts:1},ownerAccountId:owner,purpose:'platform-email',schedule:{createdAt:when,expiresAt:when+86400000,notBefore:when}}),'e'.repeat(64),when,when+86400000,when,when,when);
+   sql.prepare('UPDATE notification_notices SET job_id=? WHERE id=?').run(job,nid);
+   sql.prepare("UPDATE job_journal SET state='leased',fence=1,lease_until=?,last_event='claimed',last_at=? WHERE id=?").run(when+30000,when+1,job);
+   sql.prepare("UPDATE job_journal SET state='awaiting',attempt=1,attempt_id=id||'.1',last_event='intent',last_at=?,last_ref=id||'.1' WHERE id=?").run(when+2,job);
+   sql.prepare("INSERT OR IGNORE INTO notification_send_ledger(provider,day,sends,ceiling) VALUES('cloudflare-email',?,0,100)").run(new Date(when+2).toISOString().slice(0,10));
+   sql.prepare("UPDATE notification_notices SET state='dispatching',attempts=1,dispatched_at=? WHERE id=?").run(when+2,nid);
+   sql.prepare("UPDATE job_journal SET state='uncertain',last_event='uncertain',last_at=?,last_ref=NULL WHERE id=?").run(when+3,job);
+  }
+ }
  sql.prepare('INSERT INTO site_traffic_daily VALUES(?,?,?)').run(project,at(-32*day).slice(0,10),1);
  sql.prepare('INSERT INTO site_traffic_daily VALUES(?,?,?)').run(project,at(-2*day).slice(0,10),1);
  sql.prepare('INSERT INTO fair_use_project_lifecycle(project_id,user_id,created_at,removed_at) VALUES(?,?,?,?)').run(id(),owner,at(-100*day),at(-93*day));
@@ -71,7 +85,7 @@ try{
  sql.exec('PRAGMA query_only=ON');
  report=await maintenanceReport(db,Date.now());
  assert.equal(report.backlogs.length,52);assert.ok(report.backlogs.every(q=>q.state!=='unavailable'),JSON.stringify(report.backlogs));
- for(const queue of ['contact_receipts','contact_notification_outbox','contact_notification_queue','traffic','fair_use','health_budget','github_staged','connection_exchanges']){const backlog=report.backlogs.find(q=>q.queue===queue);assert.equal(backlog.state,'attention',queue);assert.equal(backlog.count,1,queue);}
+ for(const queue of ['contact_receipts','notification_notices','notification_queue','notification_unknown','traffic','fair_use','health_budget','github_staged','connection_exchanges']){const backlog=report.backlogs.find(q=>q.queue===queue);assert.equal(backlog.state,'attention',queue);assert.equal(backlog.count,1,queue);}
  assert.equal(report.backlogs.find(q=>q.queue==='contact_receipts').oldestAgeMs>=2*day,true);
  for(const queue of ['github','cloudflare']){const backlog=report.backlogs.find(q=>q.queue===queue);assert.equal(backlog.state,'pending');assert.equal(backlog.unknownAgeCount,0);assert.ok(backlog.oldestAgeMs<60000);}
  for(const queue of ['review_turnover','review_receipts']){const backlog=report.backlogs.find(q=>q.queue===queue);assert.equal(backlog.count,1,queue);assert.equal(backlog.state,'attention',queue);}

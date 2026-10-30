@@ -76,7 +76,8 @@ import {HealthError,listHealth,checkHealth,maintainHealth} from './site-health';
 import {DiffError,compareVersions,compareReview,diffPage,comparisonErrorResponse} from './version-diff';
 import {contactPage} from './contact-page';
 import {ContactError,contactInbox,deleteContact,cleanupContacts} from './contacts';
-import {contactNotificationStatus,proposeContactDestination,removeContactDestination,requestContactVerification,confirmContactDestination,runContactDelivery} from './contact-notifications';
+import {contactNotificationStatus,proposeContactDestination,removeContactDestination,requestContactVerification,confirmContactDestination,contactDeliveryLane} from './contact-notifications';
+import {maintainNotices} from './notification-outbox';
 import {contactDelivery} from './contact-email';
 import {dispatchJobs} from './job-dispatcher';
 import {handleModuleRequest,cleanupModuleRequestReceipts} from './shared-modules/api';
@@ -659,11 +660,11 @@ export default {
   async scheduled(_event: ScheduledController, env: Env) {
     // The every-minute trigger is a job-type registry (docs/job-orchestration.md, WH-052 P-1). Contact notice delivery (WH-036) is
     // its only type and does nothing unless contactDelivery(env) finds the reviewed provider and binding.
-    if(_event.cron==='* * * * *'){await dispatchJobs([{type:'contact_delivery',run:async ctx=>{const delivery=contactDelivery(env);if(delivery)await runContactDelivery(env.DB,delivery.settings,delivery.sender,{scan:25,claim:ctx.claim,provider:ctx.provider});}}]);return;}
+    if(_event.cron==='* * * * *'){await dispatchJobs([{type:'contact_delivery',run:async ctx=>{const delivery=contactDelivery(env);if(delivery)await contactDeliveryLane(env.DB,{settings:delivery.settings,sender:delivery.sender,now:Date.now}).run(ctx);}}]);return;}
     const imports={name:'imports' as const,run:()=>scanBackendImports(env.DB)};
     if(_event.cron==='47 * * * *'){
       await runMaintenance(env.DB,[imports,{name:'chat_drafts',run:()=>cleanupInteractionDrafts(env.DB)},
-      {name:'identity',run:()=>cleanIdentityCeremonies(env.DB)},{name:'hosting',enabled:!!hostingConfig(env),run:()=>maintainHosting(env.DB,hostingConfig(env))},{name:'health',run:()=>maintainHealth(env.DB)},{name:'funnel',run:()=>maintainFunnelEvents(env.DB)}]);return;
+      {name:'identity',run:()=>cleanIdentityCeremonies(env.DB)},{name:'hosting',enabled:!!hostingConfig(env),run:()=>maintainHosting(env.DB,hostingConfig(env))},{name:'health',run:async()=>{await maintainHealth(env.DB);await maintainNotices(env.DB);}},{name:'funnel',run:()=>maintainFunnelEvents(env.DB)}]);return;
     }
     await runMaintenance(env.DB,[imports,{name:'chat_drafts',run:()=>cleanupInteractionDrafts(env.DB)},
       {name:'identity',run:()=>cleanIdentityCeremonies(env.DB)},

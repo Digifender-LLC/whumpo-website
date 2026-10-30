@@ -235,7 +235,7 @@
    "evidence": [
     {
      "file": "src/contact-notifications.ts",
-     "contains": "AND (SELECT count(*) FROM contact_notification_outbox o WHERE o.destination_id=d.id AND o.kind='new_message' AND o.created_at>?)<10"
+     "contains": "AND (SELECT count(*) FROM notification_notices o WHERE o.recipient_key='owner-destination:'||d.id AND o.created_at>?)<10"
     },
     {
      "file": "tests/boundary-contact-notice-intake.mjs",
@@ -252,8 +252,8 @@
    "reproduction": "node tests/boundary-contact-notice-intake.mjs [--d1] (regression, exit 0; fails with the per-owner scan bound removed)",
    "evidence": [
     {
-     "file": "src/contact-notifications.ts",
-     "contains": "WHERE o.owner_rank<=?"
+     "file": "src/job-journal.ts",
+     "contains": "WHERE rank<=?3"
     },
     {
      "file": "tests/boundary-contact-notice-intake.mjs",
@@ -1543,7 +1543,7 @@
      "enforcedAt": [
       {
        "file": "src/support.ts",
-       "contains": "LEFT JOIN support_deliveries d ON d.request_id=r.id WHERE r.id=? AND r.user_id=?"
+       "contains": "LEFT JOIN notification_notices d ON d.template='support.response-saved@1' AND d.event_ref=r.id AND d.user_id=r.user_id WHERE r.id=? AND r.user_id=?"
       }
      ],
      "tests": [
@@ -9184,15 +9184,6 @@
      "methods": [
       "SCHEDULED"
      ]
-    },
-    {
-     "file": "src/index.ts",
-     "kind": "job",
-     "match": "* * * * * runContactDelivery",
-     "methods": [
-      "SCHEDULED"
-     ],
-     "conditional": true
     }
    ],
    "cells": {
@@ -9215,21 +9206,21 @@
     },
     "tenant": {
      "state": "evidenced",
-     "detail": "Notices go only to each project's verified destination and contain no visitor content; contained projects are cancelled. One owner cannot starve others: intake skips destinations at their cap (B9) and the dispatcher's drain scans at most its per-owner cap of each owner's rows (B10).",
+     "detail": "Notices go only to each project's verified destination and contain no visitor content; contained projects are cancelled. One owner cannot starve others: intake skips destinations at their cap (B9) and the journal lane's due scan returns at most the per-owner cap of each owner's envelopes (B10).",
      "enforcedAt": [
       {
-       "file": "src/contact-notifications.ts",
-       "contains": "if(row.contained){await cancel(row,'contained');continue;}"
+       "file": "src/notification-outbox.ts",
+       "contains": "if(n.contained)return deny('contained');"
       },
       {
-       "file": "src/contact-notifications.ts",
-       "contains": "WHERE o.owner_rank<=?"
+       "file": "src/job-journal.ts",
+       "contains": "WHERE rank<=?3"
       }
      ],
      "tests": [
       {
        "file": "tests/contact-notifications.mjs",
-       "contains": "assert.equal(r.queued,10,'At most 10 notices an hour per destination');",
+       "contains": "assert.equal(r.queued,9,'At most 10 notices an hour per destination (the verification notice counts as one)');",
        "asserts": "per-destination hourly cap"
       },
       {
@@ -9250,10 +9241,10 @@
     },
     "replay": {
      "state": "evidenced",
-     "detail": "Claim + spend ledger before send; an uncertain send is never resent.",
+     "detail": "Journal intent + counted dispatch before send, in one batch; an uncertain attempt is held as unknown-outcome and never resent.",
      "enforcedAt": [
       {
-       "file": "src/contact-notifications.ts",
+       "file": "src/notification-outbox.ts",
        "contains": "catch{outcome={accepted:false,retryable:false,uncertain:true};}"
       }
      ],

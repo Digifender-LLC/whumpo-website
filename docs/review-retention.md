@@ -102,7 +102,6 @@ Class, lane and turnover values:
 | `cms_wordpress_sources` | `cms_wordpress_source_admit` | project 5 · owner 10 · platform 50 | inventory | R6 | lifetime | cascade | cms-media-imports |
 | `composition_plans` | `composition_plan_admit` | project 25 (filtered) · owner 25 (filtered) · owner 100 (filtered) · platform 2500 (filtered) · platform 5000 (filtered) | review | R1 | active-only | cascade | backend-artifacts |
 | `connector_receipts` | `connector_receipt_new` | other 2000 | receipt | R2 | expiring | app+cascade | connector-receipts |
-| `contact_notification_outbox` | `contact_outbox_insert` | owner 10 (window) · destination 3 (window) · destination 10 (window) · destination 50 (window) | operation | R3 | window | app+cascade | contact-notifications |
 | `contact_receipts` | `contact_submission_guard` | project 100 · owner 100 · platform 500 · platform 1000 | receipt | R2 | expiring | app+cascade | contacts |
 | `content_risk_evidence` | `content_risk_evidence_admit` | owner 10000 · platform 100000 | evidence | R5 | restricted | cascade | safety-cases |
 | `content_screening_decisions` | `content_screening_capacity` | owner 10000 · platform 100000 | evidence | R5 | restricted | cascade | safety-checks |
@@ -129,6 +128,7 @@ Class, lane and turnover values:
 | `module_record_files` | `module_record_file_admit` | other 4 | inventory | R6 | lifetime | cascade | module-records |
 | `module_records` | `module_record_admit` | project 20000 · visitor+instance 20 (window) · instance 10000 | inventory | R6 | expiring | app+cascade | module-records |
 | `module_request_receipts` | `module_record_admit`, `module_request_admit` | project 100 (window) · owner 100 (window) · instance 60 (window) · instance 20000 (window) · platform 500 (window) · platform 1000 (window) | receipt | R2 | window | app+cascade | module-registry |
+| `notification_notices` | `notification_notices_new` | other 10 (window) · other 50 (window) | operation | R3 | window | app+cascade | contact-notifications |
 | `operator_containments` | `operator_containment_admit` | platform 10000 | evidence | R5 | restricted | trigger | operator-containment |
 | `operator_retention_receipts` | `operator_retention_apply` | platform ≤10000 | evidence | R5 | restricted | trigger | operator-containment |
 | `operator_session_revocations` | `operator_session_revocation_admit` | platform 10000 | evidence | R5 | restricted | trigger | operator-containment |

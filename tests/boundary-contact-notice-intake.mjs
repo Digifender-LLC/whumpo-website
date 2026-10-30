@@ -35,33 +35,36 @@ async function owner(plan){
  };
  return {id,project};
 }
-const queued=project=>row("SELECT count(*) n FROM contact_notification_outbox WHERE project_id=? AND kind='new_message'",project).then(r=>r.n);
+const queued=project=>row("SELECT count(*) n FROM notification_notices WHERE project_id=? AND template='contact.new-message@1'",project).then(r=>r.n);
 const sentTo=project=>sent.filter(n=>n.projectId===project&&n.kind==='new_message').length;
+/** Intake only, at a chosen instant: the candidate query and the guarded insert, with no drain. */
+const intake=at=>N.queueContactNotices(db,settings,at);
 /** The every-minute branch of scheduled() in src/index.ts, with the fixture provider. */
-const minute=()=>dispatchJobs([{type:'contact_delivery',run:ctx=>N.runContactDelivery(db,settings,send,{scan:25,claim:ctx.claim,provider:ctx.provider})}]);
+const minute=()=>dispatchJobs([N.contactDeliveryLane(db,{settings,sender:send,now:Date.now})]);
 try{
  // Personal allows five live sites, so one owner can hold three verified destinations.
  const noisy=await owner('personal'),quiet=await owner();
  const noisyA=await noisy.project(),noisyB=await noisy.project(),noisyC=await noisy.project(),quietSite=await quiet.project();
- // B9. The noisy owner sends 20 messages to one form in one hour (the project's hourly cap; two connections at 10 each).
+ const before=Date.now()-60000;
+ // B9. The noisy owner sends 20 messages to one form in one hour (the project's hourly cap; two connections at 10 each). The destination's verification notice counts toward the same 10.
  for(let i=0;i<20;i++)await noisyA.submit();
- await N.runContactDelivery(db,settings,async()=>({accepted:false,retryable:true}),{scan:0});
- assert.equal(await queued(noisyA.project),10,'the destination hourly cap queues 10');
- // A bystander tenant's visitor writes once; the next intake must queue that notice although 10 refused rows are older.
- await quietSite.submit();
- await N.runContactDelivery(db,settings,send,{scan:0});
- assert.equal(await queued(quietSite.project),1,"another tenant's notice is queued although the noisy destination is at its cap");
- assert.equal(await queued(noisyA.project),10,'the noisy destination stays at its hourly cap');
- // B10. Twenty more noisy notices from two other projects, all due before the bystander's: 30 > the 25-row scan window.
+ await intake(before);
+ assert.equal(await queued(noisyA.project),9,'the destination hourly cap of 10 (one is its verification notice) queues 9');
+ // Twenty more noisy notices from two other projects, all due before the bystander's: 27 > the 25-row scan window.
  for(const p of [noisyB,noisyC])for(let i=0;i<10;i++)await p.submit();
- for(let i=0;i<3;i++)await N.runContactDelivery(db,settings,send,{scan:0});
- assert.equal(await queued(noisyB.project)+await queued(noisyC.project),20);
- await run("UPDATE contact_notification_outbox SET next_attempt_at=? WHERE project_id IN (?,?,?) AND state='queued'",new Date(Date.now()-60000).toISOString(),noisyA.project,noisyB.project,noisyC.project);
+ for(let i=0;i<3;i++)await intake(before);
+ assert.equal(await queued(noisyB.project)+await queued(noisyC.project),18);
+ // A bystander tenant's visitor writes once; the next intake must queue that notice although the noisy destinations are at their caps and their refused rows are older.
+ await quietSite.submit();
+ await intake(Date.now());
+ assert.equal(await queued(quietSite.project),1,"another tenant's notice is queued although the noisy destination is at its cap");
+ assert.equal(await queued(noisyA.project),9,'the noisy destination stays at its hourly cap');
+ // B10. 27 noisy envelopes are due before the bystander's; the lane's due scan keeps at most the per-owner cap of them.
  await minute();
  assert.equal(sentTo(quietSite.project),1,"the bystander's notice is sent in the first minute despite the noisy backlog");
  assert.equal(sentTo(noisyA.project)+sentTo(noisyB.project)+sentTo(noisyC.project),2,'the noisy owner still gets its two claims');
- // Negative control: once the noisy hour has passed, its refused messages queue again.
- await N.runContactDelivery(db,settings,send,{now:new Date(Date.now()+3601000),scan:0});
- assert.equal(await queued(noisyA.project),20,'refused notices are queued when the window allows');
+ // Negative control: once the noisy hour has passed, its refused messages queue again (ten more, the hourly cap).
+ await intake(Date.now()+3601000);
+ assert.equal(await queued(noisyA.project),19,'refused notices are queued when the window allows');
  console.log(`Contact notice fairness passed (${process.argv.includes('--d1')?'local D1':'SQLite'}).`);
 }finally{globalThis.fetch=originalFetch;await store.close?.();}

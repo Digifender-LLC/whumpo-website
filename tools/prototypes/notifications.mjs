@@ -127,6 +127,9 @@ export const notificationCatalog=Object.freeze({
   ...tpl(accountTemplate('account.recovery-started','Recovery was started on your Whumpo account','Account recovery was started for your Whumpo account. You can rotate your recovery kit from a signed-in session to stop it.')),
   ...tpl(accountTemplate('account.recovery-secured','Recovery was completed on your Whumpo account','Account recovery was completed and a new passkey now secures your Whumpo account.')),
   ...tpl(accountTemplate('account.kit-rotated','Your Whumpo recovery kit was replaced','The recovery kit for your Whumpo account was replaced. The old kit no longer works.')),
+  'support.response-saved@1':{state:'available',readiness:'planned',template:template({id:'support.response-saved',version:1,authority:'platform-obligation',trigger:'account.notice',audiences:['account-email'],variables:{},
+   subject:[{text:'A response to your Whumpo request is saved'}],
+   body:[{text:'A response to your Whumpo request is saved in your account. This email does not contain the response.\n\nOpen Whumpo to read it: '},{link:'workspace-settings'},{text:'\n\nIf you did not make a request to Whumpo, open Whumpo and review your account security.'}]})},
  },
 });
 

@@ -2,6 +2,7 @@ import {requireServiceClientActivation} from './project-specification/service-cl
 import {hashToken} from './security';
 import {reviewedReplyGuard} from './chat-review-receipts';
 import {requireRebuiltReply} from './reviewed-rebuild';
+import {pruneNotices} from './notification-outbox';
 /** The reply a contact form review shows, rebuilt from the saved review row (no stored digest). */
 const reviewReply=(name:string,enabled:boolean,review:string)=>`${enabled?'Enable':'Disable'} the contact form for “${name}”?\n\n${enabled?'A Contact link will appear on this live version. Visitors submit a name, email and message to your private Whumpo inbox. Messages are retained for 30 days, with a maximum of 100 submissions per project per 30 days and 20 per hour. Message content is never emailed or sent to AI; optional owner email notices, once set up and verified, only say a new message arrived. Publishing or restoring a version disables the form until reviewed again. The source ZIP remains a static export without the hosted form.':'New submissions will stop. Existing messages remain private until their 30-day expiry.'}\n\nNothing changes until you use the confirmation button for review ${review} within 10 minutes.`;
 export class ContactError extends Error {constructor(public status:number,message:string){super(message);}}
@@ -60,4 +61,4 @@ export async function deleteContact(db:D1Database,userId:string,id:string){
 }
 /** Expiry skips projects inside an active safety preservation hold's scope (WH-015); the hold release resumes ordinary expiry.
  * The inbox already hides expired messages, so retained held messages are not visible to the owner. */
-export async function cleanupContacts(db:D1Database){await db.prepare("DELETE FROM contact_submissions WHERE expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') AND project_id NOT IN (SELECT project_id FROM safety_held_projects)").run();await db.prepare("DELETE FROM contact_notification_outbox WHERE expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') AND project_id NOT IN (SELECT project_id FROM safety_held_projects)").run();await db.prepare("DELETE FROM contact_receipts WHERE expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now')").run();await db.prepare("DELETE FROM contact_notification_send_ledger WHERE day<date('now','-40 days')").run();}
+export async function cleanupContacts(db:D1Database){await db.prepare("DELETE FROM contact_submissions WHERE expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') AND project_id NOT IN (SELECT project_id FROM safety_held_projects)").run();await pruneNotices(db);await db.prepare("DELETE FROM contact_receipts WHERE expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now')").run();await db.prepare("DELETE FROM notification_send_ledger WHERE day<date('now','-40 days')").run();}

@@ -116,7 +116,7 @@ try{
  // 4. Contact notifications. No provider is configured, so verification answers provider_not_configured and stores nothing.
  const notify=`/api/projects/${site.project}/contact-notifications`;
  const destination=()=>db.prepare('SELECT id,address,state,verification_code,verification_failures FROM contact_notification_destinations WHERE project_id=?').bind(site.project).first();
- const notifyState=async()=>JSON.stringify({destination:(await destination())??null,outbox:await scalar('SELECT count(*) n FROM contact_notification_outbox WHERE project_id=?',site.project)});
+ const notifyState=async()=>JSON.stringify({destination:(await destination())??null,outbox:await scalar('SELECT count(*) n FROM notification_notices WHERE project_id=?',site.project)});
  const address={address:'owner@example.invalid'};
  await deny('PUT contact-notifications',notify,'PUT',address,notifyState);
  await admitted('the owner proposes an address',await owner(notify,'PUT',address),200);

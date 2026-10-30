@@ -6,9 +6,9 @@
  "evidence": "docs/workspace-collaboration-evidence.md",
  "baseline": {
   "sourceCommit": "4dea09c",
-  "reviewedSchemaSha256": "c49d884ffeeef12b0d76ff88dfb2a3d44f4ec9fedde429350fcc746eff7127ea",
-  "tables": 237,
-  "usersForeignKeyColumns": 121
+  "reviewedSchemaSha256": "a791a620fe2eff708cbfc16d2c82ba7329d76ca959c00549882402355c6639fd",
+  "tables": 236,
+  "usersForeignKeyColumns": 120
  },
  "vocabulary": {
   "classes": {
@@ -98,7 +98,7 @@
   {"column":"connection_rotation_guards.owner_id","sourceFile":"schema/platform.sql","onDelete":"RESTRICT","class":"workspace+custody","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id","custody":"authorizing_actor_ref"},"status":"proposed","evidenceLevel":"review-spike","basis":"Rotation guard records old/new ciphertext per store row; context string rebuilt from row.user_id (src/connection-rotation.ts:70,78)","evidence":["docs/workspace-collaboration.md#custody-consent-and-the-actor-reference"]},
   {"column":"contact_destination_reviews.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace+actor","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id","actor":"actor_ref"},"status":"proposed","evidenceLevel":"review-spike","basis":"Preparer and confirmer provenance on every review type","evidence":["docs/workspace-collaboration.md#approvals-and-release-authority"]},
   {"column":"contact_notification_destinations.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id"},"status":"proposed","evidenceLevel":"review-spike","basis":"Tenant data owned by the workspace","evidence":["docs/workspace-collaboration.md#engineering-decision-c2-a-dedicated-workspaces-tenant-proposed-engineering-not-an-owner-question"]},
-  {"column":"contact_notification_outbox.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id"},"status":"proposed","evidenceLevel":"review-spike","basis":"Tenant data owned by the workspace","evidence":["docs/workspace-collaboration.md#engineering-decision-c2-a-dedicated-workspaces-tenant-proposed-engineering-not-an-owner-question"]},
+  {"column":"notification_notices.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id"},"status":"proposed","evidenceLevel":"source-reading","basis":"A shared-outbox notice (WH-156) is content-free tenant data: it follows the owner's destination or project, or the account email, and account closure deletes it; each attempt's journal job is owned by the same account","evidence":["docs/notifications.md"]},
   {"column":"contact_notification_suppression_resets.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id"},"status":"proposed","evidenceLevel":"review-spike","basis":"Operator reset of a tenant suppression (operator_ref is operator provenance, textual)","evidence":["docs/workspace-collaboration.md#engineering-decision-c2-a-dedicated-workspaces-tenant-proposed-engineering-not-an-owner-question"]},
   {"column":"contact_notification_suppressions.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id"},"status":"proposed","evidenceLevel":"review-spike","basis":"Tenant data owned by the workspace","evidence":["docs/workspace-collaboration.md#engineering-decision-c2-a-dedicated-workspaces-tenant-proposed-engineering-not-an-owner-question"]},
   {"column":"contact_reviews.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace+actor","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id","actor":"actor_ref"},"status":"proposed","evidenceLevel":"review-spike","basis":"Preparer and confirmer provenance on every review type","evidence":["docs/workspace-collaboration.md#approvals-and-release-authority"]},
@@ -158,7 +158,6 @@
   {"column":"stripe_paid_invoices.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace+payer","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id","payer":"payer_actor_ref"},"status":"undecided","evidenceLevel":"review-spike","basis":"Billing attaches to the workspace with payer-of-record provenance kept as its own role (Billing consequence; Payer on transfer is unresolved)","evidence":["docs/workspace-collaboration.md#coordinated-current-schema-consequences"],"questions":["payer-on-transfer","late-payment-continuity"]},
   {"column":"stripe_subscription_orders.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace+payer","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id","payer":"payer_actor_ref"},"status":"undecided","evidenceLevel":"review-spike","basis":"Billing attaches to the workspace with payer-of-record provenance kept as its own role (Billing consequence; Payer on transfer is unresolved)","evidence":["docs/workspace-collaboration.md#coordinated-current-schema-consequences"],"questions":["payer-on-transfer"]},
   {"column":"stripe_subscriptions.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace+payer","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id","payer":"payer_actor_ref"},"status":"undecided","evidenceLevel":"review-spike","basis":"Billing attaches to the workspace with payer-of-record provenance kept as its own role (Billing consequence; Payer on transfer is unresolved)","evidence":["docs/workspace-collaboration.md#coordinated-current-schema-consequences"],"questions":["payer-on-transfer"]},
-  {"column":"support_deliveries.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace+actor","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id","actor":"actor_ref"},"status":"proposed","evidenceLevel":"review-spike","basis":"Delivery of usage_review_requests; follows parent","evidence":["docs/workspace-collaboration.md#actor-references-chat-identity-and-receipt-principals"]},
   {"column":"usage_review_requests.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace+actor","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id","actor":"actor_ref"},"status":"proposed","evidenceLevel":"review-spike","basis":"Customer usage/fair-use statement concerns the workspace plan; requester is an actor; public_response visibility to other members unknown","note":"engineering: who may read public_response (requester only vs owner)","evidence":["docs/workspace-collaboration.md#actor-references-chat-identity-and-receipt-principals"]},
   {"column":"user_profiles.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"account","subject":"account","retarget":"keep","roles":{"account":"user_id"},"status":"proposed","evidenceLevel":"review-spike","basis":"Personal profile","evidence":["docs/workspace-collaboration.md#terms-and-who-is-not-a-member"]},
   {"column":"version_removals.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace+actor","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id","actor":"actor_ref"},"status":"proposed","evidenceLevel":"review-spike","basis":"Preparer and confirmer provenance on every review type","evidence":["docs/workspace-collaboration.md#approvals-and-release-authority"]},
@@ -265,12 +264,12 @@
    "connection_key_registry",
    "connection_key_rotations",
    "connection_rotation_batches",
-   "contact_notification_send_ledger",
    "fair_use_control",
    "file_cleanup",
    "identity_admission_checks",
    "identity_challenges",
    "maintenance_health",
+   "notification_send_ledger",
    "operator_containments",
    "operator_retention_receipts",
    "operator_session_revocations",

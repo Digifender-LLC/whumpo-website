@@ -30,8 +30,11 @@ export const backlogInventory={
  contact_submissions:queue('contact_submissions','expires_at<=?1 AND project_id NOT IN (SELECT project_id FROM safety_held_projects)','expires_at'),
  guest_previews:queue('guest_preview_links l',"coalesce(l.revoked_at,l.expires_at)+2592000<=unixepoch(?1) AND NOT EXISTS(SELECT 1 FROM guest_preview_feedback f WHERE f.link_id=l.id)","strftime('%Y-%m-%dT%H:%M:%fZ',coalesce(l.revoked_at,l.expires_at)+2592000,'unixepoch')"),
  contact_receipts:expiry('contact_receipts'),
- contact_notification_outbox:queue('contact_notification_outbox','expires_at<=?1 AND project_id NOT IN (SELECT project_id FROM safety_held_projects)','expires_at'),
- contact_notification_queue:queue('contact_notification_outbox',"state='queued'",'next_attempt_at',3600000),
+ // WH-156 shared outbox: finished notices 30 days after their outcome and unresolved evidence after 90 days (pruneNotices, daily contacts job; held projects skipped),
+ // notices still waiting after an hour, and unknown-outcome notices past their 72-hour bound that the hourly pass has not yet moved to unresolved.
+ notification_notices:queue('notification_notices',`(project_id IS NULL OR project_id NOT IN (SELECT project_id FROM safety_held_projects)) AND ((state IN ('accepted','delivered','bounced','complained','failed','cancelled') AND coalesce(outcome_at,created_at)+2592000000<=${nowMs}) OR (state='unresolved' AND outcome_at+7776000000<=${nowMs}))`,ms('coalesce(outcome_at,created_at)','+30 days')),
+ notification_queue:queue('notification_notices',"state IN ('queued','deferred')",ms('created_at'),3600000),
+ notification_unknown:queue('notification_notices',`state='unknown-outcome' AND reconcile_until<=${nowMs}`,ms('reconcile_until'),2*3600000),
  github_oauth:expiry('github_oauth_states'),
  github_staged:expiry('github_token_staging'),
  github_refresh_grants:queue('github_refresh_custody r JOIN github_token_vault t ON t.id=r.token_id LEFT JOIN github_revocation_health h ON h.token_id=t.id',"t.state='revoking'",'COALESCE(r.access_revoked_at,h.requested_at)'),
@@ -50,7 +53,6 @@ export const backlogInventory={
  dns_unknown:queue('cloudflare_dns_actions',"state IN ('sending','uncertain')",'created_at',600000),
  // Internal attention thresholds only: they promise customers no response time.
  support_open:queue('usage_review_requests',"state='open'",'created_at',3*daily),
- support_delivery:queue('support_deliveries',"state='queued'",'next_attempt_at',3600000),
  // WH-074: unfinished build jobs past their deadline, and finished jobs whose capacity cleanup is not yet released.
  build_jobs_expired:queue('build_jobs',"state='running' AND expires_at<=?1",'expires_at',600000),
  build_cleanup:queue('build_jobs',"state<>'running' AND cleanup<>'released'",'finished_at',600000),

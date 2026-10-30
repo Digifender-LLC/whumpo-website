@@ -58,7 +58,7 @@ export async function supportJourney({page,db,state,requests,origin,activate,ent
  await answered.locator('[data-support-response]').waitFor();assert.equal(await answered.locator('[data-support-response]').innerText(),'Synthetic visible reply.');
  for(let i=0;i<100&&!(await db.prepare('SELECT customer_read_at FROM usage_review_requests WHERE id=?').bind(saved.id).first()).customer_read_at;i++)await new Promise(done=>setTimeout(done,50));
  assert.ok((await db.prepare('SELECT customer_read_at FROM usage_review_requests WHERE id=?').bind(saved.id).first()).customer_read_at,'Displaying the response records the read');
- await answered.getByText(/You read the response/).waitFor();assert.equal(await count('support_deliveries'),0,'No external notification exists or was sent');
+ await answered.getByText(/You read the response/).waitFor();assert.equal(await count('notification_notices'),0,'No external notification exists or was sent');
  assert.ok(!(await page.locator('body').innerText()).includes('Synthetic operator'),'Reviewer identity is never shown');
 
  phase('mobile, large text and follow-up');

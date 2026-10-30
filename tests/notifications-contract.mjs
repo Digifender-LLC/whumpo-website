@@ -332,21 +332,22 @@ await checkOnce('sender, provider ceiling, attempt bound and error classes agree
   assert.equal(c,mapped,code);
  }
 });
-await checkOnce('every existing contact outbox state maps to a contract receipt state',()=>{
+await checkOnce('the shared outbox (WH-156) stores exactly the contract receipt states, scopes and transitions',()=>{
  const sql=readFileSync(new URL('../schema/platform.sql',import.meta.url),'utf8');
- const table=sql.slice(sql.indexOf('CREATE TABLE contact_notification_outbox'));
- const list=re=>[...table.match(re)[1].matchAll(/'([a-z_]+)'/g)].map(x=>x[1]);
- const states=list(/state TEXT[^\n]*CHECK\(state IN \(([^)]*)\)\)/),errors=list(/last_error TEXT[^\n]*last_error IN \(([^)]*)\)\)/);
- assert.ok(states.length>=6&&errors.length>=6);
- for(const s of states){
-  const entry=real.contactStateMap[s];assert.ok(entry,`unmapped contact state ${s}`);
-  for(const v of typeof entry==='string'?[entry]:Object.values(entry))assert.ok(real.receiptStates.includes(v),`${s} -> ${v}`);
- }
- for(const v of Object.values(real.contactStateMap).flatMap(e=>typeof e==='string'?[]:Object.keys(e)))assert.ok(v==='null'||v==='not_sent'||errors.includes(v),v);
+ const table=sql.slice(sql.indexOf('CREATE TABLE notification_notices'),sql.indexOf(') STRICT;',sql.indexOf('CREATE TABLE notification_notices')));
+ const list=re=>[...table.match(re)[1].matchAll(/'([a-z-]+)'/g)].map(x=>x[1]);
+ assert.deepEqual(list(/ state TEXT[^\n]*CHECK\(state IN \(([^)]*)\)\)/).sort(),[...real.receiptStates].sort(),'the schema states are the frozen receipt states');
+ assert.deepEqual(list(/ scope TEXT[^\n]*CHECK\(scope IN \(([^)]*)\)\)/).sort(),[...real.recipientScopes].sort(),'the schema scopes are the catalog scopes');
+ const trigger=sql.slice(sql.indexOf('CREATE TRIGGER notification_notices_transition'),sql.indexOf('CREATE TRIGGER notification_notices_counted'));
+ const edges=[...trigger.matchAll(/'([a-z-]+)>([a-z-]+)'/g)].map(x=>[x[1],x[2]]);
+ for(const [from,to] of edges)assert.ok(real.receiptStates.includes(from)&&real.receiptStates.includes(to),`${from}>${to}`);
+ assert.ok(!edges.some(([from,to])=>from==='unknown-outcome'&&['queued','deferred','dispatching'].includes(to)),'nothing leaves unknown-outcome for a send state');
+ assert.deepEqual(edges.filter(([from])=>from==='unknown-outcome').map(x=>x[1]).sort(),['accepted','bounced','complained','delivered','unresolved']);
+ assert.ok(!/CREATE TABLE (contact_notification_outbox|contact_notification_send_ledger|support_deliveries)\b/.test(sql),'the old outboxes are gone from the current schema');
 });
 await checkOnce('the existing contact notification source cannot reach owner-maintenance inference',async()=>{
  const inference=/^src\/(ai|ai-chat|ai-gateway|acknowledgment|site-agent|agent-[a-z-]+|standard-ai[a-z-]*|chat|backend-chat|app-upgrade-chat|app-recovery-chat|app-page-design)\.ts$|^src\/chat-interactions\/(agent|agent-request|model-continuation|continuation)\.ts$/;
- for(const entry of ['src/contact-notifications.ts','src/contact-email.ts','src/notification-catalog.ts']){
+ for(const entry of ['src/contact-notifications.ts','src/contact-email.ts','src/notification-catalog.ts','src/notification-outbox.ts','src/support-delivery.ts']){
   const out=await build({entryPoints:[entry],bundle:true,format:'esm',platform:'node',write:false,metafile:true,logLevel:'silent'});
   const inputs=Object.keys(out.metafile.inputs);assert.ok(inputs.length>0);
   assert.deepEqual(inputs.filter(p=>inference.test(p)),[],entry);

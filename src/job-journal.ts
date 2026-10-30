@@ -32,6 +32,7 @@ function canonical(v:unknown,depth=0):string{
  if(v&&typeof v==='object'&&[Object.prototype,null].includes(Object.getPrototypeOf(v)))return '{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+canonical((v as Record<string,unknown>)[k],depth+1)).join(',')+'}';
  return bad();
 }
+export const canonicalEnvelopeJson=(envelope:unknown)=>canonical(envelope);
 export async function envelopeDigest(envelope:unknown){return hex(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(canonical(envelope))));}
 
 /** Admit an envelope: one batch inserts the job (the schema adds its outbox entry and first event) and reads it back. The same id with the same
@@ -64,10 +65,11 @@ export async function claimJob(db:Db,owner:string,id:string,now:number,leaseMs=j
 /** Bind values for statements whose ?1..?3 are the lease: job id, owner and fence. */
 const holder=(l:JobLease,...values:unknown[])=>[l.id,l.owner,l.fence,...values];
 /** Record the intent to call the outside world: leased -> awaiting, one attempt. From here an expired lease can only mean uncertain. */
+export const beginStatement=(db:Db,l:JobLease,now:number)=>db.prepare(`UPDATE job_journal SET state='awaiting',attempt=attempt+1,attempt_id=id||'.'||(attempt+1),last_event='intent',last_at=?4,last_ref=id||'.'||(attempt+1)
+  WHERE id=?1 AND owner_user_id=?2 AND fence=?3 AND state='leased' AND lease_until>?4 AND expires_at>?4 AND cancel_requested=0 AND attempt<max_attempts RETURNING *`).bind(...holder(l,now));
 export async function beginExternal(db:Db,l:JobLease,now:number){
  int(now);
- const row=await won(db.prepare(`UPDATE job_journal SET state='awaiting',attempt=attempt+1,attempt_id=id||'.'||(attempt+1),last_event='intent',last_at=?4,last_ref=id||'.'||(attempt+1)
-  WHERE id=?1 AND owner_user_id=?2 AND fence=?3 AND state='leased' AND lease_until>?4 AND expires_at>?4 AND cancel_requested=0 AND attempt<max_attempts RETURNING *`).bind(...holder(l,now)));
+ const row=await won(beginStatement(db,l,now));
  if(!row)throw new JobJournalError('lost');
  return row;
 }
@@ -89,10 +91,11 @@ export async function recoverExpiredJobs(db:Db,now:number,purpose?:JobPurpose){
 }
 /** Record the outside result (a provider reference) for an attempt: complete, or cancelled when a cancel was requested meanwhile. Works from awaiting, uncertain
  * or operator. A repeat with the same reference (a lost reply) returns the saved job; a different reference or attempt is a conflict. */
+export const settleStatement=(db:Db,owner:string,id:string,attemptId:string,reference:string,now:number)=>db.prepare(`UPDATE job_journal SET state=CASE cancel_requested WHEN 1 THEN 'cancelled' ELSE 'complete' END,result_ref=?5,lease_until=0,last_event='external_result',last_at=?4,last_ref=?5
+  WHERE id=?1 AND owner_user_id=?2 AND attempt_id=?3 AND state IN ('awaiting','uncertain','operator') AND result_ref IS NULL RETURNING *`).bind(id,owner,attemptId,now,reference);
 export async function settleJob(db:Db,owner:string,id:string,attemptId:string,reference:string,now:number){
  int(now);if(!ref.test(reference)||!ref.test(attemptId))bad();
- const row=await won(db.prepare(`UPDATE job_journal SET state=CASE cancel_requested WHEN 1 THEN 'cancelled' ELSE 'complete' END,result_ref=?5,lease_until=0,last_event='external_result',last_at=?4,last_ref=?5
-  WHERE id=?1 AND owner_user_id=?2 AND attempt_id=?3 AND state IN ('awaiting','uncertain','operator') AND result_ref IS NULL RETURNING *`).bind(id,owner,attemptId,now,reference));
+ const row=await won(settleStatement(db,owner,id,attemptId,reference,now));
  if(row)return row;
  const saved=await readJob(db,owner,id);
  if(saved&&saved.attempt_id===attemptId&&saved.result_ref===reference)return saved;
@@ -112,11 +115,12 @@ export async function confirmNotSent(db:Db,owner:string,id:string,attemptId:stri
  throw new JobJournalError('conflict');
 }
 /** Stop future work. A dispatched effect is still reconciled: awaiting/uncertain jobs keep their state and only remember the request. Repeats return the saved job. */
+export const cancelStatement=(db:Db,owner:string,id:string,now:number)=>db.prepare(`UPDATE job_journal SET cancel_requested=1,fence=fence+1,last_event='cancel_requested',last_at=?3,last_ref=NULL,
+   state=CASE WHEN state IN ('awaiting','uncertain') OR (state='operator' AND attempt_id IS NOT NULL) THEN state ELSE 'cancelled' END
+  WHERE owner_user_id=?1 AND id=?2 AND cancel_requested=0 AND state NOT IN ('complete','cancelled','expired') RETURNING *`).bind(owner,id,now);
 export async function cancelJob(db:Db,owner:string,id:string,now:number){
  int(now);
- const row=await won(db.prepare(`UPDATE job_journal SET cancel_requested=1,fence=fence+1,last_event='cancel_requested',last_at=?3,last_ref=NULL,
-   state=CASE WHEN state IN ('awaiting','uncertain') OR (state='operator' AND attempt_id IS NOT NULL) THEN state ELSE 'cancelled' END
-  WHERE owner_user_id=?1 AND id=?2 AND cancel_requested=0 AND state NOT IN ('complete','cancelled','expired') RETURNING *`).bind(owner,id,now));
+ const row=await won(cancelStatement(db,owner,id,now));
  if(row)return row;
  const saved=await readJob(db,owner,id);
  if(!saved)throw new JobJournalError('conflict');
