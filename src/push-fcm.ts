@@ -57,8 +57,9 @@ export function fcmSender(serviceAccountJson:string,transport:PushTransport,now:
   if(response.status===401)cached=null;
   // Classify by the FCM error code, not the HTTP status. 429/5xx/401/403 are refusals before acceptance and are retried.
   const {code,message}=await errorOf(response);
-  if(code==='UNREGISTERED'||code==='NOT_FOUND'||(response.status===404&&!code))return {result:'invalid-token',status:response.status};
-  if(code==='SENDER_ID_MISMATCH')return {result:'config-error',status:response.status};
+  if(code==='UNREGISTERED')return {result:'invalid-token',status:response.status};
+  if(code==='SENDER_ID_MISMATCH'||code==='NOT_FOUND'||response.status===404)return {result:'config-error',status:response.status};
+  // A 404 or NOT_FOUND without UNREGISTERED means a wrong project or URL: never withdraw devices for it.
   if(code==='INVALID_ARGUMENT'||response.status===400)return {result:/registration token/i.test(message)&&code==='INVALID_ARGUMENT'?'invalid-token':'payload-error',status:response.status};
   return {result:'retry',status:response.status};
  }};

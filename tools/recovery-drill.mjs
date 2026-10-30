@@ -184,7 +184,7 @@ export async function reconcileArtifacts(db){
 // resurrected by a restore; changed rows would roll back current authority.
 const identityTables=new Set(['users','identity_accounts','identity_sessions','identity_grants','identity_credentials','identity_recovery_kits','app_visitors','app_sessions','app_passkeys','app_recovery_codes','app_invitations']);
 const publicationTables=new Set(['publications','backend_publications','app_page_settings','app_spaces','publication_actions']);
-const credentialTables=new Set(['github_token_vault','cloudflare_token_vault','github_refresh_custody','github_oauth_states','cloudflare_oauth_states','connection_key_registry','connection_key_policy']);
+const credentialTables=new Set(['github_token_vault','cloudflare_token_vault','github_refresh_custody','github_oauth_states','cloudflare_oauth_states','connection_key_registry','connection_key_policy','push_devices']);
 const classify=table=>identityTables.has(table)?'identity':publicationTables.has(table)?'publication':credentialTables.has(table)?'credential':table.startsWith('app_')?'application-data':'other';
 
 /** Compare an isolated candidate with the operator-selected current source.
