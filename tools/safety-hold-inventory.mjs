@@ -115,6 +115,8 @@ export const deletionSites={
  'src/workspace-identity/recovery.ts::identity_credentials':excluded(credential),
  'src/workspace-identity/recovery.ts::identity_kit_offers':excluded(credential),
  'src/workspace-identity/recovery.ts::identity_recovery_reviews':excluded(credential),
+ 'src/mobile/identity.ts::identity_challenges':excluded(credential),
+ 'src/mobile/identity.ts::identity_sessions':excluded(credential),
  'src/workspace-identity/schema.sql::identity_challenges':excluded(credential),
  'src/workspace-identity/schema.sql::identity_sessions':excluded(credential),
  // Owner email-change and connector maintenance/revocation sites: ids, digests and timestamps only, no customer content.
