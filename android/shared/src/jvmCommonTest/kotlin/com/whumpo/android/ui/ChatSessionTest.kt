@@ -204,7 +204,7 @@ class ChatSessionTest {
         val last = done.lastIndexOf("\"status\":\"completed\"")
         val pending = done.substring(0, last) + "\"status\":\"pending\"" + done.substring(last + "\"status\":\"completed\"".length)
         // The first read finds the reply pending; the next poll finds it complete.
-        server.chatBodies = ArrayDeque(listOf(pending, done))
+        server.chatBodies = ArrayDeque(listOf(pending.replace("\"assistantText\":\"Review the publication below.\"", "\"assistantText\":null"), done))
         val s = session(server)
         val seen = mutableListOf<ChatState>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { s.state.collect { seen += it } }
