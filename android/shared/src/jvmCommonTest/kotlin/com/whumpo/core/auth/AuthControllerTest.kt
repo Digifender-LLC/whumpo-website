@@ -432,7 +432,8 @@ class AuthControllerTest {
         auth.signInWithPasskey()
         await(AuthState.Ready)
 
-        auth.signOutNow()
+        // Real time: the 5 s logout bound would otherwise fire instantly under the test scheduler.
+        withContext(Dispatchers.Default) { auth.signOutNow() }
         assertEquals("Bearer $token", calls.last { it.path == "/session/logout" }.auth)
         await(AuthState.SignedOut())
         assertFalse(dir.exists())
@@ -445,7 +446,8 @@ class AuthControllerTest {
         await(AuthState.Ready)
         overrides["/session/logout"] = null
 
-        auth.signOutNow()
+        // Real time: the 5 s logout bound would otherwise fire instantly under the test scheduler.
+        withContext(Dispatchers.Default) { auth.signOutNow() }
         await(AuthState.SignedOut())
         assertFalse(dir.exists())
     }
