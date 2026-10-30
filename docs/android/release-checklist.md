@@ -11,19 +11,28 @@ Facts this relies on: package `com.whumpo.android` (final, Q-005); the Play acco
 - A local build gets `versionCode = versionCodeBase + 1`; it is never uploaded.
 - Builds without your upload key are signed with the debug key, get the suffix `-debugsigned` in `versionName` and the file name `whumpo-deployed-release-DEBUGSIGNED-not-for-upload-run<N>.aab`. Play rejects them. They exist to prove the build.
 
-## 1. Create the app in Play Console
+## 1. Create the app in Play Console (DONE)
+
+**Done by the owner:** app `Whumpo`, package `com.whumpo.android`, Free, App, Play app ID `4973687919802811809`. Steps below are kept for reference.
 
 1. Open [Play Console](https://play.google.com/console), **Create app**.
 2. App name `Whumpo`, default language English (United States), **App**, **Free**. Accept the declarations.
 3. Package name is fixed by the first upload (`com.whumpo.android`); you will confirm it in step 4.
 
-## 2. Generate the upload key (on your own machine)
+## 2. Generate the upload key (DONE)
+
+**Done by the owner:** a PKCS12 upload keystore exists (alias `upload`), held in the owner's secret store. Upload certificate fingerprints:
+
+- SHA-256 `26:39:DF:A4:76:DC:6A:A5:BE:7F:E4:76:24:47:A2:B9:22:2F:7C:D8:14:FD:B6:81:E6:5F:47:58:1E:73:C0:63`
+- SHA-1 `E3:59:40:EB:F8:F0:F0:07:8B:B0:D9:8E:C0:A8:22:27:15:56:21:46`
+
+The app-signing-key fingerprint is **after first upload** (step 5). The reference commands below show how the key was meant to be made.
 
 Play App Signing keeps the real signing key at Google. You hold only the **upload key**, which can be reset if lost. Generate it once and back it up in your password manager.
 
 ```sh
 keytool -genkeypair -v -storetype PKCS12 \
-  -keystore whumpo-upload.jks -alias whumpo-upload \
+  -keystore whumpo-upload.jks -alias upload \
   -keyalg RSA -keysize 4096 -validity 9125 \
   -dname "CN=Whumpo upload key, O=Digifender LLC, C=US"
 ```
@@ -32,28 +41,30 @@ You are prompted for a password (use the same for store and key). Then:
 
 ```sh
 # Print the upload certificate fingerprint (needed for Firebase, step 6)
-keytool -list -v -keystore whumpo-upload.jks -alias whumpo-upload | grep SHA256
+keytool -list -v -keystore whumpo-upload.jks -alias upload | grep SHA256
 # Base64 for the GitHub secret, one line
 base64 -w0 whumpo-upload.jks > whumpo-upload.jks.b64
 ```
 
 Store `whumpo-upload.jks` and the password in your password manager. Delete the `.b64` file after step 3. `*.jks` and `*.p12` are gitignored; never `git add` them.
 
-## 3. Add the GitHub secrets
+## 3. Add the GitHub secrets (DONE)
+
+**Done:** the secrets below are set on the repository. `GOOGLE_SERVICES_JSON_BASE64` is also set and stays unused until the Firebase plugin is added.
 
 Repository `Digifender-LLC/whumpo-website`, **Settings, Secrets and variables, Actions, New repository secret** (or `gh secret set NAME`):
 
 | Secret | Value |
 | --- | --- |
 | `ANDROID_UPLOAD_KEYSTORE_BASE64` | contents of `whumpo-upload.jks.b64` |
-| `ANDROID_UPLOAD_STORE_PASSWORD` | the keystore password |
-| `ANDROID_UPLOAD_KEY_ALIAS` | `whumpo-upload` |
+| `ANDROID_UPLOAD_KEYSTORE_PASSWORD` | the keystore password |
+| `ANDROID_UPLOAD_KEY_ALIAS` | `upload` |
 | `ANDROID_UPLOAD_KEY_PASSWORD` | the key password (same as the store password if you followed step 2) |
 
 ```sh
 gh secret set ANDROID_UPLOAD_KEYSTORE_BASE64 --repo Digifender-LLC/whumpo-website < whumpo-upload.jks.b64
-gh secret set ANDROID_UPLOAD_STORE_PASSWORD --repo Digifender-LLC/whumpo-website
-gh secret set ANDROID_UPLOAD_KEY_ALIAS --repo Digifender-LLC/whumpo-website --body whumpo-upload
+gh secret set ANDROID_UPLOAD_KEYSTORE_PASSWORD --repo Digifender-LLC/whumpo-website
+gh secret set ANDROID_UPLOAD_KEY_ALIAS --repo Digifender-LLC/whumpo-website --body upload
 gh secret set ANDROID_UPLOAD_KEY_PASSWORD --repo Digifender-LLC/whumpo-website
 ```
 
@@ -67,7 +78,7 @@ gh run watch --repo Digifender-LLC/whumpo-website            # pick the run
 gh run download <run-id> --repo Digifender-LLC/whumpo-website -n whumpo-deployed-release-upload-signed-run<N>
 ```
 
-Check: the artifact name contains `upload-signed` (not `DEBUGSIGNED-not-for-upload`) and the job's emulator smoke test is green. The artifact holds the `.aab` and `mapping.txt` (R8 mapping; already inside the bundle for Play).
+Check: the job's **Verify the bundle signature** step prints the signer SHA-256 and fails if an upload-signed bundle does not match the fingerprint in step 2. The artifact name contains `upload-signed` (not `DEBUGSIGNED-not-for-upload`) and the job's emulator smoke test is green. The artifact holds the `.aab` and `mapping.txt` (R8 mapping; already inside the bundle for Play).
 
 ## 5. Play App Signing enrolment and the first upload
 
@@ -94,7 +105,7 @@ Passkeys and verified App Links both depend on this file. Use the **App signing 
    - `https://digitalassetlinks.googleapis.com/v1/statements:list?source.web.site=https://whumpo.com&relation=delegate_permission/common.get_login_creds` lists the package and fingerprint (repeat with `common.handle_all_urls`).
    - On a device with the Play-installed build: `adb shell pm get-app-links com.whumpo.android` shows `whumpo.com: verified`.
 
-## 7. Firebase (push): project created, finish the key steps
+## 7. Firebase (push): project created (DONE), finish the key steps
 
 The first internal build works without push: the app ships a no-op provider and Settings says notifications are not available yet. Details: [android-notifications.md](../android-notifications.md).
 
@@ -102,7 +113,7 @@ The first internal build works without push: the app ships a no-op provider and 
 
 **Still to do:**
 
-1. Add SHA-256 fingerprints once the Play keys exist: **Project settings, Your apps, `com.whumpo.android`, Add fingerprint** for the **upload key** (step 2) and the **App signing key** (step 5). The `.local` app needs none for production.
+1. Add SHA-256 fingerprints: **Project settings, Your apps, `com.whumpo.android`, Add fingerprint** for the **upload key** (step 2, available now) and, after the first upload, the **App signing key** (step 5). The `.local` app needs none for production.
 2. Download `google-services.json` and keep it in your secret store. It is injected at build time (a CI secret file written to `android/androidApp/google-services.json`) and is **never committed**.
 3. Create the FCM sender service-account key (**Project settings, Service accounts**; custom role with only `cloudmessaging.messages.create`) and store its JSON as the Worker secret for the FCM adapter (WH-086). Never in the repo.
 4. Tell the agents "Firebase keys are ready": a follow-up work package wires `firebase-messaging` and the CI secret file. The Data safety form then needs the Device IDs row ([data-safety.md](store-listing/data-safety.md)).

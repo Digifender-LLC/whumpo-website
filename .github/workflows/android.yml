@@ -154,9 +154,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
+      # Public upload-certificate fingerprint (docs/android/release-checklist.md); an upload-signed bundle must match it.
+      EXPECTED_UPLOAD_SHA256: "26:39:DF:A4:76:DC:6A:A5:BE:7F:E4:76:24:47:A2:B9:22:2F:7C:D8:14:FD:B6:81:E6:5F:47:58:1E:73:C0:63"
       # Optional repository secrets. When any is missing the build is signed with the debug key and labelled -debugsigned.
       UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
-      WHUMPO_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_STORE_PASSWORD }}
+      WHUMPO_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
       WHUMPO_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
       WHUMPO_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
     steps:
@@ -193,6 +195,17 @@ jobs:
           fi
       - name: Build minified release bundle and APK
         run: ./gradlew :androidApp:bundleDeployedRelease :androidApp:assembleDeployedRelease -Pwhumpo.runNumber=${{ github.run_number }}
+      - name: Verify the bundle signature
+        working-directory: .
+        run: |
+          aab="$(ls android/androidApp/build/outputs/bundle/deployedRelease/*.aab)"
+          jarsigner -verify "$aab"
+          sha="$(keytool -printcert -jarfile "$aab" | grep 'SHA256:' | head -1 | sed 's/.*SHA256: *//')"
+          echo "Bundle signer SHA-256: $sha"
+          echo "- Signer SHA-256: \`$sha\`" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ steps.signing.outputs.label }}" = "upload-signed" ] && [ "$sha" != "$EXPECTED_UPLOAD_SHA256" ]; then
+            echo "::error::Bundle is not signed by the expected upload key ($EXPECTED_UPLOAD_SHA256)"; exit 1
+          fi
       - name: Collect outputs
         id: out
         working-directory: .
