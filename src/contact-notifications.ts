@@ -30,8 +30,8 @@ export const contactMonthlyCeilingCents=500;
  */
 const catalogCeiling=notificationCatalog.providers['cloudflare-email'].ceiling?.callsPer32Days??0;
 export const implementedContactNotificationProviders:Readonly<Record<string,{sendCeiling:number}>>=Object.freeze({'cloudflare-email':Object.freeze({sendCeiling:Math.min(catalogCeiling,Math.floor(contactMonthlyCeilingCents*1000/35))})});
-/** Never carries the visitor's name, email or message. `verificationCode` exists only for kind 'verification' (the owner proves the address). */
-export type ContactNotice={outboxId:string;idempotencyKey:string;kind:'verification'|'new_message'|'account';template:string;projectId:string|null;recipient:string;verificationCode?:string};
+/** Never carries the visitor's name, email or message. `verificationCode` exists only for kind 'verification' (the owner proves the address); `confirmationToken` only for the account email-change confirmation, in memory for the one provider call. */
+export type ContactNotice={outboxId:string;idempotencyKey:string;kind:'verification'|'new_message'|'account';template:string;projectId:string|null;recipient:string;verificationCode?:string;confirmationToken?:string};
 /**
  * `retryable` only when the provider certainly did not take the message. `uncertain` (and any throw or timeout) means it may
  * have been taken: the notice is final and never resent, because the selected provider has no idempotency key.
