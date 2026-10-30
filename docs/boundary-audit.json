@@ -6296,6 +6296,59 @@
    }
   },
   {
+   "id": "android-assetlinks",
+   "title": "Digital Asset Links /.well-known/assetlinks.json (Android App Links and passkeys)",
+   "surface": "visitor",
+   "privileged": [],
+   "authorityClass": "anonymous public static file: no session, no account data",
+   "reach": "Public internet on whumpo.com (fetch() before /api dispatch; any other host is 404 outside ENVIRONMENT=local). GET only; served directly, never redirected.",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/.well-known/assetlinks.json",
+     "methods": [
+      "GET"
+     ],
+     "beforeOriginGate": true
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "n/a",
+     "detail": "Public by design: Google and Android must fetch it unauthenticated. The body is the package name and public certificate fingerprints, constants in src/android-signing.ts."
+    },
+    "origin": {
+     "state": "n/a",
+     "detail": "GET only and read-only; any other method falls through to the static assets handler, which does not serve the path. The file grants no cross-origin capability by itself."
+    },
+    "freshness": {
+     "state": "n/a",
+     "detail": "Read-only constant; no sensitive control."
+    },
+    "target": {
+     "state": "n/a",
+     "detail": "Fixed body, no request-derived input."
+    },
+    "replay": {
+     "state": "n/a",
+     "detail": "Idempotent read; no state."
+    },
+    "stale": {
+     "state": "n/a",
+     "detail": "Constant per deploy; clients may cache for an hour (Cache-Control: public, max-age=3600)."
+    },
+    "admission": {
+     "state": "n/a",
+     "detail": "Runs before the per-IP API_LIMITER because it is a static constant with no database or provider work; Cloudflare edge protections apply."
+    },
+    "tenant": {
+     "state": "n/a",
+     "detail": "No tenant data: one global body."
+    }
+   }
+  },
+  {
    "id": "site-host-dispatch",
    "title": "whumpo-sites host dispatch: project, visitor-app and local hosts",
    "surface": "visitor",

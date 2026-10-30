@@ -88,22 +88,19 @@ Check: the job's **Verify the bundle signature** step prints the signer SHA-256 
 4. Save, then **Next** and fix any Console warnings (see step 8 for the declarations Play requires first).
 5. Afterwards: **Test and release, Setup, App signing**. You now see two certificates: the **App signing key** (Google's) and the **Upload key** (yours). Copy the **SHA-256** of the **App signing key**: you need it for step 6. Check the upload key's SHA-256 matches what you printed in step 2.
 
-## 6. Publish `assetlinks.json` with the fingerprint
+## 6. Publish `assetlinks.json` with the fingerprint (DONE in code, awaiting the production deploy)
 
-Passkeys and verified App Links both depend on this file. Use the **App signing key** fingerprint only, never the upload key and never a debug key. Full explanation: [assetlinks-setup.md](assetlinks-setup.md).
+Passkeys and verified App Links both depend on this file. Full explanation: [assetlinks-setup.md](assetlinks-setup.md).
 
-1. Copy `docs/android/assetlinks.template.json` and replace the placeholder with the colon-separated SHA-256 from step 5.
-2. Ask for the site change: the file must be served at exactly `https://whumpo.com/.well-known/assetlinks.json` (HTTP 200, `Content-Type: application/json`, no redirect). That is a separate pull request outside `android/`; **you approve the production deploy**.
-3. Give the server owner the passkey origin value for the WH-083 approved-origin config:
+**Done (pull request "android: publish assetlinks.json and allow the app's passkey origin"):**
 
-   ```sh
-   echo "AB:CD:..." | tr -d ':' | xxd -r -p | basenc --base64url | tr -d '='
-   ```
+- The platform Worker serves `https://whumpo.com/.well-known/assetlinks.json` (HTTP 200, `Content-Type: application/json`, `Cache-Control: public, max-age=3600`, no redirect). The listed fingerprints are the **Play App Signing key** `40:8B:8F:8E:AA:DF:43:A9:5F:D6:CB:6A:ED:83:D6:E4:BD:8A:01:D3:E3:2F:88:1B:D9:2D:EE:31:F2:E9:DC:FE` first, then the **upload key** `26:39:DF:...:C0:63` (so builds signed with it before Play re-signing also verify). Source: `src/android-signing.ts`; test: `tests/android-assetlinks.mjs`.
+- The server accepts the passkey origin `android:apk-key-hash:QIuPjqrfQ6lf1stq7YPW5L2KAdPjL4gb2S3uMfLp3P4` (base64url of the app-signing SHA-256 bytes) for assertions. Nothing else starting with `android:apk-key-hash:` is accepted. The upload-key origin is deliberately not allowed: Play re-signs every installed build with the app-signing key.
 
-   The origin is `android:apk-key-hash:` followed by that output.
-4. Verify:
-   - `https://digitalassetlinks.googleapis.com/v1/statements:list?source.web.site=https://whumpo.com&relation=delegate_permission/common.get_login_creds` lists the package and fingerprint (repeat with `common.handle_all_urls`).
-   - On a device with the Play-installed build: `adb shell pm get-app-links com.whumpo.android` shows `whumpo.com: verified`.
+**Still to do, owner:** approve the production deploy, then verify:
+
+- `https://digitalassetlinks.googleapis.com/v1/statements:list?source.web.site=https://whumpo.com&relation=delegate_permission/common.get_login_creds` lists the package and fingerprints (repeat with `common.handle_all_urls`).
+- On a device with the Play-installed build: `adb shell pm get-app-links com.whumpo.android` shows `whumpo.com: verified`.
 
 ## 7. Firebase (push): project created (DONE), finish the key steps
 

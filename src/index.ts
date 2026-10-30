@@ -1,3 +1,4 @@
+import {assetLinksBody} from './android-signing';
 import {projectRuntime} from './runtime-lane';
 import {safetyService,serviceSafetyReviews,readServiceSafetyReview,prepareServiceSafetyReview,confirmServiceSafetyReview} from './service-safety';
 import {listSavedWork,readSavedWork} from './saved-work';
@@ -687,6 +688,7 @@ export default {
     const requestId = crypto.randomUUID();
     if(String(env.ENVIRONMENT)!=='local'&&new URL(request.url).origin!=='https://whumpo.com')return error(404,'Not found');
     try {
+      if(request.method==='GET'&&new URL(request.url).pathname==='/.well-known/assetlinks.json')return new Response(assetLinksBody,{headers:{'content-type':'application/json','cache-control':'public, max-age=3600'}});
       const contactMatch=new URL(request.url).pathname.match(/^\/contact\/([0-9a-f-]{36})$/);
       if(contactMatch)return contactPage(request,env,contactMatch[1]);
       if (new URL(request.url).pathname.startsWith("/api/")) return comparisonErrorResponse(request,await handle(request, env, ctx));
