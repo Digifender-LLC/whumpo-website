@@ -37,6 +37,9 @@ export const deletionSites={
  'schema/platform.sql::operator_session_revocations':blocked('operator_session_revocation_retained','Reviewed retention cleanup of an operator session-revocation record: refused inside 90 days and for any account under an unreleased preservation hold.'),
  'schema/platform.sql::operator_retention_receipts':excluded('Process receipt naming only record ids and a cutoff, no customer content; its own trigger (operator_retention_retained) keeps it 90 days, and the records it refers to are covered by the containment and revocation triggers.'),
  'schema/platform.sql::identity_sessions':excluded(credential),
+// B11 layout receipt cap (#465): per-account dashboard layout history (card order and sizes), no project, visitor or customer content.
+ 'schema/platform.sql::workspace_layout_receipts':excluded('Dashboard layout history per account (card arrangement only): no project, visitor or customer content, and not safety evidence. The cap trigger and nightly pruning keep the latest 50.'),
+ 'src/workspace-layout-maintenance.ts::workspace_layout_receipts':excluded('Nightly pruning of dashboard layout history beyond the latest 50 receipts; same rationale as the schema site.'),
  'schema/platform.sql::domain_claims':excluded('DNS ownership-claim workflow state; no customer content.'),
  'src/public-admission.ts::public_client_usage':excluded('Hashed per-client admission counters (WH-075); no customer content and no source address, only a daily SHA-256 key.'),
  'src/public-admission.ts::storage_project_usage':excluded('Per-project monthly photo-read counters (WH-075); usage totals only, no customer content.'),
