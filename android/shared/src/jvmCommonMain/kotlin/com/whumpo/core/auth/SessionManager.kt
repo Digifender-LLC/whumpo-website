@@ -71,6 +71,11 @@ class SessionManager(
             val account = store.activeAccount.value
             val stored = account?.let { store.read(it, SLOT) }?.let { Json.decodeFromString(Stored.serializer(), it) }
             stored?.let(::adopt)
+            // An account with no stored session (a crash mid sign-in) is not a sign-in.
+            if (account != null && stored == null) {
+                ended.value = true
+                store.signOut()
+            }
         } catch (_: Exception) {
             store.signOut()
         }
@@ -131,9 +136,7 @@ class SessionManager(
         val t = token
         val exp = expiresAt
         val expired = exp != null && !clock().isBefore(exp)
-        // An active account with no token means the session was lost (for example a crash during sign-in).
-        val lost = t == null && restored.value && store.activeAccount.value != null
-        if (expired || lost) {
+        if (expired) {
             clear(ended = true)
             return null
         }

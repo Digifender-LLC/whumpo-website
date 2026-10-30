@@ -453,11 +453,12 @@ class AuthControllerTest {
     }
 
     @Test
-    fun anAccountWithNoTokenIsTreatedAsASessionLost() = test {
+    fun anAccountWithNoStoredSessionIsNotASignIn() = test {
         store.activate(AccountScope.of("o***@example.test"))
         assertNotNull(store.activeAccount.value)
-        assertNull(sessions.bearerToken())
+        sessions.restore()
         await(AuthState.SignedOut(AuthProblem.SessionEnded))
+        assertFalse(dir.exists())
     }
 
     // ---- Fresh-passkey reauthentication --------------------------------------------------------------------------------

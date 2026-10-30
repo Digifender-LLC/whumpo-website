@@ -193,7 +193,7 @@ These are proposals only. IDs are assigned when each one is admitted to the back
 | # | Proposal | Size | Depends on | Notes |
 | --- | --- | --- | --- | --- |
 | P-1 | Make the `* * * * *` branch a lane registry: rotation, per-lane and per-owner claim caps, a 20 s admission deadline, independent settlement. Contact delivery becomes lane 1 with unchanged behavior. Fix the stale "No cron trigger … configured" comment in `src/index.ts`. | S | WH-052 | Code only, no schema. Existing contact tests must still pass. |
-| P-2 | Port the job journal to the current D1 schema: envelope v1 storage, atomic outbox in D1 `batch`, fence, uncertain and operator lanes, lifecycle registration in `data-lifecycle.json`. Use real concurrent-client tests on D1 (`--d1`). | L, split into schema and runner | P-1 | Cutover required. Replaces the SQLite-only proof. |
+| P-2 | Port the job journal to the current D1 schema: envelope v1 storage, atomic outbox in D1 `batch`, fence, uncertain and operator lanes, lifecycle registration in `data-lifecycle.json`. Use real concurrent-client tests on D1 (`--d1`). | L, split into schema and runner | P-1 | Cutover required. Replaces the SQLite-only proof. **Schema and runner implemented in source October 29, 2026 (schema batch 3a), not deployed: see [P-2 as built](#p-2-as-built-october-29-2026-schema-batch-3a).** |
 | P-3 | Per-lane diagnostics: due, leased, uncertain and operator counts with oldest age, tick wall/CPU time, and claims per owner, in `maintenance_health` and `report-maintenance.mjs`. Feeds the adoption triggers. | M | P-1, WH-006 | The job-name allowlist is a schema check, so a cutover is needed. |
 | P-4 | Move the contact outbox onto the journal as WH-156's first adapter using decision 5 (one envelope per attempt), and generalize it to the frozen notice states. | M | P-2, WH-155 | This is WH-156 scope; no separate scheduler. |
 | P-5 | Load and fairness run of the tick on local Worker/D1 bindings: 1,000 jobs/day steady, a 100-job burst, one noisy tenant, provider timeouts. Record p95 due-to-start and rows read/written. | M | P-2, P-3, WH-050 | Evidence for or against the Queues trigger. |
@@ -202,6 +202,31 @@ These are proposals only. IDs are assigned when each one is admitted to the back
 | P-8 | **Conditional:** Queues wake-up review. One queue plus DLQ, an outbox sweep, a usage projection against 1M operations/month, and an owner sign-off if overage is possible. | S | a trigger in P-3/P-5 | Do not start without a fired trigger. |
 
 The batch-builder study's builder lane, if its own gate ever passes, is one more lane on P-1/P-2. It needs no separate scheduler.
+
+## P-2 as built (October 29, 2026, schema batch 3a)
+
+Source and local verification only; the owner-run cutover is still to do and nothing admits a job yet.
+
+**Schema.** `job_journal`, `job_journal_events` and `job_outbox` (lifecycle class `job-journal`) port the prototype. `job_journal` adds `owner_user_id` (foreign key to `users`, `ON DELETE CASCADE`), `purpose` and `envelope_digest` to the prototype's columns, and keeps the whole envelope. Indexes: `(state,due,id)`, `(owner_user_id,state)` and `job_outbox(acknowledged_at)`, plus a unique `(job_id,event,fence,attempt)` event index that doubles as the foreign-key index. `maintenance_health.job` admits `jobs`.
+
+**How the concurrency guarantees are enforced.** D1 cannot read and then branch inside one commit, and a transaction callback is not available, so nothing in `src/job-journal.ts` reads first. Every check the prototype ran in its transaction is one of these:
+
+1. **A guarded statement.** Each caller transition is one `UPDATE ... RETURNING` whose `WHERE` is the compare-and-set: the owner, the `fence` the claim returned, the `state`, and the lease or expiry time. Of any number of racing claimers, one gets a row. A stale holder, or a holder whose job was cancelled (cancel moves the fence), updates zero rows and gets `job_lost`.
+2. **A trigger that re-checks the transition.** `job_journal_transition` lists, per event, what must hold before and what may change: a lease is at most 60 s; the fence moves by one only on events that end a holder's right to act; once an intent is recorded an expired lease can only become `uncertain`, never `ready`; an attempt id is derived from the job; the backoff after a proven non-send is fixed by the attempt number; an `account-cleanup` chunk moves its cursor forward only. A hand-written update cannot skip a state, and `tests/schema-batch-3a.mjs` tries every event from every state.
+3. **Triggers that write the receipts.** Admission (`job_journal_enqueued`) writes the outbox row, with its stable delivery id, and the first event; every later transition writes exactly one event from `last_event`, `last_at` and `last_ref`. Events cannot be forged (an insert must restate the job's own last transition), changed or repeated, and are deleted only with a finished job. Identity columns are frozen.
+4. **One `db.batch`.** Admission is one batch (insert, then read back by id and owner). A cleanup chunk is one batch: the guarded `UPDATE` first, then a statement that fails the whole batch when `changes()=0`, then the caller's effect statements, so a stale fence applies none of them. A lost admission or settle reply is a repeat: the same envelope digest or the same result reference reads the saved row; anything different is a conflict.
+
+Counts of changed rows come from `RETURNING`, because D1's `meta.changes` also counts rows its triggers write.
+
+**Evidence.** `tests/job-journal.mjs` runs on SQLite with two separate connections to one file, and with `--d1` on the actual local D1 binding: two claimers racing, a stale fence on every transition, a lost settle reply, uncertain and operator lanes, atomic chunks, forged writes, pruning and the dispatcher lane. `tests/schema-batch-3a.mjs` covers the schema objects and the transition matrix on both. Local D1 serializes the statements, so the SQLite two-connection run is the one with real interleaving; neither proves production D1 latency or contention.
+
+**Dispatcher lane.** `journalLane` in `src/job-dispatcher.ts` asks `ctx.claim()` first (the per-type, per-owner and 20 s caps stay in memory, decision D3, and reset every run), then takes the D1 lease with `claimJob`. A lost claim is skipped. The due scan returns at most `perOwner` rows per owner, so one owner's backlog cannot fill it. A handler that throws leaves the job leased: an unsent job is claimed again after the lease expires, one with an intent recorded becomes `uncertain`. No lane is registered in `src/index.ts`: contact delivery stays on its own outbox (P-4), and no adapter exists to register.
+
+**Retention.** The nightly `jobs` maintenance pass (`pruneJobJournal`) deletes finished jobs (`complete`, `cancelled`, `expired`) and, by cascade, their events and outbox entry once `jobJournalRetentionMs` (30 days, a named constant in `src/job-journal.ts`) has passed since their last transition, at most 200 per run. 30 days is an interim default pending an owner decision. `ready`, `leased`, `awaiting`, `uncertain` and `operator` jobs are never pruned (a trigger refuses it too).
+
+**Account closure.** Journal rows cascade with the account. The closure inventory counts `jobJournal`, `openJobJournal` and `unresolvedJobs`; an `awaiting`, `uncertain` or evidence-holding `operator` job is settle-first work that blocks closure like other provider work.
+
+**Not done.** No per-owner cap on journal rows; the P-3 diagnostics (`maintenance_health` per lane, due and uncertain ages); the P-4 contact adapter; any lane or adapter. Restored journals grant no lease: restore admission treats the three tables as ordinary watched records ([restore admission](restore-admission.md)).
 
 ## Verification of this record
 

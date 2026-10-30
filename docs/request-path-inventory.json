@@ -506,6 +506,344 @@
    ]
   },
   {
+   "key": "site.directory.json.live",
+   "label": "Directory JSON (published)",
+   "method": "GET",
+   "url": "https://<project>.whumpo.site/directory.json",
+   "entry": {
+    "worker": "whumpo-sites",
+    "route": "*.whumpo.site/*",
+    "config": "wrangler.sites.jsonc"
+   },
+   "workerExecution": {
+    "runs": true,
+    "reason": "no assets configured; every routed request invokes the Worker",
+    "billing": "Worker request (inbound invocation); not a direct static-asset request",
+    "serviceBindingTargets": []
+   },
+   "status": 200,
+   "cacheControl": "no-store",
+   "validators": [
+    "etag"
+   ],
+   "firstRequest": {
+    "workers": [
+     "whumpo-sites"
+    ],
+    "d1": {
+     "calls": 2,
+     "batches": 0,
+     "statements": 2,
+     "reads": 2,
+     "writes": 0
+    },
+    "r2": {},
+    "serviceBindings": {},
+    "assetsBinding": 0,
+    "rateLimiter": {},
+    "subrequests": [],
+    "waitUntil": 0,
+    "tables": [
+     "directories",
+     "operator_serving_stopped",
+     "projects",
+     "publications"
+    ]
+   },
+   "repeatRequest": {
+    "sameWork": true,
+    "status": 200,
+    "bodyIdentical": true
+   },
+   "revocationInputs": [
+    "publication pointer (publish, restore, unpublish)"
+   ]
+  },
+  {
+   "key": "site.directory.html.live",
+   "label": "Directory page (published)",
+   "method": "GET",
+   "url": "https://<project>.whumpo.site/directory",
+   "entry": {
+    "worker": "whumpo-sites",
+    "route": "*.whumpo.site/*",
+    "config": "wrangler.sites.jsonc"
+   },
+   "workerExecution": {
+    "runs": true,
+    "reason": "no assets configured; every routed request invokes the Worker",
+    "billing": "Worker request (inbound invocation); not a direct static-asset request",
+    "serviceBindingTargets": []
+   },
+   "status": 200,
+   "cacheControl": "no-store",
+   "validators": [
+    "etag"
+   ],
+   "firstRequest": {
+    "workers": [
+     "whumpo-sites"
+    ],
+    "d1": {
+     "calls": 3,
+     "batches": 0,
+     "statements": 3,
+     "reads": 2,
+     "writes": 1
+    },
+    "r2": {},
+    "serviceBindings": {},
+    "assetsBinding": 0,
+    "rateLimiter": {},
+    "subrequests": [],
+    "waitUntil": 1,
+    "tables": [
+     "directories",
+     "operator_serving_stopped",
+     "projects",
+     "publications",
+     "site_traffic_daily"
+    ]
+   },
+   "repeatRequest": {
+    "sameWork": true,
+    "status": 200,
+    "bodyIdentical": true
+   },
+   "revocationInputs": [
+    "publication pointer (publish, restore, unpublish)"
+   ]
+  },
+  {
+   "key": "site.cms.index.live",
+   "label": "CMS index (published article)",
+   "method": "GET",
+   "url": "https://<project>.whumpo.site/cms",
+   "entry": {
+    "worker": "whumpo-sites",
+    "route": "*.whumpo.site/*",
+    "config": "wrangler.sites.jsonc"
+   },
+   "workerExecution": {
+    "runs": true,
+    "reason": "no assets configured; every routed request invokes the Worker",
+    "billing": "Worker request (inbound invocation); not a direct static-asset request",
+    "serviceBindingTargets": []
+   },
+   "status": 200,
+   "cacheControl": "no-store",
+   "validators": [],
+   "firstRequest": {
+    "workers": [
+     "whumpo-sites"
+    ],
+    "d1": {
+     "calls": 3,
+     "batches": 0,
+     "statements": 3,
+     "reads": 2,
+     "writes": 1
+    },
+    "r2": {},
+    "serviceBindings": {},
+    "assetsBinding": 0,
+    "rateLimiter": {},
+    "subrequests": [],
+    "waitUntil": 1,
+    "tables": [
+     "cms_live_articles",
+     "operator_serving_stopped",
+     "projects",
+     "site_traffic_daily"
+    ]
+   },
+   "repeatRequest": {
+    "sameWork": true,
+    "status": 200,
+    "bodyIdentical": true
+   },
+   "revocationInputs": [
+    "live CMS article"
+   ]
+  },
+  {
+   "key": "site.cms.article.get",
+   "label": "CMS article (published)",
+   "method": "GET",
+   "url": "https://<project>.whumpo.site/cms/posts/01ARZ3NDEKTSV4RRFFQ69G5FAV",
+   "entry": {
+    "worker": "whumpo-sites",
+    "route": "*.whumpo.site/*",
+    "config": "wrangler.sites.jsonc"
+   },
+   "workerExecution": {
+    "runs": true,
+    "reason": "no assets configured; every routed request invokes the Worker",
+    "billing": "Worker request (inbound invocation); not a direct static-asset request",
+    "serviceBindingTargets": []
+   },
+   "status": 200,
+   "cacheControl": "no-store",
+   "validators": [],
+   "firstRequest": {
+    "workers": [
+     "whumpo-sites"
+    ],
+    "d1": {
+     "calls": 3,
+     "batches": 0,
+     "statements": 3,
+     "reads": 2,
+     "writes": 1
+    },
+    "r2": {},
+    "serviceBindings": {},
+    "assetsBinding": 0,
+    "rateLimiter": {},
+    "subrequests": [],
+    "waitUntil": 1,
+    "tables": [
+     "cms_live_articles",
+     "operator_serving_stopped",
+     "projects",
+     "site_traffic_daily"
+    ]
+   },
+   "repeatRequest": {
+    "sameWork": true,
+    "status": 200,
+    "bodyIdentical": true
+   },
+   "revocationInputs": [
+    "live CMS article"
+   ]
+  },
+  {
+   "key": "site.root.backend-form",
+   "label": "Published site root with a live backend form",
+   "method": "GET",
+   "url": "https://<project>.whumpo.site/",
+   "entry": {
+    "worker": "whumpo-sites",
+    "route": "*.whumpo.site/*",
+    "config": "wrangler.sites.jsonc"
+   },
+   "workerExecution": {
+    "runs": true,
+    "reason": "no assets configured; every routed request invokes the Worker",
+    "billing": "Worker request (inbound invocation); not a direct static-asset request",
+    "serviceBindingTargets": []
+   },
+   "status": 200,
+   "cacheControl": "no-store",
+   "validators": [],
+   "firstRequest": {
+    "workers": [
+     "whumpo-sites"
+    ],
+    "d1": {
+     "calls": 6,
+     "batches": 0,
+     "statements": 6,
+     "reads": 5,
+     "writes": 1
+    },
+    "r2": {},
+    "serviceBindings": {},
+    "assetsBinding": 0,
+    "rateLimiter": {},
+    "subrequests": [],
+    "waitUntil": 1,
+    "tables": [
+     "backend_live_forms",
+     "contact_settings",
+     "operator_serving_stopped",
+     "project_spec_held",
+     "project_spec_versions",
+     "projects",
+     "publications",
+     "service_client_blocked_contacts",
+     "site_traffic_daily",
+     "site_versions"
+    ]
+   },
+   "repeatRequest": {
+    "sameWork": true,
+    "status": 200,
+    "bodyIdentical": true
+   },
+   "revocationInputs": [
+    "live backend form",
+    "contact form enabled for the live publication revision",
+    "safety hold (content screening)",
+    "specification availability (current schema and compiler)",
+    "publication pointer (publish, restore, unpublish)",
+    "contact form blocked (service-client safety)",
+    "published version content"
+   ]
+  },
+  {
+   "key": "site.backend.post",
+   "label": "Backend form submission (published backend)",
+   "method": "POST",
+   "url": "https://<project>.whumpo.site/backend/<uuid>",
+   "entry": {
+    "worker": "whumpo-sites",
+    "route": "*.whumpo.site/*",
+    "config": "wrangler.sites.jsonc"
+   },
+   "workerExecution": {
+    "runs": true,
+    "reason": "no assets configured; every routed request invokes the Worker",
+    "billing": "Worker request (inbound invocation); not a direct static-asset request",
+    "serviceBindingTargets": [
+     {
+      "binding": "BACKEND_RUNTIME",
+      "worker": "whumpo-runtime",
+      "runs": true,
+      "reason": "no assets configured; every routed request invokes the Worker"
+     }
+    ]
+   },
+   "status": 200,
+   "cacheControl": "no-store",
+   "validators": [],
+   "firstRequest": {
+    "workers": [
+     "whumpo-sites"
+    ],
+    "d1": {
+     "calls": 3,
+     "batches": 0,
+     "statements": 3,
+     "reads": 1,
+     "writes": 2
+    },
+    "r2": {},
+    "serviceBindings": {
+     "BACKEND_RUNTIME": 1
+    },
+    "assetsBinding": 0,
+    "rateLimiter": {},
+    "subrequests": [],
+    "waitUntil": 0,
+    "tables": [
+     "backend_public_usage",
+     "backend_publication_reviews",
+     "backend_publications",
+     "backend_versions",
+     "projects",
+     "public_client_usage"
+    ]
+   },
+   "repeatRequest": {
+    "sameWork": true,
+    "status": 200,
+    "bodyIdentical": true
+   },
+   "revocationInputs": []
+  },
+  {
    "key": "site.path.unknown",
    "label": "Unknown path",
    "method": "GET",
@@ -989,6 +1327,68 @@
    ]
   },
   {
+   "key": "app.page.live",
+   "label": "Visitor app page (live page)",
+   "method": "GET",
+   "url": "https://app-<project>.whumpo.site/",
+   "entry": {
+    "worker": "whumpo-sites",
+    "route": "*.whumpo.site/*",
+    "config": "wrangler.sites.jsonc"
+   },
+   "workerExecution": {
+    "runs": true,
+    "reason": "no assets configured; every routed request invokes the Worker",
+    "billing": "Worker request (inbound invocation); not a direct static-asset request",
+    "serviceBindingTargets": [
+     {
+      "binding": "APP_HOST",
+      "worker": "whumpo-apps",
+      "runs": true,
+      "reason": "assets.run_worker_first = true; every request invokes the Worker before any asset"
+     }
+    ]
+   },
+   "assetsStub": "Static Assets were fetched through the ASSETS binding stub; the asset body and its headers are synthetic, while the wrapping Worker headers are real.",
+   "status": 200,
+   "cacheControl": "private, no-store",
+   "validators": [],
+   "firstRequest": {
+    "workers": [
+     "whumpo-sites",
+     "whumpo-apps"
+    ],
+    "d1": {
+     "calls": 1,
+     "batches": 0,
+     "statements": 1,
+     "reads": 1,
+     "writes": 0
+    },
+    "r2": {},
+    "serviceBindings": {
+     "APP_HOST": 1
+    },
+    "assetsBinding": 1,
+    "rateLimiter": {
+     "apps.API_LIMITER": 1
+    },
+    "subrequests": [],
+    "waitUntil": 0,
+    "tables": [
+     "app_live_pages"
+    ]
+   },
+   "repeatRequest": {
+    "sameWork": true,
+    "status": 200,
+    "bodyIdentical": true
+   },
+   "revocationInputs": [
+    "live visitor application page"
+   ]
+  },
+  {
    "key": "app.script.get",
    "label": "Visitor app script",
    "method": "GET",
@@ -1099,6 +1499,73 @@
    "repeatRequest": {
     "sameWork": true,
     "status": 400,
+    "bodyIdentical": true
+   },
+   "revocationInputs": []
+  },
+  {
+   "key": "app.module.access.me",
+   "label": "Visitor app module call (signed-in visitor, access.me)",
+   "method": "POST",
+   "url": "https://app-<project>.whumpo.site/modules",
+   "entry": {
+    "worker": "whumpo-sites",
+    "route": "*.whumpo.site/*",
+    "config": "wrangler.sites.jsonc"
+   },
+   "workerExecution": {
+    "runs": true,
+    "reason": "no assets configured; every routed request invokes the Worker",
+    "billing": "Worker request (inbound invocation); not a direct static-asset request",
+    "serviceBindingTargets": [
+     {
+      "binding": "APP_HOST",
+      "worker": "whumpo-apps",
+      "runs": true,
+      "reason": "assets.run_worker_first = true; every request invokes the Worker before any asset"
+     }
+    ]
+   },
+   "status": 200,
+   "cacheControl": "private, no-store",
+   "validators": [],
+   "firstRequest": {
+    "workers": [
+     "whumpo-sites",
+     "whumpo-apps"
+    ],
+    "d1": {
+     "calls": 7,
+     "batches": 0,
+     "statements": 7,
+     "reads": 7,
+     "writes": 0
+    },
+    "r2": {},
+    "serviceBindings": {
+     "APP_HOST": 1
+    },
+    "assetsBinding": 0,
+    "rateLimiter": {
+     "apps.API_LIMITER": 1
+    },
+    "subrequests": [],
+    "waitUntil": 0,
+    "tables": [
+     "app_sessions",
+     "app_visitors",
+     "module_access_roles",
+     "module_access_states",
+     "module_activation_reviews",
+     "module_activations",
+     "module_instances",
+     "operator_serving_stopped",
+     "projects"
+    ]
+   },
+   "repeatRequest": {
+    "sameWork": true,
+    "status": 200,
     "bodyIdentical": true
    },
    "revocationInputs": []

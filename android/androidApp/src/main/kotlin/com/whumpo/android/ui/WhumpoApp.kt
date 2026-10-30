@@ -14,8 +14,9 @@ import com.whumpo.android.ui.shell.TopDestination
 import com.whumpo.android.ui.shell.WhumpoShell
 
 /**
- * Wires the shared adaptive shell (navigation, insets, back, panes) to the app's screens. On expanded widths
- * each screen is the list pane and the detail pane is a placeholder until WP6 and WP7 fill it in.
+ * Wires the shared adaptive shell (navigation, insets, back, panes) to the app's screens. Chat lays out its own panes
+ * (the review sheet is its detail pane on expanded widths); the other screens are the list pane with a placeholder
+ * detail pane until WP7 fills it in.
  */
 @Composable
 fun WhumpoApp(container: AppContainer) {
@@ -23,18 +24,22 @@ fun WhumpoApp(container: AppContainer) {
     AuthGate(container.auth) {
         // No connectivity source yet, so the offline banner stays off until the API client reports one.
         WhumpoShell { destination, width ->
-            AdaptivePanes(
-                width = width,
-                list = {
-                    when (destination) {
-                        TopDestination.Chat -> ChatScreen(viewModel(factory = chatViewModelFactory(container)))
-                        TopDestination.Projects -> ProjectsScreen(viewModel(factory = projectsViewModelFactory(container)))
-                        TopDestination.Activity -> ActivityScreen(viewModel(factory = activityViewModelFactory(container)))
-                        TopDestination.Settings -> SettingsScreen(viewModel(factory = settingsViewModelFactory(container)))
-                    }
-                },
-                detail = { DetailPlaceholder() },
-            )
+            if (destination == TopDestination.Chat) {
+                ChatScreen(viewModel(factory = chatViewModelFactory(container)), width, container.environment.origin)
+            } else {
+                AdaptivePanes(
+                    width = width,
+                    list = {
+                        when (destination) {
+                            TopDestination.Chat -> Unit
+                            TopDestination.Projects -> ProjectsScreen(viewModel(factory = projectsViewModelFactory(container)))
+                            TopDestination.Activity -> ActivityScreen(viewModel(factory = activityViewModelFactory(container)))
+                            TopDestination.Settings -> SettingsScreen(viewModel(factory = settingsViewModelFactory(container)))
+                        }
+                    },
+                    detail = { DetailPlaceholder() },
+                )
+            }
         }
     }
 }

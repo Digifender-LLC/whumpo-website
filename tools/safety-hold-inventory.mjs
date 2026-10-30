@@ -37,6 +37,9 @@ export const deletionSites={
  'schema/platform.sql::operator_session_revocations':blocked('operator_session_revocation_retained','Reviewed retention cleanup of an operator session-revocation record: refused inside 90 days and for any account under an unreleased preservation hold.'),
  'schema/platform.sql::operator_retention_receipts':excluded('Process receipt naming only record ids and a cutoff, no customer content; its own trigger (operator_retention_retained) keeps it 90 days, and the records it refers to are covered by the containment and revocation triggers.'),
  'schema/platform.sql::identity_sessions':excluded(credential),
+// B11 layout receipt cap (#465): per-account dashboard layout history (card order and sizes), no project, visitor or customer content.
+ 'schema/platform.sql::workspace_layout_receipts':excluded('Dashboard layout history per account (card arrangement only): no project, visitor or customer content, and not safety evidence. The cap trigger and nightly pruning keep the latest 50.'),
+ 'src/workspace-layout-maintenance.ts::workspace_layout_receipts':excluded('Nightly pruning of dashboard layout history beyond the latest 50 receipts; same rationale as the schema site.'),
  'schema/platform.sql::domain_claims':excluded('DNS ownership-claim workflow state; no customer content.'),
  'src/public-admission.ts::public_client_usage':excluded('Hashed per-client admission counters (WH-075); no customer content and no source address, only a daily SHA-256 key.'),
  'src/public-admission.ts::storage_project_usage':excluded('Per-project monthly photo-read counters (WH-075); usage totals only, no customer content.'),
@@ -114,6 +117,8 @@ export const deletionSites={
  'src/connector-records-maintenance.ts::lookup_consents':excluded(receipts),
  'src/email-change/maintenance.ts::owner_email_change_limits':excluded(receipts),
  'src/email-change/maintenance.ts::owner_email_changes':excluded(receipts),
+ // WH-052 P-2: the nightly `jobs` pass removes finished journal jobs (events and outbox entry by cascade) 30 days after their last transition.
+ 'src/job-journal.ts::job_journal':excluded('Job control state (opaque ids, digests, schedule and receipt references; no customer content, message or payload): the content a job acts on is covered by its own domain tables and holds. The statement removes only finished jobs and the schema trigger job_journal_retained refuses any other.'),
  'src/email-change/maintenance.ts::owner_security_reviews':excluded(receipts),
  'src/email-change/review-store.ts::${table}':excluded(credential),
  'src/email-change/review-store.ts::github_oauth_states':excluded(credential),

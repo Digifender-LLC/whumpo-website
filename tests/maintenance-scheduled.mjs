@@ -42,7 +42,7 @@ try{
  assert.deepEqual({...sql.prepare("SELECT state,new_address FROM owner_email_changes WHERE change_id='change-scheduled'").get()},{state:'expired',new_address:null});
  let report=await maintenanceReport(db);
  assert.equal(report.jobs.find(j=>j.job==='traffic').state,'failed');
- for(const name of ['identity','chat_drafts','imports','fair_use','guest_previews','applications','reviews','contacts','photos','email_changes'])assert.equal(report.jobs.find(j=>j.job===name).state,'completed',name);
+ for(const name of ['identity','chat_drafts','imports','fair_use','guest_previews','applications','reviews','contacts','photos','email_changes','jobs'])assert.equal(report.jobs.find(j=>j.job===name).state,'completed',name);
  for(const name of ['github','cloudflare'])assert.equal(report.jobs.find(j=>j.job===name).state,'skipped',name);
  assert.equal(listCalls,1);assert.ok(!JSON.stringify(report).includes('PRIVATE_SCHEDULER_CANARY'));
  failTraffic=false;await worker.scheduled({cron:'17 3 * * *'},env);
