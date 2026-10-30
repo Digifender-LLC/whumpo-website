@@ -110,6 +110,8 @@ class ChatViewModel(
 
     override fun onDismissReview() = session.dismissReview()
 
+    internal suspend fun awaitIdle() = session.awaitIdle()
+
     companion object {
         const val SAVE_DEBOUNCE_MS: Long = 250
     }

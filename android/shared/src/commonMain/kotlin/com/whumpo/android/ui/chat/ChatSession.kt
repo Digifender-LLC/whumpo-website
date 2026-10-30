@@ -140,6 +140,15 @@ class ChatSession(
     /** Re-reads the conversation (the retry button and "check again"). */
     fun refreshNow() = launchWork { refresh() }
 
+    /** Suspends until all launched work, polling included, has finished. For tests and shutdown. */
+    internal suspend fun awaitIdle() {
+        while (true) {
+            val running = work.coroutineContext[Job]?.children?.toList().orEmpty()
+            if (running.isEmpty()) return
+            running.forEach { it.join() }
+        }
+    }
+
     private fun launchWork(block: suspend () -> Unit) {
         work.launch {
             try {

@@ -119,7 +119,7 @@ class ChatBehaviorTest : RobolectricUiTest() {
             ChatLayout(ChatScenes.screen(ChatScenes.ready.copy(turns = ChatScenes.turns.take(1))), WidthClass.Compact, Recorder(), animated = false)
         }.use {
             compose.onNodeWithTag("interaction-generic").assertExists()
-            compose.onNodeWithTag("interaction-generic").assert(hasText("Whumpo has a form for you", substring = true))
+            compose.onNode(hasText("Whumpo has a form for you")).assertExists()
         }
     }
 

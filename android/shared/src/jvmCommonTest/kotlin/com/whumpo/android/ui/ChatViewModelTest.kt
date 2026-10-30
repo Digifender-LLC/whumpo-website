@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -111,6 +112,12 @@ class ChatViewModelTest {
         }
     }
 
+    private suspend fun TestScope.settle(vm: ChatViewModel) {
+        advanceUntilIdle()
+        vm.awaitIdle()
+        advanceUntilIdle()
+    }
+
     private fun viewModelWith(client: com.whumpo.core.api.MobileApiClient, draft: String): Triple<ChatViewModel, FakeChatDraftRepository, FakeAccountRepository> {
         val account = FakeAccountRepository(ownerA)
         val drafts = FakeChatDraftRepository(account).apply { stored[ownerA] = draft }
@@ -120,12 +127,12 @@ class ChatViewModelTest {
     @Test
     fun theDraftIsClearedOnlyOnceTheSendIsCommitted() = runTest(main) {
         val (vm, drafts, _) = viewModelWith(chatClient(200 to ChatFixtures.body("chat.send")), "Publish it.")
-        advanceUntilIdle()
+        settle(vm)
         assertEquals(Phase.Ready, vm.screen.value.chat.phase)
         assertEquals("Publish it.", vm.screen.value.draft)
 
         vm.onSend()
-        advanceUntilIdle()
+        settle(vm)
         assertEquals("", vm.screen.value.draft)
         assertEquals("", drafts.stored[ownerA])
     }
@@ -133,10 +140,10 @@ class ChatViewModelTest {
     @Test
     fun aRejectedSendKeepsTheDraft() = runTest(main) {
         val (vm, drafts, _) = viewModelWith(chatClient(ChatFixtures.error("stale_revision")), "Publish it.")
-        advanceUntilIdle()
+        settle(vm)
 
         vm.onSend()
-        advanceUntilIdle()
+        settle(vm)
         assertEquals("Publish it.", vm.screen.value.draft)
         assertEquals("Publish it.", drafts.stored[ownerA])
         assertTrue(vm.screen.value.chat.notice != null)
@@ -145,11 +152,11 @@ class ChatViewModelTest {
     @Test
     fun signOutClearsTheConversationToo() = runTest(main) {
         val (vm, _, account) = viewModelWith(chatClient(200 to ChatFixtures.body("chat.send")), "")
-        advanceUntilIdle()
+        settle(vm)
         assertEquals(3, vm.screen.value.chat.turns.size)
 
         account.signOut()
-        advanceUntilIdle()
+        settle(vm)
         assertTrue(vm.screen.value.chat.turns.isEmpty())
         assertFalse(vm.screen.value.signedIn)
     }

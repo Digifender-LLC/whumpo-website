@@ -1,6 +1,7 @@
 package com.whumpo.android.ui
 
 import com.whumpo.android.ui.chat.ChatSession
+import com.whumpo.android.ui.chat.ChatState
 import com.whumpo.android.ui.chat.HapticKind
 import com.whumpo.android.ui.chat.Phase
 import com.whumpo.android.ui.chat.ReauthHook
@@ -22,8 +23,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.test.advanceTimeBy
-import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -43,6 +44,7 @@ class ChatSessionTest {
         val posts = mutableListOf<Pair<String, JsonObject>>()
         var gets = 0
         var chatBody = ChatFixtures.body("chat.read")
+        var chatBodies = ArrayDeque<String>()
         var onSend: () -> Unit = {}
         var sendReply: Scripted = { reply(200, ChatFixtures.body("chat.send")) }
         var confirmReplies = ArrayDeque<Scripted>()
@@ -54,7 +56,7 @@ class ChatSessionTest {
                 when {
                     request.method == HttpMethod.Get && path == "/chat" -> {
                         gets += 1
-                        reply(200, chatBody)
+                        reply(200, chatBodies.removeFirstOrNull() ?: chatBody)
                     }
                     request.method == HttpMethod.Get && path.startsWith("/chat/turns/") -> turnReply(scope)
                     request.method == HttpMethod.Post && path == "/chat/messages" -> {
@@ -92,7 +94,7 @@ class ChatSessionTest {
     private suspend fun TestScope.loaded(server: Server, info: ClientInfo = ChatFixtures.client("current"), reauth: ReauthHook = ReauthHook { true }, committed: () -> Unit = {}): ChatSession {
         val s = session(server, info, reauth, committed)
         s.load()
-        advanceUntilIdle()
+        s.awaitIdle()
         return s
     }
 
@@ -114,7 +116,7 @@ class ChatSessionTest {
         val s = loaded(server, committed = { committed += 1 })
         s.send("Add a ceramic coating service for $300.")
         s.send("Add a ceramic coating service for $300.")
-        advanceUntilIdle()
+        s.awaitIdle()
         assertEquals(1, server.count("/chat/messages"))
         val sent = server.posts.single().second
         assertEquals(ChatFixtures.SEND_IDS[0], sent["requestId"]!!.jsonPrimitive.content)
@@ -131,7 +133,7 @@ class ChatSessionTest {
         server.sendReply = { throw IOException("connection reset after the request left") }
 
         s.send("Add a booking page")
-        advanceUntilIdle()
+        s.awaitIdle()
         // The reply was lost; a read by request ID says nothing was committed. One POST so far.
         assertEquals(1, server.count("/chat/messages"))
         assertEquals(SendStatus.NotCommitted, s.state.value.outbound?.status)
@@ -140,7 +142,7 @@ class ChatSessionTest {
         // The owner presses "Send again": same ID, same text, same revision.
         server.sendReply = { reply(200, ChatFixtures.body("chat.send")) }
         s.sendAgain()
-        advanceUntilIdle()
+        s.awaitIdle()
         assertEquals(2, server.count("/chat/messages"))
         assertEquals(server.posts[0].second, server.posts[1].second)
         assertEquals(1, committed)
@@ -156,7 +158,7 @@ class ChatSessionTest {
         server.turnReply = { reply(200, ChatFixtures.body("chat.turn")) }
 
         s.send("Publish it.")
-        advanceUntilIdle()
+        s.awaitIdle()
         assertEquals(1, server.count("/chat/messages"))
         assertNull(s.state.value.outbound)
         assertEquals(1, committed)
@@ -170,11 +172,11 @@ class ChatSessionTest {
         server.turnReply = { throw IOException("still offline") }
 
         s.send("Hello")
-        advanceUntilIdle()
+        s.awaitIdle()
         assertEquals(SendStatus.Unknown, s.state.value.outbound?.status)
         assertTrue(s.state.value.offline)
         s.checkSend()
-        advanceUntilIdle()
+        s.awaitIdle()
         assertEquals(1, server.count("/chat/messages"))
     }
 
@@ -187,7 +189,7 @@ class ChatSessionTest {
         server.sendReply = { reply(ChatFixtures.error("stale_revision")) }
 
         s.send("Hello")
-        advanceUntilIdle()
+        s.awaitIdle()
         assertEquals(0, committed)
         assertNull(s.state.value.outbound)
         assertTrue(s.state.value.notice.orEmpty().contains("conversation changed"))
@@ -200,16 +202,15 @@ class ChatSessionTest {
         val server = Server()
         val done = ChatFixtures.body("chat.read")
         val last = done.lastIndexOf("\"status\":\"completed\"")
-        server.chatBody = done.substring(0, last) + "\"status\":\"pending\"" + done.substring(last + "\"status\":\"completed\"".length)
+        val pending = done.substring(0, last) + "\"status\":\"pending\"" + done.substring(last + "\"status\":\"completed\"".length)
+        // The first read finds the reply pending; the next poll finds it complete.
+        server.chatBodies = ArrayDeque(listOf(pending, done))
         val s = session(server)
+        val seen = mutableListOf<ChatState>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { s.state.collect { seen += it } }
         s.load()
-        runCurrent()
-        assertTrue(s.state.value.typing)
-        assertTrue(s.state.value.replyPending)
-
-        server.chatBody = done
-        advanceTimeBy(ChatSession.POLL_DELAY_MS + 1)
-        runCurrent()
+        s.awaitIdle()
+        assertTrue(seen.any { it.typing && it.replyPending })
         assertFalse(s.state.value.typing)
         assertTrue(s.state.value.announcement.startsWith("Whumpo replied:"))
     }
@@ -232,7 +233,7 @@ class ChatSessionTest {
 
         s.confirmReview()
         s.confirmReview() // a repeat tap while the first is running is ignored
-        advanceUntilIdle()
+        s.awaitIdle()
         assertEquals(1, server.count("/reviews/confirm"))
         val body = server.posts.single().second
         assertEquals(4, body["expectedRevision"]!!.jsonPrimitive.int)
@@ -251,7 +252,7 @@ class ChatSessionTest {
         val s = loaded(server, reauth = { reauths += 1; true })
         s.openReview(ChatFixtures.SITE_TURN)
         s.confirmReview()
-        advanceUntilIdle()
+        s.awaitIdle()
         assertEquals(1, reauths)
         assertEquals(2, server.count("/reviews/confirm"))
         assertEquals(server.posts[0].second, server.posts[1].second)
@@ -264,7 +265,7 @@ class ChatSessionTest {
         val s = loaded(server, reauth = { false })
         s.openReview(ChatFixtures.SITE_TURN)
         s.confirmReview()
-        advanceUntilIdle()
+        s.awaitIdle()
         assertEquals(1, server.count("/reviews/confirm"))
         val flow = s.state.value.review
         assertEquals(ReviewStep.Failed, flow?.step)
@@ -279,12 +280,12 @@ class ChatSessionTest {
         val s = loaded(server)
         s.openReview(ChatFixtures.SITE_TURN)
         s.confirmReview()
-        advanceUntilIdle()
+        s.awaitIdle()
         val flow = s.state.value.review
         assertEquals(ReviewStep.NoLongerCurrent, flow?.step)
         assertFalse(flow?.canConfirm == true)
         s.confirmReview()
-        advanceUntilIdle()
+        s.awaitIdle()
         assertEquals(1, server.count("/reviews/confirm"))
     }
 
@@ -295,7 +296,7 @@ class ChatSessionTest {
         s.openReview(ChatFixtures.SITE_TURN)
         assertEquals(ReviewStep.UpdateRequired, s.state.value.review?.step)
         s.confirmReview()
-        advanceUntilIdle()
+        s.awaitIdle()
         assertEquals(0, server.count("/reviews/confirm"))
     }
 
@@ -305,7 +306,7 @@ class ChatSessionTest {
         val s = loaded(server)
         s.openReview(ChatFixtures.SITE_TURN)
         s.confirmReview()
-        advanceUntilIdle()
+        s.awaitIdle()
         // The conversation still shows the review as pending, so nothing is confirmed; one POST only.
         assertEquals(1, server.count("/reviews/confirm"))
         val flow = s.state.value.review
