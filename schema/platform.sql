@@ -6479,3 +6479,25 @@ BEGIN SELECT RAISE(ABORT,'notification_notice_retained'); END;
 CREATE TRIGGER safety_hold_notification_notices_retained BEFORE DELETE ON notification_notices
 WHEN EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
 BEGIN SELECT RAISE(ABORT,'safety_preservation_hold'); END;
+
+-- The opaque event behind a push. The notification carries only this id and its kind; the app reads the target through GET /events/{id}, which answers
+-- from the owner's own rows. Content-free: ids and a kind only. An event lives seven days at most (maintenance prunes it); a deleted project leaves the event with no destination (state unavailable).
+CREATE TABLE push_events (
+ id TEXT PRIMARY KEY CHECK(length(id)=36),
+ account_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ kind TEXT NOT NULL CHECK(kind IN ('review_pending','operation_completed','attention_required')),
+ project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+ review_id TEXT CHECK(review_id IS NULL OR (kind='review_pending' AND length(review_id)=36)),
+ created_at INTEGER NOT NULL CHECK(created_at>=0),
+ expires_at INTEGER NOT NULL CHECK(expires_at>created_at AND expires_at<=created_at+604800)
+) STRICT;
+CREATE INDEX push_events_account ON push_events(account_id,created_at);
+CREATE INDEX push_events_expiry ON push_events(expires_at);
+CREATE TRIGGER push_event_limit BEFORE INSERT ON push_events
+WHEN (SELECT count(*) FROM push_events WHERE account_id=NEW.account_id AND created_at>NEW.created_at-3600)>=20
+ OR (SELECT count(*) FROM push_events WHERE account_id=NEW.account_id AND created_at>NEW.created_at-86400)>=100
+BEGIN SELECT RAISE(ABORT,'push_event_limit'); END;
+CREATE TRIGGER push_event_immutable BEFORE UPDATE ON push_events
+WHEN NEW.id!=OLD.id OR NEW.account_id!=OLD.account_id OR NEW.kind!=OLD.kind OR NEW.review_id IS NOT OLD.review_id OR NEW.created_at!=OLD.created_at OR NEW.expires_at!=OLD.expires_at
+ OR (NEW.project_id IS NOT OLD.project_id AND NEW.project_id IS NOT NULL)
+BEGIN SELECT RAISE(ABORT,'push_event_immutable'); END;

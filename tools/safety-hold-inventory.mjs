@@ -10,6 +10,7 @@ import {fileURLToPath} from 'node:url';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const credential='Authentication/credential material or OAuth state. Holds preserve customer content, not live access: expiry, logout, revocation and rotation must keep working, and retaining them would extend access rather than preserve evidence.';
+const pushRegistration='WH-086 push registration or event: a delivery address sealed and hashed (never content) or an opaque id with a kind. Holds preserve customer content, not live access: logout, withdrawal, session revocation and expiry must keep working, and a retained address would extend delivery rather than preserve evidence.';
 const receipts='Process receipt, quota counter or review token without customer content; the content it refers to is covered separately.';
 const proposals='Unapplied, short-lived proposal/review state; saved versions and applied specifications remain and are covered by the version/project holds.';
 const blocked=(trigger,note)=>({decision:'blocked',mechanism:trigger,note});
@@ -117,6 +118,12 @@ export const deletionSites={
  'src/workspace-identity/recovery.ts::identity_recovery_reviews':excluded(credential),
  'src/mobile/identity.ts::identity_challenges':excluded(credential),
  'src/mobile/identity.ts::identity_sessions':excluded(credential),
+ 'src/mobile/identity.ts::push_devices':excluded(pushRegistration),
+ 'src/mobile/push.ts::push_devices':excluded(pushRegistration),
+ 'src/workspace-identity/ceremonies.ts::push_devices':excluded(pushRegistration),
+ 'src/notification-outbox.ts::push_events':excluded(pushRegistration),
+ 'src/workspace-identity/handoff.ts::identity_handoffs':excluded(credential),
+ 'src/workspace-identity/http.ts::identity_sessions':excluded(credential),
  'src/workspace-identity/schema.sql::identity_challenges':excluded(credential),
  'src/workspace-identity/schema.sql::identity_sessions':excluded(credential),
  // Owner email-change and connector maintenance/revocation sites: ids, digests and timestamps only, no customer content.

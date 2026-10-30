@@ -58,6 +58,7 @@ export async function logoutOperation(request:Request,env:MobileEnvironment,toke
  const hash=await hashToken(token);
  await env.DB.batch([
   env.DB.prepare("DELETE FROM identity_challenges WHERE authority_kind='session' AND authority_id IN (SELECT id FROM identity_sessions WHERE token_hash=? AND client='android')").bind(hash),
+  env.DB.prepare("DELETE FROM push_devices WHERE lineage_id IN (SELECT lineage_id FROM identity_sessions WHERE token_hash=? AND client='android')").bind(hash),
   env.DB.prepare("DELETE FROM identity_sessions WHERE token_hash=? AND client='android'").bind(hash)
  ]);
  return ok({signedOut:true});

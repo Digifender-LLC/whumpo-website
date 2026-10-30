@@ -24,7 +24,7 @@ async function key(user,status=user.attempt?'staged':'active',attempt=user.attem
 }
 async function session(user,credential,proofOffset=-5,options={}){
  const token=newSessionToken(),authority=id();
- await run(`INSERT INTO identity_sessions VALUES(?,?,?,1,?,'web',?,'passkey',unixepoch()+?,unixepoch()+?,unixepoch()+?)`,authority,await hashToken(token),user.account,options.epoch??1,credential,proofOffset,options.issuedOffset??0,options.expiresOffset??3600);
+ await run(`INSERT INTO identity_sessions(id,token_hash,account_id,policy_version,auth_epoch,client,credential_id,proof_method,proof_at,issued_at,expires_at) VALUES(?,?,?,1,?,'web',?,'passkey',unixepoch()+?,unixepoch()+?,unixepoch()+?)`,authority,await hashToken(token),user.account,options.epoch??1,credential,proofOffset,options.issuedOffset??0,options.expiresOffset??3600);
  return {token,authority};
 }
 async function recovery(user){

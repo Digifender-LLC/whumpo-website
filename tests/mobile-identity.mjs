@@ -70,7 +70,7 @@ async function owner({stage='ready',sessions=0}={}){
 // A native session minted straight into the table (an older proof when `proofAge` is large), for cases that need a known token.
 async function nativeSession(o,{proofAge=5,client='android',lifetime=3600}={}){
  const token=m.newSessionToken(),authority=id();
- await run("INSERT INTO identity_sessions VALUES(?,?,?,1,(SELECT auth_epoch FROM identity_accounts WHERE account_id=?),?,?,'passkey',unixepoch()-?,unixepoch(),unixepoch()+?)",authority,await m.hashToken(token),o.account,o.account,client,o.key.id,proofAge,lifetime);
+ await run("INSERT INTO identity_sessions(id,token_hash,account_id,policy_version,auth_epoch,client,credential_id,proof_method,proof_at,issued_at,expires_at) VALUES(?,?,?,1,(SELECT auth_epoch FROM identity_accounts WHERE account_id=?),?,?,'passkey',unixepoch()-?,unixepoch(),unixepoch()+?)",authority,await m.hashToken(token),o.account,o.account,client,o.key.id,proofAge,lifetime);
  return {token,authority};
 }
 async function login(o,{origin=androidOrigin}={}){

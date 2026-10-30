@@ -143,6 +143,9 @@ try{
    await run('INSERT INTO staff_notification_optins(instance_id,visitor_id,opted_in_at) VALUES(?,?,?)',access,visitor,at);
    // WH-083 native handoff (schema batch 3d): a code-issued handoff bound to the owner's browser session. Hashes only; the restore grants no native session.
    await run("INSERT INTO identity_handoffs(id,browser_token_hash,purpose,state,code_challenge,redirect_uri,created_at,expires_at,account_id,source_session_id,auth_epoch,code_hash,code_issued_at,code_expires_at) VALUES(?,?,'signin',?,?,'https://whumpo.com/app/return',?,?,?,?,1,?,?,?)",id(),hash('drill-handoff-token'),'drill-state-'+'s'.repeat(20),'c'.repeat(43),at,at+300,owner.account,owner.authority,hash('drill-handoff-code'),at,at+60);
+   // WH-086 push (schema batch 4): a sealed-token device on the owner's session lineage and an opaque event. A restore holds the rows but sends nothing: the device is live only with a current session.
+   await run("INSERT INTO push_devices(id,account_id,lineage_id,platform,token_hash,token_sealed,notifications_enabled,created_at,last_seen_at) VALUES(?,?,(SELECT lineage_id FROM identity_sessions WHERE id=?),'android',?,?,1,?,?)",id(),owner.account,owner.authority,hash('drill-push-token'),'wv2.drill-sealed-token-not-a-real-credential',at,at);
+   await run("INSERT INTO push_events(id,account_id,kind,project_id,created_at,expires_at) VALUES(?,?,'operation_completed',?,?,?)",id(),owner.account,app,at,at+86400);
   }
   // Workspace layout cap (B11): 52 revisions leave the newest 50, and the newest receipt is never pruned.
   await run("INSERT INTO workspace_preferences(user_id,revision,layout_json,updated_at) VALUES(?,0,'{\"version\":1,\"n\":0}',?) ON CONFLICT(user_id) DO NOTHING",owner.account,iso);
@@ -151,7 +154,7 @@ try{
    await run("INSERT INTO workspace_layout_receipts(request_id,user_id,request_hash,request_json,from_revision,to_revision,previous_json,layout_json,created_at) VALUES(?,?,?,'{}',?,?,?,?,?)",id(),owner.account,hash('layout'+n),previous.revision,previous.revision+1,previous.layout_json,next,iso);
    await run('UPDATE workspace_preferences SET revision=?,layout_json=?,updated_at=? WHERE user_id=?',previous.revision+1,next,iso,owner.account);
   }
-  for(const t of ['review_receipts','cost_events','lookup_consents','connector_receipts','account_closures','rule_approvals','owner_email_changes','owner_email_change_limits','owner_security_reviews','workspace_layout_receipts','job_journal','job_journal_events','job_outbox','module_records','module_files','module_record_files','visitor_notification_addresses','staff_notification_optins','identity_handoffs','notification_notices','notification_send_ledger'])seeded[t]=(await db.prepare(`SELECT count(*) n FROM ${t}`).first()).n;
+  for(const t of ['review_receipts','cost_events','lookup_consents','connector_receipts','account_closures','rule_approvals','owner_email_changes','owner_email_change_limits','owner_security_reviews','workspace_layout_receipts','job_journal','job_journal_events','job_outbox','module_records','module_files','module_record_files','visitor_notification_addresses','staff_notification_optins','identity_handoffs','push_devices','push_events','notification_notices','notification_send_ledger'])seeded[t]=(await db.prepare(`SELECT count(*) n FROM ${t}`).first()).n;
   assert.ok(Object.values(seeded).every(n=>n>=1)&&seeded.workspace_layout_receipts===50,JSON.stringify(seeded));
  }
  const reference=async(database,runtime)=>{
@@ -220,7 +223,7 @@ try{
  const catalog=JSON.parse(await readFile('docs/data-lifecycle.json','utf8')),{snapshot:pointSnapshot}=await verifyRecoveryPoint(pointA,pointDigestA);
  const countRestored=async table=>(await target.DRILL_A.prepare(`SELECT count(*) n FROM "${table}"`).first()).n;
  const coverage=await phase('recoveryCoverage',()=>recoveryCoverage(pointSnapshot,countRestored,catalog));
- assert.equal(coverage.status,'complete',JSON.stringify(coverage.holds));assert.equal(coverage.tables,236);assert.equal(coverage.excluded,0);
+ assert.equal(coverage.status,'complete',JSON.stringify(coverage.holds));assert.equal(coverage.tables,238);assert.equal(coverage.excluded,0);
  for(const table of Object.keys(seeded))assert.equal(await countRestored(table),seeded[table],table+' restored with its archived rows');
  // A new table, a table that vanished from the restore, a stale exclusion and a mismatched count each fail until classified.
  const withTable=structuredClone(pointSnapshot);withTable.tables.push({name:'new_personal_data',columns:['id'],rows:[]});
@@ -228,7 +231,7 @@ try{
  holds.restoreMismatch=(await recoveryCoverage(pointSnapshot,async()=>-1,catalog)).holds;assert.deepEqual(holds.restoreMismatch,['coverage-restore-mismatch']);
  holds.staleExclusion=(await recoveryCoverage(pointSnapshot,countRestored,catalog,{retired_table:'none'})).holds;assert.deepEqual(holds.staleExclusion,['coverage-stale-exclusion']);
  const excludedCoverage=await recoveryCoverage(pointSnapshot,async()=>-1,catalog,Object.fromEntries(pointSnapshot.tables.filter(t=>t.name!=='sqlite_sequence').map(t=>[t.name,'drill rationale'])));
- assert.equal(excludedCoverage.status,'complete');assert.equal(excludedCoverage.excluded,236);
+ assert.equal(excludedCoverage.status,'complete');assert.equal(excludedCoverage.excluded,238);
  refusals+=3;
  // WH-117 key versions in the restored candidate: one registered key, all 4 credential rows under it, no running rotation.
  const keyVersions=await phase('inventoryKeyVersions',()=>inventoryKeyVersions(target.DRILL_A));

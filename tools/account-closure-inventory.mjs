@@ -85,6 +85,9 @@ const metrics={
  // WH-156 shared outbox (schema batch 3e): content-free notice receipts deleted with the account (the account cascade is not blocked by an open notice);
  // an attempt in flight is already counted through unresolvedJobs (its platform-email envelope).
  notificationNotices:['notification_notices','user_id'],
+ // WH-086 push (schema batch 4): content-free device registrations (sealed token) and opaque event ids, deleted with the account; no settle-first step, nothing sends.
+ pushDevices:['push_devices','account_id'],
+ pushEvents:['push_events','account_id'],
  // WH-170: shadow cost events deleted with the account and its projects (no tombstones). WH-201: the account's address changes
  // (open ones and undo reservations), rate-limit evidence and compromise-review records, all deleted with the account.
  costEvents:['cost_events','owner_id'],

@@ -11,7 +11,7 @@ export async function workspaceSession(db,m,{account,credential},proofOffset=-5)
  const token=m.newSessionToken(),authority=crypto.randomUUID();
  const current=await db.prepare('SELECT auth_epoch,policy_version FROM identity_accounts WHERE account_id=?').bind(account).first();
  if(!current)throw Error('Create the current identity fixture before issuing a session');
- await db.prepare("INSERT INTO identity_sessions VALUES(?,?,?,?,?,'web',?,'passkey',unixepoch()+?,unixepoch(),unixepoch()+3600)").bind(authority,await m.hashToken(token),account,current.policy_version,current.auth_epoch,credential,proofOffset).run();
+ await db.prepare("INSERT INTO identity_sessions(id,token_hash,account_id,policy_version,auth_epoch,client,credential_id,proof_method,proof_at,issued_at,expires_at) VALUES(?,?,?,?,?,'web',?,'passkey',unixepoch()+?,unixepoch(),unixepoch()+3600)").bind(authority,await m.hashToken(token),account,current.policy_version,current.auth_epoch,credential,proofOffset).run();
  const scope=async(database=db)=>m.admitWorkspace(database,await m.resolveIdentity(database,{version:1,client:'web',kind:'session',token}));
  return {account,credential,token,authority,scope,revoke:()=>db.prepare('DELETE FROM identity_sessions WHERE id=?').bind(authority).run()};
 }

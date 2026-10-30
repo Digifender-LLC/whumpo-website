@@ -158,8 +158,8 @@ export async function recoveryCompletionVerify(request:Request,env:IdentityEnvir
    db.prepare(`UPDATE identity_credentials SET status='active' WHERE account_id=? AND attempt_id=? AND status='staged' AND ${receiptGate}`).bind(p.accountId,intent.attemptId,c.request_id,nonce),
    db.prepare(`UPDATE identity_accounts SET stage='ready',current_attempt_id=NULL,completion_receipt_id=? WHERE account_id=? AND ${receiptGate}`).bind(c.request_id,p.accountId,c.request_id,nonce),
    ...['identity_grants','identity_challenges','identity_sessions','identity_kit_offers'].map(table=>db.prepare(`DELETE FROM ${table} WHERE account_id=? AND ${receiptGate}`).bind(p.accountId,c.request_id,nonce)),
-   db.prepare(`INSERT INTO identity_sessions SELECT ?,?,account_id,1,auth_epoch,'web',?,'passkey',?,unixepoch(),? FROM identity_accounts
-    WHERE account_id=? AND ${receiptGate} RETURNING id`).bind(sessionId,await hashToken(token),key.id,verifiedAt,verifiedAt+604800,p.accountId,c.request_id,nonce)
+   db.prepare(`INSERT INTO identity_sessions SELECT ?,?,account_id,1,auth_epoch,'web',?,'passkey',?,unixepoch(),?,?,NULL FROM identity_accounts
+    WHERE account_id=? AND ${receiptGate} RETURNING id`).bind(sessionId,await hashToken(token),key.id,verifiedAt,verifiedAt+604800,sessionId,p.accountId,c.request_id,nonce)
   ]);
   if(result[0].results.length!==1||result[9].results.length!==1)throw identityChanged();
  }catch(error){identityDatabaseError(error);}

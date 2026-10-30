@@ -39,6 +39,8 @@ export async function cleanIdentityCeremonies(db:D1Database){
   db.prepare('DELETE FROM identity_handoffs WHERE id IN (SELECT id FROM identity_handoffs WHERE expires_at<=unixepoch() ORDER BY expires_at LIMIT 500)'),
   db.prepare('DELETE FROM identity_grants WHERE id IN (SELECT id FROM identity_grants WHERE expires_at<=unixepoch() ORDER BY expires_at LIMIT 500)'),
   db.prepare('DELETE FROM identity_sessions WHERE id IN (SELECT id FROM identity_sessions WHERE expires_at<=unixepoch() ORDER BY expires_at LIMIT 500)'),
+  // WH-086: a device whose session lineage has no unexpired session left (the live view already ignores it). Expired push events are pruned by maintainNotices.
+  db.prepare('DELETE FROM push_devices WHERE id IN (SELECT id FROM push_devices WHERE revoked_at IS NOT NULL OR NOT EXISTS(SELECT 1 FROM identity_sessions s WHERE s.lineage_id=push_devices.lineage_id AND s.account_id=push_devices.account_id AND s.expires_at>unixepoch()) LIMIT 500)'),
   db.prepare('DELETE FROM identity_ceremony_receipts WHERE id IN (SELECT id FROM identity_ceremony_receipts WHERE created_at<=unixepoch()-604800 ORDER BY created_at LIMIT 500)'),
   db.prepare('DELETE FROM identity_kit_offers WHERE id IN (SELECT id FROM identity_kit_offers WHERE expires_at<=unixepoch() ORDER BY expires_at LIMIT 500)'),
   db.prepare('DELETE FROM identity_effect_receipts WHERE id IN (SELECT id FROM identity_effect_receipts WHERE created_at<=unixepoch()-604800 ORDER BY created_at LIMIT 500)')
@@ -224,6 +226,9 @@ async function authenticate(request:Request|null,env:Environment,challengeToken:
  const {key,newCounter,verifiedAt}=await verifyIdentityAssertion(env,c,data.credential,p);
  // A native reauthentication keeps its token and its absolute expiry: the contract returns no new token and never extends a native session.
  const nonce=crypto.randomUUID(),token=native?.reuseToken??newSessionToken(),tokenHash=await hashToken(token),authorityId=crypto.randomUUID();
+ // Reauthentication deletes and re-inserts the row with a new id: the stable lineage (and a handoff session's source link) is copied forward.
+ const lineage=p?.kind==='session'?await env.DB.prepare('SELECT lineage_id,source_lineage_id FROM identity_sessions WHERE id=? AND account_id=?').bind(p.authorityId,p.accountId).first<{lineage_id:string;source_lineage_id:string|null}>():null;
+ if(p?.kind==='session'&&!lineage)throw changed();
  const gate=p?identityPredicate(env.DB,p,{purpose:p.purpose,freshPasskey:false,bindIdentityRevision:true}):null;
  const admission=env.DB.prepare(`INSERT INTO identity_ceremony_receipts SELECT ?,?,?,?, ?,?,?,unixepoch() FROM identity_authentication_candidates
   WHERE id=? AND account_id=? AND public_key=? AND counter=? AND stage=? AND auth_epoch=? AND credential_revision=? AND attempt_id IS ? AND attempt_revision IS ? AND ?>unixepoch()${gate?` AND ${gate.sql}`:''}`)
@@ -236,8 +241,8 @@ async function authenticate(request:Request|null,env:Environment,challengeToken:
  const attempt=p?.attempt??(key.attempt_id===null?null:{id:key.attempt_id,revision:key.attempt_revision!});
  const purpose=p?.purpose??(key.stage==='enrolling'?'enrollment':'recovery');
  const authority=authorityKind==='session'
-  ?env.DB.prepare(`INSERT INTO identity_sessions SELECT ?,?,?,1,?,?,?,'passkey',?,unixepoch(),? WHERE ${receiptGate} RETURNING id`)
-   .bind(authorityId,tokenHash,key.account_id,key.auth_epoch,client,key.id,verifiedAt,native&&p?p.expiresAt:verifiedAt+604800,c.request_id,nonce)
+  ?env.DB.prepare(`INSERT INTO identity_sessions SELECT ?,?,?,1,?,?,?,'passkey',?,unixepoch(),?,?,? WHERE ${receiptGate} RETURNING id`)
+   .bind(authorityId,tokenHash,key.account_id,key.auth_epoch,client,key.id,verifiedAt,native&&p?p.expiresAt:verifiedAt+604800,lineage?.lineage_id??authorityId,lineage?.source_lineage_id??null,c.request_id,nonce)
   :env.DB.prepare(`INSERT INTO identity_grants SELECT ?,?,?,1,?,'web',?,?,'passkey',?,?,?,NULL,unixepoch(),? WHERE ${receiptGate} RETURNING id`)
    .bind(authorityId,tokenHash,key.account_id,key.auth_epoch,purpose,attempt!.id,verifiedAt,attempt!.revision,key.id,verifiedAt+1800,c.request_id,nonce);
  try{

@@ -62,9 +62,15 @@ CREATE TABLE identity_sessions (
  proof_at INTEGER NOT NULL CHECK(proof_at>=0),
  issued_at INTEGER NOT NULL CHECK(issued_at>=proof_at),
  expires_at INTEGER NOT NULL CHECK(expires_at>issued_at AND expires_at<=proof_at+604800),
+ -- Schema batch 4. lineage_id is stable across reauthentication (which deletes and re-inserts the row with a new id) and is copied forward by it.
+ -- source_lineage_id is set only on a handoff-minted native session (and kept by its reauthentication, which turns its proof into a passkey) and names the web lineage it came from: web sign-out of that lineage deletes it.
+ lineage_id TEXT NOT NULL DEFAULT (lower(hex(randomblob(18)))) CHECK(length(lineage_id)=36),
+ source_lineage_id TEXT CHECK(source_lineage_id IS NULL OR (length(source_lineage_id)=36 AND client='android')),
  CHECK(proof_method='passkey' OR client='android'),
  FOREIGN KEY(credential_id,account_id) REFERENCES identity_credentials(id,account_id) ON DELETE CASCADE
 ) STRICT;
+CREATE INDEX identity_sessions_source ON identity_sessions(source_lineage_id) WHERE source_lineage_id IS NOT NULL;
+CREATE INDEX identity_sessions_lineage ON identity_sessions(lineage_id);
 CREATE INDEX identity_sessions_account ON identity_sessions(account_id,issued_at);
 CREATE INDEX identity_sessions_expiry ON identity_sessions(expires_at);
 
@@ -167,6 +173,38 @@ WHEN NEW.id IS NOT OLD.id OR NEW.browser_token_hash IS NOT OLD.browser_token_has
    AND NEW.account_id IS OLD.account_id AND NEW.source_session_id IS OLD.source_session_id AND NEW.auth_epoch IS OLD.auth_epoch
    AND NEW.code_hash IS OLD.code_hash AND NEW.code_issued_at IS OLD.code_issued_at AND NEW.code_expires_at IS OLD.code_expires_at))
 BEGIN SELECT RAISE(ABORT,'identity_handoff_transition'); END;
+
+-- Schema batch 4 (WH-086). One registration per native session lineage (a native reauthentication re-inserts the session row but keeps its lineage).
+-- The FCM registration token is a delivery address, not authentication: it is stored sealed (connection vault, context 'push-device') and by hash; the
+-- hash enforces one registration per token (a rotated or re-used token moves, it never doubles). A device is LIVE only while a current android session
+-- of its lineage exists (push_live_devices), so logout, revocation, passkey removal, recovery, a security-review commit and an epoch change disable it
+-- in the same statements that end the session; maintenance deletes the rest. The account cascade removes the row.
+CREATE TABLE push_devices (
+ id TEXT PRIMARY KEY CHECK(length(id)=36),
+ account_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ lineage_id TEXT NOT NULL UNIQUE CHECK(length(lineage_id)=36),
+ platform TEXT NOT NULL CHECK(platform='android'),
+ token_hash TEXT NOT NULL UNIQUE CHECK(length(token_hash)=64 AND token_hash NOT GLOB '*[^0-9a-f]*'),
+ token_sealed TEXT NOT NULL CHECK(length(token_sealed) BETWEEN 20 AND 11040),
+ notifications_enabled INTEGER NOT NULL CHECK(notifications_enabled IN (0,1)),
+ created_at INTEGER NOT NULL CHECK(created_at>=0),
+ last_seen_at INTEGER NOT NULL CHECK(last_seen_at>=created_at),
+ revoked_at INTEGER CHECK(revoked_at IS NULL OR revoked_at>=created_at)
+) STRICT;
+CREATE INDEX push_devices_account ON push_devices(account_id);
+CREATE TRIGGER push_device_limit BEFORE INSERT ON push_devices
+WHEN (SELECT count(*) FROM push_devices WHERE account_id=NEW.account_id)>=20
+BEGIN SELECT RAISE(ABORT,'push_device_limit'); END;
+CREATE TRIGGER push_device_immutable BEFORE UPDATE ON push_devices
+WHEN NEW.id!=OLD.id OR NEW.account_id!=OLD.account_id OR NEW.lineage_id!=OLD.lineage_id OR NEW.platform!=OLD.platform OR NEW.created_at!=OLD.created_at
+ OR (OLD.revoked_at IS NOT NULL AND NEW.revoked_at IS NOT OLD.revoked_at)
+BEGIN SELECT RAISE(ABORT,'push_device_immutable'); END;
+CREATE VIEW push_live_devices AS
+SELECT d.id,d.account_id,d.lineage_id,d.token_hash,d.token_sealed,d.last_seen_at
+FROM push_devices d
+JOIN identity_sessions s ON s.lineage_id=d.lineage_id AND s.account_id=d.account_id AND s.client='android'
+JOIN identity_accounts a ON a.account_id=s.account_id AND a.auth_epoch=s.auth_epoch AND a.stage='ready'
+WHERE d.revoked_at IS NULL AND d.notifications_enabled=1 AND s.expires_at>unixepoch();
 
 -- An execution nonce fences a losing/replayed commit. No tokens or proof bodies are retained.
 CREATE TABLE identity_ceremony_receipts (
@@ -354,7 +392,7 @@ CREATE TRIGGER identity_session_immutable BEFORE UPDATE ON identity_sessions
 WHEN NEW.id!=OLD.id OR NEW.token_hash!=OLD.token_hash OR NEW.account_id!=OLD.account_id
  OR NEW.policy_version!=OLD.policy_version OR NEW.client!=OLD.client OR NEW.credential_id!=OLD.credential_id
  OR NEW.proof_method!=OLD.proof_method OR NEW.proof_at!=OLD.proof_at OR NEW.issued_at!=OLD.issued_at
- OR NEW.expires_at!=OLD.expires_at OR NEW.auth_epoch<OLD.auth_epoch
+ OR NEW.expires_at!=OLD.expires_at OR NEW.auth_epoch<OLD.auth_epoch OR NEW.lineage_id!=OLD.lineage_id OR NEW.source_lineage_id IS NOT OLD.source_lineage_id
 BEGIN SELECT RAISE(ABORT,'identity_session_immutable'); END;
 CREATE TRIGGER identity_session_limit AFTER INSERT ON identity_sessions
 BEGIN

@@ -139,8 +139,8 @@ export async function completeEnrollment(request:Request,env:IdentityEnvironment
    db.prepare(`DELETE FROM identity_challenges WHERE account_id=? AND ${receiptGate}`).bind(p.accountId,intent.requestId,nonce),
    db.prepare(`DELETE FROM identity_sessions WHERE account_id=? AND ${receiptGate}`).bind(p.accountId,intent.requestId,nonce),
    db.prepare(`DELETE FROM identity_kit_offers WHERE account_id=? AND ${receiptGate}`).bind(p.accountId,intent.requestId,nonce),
-   db.prepare(`INSERT INTO identity_sessions SELECT ?,?,account_id,1,auth_epoch,'web',?,'passkey',?,unixepoch(),? FROM identity_accounts WHERE account_id=? AND ${receiptGate} RETURNING id`)
-    .bind(sessionId,await hashToken(token),p.proof.credentialId,p.proof.verifiedAt,p.proof.verifiedAt+604800,p.accountId,intent.requestId,nonce)
+   db.prepare(`INSERT INTO identity_sessions SELECT ?,?,account_id,1,auth_epoch,'web',?,'passkey',?,unixepoch(),?,?,NULL FROM identity_accounts WHERE account_id=? AND ${receiptGate} RETURNING id`)
+    .bind(sessionId,await hashToken(token),p.proof.credentialId,p.proof.verifiedAt,p.proof.verifiedAt+604800,sessionId,p.accountId,intent.requestId,nonce)
   ]);
   if(result[0].results.length!==1||result[8].results.length!==1)throw identityChanged();
  }catch(error){identityDatabaseError(error);}

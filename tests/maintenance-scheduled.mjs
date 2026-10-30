@@ -14,7 +14,7 @@ try{
  sql.prepare("INSERT INTO identity_accounts(account_id,policy_version,stage,auth_epoch,current_attempt_id) VALUES(?,1,'enrolling',1,?)").run(enrolling,attempt);
  sql.prepare("INSERT INTO identity_attempts VALUES(?,?,'enrollment','open',0,1,0,unixepoch()-7200)").run(attempt,enrolling);
  sql.prepare("INSERT INTO identity_credentials VALUES('ready-key',?,X'010203',0,'Ready key','active',NULL,unixepoch()-7200,NULL),('pending-key',?,X'010203',0,'Pending key','staged',?,unixepoch()-7200,NULL)").run(ready,enrolling,attempt);
- sql.prepare("INSERT INTO identity_sessions VALUES(?,?,?,1,1,'web','ready-key','passkey',unixepoch()-7200,unixepoch()-7200,unixepoch()-1),(?,?,?,1,1,'web','ready-key','passkey',unixepoch(),unixepoch(),unixepoch()+3600)").run(expired,'b'.repeat(64),ready,current,'c'.repeat(64),ready);
+ sql.prepare("INSERT INTO identity_sessions(id,token_hash,account_id,policy_version,auth_epoch,client,credential_id,proof_method,proof_at,issued_at,expires_at) VALUES(?,?,?,1,1,'web','ready-key','passkey',unixepoch()-7200,unixepoch()-7200,unixepoch()-1),(?,?,?,1,1,'web','ready-key','passkey',unixepoch(),unixepoch(),unixepoch()+3600)").run(expired,'b'.repeat(64),ready,current,'c'.repeat(64),ready);
  sql.prepare("INSERT INTO identity_grants VALUES(?,?,?,1,1,'web','enrollment',?,'registration',unixepoch()-3600,0,'pending-key',NULL,unixepoch()-3600,unixepoch()-1800)").run(grant,'d'.repeat(64),enrolling,attempt);
 
  // WH-182: an expired, never-applied review of an idle project, and a live pending one that must stay.
