@@ -58,7 +58,8 @@ await check('outcomes: accepted; a dead registration is invalid-token; refusals 
  const coded=(status,errorStatus,errorCode,msg='x')=>transportFor(url=>url.includes('oauth2')?tokenReply():Response.json({error:{code:status,message:msg,status:errorStatus,...(errorCode?{details:[{'@type':'type.googleapis.com/google.firebase.fcm.v1.FcmError',errorCode}]}:{})}},{status}));
  const outcome=async t=>(await m.fcmSender(account(),t).send(message)).result;
  assert.equal(await outcome(coded(404,'NOT_FOUND','UNREGISTERED')),'invalid-token','UNREGISTERED');
- assert.equal(await outcome(coded(404,'NOT_FOUND')),'invalid-token','a bare 404 NOT_FOUND');
+ assert.equal(await outcome(coded(404,'NOT_FOUND')),'config-error','a bare 404 NOT_FOUND is a configuration error');
+ assert.equal(await outcome(coded(404,null)),'config-error','a 404 with no error code');
  assert.equal(await outcome(coded(400,'INVALID_ARGUMENT','INVALID_ARGUMENT','The registration token is not a valid FCM registration token')),'invalid-token','INVALID_ARGUMENT about the registration token');
  assert.equal(await outcome(coded(403,'PERMISSION_DENIED','SENDER_ID_MISMATCH','SenderId mismatch')),'config-error','SENDER_ID_MISMATCH is a permanent configuration error');
  assert.equal(await outcome(coded(400,'INVALID_ARGUMENT','INVALID_ARGUMENT','Invalid JSON payload received. Unknown name "x"')),'payload-error','INVALID_ARGUMENT about the payload is not a token problem');
