@@ -22,7 +22,7 @@ const moduleFiles=['src/email-change/policy.ts','src/email-change/change.ts','sr
 const read=file=>readFileSync(join(root,file),'utf8');
 // WH-201: the storage slice, the trusted HTTP adapter and the maintenance job are NOT part of the pure module; they have their own checks below.
 // WH-203 adds the review storage slice and its trusted adapter (review-store.ts, review-http.ts), covered by tests/email-change-review.mjs.
-const wiringFiles=['src/email-change/store.ts','src/email-change/http.ts','src/email-change/maintenance.ts','src/email-change/review-store.ts','src/email-change/review-http.ts'];
+const wiringFiles=['src/email-change/store.ts','src/email-change/http.ts','src/email-change/maintenance.ts','src/email-change/review-store.ts','src/email-change/review-http.ts','src/email-change/notices.ts'];
 const entry=moduleFiles.map(f=>`export * from './${f.replace(/\.ts$/,'')}';`).join('');
 /** Bundles the source (with optional mutated files) in esbuild's own process, so bundles can overlap the JS suites. */
 async function bundleSource(overrides={}){
@@ -884,8 +884,8 @@ await checkOnce('the stored account email has verification state, change records
 await checkOnce('the support notice requires a verified account email before any provider sends (gap G-E5, decision 4)',()=>{
  const queue=read('src/support-delivery.ts'),adapter=read('src/notification-outbox.ts');
  assert.match(queue,/u\.email_verified_at IS NOT NULL/,'an unverified account is never queued');
- assert.match(adapter,/n\.recipient_ref!==null\|\|n\.email_verified_at===null/);
- assert.ok(adapter.indexOf('n.email_verified_at===null')<adapter.indexOf('await ctx.provider('),'the gate runs before the provider call');
+ assert.match(adapter,/n\.recipient_ref===null&&n\.email_verified_at!==null/);
+ assert.ok(adapter.indexOf('n.email_verified_at!==null')<adapter.indexOf('await ctx.provider('),'the gate runs before the provider call');
 });
 // G-E7: the review's emergency removal and epoch fence match the identity engine's own removal and kit rotation.
 await checkOnce('the review revokes the same authority rows the identity engine revokes, and allows zero keys (gap G-E7)',()=>{

@@ -23,7 +23,8 @@ import {FeatureInclusionError} from './feature-inclusion';
 import {stripeBillingWebhook,subscriptionsEnabled,subscriptionStatus,refreshSubscriptions,startSubscription,billingPortal} from './stripe-billing';
 import {serviceClientActivationPreview} from './project-specification/service-clients/activation';
 import {runMaintenance} from './maintenance';
-import {accountEmailRoute,emailChangeDelivery} from './email-change/http';
+import {accountDeliveryLane,accountEmailRoute,emailChangeDelivery} from './email-change/http';
+import {supportDelivery,supportDeliveryLane} from './support-delivery';
 import {securityReviewRoute} from './email-change/review-http';
 import {maintainEmailChanges} from './email-change/maintenance';
 import {maintainConnectorRecords} from './connector-records-maintenance';
@@ -666,8 +667,11 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
 export default {
   async scheduled(_event: ScheduledController, env: Env) {
     // The every-minute trigger is a job-type registry (docs/job-orchestration.md, WH-052 P-1). Contact notice delivery (WH-036) is
-    // its only type and does nothing unless contactDelivery(env) finds the reviewed provider and binding.
-    if(_event.cron==='* * * * *'){await dispatchJobs([{type:'contact_delivery',run:async ctx=>{const delivery=contactDelivery(env);if(delivery)await contactDeliveryLane(env.DB,{settings:delivery.settings,sender:delivery.sender,now:Date.now}).run(ctx);}}]);return;}
+    // its first type; the account lane (WH-202: security events and the email-change notices) and the support lane run beside it. Each does nothing unless its own
+    // provider variables and the email binding are present (contactDelivery, supportDelivery).
+    if(_event.cron==='* * * * *'){await dispatchJobs([{type:'contact_delivery',run:async ctx=>{const delivery=contactDelivery(env);if(delivery)await contactDeliveryLane(env.DB,{settings:delivery.settings,sender:delivery.sender,now:Date.now}).run(ctx);}},
+     {type:'account_delivery',run:async ctx=>{const delivery=contactDelivery(env);if(delivery)await accountDeliveryLane(env.DB,{settings:delivery.settings,sender:delivery.sender,now:Date.now}).run(ctx);}},
+     {type:'support_delivery',run:async ctx=>{const delivery=supportDelivery(env);if(delivery)await supportDeliveryLane(env.DB,{...delivery,now:Date.now}).run(ctx);}}]);return;}
     const imports={name:'imports' as const,run:()=>scanBackendImports(env.DB)};
     if(_event.cron==='47 * * * *'){
       await runMaintenance(env.DB,[imports,{name:'chat_drafts',run:()=>cleanupInteractionDrafts(env.DB)},

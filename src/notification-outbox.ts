@@ -1,6 +1,7 @@
 import {beginStatement,canonicalEnvelopeJson,cancelStatement,envelopeDigest,markUncertain,settleStatement,type JobLease,type JobRow} from './job-journal';
 import {dispatchJobs,journalLane,type JobContext,type JobType} from './job-dispatcher';
 import {notificationCatalog,notificationDigest,type RecipientScope} from './notification-catalog';
+import {hashToken} from './security';
 import type {ContactNotice,ContactNotificationSettings,ContactProviderOutcome,ContactSender} from './contact-notifications';
 /**
  * WH-156 shared notification outbox (schema/platform.sql `notification_notices`, `notification_send_ledger`; docs/notifications.md).
@@ -74,9 +75,40 @@ export async function enqueueNotice(db:Db,spec:NoticeSpec){
 export type DeliveryTally={enabled:boolean;queued:number;accepted:number;retried:number;failed:number;cancelled:number;refused:number};
 export const newTally=():DeliveryTally=>({enabled:false,queued:0,accepted:0,retried:0,failed:0,cancelled:0,refused:0});
 type Due={id:string;user_id:string;scope:string;project_id:string|null;destination_id:string|null;recipient_ref:string|null;template:string;event_ref:string;state:string;attempts:number;expires_at:number;
- d_state:string|null;d_address:string|null;code:string|null;code_expires_at:string|null;email:string;email_verified_at:number|null;contained:number;submission_exists:number;suppressed:number;support_unread:number};
-/** Notices this adapter can render: contact notices and any template without variables. The email-change confirmation carries a token and waits for WH-202. */
-const sendable=(template:string)=>{const t=notificationCatalog.templates[template]?.template;return !!t&&(template==='owner.destination-verification@1'||Object.keys(t.variables).length===0);};
+ d_state:string|null;d_address:string|null;code:string|null;code_expires_at:string|null;email:string;email_verified_at:number|null;contained:number;submission_exists:number;suppressed:number;support_unread:number;
+ c_state:string|null;c_new:string|null;c_prev:string|null;c_prev_verified:number|null;c_receipt:number|null;c_deliverable:number|null;c_expires:number|null;c_revision:number|null};
+// The same values as addressKey (src/email-change/change.ts) and mintConfirmationToken (token.ts), copied because only the main Worker's route table may import
+// that folder (tests/email-change-contract.mjs); tests/email-change-delivery.mjs checks they agree.
+const addressKey=(address:string)=>hashToken(`email-change-address:${address}`);
+const mintConfirmationToken=()=>btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
+/** Notices this adapter can render: contact notices, the email-change confirmation (its token is minted in the claimed attempt) and any template without variables. */
+const sendable=(template:string)=>{const t=notificationCatalog.templates[template]?.template;return !!t&&(template==='owner.destination-verification@1'||template===confirmTemplate||Object.keys(t.variables).length===0);};
+const confirmTemplate='account.email-confirm@1';
+/**
+ * The address an account-scope notice goes to, decided from the change row at the moment of sending (docs/email-change-and-compromise.md decision 4).
+ * Only the new-address confirmation may go to an unverified address. Notices to the previous address need that address to have been verified; every other
+ * account notice goes to the account's own address only while `email_verified_at` is set. `recipient_ref` is the address hash, never an address.
+ */
+async function accountRecipient(n:Due,now:number):Promise<{address:string;confirm:boolean}|'recipient-revoked'|'record-removed'>{
+ const own=n.recipient_ref===null&&n.email_verified_at!==null?{address:n.email.toLowerCase(),confirm:false}:'recipient-revoked' as const;
+ const byKey=async(list:Array<[string|null,boolean]>)=>{
+  if(n.recipient_ref===null)return null;
+  for(const [address,eligible] of list)if(address&&n.recipient_ref===await addressKey(address))return eligible?{address,confirm:false}:'recipient-revoked' as const;
+  return null;
+ };
+ switch(n.template){
+  case confirmTemplate:{
+   if(n.c_state!=='pending'||n.c_deliverable!==1||n.c_expires===null||now>=n.c_expires||n.c_revision===null||!n.c_new||n.recipient_ref!==await addressKey(n.c_new))return 'record-removed';
+   return {address:n.c_new,confirm:true};
+  }
+  case 'account.email-change-requested@1':return n.c_state==='pending'?own:'record-removed';
+  case 'account.email-change-completed@1':
+   return n.c_state==='confirmed'||n.c_state==='undone'?await byKey([[n.c_prev,n.c_prev_verified!==null]])??'record-removed':'record-removed';
+  case 'account.email-change-undone@1':
+   return n.c_state==='undone'?await byKey([[n.c_new,n.c_receipt!==null],[n.c_prev,n.c_prev_verified!==null]])??'record-removed':'record-removed';
+  default:return own;
+ }
+}
 const kindOf=(template:string):ContactNotice['kind']=>template==='owner.destination-verification@1'?'verification':template==='contact.new-message@1'?'new_message':'account';
 
 /** Provider calls recorded in the 32 UTC days ending `now` (the spending-ceiling window), across every notice kind. */
@@ -94,7 +126,8 @@ async function attempt(db:Db,deps:DeliveryDeps,job:JobRow,lease:JobLease,ctx:Job
    EXISTS(SELECT 1 FROM contact_submissions s WHERE s.id=substr(n.event_ref,9) AND s.project_id=n.project_id) AS submission_exists,
    EXISTS(SELECT 1 FROM contact_notification_suppressions s WHERE s.user_id=n.user_id AND s.address=coalesce(d.address,lower(u.email))) AS suppressed,
    EXISTS(SELECT 1 FROM usage_review_requests q WHERE q.id=n.event_ref AND q.user_id=n.user_id AND q.state='answered' AND q.customer_read_at IS NULL) AS support_unread
-  FROM notification_notices n JOIN users u ON u.id=n.user_id LEFT JOIN contact_notification_destinations d ON d.id=n.destination_id WHERE n.job_id=?`).bind(job.id).first<Due>();
+   ,c.state AS c_state,c.new_address AS c_new,c.previous_address AS c_prev,c.previous_verified_at AS c_prev_verified,c.receipt_verified_at AS c_receipt,c.deliverable AS c_deliverable,c.expires_at AS c_expires,c.revision AS c_revision
+  FROM notification_notices n JOIN users u ON u.id=n.user_id LEFT JOIN contact_notification_destinations d ON d.id=n.destination_id LEFT JOIN owner_email_changes c ON c.change_id=n.event_ref AND c.account_id=n.user_id AND n.scope='account-email' WHERE n.job_id=?`).bind(job.id).first<Due>();
  // A job whose notice is gone, finished or not waiting for this attempt carries no work: stop it, send nothing.
  if(!n||(n.state!=='queued'&&n.state!=='deferred')){await cancelStatement(db,owner,job.id,now).first();return;}
  const deny=async(reason:'rejected'|'expired'|'suppressed'|'contained'|'ceiling'|'recipient-revoked'|'record-removed'|'template-withdrawn')=>{
@@ -105,7 +138,7 @@ async function attempt(db:Db,deps:DeliveryDeps,job:JobRow,lease:JobLease,ctx:Job
  };
  if(n.expires_at<=now)return deny('expired');
  if(!sendable(n.template)||notificationCatalog.templates[n.template]?.state!=='available')return deny('template-withdrawn');
- let recipient:string,code:string|undefined;
+ let recipient:string,code:string|undefined,confirm=false;
  if(n.scope==='owner-destination'){
   if(n.d_state==='suppressed'||n.suppressed)return deny('suppressed');
   if(n.contained)return deny('contained');
@@ -117,26 +150,37 @@ async function attempt(db:Db,deps:DeliveryDeps,job:JobRow,lease:JobLease,ctx:Job
   }else if(n.d_state!=='verified')return deny('recipient-revoked');
   else if(n.template==='contact.new-message@1'&&!n.submission_exists)return deny('record-removed');
  }else if(n.scope==='account-email'){
-  // G-E5 and decision 4: the address is only a lookup key until verified. A notice for another address (recipient_ref) waits for WH-202.
-  if(n.recipient_ref!==null||n.email_verified_at===null)return deny('recipient-revoked');
-  if(n.suppressed)return deny('suppressed');
+  // G-E5 and decision 4: the address is only a lookup key until verified; see accountRecipient for the one exception and the previous-address rule.
+  const to=await accountRecipient(n,now);
+  if(typeof to==='string')return deny(to);
+  if(await db.prepare('SELECT 1 FROM contact_notification_suppressions WHERE user_id=? AND address=?').bind(n.user_id,to.address).first())return deny('suppressed');
   // A support notice is only for a response the customer has not read yet.
   if(n.template==='support.response-saved@1'&&!n.support_unread)return deny('record-removed');
-  recipient=n.email.toLowerCase();
+  recipient=to.address;confirm=to.confirm;
  }else return deny('recipient-revoked'); // staff and submitter delivery arrives with WH-158.
  const ceiling=Math.max(0,Math.min(100000,Math.floor(settings.sendCeiling)));
  if(await noticeSendsInWindow(db,noticeProvider,now)>=ceiling)return deny('ceiling');
  const day=new Date(now).toISOString().slice(0,10);
  // Claim the attempt and count it against the ceiling in one transaction BEFORE the call. The ledger row keeps the lowest ceiling any run applied;
  // the notice trigger counts the send; the ledger trigger refuses the whole claim (journal intent included) past the 32-day ceiling.
+ // The new-address confirmation token is minted only here, after the checks and before the one provider call. Only its SHA-256 verifier is committed, in the same
+ // batch that moves the notice to `dispatching`; the dispatch step requires that verifier to be on the change, so a lost revision race sends nothing.
+ const token=confirm?mintConfirmationToken():undefined,verifier=token?await hashToken(token):null;
  let begun,dispatched;
  try{
-  [,begun,dispatched]=await db.batch([
+  const claimed=await db.batch([
    db.prepare('INSERT INTO notification_send_ledger(provider,day,sends,ceiling) VALUES(?1,?2,0,?3) ON CONFLICT(provider,day) DO UPDATE SET ceiling=min(ceiling,excluded.ceiling)').bind(noticeProvider,day,ceiling),
    beginStatement(db,lease,now),
+   ...(verifier?[db.prepare("UPDATE owner_email_changes SET token_verifier=?1,revision=revision+1 WHERE change_id=?2 AND account_id=?3 AND state='pending' AND revision=?4").bind(verifier,n.event_ref,n.user_id,n.c_revision)]:[]),
    db.prepare(`UPDATE notification_notices SET state='dispatching',attempts=attempts+1,dispatched_at=?1,outcome_at=NULL,reason=NULL
-    WHERE id=?2 AND state IN ('queued','deferred') AND job_id=?3 AND EXISTS(SELECT 1 FROM job_journal WHERE id=?3 AND state='awaiting' AND fence=?4) RETURNING attempts`).bind(now,n.id,job.id,lease.fence)]);
- }catch(cause){if(String(cause).includes('notification_send_ceiling'))return deny('ceiling');throw cause;}
+    WHERE id=?2 AND state IN ('queued','deferred') AND job_id=?3 AND EXISTS(SELECT 1 FROM job_journal WHERE id=?3 AND state='awaiting' AND fence=?4)
+     AND (?5 IS NULL OR EXISTS(SELECT 1 FROM owner_email_changes WHERE change_id=?6 AND token_verifier=?5)) RETURNING attempts`).bind(now,n.id,job.id,lease.fence,verifier,n.event_ref)]);
+  begun=claimed[1];dispatched=claimed[claimed.length-1];
+ }catch(cause){
+  if(String(cause).includes('notification_send_ceiling'))return deny('ceiling');
+  if(String(cause).includes('email_change_claim'))return deny('expired');
+  throw cause;
+ }
  const intent=(begun.results[0] as {attempt_id?:string}|undefined)?.attempt_id,attempts=dispatched.results[0] as {attempts:number}|undefined;
  if(!attempts||!intent){
   // Another actor stopped the notice between the check and the claim. If the journal recorded an intent, nothing was sent: close it without a call.
@@ -145,9 +189,13 @@ async function attempt(db:Db,deps:DeliveryDeps,job:JobRow,lease:JobLease,ctx:Job
  }
  let outcome:ContactProviderOutcome;
  try{
-  outcome=await ctx.provider(()=>withTimeout(sender({outboxId:n.id,idempotencyKey:`${n.template}:${n.event_ref}`.slice(0,120),kind:kindOf(n.template),template:n.template,projectId:n.project_id,recipient,...(code?{verificationCode:code}:{})},settings),deps.timeoutMs??noticeSendTimeoutMs));
+  outcome=await ctx.provider(()=>withTimeout(sender({outboxId:n.id,idempotencyKey:`${n.template}:${n.event_ref}${n.recipient_ref?':'+n.recipient_ref.slice(0,8):''}`.slice(0,120),kind:kindOf(n.template),template:n.template,projectId:n.project_id,recipient,...(code?{verificationCode:code}:{}),...(token?{confirmationToken:token}:{})},settings),deps.timeoutMs??noticeSendTimeoutMs));
  }catch{outcome={accepted:false,retryable:false,uncertain:true};}
  const at=deps.now();
+ // A definite non-delivery of the confirmation clears the verifier (a retry mints a new token); a permanent one closes the change as undeliverable.
+ const mine="change_id=? AND account_id=? AND state='pending' AND token_verifier=?";
+ const release=verifier?[db.prepare(`UPDATE owner_email_changes SET token_verifier=NULL,revision=revision+1 WHERE ${mine}`).bind(n.event_ref,n.user_id,verifier)]:[];
+ const undeliverable=verifier?[db.prepare(`UPDATE owner_email_changes SET state='undeliverable',token_verifier=NULL,revision=revision+1,history=json_insert(history,'$[#]','undeliverable:'||?) WHERE ${mine}`).bind(outcome.accepted?'':outcome.suppressed?'suppressed':'rejected',n.event_ref,n.user_id,verifier)]:[];
  const settle=settleStatement(db,owner,job.id,intent,outcome.accepted?'accepted':'refused',at),finish=(state:string,reason:string|null,from="state='dispatching'")=>db.prepare(`UPDATE notification_notices SET state=?1,reason=?2,outcome_at=?3 WHERE id=?4 AND ${from} AND job_id=?5`).bind(state,reason,at,n.id,job.id);
  if(outcome.accepted){
   const ref=typeof outcome.providerRef==='string'&&outcome.providerRef.length>=1&&outcome.providerRef.length<=100?outcome.providerRef:null;
@@ -160,16 +208,16 @@ async function attempt(db:Db,deps:DeliveryDeps,job:JobRow,lease:JobLease,ctx:Job
  }
  if(outcome.suppressed){
   await db.batch([db.prepare("INSERT OR IGNORE INTO contact_notification_suppressions(user_id,address,reason,created_at) VALUES(?,?,'provider',?)").bind(n.user_id,recipient,new Date(at).toISOString()),
-   settle,finish('failed','rejected')]);tally.failed++;return;
+   settle,finish('failed','rejected'),...undeliverable]);tally.failed++;return;
  }
  if(!outcome.retryable||attempts.attempts>=maxNoticeAttempts){
-  await db.batch([settle,finish('failed',outcome.retryable?'exhausted':'rejected')]);tally.failed++;return;
+  await db.batch([settle,finish('failed',outcome.retryable?'exhausted':'rejected'),...undeliverable]);tally.failed++;return;
  }
  // Definitely not taken: wait out the backoff in `deferred`, with a NEW envelope for the next attempt (maxAttempts 1 per envelope).
  const next=at+backoffMs(attempts.attempts);
- if(next>=n.expires_at){await db.batch([settle,finish('cancelled','expired')]);tally.cancelled++;return;}
+ if(next>=n.expires_at){await db.batch([settle,finish('cancelled','expired'),...release]);tally.cancelled++;return;}
  const nextId=crypto.randomUUID(),env=await attemptEnvelope(nextId,{userId:n.user_id,projectId:n.project_id,template:n.template},n.id,attempts.attempts+1,at,next,n.expires_at);
- await db.batch([settle,await admitAttempt(db,env,n.id,`state='dispatching' AND job_id='${job.id}'`),
+ await db.batch([settle,...release,await admitAttempt(db,env,n.id,`state='dispatching' AND job_id='${job.id}'`),
   db.prepare("UPDATE notification_notices SET state='deferred',reason='unavailable',outcome_at=?1,job_id=?2 WHERE id=?3 AND state='dispatching' AND job_id=?4 AND EXISTS(SELECT 1 FROM job_journal WHERE id=?2)").bind(at,nextId,n.id,job.id)]);
  tally.retried++;
 }
