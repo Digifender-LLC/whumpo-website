@@ -94,6 +94,16 @@ class ChatViewModel(
         saveJob = viewModelScope.launch { drafts.saveDraft(owner, "") }
     }
 
+    /**
+     * "Ask about this project": puts [text] in the draft and never sends it. An unsent draft is kept and the text goes after it.
+     * Does nothing while signed out or before the stored draft has loaded.
+     */
+    fun prefill(text: String) {
+        val current = mutableState.value
+        if (current.owner == null || current.loading) return
+        onDraftChanged(if (current.draft.isBlank()) text else current.draft.trimEnd() + "\n\n" + text)
+    }
+
     override fun onSend() = session.send(mutableState.value.draft)
 
     override fun onRetry() = session.load()

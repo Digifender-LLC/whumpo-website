@@ -34,9 +34,9 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
             <!--
-              Verified App Link: the browser hand-off returns here. Only this path is claimed (WP7 adds the Activity and
-              Projects deep links). Verification needs https://whumpo.com/.well-known/assetlinks.json, an owner task:
-              docs/android/assetlinks-setup.md.
+              Verified App Links: the browser hand-off returns to /app/return, and /app/projects/{id} and /app/activity/{eventId}
+              open those items behind the sign-in gate. Only these paths are claimed; everything else stays in the browser.
+              Verification needs https://whumpo.com/.well-known/assetlinks.json, an owner task: docs/android/assetlinks-setup.md.
             -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
@@ -46,6 +46,14 @@
                     android:scheme="https"
                     android:host="whumpo.com"
                     android:path="/app/return" />
+                <data
+                    android:scheme="https"
+                    android:host="whumpo.com"
+                    android:pathPrefix="/app/projects/" />
+                <data
+                    android:scheme="https"
+                    android:host="whumpo.com"
+                    android:pathPrefix="/app/activity/" />
             </intent-filter>
         </activity>
     </application>

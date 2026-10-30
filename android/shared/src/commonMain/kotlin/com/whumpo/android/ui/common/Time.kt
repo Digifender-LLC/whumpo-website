@@ -29,6 +29,10 @@ fun timeLabel(iso: String, now: Instant, prefix: String): TimeLabel {
     return TimeLabel("$prefix $relative", "$prefix $relative, $absolute")
 }
 
+/** A time with no prefix ("5 min ago") for rows that need none: Activity and Chat. Same wording and spoken absolute time. */
+fun ageLabel(iso: String, now: Instant): TimeLabel =
+    timeLabel(iso, now, "").let { TimeLabel(it.text.trim(), it.description.trim()) }
+
 /** "4 Oct 2026, 12:00 UTC" (civil-from-days, proleptic Gregorian). */
 fun absoluteUtc(at: Instant): String {
     val seconds = at.epochSeconds

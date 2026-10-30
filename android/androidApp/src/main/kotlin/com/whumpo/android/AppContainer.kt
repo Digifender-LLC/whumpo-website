@@ -9,6 +9,7 @@ import com.whumpo.android.ui.chat.ReauthHook
 import com.whumpo.android.ui.common.AppLinks
 import com.whumpo.android.ui.photos.AndroidPhotoPreparer
 import com.whumpo.android.ui.photos.PhotoPreparer
+import com.whumpo.android.ui.shell.DeepLink
 import com.whumpo.android.ui.theme.ThemeStore
 import com.whumpo.core.account.AccountStateStore
 import com.whumpo.core.api.ClientInfo
@@ -27,6 +28,23 @@ import com.whumpo.core.push.NoOpPushMessaging
 import com.whumpo.core.push.PushMessaging
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
+/** The newest deep link not yet shown. The shell only exists for a signed-in account, so the link waits behind the sign-in gate. */
+class DeepLinkInbox {
+    private val link = MutableStateFlow<DeepLink?>(null)
+    val pending: StateFlow<DeepLink?> = link.asStateFlow()
+
+    fun offer(next: DeepLink) {
+        link.value = next
+    }
+
+    fun consume(shown: DeepLink) {
+        link.compareAndSet(shown, null)
+    }
+}
 
 /** Manual dependency graph for the shell; one instance per process. */
 class AppContainer(
@@ -41,11 +59,17 @@ class AppContainer(
     val clientInfo: ClientInfo = ClientInfo.current(BuildConfig.VERSION_CODE)
     val mobileApi = MobileApiClient(okHttpEngine(), environment.mobileApiBase, clientInfo, sessions)
     val activities = ActivityTracker()
+
+    /** Custom Tabs: the hand-off pages and previews. It opens the browser's own session and never carries the bearer. */
+    val browser = CustomTabsBrowser(app, activities)
+
+    /** A verified App Link waiting for the owner to be signed in. In memory only: it is gone if the process dies. */
+    val deepLinks = DeepLinkInbox()
     val auth = AuthController(
         api = mobileApi,
         sessions = sessions,
         passkeys = CredentialManagerPasskeys(app, activities),
-        browser = CustomTabsBrowser(app, activities),
+        browser = browser,
         origin = environment.origin,
         scope = scope,
     )

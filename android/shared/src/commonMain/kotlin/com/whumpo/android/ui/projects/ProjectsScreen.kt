@@ -20,9 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.backhandler.PredictiveBackHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -41,9 +39,11 @@ import com.whumpo.android.ui.shell.AdaptivePanes
 import com.whumpo.android.ui.shell.DetailPlaceholder
 import com.whumpo.android.ui.shell.LocalNavigate
 import com.whumpo.android.ui.shell.TopDestination
+import com.whumpo.android.ui.shell.rememberBackProgress
 import com.whumpo.android.ui.shell.WidthClass
 import com.whumpo.android.ui.state.UiState
 import com.whumpo.android.ui.theme.WhumpoQuietButton
+import com.whumpo.android.ui.theme.WhumpoSecondaryButton
 import com.whumpo.android.ui.theme.WhumpoTheme
 import com.whumpo.android.ui.theme.WhumpoTokens
 
@@ -58,6 +58,8 @@ class ProjectsActions(
     val onRetryUpload: (String) -> Unit = {},
     val onDismissUpload: (String) -> Unit = {},
     val onGoToChat: () -> Unit = {},
+    /** Opens Chat with a draft that mentions the project. It never sends. */
+    val onAskAboutProject: (ProjectRow) -> Unit = {},
 )
 
 @Composable
@@ -66,6 +68,7 @@ fun ProjectsScreen(
     width: WidthClass,
     links: AppLinks,
     onPickPhoto: (() -> Unit)?,
+    onAskAboutProject: (ProjectRow) -> Unit = {},
 ) {
     val navigate = LocalNavigate.current
     val list by viewModel.list.collectAsState()
@@ -84,14 +87,15 @@ fun ProjectsScreen(
             onRetryUpload = viewModel::retryUpload,
             onDismissUpload = viewModel::dismissUpload,
             onGoToChat = { navigate(TopDestination.Chat) },
+            onAskAboutProject = { project ->
+                onAskAboutProject(project)
+                navigate(TopDestination.Chat)
+            },
         ),
     )
 }
 
 /** Stateless Projects: a list, then a detail. One pane below Expanded (list, then detail with a back button), two on Expanded. */
-// shortcut: PredictiveBackHandler is deprecated like the shell's; both move to NavigationEventHandler together.
-@Suppress("DEPRECATION")
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun ProjectsContent(
     list: UiState<ProjectList>,
@@ -105,10 +109,7 @@ fun ProjectsContent(
 ) {
     val single = width != WidthClass.Expanded
     // Inside the shell's own back handler, so back closes the detail first and only then returns to Chat.
-    PredictiveBackHandler(enabled = single && selectedId != null) { progress ->
-        progress.collect { }
-        actions.onSelect(null)
-    }
+    rememberBackProgress(enabled = single && selectedId != null) { actions.onSelect(null) }
     AdaptivePanes(
         width = width,
         modifier = modifier,
@@ -232,6 +233,10 @@ private fun DetailPane(
                 )
             }
             Text(d.project.purpose, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
+            WhumpoSecondaryButton(
+                onClick = { actions.onAskAboutProject(d.project) },
+                modifier = Modifier.heightIn(min = 48.dp).testTag("project-ask"),
+            ) { Text("Ask about this project") }
             SectionHeading("Services")
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 ServiceTile("Website", AppIcons.Globe, d.project.website, Modifier.fillMaxWidth())

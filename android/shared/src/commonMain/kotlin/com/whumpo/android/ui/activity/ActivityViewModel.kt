@@ -3,8 +3,8 @@ package com.whumpo.android.ui.activity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.whumpo.android.ui.common.TimeLabel
+import com.whumpo.android.ui.common.ageLabel
 import com.whumpo.android.ui.common.loadUi
-import com.whumpo.android.ui.common.timeLabel
 import com.whumpo.android.ui.state.UiState
 import com.whumpo.core.api.ActivityItem
 import com.whumpo.core.api.MobileApiClient
@@ -122,5 +122,5 @@ private fun ActivityItem.toRow(now: Instant) = ActivityRow(
     summary = summary,
     action = action.replace('.', ' ').replace('_', ' ').replaceFirstChar { it.uppercase() },
     projectId = projectId,
-    time = timeLabel(createdAt, now, "").let { TimeLabel(it.text.trim(), it.description.trim()) },
+    time = ageLabel(createdAt, now),
 )

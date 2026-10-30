@@ -160,4 +160,28 @@ class ChatViewModelTest {
         assertTrue(vm.screen.value.chat.turns.isEmpty())
         assertFalse(vm.screen.value.signedIn)
     }
+
+    @Test
+    fun prefillFillsTheDraftWithoutSendingAndKeepsAnUnsentOne() = runTest(main) {
+        val account = FakeAccountRepository(ownerA)
+        val drafts = FakeChatDraftRepository(account)
+        val vm = ChatViewModel(drafts, account, signedOutClient(), ChatFixtures.client("current"), ReauthHook { false })
+        advanceUntilIdle()
+
+        vm.prefill("About my project \"Cafe\". ")
+        assertEquals("About my project \"Cafe\". ", vm.state.value.draft)
+        vm.prefill("Second.")
+        assertEquals("About my project \"Cafe\".\n\nSecond.", vm.state.value.draft)
+        advanceTimeBy(ChatViewModel.SAVE_DEBOUNCE_MS + 1)
+        assertEquals(vm.state.value.draft, drafts.stored[ownerA])
+    }
+
+    @Test
+    fun prefillIsIgnoredWhileSignedOut() = runTest(main) {
+        val account = FakeAccountRepository()
+        val vm = ChatViewModel(FakeChatDraftRepository(account), account, signedOutClient(), ChatFixtures.client("current"), ReauthHook { false })
+        advanceUntilIdle()
+        vm.prefill("hello")
+        assertEquals("", vm.state.value.draft)
+    }
 }

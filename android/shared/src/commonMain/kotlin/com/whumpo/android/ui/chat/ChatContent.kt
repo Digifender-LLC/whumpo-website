@@ -47,6 +47,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
@@ -54,6 +55,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.whumpo.android.ui.common.ageLabel
 import com.whumpo.android.ui.state.ErrorCard
 import com.whumpo.android.ui.state.OfflineBanner
 import com.whumpo.android.ui.state.Skeleton
@@ -66,6 +68,8 @@ import com.whumpo.android.ui.theme.WhumpoSecondaryButton
 import com.whumpo.android.ui.theme.WhumpoTheme
 import com.whumpo.core.api.ChatTurn
 import com.whumpo.core.api.PreviewRef
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 /** Everything the Chat screen can ask for. The default bodies do nothing so previews and tests can pass [NoChatActions]. */
 interface ChatActions {
@@ -88,6 +92,8 @@ data class ChatScreenState(
     val draft: String = "",
     val composerEnabled: Boolean = false,
     val chat: ChatState = ChatState(),
+    /** For relative times. The ViewModel refreshes it with every state change; tests pin it. */
+    val now: Instant = Clock.System.now(),
 ) {
     val canSend: Boolean
         get() = composerEnabled && draft.isNotBlank() && draft.trim().length <= ChatSession.MAX_MESSAGE_CHARS &&
@@ -135,7 +141,7 @@ fun ChatPane(
                 phase is Phase.Failed -> ErrorCard(phase.what, phase.safe, actions::onRetry, Modifier.padding(horizontal = 20.dp))
                 phase is Phase.UpdateRequired -> UpdateRequiredScreen(onUpdate = onUpdateApp, onHelp = onHelp)
                 chat.turns.isEmpty() && chat.outbound == null -> EmptyConversation(actions)
-                else -> Transcript(chat, actions, animated, onOpenPreview)
+                else -> Transcript(chat, screen.now, actions, animated, onOpenPreview)
             }
         }
         chat.notice?.let {
@@ -148,13 +154,16 @@ fun ChatPane(
         }
         // The composer stays while the conversation is unavailable: the draft is protected and is never lost to an outage.
         if (screen.signedIn) Composer(screen, actions)
-        // Invisible polite live region: new replies and review outcomes are read out once.
-        Box(
-            Modifier.size(1.dp).testTag("chat-announcement").semantics {
-                liveRegion = LiveRegionMode.Polite
-                contentDescription = chat.announcement
-            },
-        )
+        // Invisible polite live region: new replies and review outcomes are read out once. It only exists while it has words,
+        // because an empty one fails the accessibility check for speakable text.
+        if (chat.announcement.isNotEmpty()) {
+            Box(
+                Modifier.size(1.dp).testTag("chat-announcement").semantics {
+                    liveRegion = LiveRegionMode.Polite
+                    contentDescription = chat.announcement
+                },
+            )
+        }
     }
 }
 
@@ -204,7 +213,7 @@ private fun EmptyConversation(actions: ChatActions) {
 }
 
 @Composable
-private fun Transcript(chat: ChatState, actions: ChatActions, animated: Boolean, onOpenPreview: (PreviewRef) -> Unit) {
+private fun Transcript(chat: ChatState, now: Instant, actions: ChatActions, animated: Boolean, onOpenPreview: (PreviewRef) -> Unit) {
     val listState = rememberLazyListState()
     val extras = (if (chat.outbound != null) 1 else 0) + (if (chat.typing) 1 else 0)
     val count = chat.turns.size + extras
@@ -215,16 +224,24 @@ private fun Transcript(chat: ChatState, actions: ChatActions, animated: Boolean,
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        items(chat.turns, key = { it.id }) { turn -> TurnItem(turn, actions, onOpenPreview) }
+        items(chat.turns, key = { it.id }) { turn -> TurnItem(turn, now, actions, onOpenPreview) }
         chat.outbound?.let { out -> item(key = "outbound") { OutboundItem(out, actions) } }
         if (chat.typing) item(key = "typing") { TypingIndicator(animated) }
     }
 }
 
 @Composable
-private fun TurnItem(turn: ChatTurn, actions: ChatActions, onOpenPreview: (PreviewRef) -> Unit) {
+private fun TurnItem(turn: ChatTurn, now: Instant, actions: ChatActions, onOpenPreview: (PreviewRef) -> Unit) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Bubble(turn.userText, mine = true)
+        // Relative like Projects and Activity; TalkBack reads the absolute UTC time too.
+        val sent = ageLabel(turn.createdAt, now)
+        Text(
+            sent.text,
+            style = MaterialTheme.typography.bodySmall,
+            color = WhumpoTheme.colors.inkMuted,
+            modifier = Modifier.align(Alignment.End).testTag("turn-time-${turn.id}").clearAndSetSemantics { contentDescription = sent.description },
+        )
         turn.assistantText?.let { Bubble(it, mine = false) }
         when (turn.status) {
             "failed" -> Note("Whumpo couldn't reply to this. Nothing was changed.")

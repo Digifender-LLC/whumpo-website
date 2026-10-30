@@ -9,6 +9,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import com.whumpo.android.ui.WhumpoApp
+import com.whumpo.android.ui.shell.DeepLink
 import com.whumpo.android.ui.theme.WhumpoTheme
 
 class MainActivity : ComponentActivity() {
@@ -43,7 +44,11 @@ class MainActivity : ComponentActivity() {
         handleLink(intent)
     }
 
-    private fun handleLink(intent: Intent?) {
-        if (intent?.action == Intent.ACTION_VIEW) intent.dataString?.let(container.auth::onReturn)
+    // Verified App Links: the hand-off return, then the Projects and Activity deep links (docs/android/app-ux.md).
+    internal fun handleLink(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_VIEW) return
+        val url = intent.dataString ?: return
+        val link = DeepLink.parse(url)
+        if (link != null) container.deepLinks.offer(link) else container.auth.onReturn(url)
     }
 }
