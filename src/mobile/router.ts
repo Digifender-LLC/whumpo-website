@@ -28,7 +28,7 @@ async function authenticated(request:Request,env:MobileEnvironment,run:(principa
  if(!token)throw signin();
  if(!(await env.API_LIMITER.limit({key:'mobile:'+ipOf(request)})).success)throw new MobileError('rate_limited');
  const principal=await mobilePrincipal(env.DB,token);
- if(!(await env.API_LIMITER.limit({key:'mobile-authority:'+principal.authorityId})).success)throw new MobileError('rate_limited');
+ if(!(await env.API_LIMITER.limit({key:'mobile-account:'+principal.accountId})).success)throw new MobileError('rate_limited');
  return run(principal,token);
 }
 export async function handleMobileRequest(request:Request,env:MobileEnvironment):Promise<Response|null>{
