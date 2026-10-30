@@ -103,6 +103,23 @@ try{
   await run("UPDATE job_journal SET state='leased',fence=1,lease_until=60000,last_event='claimed',last_at=0 WHERE id=?",job);
   await run("UPDATE job_journal SET state='awaiting',attempt=1,attempt_id=id||'.1',last_event='intent',last_at=1,last_ref=id||'.1' WHERE id=?",job);
   await run("UPDATE job_journal SET state='complete',result_ref='drill-result',lease_until=0,last_event='external_result',last_at=2,last_ref='drill-result' WHERE id=?",job);
+  // WH-127 form attachments (schema batch 3b): a records form with an upload collection, one visitor record and its attached upload,
+  // so the link, the record, the event, the upload and its photo row are archived and restored. Registry rows are written directly (the
+  // reviewed activation path is tests/form-attachments.mjs); every admission trigger stays on.
+  {
+   const at=Math.floor(ms/1000),recordsInstance=id(),filesInstance=id(),entry=id(),file=id(),request=id(),visitor=visitors[0].who,key=`photos/${app}/${file}.jpg`,bytes=Buffer.from('Synthetic drill attachment');
+   const instance=(resource,local,kind,config,dependencies)=>run("INSERT INTO module_instances(id,project_id,local_id,kind,module_digest,schema_digest,config_json,config_digest,descriptor_json,descriptor_digest,dependencies_json,config_revision,source_version_id,source_spec_digest,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,'{}',?,?,1,?,?,?,?)",
+    resource,app,local,kind,hash('module'),hash('schema'),JSON.stringify(config),hash(JSON.stringify(config)),hash('descriptor'),JSON.stringify(dependencies),id(),hash('spec'),at,at);
+   await instance(filesInstance,'media','files',{collections:[{id:'mine',read:'submitter',upload:['visitor'],maxBytes:1048576,mediaTypes:['image/jpeg'],gallery:null}]},[]);
+   await instance(recordsInstance,'requests','records',{retentionDays:30,schemas:[{id:'request',fieldsRevision:1,fields:[],staffWrite:[]}],forms:[{id:'photo-form',recordId:'request',submit:'visitor',uploadCollectionId:'mine'}],views:[]},[filesInstance]);
+   for(const resource of [filesInstance,recordsInstance])await run("INSERT INTO module_activations(instance_id,state,revision,review_id,descriptor_digest,config_revision,updated_at) VALUES(?,'active',1,?,?,1,?)",resource,id(),hash('descriptor'),at);
+   await files.put(key,bytes);objectKeys.push(key);
+   await run("INSERT INTO project_files(id,project_id,name,object_key,digest,size,width,height,status,created_at,handoff_json) VALUES(?,?,'Visitor upload drill',?,?,?,1,1,'ready',?,'null')",file,app,key,hash(bytes),bytes.length,iso);
+   await run("INSERT INTO module_files(file_id,instance_id,project_id,collection_id,uploader_kind,visitor_id,request_id,created_at) VALUES(?,?,?,'mine','visitor',?,?,?)",file,filesInstance,app,visitor,id(),at);
+   await run("INSERT INTO module_records(id,instance_id,project_id,schema_id,form_id,fields_revision,submitter_kind,visitor_id,values_json,revision,created_request_id,last_request_id,created_at,updated_at,expires_at) VALUES(?,?,?,'request','photo-form',1,'visitor',?,'{}',1,?,?,?,?,?)",entry,recordsInstance,app,visitor,request,request,at,at,at+86400*30);
+   await run("INSERT INTO module_record_events(instance_id,request_id,project_id,entry_id,event,revision,created_at) VALUES(?,?,?,?,'form.accepted',1,?)",recordsInstance,request,app,entry,at);
+   await run('INSERT INTO module_record_files(entry_id,file_id,instance_id,project_id,request_id) VALUES(?,?,?,?,?)',entry,file,recordsInstance,app,request);
+  }
   // Workspace layout cap (B11): 52 revisions leave the newest 50, and the newest receipt is never pruned.
   await run("INSERT INTO workspace_preferences(user_id,revision,layout_json,updated_at) VALUES(?,0,'{\"version\":1,\"n\":0}',?) ON CONFLICT(user_id) DO NOTHING",owner.account,iso);
   for(let n=0;n<52;n++){
@@ -110,7 +127,7 @@ try{
    await run("INSERT INTO workspace_layout_receipts(request_id,user_id,request_hash,request_json,from_revision,to_revision,previous_json,layout_json,created_at) VALUES(?,?,?,'{}',?,?,?,?,?)",id(),owner.account,hash('layout'+n),previous.revision,previous.revision+1,previous.layout_json,next,iso);
    await run('UPDATE workspace_preferences SET revision=?,layout_json=?,updated_at=? WHERE user_id=?',previous.revision+1,next,iso,owner.account);
   }
-  for(const t of ['review_receipts','cost_events','lookup_consents','connector_receipts','account_closures','rule_approvals','owner_email_changes','owner_email_change_limits','owner_security_reviews','workspace_layout_receipts','job_journal','job_journal_events','job_outbox'])seeded[t]=(await db.prepare(`SELECT count(*) n FROM ${t}`).first()).n;
+  for(const t of ['review_receipts','cost_events','lookup_consents','connector_receipts','account_closures','rule_approvals','owner_email_changes','owner_email_change_limits','owner_security_reviews','workspace_layout_receipts','job_journal','job_journal_events','job_outbox','module_records','module_files','module_record_files'])seeded[t]=(await db.prepare(`SELECT count(*) n FROM ${t}`).first()).n;
   assert.ok(Object.values(seeded).every(n=>n>=1)&&seeded.workspace_layout_receipts===50,JSON.stringify(seeded));
  }
  const reference=async(database,runtime)=>{
@@ -128,7 +145,7 @@ try{
  await mkdir(join(directory,'points'),{mode:0o700});
  const pointA=join(directory,'points','A'),snapshotA='drill-point-a';
  const capture=await phase('captureRecoveryPoint',()=>captureRecoveryPoint({sourceDb:db,objects:files,directory:pointA,snapshotId:snapshotA,workers:{runtime:runtimeBuild}}));
- assert.equal(capture.objects,2);assert.deepEqual(capture.workers,['runtime']);
+ assert.equal(capture.objects,3);assert.deepEqual(capture.workers,['runtime']);
  const pointDigestA=capture.pointDigest,archived=await openArchivedControl(pointA,pointDigestA);
  const manifest=await phase('registerArchive',async()=>{try{return await inventory.registerArchive({archiveDb:archived.db,snapshotId:snapshotA,keyBackup});}finally{archived.close();}});
  const pointBytes=await readFile(join(pointA,'control.json'));
@@ -162,14 +179,14 @@ try{
  const inspect=(extra={})=>retryIndependentEvidence(()=>inspectOnce(extra));
  const partial=await inspect();assert.deepEqual(partial.holds,['missing-objects']);holds.partialObjects=partial.holds;
  const resumed=await phase('restoreObjects',()=>restoreObjects(target.OBJECTS_A,pointA,pointDigestA));
- assert.deepEqual({written:resumed.written,skipped:resumed.skipped},{written:1,skipped:1});
- assert.deepEqual(await restoreObjects(target.OBJECTS_A,pointA,pointDigestA),{objects:2,written:0,skipped:2,preexisting:2},'Repeated restore writes nothing');
+ assert.deepEqual({written:resumed.written,skipped:resumed.skipped},{written:2,skipped:1});
+ assert.deepEqual(await restoreObjects(target.OBJECTS_A,pointA,pointDigestA),{objects:3,written:0,skipped:3,preexisting:3},'Repeated restore writes nothing');
  const restoredBuild=join(directory,'restored-runtime');
  const worker=await phase('restoreWorkerArtifact',()=>restoreWorkerArtifact(pointA,pointDigestA,'runtime',restoredBuild));
  const admitted=await phase('inspectIsolatedRestore',()=>inspect());
  assert.equal(admitted.status,'verified',JSON.stringify(admitted));
  assert.deepEqual([admitted.servingAllowed,admitted.providerDispatchAllowed,admitted.retirementAllowed],[false,false,false]);
- assert.equal(admitted.keys.credentials,4);assert.equal(admitted.objects,2);
+ assert.equal(admitted.keys.credentials,4);assert.equal(admitted.objects,3);
  const artifacts=await phase('reconcileArtifacts',()=>reconcileArtifacts(target.DRILL_A));
  assert.equal(artifacts.status,'consistent',JSON.stringify(artifacts));assert.equal(artifacts.publishedSites,1);assert.equal(artifacts.enabledApplications,1);assert.equal(artifacts.applicationDocuments,2);
  restoredRuntime=await workerd(restoredBuild);
@@ -179,7 +196,7 @@ try{
  const catalog=JSON.parse(await readFile('docs/data-lifecycle.json','utf8')),{snapshot:pointSnapshot}=await verifyRecoveryPoint(pointA,pointDigestA);
  const countRestored=async table=>(await target.DRILL_A.prepare(`SELECT count(*) n FROM "${table}"`).first()).n;
  const coverage=await phase('recoveryCoverage',()=>recoveryCoverage(pointSnapshot,countRestored,catalog));
- assert.equal(coverage.status,'complete',JSON.stringify(coverage.holds));assert.equal(coverage.tables,233);assert.equal(coverage.excluded,0);
+ assert.equal(coverage.status,'complete',JSON.stringify(coverage.holds));assert.equal(coverage.tables,234);assert.equal(coverage.excluded,0);
  for(const table of Object.keys(seeded))assert.equal(await countRestored(table),seeded[table],table+' restored with its archived rows');
  // A new table, a table that vanished from the restore, a stale exclusion and a mismatched count each fail until classified.
  const withTable=structuredClone(pointSnapshot);withTable.tables.push({name:'new_personal_data',columns:['id'],rows:[]});
@@ -187,7 +204,7 @@ try{
  holds.restoreMismatch=(await recoveryCoverage(pointSnapshot,async()=>-1,catalog)).holds;assert.deepEqual(holds.restoreMismatch,['coverage-restore-mismatch']);
  holds.staleExclusion=(await recoveryCoverage(pointSnapshot,countRestored,catalog,{retired_table:'none'})).holds;assert.deepEqual(holds.staleExclusion,['coverage-stale-exclusion']);
  const excludedCoverage=await recoveryCoverage(pointSnapshot,async()=>-1,catalog,Object.fromEntries(pointSnapshot.tables.filter(t=>t.name!=='sqlite_sequence').map(t=>[t.name,'drill rationale'])));
- assert.equal(excludedCoverage.status,'complete');assert.equal(excludedCoverage.excluded,233);
+ assert.equal(excludedCoverage.status,'complete');assert.equal(excludedCoverage.excluded,234);
  refusals+=3;
  // WH-117 key versions in the restored candidate: one registered key, all 4 credential rows under it, no running rotation.
  const keyVersions=await phase('inventoryKeyVersions',()=>inventoryKeyVersions(target.DRILL_A));

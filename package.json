@@ -144,6 +144,8 @@
     "test:rule-approvals-store": "node tests/rule-approvals-store.mjs && node tests/rule-approvals-store.mjs --d1",
     "test:schema-batch-2": "node tests/schema-batch-2.mjs && node tests/schema-batch-2.mjs --d1",
     "test:schema-batch-3a": "node tests/schema-batch-3a.mjs && node tests/schema-batch-3a.mjs --d1",
+    "test:schema-batch-3b": "node tests/schema-batch-3b.mjs && node tests/schema-batch-3b.mjs --d1",
+    "test:form-attachments": "node tests/form-attachments.mjs && node tests/form-attachments.mjs --d1",
     "test:job-journal": "node tests/job-journal.mjs && node tests/job-journal.mjs --d1",
     "test:email-change-review": "node tests/email-change-review.mjs && node tests/email-change-review.mjs --d1",
     "test:ack-timing": "node tests/ack-timing.mjs",

@@ -76,6 +76,8 @@ const metrics={
  accessRoleReceipts:['module_access_role_applies','user_id'],
  moduleRecords:['module_records','project_id IN (SELECT id FROM owned_projects)'],
  moduleFiles:['module_files','project_id IN (SELECT id FROM owned_projects)'],
+ // WH-127 form attachments (schema batch 3b): links from records to the submitter's uploads, deleted with the project.
+ moduleRecordFiles:['module_record_files','project_id IN (SELECT id FROM owned_projects)'],
  // WH-170: shadow cost events deleted with the account and its projects (no tombstones). WH-201: the account's address changes
  // (open ones and undo reservations), rate-limit evidence and compromise-review records, all deleted with the account.
  costEvents:['cost_events','owner_id'],
