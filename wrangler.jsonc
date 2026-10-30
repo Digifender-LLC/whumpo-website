@@ -56,8 +56,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "whumpo-control-2026-10-30d",
-      "database_id": "f5edb583-ece3-4d63-8378-210d6515c6d9"
+      "database_name": "whumpo-control-2026-10-30e",
+      "database_id": "fb1d7a52-e568-4d01-8573-762904fe8900"
     }
   ],
   "observability": {
