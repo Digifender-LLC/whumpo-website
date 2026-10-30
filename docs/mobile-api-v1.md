@@ -15,7 +15,7 @@ Whumpo is current-version-only ([policy](current-version-policy.md)): one contra
 ## Transport
 
 - Base `https://whumpo.com/api/mobile/v1` (HTTPS only; `local` mode may use the documented loopback origin). Responses are `application/json; charset=utf-8` with `cache-control: no-store`, `x-content-type-options: nosniff` and `referrer-policy: no-referrer`, except photo bytes (`image/jpeg`, `private, no-store`).
-- JSON requests are UTF-8, at most 16 KiB (interaction routes 32 KiB, matching [WH-105](chat-interactions.md)). Unknown or missing keys are rejected. Photo upload is the only binary request: `image/jpeg`, at most 1 MiB.
+- JSON requests are UTF-8, at most 16 KiB (interaction routes 32 KiB, matching [WH-105](chat-interactions.md)). The WebAuthn `credential` object inside `session/login/verify` and `session/reauth/verify` is further limited to 8 KiB of serialized JSON (`413 payload_too_large`); the Android client enforces the same bound. Unknown or missing keys are rejected. Photo upload is the only binary request: `image/jpeg`, at most 1 MiB.
 - Rate limits reuse the platform limiters (per client address) plus a per-session limit; exceeding returns `429 rate_limited` with `retryAfterSeconds`.
 - Every success body carries `"version": 1`. Dates are ISO-8601 UTC. IDs are lowercase UUIDs. Server cursors are opaque.
 
@@ -33,7 +33,7 @@ Declared `controls` are exactly the [admitted capabilities](#native-review-contr
 
 ## Auth and session model
 
-**Planned; schema batch 3d (WH-083) admits `client:'android'` sessions (proof `passkey` or `handoff`), android challenges and `identity_handoffs`, and `resolveIdentity` binds a token to its own client, but no mobile route exists; before it only `client:'web'` sessions and WebAuthn challenges were accepted** ([authority](../src/workspace-identity/authority.ts), [ceremonies](../src/workspace-identity/ceremonies.ts)). WH-083 adds a distinct `android` client kind in the same identity tables and resolver, not a second authority model.
+**Implemented for identity and session transport (WH-083 M1: `config`, `session/login/*`, `session/reauth/*`, `GET session`, `session/logout`; the handoff operations and every later group remain planned).** Schema batch 3d (WH-083) admits `client:'android'` sessions (proof `passkey` or `handoff`), android challenges and `identity_handoffs`, and `resolveIdentity` binds a token to its own client, but no mobile route exists; before it only `client:'web'` sessions and WebAuthn challenges were accepted** ([authority](../src/workspace-identity/authority.ts), [ceremonies](../src/workspace-identity/ceremonies.ts)). WH-083 adds a distinct `android` client kind in the same identity tables and resolver, not a second authority model.
 
 - **Issue.** A native session exists only after (a) a Credential Manager passkey assertion for an `ready` account, or (b) a PKCE-bound handoff exchange for an account whose browser enrollment/recovery completed. Native never receives an enrollment or recovery grant. `session/login/verify` for an `enrolling` or `recovering` account issues nothing and returns `403 identity_incomplete` with `next:"browser"`.
 - **Token.** 256-bit random, stored only as a hash, bound to the account, authority epoch, policy version 1, `client:'android'`, authenticating credential and **actual** passkey verification time. It travels only in `Authorization`. It is held in Android Keystore-protected app-private storage, excluded from backups, logs, URLs, model context and WebViews, and never copied into a browser cookie or query string.
