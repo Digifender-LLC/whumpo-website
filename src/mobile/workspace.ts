@@ -16,10 +16,10 @@ import {MobileError,declaredControls,fresh,ok,readJson,signin,type MobileEnviron
 export type MobileDeps={chatOptions:(scoped:Env,userId:string)=>unknown};
 type Row=Record<string,any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
-const iso=(s:string)=>new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(s)?s:s.replace(' ','T')+'Z').toISOString();
+export const iso=(s:string)=>new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(s)?s:s.replace(' ','T')+'Z').toISOString();
 
 /** The web dispatcher's gate, verbatim: scoped DB and bindings for this principal, the current-identity assert after the handler. */
-async function workspace(env:MobileEnvironment,principal:IdentityPrincipal,onboarding:boolean,run:(scoped:Env,user:string)=>Promise<Response>){
+export async function workspace(env:MobileEnvironment,principal:IdentityPrincipal,onboarding:boolean,run:(scoped:Env,user:string)=>Promise<Response>){
  try{
   const scoped=workspaceBindings(env,admitWorkspace(env.DB,principal),principal.accountId);
   if(!await scoped.DB.prepare('SELECT id FROM users WHERE id=?').bind(principal.accountId).first())throw signin();

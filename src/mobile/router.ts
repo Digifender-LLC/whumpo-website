@@ -5,6 +5,8 @@ import {bearerToken,mobilePrincipal} from './auth';
 import {config,loginOptionsOperation,loginVerifyOperation,logoutOperation,reauthOptionsOperation,reauthVerifyOperation,sessionOperation} from './identity';
 import {handoffExchangeOperation,handoffStartOperation} from './handoff';
 import {bootstrap,chatList,chatTurn,confirmReview,reviewList,sendMessage,type MobileDeps} from './workspace';
+import {interaction} from './interactions';
+import {activityList,projectList,projectRead,projectVersions} from './projects';
 import {MobileError,admitClient,refusal,signin,type MobileEnvironment} from './transport';
 
 const base='/api/mobile',prefix='/api/mobile/v1/';
@@ -68,6 +70,13 @@ export async function handleMobileRequest(request:Request,env:MobileEnvironment,
   if(method==='POST'&&action==='chat/messages')return await authenticated(request,env,p=>sendMessage(request,env,p,deps));
   if(method==='GET'&&action==='reviews')return await authenticated(request,env,p=>reviewList(request,env,p));
   if(method==='POST'&&action==='reviews/confirm')return await authenticated(request,env,p=>confirmReview(request,env,p,deps));
+  const iAction=/^interactions\/(list|read|resources|mutate|receipt|continue|stop|reconcile)$/.exec(action);
+  if(method==='POST'&&iAction)return await authenticated(request,env,p=>interaction(request,env,p,iAction[1]));
+  if(method==='GET'&&action==='projects')return await authenticated(request,env,p=>projectList(request,env,p),true);
+  const projectId=/^projects\/([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})(\/versions)?$/.exec(action);
+  if(method==='GET'&&projectId&&!projectId[2])return await authenticated(request,env,p=>projectRead(env,p,projectId[1]));
+  if(method==='GET'&&projectId)return await authenticated(request,env,p=>projectVersions(request,env,p,projectId[1]),true);
+  if(method==='GET'&&action==='activity')return await authenticated(request,env,p=>activityList(request,env,p),true);
   throw new MobileError('not_found');
  }catch(error){
   // Unexpected failures may carry SQL or provider detail and a token-bearing request: never serialized, never logged.
