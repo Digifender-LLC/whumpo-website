@@ -175,8 +175,8 @@ class ScreensScreenshotTest : RobolectricUiTest() {
 
     /**
      * Play listing images: synthetic content only, light and dark. No "show more" links and no notice banner, so the
-     * frames read as finished screens. Tablets show the project detail instead of the list: the list is a single
-     * narrow column below 840dp and would leave most of the frame empty.
+     * frames read as finished screens. Tablets show only chat and the project detail: the list and Activity are short
+     * single columns below 840dp and would leave most of the frame empty.
      */
     @Test
     fun storeListing() {
@@ -200,7 +200,6 @@ class ScreensScreenshotTest : RobolectricUiTest() {
             captureStore("4-activity", StoreDevice.Phone, dark, activityScene)
             for (device in listOf(StoreDevice.Tablet7, StoreDevice.Tablet10)) {
                 captureStore("2-project-detail", device, dark, detailScene)
-                captureStore("3-activity", device, dark, activityScene)
             }
         }
     }
