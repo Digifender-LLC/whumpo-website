@@ -3,7 +3,12 @@ import { mkdirSync, writeFileSync, unlinkSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 
-const local = process.argv.includes("--local");
+// B7: preview by default; nothing is generated or written until --apply (remote database) or --apply --local.
+const apply = process.argv.includes("--apply"), local = process.argv.includes("--local");
+if (!apply) {
+  console.log(`Preview only: would create one single-use, seven-day invitation in the ${local ? "local" : "remote"} control database. Nothing was written.\nRun with --apply to create it${local ? "" : " (add --local for the local database)"}.`);
+  process.exit(0);
+}
 const code = randomBytes(24).toString("hex");
 const digest = createHash("sha256").update(code).digest("hex");
 const now = new Date();

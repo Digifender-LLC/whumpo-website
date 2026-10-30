@@ -4,12 +4,12 @@ import {spawnSync} from 'node:child_process';
 import {build} from 'esbuild';
 import {cloudflareClient,cmsCloudflareProvider,remoteD1} from './cms-cloudflare.mjs';
 import {frozenArtifact,cmsMasterKey,instanceConfig,workerExists,activeWorker,runWrangler,privateCMSProbe} from './cms-release.mjs';
-import {deployPlatform} from './deploy-platform.mjs';
+import {deployPlatform,assertTestPlatform} from './deploy-platform.mjs';
 async function module(path){const code=await build({entryPoints:[path],bundle:true,format:'esm',platform:'node',write:false});return import('data:text/javascript;base64,'+Buffer.from(code.outputFiles[0].text).toString('base64'));}
 async function main(){
  const args=process.argv.slice(2),project=args[0],storageOnly=args[1]==='--storage-only';
  if(args.length>2||args.length===2&&!storageOnly||project!=='--list'&&!/^[0-9a-f-]{36}$/.test(project??''))throw Error('Usage: node tools/provision-cms.mjs --list | PROJECT_ID [--storage-only]');
- const base=JSON.parse(await readFile('wrangler.jsonc','utf8')),database=base.d1_databases.find(x=>x.binding==='DB'),api=cloudflareClient(base.account_id),db=remoteD1(api,database.database_id);
+ const base=JSON.parse(await readFile('wrangler.jsonc','utf8'));assertTestPlatform(base);const database=base.d1_databases.find(x=>x.binding==='DB'),api=cloudflareClient(base.account_id),db=remoteD1(api,database.database_id);
  if(project==='--list'){const {results}=await db.prepare("SELECT project_id,state FROM cms_instances WHERE state<>'ready' ORDER BY created_at LIMIT 5").all();console.log(JSON.stringify({instances:results}));return;}
  const before=await db.prepare('SELECT state FROM cms_instances WHERE project_id=?').bind(project).first();if(before?.state==='ready'){console.log('CMS is already initialized and connected; use /check-cms '+project);return;}
  // Validate and freeze the native build before allocating hosted resources.
