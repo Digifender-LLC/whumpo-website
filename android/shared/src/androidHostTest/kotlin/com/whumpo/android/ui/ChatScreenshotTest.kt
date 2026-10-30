@@ -120,14 +120,15 @@ class ChatScreenshotTest : RobolectricUiTest() {
         sheet("review-stale", s.flow(ReviewStep.NoLongerCurrent, "This review is no longer current. Nothing was changed."))
     }
 
-    /** Play listing image 1: the conversation with a draft, synthetic content from the frozen fixtures. */
+    /** Play listing image 1: the end of the conversation with a draft; phones show one turn so no card is cut at the top. */
     @Test
     fun storeListing() {
         val s = ChatScenes
         for (device in StoreDevice.entries) for (dark in listOf(false, true)) {
             val width = WidthClass.of(device.widthDp.dp)
+            val turns = s.turns.takeLast(if (device == StoreDevice.Phone) 1 else 2)
             captureStore("1-chat", device, dark) {
-                ChatLayout(s.screen(s.ready, draft = "Add a ceramic coating service for $300."), width, NoChatActions, animated = false)
+                ChatLayout(s.screen(s.ready.copy(turns = turns), draft = "Add a ceramic coating service for $300."), width, NoChatActions, animated = false)
             }
         }
     }

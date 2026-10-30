@@ -55,7 +55,9 @@ cd android
 ./gradlew connectedLocalDebugAndroidTest
 ```
 
-Debug APKs are written to `android/androidApp/build/outputs/apk/{local,deployed}/debug/`. Build outputs (`.gradle/`, `.kotlin/`, `build/`), `local.properties` and signing files (`*.jks`, `*.keystore`) are gitignored. There is no release signing configuration.
+Debug APKs are written to `android/androidApp/build/outputs/apk/{local,deployed}/debug/`. Build outputs (`.gradle/`, `.kotlin/`, `build/`), `local.properties` and signing files (`*.jks`, `*.keystore`) are gitignored.
+
+**Release build (WH-087 prep).** `release` is minified with R8 and resource shrinking (`androidApp/proguard-rules.pro`: kotlinx.serialization, Ktor and Credential Manager rules). The manual `release_bundle` input of the Android workflow builds `bundleDeployedRelease`, uploads the AAB and R8 mapping, then installs the minified APK on an API 36 emulator and runs `android/scripts/smoke-release.sh` (welcome screen renders, the first API call runs, no crash or stripped class in logcat). The instrumented suite still targets debug builds. Signing reads `WHUMPO_UPLOAD_STORE_FILE`, `WHUMPO_UPLOAD_STORE_PASSWORD`, `WHUMPO_UPLOAD_KEY_ALIAS` and `WHUMPO_UPLOAD_KEY_PASSWORD` from the environment; without all four the build uses the debug key and is labelled `-debugsigned` and not for upload. Version: `android/version.properties` plus the workflow run number. Owner steps: [release-checklist](android/release-checklist.md).
 
 ## Environments
 

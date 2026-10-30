@@ -173,12 +173,35 @@ class ScreensScreenshotTest : RobolectricUiTest() {
         capture("project-detail", Screen.Compact, dark = false, fontScale = 2f, content = scenes.first { it.first == "project-detail" }.second)
     }
 
-    /** Play listing images: synthetic content only, phone and two tablet sizes, light and dark. */
+    /**
+     * Play listing images: synthetic content only, light and dark. No "show more" links and no notice banner, so the
+     * frames read as finished screens. Tablets show the project detail instead of the list: the list is a single
+     * narrow column below 840dp and would leave most of the frame empty.
+     */
     @Test
     fun storeListing() {
-        for ((file, scene) in listOf("2-projects" to "projects-list", "3-project-detail" to "project-detail", "4-activity" to "activity")) {
-            val content = scenes.first { it.first == scene }.second
-            for (device in StoreDevice.entries) for (dark in listOf(false, true)) captureStore(file, device, dark, content)
+        val list: @Composable () -> Unit = {
+            Sized { w ->
+                ProjectsContent(UiState.Content(projects.copy(nextCursor = null)), null, UiState.Loading, PhotosState(), w, links, ProjectsActions())
+            }
+        }
+        val activityScene: @Composable () -> Unit = {
+            Sized { w ->
+                ActivityContent(
+                    UiState.Content(activity.copy(nextCursor = null)), null, w, links,
+                    onRefresh = {}, onLoadMore = {}, onDismissNotice = {}, onGoToChat = {},
+                )
+            }
+        }
+        val detailScene = scenes.first { it.first == "project-detail" }.second
+        for (dark in listOf(false, true)) {
+            captureStore("2-projects", StoreDevice.Phone, dark, list)
+            captureStore("3-project-detail", StoreDevice.Phone, dark, detailScene)
+            captureStore("4-activity", StoreDevice.Phone, dark, activityScene)
+            for (device in listOf(StoreDevice.Tablet7, StoreDevice.Tablet10)) {
+                captureStore("2-project-detail", device, dark, detailScene)
+                captureStore("3-activity", device, dark, activityScene)
+            }
         }
     }
 }
