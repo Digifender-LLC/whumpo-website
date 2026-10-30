@@ -268,7 +268,7 @@ class AuthControllerTest {
 
         auth.openSetup()
         await(AuthState.WaitingForBrowser())
-        assertEquals("signup", body("/session/handoff/start")["purpose"]!!.jsonPrimitive.content)
+        assertEquals("signin", body("/session/handoff/start")["purpose"]!!.jsonPrimitive.content)
         assertEquals(listOf("https://whumpo.com$browserPath"), browser.opened.toList())
     }
 
@@ -337,6 +337,58 @@ class AuthControllerTest {
         auth.onReturn("https://whumpo.com/app/return?code=$code&state=${"x".repeat(43)}")
         await(AuthState.SignedOut(AuthProblem.HandoffFailed))
         assertFalse(paths().contains("/session/handoff/exchange"))
+    }
+
+    @Test
+    fun onlyAStrictCodeAndStateAreExchanged() = test {
+        auth.signInWithBrowser()
+        await(AuthState.WaitingForBrowser())
+        val state = body("/session/handoff/start")["state"]!!.jsonPrimitive.content
+        val base = "https://whumpo.com/app/return"
+        // Malformed or repeated pairs are ignored; they never reach the exchange.
+        auth.onReturn("$base?code=$code&state=$state&code=$code")
+        auth.onReturn("$base?code=$code&state=$state&junk")
+        settle()
+        assertEquals(AuthState.WaitingForBrowser(), auth.state.value)
+        // An extra name is refused and spends the hand-off.
+        auth.onReturn("$base?code=$code&state=$state&extra=1")
+        await(AuthState.SignedOut(AuthProblem.HandoffFailed))
+        assertFalse(paths().contains("/session/handoff/exchange"))
+    }
+
+    @Test
+    fun anUppercaseCodeIsRefused() = test {
+        auth.signInWithBrowser()
+        await(AuthState.WaitingForBrowser())
+        auth.onReturn("https://whumpo.com/app/return?code=${"A".repeat(64)}&state=${body("/session/handoff/start")["state"]!!.jsonPrimitive.content}")
+        await(AuthState.SignedOut(AuthProblem.HandoffFailed))
+        assertFalse(paths().contains("/session/handoff/exchange"))
+    }
+
+    @Test
+    fun aShortCodeIsRefused() = test {
+        auth.signInWithBrowser()
+        await(AuthState.WaitingForBrowser())
+        auth.onReturn("https://whumpo.com/app/return?code=${code.dropLast(1)}&state=${body("/session/handoff/start")["state"]!!.jsonPrimitive.content}")
+        await(AuthState.SignedOut(AuthProblem.HandoffFailed))
+        assertFalse(paths().contains("/session/handoff/exchange"))
+    }
+
+    @Test
+    fun anOversizedCredentialIsRefusedLocally() = test {
+        passkeys.next = PasskeyResult.Assertion("""{"id":"${"A".repeat(8 * 1024)}"}""")
+        auth.signInWithPasskey()
+        await(AuthState.SignedOut(AuthProblem.CredentialTooLarge))
+        assertFalse(paths().contains("/session/login/verify"))
+    }
+
+    @Test
+    fun aCredentialAtTheLimitIsSent() = test {
+        val pad = 8 * 1024 - CREDENTIAL.toByteArray().size
+        passkeys.next = PasskeyResult.Assertion(CREDENTIAL.replace("\"id\":\"AAAA\"", "\"id\":\"AAAA${"A".repeat(pad)}\""))
+        auth.signInWithPasskey()
+        await(AuthState.Ready)
+        assertTrue(paths().contains("/session/login/verify"))
     }
 
     @Test
