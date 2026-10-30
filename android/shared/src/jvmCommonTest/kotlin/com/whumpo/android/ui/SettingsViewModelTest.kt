@@ -17,10 +17,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -47,8 +45,7 @@ class SettingsViewModelTest {
     @Before
     fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
 
-    @After
-    fun tearDown() = Dispatchers.resetMain()
+    // Main is deliberately not reset: a request still in flight when a test ends must not resume on a missing Main.
 
     private fun viewModel(push: PushMessaging = NoOpPushMessaging) = SettingsViewModel(
         account, api.client, api.sessions, themes, DeviceNotifications(api.client, push), push,
