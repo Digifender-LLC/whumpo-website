@@ -223,10 +223,12 @@ try{
  await cleanIdentityCeremonies(db);assert.equal(await row('SELECT 1 FROM identity_grants WHERE id=?',oldGrant.id),null);
  assert(await row('SELECT 1 FROM identity_credentials WHERE id=?',pending.key.id));assert(await row('SELECT 1 FROM identity_attempts WHERE id=?',oldGrant.attempt_id));
  const recoveredProgress=await login(pending.key,1);assert.equal(recoveredProgress.kind,'grant');
- // Android: only the Play app-signing key's origin passes; any other apk-key-hash is refused; the web origin still works.
+ // A web challenge accepts only the web origin: the Android origin (even the Play app-signing key's) is refused, as is any other apk-key-hash.
+ // Android challenges and their allowlist are covered in tests/schema-batch-3d.mjs (WH-083).
  const androidOrigin='android:apk-key-hash:QIuPjqrfQ6lf1stq7YPW5L2KAdPjL4gb2S3uMfLp3P4';
  for(const atOrigin of ['android:apk-key-hash:JjnfpHbcaqW-f-R2JEeiuSIvfNgU_baB5l9HWB5zwGM','android:apk-key-hash:','android:apk-key-hash:'+androidOrigin.slice(21)+'A','android:apk-key-hash:qIuPjqrfQ6lf1stq7YPW5L2KAdPjL4gb2S3uMfLp3P4'])await denies(()=>login(pending.key,2,{atOrigin}),'proof_required');
- assert.equal((await login(pending.key,2,{atOrigin:androidOrigin})).kind,'grant');
+ await denies(()=>login(pending.key,2,{atOrigin:androidOrigin}),'proof_required');
+ assert.equal((await login(pending.key,2)).kind,'grant');
  assert.equal((await login(pending.key,3)).kind,'grant');
  const spent=await enroll(),spentHash=await hashToken(spent.data.inviteCode);
  await run('DELETE FROM users WHERE id=?',spent.access.principal.accountId);

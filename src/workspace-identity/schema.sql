@@ -56,12 +56,13 @@ CREATE TABLE identity_sessions (
  account_id TEXT NOT NULL REFERENCES identity_accounts(account_id) ON DELETE CASCADE,
  policy_version INTEGER NOT NULL CHECK(policy_version=1),
  auth_epoch INTEGER NOT NULL CHECK(auth_epoch BETWEEN 1 AND 9007199254740991),
- client TEXT NOT NULL CHECK(client='web'),
+ client TEXT NOT NULL CHECK(client IN ('web','android')),
  credential_id TEXT NOT NULL,
- proof_method TEXT NOT NULL CHECK(proof_method='passkey'),
+ proof_method TEXT NOT NULL CHECK(proof_method IN ('passkey','handoff')),
  proof_at INTEGER NOT NULL CHECK(proof_at>=0),
  issued_at INTEGER NOT NULL CHECK(issued_at>=proof_at),
  expires_at INTEGER NOT NULL CHECK(expires_at>issued_at AND expires_at<=proof_at+604800),
+ CHECK(proof_method='passkey' OR client='android'),
  FOREIGN KEY(credential_id,account_id) REFERENCES identity_credentials(id,account_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX identity_sessions_account ON identity_sessions(account_id,issued_at);
@@ -98,9 +99,9 @@ CREATE TABLE identity_challenges (
  challenge TEXT NOT NULL CHECK(length(challenge) BETWEEN 32 AND 256),
  kind TEXT NOT NULL CHECK(kind IN ('signup','login','add','reauth','recovery_complete')),
  policy_version INTEGER NOT NULL CHECK(policy_version=1),
- client TEXT NOT NULL CHECK(client='web'),
- origin TEXT NOT NULL CHECK(origin IN ('https://whumpo.com','http://localhost:8787')),
- rp_id TEXT NOT NULL CHECK((origin='https://whumpo.com' AND rp_id='whumpo.com') OR (origin='http://localhost:8787' AND rp_id='localhost')),
+ client TEXT NOT NULL CHECK(client IN ('web','android')),
+ origin TEXT NOT NULL,
+ rp_id TEXT NOT NULL,
  account_id TEXT,
  email TEXT,
  invite_hash TEXT,
@@ -119,6 +120,8 @@ CREATE TABLE identity_challenges (
  CHECK((kind='signup' AND account_id IS NOT NULL AND email IS NOT NULL AND invite_hash IS NOT NULL AND eligibility_version IS NOT NULL AND authority_id IS NULL)
   OR (kind='login' AND account_id IS NULL AND authority_id IS NULL)
   OR (kind IN ('add','reauth','recovery_complete') AND account_id IS NOT NULL AND authority_id IS NOT NULL AND authority_kind IS NOT NULL AND auth_epoch IS NOT NULL AND credential_revision IS NOT NULL)),
+ CHECK((client='web' AND ((origin='https://whumpo.com' AND rp_id='whumpo.com') OR (origin='http://localhost:8787' AND rp_id='localhost')))
+  OR (client='android' AND origin GLOB 'android:apk-key-hash:*' AND length(origin)<=120 AND rp_id='whumpo.com' AND kind IN ('login','reauth'))),
  UNIQUE(account_id,request_id)
 ) STRICT;
 CREATE INDEX identity_challenges_expiry ON identity_challenges(expires_at);
@@ -128,6 +131,42 @@ WHEN (SELECT count(*) FROM identity_challenges)>=5000
 BEGIN SELECT RAISE(ABORT,'identity_challenge_limit'); END;
 CREATE TRIGGER identity_challenge_immutable BEFORE UPDATE ON identity_challenges
 BEGIN SELECT RAISE(ABORT,'identity_challenge_immutable'); END;
+
+-- WH-083 native handoff: the app's browser-held token, then one 60-second code bound to a ready account's browser session, then consumed once.
+-- No token or code is stored, only hashes. Native never receives a grant.
+CREATE TABLE identity_handoffs (
+ id TEXT PRIMARY KEY CHECK(length(id)=36),
+ browser_token_hash TEXT NOT NULL UNIQUE CHECK(length(browser_token_hash)=64 AND browser_token_hash NOT GLOB '*[^0-9a-f]*'),
+ purpose TEXT NOT NULL CHECK(purpose IN ('signin','signup','recovery')),
+ state TEXT NOT NULL CHECK(length(state) BETWEEN 16 AND 128 AND state NOT GLOB '*[^A-Za-z0-9_-]*'),
+ code_challenge TEXT NOT NULL CHECK(length(code_challenge)=43 AND code_challenge NOT GLOB '*[^A-Za-z0-9_-]*'),
+ redirect_uri TEXT NOT NULL CHECK(redirect_uri='https://whumpo.com/app/return'),
+ created_at INTEGER NOT NULL CHECK(created_at>=0),
+ expires_at INTEGER NOT NULL CHECK(expires_at>created_at AND expires_at<=created_at+300),
+ account_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+ source_session_id TEXT REFERENCES identity_sessions(id) ON DELETE CASCADE,
+ auth_epoch INTEGER CHECK(auth_epoch BETWEEN 1 AND 9007199254740991),
+ code_hash TEXT UNIQUE CHECK(code_hash IS NULL OR (length(code_hash)=64 AND code_hash NOT GLOB '*[^0-9a-f]*')),
+ code_issued_at INTEGER CHECK(code_issued_at>=0),
+ code_expires_at INTEGER CHECK(code_expires_at>code_issued_at AND code_expires_at<=code_issued_at+60),
+ native_session_id TEXT UNIQUE CHECK(length(native_session_id)=36),
+ CHECK((account_id IS NULL AND source_session_id IS NULL AND auth_epoch IS NULL AND code_hash IS NULL AND code_issued_at IS NULL AND code_expires_at IS NULL)
+  OR (account_id IS NOT NULL AND source_session_id IS NOT NULL AND auth_epoch IS NOT NULL AND code_hash IS NOT NULL AND code_issued_at IS NOT NULL AND code_expires_at IS NOT NULL)),
+ CHECK(native_session_id IS NULL OR account_id IS NOT NULL)
+) STRICT;
+CREATE INDEX identity_handoffs_expiry ON identity_handoffs(expires_at);
+CREATE TRIGGER identity_handoff_limit BEFORE INSERT ON identity_handoffs
+WHEN (SELECT count(*) FROM identity_handoffs)>=2000
+BEGIN SELECT RAISE(ABORT,'identity_handoff_limit'); END;
+-- Exactly two moves, each once: unbound -> code issued, then issued -> consumed. Nothing else may change.
+CREATE TRIGGER identity_handoff_transition BEFORE UPDATE ON identity_handoffs
+WHEN NEW.id IS NOT OLD.id OR NEW.browser_token_hash IS NOT OLD.browser_token_hash OR NEW.purpose IS NOT OLD.purpose OR NEW.state IS NOT OLD.state
+ OR NEW.code_challenge IS NOT OLD.code_challenge OR NEW.redirect_uri IS NOT OLD.redirect_uri OR NEW.created_at IS NOT OLD.created_at OR NEW.expires_at IS NOT OLD.expires_at
+ OR NOT ((OLD.account_id IS NULL AND NEW.account_id IS NOT NULL AND NEW.native_session_id IS NULL)
+  OR (OLD.account_id IS NOT NULL AND OLD.native_session_id IS NULL AND NEW.native_session_id IS NOT NULL
+   AND NEW.account_id IS OLD.account_id AND NEW.source_session_id IS OLD.source_session_id AND NEW.auth_epoch IS OLD.auth_epoch
+   AND NEW.code_hash IS OLD.code_hash AND NEW.code_issued_at IS OLD.code_issued_at AND NEW.code_expires_at IS OLD.code_expires_at))
+BEGIN SELECT RAISE(ABORT,'identity_handoff_transition'); END;
 
 -- An execution nonce fences a losing/replayed commit. No tokens or proof bodies are retained.
 CREATE TABLE identity_ceremony_receipts (
@@ -338,9 +377,9 @@ SELECT s.id AS authority_id,'session' AS kind,s.token_hash,s.account_id,'workspa
 FROM identity_sessions s
 JOIN identity_accounts a ON a.account_id=s.account_id
 JOIN identity_credentials c ON c.id=s.credential_id AND c.account_id=s.account_id
-WHERE a.policy_version=1 AND s.policy_version=1 AND s.client='web' AND s.auth_epoch=a.auth_epoch
+WHERE a.policy_version=1 AND s.policy_version=1 AND s.client IN ('web','android') AND s.auth_epoch=a.auth_epoch
  AND a.stage='ready' AND a.current_attempt_id IS NULL AND a.kit_generation>0 AND a.completion_receipt_id IS NOT NULL
- AND c.status='active' AND s.proof_method='passkey'
+ AND c.status='active' AND s.proof_method IN ('passkey','handoff')
  AND s.proof_at<=unixepoch() AND s.issued_at<=unixepoch() AND s.expires_at>unixepoch()
 UNION ALL
 SELECT g.id,'grant',g.token_hash,g.account_id,g.purpose,g.policy_version,g.auth_epoch,g.client,a.stage,a.credential_revision,

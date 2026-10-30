@@ -5,6 +5,7 @@ import {hashToken,newSessionToken} from '../security';
 import {IdentityError,assertCurrentIdentity,identityPredicate,resolveIdentity,type IdentityPrincipal,type IdentityPolicy} from './authority';
 
 import {identityRecord as record,identityRequestContext as context,identityDatabaseError as databaseError,identityChanged as changed,identityUnavailable as unavailable,invalidIdentityRequest as invalid,identityUUID as uuid,type IdentityEnvironment as Environment} from './protocol';
+type Client='web'|'android';
 type Kind='signup'|'login'|'add'|'reauth'|'recovery_complete';
 type Challenge={id:string;kind:Kind;challenge:string;origin:string;rp_id:string;policy_version:number;client:string;account_id:string|null;
  email:string|null;invite_hash:string|null;eligibility_version:string|null;authority_id:string|null;authority_kind:string|null;
@@ -33,6 +34,7 @@ export async function cleanIdentityCeremonies(db:D1Database){
  // Bounded, expired admission only. Verified pending progress is never timed out.
  await db.batch([
   db.prepare('DELETE FROM identity_challenges WHERE id IN (SELECT id FROM identity_challenges WHERE expires_at<=unixepoch() ORDER BY expires_at LIMIT 500)'),
+  db.prepare('DELETE FROM identity_handoffs WHERE id IN (SELECT id FROM identity_handoffs WHERE expires_at<=unixepoch() ORDER BY expires_at LIMIT 500)'),
   db.prepare('DELETE FROM identity_grants WHERE id IN (SELECT id FROM identity_grants WHERE expires_at<=unixepoch() ORDER BY expires_at LIMIT 500)'),
   db.prepare('DELETE FROM identity_sessions WHERE id IN (SELECT id FROM identity_sessions WHERE expires_at<=unixepoch() ORDER BY expires_at LIMIT 500)'),
   db.prepare('DELETE FROM identity_ceremony_receipts WHERE id IN (SELECT id FROM identity_ceremony_receipts WHERE created_at<=unixepoch()-604800 ORDER BY created_at LIMIT 500)'),
@@ -55,19 +57,19 @@ async function turnstile(request:Request,env:Environment,token:unknown,origin:st
   if(result?.success!==true||result.hostname!==new URL(origin).hostname||result.action!=='register')throw proof();
  }catch(error){if(error instanceof IdentityError)throw error;throw unavailable();}
 }
-export async function consumeIdentityChallenge(db:D1Database,token:unknown,kind:Kind,rp:ReturnType<typeof context>){
+export async function consumeIdentityChallenge(db:D1Database,token:unknown,kind:Kind,rp:ReturnType<typeof context>,client:Client='web'){
  if(typeof token!=='string'||!/^[0-9a-f]{64}$/.test(token))throw proof();
  // Invalid responses and wrong-kind attempts burn the presented challenge too.
  const c=await db.prepare('DELETE FROM identity_challenges WHERE token_hash=? RETURNING *,unixepoch() AS consumed_at').bind(await hashToken(token)).first<Challenge>();
- if(!c||c.kind!==kind||c.expires_at<=c.consumed_at||c.policy_version!==1||c.client!=='web'||c.origin!==rp.origin||c.rp_id!==rp.rpID)throw proof();
+ if(!c||c.kind!==kind||c.expires_at<=c.consumed_at||c.policy_version!==1||c.client!==client||c.origin!==rp.origin||c.rp_id!==rp.rpID||(client==='android'&&!androidPasskeyOrigins.includes(c.origin)))throw proof();
  return c;
 }
-export async function saveIdentityChallenge(db:D1Database,rp:ReturnType<typeof context>,kind:Kind,challenge:string,fields:{accountId?:string;email?:string;inviteHash?:string;p?:IdentityPrincipal;requestId:string;requestHash:string;name?:string}){
+export async function saveIdentityChallenge(db:D1Database,rp:ReturnType<typeof context>,kind:Kind,challenge:string,fields:{accountId?:string;email?:string;inviteHash?:string;p?:IdentityPrincipal;requestId:string;requestHash:string;name?:string},client:Client='web'){
  const id=crypto.randomUUID(),token=newSessionToken(),p=fields.p;
  const gate=p?identityPredicate(db,p,(kind==='reauth'||kind==='recovery_complete')?{purpose:p.purpose,freshPasskey:false,bindIdentityRevision:true}:operationPolicy(p)):null;
  // INSERT ... SELECT allows the same committing guard as credential changes.
- const query=`INSERT INTO identity_challenges SELECT ?,?,?,?,1,'web',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,unixepoch(),unixepoch()+300${gate?` WHERE ${gate.sql}`:''}`;
- const statement=db.prepare(query).bind(id,await hashToken(token),challenge,kind,rp.origin,rp.rpID,fields.accountId??p?.accountId??null,fields.email??null,fields.inviteHash??null,kind==='signup'?customerEligibilityVersion:null,
+ const query=`INSERT INTO identity_challenges SELECT ?,?,?,?,1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,unixepoch(),unixepoch()+300${gate?` WHERE ${gate.sql}`:''}`;
+ const statement=db.prepare(query).bind(id,await hashToken(token),challenge,kind,client,rp.origin,rp.rpID,fields.accountId??p?.accountId??null,fields.email??null,fields.inviteHash??null,kind==='signup'?customerEligibilityVersion:null,
   p?.authorityId??null,p?.kind??null,p?.authEpoch??null,p?.credentialRevision??null,p?.attempt?.id??null,p?.attempt?.revision??null,fields.requestId,fields.requestHash,fields.name??null,...(gate?.params??[]));
  try{if((await statement.run()).meta.changes!==1)throw changed();}catch(error){databaseError(error);}
  return {challengeToken:token};
@@ -189,6 +191,8 @@ export async function reauthenticationOptions(request:Request,env:Environment,p:
 }
 export async function verifyIdentityAssertion(env:Environment,c:Challenge,input:unknown,p?:IdentityPrincipal){
  const response=credential(input) as AuthenticationResponseJSON;
+ // The challenge's own origin only; an android challenge must also be an allowlisted apk-key-hash origin.
+ if(c.client==='android'&&!androidPasskeyOrigins.includes(c.origin))throw proof();
  if(typeof response.id!=='string'||!/^[A-Za-z0-9_-]{1,1024}$/.test(response.id))throw proof();
  const key=await env.DB.prepare('SELECT * FROM identity_authentication_candidates WHERE id=?').bind(response.id).first<Candidate>();
  if(!key||(p&&key.account_id!==p.accountId))throw proof();
@@ -197,7 +201,7 @@ export async function verifyIdentityAssertion(env:Environment,c:Challenge,input:
  if(p?(returnedHandle!=null&&returnedHandle!==handle):returnedHandle!==handle)throw proof();
  let newCounter:number;
  try{
-  const result=await verifyAuthenticationResponse({response,expectedChallenge:c.challenge,expectedOrigin:[c.origin,...androidPasskeyOrigins],expectedRPID:c.rp_id,requireUserVerification:true,
+  const result=await verifyAuthenticationResponse({response,expectedChallenge:c.challenge,expectedOrigin:[c.origin],expectedRPID:c.rp_id,requireUserVerification:true,
    credential:{id:key.id,publicKey:new Uint8Array(key.public_key),counter:key.counter}});
   if(!result.verified)throw proof();newCounter=result.authenticationInfo.newCounter;
  }catch{throw proof();}
