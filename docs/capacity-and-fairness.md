@@ -14,7 +14,7 @@ node tools/capacity.mjs --json out.json --scale 2 --tenants 6 --seed 7
 
 - Options: `--smoke`, `--scale N` (site/photo volume multiplier, 1 to 4), `--tenants N` (2 to 8, one is always the noisy tenant), `--seed N` (deterministic job order), `--json FILE`. Also `pnpm capacity` with the same arguments.
 - The harness refuses to run if `.env`/`.dev.vars` files exist, strips the environment to the allowlist used by [verification profiles](verification.md) (no provider keys, proxies, `NODE_OPTIONS` or Wrangler auth, temporary `HOME`), and replaces global `fetch` with a guard that throws for any host other than `127.0.0.1`/`localhost`. All state lives in temporary directories removed at exit.
-- The repository requires Node.js 24. The recorded run used **Node 22.22.0**, which only prints a warning here (unlike `pnpm verify`, which refuses); re-record on Node 24 before relying on the numbers.
+- The repository requires Node.js 24. The recorded run used **Node 22.22.0**, which only prints a warning here (unlike `pnpm verify`, which refuses); it was re-recorded on Node 24.21.0 on October 30, 2026 UTC (see the [re-record](#wh-050-re-record-on-node-24-with-the-serving-stop-check--october-30-2026-utc)).
 - Volumes are bounded: a fixed job count per scenario, 3 closed-loop clients per victim tenant and 24 for the noisy tenant, no open-ended duration. The default completes in about 4 minutes on the recorded machine; most of that is the serialized local D1 fixture.
 
 ## Method
@@ -289,6 +289,84 @@ Preserved during a stop: the owner workspace (Chat, previews, exports, contact i
 **Integration limits.** Draft PR #170 (account lifecycle/restore suppression/safety notices) and PR #174 also edit `schema/platform.sql`, `docs/data-lifecycle.json`, `tools/lifecycle-catalog.mjs` and `tests/lifecycle-catalog.mjs`, and PR #170 changes `identity_admission_checks`; whichever merges later must re-run the composed-schema, lifecycle-catalog and restore-admission table counts (221 here). PR #170's account closure would delete revoked sessions through the cascade anyway and does not read these tables. PR #170 restore suppressions are not on `main`; restoring an older backup could bring back resolved or already-cleaned operator rows (harmless: they are inactive and retained again) but could also bring back a serving stop or containment that was lifted after the backup. That restore ordering belongs to WH-008/019 and is not solved here. Customer notices for a serving stop are not sent (open owner question; PR #170 notices are tied to confirmed safety findings, not operator containment).
 
 **Tests (local).** `node tests/operator-containment.mjs` and `--d1` (adds explicit close, serving stop at every path above, stale and racing reviews, one active stop, tenant isolation, unchanged publications and customer tables, and cleanup with the exact 90-day boundary, unresolved/held/within-retention protection, a racing hold, replay and no revival, and a full 10,000-receipt store: cleanup reclaiming old receipts, a racing hold rolling the full-store cleanup back, replay after the receipt was purged refused, and a full store with no old receipt refused by the tool and the schema); `node tests/operator-serving-browser.mjs` and `--d1` (real Chromium against the actual visitor host handler and the built visitor client on loopback, virtual authenticators: account-only view, fresh-browser recovery with a lost response, replacement passkey, sign-out and sign-in, saved data, lost-request receipt, export and deletion readback; needs Playwright, `WHUMPO_PLAYWRIGHT` when not installed in the checkout); `node tests/operator-session-revocation.mjs` and `--d1` (signed ES256 sign-in and recovery through the actual identity handler); the guest-preview stop is a check group in `node tests/guest-previews.mjs` and `--d1`. Exact results are in the WH-050 backlog evidence.
+
+## WH-050 re-record on Node 24 with the serving-stop check — October 30, 2026 UTC
+
+**Local harness numbers, not Cloudflare numbers.** Same harness (`pnpm capacity`, seed 50, scale 1, 4 tenants) at main `bcbe2de`, Node 24.21.0, pnpm 11.19.0, run twice back to back in a disposable fixture on loopback. Nothing touched Cloudflare, a provider or a deployed URL. This replaces the "re-record on Node 24" caveat in [Run it](#run-it); the October 4 numbers above were Node 22.22.0 on a machine that reported 4 vCPU, this run reported 8 CPUs and 15.3 GiB, so absolute latencies are not comparable across the two records. Only the shape (ratios, statement counts, outcome counts) carries over. No source change was made for this record.
+
+### Host load during the runs
+
+| Run | Wall time | Load average (1/5/15 min) before | after |
+| --- | ---: | --- | --- |
+| 1 | 127.7 s | 0.40 / 3.71 / 4.48 | 1.02 / 2.75 / 4.02 |
+| 2 | 126.2 s | 1.02 / 2.75 / 4.02 | 1.04 / 2.15 / 3.62 |
+
+The 5 and 15 minute figures still include load from before the runs began (the 1 minute figure was 0.4 at the start); the 1 minute figure after each run shows the harness itself, about one busy core (one event loop). No process list was taken, so other agents' load is not itemized. The two runs agree within 3% on victim p50/p95, so no third run was needed. Both exited 0.
+
+### Serving-stop cost per request
+
+The [October 8 serving stop](#wh-050-owner-decisions-retention-serving-stop-and-session-revocation--october-8-2026-utc) (#186) adds one indexed point read, `SELECT 1 FROM operator_serving_stopped WHERE project_id=?` ([`src/operator-serving.ts`](../src/operator-serving.ts)), once per request at each gate: site host (`src/site-host.ts`, covers site HTML, photo and the public backend path), contact page (`src/contact-page.ts`, GET and POST) and the visitor app gateway (`src/app-gateway.ts`, page and data). So the cost is **+1 D1 statement per gated request, 0 runtime calls, 0 R2 reads**, read from the code; it is not billable-row accounting. The harness counts for the same paths moved as below (statement counts are exact in the harness, means are from unloaded sequential calls):
+
+| Path | D1 statements, 2026-10-04 | after WH-075 (also 10-04) | 2026-10-30 | Mean ms 2026-10-30 (run 1 / 2) |
+| --- | ---: | ---: | ---: | ---: |
+| Site page | 5 | n/r | 6 | 33 / 32 |
+| Photo | 4 | 6 | 8.5 | 46 / 48 |
+| Contact GET | 1 | n/r | 2 | 12 / 12 |
+| Contact POST | 4 | 5 | 6 | 38 / 34 |
+| Public backend | 2 | 3 | 3 | 21 / 21 |
+| Visitor app page | 1 | n/r | 1 | 11 / 7 |
+| Visitor transition | 8 | n/r | 10 | 72 / 94 |
+
+n/r = not recorded in the WH-075 table. The differences above include other changes merged since October 4 (photo +2.5 and visitor transition +2 are more than one statement, so they are not all the serving-stop check); the harness cannot separate the check without a source change, so only the code-derived +1 per gated request is attributed to it. The visitor app page count did not rise (1 before and after); why was not investigated.
+
+### Before and after, scenarios A to E and P
+
+"Before" is the October 4 record (Node 22, 4 vCPU, WH-050 first slice, then WH-075 where noted). "After" is this record, run 1 / run 2. Latencies in ms.
+
+**A (victims alone) and B (noisy tenant flooding), victim latency**
+
+| Victim path | A p50 before | A p50 after | A p95 before | A p95 after | B p50 before | B p50 after | B p95 before | B p95 after |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Site page | 524 | 211 / 213 | 614 | 249 / 266 | 1876 | 750 / 738 | 2238 | 954 / 925 |
+| Photo | 639 | 338 / 338 | 808 | 485 / 479 | 1036 | 619 / 619 | 2682 | 1357 / 1311 |
+| Contact GET | 143 | 92 / 90 | 202 | 122 / 123 | 371 | 300 / 277 | 982 | 390 / 382 |
+| Contact POST | 431 | 239 / 234 | 632 | 352 / 356 | 1545 | 827 / 810 | 2211 | 1099 / 1115 |
+| Public backend | 422 | 205 / 206 | 524 | 256 / 253 | 754 | 467 / 538 | 1879 | 888 / 882 |
+| Visitor app page | 242 | 101 / 96 | 330 | 144 / 135 | 513 | 375 / 354 | 1134 | 498 / 539 |
+| Visitor transition | 1057 | 447 / 439 | 1244 | 550 / 543 | 2133 | 1503 / 1474 | 4388 | 1811 / 1777 |
+| **All victim requests** | 512 | 224 / 223 | 1129 | 483 / 478 | 1084 | 577 / 581 | 4091 | 1682 / 1670 |
+
+All-request ratio B/A: p50 2.1x before, 2.6x after; p95 3.6x before, 3.5x after. Absolute times fell, which this record attributes to the different host and Node version, not to a code change (it cannot tell which). Degradation under the noisy flood is the same in kind: the local D1 fixture and the single event loop are shared, and there is still no per-tenant isolation of site HTML or photo volume (F2).
+
+Outcomes, run 1 / run 2: A had 2 / 0 server errors (all backend `busy` 503, refunded); B victims had 1 / 3 server errors (503 `busy`, plus up to 1 failed visitor transition), no 429 for victims. Noisy tenant in B: 960 requests, 254 / 248 x 429, 9 / 14 x 5xx. Backend charging in B held again: project counters equal executed calls (noisy 100 executed, 26 busy, 134 refused; victims 86, 84, 84 executed). B used 7,572 / 7,576 D1 statements (5,280 on October 4) and 416 runtime calls, peak 8 in flight. Whole run: 20,924 / 20,925 statements, 999 runtime calls.
+
+**S (simultaneous hostile and benign burst):** victims 14 ok, 1 busy (run 2: 13 ok, 2 busy) of 15; noisy 40 hostile calls all refused (`work_limit`/`execution_failed`/`busy`). Runtime concurrency gate at 4 concurrent calls: distinct lanes 4 to 5 of 16 busy, one shared lane 9 to 10 of 16 busy (WH-075 record: 4/16 and 8/16).
+
+**P (per-IP probes), identical to before:**
+
+| Probe | Requests | Accepted | Limited (429) |
+| --- | ---: | ---: | ---: |
+| Contact GET, one IP | 150 | 120 | 30 |
+| Contact GET, distinct IP each request | 150 | 150 | 0 |
+| Site page GET, one IP | 150 | 150 | 0 (still no limiter, F2) |
+| Public backend POST, one IP | 5 | 5 | 0 (client allowance is 20/day) |
+| Visitor app page GET, one IP | 150 | 120 | 30 |
+
+**D (shared daily backend budget):** platform used 389 before fillers; two filler accounts of five projects each took 200 ok (100 per account fair share) and met 783 x 429 and 17 x 503; platform 604/1,000 after probes; victim probes 5/5 ok and a fresh account 10/10 ok. October 4 after WH-075: 606/1,000, 5/5 ok. Largest account 100 of the 500 cap.
+
+**C (serving and recovery):** victim site, photo, contact, visitor page 10/10 each, visitor transitions 3/3, victim backend after fillers 3/3, noisy tenant's own site 10/10; runtime recovered (5/5 benign after hostile calls). Unchanged from the WH-075 record.
+
+**E (R2 read budgets):** noisy project at its 10,000 budget with the platform at 60,000: 10 ok then 10 x 503, victims 5/5 ok. Platform counter at 99,995: 5 ok then 5 x 503 for victims, ceiling unchanged. Unchanged from the WH-075 record.
+
+**L (client allowance):** unchanged: one IP 20 ok / 20 x 429 on backend, 10 / 5 on contact, 400 / 50 on photo; other IPs 10/10, 3/3, 10/10 ok.
+
+### Still owner-gated (not changed by this record)
+
+- **Cohort limits.** The proposed 10 active accounts and the 50%/80% platform-counter warn/act thresholds (see [Proposed account-level alerts and cohort limits](#proposed-account-level-alerts-and-cohort-limits-proposal-owner-decision-required)) are a proposal; none is enforced and these numbers do not approve them.
+- **Alert provider.** No alert is delivered anywhere; counters are read by hand or by `node tools/report-maintenance.mjs --counters`. Choosing a provider and a recipient is an owner decision.
+- **F2 rate-limit binding.** The `whumpo-sites` Worker still has no rate-limit binding, so site HTML is unlimited per IP (the P row above). Adding one is a Cloudflare configuration change that needs owner approval.
+
+WH-050 is not complete: this is a local re-record on the supported Node version, with no live experiment.
 
 ## Findings: fairness and abuse gaps (WH-050 record; status after WH-075 and the F7/F8 slice above)
 
