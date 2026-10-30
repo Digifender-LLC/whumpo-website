@@ -20,6 +20,9 @@ enum class AuthProblem {
     /** The browser hand-off returned something we do not trust, or the exchange failed. */
     HandoffFailed,
     NoBrowser,
+
+    /** Credential Manager's response is over the contract's 8 KiB limit; nothing was sent. */
+    CredentialTooLarge,
     Generic,
 }
 

@@ -107,7 +107,12 @@ class AuthController(
             PasskeyResult.Cancelled -> step.value = Step.Idle
             PasskeyResult.NoCredential -> step.value = Step.Problem(AuthProblem.NoPasskey)
             PasskeyResult.Unavailable -> step.value = Step.Problem(AuthProblem.PasskeyUnavailable)
-            is PasskeyResult.Assertion -> finishSignIn(api.loginVerify(options.challengeId, parse(result.json)).session)
+            is PasskeyResult.Assertion ->
+                if (tooLarge(result.json)) {
+                    step.value = Step.Problem(AuthProblem.CredentialTooLarge)
+                } else {
+                    finishSignIn(api.loginVerify(options.challengeId, parse(result.json)).session)
+                }
         }
     }
 
@@ -178,8 +183,7 @@ class AuthController(
      * The verified App Link `https://whumpo.com/app/return?code=...&state=...` arrived. Anything that is not that link
      * is ignored. The hand-off is single use: it is dropped before the exchange, so a replayed link does nothing.
      *
-     * The contract fixes the return URI and a one-time code but not the query names; `code` and `state` are assumed and
-     * must be confirmed with the WH-083/WH-115 return route.
+     * Strict (WH-083): exactly `code` (64 lowercase hex) and `state` (equal to what was sent), each once, nothing else.
      */
     fun onReturn(uri: String) {
         val params = returnParams(uri) ?: return
@@ -189,7 +193,7 @@ class AuthController(
             handoff = null
             step.value = Step.Waiting(exchanging = true)
             val code = params["code"]
-            if (code == null || !HEX64.matches(code) || params["state"] != pending.state) {
+            if (code == null || !HEX64.matches(code) || params["state"] != pending.state || params.size != 2) {
                 step.value = Step.Problem(AuthProblem.HandoffFailed)
                 return@launchStep
             }
@@ -210,7 +214,8 @@ class AuthController(
             is Step.Setup -> if (current.kind == SetupKind.Account) {
                 launchStep {
                     step.value = Step.Setup(SetupKind.Account, busy = true)
-                    startHandoff("signup")
+                    // The account exists after identity_incomplete; the browser resumes enrollment or recovery.
+                    startHandoff("signin")
                 }
             } else {
                 val url = onboardingPath?.let(::browserUrl)
@@ -241,7 +246,9 @@ class AuthController(
                 PasskeyResult.Cancelled -> ReauthResult.Cancelled
                 PasskeyResult.NoCredential -> ReauthResult.Failed(AuthProblem.NoPasskey)
                 PasskeyResult.Unavailable -> ReauthResult.Failed(AuthProblem.PasskeyUnavailable)
-                is PasskeyResult.Assertion -> {
+                is PasskeyResult.Assertion -> if (tooLarge(result.json)) {
+                    ReauthResult.Failed(AuthProblem.CredentialTooLarge)
+                } else {
                     sessions.updateFresh(api.reauthVerify(options.challengeId, parse(result.json)).session.freshUntil)
                     ReauthResult.Fresh
                 }
@@ -313,6 +320,8 @@ class AuthController(
         else -> AuthProblem.Generic
     }
 
+    private fun tooLarge(json: String) = json.toByteArray(Charsets.UTF_8).size > MAX_CREDENTIAL_BYTES
+
     private fun parse(json: String): JsonObject = Json.parseToJsonElement(json).jsonObject
 
     /** The app composes the URL from its constant origin; the server only supplies a path. */
@@ -325,15 +334,17 @@ class AuthController(
         if (!uri.startsWith(RETURN_URI) || '#' in uri) return null
         val rest = uri.removePrefix(RETURN_URI)
         if (rest.isNotEmpty() && !rest.startsWith("?")) return null
-        return rest.removePrefix("?").split('&').filter { it.isNotEmpty() }
-            .mapNotNull { pair -> pair.split('=', limit = 2).takeIf { it.size == 2 }?.let { it[0] to it[1] } }
-            .toMap()
+        val pairs = rest.removePrefix("?").split('&').map { it.split('=', limit = 2) }
+        // A malformed or repeated pair is ambiguous; refuse the whole link.
+        if (pairs.any { it.size != 2 }) return null
+        return pairs.associate { it[0] to it[1] }.takeIf { it.size == pairs.size }
     }
 
     private companion object {
         const val RETURN_URI = "https://whumpo.com/app/return"
         const val PLAY_URL = "https://play.google.com/store/apps/details?id=com.whumpo.android"
         const val LOGOUT_TIMEOUT_MS = 5_000L
+        const val MAX_CREDENTIAL_BYTES = 8 * 1024
         val HEX64 = Regex("[0-9a-f]{64}")
     }
 }

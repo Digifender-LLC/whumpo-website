@@ -167,7 +167,7 @@ fun FinishSetupScreen(state: AuthState.FinishSetup, actions: AuthActions, modifi
 // ---- Pieces ------------------------------------------------------------------------------------------------------
 
 /** Problems where the browser is a sensible second way in. */
-private val BrowserOffered = setOf(AuthProblem.NoPasskey, AuthProblem.PasskeyUnavailable, AuthProblem.Rejected)
+private val BrowserOffered = setOf(AuthProblem.NoPasskey, AuthProblem.PasskeyUnavailable, AuthProblem.Rejected, AuthProblem.CredentialTooLarge)
 
 /** Safe-drawing insets, a readable column (at most 480dp) and scrolling so 200% text never clips. */
 @Composable
@@ -226,6 +226,7 @@ internal fun problemCopy(problem: AuthProblem): Pair<String, String> = when (pro
     AuthProblem.SessionEnded -> "You've been signed out." to "Sign in again to continue. Unsent drafts were removed from this phone."
     AuthProblem.HandoffFailed -> "The browser sign-in didn't finish." to "Nothing was changed. Start again."
     AuthProblem.NoBrowser -> "No browser could open." to "Nothing was changed. Install or enable a browser, then try again."
+    AuthProblem.CredentialTooLarge -> "This passkey's response was too large to send." to "Nothing was changed. Try another passkey, or sign in through the browser."
     AuthProblem.Generic -> "Something went wrong." to "Nothing was changed. Try again."
 }
 
