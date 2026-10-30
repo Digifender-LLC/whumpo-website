@@ -122,7 +122,9 @@ export async function measure({allowedArguments=[]}={}){
  const tally={
   // WH-170 shadow cost events are conditional by design (a public photo read is recorded only at powers of two), so their
   // statements are tallied apart: they must not make a repeat request look like a cache. Everything else is counted as before.
-  d1:(kind,all)=>{if(!active)return;const queries=all.filter(q=>!/\bcost_events\b/.test(q));active.shadowStatements+=all.length-queries.length;if(!queries.length)return;if(kind==='batch')active.d1.batches++;else active.d1.calls++;for(const q of queries){active.d1.statements++;if(writeSQL.test(q))active.d1.writes++;else active.d1.reads++;for(const t of names)if(new RegExp('\\b'+t+'\\b').test(q))active.tables.add(t);}},
+  // #487: emitProjectStorageRead rereads the counter (the SELECT below) only when the D1 counter is a power of two, so the 2nd photo
+  // read of a project (counter 4 vs 3) differs from the 1st. That is D1 state, not an in-isolate cache; it is shadow work too.
+  d1:(kind,all)=>{if(!active)return;const queries=all.filter(q=>!/\bcost_events\b|^SELECT u\.project_id,u\.period,u\.read_ops/.test(q));active.shadowStatements+=all.length-queries.length;if(!queries.length)return;if(kind==='batch')active.d1.batches++;else active.d1.calls++;for(const q of queries){active.d1.statements++;if(writeSQL.test(q))active.d1.writes++;else active.d1.reads++;for(const t of names)if(new RegExp('\\b'+t+'\\b').test(q))active.tables.add(t);}},
   r2:op=>{if(active)active.r2[op]=(active.r2[op]??0)+1;},
   service:name=>{if(active)active.services[name]=(active.services[name]??0)+1;},
   assets:()=>{if(active)active.assets++;},

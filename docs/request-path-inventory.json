@@ -127,10 +127,10 @@
      "whumpo-sites"
     ],
     "d1": {
-     "calls": 6,
+     "calls": 5,
      "batches": 0,
-     "statements": 6,
-     "reads": 5,
+     "statements": 5,
+     "reads": 4,
      "writes": 1
     },
     "r2": {},
@@ -191,10 +191,10 @@
      "whumpo-sites"
     ],
     "d1": {
-     "calls": 5,
+     "calls": 4,
      "batches": 0,
-     "statements": 5,
-     "reads": 5,
+     "statements": 4,
+     "reads": 4,
      "writes": 0
     },
     "r2": {},
@@ -253,10 +253,10 @@
      "whumpo-sites"
     ],
     "d1": {
-     "calls": 6,
+     "calls": 4,
      "batches": 1,
-     "statements": 8,
-     "reads": 5,
+     "statements": 6,
+     "reads": 3,
      "writes": 3
     },
     "r2": {
@@ -273,7 +273,6 @@
      "project_files",
      "project_spec_held",
      "project_spec_versions",
-     "projects",
      "public_client_usage",
      "publications",
      "storage_project_usage",
@@ -742,10 +741,10 @@
      "whumpo-sites"
     ],
     "d1": {
-     "calls": 6,
+     "calls": 5,
      "batches": 0,
-     "statements": 6,
-     "reads": 5,
+     "statements": 5,
+     "reads": 4,
      "writes": 1
     },
     "r2": {},
@@ -1065,10 +1064,10 @@
      "whumpo-sites"
     ],
     "d1": {
-     "calls": 8,
+     "calls": 7,
      "batches": 0,
-     "statements": 8,
-     "reads": 7,
+     "statements": 7,
+     "reads": 6,
      "writes": 1
     },
     "r2": {},
@@ -1131,10 +1130,10 @@
      "whumpo-sites"
     ],
     "d1": {
-     "calls": 7,
+     "calls": 5,
      "batches": 1,
-     "statements": 9,
-     "reads": 6,
+     "statements": 7,
+     "reads": 4,
      "writes": 3
     },
     "r2": {
@@ -1651,10 +1650,10 @@
      "whumpo-platform"
     ],
     "d1": {
-     "calls": 6,
+     "calls": 5,
      "batches": 0,
-     "statements": 6,
-     "reads": 4,
+     "statements": 5,
+     "reads": 3,
      "writes": 2
     },
     "r2": {},
