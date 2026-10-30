@@ -150,6 +150,7 @@
     "test:mobile-identity": "node tests/mobile-identity.mjs && node tests/mobile-identity.mjs --d1",
     "test:schema-batch-3e": "node tests/schema-batch-3e.mjs && node tests/schema-batch-3e.mjs --d1",
     "test:notification-outbox": "node tests/notification-outbox.mjs && node tests/notification-outbox.mjs --d1",
+    "test:mobile-slice": "node tests/mobile-slice.mjs && node tests/mobile-slice.mjs --d1",
     "test:notification-recipients": "node tests/notification-recipients.mjs && node tests/notification-recipients.mjs --d1",
     "test:form-attachments": "node tests/form-attachments.mjs && node tests/form-attachments.mjs --d1",
     "test:job-journal": "node tests/job-journal.mjs && node tests/job-journal.mjs --d1",

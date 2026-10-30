@@ -5,10 +5,12 @@ export const contractVersion=1,jsonLimit=16384,credentialLimit=8192;
 const messages={
  invalid_request:'Check the request and try again.',unknown_field:'Check the request and try again.',missing_field:'Check the request and try again.',
  proof_required:'Sign in to continue.',identity_incomplete:'Finish setting up your account in the browser.',identity_changed:'Your account access changed. Sign in again to continue.',
- not_found:'This item is unavailable.',payload_too_large:'This request is too large.',client_update_required:'Update Whumpo to continue.',
- rate_limited:'Too many requests. Try again in a minute.',unavailable:'Whumpo is temporarily unavailable.',request_conflict:'This request ID was already used for another change.'
+ not_found:'This item is unavailable.',onboarding_required:'Start your first project in welcome before opening your workspace.',
+ stale_revision:'Your conversation changed. Refresh and review it again.',chat_busy:'Your previous reply is still being prepared.',review_unavailable:'This review is stale or expired. Ask for a fresh review.',
+ invalid_cursor:'Start the list again.',unsupported_control:'This action is not available in the app.',payload_too_large:'This request is too large.',client_update_required:'Update Whumpo to continue.',
+ rate_limited:'Too many requests. Try again in a minute.',unavailable:'Whumpo is temporarily unavailable.',request_conflict:'This request ID was already used for another message.'
 } as const;
-const statuses={invalid_request:400,unknown_field:400,missing_field:400,proof_required:401,identity_incomplete:403,not_found:404,identity_changed:409,request_conflict:409,payload_too_large:413,client_update_required:426,rate_limited:429,unavailable:503} as const;
+const statuses={invalid_request:400,unknown_field:400,missing_field:400,proof_required:401,identity_incomplete:403,not_found:404,identity_changed:409,request_conflict:409,onboarding_required:409,stale_revision:409,chat_busy:409,review_unavailable:409,invalid_cursor:400,unsupported_control:400,payload_too_large:413,client_update_required:426,rate_limited:429,unavailable:503} as const;
 export type MobileCode=keyof typeof statuses;
 export class MobileError extends Error{
  constructor(readonly code:MobileCode,readonly extra:Record<string,unknown>={}){super(code);this.name='MobileError';}
@@ -74,3 +76,5 @@ export function credentialJson(v:unknown){
  if(new TextEncoder().encode(JSON.stringify(v)).length>credentialLimit)throw new MobileError('payload_too_large');
  return v;
 }
+/** The controls this build declared (already validated by admitClient); the server issues approval only for these. */
+export const declaredControls=(request:Request):string[]=>JSON.parse(request.headers.get('whumpo-client')??'{}').controls??[];

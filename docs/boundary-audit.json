@@ -600,6 +600,228 @@
    }
   },
   {
+   "id": "mobile-workspace",
+   "title": "Native /api/mobile/v1 workspace slice (WH-084 M2): bootstrap, Chat list, turn readback and send, review list and confirm",
+   "privileged": [
+    "publish",
+    "activation",
+    "data-change"
+   ],
+   "authorityClass": "bearer android session only; each operation runs the web path (admitWorkspace + workspaceBindings + the existing Chat/review handler + assertWorkspace) with the bearer principal; no browser Origin rule, cookies refused",
+   "entries": [
+    {
+     "file": "src/mobile/router.ts",
+     "kind": "exact",
+     "match": "bootstrap",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/mobile/router.ts",
+     "kind": "exact",
+     "match": "chat",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/mobile/router.ts",
+     "kind": "regex",
+     "match": "/^chat\\/turns\\/([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/mobile/router.ts",
+     "kind": "exact",
+     "match": "chat/messages",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/mobile/router.ts",
+     "kind": "exact",
+     "match": "reviews",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/mobile/router.ts",
+     "kind": "exact",
+     "match": "reviews/confirm",
+     "methods": [
+      "POST"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "The principal is the bearer's android session; the workspace scope is the web dispatcher's own (admitWorkspace + workspaceBindings), so every domain statement repeats the current-identity predicate in its committing batch, and assertWorkspace runs after the handler. Native review controls are limited to the four admitted kinds and to the capabilities the build declared; every other web control is unsupported_control.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/workspace.ts",
+       "contains": "workspaceBindings(env,admitWorkspace(env.DB,principal),principal.accountId)"
+      },
+      {
+       "file": "src/mobile/workspace.ts",
+       "contains": "if(!cap)throw new MobileError('unsupported_control');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-slice.mjs",
+       "contains": "const r=await confirm(s.token,unsupported,id(),await revisionOf(a));assert.equal(r.status,400);same(r.data,errors.unsupported_control.body);",
+       "asserts": "non-admitted controls (unpublish, backup, shortcuts, GitHub grants, review detail) are refused"
+      },
+      {
+       "file": "tests/mobile-slice.mjs",
+       "contains": "const undeclared=await confirm(s.token,control,id(),await revisionOf(a),clientWith({controls:['site.confirm']}));assert.equal(undeclared.status,426);",
+       "asserts": "a control the build did not declare is client_update_required"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Same transport as M1: no Origin rule, a Cookie header is 400, the strict Whumpo-Client header is required (426 for an unsupported build). Query strings are refused except the three Chat list keys.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/router.ts",
+       "contains": "if(request.headers.has('cookie'))throw new MobileError('invalid_request');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-slice.mjs",
+       "contains": "assert.equal((await mobile(path,{method,token:sa.token,headers:{cookie:'__Host-whumpo_session='+sa.token},body:method==='POST'?{version:1}:undefined})).status,400,path+' cookie');",
+       "asserts": "a cookie beside a valid bearer is refused on every slice route"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "evidenced",
+     "detail": "A fresh-passkey control (specification apply, app restore) requires a passkey proof under ten minutes old, checked by the web predicate before the handler and again in the committing statement. A handoff session never has a passkey proof, so it is never fresh; the app reauthenticates and retries with the same request ID.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/workspace.ts",
+       "contains": "try{await requireFreshWorkspace(scoped.DB,user);}catch(error)"
+      },
+      {
+       "file": "src/workspace-identity/authority.ts",
+       "contains": "proof_method='passkey' AND proof_at>unixepoch()-600"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-slice.mjs",
+       "contains": "for(const s of [stale,handoff]){",
+       "asserts": "a stale-passkey session and a handoff session are both proof_required fresh_passkey"
+      },
+      {
+       "file": "tests/mobile-slice.mjs",
+       "contains": "const ok=await confirm(stale.token,control,requestId,await revisionOf(a));fixtureCall('review.confirm',ok);",
+       "asserts": "after reauthentication the same request ID succeeds"
+      }
+     ]
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "No request field names an account. Turns and reviews are read by id AND owner in every statement; a foreign turn or review is not_found and a foreign confirm changes nothing.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/workspace.ts",
+       "contains": "WHERE a.id=? AND a.user_id=?"
+      },
+      {
+       "file": "src/mobile/workspace.ts",
+       "contains": "if(!row)throw new MobileError('not_found');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-slice.mjs",
+       "contains": "assert.equal(await one('SELECT status FROM publication_actions WHERE id=?',review).then(r=>r.status),'pending','owner B cannot apply owner A review');",
+       "asserts": "owner B cannot apply owner A review"
+      },
+      {
+       "file": "tests/mobile-slice.mjs",
+       "contains": "assert.equal((await mobile('/chat/turns/'+q.id,{token:sb.token})).status,404,'owner B cannot read owner A review turn');",
+       "asserts": "owner B cannot read owner A review turn"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "The owner-supplied request ID is the turn ID. The same ID and payload returns the original result without a second effect; a different payload is request_conflict. A lost reply is resolved by reading the turn, which exposes its status and the review as applied.",
+     "enforcedAt": [
+      {
+       "file": "src/chat.ts",
+       "contains": "if (previous) return matches(previous) ? { status: 200 } : { status: 409, error: 'This request ID was already used for another message.' };"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-slice.mjs",
+       "contains": "const replay=await send(sa.token,'export my chat',requestId,revision);same(replay.data,first.data);",
+       "asserts": "same-ID replay returns the original result and writes nothing"
+      },
+      {
+       "file": "tests/mobile-slice.mjs",
+       "contains": "const conflict=await send(sa.token,'download my chat',requestId,revision);assert.equal(conflict.status,409);",
+       "asserts": "same ID with a different payload is request_conflict"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "The conversation revision fences every write: a stale expectedRevision is 409 stale_revision with the current one, a pending prior reply is chat_busy, and an expired, superseded or already applied review exposes no control (canApprove false) and cannot be confirmed.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/workspace.ts",
+       "contains": "if(m.includes('conversation changed'))throw new MobileError('stale_revision'"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-slice.mjs",
+       "contains": "const stale=await send(sa.token,'export my chat',id(),0);assert.equal(stale.status,409);",
+       "asserts": "a stale revision is stale_revision"
+      },
+      {
+       "file": "tests/mobile-slice.mjs",
+       "contains": "assert.deepEqual((await mobile('/reviews',{token:sa.token})).data.items.filter(i=>i.reviewId===q.id),[],'an applied review leaves the pending list');",
+       "asserts": "an applied review leaves the pending list"
+      }
+     ]
+    },
+    "admission": {
+     "state": "evidenced",
+     "detail": "Bearer routes keep the M1 per-IP and per-account limits; the fresh-passkey controls keep the web recovery limiter. Welcome must be complete for Chat and review routes (onboarding_required); bootstrap is exempt.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/workspace.ts",
+       "contains": "throw new MobileError('onboarding_required',{next:'browser'})"
+      },
+      {
+       "file": "src/mobile/workspace.ts",
+       "contains": "key:'app-recovery:'+user"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/mobile-slice.mjs",
+       "contains": "for(const path of ['/chat','/reviews'])same((await mobile(path,{token:sf.token})).data,errors.onboarding_required.body);",
+       "asserts": "Chat and reviews are refused until welcome is complete"
+      }
+     ]
+    }
+   }
+  },
+  {
    "id": "identity",
    "title": "Workspace identity: sign-up, login, passkeys, recovery kit, recovery and logout",
    "privileged": [
