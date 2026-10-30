@@ -15,6 +15,7 @@ androidxActivity = "1.13.0"
 androidxBrowser = "1.10.0"
 androidxComposeBom = "2026.09.00"
 androidxCore = "1.15.0"
+androidxExifinterface = "1.4.1"
 androidxCredentials = "1.6.0"
 androidxLifecycle = "2.11.0"
 androidxNavigation = "2.8.5"
@@ -38,6 +39,7 @@ androidx-compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-mani
 androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
 androidx-browser = { module = "androidx.browser:browser", version.ref = "androidxBrowser" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
+androidx-exifinterface = { module = "androidx.exifinterface:exifinterface", version.ref = "androidxExifinterface" }
 androidx-credentials = { module = "androidx.credentials:credentials", version.ref = "androidxCredentials" }
 androidx-credentials-play-services-auth = { module = "androidx.credentials:credentials-play-services-auth", version.ref = "androidxCredentials" }
 androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidxLifecycle" }

@@ -118,6 +118,7 @@ class AccountStateTest {
 
         compose.onNodeWithTag("nav-settings").performClick()
         compose.onNodeWithTag("settings-sign-out").performScrollTo().performClick()
+        compose.onNodeWithTag("settings-sign-out-confirm").performClick()
         compose.waitUntil(5_000) { store.activeAccount.value == null }
         assertFalse(stateDir.exists())
 

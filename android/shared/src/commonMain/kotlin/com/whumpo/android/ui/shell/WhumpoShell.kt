@@ -23,6 +23,7 @@ import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -30,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.PredictiveBackHandler
@@ -48,6 +50,9 @@ enum class TopDestination(val route: String, val label: String, val icon: ImageV
     Activity("activity", "Activity", WhumpoIcons.Activity),
     Settings("settings", "Settings", WhumpoIcons.Settings),
 }
+
+/** Lets a screen switch destination, for example an empty state's "Go to Chat". Provided by [WhumpoShell]. */
+val LocalNavigate = staticCompositionLocalOf<(TopDestination) -> Unit> { {} }
 
 /** Material 3 window width classes (docs/android/app-ux.md, "Adaptive layouts"). */
 enum class WidthClass {
@@ -114,7 +119,9 @@ fun WhumpoShell(
             ) {
                 if (offline) OfflineBanner(offlineMessage)
                 Box(Modifier.weight(1f)) {
-                    stateHolder.SaveableStateProvider(selected.route) { content(selected, width) }
+                    stateHolder.SaveableStateProvider(selected.route) {
+                        CompositionLocalProvider(LocalNavigate provides { selectedIndex = it.ordinal }) { content(selected, width) }
+                    }
                 }
             }
         }

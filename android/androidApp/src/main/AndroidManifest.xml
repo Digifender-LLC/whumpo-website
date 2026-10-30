@@ -6,7 +6,8 @@
       Backups are disabled and every domain is excluded for both cloud backup and
       device-to-device transfer: account-scoped state (drafts, sessions, pending
       operations) lives in no-backup storage and its Keystore key is not exportable.
-      WP5 added INTERNET: the app calls /api/mobile/v1 and nothing else.
+      WP5 added INTERNET: the app calls /api/mobile/v1 and nothing else. Photos arrive through the system photo picker,
+      so there is still no storage, camera or location permission.
     -->
     <uses-permission android:name="android.permission.INTERNET" />
 

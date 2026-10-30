@@ -15,10 +15,12 @@ fun chatViewModelFactory(c: AppContainer): ViewModelProvider.Factory =
     viewModelFactory { initializer { ChatViewModel(c.chatDrafts, c.account, c.mobileApi, c.clientInfo, c.reauth) } }
 
 fun projectsViewModelFactory(c: AppContainer): ViewModelProvider.Factory =
-    viewModelFactory { initializer { ProjectsViewModel(c.projects) } }
+    viewModelFactory { initializer { ProjectsViewModel(c.mobileApi, c.photoPreparer) } }
 
 fun activityViewModelFactory(c: AppContainer): ViewModelProvider.Factory =
-    viewModelFactory { initializer { ActivityViewModel(c.activity) } }
+    viewModelFactory { initializer { ActivityViewModel(c.mobileApi, c.notifications) } }
 
 fun settingsViewModelFactory(c: AppContainer): ViewModelProvider.Factory =
-    viewModelFactory { initializer { SettingsViewModel(c.account, c.environment, BuildConfig.VERSION_NAME) } }
+    viewModelFactory { initializer {
+        SettingsViewModel(c.account, c.mobileApi, c.themes, c.notifications, c.push, c.environment, BuildConfig.VERSION_NAME)
+    } }

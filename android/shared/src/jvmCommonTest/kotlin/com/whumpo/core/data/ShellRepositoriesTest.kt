@@ -26,21 +26,6 @@ class ShellRepositoriesTest {
     private fun store() = AccountStateStore(File(temp.root, "state"), FakeSecretBox())
 
     @Test
-    fun remoteDataExplainsWhyItIsUnavailable() = runTest {
-        val store = store()
-        val projects = ShellProjectsRepository(store)
-        val activity = ShellActivityRepository(store)
-        val signedOut = Availability.Unavailable(UnavailableReason.SIGN_IN_REQUIRED)
-        assertEquals(signedOut, projects.projects().first())
-        assertEquals(signedOut, activity.activity().first())
-
-        store.activate(ownerA)
-        val notConnected = Availability.Unavailable(UnavailableReason.SERVICE_NOT_CONNECTED)
-        assertEquals(notConnected, projects.projects().first())
-        assertEquals(notConnected, activity.activity().first())
-    }
-
-    @Test
     fun draftsRequireTheirAccountAndAreBounded() = runTest {
         val store = store()
         val drafts = StoredChatDraftRepository(store, StandardTestDispatcher(testScheduler))
