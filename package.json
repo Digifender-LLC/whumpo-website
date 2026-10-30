@@ -230,6 +230,7 @@
     "test:current-schema": "node tests/current-schema.mjs",
     "test:photo-upload-recovery": "node tests/photo-upload-recovery.mjs",
     "test:boundary-audit": "node tests/boundary-audit.mjs",
+    "test:android-assetlinks": "node tests/android-assetlinks.mjs",
     "test:boundary-visitor-shell-admission": "node tests/boundary-visitor-shell-admission.mjs",
     "test:boundary-hosting-maintenance-stale": "node tests/boundary-hosting-maintenance-stale.mjs && node tests/boundary-hosting-maintenance-stale.mjs --d1",
     "test:boundary-apps-host-forwarding": "node tests/boundary-apps-host-forwarding.mjs && node tests/boundary-apps-host-forwarding.mjs --d1",

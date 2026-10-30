@@ -1,4 +1,5 @@
 import {generateAuthenticationOptions,generateRegistrationOptions,verifyAuthenticationResponse,verifyRegistrationResponse,type AuthenticationResponseJSON,type RegistrationResponseJSON} from '@simplewebauthn/server';
+import {androidPasskeyOrigins} from '../android-signing';
 import {customerEligibilityVersion} from '../content-policy';
 import {hashToken,newSessionToken} from '../security';
 import {IdentityError,assertCurrentIdentity,identityPredicate,resolveIdentity,type IdentityPrincipal,type IdentityPolicy} from './authority';
@@ -196,7 +197,7 @@ export async function verifyIdentityAssertion(env:Environment,c:Challenge,input:
  if(p?(returnedHandle!=null&&returnedHandle!==handle):returnedHandle!==handle)throw proof();
  let newCounter:number;
  try{
-  const result=await verifyAuthenticationResponse({response,expectedChallenge:c.challenge,expectedOrigin:c.origin,expectedRPID:c.rp_id,requireUserVerification:true,
+  const result=await verifyAuthenticationResponse({response,expectedChallenge:c.challenge,expectedOrigin:[c.origin,...androidPasskeyOrigins],expectedRPID:c.rp_id,requireUserVerification:true,
    credential:{id:key.id,publicKey:new Uint8Array(key.public_key),counter:key.counter}});
   if(!result.verified)throw proof();newCounter=result.authenticationInfo.newCounter;
  }catch{throw proof();}

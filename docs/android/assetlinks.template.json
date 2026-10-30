@@ -8,7 +8,8 @@
       "namespace": "android_app",
       "package_name": "com.whumpo.android",
       "sha256_cert_fingerprints": [
-        "REPLACE_WITH_PLAY_APP_SIGNING_CERTIFICATE_SHA256_UPPERCASE_HEX_PAIRS_SEPARATED_BY_COLONS"
+        "40:8B:8F:8E:AA:DF:43:A9:5F:D6:CB:6A:ED:83:D6:E4:BD:8A:01:D3:E3:2F:88:1B:D9:2D:EE:31:F2:E9:DC:FE",
+        "26:39:DF:A4:76:DC:6A:A5:BE:7F:E4:76:24:47:A2:B9:22:2F:7C:D8:14:FD:B6:81:E6:5F:47:58:1E:73:C0:63"
       ]
     }
   }
