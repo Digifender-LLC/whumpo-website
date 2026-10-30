@@ -1,5 +1,5 @@
 import type {NotificationSettings} from './support';
-/** Content-free: the customer is told only that a saved response exists. Never includes the statement, response or reviewer. */
+/** Sends only to a verified account email (G-E5, WH-202 decision 4). Content-free: the customer is told only that a saved response exists. Never includes the statement, response or reviewer. */
 export type SupportNotification={requestId:string;accountId:string;recipient:string;template:'response_saved'};
 export type SupportSender=(notification:SupportNotification,settings:NotificationSettings)=>Promise<{accepted:true}|{accepted:false;retryable:boolean}>;
 export const maxSupportDeliveryAttempts=5;
@@ -14,9 +14,10 @@ export async function runSupportDelivery(db:Pick<D1Database,'prepare'>,settings:
  const now=options.now??new Date(),iso=now.toISOString(),limit=Math.min(options.limit??10,25),result={enabled:true,queued:0,delivered:0,retried:0,failed:0,cancelled:0};
  // Only unread responses are queued; enabling a provider later never re-notifies readers.
  result.queued=(await db.prepare("INSERT INTO support_deliveries(request_id,user_id,provider,review,created_at,next_attempt_at) SELECT id,user_id,?,?,?,? FROM usage_review_requests r WHERE state='answered' AND customer_read_at IS NULL AND NOT EXISTS(SELECT 1 FROM support_deliveries d WHERE d.request_id=r.id) ORDER BY answered_at,id LIMIT ?").bind(settings.provider,settings.review,iso,iso,limit).run()).meta.changes;
- const due=(await db.prepare("SELECT d.request_id,d.user_id,d.attempts,u.email,r.customer_read_at FROM support_deliveries d JOIN usage_review_requests r ON r.id=d.request_id JOIN users u ON u.id=d.user_id WHERE d.state='queued' AND d.next_attempt_at<=? ORDER BY d.next_attempt_at,d.request_id LIMIT ?").bind(iso,limit).all<{request_id:string;user_id:string;attempts:number;email:string;customer_read_at:string|null}>()).results;
+ const due=(await db.prepare("SELECT d.request_id,d.user_id,d.attempts,u.email,u.email_verified_at,r.customer_read_at FROM support_deliveries d JOIN usage_review_requests r ON r.id=d.request_id JOIN users u ON u.id=d.user_id WHERE d.state='queued' AND d.next_attempt_at<=? ORDER BY d.next_attempt_at,d.request_id LIMIT ?").bind(iso,limit).all<{request_id:string;user_id:string;attempts:number;email:string;email_verified_at:number|null;customer_read_at:string|null}>()).results;
  for(const row of due){
-  if(row.customer_read_at){if((await db.prepare("UPDATE support_deliveries SET state='cancelled' WHERE request_id=? AND state='queued'").bind(row.request_id).run()).meta.changes)result.cancelled++;continue;}
+  // G-E5: the address is only a lookup key until verified. An unverified account sees the response in the app and is never emailed.
+  if(row.customer_read_at||row.email_verified_at===null){if((await db.prepare("UPDATE support_deliveries SET state='cancelled' WHERE request_id=? AND state='queued'").bind(row.request_id).run()).meta.changes)result.cancelled++;continue;}
   const attempts=row.attempts+1,next=new Date(now.getTime()+backoffMinutes(attempts)*60000).toISOString();
   // Claim the attempt (and push the retry time) before sending so a crash cannot hot-loop or double-count.
   if(!(await db.prepare("UPDATE support_deliveries SET attempts=?,next_attempt_at=? WHERE request_id=? AND state='queued' AND attempts=?").bind(attempts,next,row.request_id,row.attempts).run()).meta.changes)continue;

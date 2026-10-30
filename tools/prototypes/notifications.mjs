@@ -26,9 +26,9 @@ export const digest=v=>createHash('sha256').update(canonical(v)).digest('hex');
 
 /** Frozen vocabularies (contract version 1). */
 export const contractVersion=1;
-export const recipientScopes=Object.freeze(['owner-destination','project-staff','submitter']);
+export const recipientScopes=Object.freeze(['owner-destination','project-staff','submitter','account-email']);
 export const authorityClasses=Object.freeze(['platform-obligation','approved-configuration']);
-export const triggers=Object.freeze(['contact.accepted','destination.verification','form.accepted']);
+export const triggers=Object.freeze(['contact.accepted','destination.verification','form.accepted','account.notice']);
 export const readinessLevels=Object.freeze(['planned','synthetic-conformant','source','live-accepted']);
 export const receiptStates=Object.freeze(['queued','dispatching','accepted','delivered','deferred','bounced','complained','failed','cancelled','unknown-outcome','unresolved']);
 /** Allowed receipt transitions. Nothing leaves a terminal state; nothing returns to queued/dispatching after an uncertain call. */
@@ -43,7 +43,7 @@ export const transitions=Object.freeze({
 });
 export const bounds=Object.freeze({maxAttempts:6,leaseMs:60000,reconcileReads:3,reconcileWindowMs:72*3600000,noticeTtlMs:24*3600000,subjectChars:120,bodyChars:4000,perRecipientHour:10,perRecipientDay:50});
 /** Fixed platform links. A template names one by ID; no variable, caller or configuration supplies a URL. */
-export const platformLinks=Object.freeze({'workspace-inbox':'https://whumpo.com/workspace/inbox','workspace-records':'https://whumpo.com/workspace/records'});
+export const platformLinks=Object.freeze({'workspace-inbox':'https://whumpo.com/workspace/inbox','workspace-records':'https://whumpo.com/workspace/records','workspace-settings':'https://whumpo.com/workspace/settings'});
 
 // Keys that would let a caller, configuration or template choose a destination, header, URL or credential.
 const relayKeys=new Set(['to','cc','bcc','recipient','recipients','address','addresses','email','emails','replyto','reply_to','from','headers','header','url','urls','href','webhook','callback','returnpath','return_path']);
@@ -69,13 +69,19 @@ export const variableTypes=Object.freeze({
  boolean:v=>typeof v==='boolean',
  reference:v=>typeof v==='string'&&/^[A-F0-9]{8}$/.test(v),
  code:v=>typeof v==='string'&&/^[A-Z0-9]{8}$/.test(v),
+ token:v=>typeof v==='string'&&/^[A-Za-z0-9_-]{43}$/.test(v),
 });
-const variableSources=Object.freeze({config:['text-line'],record:['choice','number','boolean'],platform:['reference','code']});
+const variableSources=Object.freeze({config:['text-line'],record:['choice','number','boolean'],platform:['reference','code','token']});
 
 const contactFooter=[{text:'\n\nYou receive this because this address was added and verified for contact-form notices in Whumpo. To stop them, remove the address in Dashboard → Contact inbox ('},{link:'workspace-inbox'},{text:').'}];
 const stopStaff=[{text:'\n\nYou receive this because you turned on appointment notices for this business in its staff area. Turn them off there at any time.'}];
 const stopSubmitter=[{text:'\n\nYou receive this because you asked for an email receipt when you sent the request. This is a one-time receipt; you will not be added to any mailing list.'}];
 const template=(o)=>({contractVersion:1,purpose:'transactional',variables:{},...o});
+
+/** Account notices (WH-202, gap G-E10): platform-obligation, to the account's own verified address (the new address for the confirmation only). Content-free: no address, token (except the new-address code), device or credential detail; every other notice links to Settings. */
+const accountFooter=[{text:'\n\nReview your account in Whumpo: '},{link:'workspace-settings'},{text:'\n\nYou receive this because of a security-relevant change to your Whumpo account. If this was not you, open Whumpo and review your account security now.'}];
+const tpl=(e)=>Object.fromEntries([e]);
+const accountTemplate=(id,subject,lead)=>[`${id}@1`,{state:'available',readiness:'planned',template:template({id,version:1,authority:'platform-obligation',trigger:'account.notice',audiences:['account-email'],subject:[{text:subject}],body:[{text:lead},...accountFooter]})}];
 
 /** Frozen v1 catalog. Planned entries are contract declarations only: no adapter, sender or schedule exists for them. */
 export const notificationCatalog=Object.freeze({
@@ -108,6 +114,19 @@ export const notificationCatalog=Object.freeze({
    variables:{businessName:{source:'config',type:'text-line'},reference:{source:'platform',type:'reference'},service:{source:'record',type:'choice'},day:{source:'record',type:'choice'}},
    subject:[{text:'We received your appointment request ('},{var:'reference'},{text:')'}],
    body:[{text:''},{var:'businessName'},{text:' received your appointment request.\n\nReference: '},{var:'reference'},{text:'\nService: '},{var:'service'},{text:'\nPreferred day: '},{var:'day'},{text:'\n\nThis is a request, not a confirmed booking. The business will contact you to confirm.'},...stopSubmitter]})},
+  'account.email-confirm@1':{state:'available',readiness:'planned',template:template({id:'account.email-confirm',version:1,authority:'platform-obligation',trigger:'account.notice',audiences:['account-email'],
+   variables:{confirmationCode:{source:'platform',type:'token'}},
+   subject:[{text:'Confirm your new Whumpo account email'}],
+   body:[{text:'Someone asked to use this address as the email for a Whumpo account. Your confirmation code is '},{var:'confirmationCode'},{text:'\n\nWhile signed in, enter it in Settings within one hour: '},{link:'workspace-settings'},{text:'\n\nIf you did not ask for this, ignore this email; nothing changes unless the code is entered in a signed-in session.'}]})},
+  ...tpl(accountTemplate('account.email-change-requested','A change to your Whumpo account email was requested','A request was made to change the email address of your Whumpo account. Nothing has changed yet. You can cancel the request in Settings.')),
+  ...tpl(accountTemplate('account.email-change-completed','Your Whumpo account email was changed','The email address of your Whumpo account was changed. You can undo the change in Settings for a limited time.')),
+  ...tpl(accountTemplate('account.email-change-undone','A Whumpo account email change was undone','A change to the email address of a Whumpo account was undone.')),
+  ...tpl(accountTemplate('account.security-review-completed','Your Whumpo security review was completed','A security review of your Whumpo account was completed. Access that was removed or replaced no longer works.')),
+  ...tpl(accountTemplate('account.passkey-added','A passkey was added to your Whumpo account','A new passkey was added to your Whumpo account.')),
+  ...tpl(accountTemplate('account.passkey-removed','A passkey was removed from your Whumpo account','A passkey was removed from your Whumpo account.')),
+  ...tpl(accountTemplate('account.recovery-started','Recovery was started on your Whumpo account','Account recovery was started for your Whumpo account. You can rotate your recovery kit from a signed-in session to stop it.')),
+  ...tpl(accountTemplate('account.recovery-secured','Recovery was completed on your Whumpo account','Account recovery was completed and a new passkey now secures your Whumpo account.')),
+  ...tpl(accountTemplate('account.kit-rotated','Your Whumpo recovery kit was replaced','The recovery kit for your Whumpo account was replaced. The old kit no longer works.')),
  },
 });
 
@@ -122,7 +141,7 @@ export function validateTemplate(t,path='template'){
  check(triggers.includes(t.trigger),'UNKNOWN_TRIGGER',`${path}.trigger`);
  check(Array.isArray(t.audiences)&&t.audiences.length>=1&&t.audiences.every(a=>recipientScopes.includes(a))&&new Set(t.audiences).size===t.audiences.length,'UNKNOWN_SCOPE',`${path}.audiences`);
  // Platform obligations notify the owner's own verified destination; customer configurations run only on accepted records.
- if(t.authority==='platform-obligation')check(t.trigger!=='form.accepted'&&t.audiences.every(a=>a==='owner-destination'),'AUTHORITY_MISMATCH',path);
+ if(t.authority==='platform-obligation')check(t.trigger!=='form.accepted'&&t.audiences.every(a=>a==='owner-destination'||a==='account-email'),'AUTHORITY_MISMATCH',path);
  else check(t.trigger==='form.accepted','AUTHORITY_MISMATCH',path);
  check(plain(t.variables),'INVALID_SHAPE',`${path}.variables`);
  for(const [name,v] of Object.entries(t.variables)){
@@ -132,6 +151,7 @@ export function validateTemplate(t,path='template'){
   // Owner and staff notices are content-free: no visitor-submitted value leaves the private panel by email.
   if(v.source==='record')check(t.audiences.length===1&&t.audiences[0]==='submitter','CONTENT_IN_NOTICE',`${path}.variables.${name}`);
   if(v.type==='code')check(t.trigger==='destination.verification','INVALID_VARIABLE',`${path}.variables.${name}`);
+  if(v.type==='token')check(t.trigger==='account.notice','INVALID_VARIABLE',`${path}.variables.${name}`);
  }
  const used=new Set();
  const segments=(list,where,multiline,maxChars)=>{
