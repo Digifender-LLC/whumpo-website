@@ -36,7 +36,7 @@ class PhotoPipelineTest {
             0x01, 0x12, 0x00, 0x03, 0x00, 0x00, 0x00, 0x01, 0x00, orientation.toByte(), 0x00, 0x00, // Orientation (SHORT)
             0x00, 0x00, 0x00, 0x00, // no next IFD
         )
-        val payload = "Exif".toByteArray() + byteArrayOf(0, 0) + tiff + SECRET.toByteArray()
+        val payload = "Exif".toByteArray() + byteArrayOf(0, 0) + tiff + MARKER.toByteArray()
         val length = payload.size + 2
         val segment = byteArrayOf(0xFF.toByte(), 0xE1.toByte(), (length shr 8).toByte(), length.toByte()) + payload
         return jpeg.copyOfRange(0, 2) + segment + jpeg.copyOfRange(2, jpeg.size)
@@ -63,7 +63,7 @@ class PhotoPipelineTest {
     @Test
     fun exifAndAllOtherMetadataNeverReachTheUpload() {
         val prepared = PhotoPipeline.prepare(withExif(jpeg(2000, 1000)), "IMG_0001.jpg")
-        assertFalse(String(prepared.jpeg, Charsets.ISO_8859_1).contains(SECRET))
+        assertFalse(String(prepared.jpeg, Charsets.ISO_8859_1).contains(MARKER))
         val found = markers(prepared.jpeg)
         assertTrue("no APPn or comment segments, got $found", found.none { it in 0xE0..0xEF || it == 0xFE })
         // Baseline JPEG: SOF0 (0xC0), tables, then the scan.
@@ -110,6 +110,6 @@ class PhotoPipelineTest {
     }
 
     private companion object {
-        const val SECRET = "GPSLatitude=51.5074;GPSLongitude=-0.1278"
+        const val MARKER = "GPSLatitude=51.5074;GPSLongitude=-0.1278"
     }
 }

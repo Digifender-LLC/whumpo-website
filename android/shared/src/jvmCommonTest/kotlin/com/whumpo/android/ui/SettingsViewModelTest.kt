@@ -129,7 +129,7 @@ class SettingsViewModelTest {
 
     @Test
     fun turningNotificationsOnRegistersTheDeviceAndOffRemovesIt() = runTest {
-        val push = FakePush(available = true, token = "fcm-token-for-the-test-device-0001")
+        val push = FakePush(available = true, token = "SYNTHETIC-TOKEN-0001")
         val vm = viewModel(push)
         val job = backgroundScope.launch { vm.state.collect {} }
 
@@ -137,7 +137,7 @@ class SettingsViewModelTest {
         vm.state.first { it.notificationsOn }
         val put = api.requests.single { it.method == HttpMethod.Put }
         assertTrue(put.url.encodedPath.endsWith("/devices/current"))
-        assertTrue(api.bodies[api.requests.indexOf(put)].decodeToString().contains("\"fcmRegistrationToken\":\"fcm-token-for-the-test-device-0001\""))
+        assertTrue(api.bodies[api.requests.indexOf(put)].decodeToString().contains("\"fcmRegistrationToken\":\"SYNTHETIC-TOKEN-0001\""))
 
         vm.setNotifications(false)
         vm.state.first { !it.notificationsOn }
@@ -149,7 +149,7 @@ class SettingsViewModelTest {
     @Test
     fun aRejectedRegistrationIsReportedAndLeavesTheSwitchOff() = runTest {
         api.override = { if (it.method == HttpMethod.Put) reply(503, """{"version":1,"error":{"code":"unavailable","message":"Try again later."}}""") else null }
-        val vm = viewModel(FakePush(available = true, token = "fcm-token-for-the-test-device-0001"))
+        val vm = viewModel(FakePush(available = true, token = "SYNTHETIC-TOKEN-0001"))
         val job = backgroundScope.launch { vm.state.collect {} }
 
         vm.setNotifications(true)

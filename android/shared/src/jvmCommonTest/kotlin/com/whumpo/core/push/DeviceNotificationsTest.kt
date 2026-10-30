@@ -25,14 +25,14 @@ class DeviceNotificationsTest {
         val push = object : PushMessaging {
             override val available = true
 
-            override suspend fun token() = "fcm-token-for-the-test-device-0001"
+            override suspend fun token() = "SYNTHETIC-TOKEN-0001"
 
             override suspend fun deleteToken() = Unit
         }
         val response = DeviceNotifications(api.client, push).register(notificationsEnabled = true)!!
         assertTrue(response.preferences.notificationsEnabled)
         val body = api.bodies.single().decodeToString()
-        assertTrue(body.contains("\"fcmRegistrationToken\":\"fcm-token-for-the-test-device-0001\""))
+        assertTrue(body.contains("\"fcmRegistrationToken\":\"SYNTHETIC-TOKEN-0001\""))
         assertTrue(body.contains("\"notificationsEnabled\":true"))
     }
 
