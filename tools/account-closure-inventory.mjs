@@ -91,6 +91,10 @@ const metrics={
  // WH-145: rule approvals (an unrevoked one still lets a rule act, so it is revoked first), deleted with the account.
  ruleApprovals:['rule_approvals','owner_id'],
  activeRuleApprovals:['rule_approvals','owner_id','revoked_at IS NULL'],
+ // WH-052 P-2: journal jobs (open ones are unfinished; unresolved ones may hold an outside effect, so closure waits for them like other provider work), deleted with the account.
+ jobJournal:['job_journal','owner_user_id'],
+ openJobJournal:['job_journal','owner_user_id',"state NOT IN ('complete','cancelled','expired')"],
+ unresolvedJobs:['job_journal','owner_user_id',"state IN ('awaiting','uncertain') OR (state='operator' AND attempt_id IS NOT NULL)"],
 };
 export const closureInventorySQL=`WITH scope AS (SELECT id FROM users WHERE (?1 IS NULL OR id=?1)),
  owned_projects AS (SELECT id FROM projects WHERE owner_user_id IN (SELECT id FROM scope))

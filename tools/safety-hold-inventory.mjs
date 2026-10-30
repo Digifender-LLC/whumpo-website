@@ -114,6 +114,8 @@ export const deletionSites={
  'src/connector-records-maintenance.ts::lookup_consents':excluded(receipts),
  'src/email-change/maintenance.ts::owner_email_change_limits':excluded(receipts),
  'src/email-change/maintenance.ts::owner_email_changes':excluded(receipts),
+ // WH-052 P-2: the nightly `jobs` pass removes finished journal jobs (events and outbox entry by cascade) 30 days after their last transition.
+ 'src/job-journal.ts::job_journal':excluded('Job control state (opaque ids, digests, schedule and receipt references; no customer content, message or payload): the content a job acts on is covered by its own domain tables and holds. The statement removes only finished jobs and the schema trigger job_journal_retained refuses any other.'),
  'src/email-change/maintenance.ts::owner_security_reviews':excluded(receipts),
  'src/email-change/review-store.ts::${table}':excluded(credential),
  'src/email-change/review-store.ts::github_oauth_states':excluded(credential),

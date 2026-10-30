@@ -101,6 +101,8 @@ Before runtime integration:
 3. WH-006/050: extend aggregate diagnostics with due/leased/uncertain/operator age, retries, throughput and measured row/CPU/storage cost. Run the proposed steady/burst/failure workloads and verify fairness on actual local Worker/D1 bindings before any reviewed live trial. Prove operator attention reaches a configured channel separately; a log alone is not an alert.
 4. If polling misses its agreed target, prepare one Queue + DLQ with an outbox and reconciliation sweep using the **same** receipts. Verify current account headroom and deletion/retention scope before provisioning. Workflows needs a separate evidence-based amendment if sequence complexity warrants it.
 
+**October 29, 2026 (schema batch 3a):** the journal now exists in the D1 schema (`job_journal`, `job_journal_events`, `job_outbox`) with its runner in `src/job-journal.ts`, and the prototype's transactions are mapped to guarded single statements, triggers and one `db.batch`, proven by concurrent-client tests on SQLite and local D1 (gate 1's "supported D1 atomic batches with real concurrent-client tests"). Source only and not deployed; no adapter admits a job. See [P-2 as built](job-orchestration.md#p-2-as-built-october-29-2026-schema-batch-3a).
+
 WH-052 selects and tests a design; it does not complete those implementation/activation tasks. Owner retention choices and qualified review remain recorded in WH-009.
 
 

@@ -24,6 +24,7 @@ import {securityReviewRoute} from './email-change/review-http';
 import {maintainEmailChanges} from './email-change/maintenance';
 import {maintainConnectorRecords} from './connector-records-maintenance';
 import {pruneLayoutReceipts} from './workspace-layout-maintenance';
+import {pruneJobJournal} from './job-journal';
 import {cleanupInteractionDrafts} from './chat-interactions/retention';
 import {exportChatTranscript} from './chat-transcript';
 import {quarantineBackendImport,listBackendImports,scanBackendImports} from './backend-imports';
@@ -678,6 +679,8 @@ export default {
       {name:'photos',run:()=>cleanupPhotos(env)},
       {name:'github',enabled:!!githubConfig(env),run:()=>cleanupGitHub(env.DB,githubConfig(env))},
       {name:'cloudflare',enabled:!!cloudflareConfig(env),run:()=>cleanupCloudflare(env.DB,cloudflareConfig(env))},
+      // WH-052 P-2: finished job-journal rows (with events and outbox entry) 30 days after their last transition.
+      {name:'jobs',run:()=>pruneJobJournal(env.DB)},
     ]);
   },
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {

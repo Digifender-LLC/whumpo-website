@@ -1811,7 +1811,7 @@ CREATE TABLE content_risk_reversals (
 );
 
 CREATE TABLE maintenance_health (
- job TEXT PRIMARY KEY CHECK(job IN ('identity','chat_drafts','imports','hosting','health','fair_use','traffic','funnel','guest_previews','email_changes','reviews','applications','contacts','photos','github','cloudflare')),
+ job TEXT PRIMARY KEY CHECK(job IN ('identity','chat_drafts','imports','hosting','health','fair_use','traffic','funnel','guest_previews','email_changes','reviews','applications','contacts','photos','github','cloudflare','jobs')),
  run_id TEXT NOT NULL,
  started_at INTEGER NOT NULL CHECK(started_at>=0),
  finished_at INTEGER,
@@ -6257,3 +6257,161 @@ BEGIN SELECT RAISE(ABORT,'rule_approval_guard'); END;
 CREATE TRIGGER rule_approval_retained BEFORE DELETE ON rule_approvals
 WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.owner_id) AND OLD.revoked_at IS NULL
 BEGIN SELECT RAISE(ABORT,'rule_approval_retained'); END;
+
+-- WH-052 P-2 job journal (docs/job-orchestration.md). Ported from tools/prototypes/job-journal.mjs. D1 cannot read and then branch inside
+-- one commit, so every check the prototype ran inside its transaction lives here: identity, outbox and the state machine are triggers,
+-- and each caller transition is one UPDATE whose WHERE clause is the fence/lease compare-and-set (src/job-journal.ts). A stale caller
+-- updates zero rows; a forged one is refused by job_journal_transition. Terminal states: complete, cancelled, expired.
+-- The row holds the immutable envelope (contract version 1, docs/job-envelope.md) and its digest; indexed columns are derived from it
+-- and checked against it on insert. Every state change writes exactly one immutable event from last_event/last_at/last_ref.
+CREATE TABLE job_journal (
+ id TEXT PRIMARY KEY CHECK(length(id)=36 AND id NOT GLOB '*[^0-9a-f-]*'),
+ owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ purpose TEXT NOT NULL CHECK(purpose IN ('platform-email','deterministic-rule','owner-push','account-cleanup','project-build')),
+ envelope_json TEXT NOT NULL CHECK(json_valid(envelope_json) AND length(envelope_json)<=8192),
+ envelope_digest TEXT NOT NULL CHECK(length(envelope_digest)=64 AND envelope_digest NOT GLOB '*[^0-9a-f]*'),
+ created_at INTEGER NOT NULL CHECK(typeof(created_at)='integer' AND created_at>=0),
+ expires_at INTEGER NOT NULL CHECK(typeof(expires_at)='integer' AND expires_at>0),
+ max_attempts INTEGER NOT NULL CHECK(typeof(max_attempts)='integer' AND max_attempts BETWEEN 1 AND 3),
+ due INTEGER NOT NULL CHECK(typeof(due)='integer' AND due>=0),
+ initial_due INTEGER NOT NULL CHECK(typeof(initial_due)='integer' AND initial_due>=0),
+ state TEXT NOT NULL DEFAULT 'ready' CHECK(state IN ('ready','leased','awaiting','uncertain','complete','cancelled','operator','expired')),
+ fence INTEGER NOT NULL DEFAULT 0 CHECK(typeof(fence)='integer' AND fence BETWEEN 0 AND 9007199254740991),
+ lease_until INTEGER NOT NULL DEFAULT 0 CHECK(typeof(lease_until)='integer' AND lease_until>=0),
+ attempt INTEGER NOT NULL DEFAULT 0 CHECK(typeof(attempt)='integer' AND attempt BETWEEN 0 AND 3 AND attempt<=max_attempts),
+ attempt_id TEXT CHECK(attempt_id IS NULL OR (length(attempt_id) BETWEEN 1 AND 128 AND attempt_id NOT GLOB '*[^a-zA-Z0-9_.:-]*')),
+ cancel_requested INTEGER NOT NULL DEFAULT 0 CHECK(cancel_requested IN (0,1)),
+ cursor INTEGER NOT NULL DEFAULT 0 CHECK(typeof(cursor)='integer' AND cursor>=0),
+ result_ref TEXT CHECK(result_ref IS NULL OR (length(result_ref) BETWEEN 1 AND 128 AND result_ref NOT GLOB '*[^a-zA-Z0-9_.:-]*')),
+ last_event TEXT NOT NULL CHECK(last_event IN ('enqueued','claimed','intent','uncertain','expired','external_result','confirmed_not_sent','cancel_requested','chunk_committed','operator_hold','operator_release')),
+ last_at INTEGER NOT NULL CHECK(typeof(last_at)='integer' AND last_at>=0),
+ last_ref TEXT CHECK(last_ref IS NULL OR (length(last_ref) BETWEEN 1 AND 128 AND last_ref NOT GLOB '*[^a-zA-Z0-9_.:-]*')),
+ CHECK(state!='awaiting' OR attempt_id IS NOT NULL),
+ CHECK(state!='leased' OR lease_until>0),
+ CHECK(state!='complete' OR result_ref IS NOT NULL OR purpose='account-cleanup')
+);
+CREATE INDEX job_journal_due ON job_journal(state,due,id);
+CREATE INDEX job_journal_owner ON job_journal(owner_user_id,state);
+
+-- Immutable receipts of every journal transition, written by the triggers below.
+CREATE TABLE job_journal_events (
+ sequence INTEGER PRIMARY KEY,
+ job_id TEXT NOT NULL REFERENCES job_journal(id) ON DELETE CASCADE,
+ event TEXT NOT NULL CHECK(event IN ('enqueued','claimed','intent','uncertain','expired','external_result','confirmed_not_sent','cancel_requested','chunk_committed','operator_hold','operator_release')),
+ fence INTEGER NOT NULL CHECK(typeof(fence)='integer' AND fence>=0),
+ attempt INTEGER NOT NULL CHECK(typeof(attempt)='integer' AND attempt BETWEEN 0 AND 3),
+ at INTEGER NOT NULL CHECK(typeof(at)='integer' AND at>=0),
+ reference TEXT CHECK(reference IS NULL OR (length(reference) BETWEEN 1 AND 128 AND reference NOT GLOB '*[^a-zA-Z0-9_.:-]*'))
+);
+-- One receipt per transition (and the foreign-key index): a repeated claim has a new fence, a repeated intent a new attempt.
+CREATE UNIQUE INDEX job_journal_events_once ON job_journal_events(job_id,event,fence,attempt);
+
+-- One stable delivery identity per job (docs/job-envelope.md "Delivery, fences and honest recovery"). acknowledged_at is the producer's
+-- transport acknowledgement only, set once; it is never domain completion.
+CREATE TABLE job_outbox (
+ delivery_id TEXT PRIMARY KEY CHECK(length(delivery_id)=36 AND delivery_id NOT GLOB '*[^0-9a-f-]*'),
+ job_id TEXT NOT NULL UNIQUE REFERENCES job_journal(id) ON DELETE CASCADE,
+ envelope_digest TEXT NOT NULL CHECK(length(envelope_digest)=64 AND envelope_digest NOT GLOB '*[^0-9a-f]*'),
+ acknowledged_at INTEGER CHECK(acknowledged_at IS NULL OR (typeof(acknowledged_at)='integer' AND acknowledged_at>=0))
+);
+CREATE INDEX job_outbox_acknowledged ON job_outbox(acknowledged_at);
+
+-- Admission: a ready, never-attempted job whose derived columns agree with the envelope it stores.
+CREATE TRIGGER job_journal_new BEFORE INSERT ON job_journal
+WHEN NEW.state!='ready' OR NEW.fence!=0 OR NEW.lease_until!=0 OR NEW.attempt!=0 OR NEW.attempt_id IS NOT NULL OR NEW.cancel_requested!=0
+ OR NEW.cursor!=0 OR NEW.result_ref IS NOT NULL OR NEW.due!=NEW.initial_due OR NEW.last_event!='enqueued' OR NEW.last_at!=NEW.created_at
+ OR NEW.last_ref IS NOT NULL OR NEW.created_at>NEW.due OR NEW.due>=NEW.expires_at
+ OR json_extract(NEW.envelope_json,'$.jobId') IS NOT NEW.id OR json_extract(NEW.envelope_json,'$.ownerAccountId') IS NOT NEW.owner_user_id
+ OR json_extract(NEW.envelope_json,'$.purpose') IS NOT NEW.purpose OR json_extract(NEW.envelope_json,'$.schedule.createdAt') IS NOT NEW.created_at
+ OR json_extract(NEW.envelope_json,'$.schedule.notBefore') IS NOT NEW.due OR json_extract(NEW.envelope_json,'$.schedule.expiresAt') IS NOT NEW.expires_at
+ OR json_extract(NEW.envelope_json,'$.limits.maxAttempts') IS NOT NEW.max_attempts
+BEGIN SELECT RAISE(ABORT,'job_journal_new'); END;
+-- The outbox entry and the first event are written by the admission itself, so neither can be missing.
+CREATE TRIGGER job_journal_enqueued AFTER INSERT ON job_journal
+BEGIN
+ INSERT INTO job_outbox(delivery_id,job_id,envelope_digest) VALUES(
+  lower(hex(randomblob(4)))||'-'||lower(hex(randomblob(2)))||'-4'||substr(lower(hex(randomblob(2))),2)||'-'||substr('89ab',abs(random())%4+1,1)||substr(lower(hex(randomblob(2))),2)||'-'||lower(hex(randomblob(6))),
+  NEW.id,NEW.envelope_digest);
+ INSERT INTO job_journal_events(job_id,event,fence,attempt,at,reference) VALUES(NEW.id,NEW.last_event,NEW.fence,NEW.attempt,NEW.last_at,NEW.last_ref);
+END;
+CREATE TRIGGER job_journal_identity BEFORE UPDATE ON job_journal
+WHEN NEW.id IS NOT OLD.id OR NEW.owner_user_id IS NOT OLD.owner_user_id OR NEW.purpose IS NOT OLD.purpose OR NEW.envelope_json IS NOT OLD.envelope_json
+ OR NEW.envelope_digest IS NOT OLD.envelope_digest OR NEW.created_at IS NOT OLD.created_at OR NEW.initial_due IS NOT OLD.initial_due
+ OR NEW.expires_at IS NOT OLD.expires_at OR NEW.max_attempts IS NOT OLD.max_attempts
+BEGIN SELECT RAISE(ABORT,'job_journal_identity'); END;
+-- The state machine. NEW.last_event names the transition and NEW.last_at is its time; each branch lists what must hold in OLD and
+-- what must (and must not) change. The fence moves only on the events that end a holder's right to act; a lease is bounded to 60 s;
+-- once an attempt is recorded (attempt_id) an expired lease can only become uncertain, never ready.
+CREATE TRIGGER job_journal_transition BEFORE UPDATE ON job_journal
+WHEN NOT (CASE NEW.last_event
+ WHEN 'claimed' THEN OLD.state IN ('ready','leased') AND NEW.state='leased' AND OLD.cancel_requested=0 AND OLD.expires_at>NEW.last_at
+  AND ((OLD.state='ready' AND OLD.due<=NEW.last_at) OR (OLD.state='leased' AND OLD.lease_until<=NEW.last_at))
+  AND NEW.fence=OLD.fence+1 AND NEW.lease_until>NEW.last_at AND NEW.lease_until<=NEW.last_at+60000
+  AND NEW.attempt=OLD.attempt AND NEW.attempt_id IS OLD.attempt_id AND NEW.due=OLD.due AND NEW.cursor=OLD.cursor
+  AND NEW.result_ref IS OLD.result_ref AND NEW.cancel_requested=OLD.cancel_requested AND NEW.last_ref IS NULL
+ WHEN 'intent' THEN OLD.state='leased' AND NEW.state='awaiting' AND OLD.cancel_requested=0 AND OLD.lease_until>NEW.last_at
+  AND OLD.expires_at>NEW.last_at AND OLD.attempt<OLD.max_attempts AND NEW.fence=OLD.fence AND NEW.lease_until=OLD.lease_until
+  AND NEW.attempt=OLD.attempt+1 AND NEW.attempt_id=OLD.id||'.'||NEW.attempt AND NEW.last_ref=NEW.attempt_id AND NEW.due=OLD.due
+  AND NEW.cursor=OLD.cursor AND NEW.result_ref IS OLD.result_ref AND NEW.cancel_requested=OLD.cancel_requested
+ WHEN 'uncertain' THEN OLD.state='awaiting' AND NEW.state='uncertain' AND NEW.fence=OLD.fence AND NEW.lease_until=OLD.lease_until
+  AND NEW.attempt=OLD.attempt AND NEW.attempt_id IS OLD.attempt_id AND NEW.due=OLD.due AND NEW.cursor=OLD.cursor
+  AND NEW.result_ref IS OLD.result_ref AND NEW.cancel_requested=OLD.cancel_requested AND NEW.last_ref IS NULL
+ WHEN 'expired' THEN OLD.state IN ('ready','leased') AND NEW.state='expired' AND OLD.expires_at<=NEW.last_at AND NEW.fence=OLD.fence+1
+  AND NEW.lease_until=0 AND NEW.attempt=OLD.attempt AND NEW.attempt_id IS OLD.attempt_id AND NEW.due=OLD.due AND NEW.cursor=OLD.cursor
+  AND NEW.result_ref IS OLD.result_ref AND NEW.cancel_requested=OLD.cancel_requested AND NEW.last_ref IS NULL
+ WHEN 'external_result' THEN OLD.state IN ('awaiting','uncertain','operator') AND OLD.attempt_id IS NOT NULL AND OLD.result_ref IS NULL
+  AND NEW.state=CASE OLD.cancel_requested WHEN 1 THEN 'cancelled' ELSE 'complete' END AND NEW.fence=OLD.fence AND NEW.lease_until=0
+  AND NEW.attempt=OLD.attempt AND NEW.attempt_id IS OLD.attempt_id AND NEW.due=OLD.due AND NEW.cursor=OLD.cursor
+  AND NEW.cancel_requested=OLD.cancel_requested AND NEW.result_ref IS NOT NULL AND NEW.last_ref=NEW.result_ref
+ WHEN 'confirmed_not_sent' THEN OLD.state IN ('awaiting','uncertain','operator') AND OLD.attempt_id IS NOT NULL AND OLD.result_ref IS NULL
+  AND NEW.attempt_id IS NULL AND NEW.attempt=OLD.attempt AND NEW.fence=OLD.fence+1 AND NEW.lease_until=0
+  AND NEW.state=CASE WHEN OLD.cancel_requested=1 THEN 'cancelled' WHEN OLD.expires_at<=NEW.last_at THEN 'expired' WHEN OLD.attempt>=OLD.max_attempts THEN 'operator' ELSE 'ready' END
+  AND NEW.due=NEW.last_at+min(3600000,60000*(1<<(OLD.attempt-1))) AND NEW.cursor=OLD.cursor AND NEW.result_ref IS NULL
+  AND NEW.cancel_requested=OLD.cancel_requested AND NEW.last_ref IS NOT NULL
+ WHEN 'cancel_requested' THEN OLD.cancel_requested=0 AND NEW.cancel_requested=1 AND OLD.state NOT IN ('complete','cancelled','expired')
+  AND NEW.fence=OLD.fence+1 AND NEW.lease_until=OLD.lease_until
+  AND NEW.state=CASE WHEN OLD.state IN ('awaiting','uncertain') OR (OLD.state='operator' AND OLD.attempt_id IS NOT NULL) THEN OLD.state ELSE 'cancelled' END
+  AND NEW.attempt=OLD.attempt AND NEW.attempt_id IS OLD.attempt_id AND NEW.due=OLD.due AND NEW.cursor=OLD.cursor
+  AND NEW.result_ref IS OLD.result_ref AND NEW.last_ref IS NULL
+ WHEN 'chunk_committed' THEN OLD.state='leased' AND OLD.purpose='account-cleanup' AND OLD.cancel_requested=0 AND OLD.lease_until>NEW.last_at
+  AND OLD.expires_at>NEW.last_at AND NEW.cursor>OLD.cursor AND NEW.state IN ('complete','ready') AND NEW.fence=OLD.fence+1
+  AND NEW.lease_until=0 AND NEW.due=NEW.last_at AND NEW.attempt=OLD.attempt AND NEW.attempt_id IS OLD.attempt_id
+  AND NEW.result_ref IS OLD.result_ref AND NEW.cancel_requested=OLD.cancel_requested AND NEW.last_ref IS NULL
+ WHEN 'operator_hold' THEN OLD.state IN ('ready','leased','uncertain') AND NEW.state='operator' AND NEW.fence=OLD.fence+1 AND NEW.lease_until=0
+  AND NEW.attempt=OLD.attempt AND NEW.attempt_id IS OLD.attempt_id AND NEW.due=OLD.due AND NEW.cursor=OLD.cursor
+  AND NEW.result_ref IS OLD.result_ref AND NEW.cancel_requested=OLD.cancel_requested AND NEW.last_ref IS NOT NULL
+ WHEN 'operator_release' THEN OLD.state='operator' AND NEW.state='ready' AND OLD.attempt_id IS NULL AND OLD.cancel_requested=0
+  AND OLD.attempt<OLD.max_attempts AND OLD.expires_at>NEW.last_at AND NEW.fence=OLD.fence+1 AND NEW.lease_until=0 AND NEW.due=NEW.last_at
+  AND NEW.attempt=OLD.attempt AND NEW.attempt_id IS NULL AND NEW.cursor=OLD.cursor AND NEW.result_ref IS OLD.result_ref
+  AND NEW.cancel_requested=OLD.cancel_requested AND NEW.last_ref IS NOT NULL
+ ELSE 0 END)
+BEGIN SELECT RAISE(ABORT,'job_journal_transition'); END;
+CREATE TRIGGER job_journal_event AFTER UPDATE ON job_journal
+BEGIN INSERT INTO job_journal_events(job_id,event,fence,attempt,at,reference) VALUES(NEW.id,NEW.last_event,NEW.fence,NEW.attempt,NEW.last_at,NEW.last_ref); END;
+-- Only a finished job may be deleted while the account exists (30-day pruning is src/job-journal.ts); the account cascade removes the rest.
+CREATE TRIGGER job_journal_retained BEFORE DELETE ON job_journal
+WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.owner_user_id) AND OLD.state NOT IN ('complete','cancelled','expired')
+BEGIN SELECT RAISE(ABORT,'job_journal_retained'); END;
+
+-- An event can only restate the job's own last transition, so no caller can write a receipt for something that did not happen.
+CREATE TRIGGER job_journal_event_new BEFORE INSERT ON job_journal_events
+WHEN NOT EXISTS(SELECT 1 FROM job_journal j WHERE j.id=NEW.job_id AND j.last_event=NEW.event AND j.last_at=NEW.at AND j.fence=NEW.fence
+ AND j.attempt=NEW.attempt AND j.last_ref IS NEW.reference)
+BEGIN SELECT RAISE(ABORT,'job_journal_event_new'); END;
+CREATE TRIGGER job_journal_event_update BEFORE UPDATE ON job_journal_events
+BEGIN SELECT RAISE(ABORT,'job_journal_event_immutable'); END;
+-- Deleted only with a finished job (or by the account cascade, when neither the job nor its owner remains).
+CREATE TRIGGER job_journal_event_retained BEFORE DELETE ON job_journal_events
+WHEN EXISTS(SELECT 1 FROM job_journal j JOIN users u ON u.id=j.owner_user_id WHERE j.id=OLD.job_id AND j.state NOT IN ('complete','cancelled','expired'))
+BEGIN SELECT RAISE(ABORT,'job_journal_event_retained'); END;
+
+CREATE TRIGGER job_outbox_new BEFORE INSERT ON job_outbox
+WHEN NEW.acknowledged_at IS NOT NULL OR NOT EXISTS(SELECT 1 FROM job_journal j WHERE j.id=NEW.job_id AND j.envelope_digest=NEW.envelope_digest)
+BEGIN SELECT RAISE(ABORT,'job_outbox_new'); END;
+CREATE TRIGGER job_outbox_identity BEFORE UPDATE ON job_outbox
+WHEN NEW.delivery_id IS NOT OLD.delivery_id OR NEW.job_id IS NOT OLD.job_id OR NEW.envelope_digest IS NOT OLD.envelope_digest
+ OR OLD.acknowledged_at IS NOT NULL OR NEW.acknowledged_at IS NULL
+BEGIN SELECT RAISE(ABORT,'job_outbox_identity'); END;
+CREATE TRIGGER job_outbox_retained BEFORE DELETE ON job_outbox
+WHEN EXISTS(SELECT 1 FROM job_journal j JOIN users u ON u.id=j.owner_user_id WHERE j.id=OLD.job_id AND j.state NOT IN ('complete','cancelled','expired'))
+BEGIN SELECT RAISE(ABORT,'job_outbox_retained'); END;

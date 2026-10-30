@@ -71,6 +71,8 @@ export const backlogInventory={
  lookup_consents:queue('lookup_consents',`COALESCE(settled_at,expires_at)+604800000<=${nowMs}`,ms('COALESCE(settled_at,expires_at)','+7 days')),
  // B11: layout receipts beyond an owner's latest 50 (the cap trigger keeps this at zero; the daily email_changes job prunes any surplus).
  workspace_layout_receipts:queue('workspace_layout_receipts','to_revision<=(SELECT max(m.to_revision) FROM workspace_layout_receipts m WHERE m.user_id=workspace_layout_receipts.user_id)-50','created_at'),
+ // WH-052 P-2: finished journal jobs 30 days after their last transition (jobJournalRetentionMs in src/job-journal.ts), removed by the daily jobs pass.
+ job_journal:queue('job_journal',`state IN ('complete','cancelled','expired') AND last_at+2592000000<=${nowMs}`,ms('last_at','+30 days')),
  connector_receipts:queue('connector_receipts',`state NOT IN ('dispatching','uncertain') AND updated_at+34560000000<=${nowMs}`,ms('updated_at','+400 days')),
 };
 export const operationInventory={

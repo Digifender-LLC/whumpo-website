@@ -8646,6 +8646,14 @@
      "methods": [
       "SCHEDULED"
      ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "job",
+     "match": "default jobs",
+     "methods": [
+      "SCHEDULED"
+     ]
     }
    ],
    "cells": {
