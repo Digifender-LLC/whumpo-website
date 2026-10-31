@@ -24,3 +24,9 @@ export async function inlineSpecificationPhotos(db:D1Database,files:R2Bucket|und
  }
  return html;
 }
+/** Every project photo a configuration serves from its own `assets/` path: page photos plus the brand logo (WH-091), once each.
+ * The logo goes through the same ownership, clearance, immutable-reference and digest checks as any page photo. */
+export function assetPhotos(config:{photos?:SpecificationPhoto[];brand?:{logo:SpecificationPhoto|null}}):SpecificationPhoto[]{
+ const photos=[...(config.photos??[])],logo=config.brand?.logo;
+ return logo&&!photos.some(p=>p.id===logo.id)?[...photos,{id:logo.id,alt:logo.alt}]:photos;
+}

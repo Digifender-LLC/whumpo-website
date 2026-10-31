@@ -12,6 +12,7 @@
     "test:support-browser": "node tests/workspace-identity-browser.mjs --support",
     "test:specification-compiler": "node tests/specification-compiler.mjs",
     "test:brand-compiler": "node tests/brand-compiler.mjs",
+    "test:brand-kits": "node tests/brand-kits.mjs && node tests/brand-kits.mjs --d1",
     "test:specification-journey": "node tests/specification-journey.mjs",
     "test:specification-review": "node tests/specification-review-details.mjs && node tests/specification-review-display.mjs",
     "test:chat-fields": "node tests/chat-interaction-fields.mjs && node tests/chat-interaction-fields-browser.mjs",
