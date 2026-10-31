@@ -149,7 +149,7 @@ Each trigger is read from the per-lane diagnostics in follow-up P-3 below, over 
 
 - 43,200 invocations a month against 10M included requests;
 - assuming 5 ms CPU per idle tick, about 216,000 CPU ms a month against 30M included;
-- about one indexed due query per active lane per tick, and no writes when idle.
+- about one indexed due query per active lane per tick, and, per tick, one `maintenance_health` upsert under the name `job_dispatch` (R8) plus the lanes' own writes; a lane with nothing due writes nothing else.
 
 Real row counts (`meta.rows_read` / `rows_written`, including indexes and triggers) must be measured in P-3/P-5. The included allowances are shared with the account's other apps.
 

@@ -13260,7 +13260,7 @@
     {
      "file": "src/index.ts",
      "kind": "job",
-     "match": "* * * * * dispatchJobs",
+     "match": "* * * * * job_dispatch",
      "methods": [
       "SCHEDULED"
      ]
@@ -13369,9 +13369,21 @@
      ]
     },
     "stale": {
-     "state": "gap",
-     "gapKind": "test",
-     "detail": "Observation R8, open: the every-minute dispatchJobs call writes no maintenance_health row and a failure escapes scheduled() raw (characterized by tests/boundary-contact-delivery-health.mjs, outside profiles). A distinct health row needs a new name in the maintenance_health job CHECK (schema change); reusing the daily jobs row would let a healthy minute run mask a stuck prune. Named gap, rides schema batch 6; backlog stays visible through the journal and report-maintenance."
+     "state": "evidenced",
+     "detail": "Observation R8, resolved (takes effect at the next cutover): the every-minute dispatchJobs call runs as the runMaintenance job `job_dispatch`, which writes its own maintenance_health row (never the daily `jobs` prune row, so a healthy minute cannot hide a stuck prune) and escapes scheduled() only as the sanitized scheduler error; lane isolation stays in dispatchJobs. The new name needs the maintenance_health job CHECK from schema batch 6.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "await runMaintenance(env.DB,[{name:'job_dispatch'"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/boundary-contact-delivery-health.mjs",
+       "contains": "assert.deepEqual(await health(),[{job:'job_dispatch',status:'completed'}]",
+       "asserts": "a healthy minute writes its own job_dispatch row, a failure is stored as a category and the raw error text neither escapes nor is stored"
+      }
+     ]
     }
    }
   },
