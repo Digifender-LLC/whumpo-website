@@ -76,7 +76,8 @@ try{
    const n=await notice(queued.id);assert.equal(n.state,'dispatching');assert.equal(n.attempts,1);assert.equal(await ledger()>=1,true,'the send is counted before the provider is called');
    assert.equal((await job(n.job_id)).state,'awaiting');
   };
-  const r=await pass(p,T+1);
+  // inspect reads the database inside the provider call; on D1 that can outlast the 50 ms default.
+  const r=await pass(p,T+1,{timeoutMs:5000});
   assert.equal(r.accepted,1);assert.equal(p.calls.length,1);
   const n=await notice(queued.id);
   assert.deepEqual({state:n.state,attempts:n.attempts,ref:n.provider_ref,reason:n.reason},{state:'accepted',attempts:1,ref:'ref-1',reason:null});
