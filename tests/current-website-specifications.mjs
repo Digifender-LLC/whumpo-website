@@ -49,8 +49,8 @@ try{
  const savedRow=sql.prepare('SELECT * FROM project_spec_versions WHERE version_id=?').get(first.turn.id);
  assert.throws(()=>sql.prepare('INSERT INTO project_spec_versions(version_id,project_id,revision,proposal_id,spec_json,spec_digest,lock_json,manifest_json,manifest_digest) VALUES(?,?,?,?,?,?,?,?,?)').run(id(),project,99,id(),JSON.stringify(schema2),savedRow.spec_digest,savedRow.lock_json,savedRow.manifest_json,savedRow.manifest_digest),/specification_current_required/);
  assert.throws(()=>sql.prepare('INSERT INTO project_spec_versions(version_id,project_id,revision,proposal_id,spec_json,spec_digest,lock_json,manifest_json,manifest_digest) VALUES(?,?,?,?,?,?,?,?,?)').run(id(),project,99,id(),savedRow.spec_json,savedRow.spec_digest,JSON.stringify(lock2),savedRow.manifest_json,savedRow.manifest_digest),/specification_current_required/);
- // project-content@3/@4/@5 snapshots were reset at the project-content@6 cutover: the lock and SQL admission both refuse them.
- for(const prior of [3,4,5]){
+ // project-content@3/@4/@5/@6 snapshots were reset at the project-content@7 cutover: the lock and SQL admission both refuse them.
+ for(const prior of [3,4,5,6]){
   const old=m.currentCompilerLock();old.compiler.version=prior;await assert.rejects(m.compileProjectSpecification(saved.specification,old),e=>e.code==='COMPILER_LOCK_MISMATCH');
   assert.throws(()=>sql.prepare('INSERT INTO project_spec_versions(version_id,project_id,revision,proposal_id,spec_json,spec_digest,lock_json,manifest_json,manifest_digest) VALUES(?,?,?,?,?,?,?,?,?)').run(id(),project,99,id(),savedRow.spec_json,savedRow.spec_digest,JSON.stringify(old),savedRow.manifest_json,savedRow.manifest_digest),/specification_current_required/);
  }
