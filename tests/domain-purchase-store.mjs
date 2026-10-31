@@ -40,7 +40,7 @@ const fundingOf=o=>({coverage:null,paymentMethod:{kind:'payment-method',id:owner
 const actorOf=o=>({kind:'owner',ownerId:owners[o].id});
 const projectOf=(o,revision=1)=>({projectId:owners[o].project,ownerId:owners[o].id,revision});
 let seq=0;const id=p=>`${p}-${String(++seq).padStart(4,'0')}`;
-const extra=Object.fromEntries(['p1','p2','p3','p4','p5','p6','p7','p8','p9','p10','p11','p12','p13','p14'].map(n=>[`synthetic-${n}.com`,{registration:1500,renewal:1500}]));
+const extra=Object.fromEntries(['p1','p2','p3','p4','p5','p6','p7','p8','p9','p10','p11','p12','p13','p14','p15','p16','p17'].map(n=>[`synthetic-${n}.com`,{registration:1500,renewal:1500}]));
 function registrar(clock=()=>T0){
  return m.createSyntheticRegistrar({clock,prices:{...extra,[NAME]:{registration:1050,renewal:1150},[CAFE]:{registration:2400,renewal:2400},[SHOP]:{registration:1500,renewal:1500},[PREMIUM]:{registration:45000,renewal:45000,premium:true}}});
 }
@@ -167,7 +167,7 @@ try{
   assert.equal(registration.hostname,NAME);assert.equal(registration.auto_renew,0);assert.equal(registration.state,'active');assert.equal(registration.charge_mismatch,0);assert.ok(registration.expires_at>T0);
   await dispatch(A,reg,orderId);assert.equal(reg.calls.register,1,'a later dispatch never registers again');
   await refuse(run('UPDATE domain_order_attempts SET order_id=? WHERE order_id=?',id('order'),orderId),/domain_attempt_frozen/);
-  await refuse(run("INSERT INTO domain_order_attempts(attempt_id,order_id,started_at) VALUES('again',?,5)",orderId),/UNIQUE/);
+  await refuse(run("INSERT INTO domain_order_attempts(attempt_id,order_id,started_at) VALUES('again',?,5)",orderId),/domain_row_exists/);
   const fresh=registrar(),other=await prepare(fresh,'b',NAME,T0+30);await refuse(consent(A,fresh,other,'b',T0+31),/ALREADY_REGISTERED/);
  });
 
@@ -313,7 +313,7 @@ try{
   await refuse(run('INSERT INTO domain_funding_holds(order_id,source_id,amount_cents,state,placed_at) VALUES(?,?,1,?,5)',id('order'),'pm-a','held'),/domain_hold_admit/);
   await refuse(run("UPDATE domain_orders SET state='dispatching',attempts=1,attempt_id=?,attempt_started_at=?,version=version+1,updated_at=? WHERE order_id=?",orderId+':a1',T0+MINUTE*20,T0+MINUTE*20,orderId),/domain_order_expired/);
   await dispatch(A,reg,orderId);assert.equal(await state(orderId),'registered');
-  await refuse(run("INSERT INTO domain_registrations(hostname,order_id,owner_user_id,project_id,created_at) VALUES('synthetic-p14.com',?,?,?,?)",orderId,owners.a.id,owners.a.project,T0),/domain_registration_admit|UNIQUE constraint failed: domain_registrations.order_id/);
+  await refuse(run("INSERT INTO domain_registrations(hostname,order_id,owner_user_id,project_id,created_at) VALUES('synthetic-p14.com',?,?,?,?)",orderId,owners.a.id,owners.a.project,T0),/domain_row_exists/);
   // Released (transferred out): the name can be bought and registered again, and the old order's contact is gone.
   await run("UPDATE domain_registrations SET state='transferred-out' WHERE order_id=?",orderId);
   assert.equal((await one('SELECT released FROM domain_orders WHERE order_id=?',orderId)).released,1);
@@ -332,6 +332,37 @@ try{
   assert.equal(results.filter(r=>r.applied).length,1);
   assert.equal(await count('SELECT count(*) FROM domain_registrar_events WHERE order_id=? AND applied=1',orderId),1);
   assert.equal(await count('SELECT count(*) FROM domain_registrar_events WHERE order_id=?',orderId),1,'the loser leaves no receipt');
+ });
+
+ await check('INSERT OR REPLACE cannot rewrite or remove a genuine row on any guarded table, and cannot stretch a registration past its real expiry',async()=>{
+  const reg=registrar(),{orderId}=await reserved(reg,'a','synthetic-p15.com');await dispatch(A,reg,orderId);
+  const host=(await one('SELECT hostname FROM domain_orders WHERE order_id=?',orderId)).hostname;
+  const before=JSON.stringify(await all('SELECT * FROM domain_registrations WHERE order_id=?',orderId));
+  const keyed=[['domain_quotes','quote_id=(SELECT quote_id FROM domain_orders WHERE order_id=?1)'],['domain_reviews','review_id=(SELECT review_id FROM domain_orders WHERE order_id=?1)'],
+   ['domain_orders','order_id=?1'],['domain_funding_holds','order_id=?1'],['domain_order_attempts','order_id=?1'],['domain_registrations','order_id=?1']];
+  for(const [t,where] of keyed)await refuse(run(`INSERT OR REPLACE INTO ${t} SELECT * FROM ${t} WHERE ${where}`,orderId),/domain_row_exists/);
+  // The real forgery: the same row with a far-future expiry. The row, its expiry and hosting proof are untouched.
+  await refuse(run("INSERT OR REPLACE INTO domain_registrations(hostname,order_id,owner_user_id,project_id,state,created_at,expires_at,charge_mismatch) SELECT hostname,order_id,owner_user_id,project_id,state,created_at,9999999999999,charge_mismatch FROM domain_registrations WHERE order_id=?",orderId),/domain_row_exists/);
+  assert.equal(JSON.stringify(await all('SELECT * FROM domain_registrations WHERE order_id=?',orderId)),before);
+  assert.equal(await count('SELECT count(*) FROM domain_orders WHERE order_id=?',orderId),1);
+  // Defense in depth: with the once-trigger out of the way, the admit trigger alone still refuses a REPLACE that stretches the expiry (or changes anything it binds).
+  const once=(await one("SELECT sql FROM sqlite_master WHERE name='domain_registrations_once'")).sql;
+  await run('DROP TRIGGER domain_registrations_once');
+  try{
+   await refuse(run("INSERT OR REPLACE INTO domain_registrations(hostname,order_id,owner_user_id,project_id,state,created_at,expires_at,charge_mismatch) SELECT hostname,order_id,owner_user_id,project_id,state,created_at,9999999999999,charge_mismatch FROM domain_registrations WHERE order_id=?",orderId),/domain_registration_admit/);
+   await refuse(run("INSERT OR REPLACE INTO domain_registrations(hostname,order_id,owner_user_id,project_id,state,created_at,expires_at,charge_mismatch) SELECT hostname,order_id,owner_user_id,project_id,state,created_at+1,expires_at,charge_mismatch FROM domain_registrations WHERE order_id=?",orderId),/domain_registration_admit/);
+  }finally{await run(once);}
+  assert.equal(JSON.stringify(await all('SELECT * FROM domain_registrations WHERE order_id=?',orderId)),before);
+  void host;
+  // released=1 is refused on an order whose registration is still live (here none exists; re-create via re-buy is covered above).
+ });
+
+ await check('a released flag needs a terminal registration, and the first tick after 72 hours still reads once',async()=>{
+  const reg=registrar(),{orderId}=await reserved(reg,'a','synthetic-p16.com');await dispatch(A,reg,orderId);
+  await refuse(run('UPDATE domain_orders SET released=1,version=version+1 WHERE order_id=?',orderId),/domain_order_final/);
+  const late=await reserved(reg,'a','synthetic-p17.com');reg.next('timeout-before');await dispatch(A,reg,late.orderId);reg.takeBy('synthetic-p17.com','someone-elses-order');
+  assert.ok((await m.reconcileUnknown(A,reg,T0+100*HOUR)).moved>=1);
+  assert.equal(await state(late.orderId),'failed','after the window the first tick reads once and finds the proof');
  });
  await check('an active registration blocks project and account purge until it is transferred out; a settled order does not',async()=>{
   const reg=registrar(),{orderId}=await reserved(reg,'a',P4);await dispatch(A,reg,orderId);assert.equal(await state(orderId),'registered');
