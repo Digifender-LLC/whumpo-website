@@ -47,6 +47,10 @@ jobs:
       # Fails when AGENTS.md cites a path, pnpm script or tool version that no longer exists.
       - name: AGENTS.md is not stale
         run: node tools/agents-md-check.mjs
+      # Browser suites stay out of the verify profiles (tests/verification-profiles.mjs), so this step is what runs the brand kit
+      # editor in Chromium at 360/390/1280px, 200% text, keyboard and axe, under the workspace's own Content-Security-Policy (WH-091).
+      - name: Brand kit editor in Chromium
+        run: pnpm exec playwright install --with-deps chromium && node tests/brand-kits-browser.mjs
       - name: Roadmap backlog is in sync
         run: node tools/roadmap.mjs validate && node tools/roadmap.mjs render --check
 
