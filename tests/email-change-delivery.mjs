@@ -23,9 +23,10 @@ const origin='https://whumpo.com',minute=60000,hour=3600000;
 let limited=false;const authEnv={AUTH_LIMITER:{limit:async()=>({success:!limited})}};
 
 /** The simulated provider (a `send_email` binding). `mode` is what the next call does; every call is recorded. */
-const sent=[];let mode='up';
+const sent=[];let mode='up',during=null; // `during` runs once inside the next provider call (a competing action while a dispatch is in flight)
 const binding={send:async message=>{
  sent.push(message);
+ if(during){const hook=during;during=null;await hook();}
  const fail=code=>Object.assign(Error('PRIVATE-PROVIDER-ERROR'),{code});
  if(mode==='down')throw fail('E_RATE_LIMIT_EXCEEDED');
  if(mode==='reject')throw fail('E_VALIDATION_ERROR');
@@ -165,6 +166,21 @@ try{
   assert.equal((await changeRow(pending.data.changeId)).token_verifier,await m.hashToken(token2));
   assert.equal((await call(b,'confirm',{version:1,token:token1})).data.code,'invalid_token','the first token is dead');
   assert.equal((await call(b,'confirm',{version:1,token:token2})).data.status,'confirmed');
+ });
+
+ await check('a competing change during dispatch: the in-flight code is dead on arrival, nothing is resent, and only the newer change can confirm (WH-204)',async()=>{
+  const a=await owner(),x=addr('inflight'),y=addr('winner');
+  const first=await request(a,x);let racing;
+  during=()=>(racing=request(a,y)); // on local D1 this can outlast the drain's 50 ms provider timeout, so it is awaited below
+  try{await drain();}finally{during=null;}
+  const second=await racing;
+  assert.equal(to(x).length,1,'the first confirmation was sent once');assert.ok(second&&second.data.changeId!==first.data.changeId);
+  assert.equal((await changeRow(first.data.changeId)).state,'superseded');
+  const late=await call(a,'confirm',{version:1,token:tokenOf(to(x)[0])});assert.equal(late.status,409);assert.equal(late.data.code,'stale_change');
+  await drain(Date.now()+10*minute);assert.equal(to(x).length,1,'no later pass resends or retargets the superseded change');
+  assert.equal(to(y).length,1,'the newer change is delivered once');
+  const win=await call(a,'confirm',{version:1,token:tokenOf(to(y)[0])});assert.equal(win.data.status,'confirmed');
+  assert.equal((await one('SELECT email FROM users WHERE id=?',a.account)).email,y);
  });
 
  await check('a superseded, cancelled or expired change is never sent a code',async()=>{

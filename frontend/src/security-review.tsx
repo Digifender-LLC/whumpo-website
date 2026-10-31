@@ -51,7 +51,7 @@ export function SecurityReviewView({v,on}:{v:View;on:Handlers}){
    <p className="text-body-sm">Use this if you think a passkey, recovery kit, email account or connection may be exposed. You will check your passkey, choose what to remove, and be signed out everywhere.</p>
    <details className="text-body-sm text-ink-muted"><summary className="min-h-11 cursor-pointer py-3 font-medium text-ink">What to know</summary><p>This restores control of your account. It does not recover encrypted content.</p></details>
    {v.resume&&<p className="text-body-sm">A security review may not have finished. Check its result; the same request is safe to repeat.</p>}
-   <div className="flex flex-wrap gap-3"><Button className="min-h-11" disabled={v.busy} onClick={on.start}>{v.resume?'Check result':'Secure my account'}</Button></div></div>}
+   <div className="flex flex-wrap gap-3"><Button className="min-h-11 h-auto max-w-full whitespace-normal" disabled={v.busy} onClick={on.start}>{v.resume?'Check result':'Secure my account'}</Button></div></div>}
   {v.step==='select'&&snap&&<form className="grid gap-5" onSubmit={e=>{e.preventDefault();on.toSelectDone()}}>{h('Choose what to keep')}
    <p className="text-body-sm">This review is valid until <Deadline value={snap.expiresAt}/>. Every sign-in on every device ends when you finish.</p>
    <fieldset className="grid gap-3"><legend className="text-body-sm font-medium">Passkeys</legend><p className="text-body-sm text-ink-muted">All are kept unless you remove them. Remove one only if you do not recognise it or no longer hold it.</p>
@@ -61,15 +61,15 @@ export function SecurityReviewView({v,on}:{v:View;on:Handlers}){
      {snap.connections.map(c=><label key={c.connectionId} className="flex items-start gap-3 text-body-sm min-h-11"><input type="checkbox" className="mt-1" checked={v.dropConns.includes(c.connectionId)} onChange={()=>on.toggleConn(c.connectionId)}/><span>Remove {providerName(c.provider)} connection<span className="block text-ink-muted">{c.access==='active'?'Access is on':'Access is already off'}</span></span></label>)}</>:<p className="text-body-sm text-ink-muted">You have no provider connections.</p>}</fieldset>
    {snap.pendingEmailChange&&<p className="text-body-sm">An email change is waiting for confirmation. It will be cancelled.</p>}
    {v.dropKeys.length===snap.credentials.length&&<p className={alertBox} role="alert">You chose to remove every passkey. You will need your saved recovery kit to get back in.</p>}
-   <div className="flex flex-wrap gap-3"><Button className="min-h-11" disabled={v.busy}>Continue</Button><Button type="button" variant="secondary" className="min-h-11" disabled={v.busy} onClick={()=>on.back('start')}>Cancel</Button></div></form>}
+   <div className="flex flex-wrap gap-3"><Button className="min-h-11 h-auto max-w-full whitespace-normal" disabled={v.busy}>Continue</Button><Button type="button" variant="secondary" className="min-h-11 h-auto max-w-full whitespace-normal" disabled={v.busy} onClick={()=>on.back('start')}>Cancel</Button></div></form>}
   {v.step==='kit'&&<div className="grid gap-4">{h('Replace your recovery kit')}
    <p className="text-body-sm">A new kit replaces the one you have now, and the old kit stops working. Keep it private and apart from your passkeys. It cannot be shown again.</p>
-   {!v.kit&&<div className="flex flex-wrap gap-3"><Button className="min-h-11" disabled={v.busy} onClick={on.makeKit}>Create new recovery kit</Button><Button type="button" variant="secondary" className="min-h-11" disabled={v.busy} onClick={on.skipKit}>Keep my current kit</Button></div>}
-   {v.kit&&<><div className="grid sm:grid-cols-2 gap-2"><Button type="button" variant="secondary" className="min-h-11" onClick={on.download}><Download className="size-4"/>Download</Button><Button type="button" variant="secondary" className="min-h-11" onClick={on.copy}><Copy className="size-4"/>Copy</Button></div>
+   {!v.kit&&<div className="flex flex-wrap gap-3"><Button className="min-h-11 h-auto max-w-full whitespace-normal" disabled={v.busy} onClick={on.makeKit}>Create new recovery kit</Button><Button type="button" variant="secondary" className="min-h-11 h-auto max-w-full whitespace-normal" disabled={v.busy} onClick={on.skipKit}>Keep my current kit</Button></div>}
+   {v.kit&&<><div className="grid sm:grid-cols-2 gap-2"><Button type="button" variant="secondary" className="min-h-11 h-auto max-w-full whitespace-normal" onClick={on.download}><Download className="size-4"/>Download</Button><Button type="button" variant="secondary" className="min-h-11 h-auto max-w-full whitespace-normal" onClick={on.copy}><Copy className="size-4"/>Copy</Button></div>
     <details className="rounded-md border p-4"><summary className="cursor-pointer text-body-sm font-medium">Show private recovery key</summary><p className="font-mono text-body-sm break-all select-all mt-4">{v.kit.key}</p></details>
-    {v.kitSaved?<p className="text-body-sm text-ready-ink">Saved. Continue when you are ready.</p>:<Button className="min-h-11 h-auto whitespace-normal" disabled={v.busy} onClick={on.saved}>I have saved my new recovery kit</Button>}
-    <div className="flex flex-wrap gap-3"><Button variant={v.kitSaved?'primary':'secondary'} className="min-h-11" disabled={v.busy||!v.kitSaved} onClick={()=>on.back('confirm')}>Continue</Button><Button type="button" variant="secondary" className="min-h-11" disabled={v.busy} onClick={on.skipKit}>Keep my current kit instead</Button></div></>}
-   <Button type="button" variant="quiet" className="min-h-11 justify-self-start" disabled={v.busy} onClick={()=>on.back('select')}>Back</Button></div>}
+    {v.kitSaved?<p className="text-body-sm text-ready-ink">Saved. Continue when you are ready.</p>:<Button className="min-h-11 h-auto max-w-full whitespace-normal" disabled={v.busy} onClick={on.saved}>I have saved my new recovery kit</Button>}
+    <div className="flex flex-wrap gap-3"><Button variant={v.kitSaved?'primary':'secondary'} className="min-h-11 h-auto max-w-full whitespace-normal" disabled={v.busy||!v.kitSaved} onClick={()=>on.back('confirm')}>Continue</Button><Button type="button" variant="secondary" className="min-h-11 h-auto max-w-full whitespace-normal" disabled={v.busy} onClick={on.skipKit}>Keep my current kit instead</Button></div></>}
+   <Button type="button" variant="quiet" className="min-h-11 h-auto max-w-full whitespace-normal justify-self-start" disabled={v.busy} onClick={()=>on.back('select')}>Back</Button></div>}
   {v.step==='confirm'&&snap&&<form className="grid gap-4" onSubmit={e=>{e.preventDefault();on.commit()}}>{h('Confirm')}
    <ul className="text-body-sm list-disc pl-5 grid gap-1"><li>You will be signed out on every device, including this one.</li>
     <li>{v.dropKeys.length?'Passkeys removed: '+v.dropKeys.length+' of '+snap.credentials.length+'.':'No passkeys will be removed.'}</li>
@@ -78,7 +78,7 @@ export function SecurityReviewView({v,on}:{v:View;on:Handlers}){
     {snap.pendingEmailChange&&<li>The waiting email change will be cancelled.</li>}</ul>
    {v.dropKeys.length===snap.credentials.length&&<p className={alertBox} role="alert">No passkey will remain. Your saved recovery kit is the only way back in.</p>}
    <label className="flex items-start gap-3 text-body-sm min-h-11"><input type="checkbox" className="mt-1" checked={v.ack} onChange={e=>on.setAck(e.target.checked)}/><span>I understand this cannot be undone and I will be signed out everywhere.</span></label>
-   <div className="flex flex-wrap gap-3"><Button className="min-h-11 h-auto whitespace-normal" disabled={v.busy||!v.ack||!ready}>Secure my account now</Button><Button type="button" variant="secondary" className="min-h-11" disabled={v.busy} onClick={()=>on.back('kit')}>Back</Button></div></form>}
+   <div className="flex flex-wrap gap-3"><Button className="min-h-11 h-auto max-w-full whitespace-normal" disabled={v.busy||!v.ack||!ready}>Secure my account now</Button><Button type="button" variant="secondary" className="min-h-11 h-auto max-w-full whitespace-normal" disabled={v.busy} onClick={()=>on.back('kit')}>Back</Button></div></form>}
   {v.step==='done'&&v.receipt&&<div className="grid gap-3">{h('Your account is secured')}
    <ul className="text-body-sm list-disc pl-5 grid gap-1"><li>You are signed out everywhere.</li>
     <li>Passkeys removed: {v.receipt.revokedCredentials.length}.</li>
@@ -87,7 +87,7 @@ export function SecurityReviewView({v,on}:{v:View;on:Handlers}){
     {v.receipt.connections.map(c=><li key={c.connectionId}>Connection removed: {revocationText(c.revocation)}.</li>)}
     {v.receipt.stage==='recovering'&&<li>No passkey remains. Use your saved recovery kit to get back in.</li>}</ul>
    <p className="text-body-sm text-ink-muted">This restores control of your account. It does not recover encrypted content.</p>
-   <Button className="min-h-11 justify-self-start" onClick={on.signIn}>Continue to sign-in</Button></div>}
+   <Button className="min-h-11 h-auto max-w-full whitespace-normal justify-self-start" onClick={on.signIn}>Continue to sign-in</Button></div>}
   <p role="status" aria-live="polite" className="text-body-sm text-ink-muted">{v.status}</p>
   {v.error&&<p role="alert" className={alertBox}>{v.error}</p>}
  </div>;
