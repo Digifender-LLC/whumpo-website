@@ -9,7 +9,7 @@ import {databaseFixture} from './helpers/current-database.mjs';
 // Events come only from the real producer paths: the OpenCode Go adapter (complete) with a stubbed transport between the real
 // inference receipt transitions, the gateway spend receipt transitions, and public photo reads. No direct cost_events insert,
 // no network, credential, paid API or live provider. Every WH-172 acceptance item is tagged A1..A3 / W1..W5 in the check names.
-const bundle=await build({stdin:{contents:"export * from './src/cost-events';export * from './src/cost-event-store';export * from './src/cost-event-emission';export * from './src/cost-event-adapters';export * from './src/cost-reconcile';export * from './src/model-costs';export * from './src/gateway-spend';export * from './src/inference-routing';export * from './src/storage-budget';export * from './src/task-cost-report';export {complete,ProviderError} from './src/ai';export * from './src/fair-use-report';export {resourceTariff,estimateWorkload} from './src/resource-economics';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
+const bundle=await build({stdin:{contents:"export * from './src/cost-events';export * from './src/cost-event-store';export * from './src/cost-event-emission';export * from './src/cost-event-adapters';export * from './src/cost-reconcile';export * from './src/model-costs';export * from './src/gateway-spend';export * from './src/inference-routing';export * from './src/storage-budget';export * from './src/task-cost-report';export {complete,ProviderError} from './src/ai';export * from './src/fair-use-report';export {resourceTariff,estimateWorkload} from './src/resource-economics';export * from './src/liability-register';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
 const m=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
 const scenario=JSON.parse(readFileSync(new URL('./fixtures/inference-routing-scenario.json',import.meta.url),'utf8'));
 const store=await databaseFixture(),db=store.db;
@@ -204,7 +204,7 @@ try{
   assert.equal(rb.excluded.unpriced,1);assert.equal(rb.completedFullyObserved.shadowCostMicros.samples,1,'the unpriced turn adds no sample');
   assert.equal(infRow(m.reconciliationReport(statementFor('inference-provider',[['g1','inference','usage','','1']]),await heads())).status,'incomplete');
  });
- await check('W10 uncertain-operation exposure and invoice liabilities: exposure stays bounded and visible, unknown liability lines stay unknown, no liability event has a producer',async()=>{
+ await check('W10 uncertain-operation exposure and invoice liabilities: exposure stays bounded and visible, unknown liability lines stay unknown, the liability register producer keeps unknown amounts unknown (A5)',async()=>{
   const t=await ai(B,down);
   const e=(await evt(await key('inference-receipt',t))).at(-1);assert.equal(e.outcome,'uncertain');assert.equal(e.cost.basis,'unknown');assert.ok(e.cost.exposureMicros>0);
   const r=infRow(m.reconciliationReport([],await heads()));assert.ok(r.boundedExposureMicros>=e.cost.exposureMicros&&r.unfinishedEvents>=1);
@@ -212,7 +212,25 @@ try{
   const row=m.reconciliationReport(statementFor('company',lines),await heads()).rows.find(x=>x.provider==='company');
   assert.equal(row.status,'incomplete');assert.equal(row.unknownInvoiceLines,1);assert.equal(row.invoiceLiabilityMicros,5000000);assert.equal(row.recordedLiabilityMicros,0);assert.equal(row.liabilityResidualMicros,5000000,'an invoiced liability with no event is a visible residual');
   assert.deepEqual(row.liabilityRegister.map(x=>[x.category,x.state]),[['license','known'],['renewal','unknown']]);
-  assert.equal((await heads()).filter(x=>x.kind==='liability').length,0,'gap: no producer emits liability events; they are proven only with synthetic appends in tests/cost-reconcile.mjs');
+  // The producer: the synthetic register (all amounts unknown) goes through src/liability-register.ts into the real store. Unknown stays unknown, never zero.
+  assert.equal((await heads()).filter(x=>x.kind==='liability').length,0,'nothing emits liability events until the register is read');
+  const register=JSON.parse(readFileSync(new URL('../docs/economics/liability-register.example.json',import.meta.url),'utf8')),evs=await m.costEventsFromRegister(register);
+  for(const e of evs)assert.equal((await m.appendCostEvent(db,e)).status,'accepted');
+  for(const e of evs)assert.equal((await m.appendCostEvent(db,e)).status,'duplicate','re-reading the register adds nothing');
+  const liab=(await heads()).filter(x=>x.kind==='liability');
+  assert.equal(liab.length,3);assert.ok(liab.every(x=>x.source==='liability-register'&&x.attribution.scope==='platform'&&x.cost.basis==='unknown'&&x.cost.exposureMicros===null&&x.customerUnits===0));
+  const after=m.reconciliationReport(statementFor('company',lines),await heads()).rows.find(x=>x.provider==='company');
+  assert.equal(after.recordedLiabilityMicros,0,'unknown amounts add nothing to a total');assert.equal(after.status,'incomplete');assert.equal(after.liabilityResidualMicros,5000000,'the invoiced license is still a residual until its amount is known');
+  // A later revision supplies a real amount for the license only; the renewal stays unknown and keeps the report incomplete.
+  const lic=register.entries.find(x=>x.dimension==='liability.license'),known=await m.costEventFromLiabilityEntry({...lic,revision:2,amountMicros:5000000,ref:'invoice-line-1',observedAt:'2026-11-01T00:00:00.000Z'});
+  assert.equal((await m.appendCostEvent(db,known)).status,'accepted');
+  const filled=m.reconciliationReport(statementFor('company',lines),await heads()).rows.find(x=>x.provider==='company');
+  assert.equal(filled.recordedLiabilityMicros,5000000);assert.equal(filled.liabilityResidualMicros,0);assert.equal(filled.status,'incomplete','the unknown renewal still holds the report incomplete');
+  // A known amount is never made unknown again, and the register accepts nothing outside its closed shape.
+  await rejects(m.appendCostEvent(db,await m.costEventFromLiabilityEntry({...lic,revision:3})),'REVISION_REGRESSION');
+  for(const bad of [{...lic,owner:'x'},{...lic,dimension:'worker.requests'},{...lic,amountMicros:-1,ref:'r'},{...lic,amountMicros:5,ref:null},{...lic,amountMicros:null,ref:'r'},{...lic,pool:'closed-account'},{...lic,period:'2026-13'}])await rejects(m.costEventFromLiabilityEntry(bad),'INVALID_LIABILITY');
+  // No producer retries a billable operation (no code sets attempt 2 or later), so no retry-class event exists; the validator still requires one to be attempt 2 or later.
+  assert.equal((await heads()).filter(x=>x.workClass==='retry').length,0);
  });
  await check('W11 comparison with the fair-use, task-cost and economic-scenario outputs',async()=>{
   const [from,to]=window(),evs=(await heads()).filter(e=>e.source==='inference-receipt');
@@ -254,5 +272,5 @@ try{
   await m.inferenceReservation(db,A,t,period,config,1000,1000).run();assert.equal(await m.dispatchInference(broken,A,t),true);
   assert.equal((await one('SELECT status FROM inference_calls WHERE turn_id=?',t)).status,'dispatched');
  });
- console.log(`Cost events acceptance passed (${cases} checks, ${process.argv.includes('--d1')?'actual local D1':'in-memory SQLite'}): AI via OpenCode Go stub, gateway and storage producers, uncertain outcome, replay, tenant isolation, WH-171 reconciliation with shadow excluded, late-after-close, allowance, overhead, unknown rate, liability gap and fair-use/task-cost/scenario comparison.${compared}`);
+ console.log(`Cost events acceptance passed (${cases} checks, ${process.argv.includes('--d1')?'actual local D1':'in-memory SQLite'}): AI via OpenCode Go stub, gateway and storage producers, uncertain outcome, replay, tenant isolation, WH-171 reconciliation with shadow excluded, late-after-close, allowance, overhead, unknown rate, liability register producer and fair-use/task-cost/scenario comparison.${compared}`);
 }finally{console.warn=warn;rmSync(dir,{recursive:true,force:true});await store.close();}

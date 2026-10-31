@@ -157,6 +157,19 @@ try{
   assert.equal((await call(b,'cancel',{version:1,changeId})).data.code,'unknown_change');assert.equal((await call(b,'undo',{version:1,changeId})).data.code,'unknown_change');
   assert.equal((await call(b,'',undefined,{method:'GET'})).data.pending,null);assert.equal((await one('SELECT state FROM owner_email_changes WHERE change_id=?',changeId)).state,'pending');
  });
+ await check('WH-200 A2: confirm and cancel racing on one change commit exactly one outcome, whichever runs first, and the account matches it',async()=>{
+  for(const [first,second] of [['confirm','cancel'],['cancel','confirm']]){
+   const a=await owner(),x=addr('race'),changeId=(await change(a,x)).data.changeId;await deliver('confirm-new-address',x);const token=tokenTo(x);
+   const run={confirm:()=>call(a,'confirm',{version:1,token}),cancel:()=>call(a,'cancel',{version:1,changeId})};
+   const results=await Promise.all([run[first](),run[second]()]);
+   const state=(await one('SELECT state FROM owner_email_changes WHERE change_id=?',changeId)).state,email=(await one('SELECT email FROM users WHERE id=?',a.account)).email;
+   assert.ok(state==='confirmed'||state==='cancelled',state);
+   assert.equal(email,state==='confirmed'?x:a.email,'the stored address follows the one winning outcome');
+   assert.equal(results.filter(r=>r.status===200&&r.data.status===state).length>=1,true,'the winner reports its own outcome');
+   assert.equal(results.some(r=>r.status===200&&r.data.status===(state==='confirmed'?'cancelled':'confirmed')),false,'the loser never reports the other outcome as done');
+   assert.equal(outbox.filter(n=>n.changeId===changeId&&n.kind==='change-completed').length,state==='confirmed'?1:0,'at most one completion notice');
+  }
+ });
  await check('expiry: an expired token is refused and the change is closed; epoch advance makes a pending change stale',async()=>{
   const a=await owner(),x=addr('late');
   // An aged pending change (a request two hours ago) with its limit evidence, written through the schema's own insert checks.

@@ -127,9 +127,9 @@ async function suite(m,label){
   assert.deepEqual(Object.keys(ct.sources),Object.keys(ref.sources));
   for(const [source,entry] of Object.entries(ct.sources)){
    assert.equal(entry.table,ref.sources[source].table,source);
-   assert.equal(entry.readiness,ref.sources[source].readiness==='source-adapter-planned'?'source-adapter':ref.sources[source].readiness,source);
+   assert.equal(entry.readiness,ref.sources[source].readiness==='source-adapter-planned'||source==='liability-register'?'source-adapter':ref.sources[source].readiness,source);
   }
-  assert.deepEqual(Object.entries(ct.sources).filter(([,s])=>s.readiness==='source-adapter').map(([k])=>k).sort(),['gateway-settlement','inference-receipt','storage-operations']);
+  assert.deepEqual(Object.entries(ct.sources).filter(([,s])=>s.readiness==='source-adapter').map(([k])=>k).sort(),['gateway-settlement','inference-receipt','liability-register','storage-operations']);
   // Internal consistency of the registries, checked here rather than shipped as runtime code.
   for(const [id,d] of Object.entries(ct.dimensions)){assert.match(id,/^[a-z0-9_.-]+$/);assert.ok(d.sources.every(s=>Object.hasOwn(ct.sources,s)),id);assert.ok(d.kind==='usage'||d.kind==='liability');}
   for(const versions of Object.values(ct.tariffs))for(const t of Object.values(versions)){
@@ -521,7 +521,7 @@ function staticScope(texts=sourceText){
  // WH-170: only the append-only store, the emission module and the WH-171 reconciliation report import the contract or adapters. No route, report or other consumer does. Imports only: lifecycle class ids such as 'cost-events' are not consumers.
  const users=[...walk('src'),...walk('frontend'),...walk('public-app')].filter(f=>/\.(?:ts|tsx|js|mjs)$/.test(f)&&!/src\/cost-event(?:s|-adapters)\.ts$/.test(f)).filter(f=>/from\s*['"][^'"]*cost-event(?:s|-adapters)['"]|import\(\s*['"][^'"]*cost-event(?:s|-adapters)['"]/.test(readFileSync(new URL('../'+f,import.meta.url),'utf8')));
  const wired=['src/model-costs.ts','src/gateway-spend.ts','src/storage-budget.ts','src/ai-chat.ts','src/standard-ai-recovery.ts'];
- assert.deepEqual(users.filter(f=>!/src\/cost-(?:event-(?:store|emission)|reconcile)\.ts$/.test(f)&&!wired.includes(f)),[]);
+ assert.deepEqual(users.filter(f=>!/src\/(?:cost-(?:event-(?:store|emission)|reconcile)|liability-register)\.ts$/.test(f)&&!wired.includes(f)),[]);
  // The producers reach it only through the emission module, after their receipt transition; none imports the store or the pure modules.
  for(const file of wired)assert.ok(/from '\.\/cost-event-emission'/.test(read(file))&&!/cost-event-(?:store|adapters)|cost-events'/.test(read(file)),file);
  assert.ok(!/cost-event/.test(read('src/task-cost-report.ts')));
