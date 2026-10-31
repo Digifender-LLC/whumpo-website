@@ -303,6 +303,11 @@ try{
     'app-auth.ts:UPDATE app_visitors',                           // revocation flag only
     'app-lifecycle.ts:DELETE FROM app_visitors',                 // safety_hold_visitor_retained + module cascades; tests/boundary-visitor-deletion-hold.mjs, shared-modules-records.mjs
     'files.ts:UPDATE project_files',                             // pending to ready after the object is stored
+    'restore-suppression.ts:DELETE FROM app_visitors',          // WH-019 operator replay on an isolated candidate only (no Worker imports it); hold triggers refuse inside held scope
+    'restore-suppression.ts:DELETE FROM module_records',        // same replay, same triggers
+    'restore-suppression.ts:DELETE FROM project_files',         // same replay, same triggers
+    'restore-suppression.ts:UPDATE app_visitors',               // same replay: revocation flag only
+    'restore-suppression.ts:UPDATE module_access_roles',        // same replay: a grant older than the ledger's revocation is revoked
     'shared-modules/files-gallery.ts:DELETE FROM module_files',  // removes the collection link only, never the photo
     'shared-modules/records.ts:DELETE FROM module_records',      // owner removal, held by safety_hold_module_record_retained
     'shared-modules/records.ts:DELETE FROM module_records',      // retention expiry, same trigger and held-project/object filter

@@ -6,8 +6,8 @@
  "evidence": "docs/workspace-collaboration-evidence.md",
  "baseline": {
   "sourceCommit": "4dea09c",
-  "reviewedSchemaSha256": "357661098852f0f9155806f1342f32e30949fba1e5332542ecc0f6da392c17f6",
-  "tables": 244,
+  "reviewedSchemaSha256": "65a3e80b31933c4f20e708deee96c07b031aec07611569e2d0a80c77cd2fcf76",
+  "tables": 245,
   "usersForeignKeyColumns": 125
  },
  "vocabulary": {
@@ -281,6 +281,7 @@
    "operator_containments",
    "operator_retention_receipts",
    "operator_session_revocations",
+   "restore_suppressions",
    "plan_catalog",
    "safety_case_audit",
    "safety_case_evidence",
