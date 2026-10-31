@@ -7,7 +7,6 @@ import type {ModuleContext,ModuleHandlers,ModuleReadHandler,ModuleWriteHandler} 
 import {admissionNotices} from '../notification-configurations';
 import {assertFeature,featurePredicate} from '../feature-admission';
 import {featureRequest,FeatureInclusionError} from '../feature-inclusion';
-import type {RecordsLeadsSummaryFacts} from './shape';
 
 /** WH-127 records and forms module (docs/shared-modules.md#records-and-forms-module-wh-127--october-4-2026-utc).
  * Deterministic handlers over `module_records` in the shared control D1: no inference, provider, network, model context
@@ -308,28 +307,6 @@ export async function readRecordsSummary(db:D1Database,user:string,project:strin
    schemas:c.schemas.map(s=>({recordId:s.id,fieldsRevision:s.fieldsRevision,fields:s.fields.length,records:{public:n(s.id,'public'),visitor:n(s.id,'visitor'),staff:n(s.id,'staff')}})),
    forms:c.forms.map(f=>({formId:f.id,recordId:f.recordId,submit:f.submit,attachments:f.uploadCollectionId!==null})),
    views:c.views.map(v=>({viewId:v.id,recordId:v.recordId,audience:v.audience,scope:v.scope}))});
- }
- return {items};
-}
-
-/** `records.leads-summary@1`: per registered records instance of one owned project and schema, the count of currently retained records by lead
- * stage (`new` includes records with no lead row) and how many of them have a due date. Counts only: never a record, note, date or entry id, so
- * it is safe for the Chat temporary view and the model's view facts (owner decision 2). Identity and ownership only, so it survives plan loss. */
-export async function readLeadsSummary(db:D1Database,user:string,project:string):Promise<RecordsLeadsSummaryFacts>{
- if(!uuid(project)||!await db.prepare('SELECT 1 FROM projects WHERE id=? AND owner_user_id=?').bind(project,user).first())throw new ModuleError('not_found','Project not found.');
- const items:RecordsLeadsSummaryFacts['items']=[];
- for(const row of (await registeredInstances(db,project)).filter(r=>r.kind==='records').slice(0,8)){
-  if(row.state===null)continue;
-  const instance=await instanceOf(row);if(instance.kind!=='records')continue;
-  const window=live(instance.config.retentionDays);
-  const {results}=await db.prepare(`SELECT r.schema_id,coalesce(l.stage,'new') stage,count(*) n,count(l.due_date) due FROM module_records r LEFT JOIN module_record_leads l ON l.entry_id=r.id
-   WHERE r.instance_id=? AND r.project_id=? AND ${window.sql} GROUP BY r.schema_id,coalesce(l.stage,'new')`).bind(row.id,project,...window.params).all<{schema_id:string;stage:string;n:number;due:number}>();
-  items.push({localId:row.local_id,resourceId:row.id,state:row.state as RecordsLeadsSummaryFacts['items'][number]['state'],
-   schemas:instance.config.schemas.map(sc=>{
-    const at=(stage:string)=>results.find(x=>x.schema_id===sc.id&&x.stage===stage);
-    return {recordId:sc.id,stages:{new:at('new')?.n??0,contacted:at('contacted')?.n??0,qualified:at('qualified')?.n??0,won:at('won')?.n??0,lost:at('lost')?.n??0},
-     withDueDate:leadStages.reduce((n,stage)=>n+(at(stage)?.due??0),0)};
-   })});
  }
  return {items};
 }

@@ -130,7 +130,7 @@ export async function accountClosureInventory(db,userId=null){
  return {observedAt:new Date().toISOString(),scope:userId===null?'platform_aggregate':'single_account',counts,
   readyForDeletion:false,
   limitations:[
-   'Read-only control-database snapshot; not a complete data export or deletion authorization.',
+   'Read-only control-database counts taken in three separate statements (D1 limits a result to 100 columns), so they are not one atomic snapshot; not a complete data export or deletion authorization.',
    'Identity counts cover rows linked to extant accounts; anonymous login/signup challenges and detached effect receipts need separate platform retention.',
    'Provider resources, R2 objects and backups have not been reconciled. Row counts are not resource counts.',
    'Saved configuration/proposal counts include full content copies. Metadata receipt counts do not prove independent restore suppression or safe deletion order.',

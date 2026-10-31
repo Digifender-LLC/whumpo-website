@@ -54,18 +54,6 @@ export function validRecordsSummaryFacts(d:unknown):d is RecordsSummaryFacts{
   &&new Set(d.items.map(i=>(i as {localId:string}).localId)).size===d.items.length;
 }
 
-/** WH-093 `records.leads-summary@1` view facts: per registered records instance and schema, how many currently retained records sit at each lead
- * stage and how many have a due date. Counts only: never a record, note, due date, field value or entry id. */
-export type RecordsLeadsSummaryFacts={items:{localId:string;resourceId:string;state:'inactive'|'active'|'suspended'|'migrating';
- schemas:{recordId:string;stages:{new:number;contacted:number;qualified:number;won:number;lost:number};withDueDate:number}[]}[]};
-export function validRecordsLeadsSummaryFacts(d:unknown):d is RecordsLeadsSummaryFacts{
- return exact(d,['items'])&&Array.isArray(d.items)&&d.items.length<=8&&d.items.every(i=>exact(i,['localId','resourceId','state','schemas'])&&localName(i.localId)&&uuid(i.resourceId)
-  &&['inactive','active','suspended','migrating'].includes(String(i.state))&&Array.isArray(i.schemas)&&i.schemas.length>=1&&i.schemas.length<=4
-  &&i.schemas.every(s=>exact(s,['recordId','stages','withDueDate'])&&localName(s.recordId)&&exact(s.stages,['new','contacted','qualified','won','lost'])
-   &&Object.values(s.stages as Record<string,unknown>).every(tally)&&tally(s.withDueDate)))
-  &&new Set(d.items.map(i=>(i as {localId:string}).localId)).size===d.items.length;
-}
-
 /** WH-128 owner photo-collection panel facts (dashboard only, owner route GET /api/projects/P/module-files): the saved
  * specification's page ids and paths, the owner's ready library photos not yet in a collection (id and exact digest, so
  * the owner's `files.putBytes` can name them), and per owner collection (`upload` lists `owner`) of each registered files

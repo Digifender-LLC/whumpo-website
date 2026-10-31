@@ -23,9 +23,7 @@ export const moduleBindings=Object.freeze({
  // WH-127 records counts per registered records instance. Field labels, values, entry ids and visitor ids are never a
  // binding output; owners read values only in the dashboard records panel (GET /api/projects/P/module-records/R/S).
  'records.summary@1':{mode:'read',scope:'project',handler:'readRecordsSummary',surface:'view widget records-summary (saved page and Chat temporary view) and the owner records panel',inclusion:'identity and ownership only',modelContext:'records instance ids, states, revisions, retention, counts by submitter kind, form and view ids with audiences'},
- // WH-093 lead counts by stage per records instance and schema (the `records-leads-summary` view). Counts only: a note, due date, stage of one record and entry id are never a binding output;
- // the owner reads and edits them in the dashboard records panel. Owner writes go through `leads.update` on whumpo-modules@1 and need business.leads.
- 'records.leads-summary@1':{mode:'read',scope:'project',handler:'readLeadsSummary',surface:'view widget records-leads-summary (saved page and Chat temporary view)',inclusion:'identity and ownership only',modelContext:'records instance ids, states and per-stage lead counts'},
+ // WH-093 lead stages, notes and due dates are owner-only dashboard data: no binding, Chat control, view or model context carries them. Owner writes go through `leads.update` on whumpo-modules@1 and need business.leads.
  // WH-158 appointment notice configuration: prepares the exact review (template digests, sender, scopes, limits, price, business name) for one records
  // form; the confirm is the typed `confirm` control of kind notificationConfiguration. Counts and switches ride on the records panel route; no address or value.
  notificationSetupReview:{mode:'prepare',scope:'project',handler:'notificationSetupCommand',surface:'ChatControl notificationSetupReview (records panel) and the site action of the same name',inclusion:'current core.forms prepare and confirm; sending re-reads core.forms dispatch',modelContext:'review summary without addresses or submitted values'},

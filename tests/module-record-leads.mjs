@@ -234,7 +234,6 @@ try{
   assert.equal(await leadRow(fresh),null);
   const page=await list(a,records);assert.equal(page.status,200);assert.equal(page.body.leads.editable,false);assert.ok(page.body.items.some(i=>i.lead.revision>0),'Saved leads stay readable');
   // Records are still removable without the plan.
-  const view=await m.readViewBinding(a.scope,a.user,'records-leads-summary',a.project);assert.equal(view.status,'ready',JSON.stringify(view));assert.equal(view.binding,'records.leads-summary@1');
   const {exportRecords,validateRecordsExport}=m.moduleRecordsExport,exported=await exportRecords(a.scope,a.user,a.project,records.id,records.config_revision,{recordId:'request'});
   const withLead=exported.records.filter(r=>r.lead);assert.ok(withLead.length>=3);assert.ok(withLead.every(r=>r.lead.revision>=1&&['new','contacted','qualified','won','lost'].includes(r.lead.stage)));
   await validateRecordsExport(JSON.parse(JSON.stringify(exported)));
@@ -245,25 +244,34 @@ try{
   await grant(a);assert.equal((await ownerCall(a,leadEdit(records,fresh,0,{stage:'contacted'}))).status,200,'A current grant admits the write again');
  });
 
- await check('records.leads-summary@1 is counts only, scoped to the owner, and no lead value reaches Chat, receipts, events, views or logs',async()=>{
-  const view=await m.readViewBinding(a.scope,a.user,'records-leads-summary',a.project);assert.equal(view.status,'ready');
-  const item=view.data.items.find(i=>i.localId==='requests');assert.equal(item.resourceId,records.id);
-  const stages=item.schemas[0].stages,total=Object.values(stages).reduce((n,x)=>n+x,0);
-  assert.equal(total,(await row('SELECT count(*) n FROM module_records WHERE instance_id=? AND expires_at>unixepoch()',records.id)).n);
-  assert.equal(stages.lost,(await row("SELECT count(*) n FROM module_record_leads WHERE instance_id=? AND stage='lost'",records.id)).n);
-  assert.equal(item.schemas[0].withDueDate,(await row('SELECT count(*) n FROM module_record_leads WHERE instance_id=? AND due_date IS NOT NULL',records.id)).n);
-  assert.deepEqual(Object.keys(item.schemas[0]).sort(),['recordId','stages','withDueDate']);
-  const text=JSON.stringify(view);for(const x of [...markers,e1,e2,e3,v1.visitorId,'note'])assert.ok(!text.includes(x),x);
-  assert.equal((await m.readViewBinding(a.scope,a.user,'records-leads-summary',b.project)).status,'unavailable');
-  assert.equal((await m.readViewBinding(b.scope,b.user,'records-leads-summary',a.project)).status,'unavailable');
-  assert.equal((await m.readViewBinding(a.scope,a.user,'records-leads-summary',null)).status,'unavailable');
+ await check('lead data never reaches Chat, views, bindings, receipts, events, logs or the agent prompt',async()=>{
+  for(const kind of ['records-leads-summary','leads'])await assert.rejects(()=>m.readViewBinding(a.scope,a.user,kind,a.project),/registered component/,kind);
+  const {moduleBindings}=await import('../src/shared-modules/bindings.ts').catch(()=>({moduleBindings:null}));if(moduleBindings)assert.ok(!Object.keys(moduleBindings).some(k=>/lead/i.test(k)));
   for(const t of ['chat_turns','module_request_receipts','module_record_events','module_activation_reviews','activity_events']){const dump=JSON.stringify(await rows('SELECT * FROM '+t));for(const x of markers)assert.ok(!dump.includes(x),t);}
   const chat=JSON.stringify(await m.readChat(a.scope,a.user));for(const x of markers)assert.ok(!chat.includes(x));
-  for(const kind of ['modules','records-summary','records-leads-summary']){const dump=JSON.stringify(await m.readViewBinding(a.scope,a.user,kind,a.project));for(const x of markers)assert.ok(!dump.includes(x),kind);}
+  for(const kind of ['modules','records-summary']){const dump=JSON.stringify(await m.readViewBinding(a.scope,a.user,kind,a.project));for(const x of markers)assert.ok(!dump.includes(x),kind);assert.ok(!/lead|stage/i.test(dump),kind);}
   for(const x of markers)assert.ok(!logs.join('\n').includes(x));
-  const prompt=m.agentPrompt({})+m.agentPrompt({},'website');for(const word of ['leads.update','leads','records.leads-summary'])assert.ok(!prompt.includes(word),word);
+  const prompt=m.agentPrompt({})+m.agentPrompt({},'website');for(const word of ['leads.update','leads','lead stage'])assert.ok(!prompt.includes(word),word);
   assert.equal(m.modulePolicy.moduleOperations['leads.update'].write,true);assert.equal(typeof m.sharedModules.moduleHandlers['leads.update'],'function');
   assert.equal(network,0);
+ });
+
+ await check('retention expiry across tenants: a held lead outlives its expired record only while held, another tenant is unaffected',async()=>{
+  await grant(b);
+  const age=async e=>{const ts=await rows("SELECT sql FROM sqlite_master WHERE type='trigger' AND name IN ('module_record_update','safety_hold_module_record_frozen')");await run('DROP TRIGGER module_record_update');await run('DROP TRIGGER safety_hold_module_record_frozen');try{await run('UPDATE module_records SET created_at=unixepoch()-31*86400,updated_at=unixepoch()-31*86400,expires_at=unixepoch()-86400 WHERE id=?',e);}finally{for(const s of ts)await run(s.sql);}};
+  for(const scope of ['project','account']){
+   const ae=await submit(a,records,v1),be=await submit(b,theirs,bv);
+   assert.equal((await ownerCall(a,leadEdit(records,ae,0,{stage:'won',note:'held'}))).status,200);assert.equal((await ownerCall(b,leadEdit(theirs,be,0,{stage:'won',note:'free'}))).status,200);
+   await age(ae);await age(be);
+   const c='case-x-'+scope,h='hold-x-'+scope;
+   await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES(?,?,'intake-x','human:reviewer',unixepoch(),unixepoch()+31536000)",c,a.user);
+   await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES(?,?,?,?,?,'basis-x','human:approver',unixepoch(),unixepoch()+86400)",h,c,a.user,scope,scope==='project'?a.project:null);
+   await m.sharedModuleRecords.cleanupModuleRecords(db);
+   assert.ok(await leadRow(ae),'held lead kept '+scope);assert.ok(await row('SELECT 1 x FROM module_records WHERE id=?',ae),'held record kept');
+   assert.equal(await leadRow(be),null,'other tenant lead gone '+scope);assert.equal(await row('SELECT 1 x FROM module_records WHERE id=?',be),null);
+   await run("UPDATE safety_preservation_holds SET released_at=unixepoch(),released_by='human:approver',release_ref='r' WHERE id=?",h);
+   await m.sharedModuleRecords.cleanupModuleRecords(db);assert.equal(await leadRow(ae),null,'expires after release '+scope);
+  }
  });
 
  await check('lifecycle: closure counts the leads and project deletion removes them',async()=>{
@@ -273,6 +281,6 @@ try{
  });
 
  assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
- process.stdout.write(`Record leads passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — owner-only leads.update (first edit, partial change, clear), revision compare-and-swap with one winner under concurrency, input bounds, visitor/staff/public/foreign-owner refusals and no lead field on any other read, stage/due/overdue filters on the owner list, deleted/expired records cannot be resurrected, hold freeze, Business admission with plan loss (read, summary and export survive), counts-only Chat binding, closure and lifecycle.\n`);
+ process.stdout.write(`Record leads passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — owner-only leads.update (first edit, partial change, clear), revision compare-and-swap with one winner under concurrency, input bounds, visitor/staff/public/foreign-owner refusals and no lead field on any other read, stage/due/overdue filters on the owner list, deleted/expired records cannot be resurrected, hold freeze, Business admission with plan loss (read and export survive), counts-only Chat binding, closure and lifecycle.\n`);
 }catch(error){originals.error(String(error.stack||error).replace(/data:text\/javascript;base64,[A-Za-z0-9+/=]+/g,'<bundled module>'));process.exitCode=1;}
 finally{for(const k of consoleMethods)console[k]=originals[k];globalThis.fetch=originalFetch;await fixture.close();}

@@ -1,7 +1,7 @@
 import {useRef,useState} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import {Link} from '@tanstack/react-router';
-import type {PublicFormState,RecordsLeadsSummaryFacts,RecordsSummaryFacts} from '../../src/shared-modules/shape';
+import type {PublicFormState,RecordsSummaryFacts} from '../../src/shared-modules/shape';
 import {APIError,api,message} from './lib/api';
 import {Textarea} from './components/ui/textarea';
 import {Button} from './components/ui/button';
@@ -83,18 +83,6 @@ export function NoticeSetup({project,instance,form,submit,setup}:{project:string
  </section>;
 }
 
-/** WH-093 `records.leads-summary@1` card: counts per stage, never a note, date or record. The text carries every number. */
-export function RecordsLeadsSummaryCard({facts,projectId}:{facts:RecordsLeadsSummaryFacts;projectId:string}){
- if(!facts.items.length)return <StateNote title="No records module is registered for this project.">Ask Whumpo in Chat to add a form that collects records.</StateNote>;
- return <div className="space-y-4">{facts.items.map(i=><section key={i.localId} aria-label={i.localId+' leads'} className="space-y-2 rounded-md bg-surface-sunken p-4 text-body-sm">
-   <p className="font-semibold break-words">{i.localId} · {states[i.state]}</p>
-   <ul className="space-y-1">{i.schemas.map(s=><li key={s.recordId} className="break-words">{s.recordId}: {stages.map(x=>`${s.stages[x]} ${stageLabel[x].toLowerCase()}`).join(', ')}; {s.withDueDate} with a follow-up date</li>)}</ul>
-  </section>)}
-  <Button asChild variant="secondary" className="min-h-11"><Link to="/workspace/$view" params={{view:'records'}} search={{project:projectId}}>Open form records</Link></Button>
-  <p className="text-caption text-ink-muted">Counts only. Notes and dates stay in the private records panel. They are not shown in Chat or sent to AI.</p>
- </div>;
-}
-
 /** Owner records panel (workspace origin): every field of one schema, newest first, 50 per page, rendered as text only.
  * Data comes only from the owner routes; nothing here is written to Chat history or model context. Removal sends an
  * owner `records.remove` module request and reuses its request id until a result is confirmed. */
@@ -163,12 +151,12 @@ export function LeadFilters({stage,due,onChange}:{stage:string;due:string;onChan
  * never a silent overwrite. Without Business the fields are read-only and say why. Owner-private: not shown in Chat or sent to AI. */
 export function LeadEditor({id,lead,editable,today,onSave,onReload}:{id:string;lead:Lead;editable:boolean;today:string;onSave:(changes:LeadChanges)=>Promise<void>;onReload:()=>void}){
  const [stage,setStage]=useState<Stage>(lead.stage),[note,setNote]=useState(lead.note),[due,setDue]=useState(lead.dueDate??''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[conflict,setConflict]=useState(false),[saved,setSaved]=useState(false);
- // A newer saved revision (after our own save or a reload) replaces the form values; the saved notice and any typing in between are kept honest by that reset.
- const [seen,setSeen]=useState(lead.revision);
- if(seen!==lead.revision){setSeen(lead.revision);setStage(lead.stage);setNote(lead.note);setDue(lead.dueDate??'');setConflict(false);}
+ // A newer saved revision (after our own save or a reload) updates each field the owner has not touched since the last one; a field with an unsaved draft keeps the draft, so a conflict reload never discards typing.
+ const [seen,setSeen]=useState(lead),[last,setLast]=useState(lead);
+ if(seen.revision!==lead.revision){setSeen(lead);setLast(lead);setConflict(false);if(stage===last.stage)setStage(lead.stage);if(note===last.note)setNote(lead.note);if((due||null)===last.dueDate)setDue(lead.dueDate??'');}
  const length=Array.from(note).length,tooLong=length>noteLimit,changes:LeadChanges={...stage!==lead.stage?{stage}:{},...note!==lead.note?{note}:{},...(due||null)!==lead.dueDate?{dueDate:due||null}:{}};
  const changed=Object.keys(changes).length>0,why=!editable?'':busy?'Saving.':tooLong?'Shorten the note to save.':!changed?'Change something to save.':'';
- const late=overdue({stage,dueDate:due||null},today);
+ const late=overdue(lead,today);
  async function save(){
   setError('');setSaved(false);setBusy(true);
   try{await onSave(changes);setSaved(true);}
@@ -176,19 +164,19 @@ export function LeadEditor({id,lead,editable,today,onSave,onReload}:{id:string;l
   finally{setBusy(false);}
  }
  return <fieldset className="space-y-4 rounded-md bg-surface-sunken p-4 text-body-sm"><legend className="px-1 font-semibold">Lead</legend>
-  <p>Stage: <span className="font-medium">{stageLabel[stage]}</span>{late&&<span className="font-medium"> · Overdue</span>}{due&&<span className="text-ink-muted"> · Follow up {due}</span>}</p>
+  <p>Saved stage: <span className="font-medium">{stageLabel[lead.stage]}</span>{late&&<span className="font-medium"> · Overdue</span>}{lead.dueDate&&<span className="text-ink-muted"> · Follow up {lead.dueDate}</span>}</p>
   {!editable&&<p id={id+'-plan'} className="rounded-md border border-line bg-surface-raised p-3">Changing leads needs the Business plan. You can still read and export what you saved.</p>}
   <div className="grid gap-4 sm:grid-cols-2">
    <div className="flex flex-col gap-2"><label htmlFor={id+'-stage'} className="font-medium">Stage</label><select id={id+'-stage'} value={stage} disabled={!editable||busy} aria-describedby={editable?undefined:id+'-plan'} onChange={e=>{setStage(e.target.value as Stage);setSaved(false);}} className="h-11 min-h-11 px-3 border border-line rounded-md bg-surface-raised disabled:opacity-60">{stages.map(x=><option key={x} value={x}>{stageLabel[x]}</option>)}</select></div>
    <div className="flex flex-col gap-2"><label htmlFor={id+'-due'} className="font-medium">Follow-up date</label>
-    <div className="flex flex-wrap gap-2"><Input id={id+'-due'} type="date" value={due} min="2020-01-01" max="2100-12-31" disabled={!editable||busy} aria-describedby={id+'-due-help'} onChange={e=>{setDue(e.target.value);setSaved(false);}} className="w-auto min-w-0 flex-1"/>
+    <div className="flex flex-wrap gap-2"><Input id={id+'-due'} type="date" value={due} min="2020-01-01" max="2100-12-31" readOnly={!editable} disabled={busy} aria-describedby={id+'-due-help'} onChange={e=>{setDue(e.target.value);setSaved(false);}} className="w-auto min-w-0 flex-1"/>
      {due&&editable&&<Button type="button" variant="secondary" className="min-h-11" disabled={busy} onClick={()=>{setDue('');setSaved(false);}}>Clear date</Button>}</div>
     <p id={id+'-due-help'} className="text-caption text-ink-muted">A date only, in your own calendar. Nothing is sent or scheduled.</p></div>
   </div>
   <div className="flex flex-col gap-2"><label htmlFor={id+'-note'} className="font-medium">Private note</label>
-   <Textarea id={id+'-note'} value={note} rows={4} disabled={!editable||busy} aria-invalid={tooLong} aria-describedby={id+'-note-help'} onChange={e=>{setNote(e.target.value);setSaved(false);}}/>
+   <Textarea id={id+'-note'} value={note} rows={4} readOnly={!editable} disabled={busy} aria-invalid={tooLong} aria-describedby={id+'-note-help'} onChange={e=>{setNote(e.target.value);setSaved(false);}}/>
    <p id={id+'-note-help'} className={tooLong?'text-caption font-medium':'text-caption text-ink-muted'}>{tooLong?`This note is ${length-noteLimit} characters too long. Keep it to ${noteLimit.toLocaleString('en-US')}.`:`${length.toLocaleString('en-US')} of ${noteLimit.toLocaleString('en-US')} characters. Only you can see this.`}</p></div>
-  {conflict?<div role="alert" className="space-y-2 rounded-md border border-line bg-surface-raised p-3"><p>This lead changed in another window. Reload it, then make your change again.</p><Button type="button" variant="secondary" className="min-h-11" onClick={onReload}>Reload lead</Button></div>
+  {conflict?<div role="alert" className="space-y-2 rounded-md border border-line bg-surface-raised p-3"><p>This lead changed in another window, or the module was updated. Reload it. Your unsaved changes stay in the fields so you can decide what to keep.</p><Button type="button" variant="secondary" className="min-h-11" onClick={()=>{setConflict(false);onReload();}}>Reload lead</Button></div>
    :editable&&<div className="flex flex-wrap items-center gap-3"><Button type="button" className="min-h-11" disabled={busy||!changed||tooLong} aria-describedby={why?id+'-why':undefined} onClick={()=>void save()}>{busy?'Saving…':'Save lead'}</Button>
     {why&&<span id={id+'-why'} className="text-caption text-ink-muted">{why}</span>}</div>}
   {saved&&!changed&&<p role="status" className="font-medium">Lead saved.</p>}

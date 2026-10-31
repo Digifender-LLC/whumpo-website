@@ -23,7 +23,7 @@ try{
  await page.goto(origin);await page.locator('#fresh fieldset').waitFor();
  const ed=id=>page.locator('#'+id),stage=id=>ed(id).getByLabel('Stage',{exact:true}),date=id=>ed(id).getByLabel('Follow-up date',{exact:true}),note=id=>ed(id).getByLabel('Private note',{exact:true}),save=id=>ed(id).getByRole('button',{name:'Save lead',exact:true}),log=async id=>JSON.parse(await ed(id+'-log').textContent());
  phase='labelled controls, the empty lead reads as New, and saving needs a change';
- await ed('fresh').getByText('Stage: New').waitFor();
+ await ed('fresh').getByText('Saved stage: New').waitFor();
  assert(await save('fresh').isDisabled());await ed('fresh').getByText('Change something to save.').waitFor();
  assert.equal(await stage('fresh').inputValue(),'new');assert.equal(await date('fresh').getAttribute('type'),'date');
  await ed('fresh').getByText('0 of 2,000 characters. Only you can see this.').waitFor();
@@ -44,20 +44,23 @@ try{
  assert.match(await note('fresh').getAttribute('aria-describedby'),/note-help/);
  await note('fresh').fill('x'.repeat(2000));assert(await save('fresh').isEnabled());
  phase='overdue is text, computed from the owner date, and a closed lead is never overdue';
- await ed('late').getByText('Stage: Contacted · Overdue · Follow up 2026-10-20').waitFor();
- assert.equal(await ed('closed').getByText('Overdue').count(),0);await ed('closed').getByText('Stage: Won').waitFor();
+ await ed('late').getByText('Saved stage: Contacted · Overdue · Follow up 2026-10-20').waitFor();
+ assert.equal(await ed('closed').getByText('Overdue').count(),0);await ed('closed').getByText('Saved stage: Won').waitFor();
  assert.equal(await page.locator('#overdue-rule').textContent(),'true,false,false,false');
- await date('late').fill('2026-12-01');await ed('late').getByText('Overdue').waitFor({state:'detached'});
- await ed('late').getByRole('button',{name:'Clear date'}).click();assert.equal(await date('late').inputValue(),'');assert.equal(await ed('late').getByRole('button',{name:'Clear date'}).count(),0);
+ await date('late').fill('2026-12-01');await stage('late').selectOption('won');await ed('late').getByText('Saved stage: Contacted · Overdue · Follow up 2026-10-20').waitFor();assert.equal(await ed('late').getByText('Overdue').count(),1,'An unsaved draft is never shown as the saved state');
+ await ed('late').getByRole('button',{name:'Clear date'}).click();assert.equal(await date('late').inputValue(),'');await ed('late').getByText('Overdue').waitFor();assert.equal(await ed('late').getByRole('button',{name:'Clear date'}).count(),0);
  phase='a stale save shows a plain conflict message and reloads without overwriting';
  await note('conflict').fill('Mine');await save('conflict').click();
- const alert=ed('conflict').getByRole('alert');await alert.getByText('This lead changed in another window. Reload it, then make your change again.').waitFor();
+ const alert=ed('conflict').getByRole('alert');await alert.getByText('This lead changed in another window, or the module was updated.').waitFor();
  assert.equal(await save('conflict').count(),0,'No save button while the conflict is open');
- await alert.getByRole('button',{name:'Reload lead'}).click();await ed('conflict').getByRole('alert').waitFor({state:'detached'});assert.equal(await note('conflict').inputValue(),'','The reloaded lead replaces the edit');
+ await alert.getByRole('button',{name:'Reload lead'}).click();await ed('conflict').getByRole('alert').waitFor({state:'detached'});assert.equal(await note('conflict').inputValue(),'Mine','A reload keeps the unsaved draft for the owner to decide');assert(await save('conflict').isEnabled(),'Save is back after the reload');
+ phase='a conflict that does not change the lead revision (module changed) also clears on reload';
+ await note('config').fill('Draft');await save('config').click();await ed('config').getByRole('alert').getByText('This lead changed in another window').waitFor();
+ await ed('config').getByRole('button',{name:'Reload lead'}).click();await ed('config').getByRole('alert').waitFor({state:'detached'});assert.equal(await note('config').inputValue(),'Draft');assert(await save('config').isVisible());
  phase='another failure is shown in place and the edit is kept';
  await note('down').fill('Kept');await save('down').click();await ed('down').getByRole('alert').filter({hasText:'This request could not finish.'}).waitFor();assert.equal(await note('down').inputValue(),'Kept');assert(await save('down').isEnabled());
  phase='without Business the lead is readable, disabled and says why';
- for(const control of [stage('plan'),date('plan'),note('plan')])assert(await control.isDisabled());
+ assert(await stage('plan').isDisabled());for(const control of [date('plan'),note('plan')]){assert.equal(await control.getAttribute('readonly'),'','Read-only, not disabled');assert(await control.isEnabled());await control.focus();assert(await control.evaluate(el=>el===document.activeElement),'Focusable');}
  await ed('plan').getByText('Changing leads needs the Business plan. You can still read and export what you saved.').waitFor();
  assert.equal(await save('plan').count(),0);assert.equal(await note('plan').inputValue(),'Kept for reading.');assert.equal(await stage('plan').inputValue(),'qualified');
  phase='filters have visible labels, a clear route back, and keyboard operation';
@@ -71,7 +74,7 @@ try{
   phase='layout at '+width+'px';
   await page.setViewportSize({width,height:width===1280?900:844});
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'No horizontal scroll at '+width);
-  for(const id of ['fresh','late','conflict','plan']){
+  for(const id of ['fresh','late','conflict','config','plan']){
    await ed(id).scrollIntoViewIfNeeded();const b=await ed(id).locator('fieldset').boundingBox();assert(b.x>=0&&b.x+b.width<=width,id+' inside the viewport at '+width);
    for(const control of await ed(id).locator('select,input,button,textarea').all()){const box=await control.boundingBox();if(box)assert(box.height>=44||await control.evaluate(el=>el.tagName==='TEXTAREA'),`${id} target ${await control.evaluate(el=>el.tagName)} is ${box.height}px at ${width}`);}
   }
