@@ -123,9 +123,12 @@ export async function restoreControlD1(target,directory,expectedDigest){
  // event loop for 3 to 6 s. The proxy's keep-alive socket (idle since the last call, 5 s server timeout) then expired while the loop was
  // blocked, and the batch was written to the dead socket: 'fetch failed' / UND_ERR_SOCKET, about one run in two. Yielding between slices
  // lets the client see the socket close and open a fresh one. The restore is still ONE atomic batch with the same statements.
- const prepared=[];
- for(let i=0;i<statements.length;i++){prepared.push(target.prepare(statements[i]));if(i%50===49)await new Promise(resolve=>setImmediate(resolve));}
- let result;try{result=await target.batch(prepared);}catch{throw new DrillHold('restore-batch-failed');}
+ let result;
+ try{
+  const prepared=[];
+  for(let i=0;i<statements.length;i++){prepared.push(target.prepare(statements[i]));if(i%50===49)await new Promise(resolve=>setImmediate(resolve));}
+  result=await target.batch(prepared);
+ }catch{throw new DrillHold('restore-batch-failed');}
  hold(result.length===statements.length&&result.every(r=>r.success!==false),'restore-batch-failed');
  hold((await target.prepare('PRAGMA foreign_key_check').all()).results.length===0,'restore-integrity');
  // PRAGMA quick_check exhausts local D1 memory (SQLITE_NOMEM) on the complete
