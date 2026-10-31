@@ -33,6 +33,13 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Share sheet: one photo or plain text. The app only remembers it until the owner confirms (ShareDialog). -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
             <!--
               Verified App Links: the browser hand-off returns to /app/return, and /app/projects/{id} and /app/activity/{eventId}
               open those items behind the sign-in gate. Only these paths are claimed; everything else stays in the browser.
