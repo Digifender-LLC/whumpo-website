@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Rules for agents working in this repo. Keep it short; follow the links for detail. If code changes a rule here, change the rule in the same PR (`node tools/agents-md-check.mjs` fails CI when this file cites a path, `pnpm` script or tool version that no longer exists).
+Rules for agents working in this repo. Keep it short; follow the links for detail. If code changes a rule here, change the rule in the same PR (`node tools/agents-md-check.mjs` fails CI when a backticked or linked path, a cited `pnpm` script or a pinned tool version in this file no longer exists; paths in running prose are not checked).
 
 ## Stack and tooling
 
@@ -26,7 +26,7 @@ Also run the tests for what you changed (`test:*` scripts in `package.json`), `n
 - **Never commit keystores or `google-services.json`** (`android/.gitignore` lists them). Also keep out `.dev.vars`, `.env` and the `.secrets` directory.
 - **Never force-push.** If `main` moves, `git merge origin/main`.
 - **Ask before adding a dependency.** Prefer the standard library and what is installed.
-- **Sending, checkout and push stay off** unless the owner says so: `STRIPE_CHECKOUT_OPEN`, `PUSH_NOTIFICATION_PROVIDER` and the notification provider variables are unset by default. Do not set Worker secrets or vars, and make no Stripe call.
+- **Sending, checkout and push stay off** unless the owner says so. `STRIPE_CHECKOUT_OPEN`, `PUSH_NOTIFICATION_PROVIDER`, `SUPPORT_NOTIFICATION_PROVIDER` and `NOTIFICATION_CUSTOMER_CEILING_CENTS` stay unset, and customer-configured notices are cancelled at send time while the ceiling is unset. Contact and account notices have a configured provider (`CONTACT_NOTIFICATION_PROVIDER` and the `CONTACT_EMAIL` binding in `wrangler.jsonc`); whether delivery is live is a deployment fact ([contact forms](docs/contact-forms.md)), so never trigger a real send from a test or script. Do not set Worker secrets or vars, and make no Stripe call.
 - **Do not change `src/` for docs or tooling tasks.**
-- **Merges wait on the risk-tiered review.** The `review:clean` label is added only after the tier's reviewers pass and CI is green. Tiers, sensitive paths and the "What NOT to flag" lists: [agent review](docs/agent-review.md). The agent that built a change never reviews it.
+- **Merges wait on the risk-tiered review.** Approval is a commit status named `review:clean` on the PR's exact head commit, posted only after the tier's reviewers pass and CI is green; any new push clears it. Everything is full tier unless it is on the safe-path allowlist. Tiers, the allowlist, roles and the "What NOT to flag" lists: [agent review](docs/agent-review.md). The agent that built a change never reviews it.
 - **Docs keep planned, implemented and accepted distinct.** Record decisions in the docs; do not reopen recorded ones in review.

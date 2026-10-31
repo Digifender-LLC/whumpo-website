@@ -4,15 +4,19 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 
 const builtins=new Set(['install','i','add','audit','exec','dlx','update','remove','run','--version']);
 
-/** Problems in AGENTS.md text: backticked paths that do not exist, cited pnpm scripts that are gone, pinned versions that drifted.
- * shortcut: only backticked spans and link targets are checked, and a path needs a slash plus an extension or trailing slash. */
+// Named in AGENTS.md as things that must never be present.
+const neverPresent=new Set(['google-services.json','.dev.vars','.env','.secrets']);
+const bareFile=t=>/^\.?[A-Za-z_][\w-]*(?:\.[\w-]+)*$/.test(t)&&t.includes('.');
+
+/** Problems in AGENTS.md text: backticked or linked paths that do not exist, cited pnpm scripts that are gone, pinned versions that drifted.
+ * shortcut: a path is a backticked token or link target with a slash plus an extension or trailing slash, or a bare root file name such as README.md or .node-version; prose paths are not checked. */
 export function checkAgentsMd(text,{exists,scripts,nodeVersion,pnpmVersion}){
  const problems=[];
  const spans=[...text.matchAll(/`([^`\n]+)`/g)].map(m=>m[1]);
- const links=[...text.matchAll(/\]\(([^)#\s]+)(?:#[^)]*)?\)/g)].map(m=>m[1]);
+ const links=[...text.matchAll(/\]\(([^)#\s]+)(?:#[^)\s]*)?(?:\s+"[^"]*")?\)/g)].map(m=>m[1]);
  for(const token of [...spans.flatMap(s=>s.split(/\s+/)),...links]){
-  if(/[*:$~<>=@]|^\/|^\.\.\//.test(token)||!token.includes('/'))continue;
-  if(!/\.\w+$|\/$/.test(token))continue;
+  if(/[*:$~<>=@]|^\/|^\.\.\//.test(token)||neverPresent.has(token))continue;
+  if(token.includes('/')?!/\.\w+$|\/$/.test(token):!bareFile(token))continue;
   if(!exists(token))problems.push(`path not found: ${token}`);
  }
  for(const span of spans)for(const m of span.matchAll(/(?:^|\s)pnpm (?:run )?([\w:.-]+)/g))

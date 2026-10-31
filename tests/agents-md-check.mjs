@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import {checkAgentsMd} from '../tools/agents-md-check.mjs';
-const ctx={exists:p=>['tools/a.mjs','docs/','docs/x.md'].includes(p),scripts:{check:'x','test:a':'y'},nodeVersion:'24.1.0',pnpmVersion:'11.0.0'};
+const ctx={exists:p=>['tools/a.mjs','docs/','docs/x.md','README.md','.node-version'].includes(p),scripts:{check:'x','test:a':'y'},nodeVersion:'24.1.0',pnpmVersion:'11.0.0'};
 const run=text=>checkAgentsMd(text,ctx);
 assert.deepEqual(run('Run `pnpm check`, `pnpm run test:a`, `node tools/a.mjs`, `docs/`, [x](docs/x.md#h), `origin/main`, https://a.b/c.md, `mise exec node@24.1.0 pnpm@11.0.0 -- pnpm check`.'),[]);
+assert.deepEqual(run('`README.md` `.node-version` `google-services.json` `.dev.vars` `pnpm@11.0.0` [t](docs/x.md "title")'),[]);
+assert.deepEqual(run('`.gitleaks.toml` `GONE.md` [t](docs/gone.md#a "title")'),['path not found: .gitleaks.toml','path not found: GONE.md','path not found: docs/gone.md']);
 assert.deepEqual(run('`tools/gone.mjs` and [d](docs/gone.md)'),['path not found: tools/gone.mjs','path not found: docs/gone.md']);
 assert.deepEqual(run('`pnpm test:gone` `pnpm install`'),['pnpm script not found: test:gone']);
 assert.deepEqual(run('node@24.0.0 pnpm@10.0.0'),['node version 24.0.0 differs from .node-version 24.1.0','pnpm version 10.0.0 differs from packageManager 11.0.0']);
