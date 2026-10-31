@@ -676,9 +676,10 @@ export default {
     // The every-minute trigger is a job-type registry (docs/job-orchestration.md, WH-052 P-1). Contact notice delivery (WH-036) is
     // its first type; the account lane (WH-202: security events and the email-change notices) and the support lane run beside it. Each does nothing unless its own
     // provider variables and the email binding are present (contactDelivery, supportDelivery).
-    if(_event.cron==='* * * * *'){await dispatchJobs([{type:'contact_delivery',run:async ctx=>{const delivery=contactDelivery(env);if(delivery)await contactDeliveryLane(env.DB,{settings:delivery.settings,sender:delivery.sender,now:Date.now}).run(ctx);}},
+    // R8: recorded under its own maintenance_health name (job_dispatch), so a healthy minute cannot hide a stuck daily prune on `jobs`; a failure is stored as a category and escapes sanitized.
+    if(_event.cron==='* * * * *'){await runMaintenance(env.DB,[{name:'job_dispatch',run:()=>dispatchJobs([{type:'contact_delivery',run:async ctx=>{const delivery=contactDelivery(env);if(delivery)await contactDeliveryLane(env.DB,{settings:delivery.settings,sender:delivery.sender,now:Date.now}).run(ctx);}},
      {type:'account_delivery',run:async ctx=>{const delivery=contactDelivery(env);if(delivery)await accountDeliveryLane(env.DB,{settings:delivery.settings,sender:delivery.sender,now:Date.now}).run(ctx);}},
-     {type:'support_delivery',run:async ctx=>{const delivery=supportDelivery(env);if(delivery)await supportDeliveryLane(env.DB,{...delivery,now:Date.now}).run(ctx);}}]);return;}
+     {type:'support_delivery',run:async ctx=>{const delivery=supportDelivery(env);if(delivery)await supportDeliveryLane(env.DB,{...delivery,now:Date.now}).run(ctx);}}])}]);return;}
     const imports={name:'imports' as const,run:()=>scanBackendImports(env.DB)};
     if(_event.cron==='47 * * * *'){
       await runMaintenance(env.DB,[imports,{name:'chat_drafts',run:()=>cleanupInteractionDrafts(env.DB)},
