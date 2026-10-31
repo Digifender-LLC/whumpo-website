@@ -92,6 +92,14 @@ Standard GitHub-hosted runners are free for public repositories. Private reposit
 
 **Local emulator pass (2026-10-31).** One headless API 35 `google_apis` x86_64 AVD (the only image on the dev host; API 28 and 36 are CI only), `-no-window -gpu swiftshader_indirect`, KVM. `connectedLocalDebugAndroidTest connectedDeployedDebugAndroidTest`: 21 tests per flavor, 0 failed, 0 skipped. The AVD data partition needs a disk with more than 7.4 GB free (not a small tmpfs). Emulator only: not a physical device, TalkBack speech, identity, provider or signed-release acceptance.
 
+## Push stays off (WH-086 slice, emulator and JVM evidence only)
+
+`PushUnwiredTest` (instrumented) pins the shipped build: the container is wired to `NoOpPushMessaging`, `notifications.available` is false and `register()` returns null without a request; the merged manifest requests `INTERNET` but no `POST_NOTIFICATIONS`, no Firebase, C2DM or messaging permission, and declares no messaging service, receiver or provider (`com.google.firebase.MESSAGING_EVENT` resolves to nothing). Wiring push has to change this test on purpose. `DeviceNotificationsTest` (JVM) adds token rotation (the new token is sent, never the old one), permission denial as an opted-out registration (`notificationsEnabled:false`), a signed-out device making no registration call, and that the app's event read model holds only `id`, `kind`, `destination` and `state`. Opening an event is a bearer GET only (existing test), and the link grammar refuses everything but projects and activity (existing `DeepLinkTest`).
+
+Server side nothing changed: `tests/push-fcm.mjs` already proves the adapter against a fake transport and a synthetic key, and that no Worker path references the sender; `tests/mobile-push.mjs` covers registration, revocation and the content-free event table.
+
+**Stopped, deliberately:** the plan's "V1 fixtures for the dispatch lane" (event and outbox recovery, lease races, fencing, fairness, expiry) have nothing to test. `src/` holds no dispatcher: `pushSender` is called by no Worker path, and a lane needs new production code in `src/` that reads `push_events`, leases rows and calls the sender. That is the production wiring this slice must not add, and it belongs with activation review (WH-086 B1, WH-052 and WH-075 dispatcher gates). A test that defined its own lane would only test itself. No FCM call, token, Firebase project or `google-services.json` was used.
+
 ## Verification record
 
 - **October 4, 2026 (original shell):** Gradle wrapper hashes matched; `:core:test` passed 19/19 locally; the Android modules were CI-only.
