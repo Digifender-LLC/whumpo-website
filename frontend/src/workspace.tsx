@@ -43,6 +43,8 @@ import {DeferredArea} from './deferred-area';
 import {QueryRecovery} from './query-recovery';
 import {updatedReplies} from './lib/chat-announcements';
 import {useWorkspaceTheme} from './lib/workspace-theme';
+import {JourneyPending} from './journey/stage';
+import {isWelcoming,takeArrival} from './journey/motion';
 const DashboardPage=lazy(()=>import('./workspace-pages').then(module=>({default:module.DashboardPage})));
 const SettingsPage=lazy(()=>import('./workspace-pages').then(module=>({default:module.SettingsPage})));
 const ProfilePage=lazy(()=>import('./workspace-pages').then(module=>({default:module.ProfilePage})));
@@ -63,6 +65,7 @@ function WorkspaceProfile(){
   return next;
  }});
  useEffect(()=>{if(profile.data&&!profile.data.onboardingComplete)document.title="Welcome — Whumpo";},[profile.data?.onboardingComplete]);
+ if(profile.isPending&&isWelcoming())return <JourneyPending label="Getting your welcome ready…" action={<AccountHelp/>}/>;
  if(profile.isPending)return <main className="min-h-dvh grid place-content-center justify-items-center gap-5"><LoaderCircle className="animate-spin size-6" aria-label="Opening your workspace"/><AccountHelp/></main>;
  if(profile.error)return <main className="page-pad space-y-4"><h1 className="text-2xl font-bold">Couldn’t open your workspace</h1><p role="alert">{message(profile.error)}</p><div className="flex flex-wrap gap-3"><Button onClick={()=>profile.refetch()}>Try again</Button><AccountHelp/></div></main>;
  if(!profile.data)return null;
@@ -74,6 +77,7 @@ function WorkspaceSession({account}:{account:Profile}){
  const location=useRouterState({select:s=>s.location}),view=workspaceView(location.pathname),navigate=useNavigate();
  const dashboard=useQuery({queryKey:['dashboard',scope],queryFn:async()=>{const value=await api<Dashboard>('/workspace/dashboard');return {...value,layout:parseLayout(value.layout)};}});
  const chat=useQuery({queryKey:['chat',scope],queryFn:()=>api<Chat>('/chat'),refetchInterval:q=>q.state.data?.turns.some(t=>t.status==='pending')?2500:false});
+ useEffect(()=>{if(chat.data&&!chat.data.firstDraft)takeArrival();},[chat.data]);
  const {draft,setDraft,pending,setPending,restored,storageFailed}=useChatRecovery(account.accountId);
  const [notice,setNotice]=useState(''),[deliverySupport,setDeliverySupport]=useState<string|null>(null),[chatProblem,setChatProblem]=useState<{text:string;support:string}|null>(null),[ack,setAck]=useState(''),[pendingText,setPendingText]=useState(restored?.content??''),[deliveryError,setDeliveryError]=useState(restored?'An interrupted request was recovered from this tab. We’ll check your saved conversation before you retry.':'');
  const composer=useRef<HTMLTextAreaElement>(null);

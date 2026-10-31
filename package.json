@@ -139,6 +139,7 @@
     "test:cost-reconcile":"node tests/cost-reconcile.mjs && node tests/cost-reconcile.mjs --d1",
     "test:email-change-store": "node tests/email-change-store.mjs && node tests/email-change-store.mjs --d1",
     "test:email-change-browser": "node tests/email-change-browser.mjs && node tests/email-change-browser.mjs --d1",
+    "test:onboarding-journey": "node tests/onboarding-journey-browser.mjs",
     "test:email-change-delivery": "node tests/email-change-delivery.mjs && node tests/email-change-delivery.mjs --d1",
     "test:connector-rule-authority": "node tests/connector-rule-authority.mjs",
     "test:connector-records-store": "node tests/connector-records-store.mjs && node tests/connector-records-store.mjs --d1",
