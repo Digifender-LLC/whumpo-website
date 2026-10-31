@@ -7189,7 +7189,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ## WH-196 — Domain renewal opt-in, expiry reminders, disconnect and transfer-out lifecycle
 
-Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **blocked**. Kind: implementation. Size: M.
 
 Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
@@ -7220,7 +7220,7 @@ Owners control renewal, hosting disconnect and transfer-out of purchased domains
 
 Planning dependencies: WH-194. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+- Delivery lines: the schema ships only through the C2 empty-database cutover the owner runs; expiry reminders are queued but not sent (the sender gate is closed, WH-036/WH-202); no route, Chat card or registrar adapter (WH-195) can issue a renewal review or transfer-out, so the minimal UI is not built (a screen would imply a capability that does not exist); renewal charging belongs to the WH-042 extension.
 
 ### References
 
@@ -7234,7 +7234,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-31 UTC (Batch 7, schema group C2, branch wh-196-domain-lifecycle on WH-194; source and local verification on disposable SQLite with two connections and actual local D1; synthetic registrar, no registrar account, real DNS, domain, Stripe key or call, sender, secret, var or deploy): lifecycle delivered in source, not wired, no UI. Schema adds domain_renewal_reviews, domain_renewal_approvals and domain_transfer_requests (252 tables with C2) and tightens domain_registrations (states active, transfer-out, transferred-out, lapsed; the last two final; the expiry never moves back; auto-renew turns on only through a confirmed review for the same name, owner and price). src/domain-purchase/lifecycle.ts: (1) renewal opt-in is an exact review of the current renewal price, prepared by the owner or the model and confirmed only by the owner, once, before it expires, at a price read again at confirmation, and the schema refuses auto-renew without it; decideRenewal writes one approval per name and expiry only while the opt-in covers the current price, and a price rise turns auto-renew off until a new review (acceptance line 1: tests/domain-purchase-lifecycle.mjs, including a forged approval and a forged update refused in D1). Nothing charges or renews: the approval is the record the WH-042 charger and the WH-195 renew call must require. (2) Reminders: three content-free catalog templates domain.expiry-month, -week and -expired (no domain name in the email) on the ICANN Expired Registration Recovery Policy windows (a month and a week before, one to five days after), queued once per name, kind and expiry through the shared outbox with the sender gate untouched; nothing is sent. (3) Transfer-out: owner only, after the 60-day lock (code and schema), one provider unlock per request claimed in D1 before the registrar is asked, concurrent and repeated starts make one provider call, a lost answer is an unknown outcome settled by reading the registrar's lock report (never by asking again), a refusal returns the name to active; the authorization code is read for the owner when shown and has no column, event, job or error text, and a model, visitor, service or operator is refused before the registrar is reached (acceptance line 2). (4) Disconnect: unchanged hosting disconnect leaves the registration alone and a purchase creates no connection. (5) G-D8 decided by the delegation of 2026-10-27, reversible, no money: registrar evidence is the proof for a purchased name; claimPurchasedName writes a verified claim marked registrar-evidence: only for the owner of an active registration of that exact name and project, and claimProofHolds in src/domain-hosting.ts accepts the marker only while that registration is active (every other claim is still proved by DNS TXT). Account closure counts transfer-out as active. Verification: tests/domain-purchase-lifecycle.mjs (SQLite and --d1), pnpm test:domain-hosting, tests/notifications-contract.mjs, lifecycle, tenant, closure and restore suites, pnpm check. Not done, and why: UI. The plan marks WH-196 UI as minimal, but there is no Domains page in the app to extend (nothing reads /api/domains) and no route, Chat card or registrar adapter can issue a renewal review or a transfer-out until WH-195 exists, so any screen would show controls for a capability that does not exist and would imply a domain can be bought; this is left open and a screen belongs with the first route that can create a registration. Still open: the C2 cutover, the registrar adapter (WH-195), the renewal charger (WH-042 extension) and a route or card for each action.
 
 ## WH-197 — Connected domain purchase acceptance with a sandbox registrar and sandbox payment
 

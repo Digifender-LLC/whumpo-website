@@ -137,6 +137,9 @@ const c:Record<string,[string,string,Disposition]>={
  domainOrderAttempts:['domain_order_attempts','domain-registrations','delete'],
  domainRegistrarEvents:['domain_registrar_events','domain-registrations','delete'],
  domainFundingHolds:['domain_funding_holds','billing','delete'],
+ domainRenewalReviews:['domain_renewal_reviews','domain-registrations','delete'],
+ domainRenewalApprovals:['domain_renewal_approvals','domain-registrations','delete'],
+ domainTransferRequests:['domain_transfer_requests','domain-registrations','delete'],
  domainRegistrations:['domain_registrations','domain-registrations','retain'],
  activeDomainRegistrations:['domain_registrations','domain-registrations','retain'],
 };

@@ -44,6 +44,17 @@ export async function renewalDecision({registration,registrar,policy}:{registrat
   return {decision:{renew:false,reason:'renewal-price-changed'},registration:{...registration,autoRenew:false,renewalOptIn:null}};
  return {decision:{renew:true},registration};
 }
+/** ICANN Expired Registration Recovery Policy cadence: about a month and a week before expiry, and within five days after. Each kind has one window; `now`
+ * is in at most one. Nothing is sent from here: the lifecycle store queues a never-sent notice per kind (event reference = name, kind and expiry). */
+const DAY=86400000;
+export const reminderWindows=Object.freeze([
+ {kind:'month',from:-30*DAY,to:-7*DAY},{kind:'week',from:-7*DAY,to:0},{kind:'expired',from:DAY,to:5*DAY},
+] as const);
+export type ReminderKind=typeof reminderWindows[number]['kind'];
+export function dueReminder(expiresAt:number,now:number):ReminderKind|null {
+ check(Number.isSafeInteger(expiresAt)&&Number.isSafeInteger(now),'INVALID_SHAPE','reminder');
+ return reminderWindows.find(w=>now>=expiresAt+w.from&&now<expiresAt+w.to)?.kind??null;
+}
 /** Transfer-out honours the ICANN 60-day post-registration lock; the auth code goes only to the owner, never to a model. */
 export function requestTransferOut({actor,registration,now}:{actor:Actor;registration:Registration|null|undefined;now:number}){
  check(registration&&plain(actor)&&actor.kind==='owner'&&actor.ownerId===registration.ownerId,'FOREIGN_OWNER',registration?.hostname??'registration');

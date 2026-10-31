@@ -6,8 +6,8 @@
  "evidence": "docs/workspace-collaboration-evidence.md",
  "baseline": {
   "sourceCommit": "4dea09c",
-  "reviewedSchemaSha256": "5be04481b4afa302b2f950522073761523acbc8fd6e37d58e0aa53c0e087a5ce",
-  "tables": 249,
+  "reviewedSchemaSha256": "918ed52ee976b6a95a2b084eef55205f0705172682f73912ab0f20bdefb326c7",
+  "tables": 252,
   "usersForeignKeyColumns": 123
  },
  "vocabulary": {
@@ -242,6 +242,9 @@
    "domain_reconciliations",
    "domain_registrant_contacts",
    "domain_registrar_events",
+   "domain_renewal_approvals",
+   "domain_renewal_reviews",
+   "domain_transfer_requests",
    "gateway_inference_requests",
    "gateway_provider_receipts",
    "github_revocation_claims",

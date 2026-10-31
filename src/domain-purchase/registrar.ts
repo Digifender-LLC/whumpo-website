@@ -10,9 +10,12 @@ export type RegisterResult=
  |{kind:'registered';hostname:string;orderRef:string;expiresAt:number;chargedWholesaleCents:number}
  |{kind:'rejected';code:string}
  |{kind:'pending'};
-/** "not-found" and "in_progress" are never proof either way. */
+/** Transfer-out (WH-196). `beginTransferOut` is the one mutation (unlock for transfer and stop auto-renew), claimed once per request; `authCode` is a read. */
+export type TransferOutRequest={hostname:string;requestRef:string};
+export type TransferOutResult=|{kind:'unlocked'}|{kind:'rejected';code:string}|{kind:'pending'};
+/** "not-found" and "in_progress" are never proof either way. `unlocked` is the transfer lock as the registrar reports it. */
 export type RegistrarLookup=
- |{status:'registered';orderRef:string|null;expiresAt:number;renewal:{currency:'USD';wholesaleCents:number}}
+ |{status:'registered';orderRef:string|null;expiresAt:number;renewal:{currency:'USD';wholesaleCents:number};unlocked?:boolean}
  |{status:'failed'|'in_progress';orderRef:string|null}
  |{status:'not-found'};
 export interface RegistrarAdapter {
@@ -24,16 +27,21 @@ export interface RegistrarAdapter {
  register(request:RegisterRequest):Promise<RegisterResult|unknown>;
  /** Read-only lookup by name (registration, attributed workflow or nothing), including the current renewal price. */
  lookup(name:string):Promise<RegistrarLookup>;
+ /** Unlock a registration for transfer-out. Anything other than a well-formed `unlocked` or `rejected` is an unknown outcome and is reconciled by `lookup`, never repeated. */
+ beginTransferOut(request:TransferOutRequest):Promise<TransferOutResult|unknown>;
+ /** Read the transfer authorization code of an unlocked registration. Read-only and repeatable; the caller shows it to the owner and nowhere else. */
+ authCode(name:string):Promise<{code:string}|{unavailable:true}|unknown>;
 }
 
 type SyntheticPrice={registration:number;renewal:number;premium?:boolean;terms?:string};
 type SyntheticOutcome='ok'|'rejected'|'pending'|'timeout-before'|'timeout-after'|'malformed';
+type SyntheticTransfer='ok'|'rejected'|'timeout-before'|'timeout-after';
 const year=365*86400000;
 /** Synthetic in-memory registrar: synthetic names and prices only, no network. Counts every call so tests can prove
  * that register is called at most once per order. `next` scripts the next register outcome. */
 export function createSyntheticRegistrar({adapterId='synthetic-registrar',adapterVersion=1,prices={},clock=()=>0}:{adapterId?:string;adapterVersion?:number;prices?:Record<string,SyntheticPrice>;clock?:()=>number}={}){
- const s={prices:structuredClone(prices),registrations:{} as Record<string,{orderRef:string|null;createdAt:number;expiresAt:number}>,workflows:{} as Record<string,{orderRef:string;status:'in_progress'|'succeeded'|'failed'}>,script:[] as SyntheticOutcome[]};
- const calls={check:0,register:0,lookup:0},registerLog:string[]=[];
+ const s={prices:structuredClone(prices),registrations:{} as Record<string,{orderRef:string|null;createdAt:number;expiresAt:number}>,workflows:{} as Record<string,{orderRef:string;status:'in_progress'|'succeeded'|'failed'}>,script:[] as SyntheticOutcome[],transferScript:[] as SyntheticTransfer[],unlocked:new Set<string>()};
+ const calls={check:0,register:0,lookup:0,transferOut:0,authCode:0},registerLog:string[]=[];
  const record=(hostname:string,orderRef:string|null)=>{const now=clock();return s.registrations[hostname]={orderRef,createdAt:now,expiresAt:now+year};};
  return {
   adapterId,adapterVersion,calls,registerLog,
@@ -41,6 +49,9 @@ export function createSyntheticRegistrar({adapterId='synthetic-registrar',adapte
   /** Someone else registers the name. */
   takeBy(name:string,orderRef:string|null=null){record(name,orderRef);},
   next(kind:SyntheticOutcome){s.script.push(kind);},
+  nextTransfer(kind:SyntheticTransfer){s.transferScript.push(kind);},
+  /** The owner took the name to another registrar. */
+  completeTransfer(name:string){delete s.registrations[name];s.unlocked.delete(name);},
   finishPending(name:string,ok:boolean){const w=s.workflows[name];if(!w)return;w.status=ok?'succeeded':'failed';if(ok)record(name,w.orderRef);},
   async check(name:string):Promise<RegistrarCheck>{
    calls.check++;const p=s.prices[name];
@@ -58,10 +69,23 @@ export function createSyntheticRegistrar({adapterId='synthetic-registrar',adapte
    const done=record(hostname,orderRef);
    return {kind:'registered',hostname,orderRef,expiresAt:done.expiresAt,chargedWholesaleCents:p.registration};
   },
+  async beginTransferOut({hostname}:TransferOutRequest):Promise<unknown>{
+   calls.transferOut++;
+   const kind=s.transferScript.shift()??'ok';
+   if(kind==='rejected'||!s.registrations[hostname])return {kind:'rejected',code:'transfer_locked'};
+   if(kind==='timeout-before')throw Error('synthetic timeout before the registrar acted');
+   s.unlocked.add(hostname);
+   if(kind==='timeout-after')throw Error('synthetic timeout after the registrar acted');
+   return {kind:'unlocked'};
+  },
+  async authCode(name:string):Promise<unknown>{
+   calls.authCode++;
+   return s.registrations[name]&&s.unlocked.has(name)?{code:`SYNTHETIC-AUTH-${name}`}:{unavailable:true};
+  },
   async lookup(name:string):Promise<RegistrarLookup>{
    calls.lookup++;
    const reg=s.registrations[name],p=s.prices[name];
-   if(reg)return {status:'registered',orderRef:reg.orderRef,expiresAt:reg.expiresAt,renewal:{currency:'USD',wholesaleCents:p?.renewal??0}};
+   if(reg)return {status:'registered',orderRef:reg.orderRef,expiresAt:reg.expiresAt,renewal:{currency:'USD',wholesaleCents:p?.renewal??0},unlocked:s.unlocked.has(name)};
    const w=s.workflows[name];if(w)return {status:w.status==='failed'?'failed':'in_progress',orderRef:w.orderRef};
    return {status:'not-found'};
   },
