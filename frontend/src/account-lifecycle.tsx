@@ -76,7 +76,7 @@ function ExportSection(){
 }
 
 function ClosureSection({onStarted}:{onStarted:(status:ClosureStatus)=>void}){
- const [review,setReview]=useState<ClosureReview|null>(null),[confirmation,setConfirmation]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [review,setReview]=useState<ClosureReview|null>(null),[confirmation,setConfirmation]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[needsSupport,setNeedsSupport]=useState(false);
  const lock=useRef(false);
  async function prepare(){
   if(lock.current)return;lock.current=true;setBusy(true);setError('');setConfirmation('');
@@ -88,7 +88,7 @@ function ClosureSection({onStarted}:{onStarted:(status:ClosureStatus)=>void}){
   try{
    const r=await confirmAccountClosure(review,transport);
    if(r.state==='ok'){onStarted(r.value);return;}
-   setError(r.message);if(r.code==='stale_review'||r.code==='action_required')setReview(null);
+   setError(r.message);setNeedsSupport(/Whumpo support/.test(r.message));if(r.code==='stale_review'||r.code==='action_required')setReview(null);
    if(r.code==='closure_exists'){const s=await readAccountClosure(transport);if(s.state==='ok'&&s.value)onStarted(s.value);}
   }catch{setError('Closure confirmation did not finish. Check the account status before retrying.');}finally{lock.current=false;setBusy(false);}
  }
@@ -101,13 +101,15 @@ function ClosureSection({onStarted}:{onStarted:(status:ClosureStatus)=>void}){
    <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-body-sm">{Object.entries(review.removes).map(([k,v])=><div key={k} className="contents"><dt>{removeLabels[k]??k}</dt><dd className="text-right tabular-nums">{v}</dd></div>)}</dl>
    <h3 className="font-semibold">What happens</h3><ol className="list-decimal pl-5 text-body-sm space-y-1">{review.effects.map(e=><li key={e}>{e}</li>)}</ol>
    <h3 className="font-semibold">What remains after closure</h3><ul className="list-disc pl-5 text-body-sm space-y-1">{review.remainsAfterClosure.map(e=><li key={e}>{e}</li>)}</ul>
-   {review.needsSupport&&<div className="rounded-md border border-attention-ink/40 bg-attention-soft p-4 text-body-sm text-attention-ink space-y-3" role="group" aria-labelledby="closure-support"><h3 id="closure-support" className="font-semibold">Support is needed first</h3><p>{review.supportMessage}</p><Button asChild variant="secondary" className={wrap}><Link to="/workspace/$view" params={{view:'support'}} search={{}}>Contact support</Link></Button></div>}
+   {review.paidInvoiceNotice&&<div className="rounded-md border border-attention-ink/40 bg-attention-soft p-4 text-body-sm text-attention-ink space-y-2" role="group" aria-labelledby="closure-invoices"><h3 id="closure-invoices" className="font-semibold">Paid invoices are kept</h3><p>{review.paidInvoiceNotice}</p></div>}
+   {review.needsSupport&&!review.paidInvoiceNotice&&<div className="rounded-md border border-attention-ink/40 bg-attention-soft p-4 text-body-sm text-attention-ink space-y-3" role="group" aria-labelledby="closure-support"><h3 id="closure-support" className="font-semibold">Support is needed first</h3><p>{review.supportMessage}</p><Button asChild variant="secondary" className={wrap}><Link to="/workspace/$view" params={{view:'support'}} search={{}}>Contact support</Link></Button></div>}
    {review.canConfirm?<>
     <label className="grid gap-2 text-body-sm font-medium">Type CLOSE to confirm<Input value={confirmation} onChange={e=>setConfirmation(e.target.value)} disabled={busy} autoComplete="off" autoCapitalize="characters" spellCheck={false} className="min-h-11"/></label>
     <div className="flex flex-wrap gap-3"><Button variant="destructive" className={wrap} disabled={busy||confirmation!=='CLOSE'} onClick={()=>void confirm()}>{busy?'Closing…':'Check passkey and close account'}</Button><Button variant="quiet" className={wrap} disabled={busy} onClick={()=>{setReview(null);setError('');}}>Cancel</Button></div>
    </>:<div className="flex flex-wrap gap-3"><Button variant="secondary" className={wrap} disabled={busy} onClick={()=>void prepare()}>Review again</Button><Button variant="quiet" className={wrap} disabled={busy} onClick={()=>setReview(null)}>Cancel</Button></div>}
   </section>}
   {error&&<p role="alert" className="rounded-md border border-attention-ink/40 bg-attention-soft p-3 text-body-sm text-attention-ink">{error}</p>}
+  {needsSupport&&<Button asChild variant="secondary" className={wrap}><Link to="/workspace/$view" params={{view:'support'}} search={{}}>Contact support</Link></Button>}
  </CardContent></Card>;
 }
 
@@ -120,8 +122,9 @@ function ClosureProgress({initial}:{initial:ClosureStatus}){
  }
  const complete=status.state==='complete';
  return <Card><CardHeader><CardTitle role="heading" aria-level={2}>{complete?'Your account is closed':'Your account is closing'}</CardTitle>
-  <CardDescription>{complete?'Your account data was deleted. Keep this receipt; you will not be able to sign in to this account again.':'New work is stopped. Each step below runs once and can be resumed safely; nothing is repeated or released because it is retried. Waiting steps are also checked automatically about once an hour, so closure finishes even if you do not return.'}</CardDescription></CardHeader>
+  <CardDescription>{complete?'Your account data was deleted. Keep this receipt; you will not be able to sign in to this account again.':'New work is stopped. Each step below runs once and can be resumed safely; nothing is repeated or released because it is retried. Waiting steps are checked automatically about once an hour and every wait has an end: most closures finish within a day, and the longest bounded wait is three days.'}</CardDescription></CardHeader>
   <CardContent className="space-y-4">
+   {status.overdue&&!complete&&<div role="alert" className="rounded-md border border-attention-ink/40 bg-attention-soft p-4 text-body-sm text-attention-ink space-y-3"><p>This is taking longer than expected. Something on this account needs Whumpo support; the delay is listed on the operator report. Nothing else will be deleted until it is cleared.</p><Button asChild variant="secondary" className={wrap}><Link to="/workspace/$view" params={{view:'support'}} search={{}}>Contact support</Link></Button></div>}
    <p className="text-body-sm"><StatusBadge status={badge(status.state)}>{closureStateLabels[status.state]}</StatusBadge> <span className="break-all">Closure {status.id}</span></p>
    <ol className="space-y-2" aria-label="Closure steps">{status.steps.map(s=><li key={s.step} className="rounded-md border p-3 text-body-sm space-y-1">
     <p className="flex flex-wrap items-center gap-2"><span className="font-medium">{closureStepLabels[s.step]}</span><StatusBadge status={badge(s.state)}>{closureStateLabels[s.state]}</StatusBadge></p>

@@ -7,6 +7,7 @@ import {workspaceFixture,interceptDatabase} from './helpers/workspace-identity.m
 import {paidPlan} from './helpers/paid-plan.mjs';
 import {initializeFixtureKeys,fixtureKeyring,fixtureCiphertext} from './helpers/connection-keyring.mjs';
 import {accountClosureInventory} from '../tools/account-closure-inventory.mjs';
+import {maintenanceReport} from '../tools/report-maintenance.mjs';
 Error.stackTraceLimit=0;
 // WH-018 reviewed account export and resumable account closure through the actual platform Worker routes, against the
 // complete current schema in disposable SQLite, or local D1 with --d1. Every identity, photo, token and record is
@@ -183,6 +184,9 @@ try{
   assert.ok(manifest.omissions.some(o=>o.section==='usage.json'&&o.reason==='most-recent-20-requests-only'&&o.count>=25),JSON.stringify(manifest.omissions));
   const leads=JSON.parse(strFromU8(files[`projects/${x.project}/leads.json`]));assert.equal(leads.leads.length,1);assert.equal(leads.leads[0].note,leadNote);assert.equal(leads.leads[0].stage,'contacted');
   assert.ok(!Object.keys(files).some(n=>/records-enquiry/.test(n)),'Visitor datasets stay opt-in');
+  // 6: the estimate charges one page per schema or collection.
+  const least=async visitor=>{let lo=0,hi=5000;while(lo<hi){const mid=(lo+hi)>>1;try{await m.assertExportWithinBudget(db,x.user,visitor,mid);hi=mid;}catch{lo=mid+1;}}return lo;};
+  assert.ok(await least(true)-await least(false)>=8,'one page for the records schema plus one page of records at least');
   // The size pre-check refuses before the review is saved or the monthly allowance touched.
   await assert.rejects(()=>m.assertExportWithinBudget(db,x.user,true,10),/too large to export in one download/);
   const before=(await row("SELECT downloads FROM account_export_usage WHERE user_id=? AND period=strftime('%Y-%m','now')",x.user))?.downloads??0;
@@ -292,11 +296,12 @@ try{
   await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES(?,?,'intake-1','human:reviewer',unixepoch(),unixepoch()+31536000)",caseId,c.user);
   await run("INSERT OR IGNORE INTO safety_case_roles(id,operator_ref,role,granted_by,granted_at) VALUES('grant-test-approver','human:approver','preservation_approver','human:test-administrator',unixepoch())"); // holds need a current preservation approver
   await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES(?,?,?,'project',?,'basis-1','human:approver',unixepoch(),unixepoch()+86400)",hold,caseId,c.user,c.project);
-  // A hold is never disclosed through the review: the client view (including its opaque digest) does not depend on hold
-  // or risk-ledger state, and a review prepared before the hold is still exact afterwards.
-  const fresh=await closureReview(c),view=r=>JSON.stringify({...r,id:undefined,digest:undefined,expiresAt:undefined});
-  assert.equal(view(fresh),view(review));assert.notEqual(fresh.digest,review.digest);
-  const again=await closureReview(c);assert.notEqual(again.digest,fresh.digest,'Equal bindings still give unrelated digests');
+  // The review and the refusal agree: a hold makes the review say, in the same generic sentence every support-only condition uses, that support is needed. No clean review
+  // is ever followed by a repeatable refusal, so the refusal reveals nothing the review did not. The hold itself, its case and its scope are never named.
+  const fresh=await closureReview(c);assert.equal(fresh.canConfirm,false);assert.equal(fresh.needsSupport,true);assert.match(fresh.supportMessage,/need Whumpo support/);
+  assert.doesNotMatch(JSON.stringify(fresh),/hold|safety|preserv|case-|basis/i);
+  const other=await owner();await run('INSERT INTO backend_form_settings(project_id,revision) VALUES(?,0)',other.project);assert.equal((await closureReview(other)).supportMessage,fresh.supportMessage,'Every support-only condition shows the same sentence');
+  await run('DELETE FROM backend_form_settings WHERE project_id=?',other.project);
   // Confirmation is refused before anything is taken away, with a sentence that is the same for every kind of support-only condition.
   const refusal=await refused(await confirm(c,review),409,'action_required');
   assert.match(refusal.error,/need Whumpo support/);assert.doesNotMatch(JSON.stringify(refusal),/hold|safety|preserv|case-|basis/i);
@@ -321,6 +326,59 @@ try{
   assert.equal(done.closure.steps.at(-1).detail.cloudflareZonesLeftInPlace,1,'The receipt lists the zone left in place');
  });
 
+ await check('a lost notification reply and an interrupted form continuation stop counting after their windows; recent ones wait; a stuck closure reports itself',async()=>{
+  const day=864e5,{enqueueNotice,runNotificationDelivery}=m.notificationOutbox;
+  const lockstep=(await row("SELECT sql FROM sqlite_master WHERE name='users_email_lockstep'"))?.sql;await run('DROP TRIGGER IF EXISTS users_email_lockstep');
+  // The real notification lane: the sender's reply is lost, so the journal job goes uncertain and its notice unknown, exactly as in production.
+  const lost=async(o,agoDays)=>{
+   await run("UPDATE users SET email_verified_at=?,email_verified_via='notify@whumpo.com' WHERE id=?",Date.now(),o.user);
+   const at=Date.now()-agoDays*day;await enqueueNotice(db,{userId:o.user,scope:'account-email',template:'account.passkey-added@1',eventRef:'evt-'+id(),now:at});
+   await runNotificationDelivery(db,{sendCeiling:1000,customerCeilingCents:0},async()=>{throw Error('reply lost');},{now:new Date(at),timeoutMs:50});
+   return row('SELECT state,last_at FROM job_journal WHERE owner_user_id=?',o.user);};
+  try{
+   const old=await owner(),oldJob=await lost(old,4);assert.equal(oldJob.state,'uncertain');assert.ok(oldJob.last_at<Date.now()-3*day,'the lane recorded the old time');
+   const oldReview=await closureReview(old);assert.equal(oldReview.canConfirm,true);
+   const finished=await ok(await confirm(old,oldReview));assert.equal(finished.closure.state,'complete','a lost reply older than 72 hours does not stop the purge');
+   assert.equal(await row('SELECT 1 x FROM job_journal WHERE owner_user_id=?',old.user),null,'the uncertain job and its unknown notice leave with the account');
+   const recent=await owner(),recentJob=await lost(recent,0);assert.equal(recentJob.state,'uncertain');
+   const waiting=await ok(await confirm(recent,await closureReview(recent)));assert.equal(steps(waiting).operations,'waiting');assert.equal(waiting.closure.overdue,false);
+   // A closure still quiescing four days after it began says so to its owner, and the operator report lists it (observed with the JS clock moved forward; nothing is edited).
+   const real=Date.now;let stuck,report;Date.now=()=>real()+5*day;try{stuck=await ok(await account(recent,'closure/status'));report=await maintenanceReport(db,Date.now());}finally{Date.now=real;}
+   assert.equal(stuck.closure.overdue,true);assert.equal(report.backlogs.find(q=>q.queue==='account_closures').state,'attention');
+   assert.equal(waiting.closure.overdue,false);assert.equal((await maintenanceReport(db,Date.now())).backlogs.find(q=>q.queue==='account_closures').state,'pending','a fresh closure is pending, not attention');
+  }finally{if(lockstep)await run(lockstep);}
+  // An interrupted form-continued AI turn: pending and then unknown. Its window is 24 hours from the start.
+  const continuation=async(o,startedHoursAgo,rev)=>{
+   const conv=id(),task=id(),interaction=id(),turn=id(),started=new Date(Date.now()-startedHoursAgo*3600000).toISOString(),created=new Date(Date.now()-48*3600000).toISOString();
+   await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,?,'q','a',?,'ai','completed')",turn,o.user,rev,created);
+   await run('INSERT INTO chat_conversations(id,user_id) VALUES(?,?)',conv,o.user);
+   await run('INSERT INTO chat_interaction_tasks(id,user_id,conversation_id,project_id,origin_turn_id) VALUES(?,?,?,?,?)',task,o.user,conv,o.project,turn);
+   const expires=new Date(Date.now()+86400000).toISOString(),envelope=JSON.stringify({version:1,id:interaction,scope:{accountId:o.user,actorId:o.user,conversationId:conv,taskId:task,projectId:o.project,originTurnId:turn},createdAt:created,expiresAt:expires,definitionDigest:'a'.repeat(64),definition:{continuationBinding:'agent.task-continue@1'}});
+   await run('INSERT INTO chat_interactions(id,user_id,conversation_id,task_id,project_id,origin_turn_id,envelope_json,definition_digest,issue_hash,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)',interaction,o.user,conv,task,o.project,turn,envelope,'a'.repeat(64),'b'.repeat(64),created,expires);
+   await run("UPDATE chat_interactions SET state='submitted',answer_revision=1,draft_json='{}',draft_saved_at=NULL WHERE id=?",interaction);
+   await run("INSERT INTO chat_interaction_requests(user_id,request_id,interaction_id,request_hash,operation,answer_revision,created_at) VALUES(?,?,?,?,'submit',1,?)",o.user,interaction,interaction,'d'.repeat(64),created);
+   await run("INSERT INTO chat_interaction_submissions(id,user_id,interaction_id,answers_json,answers_digest,answer_revision,created_at) VALUES(?,?,?,'{}',?,1,?)",interaction,o.user,interaction,'c'.repeat(64),created);
+   await run('INSERT INTO chat_interaction_continuations(id) VALUES(?)',interaction);
+   await run("UPDATE chat_interaction_continuations SET state='pending',started_at=? WHERE id=?",started,interaction);await run("UPDATE chat_interaction_continuations SET state='unknown' WHERE id=?",interaction);};
+  const stale=await owner();await continuation(stale,30,9301);
+  assert.equal((await ok(await confirm(stale,await closureReview(stale)))).closure.state,'complete','an unanswered continuation older than 24 hours does not stop closure');
+  const fresh=await owner();await continuation(fresh,1,9302);
+  assert.equal(steps(await ok(await confirm(fresh,await closureReview(fresh)))).operations,'waiting','a recent one waits');
+ });
+
+ await check('what the owner reviewed is what is deleted; a late billing record stops the purge',async()=>{
+  // 5: a project created between the confirmation read and the batch.
+  const n=await owner(),review=await closureReview(n);
+  batchHooks.push({re:/INSERT INTO account_closures/,fn:()=>createFixtureProject(n.scope,n.user,'Created in the gap '+marker,'Second project')});
+  await refused(await confirm(n,review),409,'stale_review');assert.equal(batchHooks.length,0);
+  assert.equal(await row('SELECT 1 x FROM account_closures WHERE account_id=?',n.user),null,'nothing started');assert.equal((await row('SELECT count(*) c FROM projects WHERE owner_user_id=?',n.user)).c,2,'nothing deleted');
+  // 7: a paid plan that lands after the last read is not cascade-deleted silently.
+  const z=await owner();let paid;batchHooks.push({re:/DELETE FROM users/,fn:async()=>{paid=await paidPlan(db,z.user,'business');}});
+  const stopped=await ok(await confirm(z,await closureReview(z)));
+  assert.ok(paid);assert.ok(await row('SELECT 1 x FROM users WHERE id=?',z.user),'the account is still there');assert.ok(await row('SELECT 1 x FROM stripe_paid_invoices WHERE id=?',paid),'the invoice record is kept');
+  assert.equal(stopped.closure.state,'blocked');assert.equal(stopped.closure.steps.at(-1).detail.reason,'retained_records');
+ });
+
  await check('work that appears between the last read and the purge batch stops the purge inside the batch',async()=>{
   const k=await owner();let rev=9200;
   // The injected request is created by "another runner" right before the purge batch commits.
@@ -343,7 +401,7 @@ try{
   const plan=await closureReview(billing);assert.deepEqual(plan.requiredBeforeClosure.map(r=>r.id),['activeSubscriptions']);assert.match(plan.requiredBeforeClosure[0].action,/forfeit/);
   await refused(await confirm(billing,plan),409,'action_required');
   await run("UPDATE stripe_subscriptions SET status='canceled' WHERE user_id=?",billing.user); // the end state the Stripe webhook records; no Stripe call is made
-  const invoices=await closureReview(billing);assert.equal(invoices.needsSupport,true);assert.equal(invoices.canConfirm,false);assert.ok(await row('SELECT 1 x FROM stripe_paid_invoices WHERE user_id=?',billing.user),'The paid invoice record is kept');
+  const invoices=await closureReview(billing);assert.equal(invoices.needsSupport,true);assert.equal(invoices.canConfirm,false);assert.match(invoices.paidInvoiceNotice,/cannot be closed yet, by you or by support/);assert.ok(await row('SELECT 1 x FROM stripe_paid_invoices WHERE user_id=?',billing.user),'The paid invoice record is kept');
   // A retained finance record that appears after confirmation (an operator or late write) still stops the purge honestly.
   const e=await owner();
   await run("INSERT INTO github_token_vault(id,user_id,ciphertext,expires_at,state) VALUES('token-late',?,?,'2027-01-01','active')",e.user,await fixtureCiphertext(fixtureKeyring(),`whumpo:github:token:${e.user}:token-late`,'gho_SYNTHETIC_LATE'));

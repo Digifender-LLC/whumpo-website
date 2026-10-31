@@ -63,9 +63,10 @@ export async function assertExportWithinBudget(db:D1Database,user:string,visitor
   (SELECT count(*) FROM module_records r JOIN projects p ON p.id=r.project_id WHERE p.owner_user_id=?1) records,
   (SELECT count(*) FROM module_files m JOIN projects p ON p.id=m.project_id WHERE p.owner_user_id=?1) uploads,
   (SELECT count(*) FROM module_instances i JOIN projects p ON p.id=i.project_id WHERE p.owner_user_id=?1) modules,
-  (SELECT count(*) FROM projects WHERE owner_user_id=?1) projects`).bind(user).first<{photos:number;records:number;uploads:number;modules:number;projects:number}>();
+  (SELECT coalesce(sum(CASE i.kind WHEN 'records' THEN json_array_length(json_extract(i.config_json,'$.schemas')) WHEN 'files' THEN json_array_length(json_extract(i.config_json,'$.collections')) ELSE 0 END),0) FROM module_instances i JOIN projects p ON p.id=i.project_id WHERE p.owner_user_id=?1) targets,
+  (SELECT count(*) FROM projects WHERE owner_user_id=?1) projects`).bind(user).first<{photos:number;records:number;uploads:number;modules:number;targets:number;projects:number}>();
  if(!row)throw new AccountLifecycleError(503,'closure_unavailable','The export could not be sized. Try again later.');
- const estimate=60+row.projects*14+row.modules*6+row.photos*3+(visitorData?Math.ceil(row.records/200)*4+row.uploads*4:0);
+ const estimate=60+row.projects*14+row.modules*6+row.photos*3+(visitorData?row.targets*4+Math.ceil(row.records/200)*4+row.uploads*4:0);
  if(estimate>budget)throw new AccountLifecycleError(409,'request_conflict','This account is too large to export in one download'+(visitorData?'; try again without visitor datasets':'')+'. Nothing was used from your monthly allowance. Contact support to arrange a split export.');
 }
 

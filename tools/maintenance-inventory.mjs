@@ -12,6 +12,8 @@ const nowMs="CAST(strftime('%s',?1) AS INTEGER)*1000";
 export const backlogInventory={
  chat_drafts:queue('chat_interactions',`removed_at IS NULL AND state!='submitted' AND ${date('COALESCE(draft_saved_at,created_at)','+7 days')}<=?1`,date('COALESCE(draft_saved_at,created_at)','+7 days'),2*3600000),
  connection_exchanges:queue('connection_oauth_exchanges',"state='dispatched'",'created_at',600000),
+ // WH-018: a closure still quiescing four days after it began (72 hour job window plus a day): a support-only condition appeared or a step is stuck.
+ account_closures:queue('account_closures',"state='quiescing'","strftime('%Y-%m-%dT%H:%M:%fZ',quiesced_at/1000,'unixepoch')",96*3600000),
  imports:queue('backend_imports',"state='pending'",'created_at',3600000),
  // WH-132: objects/rows retained by an active preservation hold are intentionally not backlog.
  photos:queue('file_cleanup',"NOT EXISTS(SELECT 1 FROM safety_preservation_holds h WHERE h.released_at IS NULL AND ((h.scope='account' AND h.subject_user_id=file_cleanup.owner_user_id) OR (h.scope='project' AND h.project_id=file_cleanup.project_id)))",'created_at'),

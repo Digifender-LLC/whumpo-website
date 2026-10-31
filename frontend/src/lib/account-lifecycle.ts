@@ -11,9 +11,9 @@ export type AccountTransport={fetch:Fetch;reauth:()=>Promise<unknown>};
 export type AccountResult<T>={state:'ok';value:T}|{state:'error';code:string;message:string;status:number};
 
 export type ExportReview={id:string;digest:string;expiresAt:number;format:'whumpo-account-export-v1';visitorData:boolean;projects:number;includes:string[];excludes:string[];notice:string};
-export type ClosureReview={id:string;digest:string;expiresAt:number;canConfirm:boolean;needsSupport:boolean;supportMessage:string|null;requiredBeforeClosure:{id:string;count:number;action:string}[];removes:Record<string,number>;effects:string[];remainsAfterClosure:string[]};
+export type ClosureReview={id:string;digest:string;expiresAt:number;canConfirm:boolean;needsSupport:boolean;supportMessage:string|null;paidInvoiceNotice:string|null;requiredBeforeClosure:{id:string;count:number;action:string}[];removes:Record<string,number>;effects:string[];remainsAfterClosure:string[]};
 export type ClosureStep={step:'freeze'|'withdraw'|'credentials'|'holds'|'operations'|'purge';state:'pending'|'done'|'waiting'|'blocked';attempts:number;updatedAt:number;origin:'owner'|'maintenance'|null;detail:Record<string,unknown>};
-export type ClosureStatus={id:string;state:'closing'|'waiting'|'blocked'|'complete';revision?:number;createdAt?:number;updatedAt?:number;completedAt:number|null;steps:ClosureStep[]};
+export type ClosureStatus={id:string;state:'closing'|'waiting'|'blocked'|'complete';overdue?:boolean;revision?:number;createdAt?:number;updatedAt?:number;completedAt:number|null;steps:ClosureStep[]};
 
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const digest=/^[a-f0-9]{64}$/;
