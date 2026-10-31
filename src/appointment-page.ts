@@ -1,5 +1,4 @@
-import {instanceOf,publicFormState,registeredInstances} from './shared-modules/registry';
-import {hasAppointmentForm,standardAppointmentFormId} from './shared-modules/records-setup';
+import {boundAppointment,standardAppointmentFormId} from './shared-modules/records-setup';
 import type {RecordField} from './project-specification/v3/modules';
 import {servingStopped} from './operator-serving';
 
@@ -10,8 +9,8 @@ import {servingStopped} from './operator-serving';
  * The page is open only while the form is bound to the live website version AND the deployed Worker has the Turnstile
  * secret (`secretPresent`); every other state renders one identical closed page that gives no reason and has no submit.
  * Copy says request, never a confirmed booking, and promises no email. The open page alone gets `appointmentPolicy`, which adds
- * https://challenges.cloudflare.com to script-src and frame-src; the closed page keeps the strict application-host policy. */
-export const appointmentPolicy="default-src 'none'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'";
+ * https://challenges.cloudflare.com to script-src, frame-src and connect-src (as the contact page needs) and allows inline styles for the widget; the closed page keeps the strict application-host policy. */
+export const appointmentPolicy="default-src 'none'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self' https://challenges.cloudflare.com; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'";
 const esc=(s:string)=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
 const head=(title:string)=>`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="color-scheme" content="light dark"><title>${esc(title)}</title><link rel="stylesheet" href="/design-tokens.css"><link rel="stylesheet" href="/appointment.css">`;
 const html=(body:string)=>new Response(body,{headers:{'content-type':'text/html; charset=utf-8'}});
@@ -34,25 +33,21 @@ export async function appointmentPage(db:D1Database,project:string,open:{local:b
  const closed=()=>({response:closedAppointmentPage(),open:false});
  if(!open.local&&(!open.secretPresent||!open.siteKey))return closed();
  if(await servingStopped(db,project))return closed();
- let found:{id:string;revision:number;config:Config}|null=null;
- for(const row of (await registeredInstances(db,project)).filter(r=>r.kind==='records')){
-  const instance=await instanceOf(row).catch(()=>null);
-  if(instance&&hasAppointmentForm(instance)&&await publicFormState(db,row)==='bound'){found={id:row.id,revision:row.config_revision,config:instance.config as Config};break;}
- }
+ const bound=await boundAppointment(db,project),found=bound?{id:bound.row.id,revision:bound.row.config_revision,config:bound.instance.config as Config}:null;
  const name=(await db.prepare('SELECT name FROM projects WHERE id=?').bind(project).first<{name:string}>())?.name;
  const form=found?.config.schemas.find(s=>s.id==='appointment')??null;
  if(!found||!name||!form)return closed();
  const business=esc(name),local=open.local,modules=local?`/apps/${project}/modules`:'/modules';
  return {open:true,response:html(`${head('Request an appointment · '+name)}<script defer src="/appointment.js"></script></head><body><main class="page">
 <header class="intro"><p class="eyebrow">${business}</p><h1 id="title">Request an appointment</h1><p class="lede">Tell us what you need and when suits you. This sends a request to ${business}. Nothing is booked until they agree a time with you.</p></header>
-<section class="panel" aria-labelledby="title"><form id="form" novalidate data-modules="${esc(modules)}" data-resource="${esc(found.id)}" data-revision="${found.revision}" data-form="${standardAppointmentFormId}" data-site-key="${local?'':esc(open.siteKey!)}" data-business="${business}">
+<section class="panel" aria-labelledby="title"><form id="form" novalidate data-modules="${esc(modules)}" data-resource="${esc(found.id)}" data-revision="${found.revision}" data-form="${standardAppointmentFormId}" data-site-key="${local?'':esc(open.siteKey!)}">
 <div id="summary" class="summary" role="alert" tabindex="-1" hidden></div>
 ${form.fields.map(control).join('\n')}
 ${local?'':`<div class="field check" id="check-field"><p class="check-title" id="check-title">Quick security check</p><div id="widget" aria-labelledby="check-title"></div><p class="error" id="e-check" hidden></p></div>`}
 <div class="actions"><button type="submit" id="send" class="primary">Send request</button><p id="progress" class="progress" role="status" aria-live="polite"></p></div>
-<p class="fine">${business} can see your answers for up to ${found.config.retentionDays} days. Please don’t include passwords or payment details.</p>
+<p class="fine">This form is run for ${business} by Whumpo. ${business} can see your answers in Whumpo for up to ${found.config.retentionDays} days. They are not sent to AI. Please don’t include passwords or payment details. <a href="https://digifender.com/legal/whumpo/privacy" target="_blank" rel="noopener noreferrer">Draft privacy policy</a></p>
 </form>
-<div id="done" class="done" hidden tabindex="-1"><h2>Request sent</h2><p>${business} can now see your request. They will use the details you gave to arrange a time. Nothing is booked yet, and this page does not send you an email.</p><button type="button" id="again">Send another request</button></div>
+<div id="done" class="done" hidden tabindex="-1"><h2>Request sent</h2><p class="ref">Your reference: <strong id="reference"></strong></p><p>${business} can now see your request. They will use the details you gave to arrange a time. Nothing is booked yet, and this page does not send you an email.</p><button type="button" id="again">Send another request</button></div>
 <noscript><p class="error-static">This form needs JavaScript to send a request. Please turn it on, or contact the business another way.</p></noscript>
 </section></main></body></html>`)};
 }

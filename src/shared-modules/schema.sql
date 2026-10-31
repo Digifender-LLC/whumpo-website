@@ -494,7 +494,8 @@ CREATE TRIGGER module_record_admit BEFORE INSERT ON module_records BEGIN
    AND (NEW.submitter_kind!='public' OR json_extract(f.value,'$.submit')='public'))
   AND EXISTS(SELECT 1 FROM json_each(i.config_json,'$.schemas') s WHERE json_extract(s.value,'$.id')=NEW.schema_id AND json_extract(s.value,'$.fieldsRevision')=NEW.fields_revision)
   AND NEW.expires_at=NEW.created_at+86400*json_extract(i.config_json,'$.retentionDays'))
-  OR NEW.submitter_kind='public' AND NOT EXISTS(SELECT 1 FROM publications p JOIN module_activations a ON a.instance_id=NEW.instance_id WHERE p.project_id=NEW.project_id AND p.version_id IS NOT NULL AND p.revision=a.publication_revision);
+  OR NEW.submitter_kind='public' AND NOT EXISTS(SELECT 1 FROM publications p JOIN module_activations a ON a.instance_id=NEW.instance_id WHERE p.project_id=NEW.project_id AND p.version_id IS NOT NULL AND p.revision=a.publication_revision
+   AND NOT EXISTS(SELECT 1 FROM project_spec_held h WHERE h.version_id=p.version_id));
  SELECT RAISE(ABORT,'module_request_stale') WHERE NEW.revision!=1 OR NEW.last_request_id!=NEW.created_request_id OR NEW.updated_at!=NEW.created_at OR abs(NEW.created_at-unixepoch())>60;
  SELECT RAISE(ABORT,'module_request_forbidden') WHERE NEW.visitor_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM app_visitors WHERE id=NEW.visitor_id AND project_id=NEW.project_id AND revoked=0);
  SELECT RAISE(ABORT,'module_request_limited') WHERE (SELECT count(*) FROM module_records WHERE instance_id=NEW.instance_id)>=10000

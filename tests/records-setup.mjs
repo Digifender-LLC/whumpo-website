@@ -161,13 +161,15 @@ try{
   const open=await hostedPage(a,{secret:'s'}),text=await open.text();
   assert.equal(open.status,200);assert.equal(open.headers.get('cache-control'),'private, no-store');
   const policy=open.headers.get('content-security-policy');
-  assert.equal(policy,"default-src 'none'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'");
+  assert.equal(policy,"default-src 'none'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self' https://challenges.cloudflare.com; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'");
   assert.ok(text.includes(`data-resource="${resource.id}"`)&&text.includes(`data-revision="${resource.config_revision}"`)&&text.includes('data-modules="/modules"')&&text.includes('data-site-key="0x4AAAAAAFIoE2toIv5N36J5"'));
   for(const label of ['Your name','Email or phone','What do you need?','Preferred day','Anything we should know?','(optional)','First visit','A weekend day','Send request'])assert.ok(text.includes(label),label);
   assert.ok(text.includes('Nothing is booked until they agree a time')&&text.includes('up to 90 days'));
   assert.ok(!/confirmed booking|we will email|you will receive an email|booked for you/i.test(text.replace('Nothing is booked yet, and this page does not send you an email.','')),'Never a confirmed booking, never an email promise');
   assert.ok(!/<script(?![^>]*src=)|<style|\sstyle=|\son\w+=/i.test(text),'No inline script, style or handler');
-  assert.ok(!/Whumpo|whumpo\.com/i.test(text),'No platform chrome');
+  assert.ok(!/Powered by|class="brand"|href="https:\/\/whumpo\.com/i.test(text),'No platform chrome');
+  assert.ok(text.includes('run for Salon')&&text.includes('by Whumpo')&&text.includes('They are not sent to AI')&&text.includes('href="https://digifender.com/legal/whumpo/privacy"'),'Fine print names Whumpo, links the privacy policy, says not sent to AI');
+  assert.ok(!text.includes('data-business')&&text.includes('id="reference"'));
   // The other visitor routes keep the strict policy.
   for(const path of ['/','/visitor.js','/design-tokens.css','/appointment.css','/appointment.js'])assert.equal((await m.appHost.fetch(new Request(a.host+path),{...env,ASSETS:{fetch:async()=>new Response('x')}})).headers.get('content-security-policy'),STRICT,path);
   {const q=await m.appHost.fetch(new Request(a.host+'/forms/appointment?x=1'),{...env});assert.ok(!q.headers.get('content-security-policy').includes('challenges'));assert.ok(!(await q.text()).includes('Request an appointment'));}
@@ -222,6 +224,51 @@ try{
   await publish(a);await state('stale',false);assert.equal(await attempt('192.0.2.72'),'unavailable');
   assert.match(ui.appointmentSetupView(a.project,(await panel(a)).appointment).note,/changed after/);
   await activation(a,'appointments');await state('bound',true);
+ });
+
+ await check('held, retired and contained content, and a withdrawn pin, close the form, the link and the commit',async()=>{
+  const link=`https://app-${a.project}.whumpo.site/forms/appointment`;
+  const open=async()=>!(await (await hostedPage(a,{secret:'s'})).text()).includes(closedText);
+  const attempt=async ip=>{const r=await instance(a,'appointments'),before=await count(a);verdict=()=>({success:true,hostname:new URL(a.host).hostname,action:'module-form',cdata:r.id});const p=await post(a,submit(r),{secret:'s',ip});return [p.body.code??'accepted',(await count(a))-before];};
+  const closedEverywhere=async(label,code,panelState)=>{
+   assert.equal(await open(),false,label+': page closed');assert.equal((await siteHtml(a)).text.includes(link),false,label+': no link');
+   assert.equal((await panel(a)).appointment.publicForm,panelState,label+': panel');
+   const [got,stored]=await attempt('198.51.100.'+Math.floor(Math.random()*200+1));assert.equal(stored,0,label+': nothing stored');assert.equal(got,code,label+': POST answer');
+  };
+  const reopened=async label=>{assert.equal(await open(),true,label+': open again');assert.equal((await siteHtml(a)).text.includes(link),true,label+': link again');};
+  assert.equal(await open(),true);
+  const live=await row('SELECT s.version_id,v.digest FROM publications s JOIN site_versions v ON v.id=s.version_id WHERE s.project_id=?',a.project);
+  // Operator containment of public contact intake with allowance 0.
+  const cid=id();await run("INSERT INTO operator_containments(id,scope,subject_kind,subject_id,allowance,operator_ref,reason,request_digest,expires_at) VALUES(?,?,?,?,?,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 day'))",cid,'contact','project',a.project,0,'human:synthetic','synthetic WH-070 fixture','0'.repeat(64));
+  await closedEverywhere('contained','limited','unavailable');
+  await run("UPDATE operator_containments SET resolution='lifted',resolved_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),resolved_by='human:synthetic',resolution_reason='synthetic',resolution_digest=? WHERE id=?",'1'.repeat(64),cid);
+  await reopened('after lift');
+  // A required screening decision on the live artifact holds it: the site host answers 503, so the form closes and the commit refuses.
+  await run("INSERT INTO content_screening_decisions(user_id,kind,digest,policy_version,first_required,required,first_reason,first_percent,first_risk_score) VALUES(?,'generated_artifact',?,'synthetic-policy',1,1,'mandatory_format',100,100)",a.user,live.digest);
+  assert.equal((await siteHtml(a)).status,503);
+  await closedEverywhere('held','unavailable','unavailable');
+  // The commit trigger itself (not only the gateway) refuses an anonymous record on a held live version.
+  const r=await instance(a,'appointments');
+  await assert.rejects(m.sharedModules.handleModuleRequest(db,{kind:'public',projectId:a.project},submit(r),undefined,{publicAdmission:async()=>{}}),e=>e?.code==='unavailable');
+  await run('DELETE FROM content_screening_decisions WHERE user_id=? AND digest=?',a.user,live.digest);await reopened('after release');
+  // A retired compiler lock or format is not served either.
+  const saved=await row('SELECT lock_json FROM project_spec_versions WHERE version_id=?',live.version_id);
+  const immutable=(await row("SELECT sql FROM sqlite_master WHERE name='project_spec_version_immutable'")).sql;
+  await run('DROP TRIGGER project_spec_version_immutable');
+  try{
+   await run('UPDATE project_spec_versions SET lock_json=? WHERE version_id=?','{"retired":true}',live.version_id);
+   assert.equal((await siteHtml(a)).status,503);await closedEverywhere('retired','unavailable','unavailable');
+  }finally{await run('UPDATE project_spec_versions SET lock_json=? WHERE version_id=?',saved.lock_json,live.version_id);await run(immutable);}
+  await reopened('after restore');
+  // A withdrawn or stale module pin closes the page and drops the link, though the SQL pre-filter still matches.
+  const pinned=await row("SELECT module_digest FROM module_instances WHERE project_id=? AND local_id='appointments'",a.project);
+  const guard=(await row("SELECT sql FROM sqlite_master WHERE name='module_instance_update'")).sql;
+  await run('DROP TRIGGER module_instance_update');
+  try{
+   await run("UPDATE module_instances SET module_digest=? WHERE project_id=? AND local_id='appointments'",'f'.repeat(64),a.project);
+   assert.equal(await open(),false,'pin: page closed');assert.equal((await siteHtml(a)).text.includes(link),false,'pin: no link');
+  }finally{await run("UPDATE module_instances SET module_digest=? WHERE project_id=? AND local_id='appointments'",pinned.module_digest,a.project);await run(guard);}
+  await reopened('after pin restore');
  });
 
  console.log=originals.log;

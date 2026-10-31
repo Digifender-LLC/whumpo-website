@@ -11,7 +11,7 @@ import {hashToken} from './security';
 import {publicDirectory} from './directory';
 import {directoryPage} from './directory-page';
 import {publishedHTML} from './published-html';
-import {withAppointmentLink} from './appointment-link';
+import {withAppointmentLink,appointmentLinkShown} from './appointment-link';
 import {requireSpecificationAvailable} from './specification-safety';
 import { previewHeaders } from './components';
 import {reservePublicPhotoRead,StorageLimitError} from './storage-budget';
@@ -64,9 +64,10 @@ const serving = {
    if(site.component_id==='photo-page@1'&&!url.pathname.endsWith('/'))return new Response(null,{status:308,headers:{...headers,location:new URL(request.url).pathname+'/'}});
    const contact=site.contact_enabled===1;
    const form=await activeBackendForm(env.DB,match[1]);
-   const html=withAppointmentLink(publishedHTML(site.html,contact,match[1],form),match[1],site.appointment_enabled===1);
+   const appointment=await appointmentLinkShown(env.DB,match[1],site.appointment_enabled);
+   const html=withAppointmentLink(publishedHTML(site.html,contact,match[1],form),match[1],appointment);
    const formPolicy=form?"; script-src "+await backendFormScriptPolicy()+"; connect-src "+projectOrigin(match[1])+"":'';
-   const sandbox='sandbox'+(form?' allow-scripts allow-forms':'')+(contact||site.appointment_enabled===1?' allow-popups allow-popups-to-escape-sandbox':'')+';';
+   const sandbox='sandbox'+(form?' allow-scripts allow-forms':'')+(contact||appointment?' allow-popups allow-popups-to-escape-sandbox':'')+';';
    return new Response(request.method==='HEAD'?null:html,{headers:{...headers,'content-security-policy':headers['content-security-policy'].replace('sandbox;',sandbox)+"; img-src 'self'"+formPolicy}});
   }catch(cause){if(cause instanceof PublicClientLimitError)return new Response('Too many photo requests from this connection today',{status:429,headers});return new Response(cause instanceof StorageLimitError?'Photo allowance temporarily exhausted':'Site temporarily unavailable',{status:503,headers});}
  }

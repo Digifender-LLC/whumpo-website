@@ -34,6 +34,16 @@ export function standardAppointmentInstance():Extract<ModuleInstance,{kind:'reco
 }
 export const hasAppointmentForm=(i:ModuleInstance)=>i.kind==='records'&&i.config.forms.some(f=>f.id===standardAppointmentFormId&&f.submit==='public');
 
+/** The project's standard appointment form while it is open to the public: active, bound to the live publication, not held,
+ * retired or contained, and on a current catalog pin (`publicFormState` agrees with serving). Shared by the hosted page and the site link. */
+export async function boundAppointment(db:D1Database,project:string){
+ for(const row of (await registeredInstances(db,project)).filter(r=>r.kind==='records')){
+  const instance=await instanceOf(row).catch(()=>null);
+  if(instance&&hasAppointmentForm(instance)&&await publicFormState(db,row)==='bound')return {row,instance:instance as Extract<ModuleInstance,{kind:'records'}>};
+ }
+ return null;
+}
+
 /** Owner metadata for the records panel: which step of appointment form setup comes next, and the public form state once
  * registered. Ids and states only. */
 export async function readRecordsSetup(db:D1Database,user:string,project:string):Promise<RecordsSetup>{

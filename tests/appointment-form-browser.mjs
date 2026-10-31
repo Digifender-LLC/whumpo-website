@@ -201,6 +201,7 @@ try{
  const listed=await ownerGet(`/api/projects/${o.project}/module-records/${resource.id}/appointment`);
  assert.deepEqual(listed.items.map(i=>[i.submittedBy,i.values.name,i.values.contact,i.values.service,i.values.day,i.values.note]),[['public','Ada Lovelace','ada@example.test','follow-up','weekend','Ground floor please']],'The request is in the owner records list');
  assert.equal((await ownerGet(`/api/projects/${o.project}/module-records`)).items[0].schemas[0].records.public,1);
+ assert.equal(await page.locator('#reference').textContent(),listed.items[0].entryId.slice(0,8).toUpperCase(),'The on-page reference is the one the owner sees');
  await page.getByRole('button',{name:'Send another request'}).click();
  await page.locator('#f-name').waitFor({state:'visible'});assert.equal(await page.evaluate(()=>document.activeElement?.id),'f-name');assert.equal(await page.locator('#f-name').inputValue(),'');
 

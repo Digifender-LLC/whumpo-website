@@ -27,7 +27,7 @@ const total=(s:Item['schemas'][number])=>s.records.public+s.records.visitor+s.re
 const shown=(v:unknown)=>typeof v==='boolean'?(v?'Yes':'No'):String(v);
 
 const publicForm:Record<Exclude<PublicFormState,'none'>,string>={bound:'Bound to the live website version.',inactive:'Anonymous submissions are closed: this module is not active. Review activation in Chat to turn it on.',
- unavailable:'Anonymous submissions are closed: a module this form depends on is off, or this module version is no longer current.',
+ unavailable:'Anonymous submissions are closed: a module this form depends on is off, this module version is no longer current, the website content is held for safety review, or Whumpo has paused public forms for this website.',
  unpublished:'Anonymous submissions are closed: the website is not published. Publish it, then review activation.',stale:'Anonymous submissions are closed: the website changed after this module was activated. Review activation to bind the form to the live version.'};
 /** Whether a public form is bound to the live website and, if not, why anonymous submissions are closed. Plain static text; no colour carries the meaning. */
 export function PublicFormNote({state}:{state:PublicFormState}){
@@ -130,6 +130,7 @@ function RecordList({project,resourceId,recordId,onChanged}:{project:string;reso
  }
  return <div className="space-y-4"><QueryStatus pending={q.isPending} error={q.error}/>
   {q.data?.items.map(item=><Section key={item.entryId} title={who[item.submittedBy]+' · '+new Date(item.createdAt).toLocaleString()}>
+   <p className="text-caption text-ink-muted">Reference {item.entryId.slice(0,8).toUpperCase()}</p>
    <dl className="space-y-2 text-body-sm">{q.data.fields.map(f=><div key={f.key} className="flex flex-wrap gap-x-3"><dt className="text-ink-muted">{f.label}</dt><dd className="whitespace-pre-wrap break-words">{Object.hasOwn(item.values,f.key)?shown(item.values[f.key]):'—'}</dd></div>)}</dl>
    <div className="mt-4"><ConfirmButton label="Delete record" description="Permanently delete this record? It cannot be restored." run={()=>remove(item.entryId)}/></div>
   </Section>)}

@@ -44,3 +44,5 @@ button[aria-disabled=true]{opacity:.7;cursor:progress}
 [hidden]{display:none!important}
 @media(min-width:40rem){.page{padding-top:3rem}.panel{padding:2rem}.choices{grid-template-columns:repeat(auto-fit,minmax(11rem,1fr))}}
 @media(prefers-reduced-motion:no-preference){button,label.choice{transition:background-color var(--duration-fast) var(--ease-standard),border-color var(--duration-fast) var(--ease-standard)}}
+.fine a{color:var(--link);text-decoration:underline}
+.ref{font-size:1.0625rem}

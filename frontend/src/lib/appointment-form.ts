@@ -25,7 +25,7 @@ export function appointmentSetupView(project:string,setup:RecordsSetup|undefined
   case 'bound':return {steps:mk('done','done','done','done'),note:'The form is on and matches your live website. Requests appear in this list. The form sends no email by itself.',action:null,link:appointmentLink(project)};
   case 'unpublished':return {steps:mk('done','done','done','next'),note:'The form is on, but your website is not published, so the form stays closed. Publish your website, then review activating the form again.',action:activate,link:null};
   case 'stale':return {steps:mk('done','done','next','waiting'),note:'Your website changed after the form was turned on, so the form is closed. Review activating it again to match the live website.',action:activate,link:null};
-  case 'unavailable':return {steps:mk('done','done','waiting','waiting'),note:'The form is closed: this module version is no longer current or something it depends on is off.',action:null,link:null};
+  case 'unavailable':return {steps:mk('done','done','waiting','waiting'),note:'The form is closed: this module version is no longer current, something it depends on is off, the website content is held for safety review, or Whumpo has paused public forms for this website.',action:null,link:null};
   default:return {steps:mk('done','done','next','waiting'),note:'The form is saved but turned off. Review activating it in Chat.',action:activate,link:null};
  }
 }

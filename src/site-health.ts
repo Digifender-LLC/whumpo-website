@@ -1,7 +1,7 @@
 import {activeBackendForm} from './backend-forms';
 import {hashToken} from './security';
 import {publishedHTML} from './published-html';
-import {withAppointmentLink} from './appointment-link';
+import {withAppointmentLink,appointmentLinkShown} from './appointment-link';
 import {platformCheckAgent} from './site-traffic';
 export class HealthError extends Error{constructor(public status:number,message:string){super(message);}}
 export type HealthOptions={healthChecks?:boolean;healthTransport?:typeof fetch};
@@ -28,7 +28,7 @@ export async function checkHealth(db:D1Database,user:string,project:string,trans
   if(await hashToken(s.html)!==s.digest)throw Error('The saved website artifact failed its integrity check.');
   const url='https://'+project+'.whumpo.site/';
   const response=await transport(url,{method:'GET',headers:{accept:'text/html','cache-control':'no-cache','user-agent':platformCheckAgent},redirect:'manual',signal:AbortSignal.timeout(10000)});
-  const html=await pageText(response);if(await hashToken(html)!==await hashToken(withAppointmentLink(publishedHTML(s.html,s.contact_enabled===1,project,form),project,s.appointment_enabled===1)))throw Error('The served page did not match the current saved version.');
+  const html=await pageText(response);if(await hashToken(html)!==await hashToken(withAppointmentLink(publishedHTML(s.html,s.contact_enabled===1,project,form),project,await appointmentLinkShown(db,project,s.appointment_enabled))))throw Error('The served page did not match the current saved version.');
   // WH-183: a directory the platform serves (live and bound to this publication) must return the approved snapshot: ETag and listings hash both equal its digest.
   if(dir?.live_json&&dir.publication_revision===s.revision){
    const expected=dir.live_digest,r=await transport(url+'directory.json',{method:'GET',headers:{accept:'application/json','cache-control':'no-cache','user-agent':platformCheckAgent},redirect:'manual',signal:AbortSignal.timeout(10000)});

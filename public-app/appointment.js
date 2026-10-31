@@ -8,7 +8,7 @@
  let token='',widget=null,widgetFailed=false,busy=false,attempt=null;
  const message={
   unavailable:'This form isn’t open right now. Please try again later.',
-  limited:'There have been a lot of requests from your connection today. Please try again tomorrow.',
+  limited:'This form can’t take more requests right now. Please try again later.',
   forbidden:'The security check didn’t pass. Please try it again.',
   stale_configuration:'This form has changed. Reload the page to see the current form.',
   invalid_request:'Some answers couldn’t be accepted. Please check them and try again.',
@@ -74,7 +74,7 @@
     body:JSON.stringify({api:'whumpo-modules',version:1,operation:'forms.submit',resourceId:form.dataset.resource,configRevision:Number(form.dataset.revision),requestId:attempt.id,target:{formId:form.dataset.form},input:{values}})});
    let body=null;try{body=await response.json();}catch{}
    if(response.ok&&body?.result?.accepted===true){
-    attempt=null;token='';form.hidden=true;done.hidden=false;done.focus();return;
+    $('reference').textContent=String(body.result.entryId??'').slice(0,8).toUpperCase();attempt=null;token='';form.hidden=true;done.hidden=false;done.focus();return;
    }
    if(siteKey&&window.turnstile&&widget!==null){token='';window.turnstile.reset(widget);}
    fail(message[body?.code]??'We couldn’t send your request. Your answers are still here. Please try again.');
