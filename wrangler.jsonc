@@ -13,6 +13,7 @@
     }
   ],
   "vars": {
+    "STRIPE_PUBLISHABLE_KEY": "pk_live_51UWOjs0LNjXeQYHLGgSplEzEsN3h4pDWKZ8wsVFTVzkBtkTFrngYHdOyjN14F19DSUs57xZpJY3xl9EG0IywibEJ00s2Lp0ALJ",
     "ENVIRONMENT": "test",
     "TURNSTILE_SITE_KEY": "0x4AAAAAAFIoE2toIv5N36J5",
     "AI_BASE_URL": "https://opencode.ai/zen/go/v1",
