@@ -61,6 +61,7 @@ Class, lane and turnover values:
 <!-- review-retention:inventory:start -->
 | Counted table | Capacity trigger(s) | Caps | Class | Lane | Turnover today | Deleted by | WH-009 class |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| `account_lifecycle_reviews` | `account_lifecycle_reviews_capacity` | owner 20 | review | R1 | expiring | app+cascade | account-exports |
 | `app_activation_reviews` | `app_activation_admit` | project 25 (filtered) · owner 25 (filtered) · owner 100 (filtered) · platform 2500 (filtered) · platform 5000 (filtered) | review | R1 | active-only | none | visitor-app-data |
 | `app_auth_challenges` | `app_challenge_admit` | project 5 (filtered) · project 50 · platform 1000 | inventory | R6 | expiring | app+trigger+cascade | visitor-identity |
 | `app_daily_usage` | `app_run_admit` | owner 100 (window) · platform 500 (window) · platform 1000 (window) | rate | R6 | window | app | visitor-app-data |

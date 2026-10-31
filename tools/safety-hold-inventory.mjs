@@ -144,6 +144,10 @@ export const deletionSites={
  'src/project-specification/store.ts::project_spec_proposals':excluded(proposals),
  'src/shared-modules/records.ts::module_records':{decision:'blocked',mechanism:'safety_hold_module_record_retained + cleanupModuleRecords excludes safety_held_projects',note:'WH-127 owner record removal (records.remove) is refused as unavailable inside a held project; retention expiry skips held projects and the delete trigger backs both. Visitor erasure cascades only through app_visitors, which the visitor hold refuses.'},
  'src/project-specification/service-clients/store.ts::service_client_proposals':excluded(proposals),
+ 'src/account-lifecycle/closure.ts::users':blocked('safety_hold_account_retained + safety_hold_project_retained + closure holds step','Reviewed account closure purge. The holds step stops at a generic retention pause for any active account, project or object hold on the account; the cascade itself is refused by the account/project/file hold triggers, and the batch (including the completed journal) rolls back.'),
+ 'src/account-lifecycle/closure.ts::identity_challenges':excluded(credential),
+ 'src/account-lifecycle/closure.ts::account_lifecycle_reviews':excluded(proposals),
+ 'src/account-lifecycle/export.ts::account_lifecycle_reviews':excluded('A download consumes its own ten-minute export review (single use); the review holds a content-free binding, never customer content.'),
  'src/site-health.ts::site_health_budget':excluded('Platform monitoring budget; no customer content.'),
  'src/site-health.ts::site_health_checks':excluded('Platform availability checks of public pages; no customer content beyond the public URL status.'),
 };
