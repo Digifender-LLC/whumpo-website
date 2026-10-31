@@ -153,7 +153,7 @@ export function ConversionSummary({data,pending=false,failed=false}:{data?:Conve
  </Section>;
 }
 
-function RecordList({project,resourceId,recordId,onChanged}:{project:string;resourceId:string;recordId:string;onChanged:()=>void}){
+export function RecordList({project,resourceId,recordId,onChanged}:{project:string;resourceId:string;recordId:string;onChanged:()=>void}){
  const [cursor,setCursor]=useState<string|null>(null),[error,setError]=useState(''),pending=useRef(new Map<string,string>()),[filter,setFilter]=useState({stage:'',due:''}),today=localDate();
  const query=new URLSearchParams({...cursor?{after:cursor}:{},...filter.stage?{stage:filter.stage}:{},...filter.due?{due:filter.due}:{},...filter.due==='overdue'?{today}:{}}).toString();
  const q=useQuery({queryKey:['module-records',project,resourceId,recordId,query],queryFn:()=>api<RecordPage>(`/projects/${project}/module-records/${resourceId}/${recordId}${query?'?'+query:''}`),gcTime:0});

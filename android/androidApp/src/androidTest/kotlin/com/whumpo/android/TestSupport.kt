@@ -22,3 +22,20 @@ object Fixtures {
         container.accountState.signOut()
     }
 }
+
+/** Emulator screenshots for the PR (app external files, pulled by adb); a failure to capture never fails a test. */
+object Shots {
+    fun take(name: String) {
+        try {
+            val ctx = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext
+            val dir = java.io.File(ctx.getExternalFilesDir(null), "shots").apply { mkdirs() }
+            val night = (ctx.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+                android.content.res.Configuration.UI_MODE_NIGHT_YES
+            Thread.sleep(400)
+            androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()?.let { bmp ->
+                java.io.File(dir, "$name-${if (night) "dark" else "light"}.png").outputStream().use { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+            }
+        } catch (_: Exception) {
+        }
+    }
+}

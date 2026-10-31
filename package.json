@@ -170,6 +170,7 @@
     "test:module-record-leads": "node tests/module-record-leads.mjs && node tests/module-record-leads.mjs --d1",
     "test:module-record-conversions": "node tests/module-record-conversions.mjs && node tests/module-record-conversions.mjs --d1",
     "test:record-leads-browser": "node tests/record-leads-browser.mjs",
+    "test:record-leads-journey": "node tests/record-leads-journey.mjs && node tests/record-leads-journey.mjs --d1",
     "test:job-journal": "node tests/job-journal.mjs && node tests/job-journal.mjs --d1",
     "test:email-change-review": "node tests/email-change-review.mjs && node tests/email-change-review.mjs --d1",
     "test:ack-timing": "node tests/ack-timing.mjs",
