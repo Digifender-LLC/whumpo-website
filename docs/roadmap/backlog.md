@@ -2,7 +2,7 @@
 
 > Generated from `backlog.json` by `node tools/roadmap.mjs render`. Edit the JSON source, then render again.
 
-Reviewed 2026-10-31 against source `be4e6bf321b71c20e208b13a6628ff973826eec0`. 190 planned tasks.
+Reviewed 2026-10-31 against source `be4e6bf321b71c20e208b13a6628ff973826eec0`. 191 planned tasks.
 
 Planning readiness and dependencies describe the plan. Current execution, claims, blockers, and completion evidence live in GitHub Issues. A ready task is only a candidate: verify live dependency completion and authorization before work.
 
@@ -9152,217 +9152,6 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
 
-## WH-156 — Shared notification outbox, receipt states and bounded reconciliation
-
-Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
-
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-Every notice kind uses one durable outbox with the frozen receipt states, at-most-once provider calls, bounded read-only reconciliation and one spending ledger per provider.
-
-### Scope
-
-- Generalize the contact outbox to queued, dispatching, deferred, accepted, delivered, unknown-outcome, unresolved, bounced, complained, failed and cancelled with database-enforced transitions (gap G-N4); build on the durable-dispatch prerequisite if owner PR #174 is merged, never duplicate it
-- One ledger and ceiling per provider across all notice kinds (G-N5); an authenticated provider event-intake interface without activating Queues (G-N6)
-- Reconcile the attempt bound with the WH-052 envelope maxAttempts rule by a reviewed contract change or envelope-per-attempt design (G-N10)
-- Complete current schema with lifecycle/export/closure registration and an owner-run empty-database cutover; no compatibility reader
-
-### Acceptance criteria
-
-- [ ] A lost response, thrown call or interrupted worker becomes unknown-outcome and is never redispatched; reconciliation is read-only and ends unresolved at its bound
-- [ ] Duplicate and out-of-order events, replays and concurrent passes keep one notice per recipient and event
-- [ ] Notification failures never alter or remove the accepted record or inbox message; unresolved evidence outlives ordinary expiry
-- [ ] Every provider call counts against the ceiling before the call
-
-### Verification
-
-- pnpm check
-- pnpm test:contacts
-- node tests/notifications-contract.mjs
-- Focused outbox suite on SQLite and local D1 with a simulated provider
-
-### Dependencies and blockers
-
-Planning dependencies: WH-155, WH-052. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/notifications.md](../../docs/notifications.md)
-- [docs/contact-forms.md](../../docs/contact-forms.md)
-- [docs/job-envelope.md](../../docs/job-envelope.md)
-- [schema/platform.sql](../../schema/platform.sql)
-- [src/contact-notifications.ts](../../src/contact-notifications.ts)
-
-### Execution coordination
-
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-- 2026-10-30 UTC (schema batch 3e, branch schema-batch-3e-shared-outbox from f05583a, rebased onto 48e4b91; source and local verification on disposable SQLite and actual local D1 with a simulated provider; no deploy, secret, dependency or live send; the D1 binding and the B4 pin are untouched and the cutover is the orchestrator's): source part delivered, nothing sent. New STRICT notification_notices (one receipt per template, event and recipient; scopes owner-destination, account-email, project-staff, submitter with a per-scope nullability CHECK and a CHECKed recipient_key; the frozen states; attempts 0..6; unique job_id to job_journal ON DELETE SET NULL; epoch-millisecond created_at and expires_at at most 24 hours; closed reason list; lookups 0..3; reconcile_until required in unknown-outcome) and notification_send_ledger(provider, day, sends, ceiling) with the 32-day-sum ceiling trigger; contact_notification_outbox, contact_notification_send_ledger and support_deliveries are dropped (no legacy reader, the cutover resets data; destinations, reviews and contact_notification_suppressions stay). Twelve triggers: admission with the 10 an hour and 50 a day backstop, the frozen transition table (nothing leaves unknown-outcome for a send state; unresolved only at 3 lookups or past reconcile_until), dispatching increments the ledger so no call is uncounted, a platform-email job that becomes uncertain moves its dispatching notice to unknown-outcome (interrupted worker), cancel on suppression, a cancelled notice cancels its unclaimed envelope, destination and project removal cancel unsent notices, no delete while open and unresolved kept 90 days (interim default), safety-hold retention. src/notification-outbox.ts: enqueueNotice (guarded INSERT ... SELECT, envelope per attempt, maxAttempts 1), the attempt (recheck, one batch for intent + dispatching + ledger, at most one provider call, one batch for the outcome; refused attempts become deferred with a NEW envelope, six attempts at most), the notificationLane on journalLane, applyNoticeEvent (function only, no route; refuses an unauthenticated event), recordNoticeLookup, maintainNotices (hourly, in the health job: 24-hour expiry and unknown-outcome to unresolved at 3 lookups or 72 hours) and pruneNotices (daily, contacts job). contact-notifications.ts now queues contact notices and registers contactDeliveryLane as the every-minute entry; support-delivery.ts queues support.response-saved@1 (new catalog template, also in tools/prototypes/notifications.mjs) only for verified accounts; the support page reads its delivery state from the notice. Registered in data-lifecycle (contact-notifications class; support_deliveries leaves usage-reviews), tenant classification (new sha a791a620fe2eff708cbfc16d2c82ba7329d76ca959c00549882402355c6639fd, 120 users foreign keys, two baselined trigger findings), the closure inventory (notificationNotices), the safety-hold inventory (the prune site skips held projects), the maintenance inventory (notification_notices, notification_queue, notification_unknown), review-retention, the restore manifest (236 tables), the recovery drill (a counted notice held as unknown-outcome and a ledger row) and releases. Verified: tests/notification-outbox.mjs (17 cases) and tests/schema-batch-3e.mjs (7 cases) on SQLite and --d1 (lost reply, throw, worker interrupted after claim, duplicate passes, ceiling, caps, suppression, record isolation, unknown-outcome to unresolved), contacts and contact-notifications, support-access, boundary-contact-notice-intake (SQLite and --d1), notifications-contract, job-journal, job-registry, maintenance*, recovery-drill, lifecycle-catalog, current-schema, tenant-sql-surface, tenant-classification, boundary-audit and safety-case-operations. NOT done and still open: wiring the email-change and security events (WH-202) and the new-address confirmation (a token and a recipient other than the account email) to enqueueNotice; staff and submitter delivery and customer configurations (WH-157/WH-158); any provider event adapter (Cloudflare needs Queues, not chosen) so delivered evidence still never arrives and unknown-outcome usually ends unresolved; a provider message lookup (none documented); owner decisions on the 24-hour notice lifetime, the 30-day and 90-day retention and whether unresolved evidence should block account closure; the cutover and any live acceptance.
-- 2026-10-30 UTC (WH-001 reconciliation against origin/main 475a3a9, read from git log and gh pr view; docs only, nothing re-run unless stated, no GitHub issue, Cloudflare or provider mutation): merged PR #503 (6d62e83, schema batch 3e shared outbox; cut over by #506). Stays planned: source and local simulated provider only; no live send, and WH-158 owns configured notices.
-
-## WH-157 — Notification recipient scopes, consent and preferences
-
-Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
-
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-Staff and submitters can receive notices only through server-resolved, verified and consented addresses that are rechecked before every call.
-
-### Scope
-
-- Staff notification opt-in, address verification and opt-out on the visitor origin through the same provider and sender; role revocation stops unsent notices (gap G-N7)
-- Verified project-visitor address and an explicit per-submission receipt consent stored with the record; anonymous typed addresses are never recipients
-- Shared per-account suppression across scopes and templates; new data classes registered with lifecycle, export and closure
-
-### Acceptance criteria
-
-- [ ] Recipients derive only from current records; caller, configuration and visitor input cannot add an address
-- [ ] Revoked, opted-out, unverified or suppressed recipients are cancelled before any provider call
-- [ ] Two-tenant and cross-origin isolation for staff and visitor addresses
-
-### Verification
-
-- pnpm check
-- node tests/shared-modules-access.mjs
-- node tests/notifications-contract.mjs
-- node tests/lifecycle-catalog.mjs
-
-### Dependencies and blockers
-
-Planning dependencies: WH-155, WH-126, WH-116. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/notifications.md](../../docs/notifications.md)
-- [docs/shared-modules.md](../../docs/shared-modules.md)
-- [docs/data-protection.md](../../docs/data-protection.md)
-- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
-
-### Execution coordination
-
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-- 2026-10-29 UTC (schema batch 3c, branch schema-batch-3c-recipients from 30f8dd3; source and local verification on disposable SQLite and actual local D1; no deploy, secret or dependency; the D1 binding and the B4 pin are untouched and the cutover is the orchestrator's): source part delivered, no delivery. New tables visitor_notification_addresses (visitor_id primary key cascading with the visitor identity; address, code hash, code expiry, failures, verified_at) and staff_notification_optins (instance_id, visitor_id; opted_in_at), column module_records.receipt_consent (0/1, default 0, CHECK that a public record is 0, immutable after submission), view notification_recipients(project_id, scope, ref, address) over the owner destination, opted-in verified staff and consenting verified submitters excluding contact_notification_suppressions keyed by the project owner (D5: reused across scopes, no rename), eight triggers (admission refuses suppressed addresses; staff role revocation removes the opt-in) and one index; 236 tables, 1185 objects, inventory sha256 119bb4bb071e332f4676caf9f4eb02cf056345855f0dde91b286bf9d1d4b513f. src/notification-recipients.ts derives recipients, sets and removes the visitor address, opts staff in and out, and starts (always delivery_unavailable, no code stored) and completes (hashed code, expiry, five tries) verification; forms.submit accepts input.receiptConsent on non-public forms only. Registered in data-lifecycle (contact-notifications class), tenant classification (chained), the closure inventory (visitorNotificationAddresses, staffNotificationOptins), the safety-hold inventory (three consent-withdrawal DELETE sites classified excluded), the restore manifest and the recovery drill. Verified: tests/notification-recipients.mjs (8 cases) and tests/schema-batch-3c.mjs (3 cases) on SQLite and --d1, plus the notifications-contract, contact-notifications, shared-modules-records, form-attachments, recovery-drill, lifecycle-catalog, current-schema, tenant-sql-surface, boundary-audit and safety-case-operations suites. NOT done and still open: the visitor-origin routes for address, verification and opt-in (with Origin, rate-limit, tenant checks and boundary-audit entries) and every send, cancel-before-call recheck and outbox row, blocked on the WH-036/WH-202 sender and WH-156; export of the new rows; the cross-origin acceptance. Interim defaults pending owner decisions: an address lives and dies with the visitor identity; a staff opt-in ends with the role, address or visitor.
-- 2026-10-30 UTC (WH-001 reconciliation against origin/main 475a3a9, read from git log and gh pr view; docs only, nothing re-run unless stated, no GitHub issue, Cloudflare or provider mutation): merged PR #495 (fce4d32, schema batch 3c recipients and cross-scope suppression; cut over by #496). Stays planned: source and local only, no delivery; the customer notification configuration is WH-158.
-
-## WH-158 — Customer notification configuration and standard appointment presets
-
-Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
-
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-An owner configures the standard appointment-request receipt and staff notice through an exact review, and accepted form records trigger them deterministically.
-
-### Scope
-
-- Store notification configurations bound to a records instance form.accepted event; the exact owner review binds template digest, sender, recipient scope, limits and provider price (gap G-N8)
-- Implement the approved-configuration resolver for the fixed form.accepted trigger under the WH-052 envelope; WH-069 later reuses it rather than adding a second resolver
-- Register Chat/view bindings and an essential dashboard control through WH-105 with WH-122 feature admission; ship the standard appointment presets as configuration
-
-### Acceptance criteria
-
-- [ ] Submission and notification delivery never invoke the maintainer model, its context, credentials or funding
-- [ ] The model may prepare but cannot confirm a configuration; a changed price, template or configuration makes the review stale
-- [ ] Configuring provisions no sender, DNS record, provider or schedule
-- [ ] Owner and staff notices stay content-free; submitter receipts carry only choice/number/boolean values and the reference
-
-### Verification
-
-- pnpm check
-- node tests/shared-modules-records.mjs
-- node tests/notifications-contract.mjs
-
-### Dependencies and blockers
-
-Planning dependencies: WH-156, WH-157, WH-127, WH-105, WH-122. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/notifications.md](../../docs/notifications.md)
-- [docs/shared-modules.md](../../docs/shared-modules.md)
-- [docs/chat-interactions.md](../../docs/chat-interactions.md)
-- [docs/feature-admission.md](../../docs/feature-admission.md)
-- [src/shared-modules/records.ts](../../src/shared-modules/records.ts)
-
-### Execution coordination
-
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-- 2026-10-31 UTC (WH-001 catch-up; commit bodies read, nothing re-run here): PR #517 merged (d77d8f2, schema batch 5, cut over by #518 and #524, binding whumpo-control-2026-10-31c after #525/#526): notification_configurations and notification_configuration_reviews, the exact Chat review applied only by a typed confirm control (the confirm trigger also requires a guided turn), accepted form.accepted records queued through the shared outbox at form admission, per-visitor receipts, the records panel card, tests/notification-configurations.mjs and tests/notification-setup-browser.mjs. Per D3 nothing is queued or sent while NOTIFICATION_CUSTOMER_CEILING_CENTS is unset (it is unset), so no customer notice has been sent; no sender, DNS or provider is provisioned. Local synthetic acceptance only. Readiness is unchanged: the appointment form still cannot be created by an owner without a fixture (docs/shared-modules.md gaps 6 and 7).
-
-## WH-159 — Connected synthetic acceptance of configured notifications
-
-Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: verification. Size: M.
-
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-A local two-tenant appointment journey proves configured notifications end to end on the actual handlers with the maintainer transport disabled.
-
-### Scope
-
-- Two synthetic tenants: appointment form to record to staff notice, owner notice and submitter receipt on SQLite and local D1 with a simulated provider
-- Duplicate events, timeout/bounce, lost response, revoked recipient, cancellation, ceiling, template withdrawal and accepted-record isolation against the D1 handlers
-- Run the contract conformance scenarios against the implementation, not only the reference
-
-### Acceptance criteria
-
-- [ ] Every WH-068 acceptance criterion has local synthetic evidence on the actual handlers
-- [ ] No real message, provider call, DNS change or deployment; local evidence is not live acceptance
-
-### Verification
-
-- Connected notification suite on SQLite and local D1
-- pnpm test:contacts
-- node tools/verify.mjs fast
-
-### Dependencies and blockers
-
-Planning dependencies: WH-158. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/notifications.md](../../docs/notifications.md)
-- [tests/notifications-contract.mjs](../../tests/notifications-contract.mjs)
-- [tests/contact-notifications.mjs](../../tests/contact-notifications.mjs)
-
-### Execution coordination
-
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
-
 ## WH-160 — Approved provider canary for configured notifications
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **blocked**. Kind: verification. Size: S.
@@ -9391,7 +9180,7 @@ Configured notifications are proven against the real reviewed provider using onl
 
 ### Dependencies and blockers
 
-Planning dependencies: WH-159, WH-036. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+Planning dependencies: WH-159, WH-036, WH-214. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
 - Owner decisions in docs/notifications.md: provider, sender domain/display name, retention, submitter receipts, plan gating and spending ceiling
 - WH-036 sender activation and its live canary to explicitly approved addresses
@@ -9605,6 +9394,61 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
 
+## WH-214 — Visitor-origin routes for notification address entry, verification and staff opt-in
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+A signed-in project visitor can enter and verify a notification address and a staff member can opt in and out on the visitor origin, so staff notices and submitter receipts have reachable recipients.
+
+### Scope
+
+- Visitor-origin routes over the existing src/notification-recipients.ts functions: set and remove the visitor address, start and complete verification, staff opt-in and opt-out, each with Origin, rate-limit, tenant and session checks and boundary-audit entries
+- Verification delivery goes through the shared outbox and sender; while no sender is active the routes keep answering delivery_unavailable and store no code
+- No new table or column unless the routes prove one is needed; if so, stop and record the gap
+- Export of the new rows, as recorded as not done in WH-157
+
+### Acceptance criteria
+
+- [ ] A visitor can set, verify, change and remove only their own address, and a staff member can opt in and out only for their own role
+- [ ] Two-tenant isolation: no route reads, writes or reveals another project's or another visitor's address
+- [ ] Cross-origin isolation: a session presented at another project's origin, or the owner origin, is refused on every route and nothing is stored or queued
+- [ ] No route response, log or error carries an address that the caller did not just submit; no real message is sent in testing
+
+### Verification
+
+- New route suite on SQLite and local D1 with a simulated provider, covering two-tenant and cross-origin cases
+- node tests/notification-recipients.mjs
+- node tests/notifications-connected.mjs
+- node tests/boundary-audit.mjs
+- pnpm check
+
+### Dependencies and blockers
+
+Planning dependencies: WH-157, WH-159. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/notifications.md](../../docs/notifications.md)
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+- [docs/data-protection.md](../../docs/data-protection.md)
+- [src/notification-recipients.ts](../../src/notification-recipients.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-31 UTC: created from WH-157 and WH-159. The functions and tables exist and are tested directly; no route reaches them, so WH-157's cross-origin acceptance line holds only because no route exists. Planned, not started.
+
 ## WH-079 — Design optional customer-configured runtime AI as a separate capability
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P2**. Planning readiness: **deferred**. Kind: decision. Size: M.
@@ -9662,7 +9506,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
 
-# F5 — Done (18)
+# F5 — Done (22)
 
 Verified complete with recorded evidence; kept for history and dependency context. Not candidates for new work.
 
@@ -10617,6 +10461,220 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 - 2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): readiness planned to ready. Every dependency (WH-154) is accepted in its own evidence, so this is an open planning candidate; its acceptance is unchanged and not claimed.
 - 2026-10-29 UTC, verification only on origin/main db72ccc, no source change (branch wh-155-notification-catalog): the catalog (src/notification-catalog.ts), the plain-text renderer and the contact-email.ts and contact-notifications.ts rewiring were already on main via #333 (7bf3cd2); this pass found nothing left to build and added no code. Re-ran with local synthetic fixtures: node tests/notifications-contract.mjs (31 reference and 14 source-agreement/static checks, 20/20 reference and 10/10 source mutants caught), node tests/contact-notifications.mjs and node tests/contacts.mjs (both fixtures use local D1 and pass), node tests/tenant-sql-surface.mjs and node tests/boundary-audit.mjs, all passing. Open PR #446 (claim/provider/scan hooks on runContactDelivery) is not on main and was not touched, so there was nothing to rebase over. No schema, provider, sender, binding, cron, DNS or customer-visible change. Not deployed or accepted.
 - 2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #447 (zemdregon/whumpo) is the merged change(s) behind the evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open.
+
+## WH-156 — Shared notification outbox, receipt states and bounded reconciliation
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
+
+Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Every notice kind uses one durable outbox with the frozen receipt states, at-most-once provider calls, bounded read-only reconciliation and one spending ledger per provider.
+
+### Scope
+
+- Generalize the contact outbox to queued, dispatching, deferred, accepted, delivered, unknown-outcome, unresolved, bounced, complained, failed and cancelled with database-enforced transitions (gap G-N4); build on the durable-dispatch prerequisite if owner PR #174 is merged, never duplicate it
+- One ledger and ceiling per provider across all notice kinds (G-N5); an authenticated provider event-intake interface without activating Queues (G-N6)
+- Reconcile the attempt bound with the WH-052 envelope maxAttempts rule by a reviewed contract change or envelope-per-attempt design (G-N10)
+- Complete current schema with lifecycle/export/closure registration and an owner-run empty-database cutover; no compatibility reader
+
+### Acceptance criteria
+
+- [ ] A lost response, thrown call or interrupted worker becomes unknown-outcome and is never redispatched; reconciliation is read-only and ends unresolved at its bound
+- [ ] Duplicate and out-of-order events, replays and concurrent passes keep one notice per recipient and event
+- [ ] Notification failures never alter or remove the accepted record or inbox message; unresolved evidence outlives ordinary expiry
+- [ ] Every provider call counts against the ceiling before the call
+
+### Verification
+
+- pnpm check
+- pnpm test:contacts
+- node tests/notifications-contract.mjs
+- Focused outbox suite on SQLite and local D1 with a simulated provider
+
+### Dependencies and blockers
+
+Planning dependencies: WH-155, WH-052. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/notifications.md](../../docs/notifications.md)
+- [docs/contact-forms.md](../../docs/contact-forms.md)
+- [docs/job-envelope.md](../../docs/job-envelope.md)
+- [schema/platform.sql](../../schema/platform.sql)
+- [src/contact-notifications.ts](../../src/contact-notifications.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-30 UTC (schema batch 3e, branch schema-batch-3e-shared-outbox from f05583a, rebased onto 48e4b91; source and local verification on disposable SQLite and actual local D1 with a simulated provider; no deploy, secret, dependency or live send; the D1 binding and the B4 pin are untouched and the cutover is the orchestrator's): source part delivered, nothing sent. New STRICT notification_notices (one receipt per template, event and recipient; scopes owner-destination, account-email, project-staff, submitter with a per-scope nullability CHECK and a CHECKed recipient_key; the frozen states; attempts 0..6; unique job_id to job_journal ON DELETE SET NULL; epoch-millisecond created_at and expires_at at most 24 hours; closed reason list; lookups 0..3; reconcile_until required in unknown-outcome) and notification_send_ledger(provider, day, sends, ceiling) with the 32-day-sum ceiling trigger; contact_notification_outbox, contact_notification_send_ledger and support_deliveries are dropped (no legacy reader, the cutover resets data; destinations, reviews and contact_notification_suppressions stay). Twelve triggers: admission with the 10 an hour and 50 a day backstop, the frozen transition table (nothing leaves unknown-outcome for a send state; unresolved only at 3 lookups or past reconcile_until), dispatching increments the ledger so no call is uncounted, a platform-email job that becomes uncertain moves its dispatching notice to unknown-outcome (interrupted worker), cancel on suppression, a cancelled notice cancels its unclaimed envelope, destination and project removal cancel unsent notices, no delete while open and unresolved kept 90 days (interim default), safety-hold retention. src/notification-outbox.ts: enqueueNotice (guarded INSERT ... SELECT, envelope per attempt, maxAttempts 1), the attempt (recheck, one batch for intent + dispatching + ledger, at most one provider call, one batch for the outcome; refused attempts become deferred with a NEW envelope, six attempts at most), the notificationLane on journalLane, applyNoticeEvent (function only, no route; refuses an unauthenticated event), recordNoticeLookup, maintainNotices (hourly, in the health job: 24-hour expiry and unknown-outcome to unresolved at 3 lookups or 72 hours) and pruneNotices (daily, contacts job). contact-notifications.ts now queues contact notices and registers contactDeliveryLane as the every-minute entry; support-delivery.ts queues support.response-saved@1 (new catalog template, also in tools/prototypes/notifications.mjs) only for verified accounts; the support page reads its delivery state from the notice. Registered in data-lifecycle (contact-notifications class; support_deliveries leaves usage-reviews), tenant classification (new sha a791a620fe2eff708cbfc16d2c82ba7329d76ca959c00549882402355c6639fd, 120 users foreign keys, two baselined trigger findings), the closure inventory (notificationNotices), the safety-hold inventory (the prune site skips held projects), the maintenance inventory (notification_notices, notification_queue, notification_unknown), review-retention, the restore manifest (236 tables), the recovery drill (a counted notice held as unknown-outcome and a ledger row) and releases. Verified: tests/notification-outbox.mjs (17 cases) and tests/schema-batch-3e.mjs (7 cases) on SQLite and --d1 (lost reply, throw, worker interrupted after claim, duplicate passes, ceiling, caps, suppression, record isolation, unknown-outcome to unresolved), contacts and contact-notifications, support-access, boundary-contact-notice-intake (SQLite and --d1), notifications-contract, job-journal, job-registry, maintenance*, recovery-drill, lifecycle-catalog, current-schema, tenant-sql-surface, tenant-classification, boundary-audit and safety-case-operations. NOT done and still open: wiring the email-change and security events (WH-202) and the new-address confirmation (a token and a recipient other than the account email) to enqueueNotice; staff and submitter delivery and customer configurations (WH-157/WH-158); any provider event adapter (Cloudflare needs Queues, not chosen) so delivered evidence still never arrives and unknown-outcome usually ends unresolved; a provider message lookup (none documented); owner decisions on the 24-hour notice lifetime, the 30-day and 90-day retention and whether unresolved evidence should block account closure; the cutover and any live acceptance.
+- 2026-10-30 UTC (WH-001 reconciliation against origin/main 475a3a9, read from git log and gh pr view; docs only, nothing re-run unless stated, no GitHub issue, Cloudflare or provider mutation): merged PR #503 (6d62e83, schema batch 3e shared outbox; cut over by #506). Stays planned: source and local simulated provider only; no live send, and WH-158 owns configured notices.
+- 2026-10-31 UTC, CLOSED by WH-159 on D43, on the local synthetic envelope only (main a332b1e, Node 24.21.0, pnpm 11.19.0, disposable SQLite and local D1, simulated provider, no network, credential, secret, send or provider call; NOTIFICATION_CUSTOMER_CEILING_CENTS is set only inside the test fixture env and the suite asserts it is in no tracked wrangler file). Local evidence is not live acceptance: no real email was sent and no sender, DNS record or provider exists. Line 1 (lost response, thrown call, interrupted worker): tests/notification-outbox.mjs cases 'a lost reply is held as unknown-outcome with its 72-hour bound and is never redispatched', 'a thrown provider call', 'a worker interrupted after its claim' and 'unknown-outcome leaves only for evidence, or for unresolved at three lookups or past its bound' (lookups are counted and never call the provider; unresolved is final); tests/notifications-connected.mjs group 3 repeats the lost reply and throw through the real appointment journey. Line 2 (duplicate and out-of-order events, replays, concurrent passes): outbox cases 'duplicate passes and duplicate events send once' and 'authenticated provider events ... replays and out-of-order events change nothing'; connected groups 2 and 3 (three concurrent passes, three notices, three calls; unauthenticated event refused; a bounce replay and a late accepted event change nothing). Line 3 (failures never alter the accepted record or inbox; unresolved outlives ordinary expiry): connected group 8 (down, reject, throw and lost over 12 requests leave all 12 records byte-for-byte and the visitor view readable); tests/contact-notifications.mjs asserts the inbox is unchanged and throttled messages stay in it; outbox 'unknown-outcome ...' shows an unresolved notice survives the 30-day prune and cannot be deleted for 90 days. Line 4 (every call counted before it is made): outbox 'the spending ceiling counts every call before it is made' (trigger notification_ledger_missing refuses an uncounted dispatch); connected group 6 reads the ledger inside each provider call. Verification list re-run on this commit, all exit 0: pnpm test:contacts, node tests/notifications-contract.mjs (31 reference and 15 source checks, 20/20 mutants), notification-outbox on SQLite and --d1 (17 cases each), tests/notifications-connected.mjs on SQLite and --d1 (9 groups each), pnpm check. Limits, unchanged from the 2026-10-30 entry: no provider event adapter exists (a function only, no route or queue), so delivered evidence never arrives in practice and an unknown outcome usually ends unresolved; no provider message lookup is documented; the email-change and security events (WH-202) and the 24-hour, 30-day and 90-day lifetimes still await the owner; no per-notice owner cancel or retry handler exists; nothing was sent live.
+
+## WH-157 — Notification recipient scopes, consent and preferences
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
+
+Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Staff and submitters can receive notices only through server-resolved, verified and consented addresses that are rechecked before every call.
+
+### Scope
+
+- Staff notification opt-in, address verification and opt-out on the visitor origin through the same provider and sender; role revocation stops unsent notices (gap G-N7)
+- Verified project-visitor address and an explicit per-submission receipt consent stored with the record; anonymous typed addresses are never recipients
+- Shared per-account suppression across scopes and templates; new data classes registered with lifecycle, export and closure
+
+### Acceptance criteria
+
+- [ ] Recipients derive only from current records; caller, configuration and visitor input cannot add an address
+- [ ] Revoked, opted-out, unverified or suppressed recipients are cancelled before any provider call
+- [ ] Two-tenant and cross-origin isolation for staff and visitor addresses
+
+### Verification
+
+- pnpm check
+- node tests/shared-modules-access.mjs
+- node tests/notifications-contract.mjs
+- node tests/lifecycle-catalog.mjs
+
+### Dependencies and blockers
+
+Planning dependencies: WH-155, WH-126, WH-116. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/notifications.md](../../docs/notifications.md)
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+- [docs/data-protection.md](../../docs/data-protection.md)
+- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-29 UTC (schema batch 3c, branch schema-batch-3c-recipients from 30f8dd3; source and local verification on disposable SQLite and actual local D1; no deploy, secret or dependency; the D1 binding and the B4 pin are untouched and the cutover is the orchestrator's): source part delivered, no delivery. New tables visitor_notification_addresses (visitor_id primary key cascading with the visitor identity; address, code hash, code expiry, failures, verified_at) and staff_notification_optins (instance_id, visitor_id; opted_in_at), column module_records.receipt_consent (0/1, default 0, CHECK that a public record is 0, immutable after submission), view notification_recipients(project_id, scope, ref, address) over the owner destination, opted-in verified staff and consenting verified submitters excluding contact_notification_suppressions keyed by the project owner (D5: reused across scopes, no rename), eight triggers (admission refuses suppressed addresses; staff role revocation removes the opt-in) and one index; 236 tables, 1185 objects, inventory sha256 119bb4bb071e332f4676caf9f4eb02cf056345855f0dde91b286bf9d1d4b513f. src/notification-recipients.ts derives recipients, sets and removes the visitor address, opts staff in and out, and starts (always delivery_unavailable, no code stored) and completes (hashed code, expiry, five tries) verification; forms.submit accepts input.receiptConsent on non-public forms only. Registered in data-lifecycle (contact-notifications class), tenant classification (chained), the closure inventory (visitorNotificationAddresses, staffNotificationOptins), the safety-hold inventory (three consent-withdrawal DELETE sites classified excluded), the restore manifest and the recovery drill. Verified: tests/notification-recipients.mjs (8 cases) and tests/schema-batch-3c.mjs (3 cases) on SQLite and --d1, plus the notifications-contract, contact-notifications, shared-modules-records, form-attachments, recovery-drill, lifecycle-catalog, current-schema, tenant-sql-surface, boundary-audit and safety-case-operations suites. NOT done and still open: the visitor-origin routes for address, verification and opt-in (with Origin, rate-limit, tenant checks and boundary-audit entries) and every send, cancel-before-call recheck and outbox row, blocked on the WH-036/WH-202 sender and WH-156; export of the new rows; the cross-origin acceptance. Interim defaults pending owner decisions: an address lives and dies with the visitor identity; a staff opt-in ends with the role, address or visitor.
+- 2026-10-30 UTC (WH-001 reconciliation against origin/main 475a3a9, read from git log and gh pr view; docs only, nothing re-run unless stated, no GitHub issue, Cloudflare or provider mutation): merged PR #495 (fce4d32, schema batch 3c recipients and cross-scope suppression; cut over by #496). Stays planned: source and local only, no delivery; the customer notification configuration is WH-158.
+- 2026-10-31 UTC, CLOSED by WH-159 on D43, on the local synthetic envelope only (main a332b1e, Node 24.21.0, pnpm 11.19.0, disposable SQLite and local D1, simulated provider, no network, credential, secret, send or provider call; NOTIFICATION_CUSTOMER_CEILING_CENTS is set only inside the test fixture env and the suite asserts it is in no tracked wrangler file). Local evidence is not live acceptance: no real email was sent and no sender, DNS record or provider exists. Line 1 (recipients derive only from current records): tests/notification-recipients.mjs 'recipients for each scope come only from current verified, consented records' and 'a public record cannot consent, and an anonymous submitter is never a recipient'; tests/notifications-connected.mjs group 9 posts a form with extra recipient and to fields and no provider call carries the injected address, and group 1 shows owner, staff and receipt calls go only to addresses read from records at send time. Line 2 (revoked, opted-out, unverified or suppressed cancelled before any call): connected group 4 (staff opt-out and receipt-address suppression both cancelled with recipient-revoked and only the owner is called; a revoked visitor gets no receipt; a removed record cancels its notices) and group 3 (a bounced address gets no further receipt while the record is still accepted); tests/notification-configurations.mjs 'eligibility is read again at send time' and 'the claim serializes with erasure' (an address removed, changed to unverified or deleted between read and claim is never called); recipients test 'staff role revocation removes the opt-in'. Line 3 (two-tenant and cross-origin isolation for staff and visitor addresses): recipients test 'two tenants and the visitor identity'; connected groups 1 and 7 (no address crosses tenants); connected group 9 presents each project's visitor session at the other project's origin on the real visitor gateway, both are refused with nothing queued, and no visitor-origin response carries an address. Verification list re-run on this commit, all exit 0: shared-modules-access, notifications-contract, lifecycle-catalog, notification-recipients on SQLite and --d1, notifications-connected on SQLite and --d1, pnpm check. Limits, stated so this close is not read as more: no visitor-origin route exists to enter an address, verify it or opt a staff member in (the functions exist; startVerification always answers delivery_unavailable; the tests set rows directly), so the cross-origin line holds ONLY because no route exists that reads or writes these addresses; no cross-origin test of an address route was run, because there is no such route to test. WH-214 now owns building those routes and testing two-tenant and cross-origin isolation on them, and WH-160 depends on it. Export of the new rows was recorded as not done on 2026-10-29 and is not an acceptance line. No real email was sent.
+
+## WH-158 — Customer notification configuration and standard appointment presets
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
+
+Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+An owner configures the standard appointment-request receipt and staff notice through an exact review, and accepted form records trigger them deterministically.
+
+### Scope
+
+- Store notification configurations bound to a records instance form.accepted event; the exact owner review binds template digest, sender, recipient scope, limits and provider price (gap G-N8)
+- Implement the approved-configuration resolver for the fixed form.accepted trigger under the WH-052 envelope; WH-069 later reuses it rather than adding a second resolver
+- Register Chat/view bindings and an essential dashboard control through WH-105 with WH-122 feature admission; ship the standard appointment presets as configuration
+
+### Acceptance criteria
+
+- [ ] Submission and notification delivery never invoke the maintainer model, its context, credentials or funding
+- [ ] The model may prepare but cannot confirm a configuration; a changed price, template or configuration makes the review stale
+- [ ] Configuring provisions no sender, DNS record, provider or schedule
+- [ ] Owner and staff notices stay content-free; submitter receipts carry only choice/number/boolean values and the reference
+
+### Verification
+
+- pnpm check
+- node tests/shared-modules-records.mjs
+- node tests/notifications-contract.mjs
+
+### Dependencies and blockers
+
+Planning dependencies: WH-156, WH-157, WH-127, WH-105, WH-122. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/notifications.md](../../docs/notifications.md)
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+- [docs/chat-interactions.md](../../docs/chat-interactions.md)
+- [docs/feature-admission.md](../../docs/feature-admission.md)
+- [src/shared-modules/records.ts](../../src/shared-modules/records.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-31 UTC (WH-001 catch-up; commit bodies read, nothing re-run here): PR #517 merged (d77d8f2, schema batch 5, cut over by #518 and #524, binding whumpo-control-2026-10-31c after #525/#526): notification_configurations and notification_configuration_reviews, the exact Chat review applied only by a typed confirm control (the confirm trigger also requires a guided turn), accepted form.accepted records queued through the shared outbox at form admission, per-visitor receipts, the records panel card, tests/notification-configurations.mjs and tests/notification-setup-browser.mjs. Per D3 nothing is queued or sent while NOTIFICATION_CUSTOMER_CEILING_CENTS is unset (it is unset), so no customer notice has been sent; no sender, DNS or provider is provisioned. Local synthetic acceptance only. Readiness is unchanged: the appointment form still cannot be created by an owner without a fixture (docs/shared-modules.md gaps 6 and 7).
+- 2026-10-31 UTC, CLOSED by WH-159 on D43, on the local synthetic envelope only (main a332b1e, Node 24.21.0, pnpm 11.19.0, disposable SQLite and local D1, simulated provider, no network, credential, secret, send or provider call; NOTIFICATION_CUSTOMER_CEILING_CENTS is set only inside the test fixture env and the suite asserts it is in no tracked wrangler file). Local evidence is not live acceptance: no real email was sent and no sender, DNS record or provider exists. Line 1 (submission and delivery never invoke the maintainer model): tests/notification-configurations.mjs 'no inference path' (the configuration, outbox and email modules import no model, chat, agent or maintainer code; fetch is a trap and was never called); tests/notifications-connected.mjs group 9 repeats the import check and the trap over the whole journey. Line 2 (the model may prepare but not confirm; a changed price, template or configuration makes the review stale): configurations cases 'the model may prepare but never confirm' (model actions and forged confirm turns refused by the trigger) and 'a changed price, template, form or configuration makes the review stale' (price, template digest, business name, digest and a later saved revision each refuse the confirm). Line 3 (configuring provisions no sender, DNS record, provider or schedule): configurations case 'an exact review binds the notices, price and business name' (ledger, job journal and destination counts are identical after prepare and after confirm; the review says 'Not sending yet'); connected group 5 reconfigures without touching either. Line 4 (owner and staff notices content-free; receipts carry only choice/number/boolean values and the reference): configurations case 'with the limit set, owner and staff notices are content-free and receipts carry only reference, service and day' (the visitor's name is in no message), connected group 1 repeats it for both tenants; the notifications-contract checks 'owner and staff notices are content-free' and 'template and value injection' cover the catalog validators. Verification list re-run on this commit, all exit 0: shared-modules-records, notifications-contract, notification-configurations on SQLite and --d1, pnpm check. Limits: nothing is queued or sent while NOTIFICATION_CUSTOMER_CEILING_CENTS is unset (it is unset in every Worker); the sender, DNS and provider remain WH-036 and WH-160; the dashboard control and Chat bindings are as recorded on 2026-10-31. No real email was sent.
+
+## WH-159 — Connected synthetic acceptance of configured notifications
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: verification. Size: M.
+
+Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+A local two-tenant appointment journey proves configured notifications end to end on the actual handlers with the maintainer transport disabled.
+
+### Scope
+
+- Two synthetic tenants: appointment form to record to staff notice, owner notice and submitter receipt on SQLite and local D1 with a simulated provider
+- Duplicate events, timeout/bounce, lost response, revoked recipient, cancellation, ceiling, template withdrawal and accepted-record isolation against the D1 handlers
+- Run the contract conformance scenarios against the implementation, not only the reference
+
+### Acceptance criteria
+
+- [ ] Every WH-068 acceptance criterion has local synthetic evidence on the actual handlers
+- [ ] No real message, provider call, DNS change or deployment; local evidence is not live acceptance
+
+### Verification
+
+- Connected notification suite on SQLite and local D1
+- pnpm test:contacts
+- node tools/verify.mjs fast
+
+### Dependencies and blockers
+
+Planning dependencies: WH-158. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/notifications.md](../../docs/notifications.md)
+- [tests/notifications-contract.mjs](../../tests/notifications-contract.mjs)
+- [tests/contact-notifications.mjs](../../tests/contact-notifications.mjs)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-31 UTC, CLOSED by WH-159 on D43, on the local synthetic envelope only (main a332b1e, Node 24.21.0, pnpm 11.19.0, disposable SQLite and local D1, simulated provider, no network, credential, secret, send or provider call; NOTIFICATION_CUSTOMER_CEILING_CENTS is set only inside the test fixture env and the suite asserts it is in no tracked wrangler file). Local evidence is not live acceptance: no real email was sent and no sender, DNS record or provider exists. New tests/notifications-connected.mjs (SQLite and --d1, 9 groups, added to the site profile): two synthetic tenants, the real appointment form through the visitor gateway, the real admission batch, outbox, delivery lane and event intake, a simulated provider. Groups: 1 journey (record, then owner, staff and receipt notices per tenant, content-free); 2 duplicate events and concurrent passes; 3 lost response, timeout, throw, bounce, out-of-order and replayed events, bounded read-only reconciliation; 4 revoked recipients (opt-out, suppression, revoked visitor, removed record); 5 cancellation by switching notices off, other tenant untouched; 6 ceiling (unset, NaN, counted before each call, exhausted); 7 template withdrawal, run through a second bundle of the same handlers whose catalog marks the staff template withdrawn; 8 accepted-record isolation under down, reject, throw and lost plus the per-recipient caps (12 requests all admitted); 9 no inference, no injected recipient, the sender gets no credential, cross-origin sessions refused. The mapping of each tests/notifications-contract.mjs scenario to a group is the comment at the top of the suite. Line 1, every WH-068 acceptance criterion on the actual handlers: (a) the maintainer model is never invoked: connected 9, configurations 'no inference path'; (b) provider secrets and open relay: the Cloudflare Email binding carries no credential in the send path, the sender receives only outboxId, idempotencyKey, kind, template, projectId, recipient and the rendered variables (connected 9), caller recipient fields are ignored (connected 9) and the source validators refuse relay keys (notifications-contract source agreement checks); (c) retries, timeouts, bounces and cancellation with exact receipts and bounded reconciliation: connected 3 and 5, outbox 'definite refusals defer with a NEW envelope per attempt, bounded at six' and the 72-hour and three-lookup bound; (d) charges need concrete review and a template provisions nothing: configurations 'an exact review binds ... price' and 'a changed price ... makes the review stale', connected 5 and 6; (e) a failed notification does not lose the accepted record: connected 8 and 6 (a request made with no limit is accepted with no notices). Line 2: the suite's fetch is a trap that was never called and the provider is a function in the file, so no message, provider call, DNS change or deployment happened; the suite states that local evidence is not live acceptance. Run on this commit, all exit 0: notifications-connected on SQLite and --d1 (9 groups each), pnpm test:contacts, node tools/verify.mjs fast, plus the lists for WH-156, WH-157 and WH-158. Does not close WH-068 (WH-160, the WH-036 canary and WH-067 remain) and does not open WH-160, which still needs a sender and an owner ceiling. Gaps the suite surfaced rather than hid: no per-notice owner cancel or owner retry handler exists (the reference runtime has both); there is no provider event adapter; there is no visitor-origin route for address entry, verification or staff opt-in (see WH-157). No defect in the shipped handlers was found, so no fix PR is needed.
 
 ## WH-186 — Freeze the portable export contract and decompose WH-077
 
