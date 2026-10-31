@@ -15,7 +15,7 @@ fun chatViewModelFactory(c: AppContainer): ViewModelProvider.Factory =
     viewModelFactory { initializer { ChatViewModel(c.chatDrafts, c.account, c.mobileApi, c.clientInfo, c.reauth) } }
 
 fun projectsViewModelFactory(c: AppContainer): ViewModelProvider.Factory =
-    viewModelFactory { initializer { ProjectsViewModel(c.mobileApi, c.photoPreparer) } }
+    viewModelFactory { initializer { ProjectsViewModel(c.mobileApi, c.photoPreparer, c.uploads) } }
 
 fun activityViewModelFactory(c: AppContainer): ViewModelProvider.Factory =
     viewModelFactory { initializer { ActivityViewModel(c.mobileApi, c.notifications) } }
