@@ -20,7 +20,7 @@ export async function inlineSpecificationPhotos(db:D1Database,files:R2Bucket|und
   const bytes=new Uint8Array(await object.arrayBuffer()),hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),n=>n.toString(16).padStart(2,'0')).join('');
   if(hash!==row.digest)throw new BackendError(503,'A reviewed photo failed its integrity check.');
   let binary='';for(let n=0;n<bytes.length;n+=8192)binary+=String.fromCharCode(...bytes.subarray(n,n+8192));
-  html=html.replace(`src="assets/${photo.id}.jpg"`,`src="data:image/jpeg;base64,${btoa(binary)}"`);
+  html=html.replaceAll(`src="assets/${photo.id}.jpg"`,()=>`src="data:image/jpeg;base64,${btoa(binary)}"`);
  }
  return html;
 }

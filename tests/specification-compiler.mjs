@@ -239,9 +239,9 @@ try{
  m.assertCompilerAvailable(lock,available);
  for(let n=0;n<available.length;n++){const withdrawn=clone(available);withdrawn[n].state='withdrawn';rejects(()=>m.assertCompilerAvailable(lock,withdrawn),'COMPILER_UNAVAILABLE');}
  rejects(()=>m.assertCompilerAvailable(lock,[]),'COMPILER_UNAVAILABLE');
- // project-content@6: instance configuration compiles against exact trusted pins as saved, inactive configuration
+ // project-content@7: instance configuration compiles against exact trusted pins as saved, inactive configuration
  // (serving needs WH-125 activation). Notification/automation modules, integrations and rules stay unavailable.
- assert.deepEqual([lock.compiler.id,lock.compiler.version,lock.schemaVersion],['project-content',6,3]);
+ assert.deepEqual([lock.compiler.id,lock.compiler.version,lock.schemaVersion],['project-content',7,3]);
  await rejectsAsync(()=>m.compileProjectSpecification(detailing,lock),'UNAVAILABLE_CAPABILITY');
  const configured={...clone(content),instances:clone(detailing.instances)},configuredOutput=await m.compileProjectSpecification(configured,lock);
  assert.deepEqual(configuredOutput.artifacts.map(a=>[a.path,a.digest]),output.artifacts.map(a=>[a.path,a.digest]),'Instances add no compiled artifact');
@@ -284,7 +284,7 @@ try{
  // Exercise escaping expansion near the supported configuration/output ceilings.
  const dense=clone(content);dense.name='&'.repeat(100);
  for(const [index,length] of [160,1000,100,1000,100,800,100,800].entries())dense.content[index].text='&'.repeat(length);
- for(const suffix of ['one','two']){dense.content.push({id:'extra-title-'+suffix,text:'&'.repeat(100)},{id:'extra-copy-'+suffix,text:'&'.repeat(suffix==='one'?800:450)});dense.pages[0].sections.push({heading:'extra-title-'+suffix,text:'extra-copy-'+suffix});}
+ for(const suffix of ['one','two']){dense.content.push({id:'extra-title-'+suffix,text:'&'.repeat(100)},{id:'extra-copy-'+suffix,text:'&'.repeat(suffix==='one'?800:450)});dense.pages[0].sections.push({heading:'extra-title-'+suffix,text:'extra-copy-'+suffix,variant:'plain'});}
  m.validateSpecification(dense);
  const denseOutput=await m.compileProjectSpecification(dense,lock);assert.ok(denseOutput.artifacts[0].bytes>30000&&denseOutput.artifacts[0].bytes<=32768);
  const change=await m.compileSpecificationChange(content,operationBatches[0],lock);assert.equal(change.baseDigest,output.specificationDigest);assert.notEqual(change.nextDigest,change.baseDigest);assert.deepEqual(change.requiredReviews,[]);assert.ok(change.compiled.artifacts[0].html.includes('Monday to Saturday'));assert.equal(change.diff[0].path,'/content');assert.deepEqual(content,unchangedContent());
@@ -305,7 +305,7 @@ try{
  assert.match(renamed.compiled.artifacts[0].html,/Neighborhood gardens/);
  const sections=[{heading:'Seasonal care',text:'Tidy every spring.'}];
  const resectioned=await m.compileSpecificationChange(created.specification,[{type:'pages.setSections',pageId:'home',sections}],lock);
- assert.deepEqual(m.projectPage(resectioned.compiled.specification,'home').sections,sections);
+ assert.deepEqual(m.projectPage(resectioned.compiled.specification,'home').sections,sections.map(s=>({...s,variant:'plain'})));
  for(const operations of [[{type:'pages.setPhotos',pageId:'home',photos:[{id:'bad',alt:'Invalid'}]}],[{type:'pages.setPhotos',pageId:'home',photos:null}],[{type:'pages.setPhotos',pageId:'home',photos:[...photos,...photos]}],[{type:'pages.setSections',pageId:'home',sections:Array(7).fill(sections[0])}],[{type:'project.setName',name:''}]])assert.throws(()=>m.changeSpecification(content,operations));
  const shared=clone(content);shared.pages.push({...clone(shared.pages[0]),id:'other',path:'/other'});
  const modified=m.changeSpecification(shared,[{type:'pages.setSections',pageId:'home',sections}]).spec;
@@ -318,14 +318,14 @@ try{
  for(const [kind,names] of Object.entries(m.moduleKinds))for(const id of names.lifecycleClasses)assert.equal(lifecycle.classes.find(c=>c.id===id)?.storageStatus,'current',kind+' '+id);
  for(const e of m.moduleCatalog)assert.equal(e.schema.digest,hash(JSON.stringify({formatVersion:1,kind:e.kind,schema:{name:e.schema.name,version:1},lifecycleClasses:[...m.moduleKinds[e.kind].lifecycleClasses],storage:'current'},null,2)+'\n'));
  assert.equal(networkCalls,0);
- console.log('Compiler fixtures passed: project-content@6 instance-bearing compile/change/restore classification, never-activated modules.remove, and @3/@4 lock refusal, schema 3 module configuration (PNG/size/public audience/role/view/dependency refusals, staff upload/write), permission/additive/migration classification, exact module pins and withdrawals, detached edits, deterministic content/routes/themes/manifests, exact locks and withdrawals, escaped output, direct current creation, photos, sections/name edits and retired schema refusal, zero network/model calls.');
+ console.log('Compiler fixtures passed: project-content@7 instance-bearing compile/change/restore classification, never-activated modules.remove, and @3/@4 lock refusal, schema 3 module configuration (PNG/size/public audience/role/view/dependency refusals, staff upload/write), permission/additive/migration classification, exact module pins and withdrawals, detached edits, deterministic content/routes/themes/manifests, exact locks and withdrawals, escaped output, direct current creation, photos, sections/name edits and retired schema refusal, zero network/model calls.');
 }finally{globalThis.fetch=fetch;}
 
 // A second checkout/process proves input-path independence and that the build gate
 // rejects source/constant drift without rewriting any working-tree file.
 const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-compiler-lock-');
 try{
- const paths=[...checked.sources.map(s=>s.path),'tools/check-specification-compiler.mjs','compiler-locks/project-content-v6.json','src/project-specification/compiler-artifacts.generated.ts','src/project-specification/catalog.ts','package.json'];
+ const paths=[...checked.sources.map(s=>s.path),'tools/check-specification-compiler.mjs','compiler-locks/project-content-v7.json','src/project-specification/compiler-artifacts.generated.ts','src/project-specification/catalog.ts','package.json'];
  for(const path of paths){await mkdir(dirname(join(dir,path)),{recursive:true});await copyFile(path,join(dir,path));}
  await symlink(resolve('node_modules'),join(dir,'node_modules'),'dir');
  const run=args=>spawnSync(process.execPath,['tools/check-specification-compiler.mjs',...args],{cwd:dir,encoding:'utf8'});
