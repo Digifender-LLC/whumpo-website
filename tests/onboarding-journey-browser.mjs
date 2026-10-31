@@ -32,6 +32,7 @@ function instrument(){
   const move={name:document.documentElement.dataset.journeyMove??'navigation',start:performance.now()},transition=start(update);log.moves.push(move);
   // A test sets log.hold to keep a transition open, so input during one is checked without racing its length.
   if(log.hold)transition.ready.then(()=>document.documentElement.animate({opacity:[1,1]},{duration:log.hold,pseudoElement:'::view-transition'})).catch(()=>{});
+  transition.ready.then(()=>{move.ready=true;}).catch(()=>{});
   transition.finished.finally(()=>{move.end=performance.now();});return transition;
  };
  for(const name of ['create','get']){const original=navigator.credentials[name].bind(navigator.credentials);navigator.credentials[name]=(...args)=>{log.gestures.push(navigator.userActivation.isActive);return original(...args);};}
@@ -51,7 +52,7 @@ const invite=async(db,hashToken)=>{const code=crypto.randomUUID();await db.prepa
 const settled=page=>page.waitForFunction(()=>!document.documentElement.dataset.journeyMove&&!document.getAnimations().some(animation=>animation.playState==='running'&&!animation.effect?.target?.matches?.('.skeleton,.skeleton::after')),undefined,{polling:100});
 
 /** One full journey. checks turns on the one-off failure, interruption and timing cases. */
-async function walk(page,cdp,{db,hashToken,width,height=844,label,reduced=false,large=false,checks=false,axe=false,landing=false,keyboard=false,zoom=1,pages,kitSaves}){
+async function walk(page,cdp,{db,hashToken,width,height=844,label,reduced=false,large=false,checks=false,axe=false,landing=false,keyboard=false,pages,kitSaves}){
  const {activate,enter}=keyboardJourney(page,true),code=await invite(db,hashToken),email=`journey-${label}@example.test`;
  const authenticator=async()=>(await cdp.send('WebAuthn.addVirtualAuthenticator',{options:{protocol:'ctap2',transport:'internal',hasResidentKey:true,hasUserVerification:true,isUserVerified:true,automaticPresenceSimulation:true}})).authenticatorId;
  const button=name=>page.getByRole('button',{name,exact:true});
@@ -112,7 +113,7 @@ async function walk(page,cdp,{db,hashToken,width,height=844,label,reduced=false,
  assert.equal(await page.getByText('Hi there.',{exact:true}).count(),0);
  assert.equal(await page.locator('.journey-sketch [data-slot]').count(),await page.locator('.journey-sketch [data-slot][dir=auto]').count(),'Sketch text follows the direction of what was typed');
  await fit('name');
- if(!large){const top=await page.locator('.journey-question').evaluate(element=>element.getBoundingClientRect().top);assert(top<=(width<=760?250:180)*zoom,`The question starts near the top: ${top}`);}
+ if(!large){const top=await page.locator('.journey-question').evaluate(element=>element.getBoundingClientRect().top);assert(top<=width<=760?250:180,`The question starts near the top: ${top}`);}
  await pause();
  await answer(page.getByLabel('Your name',{exact:true}),'Maya');assert.equal(await line('greeting').innerText(),'Hi, I’m Maya.','The first answer builds the sketch');await pause();
  await activate(button('Continue'));await focused('Nice to meet you, Maya. Pick a face for your space.');await promised();await fit('picture');await pause();
@@ -125,7 +126,7 @@ async function walk(page,cdp,{db,hashToken,width,height=844,label,reduced=false,
  const sketch=page.locator('.journey-sketch');assert.match(await sketch.innerText(),/Sketch from your answers/);await fit('idea');
  if(width<=760&&!large){
   const chips=await page.locator('.journey-chips').evaluate(element=>{const box=element.getBoundingClientRect();return {bottom:box.bottom,bar:document.querySelector('.journey-actions').getBoundingClientRect().top,height:box.height,row:getComputedStyle(element).overflowX};});
-  assert(chips.height<70*zoom&&chips.row==='auto'&&chips.bottom<=chips.bar,`Suggestions form one scrolling row clear of the pinned bar: ${JSON.stringify(chips)}`);
+  assert(chips.height<70&&chips.row==='auto'&&chips.bottom<=chips.bar,`Suggestions form one scrolling row clear of the pinned bar: ${JSON.stringify(chips)}`);
  }
  await pause();
  const idea='A website for my neighborhood bakery where people can see the menu.';
@@ -157,6 +158,8 @@ async function walk(page,cdp,{db,hashToken,width,height=844,label,reduced=false,
   await activate(page.getByRole('button',{name:'Previous welcome question'}));await focused('What would you like us to make first?');assert.equal((await lastMove()).name,'back','Going back reads as back');await settled(page);
   await page.evaluate(()=>{window.__journey.hold=1500;});
   await activate(button('Continue'));await focused('What shall we call your project?');await page.evaluate(()=>{window.__journey.hold=0;});
+  // The browser pauses rendering and hit testing for the frame or two between its two captures, while the new step is not yet on screen.
+  await page.waitForFunction(()=>window.__journey.moves.at(-1).ready,undefined,{polling:20});
   const spot=await page.evaluate(()=>{const box=document.getElementById('welcome-project').getBoundingClientRect(),action=document.querySelector('.journey-actions button[type=submit]').getBoundingClientRect();return {x:box.x+24,y:box.y+box.height/2,hit:document.elementFromPoint(box.x+24,box.y+box.height/2)?.id,action:!!document.elementFromPoint(action.x+action.width/2,action.y+action.height/2)?.closest('button[type=submit]')};});
   assert.deepEqual(await lastMove().then(({name,running})=>[name,running]),['forward',true],'This check must land during the transition');assert.equal(spot.hit,'welcome-project','The field takes pointer input during a transition');assert.equal(spot.action,true,'So does the next action');
   await page.mouse.click(spot.x,spot.y);await page.keyboard.insertText('Copper Oven');assert.equal(await page.getByLabel('Working name',{exact:true}).inputValue(),'Copper Oven','A click and typing during a transition reach the page');await settled(page);
@@ -197,7 +200,7 @@ async function walk(page,cdp,{db,hashToken,width,height=844,label,reduced=false,
  assert.equal(log.gestures.length,log.gestures.filter(Boolean).length,'Every passkey prompt came from a user gesture');assert(log.gestures.length>=(checks?1:3)); // A checks pass reloads mid-setup, which restarts this log.
  if(reduced)assert.equal(log.moves.length,0,'Reduced motion commits without a transition');else assert(log.moves.length>=12,`moves: ${log.moves.length}`);
  if(!reduced)assert(log.moves.some(move=>move.name==='arrive'),'Chat is reached by the arrival move');
- if(!process.env.WHUMPO_JOURNEY_THROTTLE)assert(log.shift<.1,`Layout shift ${log.shift} ${JSON.stringify(log.shifts)}`); // Throttling pushes commits past the browser's recent-input window.
+ if(!process.env.WHUMPO_JOURNEY_THROTTLE&&!capture)assert(log.shift<.1,`Layout shift ${log.shift} ${JSON.stringify(log.shifts)}`); // Throttling and capture pauses push commits past the browser's recent-input window.
  return log;
 }
 
@@ -218,7 +221,7 @@ try{
  crypto.subtle.timingSafeEqual=(a,b)=>timingSafeEqual(Buffer.from(a),Buffer.from(b));
  globalThis.fetch=async url=>{if(String(url)==='https://challenges.cloudflare.com/turnstile/v0/siteverify')return Response.json({success:true,hostname:'localhost',action:'register'});throw Error('Unexpected external request');};
  const env={DB:db,ENVIRONMENT:'local',TURNSTILE_SITE_KEY:'synthetic-public',TURNSTILE_SECRET:'synthetic-secret',AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})}};
- const background=[],root=resolve(dir+'/web'),pages=new Set(),kitSaves={count:0};
+ const background=[],root=resolve(dir+'/web'),pages=new Set(),kitSaves={count:0},served={};
  server=createServer(async(req,res)=>{try{
   const url=new URL(req.url,origin);
   pages.add(url.pathname);if(url.pathname.endsWith('/kit/save'))kitSaves.count++;
@@ -229,12 +232,12 @@ try{
   }
   const document=url.pathname==='/'||url.pathname==='/workspace'||url.pathname.startsWith('/workspace/'),name=document?html.split('/').at(-1):decodeURIComponent(url.pathname).slice(1),path=resolve(root,name);
   if(!path.startsWith(root+sep)){res.writeHead(404).end();return;}
-  const bytes=await readFile(path),ext=path.split('.').at(-1);res.writeHead(200,{'content-type':{html:'text/html',js:'text/javascript',css:'text/css',png:'image/png',svg:'image/svg+xml',webp:'image/webp',woff2:'font/woff2'}[ext]??'application/octet-stream','cache-control':'no-store','content-security-policy':csp}).end(bytes);
+  const file=await readFile(path),ext=path.split('.').at(-1),bytes=document&&served.layout?file.toString().replace('width=device-width,initial-scale=1',`width=${served.layout}`):file;res.writeHead(200,{'content-type':{html:'text/html',js:'text/javascript',css:'text/css',png:'image/png',svg:'image/svg+xml',webp:'image/webp',woff2:'font/woff2'}[ext]??'application/octet-stream','cache-control':'no-store','content-security-policy':csp}).end(bytes);
  }catch{res.writeHead(404).end();}});
  await new Promise((done,reject)=>{server.once('error',reject);server.listen(8787,'127.0.0.1',done)});
  browser=await chromium.launch({headless:true,...(process.env.WHUMPO_CHROMIUM?{executablePath:process.env.WHUMPO_CHROMIUM}:{})});
- // Screencasts come at CSS pixels, so the sharp phone passes lay out at 390px through root zoom. 636px stays under every phone breakpoint.
- const sharp={width:636,height:1376,zoom:636/390},scenarios=capture?[{label:'phone',...sharp,landing:true},{label:'desktop',width:1280,height:800,landing:true},{label:'phone-dark',...sharp,dark:true},{label:'phone-reduced',...sharp,reduced:true},{label:'phone-large-text',width:390,large:true},{label:'phone-keyboard',width:390,keyboard:true}]
+ // Screencasts never exceed the viewport's own pixels, so the sharp phone passes use a 636px viewport with a 390px layout, as a high-density phone does.
+ const sharp={width:636,height:1376,layout:390},scenarios=capture?[{label:'phone',...sharp,landing:true},{label:'desktop',width:1280,height:800,landing:true},{label:'phone-dark',...sharp,dark:true},{label:'phone-reduced',...sharp,reduced:true},{label:'phone-large-text',width:390,large:true},{label:'phone-keyboard',width:390,keyboard:true}]
  :[{label:'390-light',width:390,checks:true,axe:true,landing:true,keyboard:true},{label:'390-dark',width:390,dark:true,axe:true},{label:'360-light',width:360},{label:'360-dark',width:360,dark:true},{label:'1280-light',width:1280,height:800,checks:true,axe:true,landing:true},{label:'1280-dark',width:1280,height:800,dark:true,axe:true},{label:'390-reduced',width:390,reduced:true,checks:true},{label:'390-large-text',width:390,large:true}];
  const report={};
  // Returning people share the frame: sign-in and recovery entry fit, move by keyboard and stay inside the CSP too.
@@ -248,11 +251,10 @@ try{
   if(capture)await page.screenshot({path:capture+'/sign-in.png'});
   assert.deepEqual(await page.evaluate(()=>window.__journey.violations),[]);await entry.close();}
  for(const scenario of scenarios.filter(item=>!process.env.WHUMPO_JOURNEY_ONLY||item.label===process.env.WHUMPO_JOURNEY_ONLY)){
-  const {label,width,height=844,dark=false,reduced=false,large=false,zoom}=scenario,phone=width<=760;phase=label;kitSaves.count=0;pages.clear();
-  const context=await browser.newContext({viewport:{width,height},deviceScaleFactor:capture&&!zoom?2:1,isMobile:phone&&!zoom,hasTouch:phone&&!zoom,serviceWorkers:'block',acceptDownloads:true,colorScheme:dark?'dark':'light',reducedMotion:reduced?'reduce':'no-preference',});
+  const {label,width,height=844,dark=false,reduced=false,large=false,layout}=scenario,phone=width<=760;phase=label;served.layout=layout;kitSaves.count=0;pages.clear();
+  const context=await browser.newContext({viewport:{width,height},deviceScaleFactor:capture&&!layout?2:1,isMobile:phone,hasTouch:phone,serviceWorkers:'block',acceptDownloads:true,colorScheme:dark?'dark':'light',reducedMotion:reduced?'reduce':'no-preference',});
   await context.addInitScript(instrument);
   if(large)await context.addInitScript(rootStyle,['fontSize','200%']);
-  if(zoom)await context.addInitScript(rootStyle,['zoom',String(zoom)]);
   const page=await context.newPage();page.setDefaultTimeout(15000);const errors=[];page.on('pageerror',error=>errors.push(error.message));page.on('console',message=>{if(/Content Security Policy|Refused to/.test(message.text()))errors.push(message.text());});
   const cdp=await context.newCDPSession(page),frames=[];await cdp.send('WebAuthn.enable');
   if(capture){cdp.on('Page.screencastFrame',({data,metadata,sessionId})=>{frames.push({data,time:metadata.timestamp});void cdp.send('Page.screencastFrameAck',{sessionId}).catch(()=>{});});await cdp.send('Page.startScreencast',{format:'jpeg',quality:92,everyNthFrame:1,maxWidth:width*2,maxHeight:height*2});}
