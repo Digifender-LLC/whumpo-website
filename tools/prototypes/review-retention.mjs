@@ -180,6 +180,8 @@ export const capRegistry=Object.freeze({
  github_token_vault:R('inventory','R6','owner-removable','connections'),
  guest_preview_feedback:R('inventory','R6','owner-removable','guest-feedback'),
  guest_preview_links:R('inventory','R6','owner-removable','guest-feedback'),
+ brand_kits:R('inventory','R6','owner-removable','brand-kits'),
+ saved_sections:R('inventory','R6','owner-removable','brand-kits'),
  identity_ceremony_receipts:R('receipt','R2','expiring','owner-identity-receipts'),
  identity_challenges:R('inventory','R6','expiring','owner-identity-admission'),
  identity_credentials:R('inventory','R6','owner-removable','owner-identity-progress'),

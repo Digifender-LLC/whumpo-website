@@ -19,7 +19,7 @@ CREATE TABLE brand_kit_versions (
  tokens_digest TEXT NOT NULL CHECK(length(tokens_digest)=64 AND tokens_digest NOT GLOB '*[^0-9a-f]*'),
  created_at TEXT NOT NULL CHECK(length(created_at) BETWEEN 20 AND 30),
  PRIMARY KEY(kit_id,version)
-) STRICT, WITHOUT ROWID;
+) STRICT;
 CREATE TABLE saved_sections (
  id TEXT PRIMARY KEY CHECK(length(id)=36),
  owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -36,7 +36,7 @@ CREATE TABLE saved_section_versions (
  content_digest TEXT NOT NULL CHECK(length(content_digest)=64 AND content_digest NOT GLOB '*[^0-9a-f]*'),
  created_at TEXT NOT NULL CHECK(length(created_at) BETWEEN 20 AND 30),
  PRIMARY KEY(section_id,version)
-) STRICT, WITHOUT ROWID;
+) STRICT;
 
 -- Bounded per owner, enforced in the commit so a race cannot exceed it.
 CREATE TRIGGER brand_kits_capacity BEFORE INSERT ON brand_kits

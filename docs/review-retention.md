@@ -85,6 +85,7 @@ Class, lane and turnover values:
 | `backend_runs` | `backend_runs_quota` | project 20 (window) · owner 100 (window) · platform 1000 (window) · platform 5000 | receipt | R2 | lifetime | cascade | backend-artifacts |
 | `backend_state_reviews` | `backend_state_review_insert` | project 25 (filtered) · owner 25 (filtered) · owner 100 (filtered) · platform 2500 (filtered) · platform 5000 (filtered) | review | R1 | active-only | cascade | backend-artifacts |
 | `backend_versions` | `backend_versions_quota` | project 25 · platform 1000 | version | R4 | lifetime | cascade | backend-artifacts |
+| `brand_kits` | `brand_kits_capacity` | owner 20 | inventory | R6 | owner-removable | app+cascade | brand-kits |
 | `build_jobs` | `build_job_admit` | project 1 (filtered) · owner 3 (filtered) · platform 16 (filtered) | operation | R3 | pending-only | cascade | pooled-build-jobs |
 | `cloudflare_dns_actions` | `cloudflare_dns_quota` | project 25 (filtered) · owner 25 (filtered) · owner 100 (filtered) · platform 2500 (filtered) · platform 5000 (filtered) | operation | R3 | active-only | cascade | domains-dns |
 | `cloudflare_token_vault` | `cloudflare_vault_quota` | owner 10 | inventory | R6 | owner-removable | app+cascade | connections |
@@ -152,6 +153,7 @@ Class, lane and turnover values:
 | `safety_preservation_holds` | `safety_preservation_holds_admit` | platform 10000 | evidence | R5 | restricted | none | restricted-safety-cases |
 | `safety_preserved_records` | `safety_preserved_records_admit` | platform 50000 | evidence | R5 | restricted | trigger | restricted-safety-cases |
 | `safety_retention_decisions` | `safety_retention_decisions_admit` | platform 100000 | evidence | R5 | restricted | none | restricted-safety-cases |
+| `saved_sections` | `saved_sections_capacity` | owner 60 | inventory | R6 | owner-removable | app+cascade | brand-kits |
 | `service_client_activation_reviews` | `service_client_activation_admit` | project 500 · platform 20000 | review | R1 | lifetime | cascade | configuration-authority |
 | `service_client_applies` | `service_client_apply_admit` | project 500 · platform 20000 | receipt | R2 | lifetime | cascade | configuration-authority |
 | `service_client_proposals` | `service_client_proposal_admit` | project 20 · platform 400 | review | R1 | expiring | app+trigger+cascade | project-configurations |
