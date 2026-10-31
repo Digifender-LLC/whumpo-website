@@ -217,5 +217,14 @@ try{
  assert.equal((await db.prepare("SELECT count(*) n FROM build_jobs WHERE state='published'").first()).n,published,'A freeze never alters a published job');
  assert.equal(neighbourLease.job,neighbour.t);
 
+ // 12. WH-075 D41: builds dispatch as batch work; a runtime refusal as busy leaves no stuck job, reads as try-again and ran no guest code.
+ const lena=await account(undefined,2),lP=await project(lena),lT=await turn(lena),classes=[];
+ const busyRuntime={fetch:async(_url,init)=>{classes.push(init.headers['x-whumpo-class']);return Response.json({ok:false,error:'busy'},{status:503});}};
+ const refusedReply=await build(lena,lP,lT,note,noteIn('l'),noteOut('l'),busyRuntime);
+ assert.deepEqual(classes,['batch'],'The build dispatches as batch work');assert.match(refusedReply,/runner was busy/);assert.match(refusedReply,/Ask for the build again/);assert.doesNotMatch(refusedReply,/did not pass/);
+ assert.equal((await job(lT)).state,'failed');assert.deepEqual((await cleanups(lT)).map(c=>c.reason),['runtime-returned']);
+ assert.equal(await active(),0,'A busy build holds no capacity afterwards');
+ const retry=await build(lena,await project(lena),await turn(lena),note,noteIn('l2'),noteOut('l2'),service);assert.match(retry,/Application review/,'The next build runs normally');
+
  console.log('Build jobs passed: two-tenant fresh runtime memory, shared toolchain vs private artifact keys, output ownership, cancellation before/during/after execution, lease isolation, single spend, expiry, recorded cleanup failure holding capacity, per-project/account/pool bounds, owner replay/concurrency/lost lease, no visitor/workflow/scheduled wake path, deterministic diagnostics before an optional model repair, and the operator build freeze (refuses new jobs, cancels running and unpublished jobs in scope, generic response, lift restores admission).');
 }finally{await runtime?.dispose();await store.close();await rm(dir,{recursive:true,force:true});}

@@ -15,14 +15,16 @@ import {withAppointmentLink,appointmentLinkShown} from './appointment-link';
 import {requireSpecificationAvailable} from './specification-safety';
 import { previewHeaders } from './components';
 import {reservePublicPhotoRead,StorageLimitError} from './storage-budget';
-import {PublicClientLimitError} from './public-admission';
+import {PublicClientLimitError,publicClientSource} from './public-admission';
 import {servingStopped} from './operator-serving';
 /** Public serving boundary: only current published HTML and its exact photo dependencies. */
 const serving = {
- async fetch(request:Request,env:Pick<Env,'DB'|'FILES'> & Partial<Pick<Env,'BACKEND_RUNTIME'>>&{APP_HOST?:Fetcher}):Promise<Response>{
+ async fetch(request:Request,env:Pick<Env,'DB'|'FILES'> & Partial<Pick<Env,'BACKEND_RUNTIME'>>&{APP_HOST?:Fetcher;SITE_LIMITER?:RateLimit}):Promise<Response>{
   const url=new URL(request.url),headers={...previewHeaders,'cache-control':'no-store'};
   const local=['localhost','127.0.0.1'].includes(url.hostname),project=customerProject(url.hostname);
   if(visitorProject(url.hostname))return env.APP_HOST?env.APP_HOST.fetch(request):new Response('Application unavailable',{status:503,headers});
+  // WH-075 F2: per-source limit before any D1 read. Optional binding: a removed block keeps serving.
+  if(!local&&env.SITE_LIMITER&&!(await env.SITE_LIMITER.limit({key:'site:'+publicClientSource(request)})).success)return new Response('Too many requests. Try again in a minute.',{status:429,headers:{...headers,'retry-after':'60'}});
   // WH-092 guest previews: one fixed host (or a local path prefix), never a project or custom domain.
   if(url.hostname===guestPreviewHost||(local&&(url.pathname==='/guest-preview'||url.pathname.startsWith('/guest-preview/'))))return env.FILES?guestPreviewRequest(request,{DB:env.DB,FILES:env.FILES},local):new Response('Preview unavailable',{status:503,headers});
   if(project)url.pathname='/s/'+project+url.pathname;
@@ -71,7 +73,7 @@ const serving = {
    return new Response(request.method==='HEAD'?null:html,{headers:{...headers,'content-security-policy':headers['content-security-policy'].replace('sandbox;',sandbox)+"; img-src 'self'"+formPolicy}});
   }catch(cause){if(cause instanceof PublicClientLimitError)return new Response('Too many photo requests from this connection today',{status:429,headers});return new Response(cause instanceof StorageLimitError?'Photo allowance temporarily exhausted':'Site temporarily unavailable',{status:503,headers});}
  }
-} satisfies ExportedHandler<Pick<Env,'DB'|'FILES'> & Partial<Pick<Env,'BACKEND_RUNTIME'>>&{APP_HOST?:Fetcher}>;
+} satisfies ExportedHandler<Pick<Env,'DB'|'FILES'> & Partial<Pick<Env,'BACKEND_RUNTIME'>>&{APP_HOST?:Fetcher;SITE_LIMITER?:RateLimit}>;
 
 export default {
  async fetch(request:Request,env:Parameters<typeof serving.fetch>[1],ctx?:ExecutionContext):Promise<Response>{

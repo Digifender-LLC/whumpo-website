@@ -56,7 +56,9 @@
      "BACKEND_RUNTIME->whumpo-runtime",
      "APP_HOST->whumpo-apps"
     ],
-    "rateLimits": []
+    "rateLimits": [
+     "SITE_LIMITER"
+    ]
    },
    "workersCache": null
   },
@@ -136,7 +138,9 @@
     "r2": {},
     "serviceBindings": {},
     "assetsBinding": 0,
-    "rateLimiter": {},
+    "rateLimiter": {
+     "sites.SITE_LIMITER": 1
+    },
     "subrequests": [],
     "waitUntil": 1,
     "tables": [
@@ -202,7 +206,9 @@
     "r2": {},
     "serviceBindings": {},
     "assetsBinding": 0,
-    "rateLimiter": {},
+    "rateLimiter": {
+     "sites.SITE_LIMITER": 1
+    },
     "subrequests": [],
     "waitUntil": 0,
     "tables": [
@@ -268,7 +274,9 @@
     },
     "serviceBindings": {},
     "assetsBinding": 0,
-    "rateLimiter": {},
+    "rateLimiter": {
+     "sites.SITE_LIMITER": 1
+    },
     "subrequests": [],
     "waitUntil": 0,
     "tables": [
@@ -331,7 +339,9 @@
     "r2": {},
     "serviceBindings": {},
     "assetsBinding": 0,
-    "rateLimiter": {},
+    "rateLimiter": {
+     "sites.SITE_LIMITER": 1
+    },
     "subrequests": [],
     "waitUntil": 0,
     "tables": [
@@ -387,7 +397,9 @@
     "r2": {},
     "serviceBindings": {},
     "assetsBinding": 0,
-    "rateLimiter": {},
+    "rateLimiter": {
+     "sites.SITE_LIMITER": 1
+    },
     "subrequests": [],
     "waitUntil": 0,
     "tables": [
@@ -439,7 +451,9 @@
     "r2": {},
     "serviceBindings": {},
     "assetsBinding": 0,
-    "rateLimiter": {},
+    "rateLimiter": {
+     "sites.SITE_LIMITER": 1
+    },
     "subrequests": [],
     "waitUntil": 0,
     "tables": [
@@ -491,7 +505,9 @@
     "r2": {},
     "serviceBindings": {},
     "assetsBinding": 0,
-    "rateLimiter": {},
+    "rateLimiter": {
+     "sites.SITE_LIMITER": 1
+    },
     "subrequests": [],
     "waitUntil": 0,
     "tables": [
@@ -543,7 +559,9 @@
     "r2": {},
     "serviceBindings": {},
     "assetsBinding": 0,
-    "rateLimiter": {},
+    "rateLimiter": {
+     "sites.SITE_LIMITER": 1
+    },
     "subrequests": [],
     "waitUntil": 0,
     "tables": [
@@ -597,7 +615,9 @@
     "r2": {},
     "serviceBindings": {},
     "assetsBinding": 0,
-    "rateLimiter": {},
+    "rateLimiter": {
+     "sites.SITE_LIMITER": 1
+    },
     "subrequests": [],
     "waitUntil": 1,
     "tables": [
@@ -650,7 +670,9 @@
     "r2": {},
     "serviceBindings": {},
     "assetsBinding": 0,
-    "rateLimiter": {},
+    "rateLimiter": {
+     "sites.SITE_LIMITER": 1
+    },
     "subrequests": [],
     "waitUntil": 1,
     "tables": [
@@ -702,7 +724,9 @@
     "r2": {},
     "serviceBindings": {},
     "assetsBinding": 0,
-    "rateLimiter": {},
+    "rateLimiter": {
+     "sites.SITE_LIMITER": 1
+    },
     "subrequests": [],
     "waitUntil": 1,
     "tables": [
@@ -754,7 +778,9 @@
     "r2": {},
     "serviceBindings": {},
     "assetsBinding": 0,
-    "rateLimiter": {},
+    "rateLimiter": {
+     "sites.SITE_LIMITER": 1
+    },
     "subrequests": [],
     "waitUntil": 1,
     "tables": [
@@ -829,7 +855,9 @@
      "BACKEND_RUNTIME": 1
     },
     "assetsBinding": 0,
-    "rateLimiter": {},
+    "rateLimiter": {
+     "sites.SITE_LIMITER": 1
+    },
     "subrequests": [],
     "waitUntil": 0,
     "tables": [
@@ -881,7 +909,9 @@
     "r2": {},
     "serviceBindings": {},
     "assetsBinding": 0,
-    "rateLimiter": {},
+    "rateLimiter": {
+     "sites.SITE_LIMITER": 1
+    },
     "subrequests": [],
     "waitUntil": 0,
     "tables": [
@@ -928,7 +958,9 @@
     "r2": {},
     "serviceBindings": {},
     "assetsBinding": 0,
-    "rateLimiter": {},
+    "rateLimiter": {
+     "sites.SITE_LIMITER": 1
+    },
     "subrequests": [],
     "waitUntil": 0,
     "tables": []
@@ -973,7 +1005,9 @@
     "r2": {},
     "serviceBindings": {},
     "assetsBinding": 0,
-    "rateLimiter": {},
+    "rateLimiter": {
+     "sites.SITE_LIMITER": 1
+    },
     "subrequests": [],
     "waitUntil": 0,
     "tables": [
@@ -1031,7 +1065,9 @@
     "r2": {},
     "serviceBindings": {},
     "assetsBinding": 0,
-    "rateLimiter": {},
+    "rateLimiter": {
+     "sites.SITE_LIMITER": 1
+    },
     "subrequests": [],
     "waitUntil": 0,
     "tables": [
@@ -1081,7 +1117,9 @@
     "r2": {},
     "serviceBindings": {},
     "assetsBinding": 0,
-    "rateLimiter": {},
+    "rateLimiter": {
+     "sites.SITE_LIMITER": 1
+    },
     "subrequests": [],
     "waitUntil": 1,
     "tables": [
@@ -1151,7 +1189,9 @@
     },
     "serviceBindings": {},
     "assetsBinding": 0,
-    "rateLimiter": {},
+    "rateLimiter": {
+     "sites.SITE_LIMITER": 1
+    },
     "subrequests": [],
     "waitUntil": 0,
     "tables": [
@@ -1217,7 +1257,9 @@
     "r2": {},
     "serviceBindings": {},
     "assetsBinding": 0,
-    "rateLimiter": {},
+    "rateLimiter": {
+     "sites.SITE_LIMITER": 1
+    },
     "subrequests": [],
     "waitUntil": 0,
     "tables": []
@@ -1262,7 +1304,9 @@
     "r2": {},
     "serviceBindings": {},
     "assetsBinding": 0,
-    "rateLimiter": {},
+    "rateLimiter": {
+     "sites.SITE_LIMITER": 1
+    },
     "subrequests": [],
     "waitUntil": 0,
     "tables": []

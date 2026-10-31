@@ -388,7 +388,7 @@ WH-050 closes on the local envelope with the limits in [What this does not prove
 
 --- | --- | --- | --- |
 | F1 | **Platform-wide daily budgets are first-come across tenants.** Public backend (1,000/day), visitor transitions (1,000/day), contact receipts (1,000 retained) and R2 reads (100,000/month) are shared; the per-account sub-cap (500) lets two accounts drain the platform and a tenant under its own project cap is refused. | D, E; schema triggers in [`schema/platform.sql`](../schema/platform.sql) (contact and visitor platform caps read from schema, not driven by traffic here) | High |
-| F2 | **No admission control on the public site host.** Site HTML, photos and the public backend route have no per-IP, per-tenant or per-project request limiter; only quotas apply to backend and photo reads. One IP sent 150/150 accepted. | P; [`src/site-host.ts`](../src/site-host.ts) | High |
+| F2 | **No admission control on the public site host.** Site HTML, photos and the public backend route have no per-IP, per-tenant or per-project request limiter; only quotas apply to backend and photo reads. One IP sent 150/150 accepted. **Resolved locally by WH-075 (October 31): `SITE_LIMITER` 300/60 s per source before any D1 read; see the section below.** | P; [`src/site-host.ts`](../src/site-host.ts) | High |
 | F3 | **One client can exhaust every tenant's photos.** Photo GETs are `no-store` and each charges the shared monthly R2 read counter, with no per-tenant or per-IP bound. | E | High |
 | F4 | **The runtime concurrency gate is global and not tenant-aware.** At 4+ simultaneous calls 25% or more are refused regardless of caller; in B victims saw 3.3% `busy` and a failed visitor transition. Refused and failed attempts still spend the project allowance; the gateway neither queues nor retries. Behavior of the real service binding across multiple Cloudflare isolates is unmeasured. | concurrency table, S, B | Medium |
 | F5 | **Allowances are keyed by the target, not the caller.** Anonymous callers can spend a tenant's 100 backend calls/day, fill its 20-per-hour contact cap (and, over time, its 100 retained receipts) or its visitor-page allowance, locking out legitimate users. Per-IP limits do not help against distributed callers. | B noisy table, P | Medium |
@@ -397,6 +397,55 @@ WH-050 closes on the local envelope with the limits in [What this does not prove
 | F8 | **No alert exists for any of the shared counters.** No notification fires at 50% or 80% of any platform budget (G1). **Implemented locally (pull-based):** `report-maintenance.mjs --counters` flags 50%/80%; no alert provider is installed (D28: pull-based on a stated cadence). | none installed | Medium |
 
 Candidate remedies (each needs its own reviewed task; none implemented here): per-account sub-caps sized to the enrolled cohort, per-tenant photo read accounting before the platform counter is charged, an edge rate rule or cache policy for the public site host (a [WAF rate limiting](https://developers.cloudflare.com/waf/rate-limiting-rules/) rule is paid-plan dependent and **requires entitlement and price verification**), a per-project fairness token or queue ahead of the runtime gate, and an operator per-tenant freeze (WH-015/016; the public-allowance part is now implemented locally, see the F7 slice).
+
+## WH-075 site limiter, batch slot and saturation phase I — October 31, 2026 UTC
+
+**Local harness numbers, not Cloudflare numbers.** Same harness (`pnpm capacity`, seed 50, scale 1, 4 tenants) at main `a332b1e` plus this change, Node 24.21.0, pnpm 11.19.0, loopback only, 8 CPUs. Exit 0. Wall time 176.7 s against 126 to 128 s on October 30: the run added phase I and the larger P probe, and the host load average rose from 0.45 before to 6.26 after, so other work on this host overlapped the run. Treat latencies as indicative; the outcome counts below do not depend on timing.
+
+### What changed
+
+- **F2 (D38, D39):** `SITE_LIMITER` in `wrangler.sites.jsonc`, namespace 1001005, 300 requests per 60 s, keyed `site:` plus the normalized client source (IPv4, or IPv6 /64), across all projects. It is checked in `src/site-host.ts` straight after the visitor-host forward, so it covers site HTML, photos, the public backend route, custom domains and guest previews, before any D1 read. Local hosts skip it. Refusal is 429 with `retry-after: 60`. The binding is optional in the env type, so a fixture or a deleted block keeps serving (`tests/public-fairness.mjs`). Price: the binding's documentation and the Workers pricing page list no charge ("no charge listed", not "confirmed free"); it is a fifth namespace beside the platform pair and the apps pair. If a price turns up, delete the block.
+- **Batch slot (D41):** `projectRuntime(service,project,'batch')` adds `x-whumpo-class: batch`, used by `src/application-build.ts` and `src/app-migration-checks.ts`. The runtime gate lets batch work hold at most one of the two slots. A refused batch call is `busy`, runs no guest code, is not charged, and a build that gets it reads "the shared test runner was busy ... ask for the build again" instead of "did not pass".
+- **Harness:** the P site probe now goes through the real `<project>.whumpo.site` hostname and the configured limit; phase I floods the runtime gate with batch work while a victim project makes public backend calls, then checks recovery.
+
+### Results
+
+| Check | Result |
+| --- | --- |
+| P, site page GET by `<project>.whumpo.site`, one IP, 350 requests | 300 accepted, 50 x 429 (was 150/150 with no limiter) |
+| P, same, a distinct IP per request, 150 requests | 150 accepted, 0 x 429 |
+| P, contact GET and visitor page, one IP | 120 accepted, 30 x 429 each (unchanged) |
+| D1 statements per request | pinned values unchanged (site 5, photo 6.8, contact GET 2, contact POST 5, backend 3, app page 1, visitor transition 10); the limiter adds none |
+| Whole run | 20,492 D1 statements, 1,062 runtime calls |
+
+**Phase I (batch flood against interactive calls).** The flood is 4 concurrent runtime calls on fresh lanes at a time, for the length of 30 sequential public backend calls by one victim project.
+
+| Flood class | Flood calls | Flood ok / busy | Flood wrong values | Victim calls ok / busy | Victim p50 / p95 ms | Project counter delta vs executed |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| No class header (before this change) | 328 | 241 / 87 | 0 | 6 / 24 | 68 / 91 | 6 / 6 |
+| `batch` | 348 | 173 / 175 | 0 | 30 / 0 | 62 / 100 | 30 / 30 |
+
+Before, the flood took both slots and 24 of 30 victim calls were refused `busy`. With the batch class, no victim call was refused and the flood was held to one slot. Every accepted flood call returned the right value, refused calls were not charged (counters equal executed calls), and the runtime then served 2 batch and 3 interactive calls normally. The harness throws on a wrong value, a charged refusal, a refused victim call in the batch run or a failed recovery.
+
+**A and B (victims alone, then with the noisy flood), all victim requests:** A p50 207 / p95 476 ms (October 30: 224 / 483), B p50 490 / p95 1,646 ms (577 / 1,682), 1 and 2 server errors (`busy`, refunded). The noisy tenant in B: 960 requests, 245 x 429, 19 x 5xx. Backend charging in B held again: noisy 100 executed / 35 busy / 125 refused, counter 100; victims 88, 83, 83 executed, counters equal. S: victims 14 ok, 1 busy of 15; noisy 24 guest refusals and 16 busy. Gate at 4 concurrent: distinct lanes 4 of 16 busy, one shared lane 8 to 10 of 16. D: platform 428 before fillers, 643 after probes; fair share held (largest account 100 of 500); victim probes 5/5, fresh account 10/10. L, C, E: unchanged from October 30 (C: one of three victim backend calls after fillers was a fair-share 429, not a failure).
+
+### Acceptance by line
+
+| Line | Evidence |
+| --- | --- |
+| 1. Forged tenant arguments and copied job IDs | `tests/build-jobs.mjs` (two-tenant output ownership, lease isolation), `tests/job-journal.mjs`, `tests/boundary-site-isolation.mjs`, `tests/boundary-visitor-gateway-isolation.mjs`; no new path found |
+| 2. Permission-sensitive caches | main has no shared cache; `tests/shared-cache-guard.mjs` fails if a Cache API, `cf` cache key, KV or durable binding appears, and `tests/request-path-inventory.mjs` asserts every route is a Worker invocation with no cacheable response |
+| 3. Noisy neighbour, backpressure, no silent loss | phases A, B, S, L, P above; phase I; `tests/backend-runtime.mjs` (batch cap, interactive keeps a slot); `tests/build-jobs.mjs` (busy build holds nothing, reads as try again); `tests/public-fairness.mjs` (429 before D1, missing binding serves) |
+| 4. No silent AI metering or plan upgrade | `tests/standard-ai-chat.mjs` (standard assistance, zero credit charge, no customer ledger), `tests/workspace-dashboard.mjs` (`automaticPlanChanges` and `overageChargingEnabled` false) |
+| 5. Unknown cost and pooled overhead visible | `tests/cost-reconcile.mjs` (unknown never zero, standing overhead and liabilities in the report), `tests/cost-events-contract.mjs`; WH-172 covers producers |
+
+### Stated limits (D40)
+
+- The limiter is per Cloudflare location and approximate; a shared address (office, carrier NAT) can hit 300 per minute and gets a one-minute 429. It is one line to change.
+- It does not cap spend: a refused request still invokes the Worker.
+- The runtime gate is per isolate; behaviour across isolates stays unmeasured. No queue: `busy` is the explicit, refunded backpressure.
+- No dedicated isolation (no evidence warrants it), and failure groups stay a written plan.
+- The live probe (up to 600 GETs to a random `<uuid>.whumpo.site`) waits for the deploy and was not run.
 
 ## Account-level alerts and cohort limits (decided D28, 2026-10-31)
 

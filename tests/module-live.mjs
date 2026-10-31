@@ -200,6 +200,33 @@ try{
  assert.equal(summary.items.find(i=>i.localId==='requests').publicForm,'bound');
  steps.ownerReads=true;
 
+ // WH-093: deployed leads.update on the owner route. The Business gate (business.leads) is observed first with no grant.
+ // It is then opened the way core.editing/core.forms are above: a synthetic private-test preview grant on this run's own owner and
+ // project (deleted with the owner at cleanup). The gate itself is neither edited nor bypassed.
+ const leadPath=`/api/projects/${a.project}/modules`,leadEdit=(revision,changes)=>envelope(man.instances.requests,'leads.update',{recordId:'request',entryId:entry,revision,changes});
+ const leadRead=async()=>(await (await a.browser.call(`/api/projects/${a.project}/module-records/${resource}/request`)).json()).items.find(i=>i.entryId===entry).lead;
+ const ungranted=await a.call(leadPath,leadEdit(0,{stage:'contacted'})),ungrantedBody=await ungranted.json();
+ seen.leadsGateWithoutGrant={status:ungranted.status,code:ungrantedBody.code};
+ assert.equal(ungranted.status,403,'No business.leads grant: '+JSON.stringify(ungrantedBody));assert.equal(ungrantedBody.code,'forbidden');
+ assert.equal(await row('SELECT 1 FROM module_record_leads WHERE entry_id=?',entry),null,'A refused lead write leaves no row');
+ await run("INSERT INTO feature_preview_grants VALUES(?,1,?,?,'business.leads','confirm','private-test-acceptance','synthetic WH-093 live fixture',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",crypto.randomUUID(),a.id,a.project);
+ await a.fresh();
+ const leadNote=value('lead-note'),dueDate=new Date(Date.now()+3*86400000).toISOString().slice(0,10);
+ const set=await a.call(leadPath,leadEdit(0,{stage:'contacted',note:leadNote,dueDate})),setBody=await set.json();
+ assert.equal(set.status,200,JSON.stringify(setBody));assert.deepEqual(setBody.result,{entryId:entry,revision:1});assert.ok(!JSON.stringify(setBody).includes(leadNote),'The reply carries no lead value');
+ assert.deepEqual(await leadRead(),{stage:'contacted',note:leadNote,dueDate,revision:1},'Owner reads the lead back through the deployed list route');
+ const savedLead=await row('SELECT stage,note,due_date,revision,project_id FROM module_record_leads WHERE entry_id=?',entry);
+ assert.deepEqual([savedLead.stage,savedLead.note,savedLead.due_date,savedLead.revision,savedLead.project_id],['contacted',leadNote,dueDate,1,a.project]);
+ const stale=await a.call(leadPath,leadEdit(0,{stage:'won'}));assert.equal(stale.status,409,'A stale revision is refused');assert.equal((await stale.json()).code,'stale_configuration');
+ assert.equal((await row('SELECT stage FROM module_record_leads WHERE entry_id=?',entry)).stage,'contacted');
+ for(const [who,cookie] of [['visitor',v1.cookie],['staff',staff.cookie]]){
+  const refusal=await raw(a,leadEdit(1,{stage:'won'}),{cookie});assert.equal(refusal.body.code,'forbidden',who+' is refused lead writes');
+ }
+ assert.ok((await raw(a,leadEdit(1,{stage:'won'}))).status>=400,'Anonymous callers are refused');
+ assert.equal((await b.call(leadPath,leadEdit(1,{stage:'won'}))).status>=400,true,'Owner B is refused on A\'s project');
+ assert.equal((await row('SELECT stage FROM module_record_leads WHERE entry_id=?',entry)).stage,'contacted','No refused caller changed the lead');
+ steps.leadsUpdate=true;
+
  // Turnstile (D26): fail closed, no token, no row.
  const rowsBefore=(await row('SELECT count(*) c FROM module_records WHERE project_id=?',a.project)).c,anon=intake(null);
  assert.equal((await anon.me()).code,'forbidden');assert.equal((await anon.submit(values)).code,'forbidden','Visitor forms refuse anonymous callers');assert.equal((await anon.myRequests()).code,'forbidden');
@@ -252,7 +279,7 @@ finally{
   for(const key of record.objectKeys)assert.ok(record.projects.some(p=>key.startsWith('photos/'+p+'/')),'Only this run\'s object keys');
   for(const [n,id] of ids.entries())await run('DELETE FROM users WHERE id=? AND email=?',id,emails[n]);
   for(const id of ids)for(const t of ['users WHERE id','identity_accounts WHERE account_id','identity_sessions WHERE account_id','identity_credentials WHERE account_id','projects WHERE owner_user_id','feature_preview_grants WHERE user_id','chat_turns WHERE user_id','workspace_state WHERE user_id','notification_notices WHERE user_id'])assert.equal(await row('SELECT 1 FROM '+t+'=?',id),null,'Cleanup left rows in '+t.split(' ')[0]);
-  for(const p of record.projects.filter(Boolean))for(const t of ['module_instances','module_records','module_files','app_visitors','project_files','publications','project_spec_heads'])assert.equal(await row('SELECT 1 FROM '+t+' WHERE project_id=?',p),null,'Cleanup left rows in '+t);
+  for(const p of record.projects.filter(Boolean))for(const t of ['module_instances','module_records','module_record_leads','module_files','app_visitors','project_files','publications','project_spec_heads'])assert.equal(await row('SELECT 1 FROM '+t+' WHERE project_id=?',p),null,'Cleanup left rows in '+t);
   objectDeleted=true;
   for(const key of record.objectKeys){
    assert.ok(await row('SELECT 1 FROM file_cleanup WHERE object_key=?',key),'The object is queued in file_cleanup');
