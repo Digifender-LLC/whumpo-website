@@ -12,7 +12,7 @@ Error.stackTraceLimit=0;
 const m=await currentSiteFixtureHandlers(),fixture=await databaseFixture({d1:process.argv.includes('--d1')}),{db}=fixture,id=()=>crypto.randomUUID();
 const originalFetch=globalThis.fetch;let network=0;globalThis.fetch=async()=>{network++;throw Error('No network or inference is available');};
 const row=(q,...p)=>db.prepare(q).bind(...p).first(),rows=async(q,...p)=>(await db.prepare(q).bind(...p).all()).results,run=(q,...p)=>db.prepare(q).bind(...p).run();
-let cases=0,forged_n=0;const check=async(name,fn)=>{try{await fn();cases++;}catch(error){console.error('FAILED:',name);throw error;}};
+let cases=0,forged_n=0;const check=async(name,fn)=>{try{if(process.env.WH_TRACE)console.error(Date.now(),'START',name.slice(0,50));await fn();cases++;}catch(error){console.error('FAILED:',name);throw error;}};
 const {appAuth:auth,appGateway}=m,C=m.notificationConfigurations,Contact=m.contactNotifications;
 const pins=kind=>{const e=m.moduleCatalog.find(x=>x.kind===kind);return {module:{...e.module},schema:{...e.schema}};};
 const env={DB:db,ENVIRONMENT:'test',AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})}};
