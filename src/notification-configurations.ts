@@ -64,9 +64,9 @@ const parseFlags=(list:string)=>{
  return {owner:set.has('owner'),staff:set.has('staff'),receipt:set.has('receipt')};
 };
 const dollars=(micros:number)=>'$'+(micros/1e6).toFixed(5).replace(/0+$/,'');
-function describe(r:{form:string;flags:NoticeFlags;name:string;micros:number;checked:string;revision:number}){
+function describe(r:{site:string;form:string;flags:NoticeFlags;name:string;micros:number;checked:string;revision:number}){
  const on=[r.flags.owner&&'a notice to your verified notification address when a request arrives',r.flags.staff&&'a notice to staff who opted in and have a verified address',r.flags.receipt&&'an email receipt to a signed-in visitor with a verified address who asks for one on that request'].filter(Boolean) as string[];
- return `Review appointment email notices for the “${r.form}” form\n\n${on.length?'Turn on:\n'+on.map(x=>'- '+x).join('\n'):'Turn all appointment email notices off for this form.'}\n\nBusiness name in the emails: ${r.name}\n`
+ return `Review appointment email notices for the “${r.form}” form on the website “${r.site}”\n\n${on.length?'Turn on:\n'+on.map(x=>'- '+x).join('\n'):'Turn all appointment email notices off for this form.'}\n\nBusiness name in the emails: ${r.name}\n`
   +(on.length?`Notices to you and staff only say a request arrived and link to your private request list; they never include the request. A receipt shows only a reference, the chosen service and the chosen day, and says it is a request and not a confirmed booking.\nSent from notify@whumpo.com through Cloudflare Email at ${dollars(r.micros)} per email (price checked ${r.checked}). At most 10 an hour and 50 a day per owner or staff recipient, and 3 an hour and 10 a day for receipts.\n`:'')
   +`Not sending yet: saving this only records the settings. It sets up no sender, domain or provider, and nothing is emailed until Whumpo turns on email delivery and sets its monthly spending limit. Requests that arrive before then are not emailed later.\nThis is configuration revision ${r.revision}. Review expires in 10 minutes. Use the confirmation button for notification setup to save exactly this.`;
 }
@@ -109,7 +109,8 @@ export async function notificationSetupCommand(db:D1Database,userId:string,turnI
  if(current&&current.config_json===built.configJson&&current.business_name===name&&!!current.owner_notice===flags.owner&&!!current.staff_notice===flags.staff&&!!current.receipt===flags.receipt)
   return result('These appointment notices are already set for the “'+form+'” form. Open Dashboard → Form records to see their status.');
  if(!current&&!flags.owner&&!flags.staff&&!flags.receipt)throw invalid('Choose at least one notice to turn on.');
- const reply=describe({form,flags,name,micros:built.priceMicros,checked:built.priceCheckedAt,revision:(current?.revision??0)+1});
+ const site=(await db.prepare('SELECT name FROM projects WHERE id=? AND owner_user_id=?').bind(project,userId).first<{name:string}>())?.name??'';
+ const reply=describe({site,form,flags,name,micros:built.priceMicros,checked:built.priceCheckedAt,revision:(current?.revision??0)+1});
 
  return result(reply,[
   db.prepare('INSERT INTO notification_configuration_reviews(id,user_id,project_id,instance_id,form_id,owner_notice,staff_notice,receipt,business_name,config_json,price_micros,price_checked_at,base_revision,digest,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
@@ -119,46 +120,60 @@ export async function notificationSetupCommand(db:D1Database,userId:string,turnI
 type ReviewRow={id:string;project_id:string;instance_id:string;form_id:string;owner_notice:number;staff_notice:number;receipt:number;business_name:string;config_json:string;price_micros:number;price_checked_at:string;base_revision:number;digest:string;expires_at:string;status:string};
 
 export type DeliveryState='inactive'|'spending-limit-unset'|'active';
-/** What the dashboard says about sending: inactive (no provider binding), active-but-no-spending-limit (every configured notice is cancelled at send time) or active. */
+/** What the dashboard says about sending: inactive (no provider binding), active-but-no-spending-limit (nothing is queued or sent) or active. */
 export const deliveryState=(delivery:{settings:{customerCeilingCents?:number}}|null):DeliveryState=>!delivery?'inactive':delivery.settings.customerCeilingCents?'active':'spending-limit-unset';
-/** Owner dashboard read: per form of each owned records module its saved notice settings and counts of the configured notices. Counts and flags only, never an address or a value. */
+export type FormSending=DeliveryState|'off'|'plan'|'needs-address';
+/**
+ * Owner dashboard read: per form of each owned records module its saved notice settings, whether THIS form would send (its own notices on, `core.forms`
+ * included, and an owner address verified when the owner notice is the only one on) and counts of the notices of THIS form. Counts and flags only, never an
+ * address or a value.
+ */
 export async function readNotificationSetup(db:Pick<D1Database,'prepare'>,user:string,project:string,delivery:DeliveryState){
  if(!uuid.test(project)||!await db.prepare('SELECT 1 FROM projects WHERE id=? AND owner_user_id=?').bind(project,user).first())throw new ModuleError('not_found','Project not found.');
  const rows=(await db.prepare('SELECT c.instance_id,i.local_id,c.form_id,c.owner_notice,c.staff_notice,c.receipt,c.business_name,c.revision FROM notification_configurations c JOIN module_instances i ON i.id=c.instance_id WHERE c.project_id=? ORDER BY i.local_id,c.form_id LIMIT 32').bind(project).all<{instance_id:string;local_id:string;form_id:string;owner_notice:number;staff_notice:number;receipt:number;business_name:string;revision:number}>()).results;
- const counts=(await db.prepare("SELECT state,reason,count(*) n FROM notification_notices WHERE project_id=? AND template IN ('appointment.staff-notice@1','appointment.request-receipt@1') GROUP BY state,reason").bind(project).all<{state:string;reason:string|null;n:number}>()).results;
- const sum=(f:(c:{state:string;reason:string|null})=>boolean)=>counts.filter(f).reduce((a,c)=>a+c.n,0);
- return {delivery,forms:rows.map(r=>({instanceId:r.local_id,formId:r.form_id,notices:{owner:!!r.owner_notice,staff:!!r.staff_notice,receipt:!!r.receipt},businessName:r.business_name,revision:r.revision})),
-  notices:{sent:sum(c=>['accepted','delivered'].includes(c.state)),waiting:sum(c=>['queued','dispatching','deferred','unknown-outcome'].includes(c.state)),
-   notSent:sum(c=>c.state==='cancelled'||c.state==='failed'||c.state==='bounced'||c.state==='complained'||c.state==='unresolved')}};
+ const counts=(await db.prepare("SELECT r.instance_id,r.form_id,n.state,count(*) n FROM notification_notices n JOIN module_records r ON r.id=substr(n.event_ref,6,36) AND r.project_id=n.project_id WHERE n.project_id=? AND n.template IN ('appointment.staff-notice@1','appointment.request-receipt@1') GROUP BY r.instance_id,r.form_id,n.state").bind(project).all<{instance_id:string;form_id:string;state:string;n:number}>()).results;
+ const ownerVerified=!!await db.prepare("SELECT 1 FROM notification_recipients WHERE project_id=? AND scope='owner'").bind(project).first();
+ const included=await includedNow(db,user,project);
+ return {delivery,forms:rows.map(r=>{
+  const mine=counts.filter(c=>c.instance_id===r.instance_id&&c.form_id===r.form_id),sum=(states:string[])=>mine.filter(c=>states.includes(c.state)).reduce((a,c)=>a+c.n,0);
+  const any=r.owner_notice||r.staff_notice||r.receipt;
+  const sending:FormSending=!any?'off':!included?'plan':delivery!=='active'?delivery:r.owner_notice&&!r.staff_notice&&!r.receipt&&!ownerVerified?'needs-address':'active';
+  return {instanceId:r.local_id,formId:r.form_id,notices:{owner:!!r.owner_notice,staff:!!r.staff_notice,receipt:!!r.receipt},businessName:r.business_name,revision:r.revision,sending,
+   counts:{sent:sum(['accepted','delivered']),waiting:sum(['queued','dispatching','deferred','unknown-outcome']),notSent:sum(['cancelled','failed','bounced','complained','unresolved'])}};
+ })};
 }
 
 /**
- * The approved-configuration resolver for `form.accepted` (inside the every-minute lane's queue step). Each accepted record after a configuration took effect,
- * within 24 hours, gets one outbox row per current recipient of each enabled notice, through `enqueueNotice`. No backfill, no model, no provider call.
- * Whether the notice is ever sent is decided at send time (`resolveConfiguredNotice`), including the owner's monthly spending limit.
- * shortcut: newest 50 events a pass, so a project taking more than 50 accepted records a minute leaves the oldest unqueued; revisit with WH-159 volumes.
+ * The approved-configuration resolver for `form.accepted` (inside the every-minute lane's queue step). Per configuration it walks the instance's accepted
+ * events in time order after a durable cursor, within 24 hours and after the configuration took effect, and queues one outbox row per current recipient
+ * of each enabled notice through `enqueueNotice`. The cursor moves only after every recipient of every event in the page was queued (`enqueueNotice` is
+ * idempotent, so a crash mid-page only repeats work); an event with no recipient then is final, which is the no-backfill rule. Nothing is queued while the
+ * owner's monthly spending limit is unset (D8), so cancelled rows can never use up the contact notice caps. No model, no provider call.
  */
-export async function queueConfiguredNotices(db:Db,nowMs:number,limit=50){
- const events=(await db.prepare(`SELECT e.entry_id,e.project_id,e.instance_id,c.form_id,c.revision,c.owner_notice,c.staff_notice,c.receipt,p.owner_user_id AS user_id,r.receipt_consent
-   FROM module_record_events e JOIN notification_configurations c ON c.instance_id=e.instance_id AND c.project_id=e.project_id
-   JOIN module_records r ON r.id=e.entry_id AND r.instance_id=e.instance_id AND r.form_id=c.form_id JOIN projects p ON p.id=e.project_id
-   WHERE e.event='form.accepted' AND e.created_at>=c.created_at AND e.created_at>?1 AND c.owner_notice+c.staff_notice+c.receipt>0
-    AND NOT EXISTS(SELECT 1 FROM notification_notices n WHERE n.project_id=e.project_id AND n.event_ref='form:'||e.entry_id||':r'||c.revision)
-   ORDER BY e.created_at DESC LIMIT ?2`).bind(Math.floor(nowMs/1000)-86400,limit).all<{entry_id:string;project_id:string;instance_id:string;form_id:string;revision:number;owner_notice:number;staff_notice:number;receipt:number;user_id:string;receipt_consent:number}>()).results;
- const admitted=new Map<string,boolean>();
- const included=async(user:string,project:string)=>{
-  const key=user+project;if(admitted.has(key))return admitted.get(key)!;
-  const ok=await includedNow(db,user,project);admitted.set(key,ok);return ok;
- };
+export async function queueConfiguredNotices(db:Db,settings:{customerCeilingCents?:number}|null,nowMs:number,pageSize=25,configLimit=50){
+ if(!(Number(settings?.customerCeilingCents)>0))return 0;
+ const configs=(await db.prepare(`SELECT c.instance_id,c.form_id,c.project_id,c.revision,c.owner_notice,c.staff_notice,c.receipt,c.cursor_at,c.cursor_entry,p.owner_user_id AS user_id
+   FROM notification_configurations c JOIN projects p ON p.id=c.project_id WHERE c.owner_notice+c.staff_notice+c.receipt>0 ORDER BY c.project_id,c.instance_id,c.form_id LIMIT ?`).bind(configLimit)
+  .all<{instance_id:string;form_id:string;project_id:string;revision:number;owner_notice:number;staff_notice:number;receipt:number;cursor_at:number;cursor_entry:string;user_id:string}>()).results;
  const refs=async(project:string,scope:'owner'|'staff'|'submitter',ref?:string)=>(await db.prepare('SELECT ref FROM notification_recipients WHERE project_id=?1 AND scope=?2 AND (?3 IS NULL OR ref=?3) LIMIT 20').bind(project,scope,ref??null).all<{ref:string}>()).results.map(x=>x.ref);
  let queued=0;
- for(const e of events){
-  if(!await included(e.user_id,e.project_id))continue;
-  const eventRef=`form:${e.entry_id}:r${e.revision}`,base={userId:e.user_id,projectId:e.project_id,eventRef,now:nowMs};
-  const one=async(spec:Parameters<typeof enqueueNotice>[1])=>{if((await enqueueNotice(db,spec)).queued)queued++;};
-  if(e.owner_notice)for(const ref of await refs(e.project_id,'owner'))await one({...base,scope:'owner-destination',destinationId:ref,template:'appointment.staff-notice@1'});
-  if(e.staff_notice)for(const ref of await refs(e.project_id,'staff'))await one({...base,scope:'project-staff',recipientRef:ref,template:'appointment.staff-notice@1'});
-  if(e.receipt&&e.receipt_consent)for(const ref of await refs(e.project_id,'submitter',e.entry_id))await one({...base,scope:'submitter',recipientRef:ref,template:'appointment.request-receipt@1',caps:{hour:3,day:10}});
+ for(const c of configs){
+  if(!await includedNow(db,c.user_id,c.project_id))continue;
+  const floor=Math.max(c.cursor_at,Math.floor(nowMs/1000)-86400),settled=Math.floor(nowMs/1000)-2; // events are whole seconds ordered by (second, id): only a settled second is final, so a late commit in the cursor's second cannot fall behind it
+  const events=(await db.prepare(`SELECT e.entry_id,e.created_at,r.receipt_consent,r.visitor_id FROM module_record_events e JOIN module_records r ON r.id=e.entry_id AND r.instance_id=e.instance_id AND r.form_id=?3
+    WHERE e.instance_id=?1 AND e.event='form.accepted' AND (e.created_at>?2 OR e.created_at=?2 AND e.entry_id>?4) AND e.created_at>=?5 AND e.created_at<=?7 ORDER BY e.created_at,e.entry_id LIMIT ?6`)
+   .bind(c.instance_id,c.cursor_at,c.form_id,c.cursor_entry,floor,pageSize,settled).all<{entry_id:string;created_at:number;receipt_consent:number;visitor_id:string|null}>()).results;
+  if(!events.length)continue;
+  for(const e of events){
+   const eventRef=`form:${e.entry_id}:r${c.revision}`,base={userId:c.user_id,projectId:c.project_id,eventRef,now:nowMs};
+   const one=async(spec:Parameters<typeof enqueueNotice>[1])=>{if((await enqueueNotice(db,spec)).queued)queued++;};
+   if(c.owner_notice)for(const ref of await refs(c.project_id,'owner'))await one({...base,scope:'owner-destination',destinationId:ref,template:'appointment.staff-notice@1',caps:{hour:10,day:50}});
+   if(c.staff_notice)for(const ref of await refs(c.project_id,'staff'))await one({...base,scope:'project-staff',recipientRef:ref,template:'appointment.staff-notice@1',caps:{hour:10,day:50}});
+   // A receipt's recipient key is the visitor, so the promised 3 an hour and 10 a day hold per visitor across submissions.
+   if(c.receipt&&e.receipt_consent&&e.visitor_id&&(await refs(c.project_id,'submitter',e.entry_id)).length)await one({...base,scope:'submitter',recipientRef:e.visitor_id,template:'appointment.request-receipt@1',caps:{hour:3,day:10}});
+  }
+  const last=events.at(-1)!;
+  await db.prepare('UPDATE notification_configurations SET cursor_at=?,cursor_entry=? WHERE instance_id=? AND form_id=? AND revision=?').bind(last.created_at,last.entry_id,c.instance_id,c.form_id,c.revision).run();
  }
  return queued;
 }
@@ -179,7 +194,7 @@ export async function resolveConfiguredNotice(db:Pick<D1Database,'prepare'>,n:{u
  const m=/^form:([0-9a-f-]{36}):r(\d{1,9})$/.exec(n.event_ref),flag=configuredFlag(n.template,n.scope);
  if(!m||!n.project_id||!flag)return 'record-removed';
  if(n.contained)return 'contained';
- const rec=await db.prepare('SELECT r.instance_id,r.form_id,r.values_json,r.receipt_consent,i.config_json FROM module_records r JOIN module_instances i ON i.id=r.instance_id WHERE r.id=? AND r.project_id=?').bind(m[1],n.project_id).first<{instance_id:string;form_id:string;values_json:string;receipt_consent:number;config_json:string}>();
+ const rec=await db.prepare('SELECT r.instance_id,r.form_id,r.values_json,r.receipt_consent,r.visitor_id,i.config_json FROM module_records r JOIN module_instances i ON i.id=r.instance_id WHERE r.id=? AND r.project_id=?').bind(m[1],n.project_id).first<{instance_id:string;form_id:string;values_json:string;receipt_consent:number;visitor_id:string|null;config_json:string}>();
  if(!rec)return 'record-removed';
  const c=await db.prepare('SELECT business_name,revision,owner_notice,staff_notice,receipt,config_json FROM notification_configurations WHERE instance_id=? AND form_id=?').bind(rec.instance_id,rec.form_id).first<{business_name:string;revision:number;owner_notice:number;staff_notice:number;receipt:number;config_json:string}>();
  const on=c&&(flag==='owner'?c.owner_notice:flag==='staff'?c.staff_notice:c.receipt);
@@ -187,8 +202,8 @@ export async function resolveConfiguredNotice(db:Pick<D1Database,'prepare'>,n:{u
  if(!await includedNow(db,n.user_id,n.project_id))return 'configuration-changed';
  let recipient:string|undefined;
  if(n.scope!=='owner-destination'){
-  if(!n.recipient_ref||(flag==='receipt'&&(n.recipient_ref!==m[1]||!rec.receipt_consent)))return 'recipient-revoked';
-  recipient=(await db.prepare('SELECT address FROM notification_recipients WHERE project_id=? AND scope=? AND ref=?').bind(n.project_id,flag==='staff'?'staff':'submitter',n.recipient_ref).first<{address:string}>())?.address;
+  if(!n.recipient_ref||(flag==='receipt'&&(n.recipient_ref!==rec.visitor_id||!rec.receipt_consent)))return 'recipient-revoked';
+  recipient=(await db.prepare('SELECT address FROM notification_recipients WHERE project_id=? AND scope=? AND ref=?').bind(n.project_id,flag==='staff'?'staff':'submitter',flag==='staff'?n.recipient_ref:m[1]).first<{address:string}>())?.address;
   if(!recipient)return 'recipient-revoked';
  }
  const variables:Record<string,string>={businessName:c.business_name},fields:ConfiguredSend['fields']={};

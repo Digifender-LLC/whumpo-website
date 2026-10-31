@@ -59,8 +59,8 @@ export async function enqueueNotice(db:Db,spec:NoticeSpec){
  const envelope=await attemptEnvelope(jobId,spec,id,1,spec.now,spec.now,expires);
  const [insert]=await db.batch([
   db.prepare(`INSERT INTO notification_notices(id,user_id,scope,project_id,destination_id,recipient_ref,recipient_key,template,event_ref,created_at,expires_at)
-   SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11 WHERE (SELECT count(*) FROM notification_notices WHERE recipient_key=?7 AND created_at>?10-3600000)<?12
-    AND (SELECT count(*) FROM notification_notices WHERE recipient_key=?7 AND created_at>?10-86400000)<?13
+   SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11 WHERE (SELECT count(*) FROM notification_notices WHERE recipient_key=?7 AND (template GLOB 'appointment.*')=(?8 GLOB 'appointment.*') AND created_at>?10-3600000)<?12
+    AND (SELECT count(*) FROM notification_notices WHERE recipient_key=?7 AND (template GLOB 'appointment.*')=(?8 GLOB 'appointment.*') AND created_at>?10-86400000)<?13
     AND (?14 IS NULL OR (SELECT count(*) FROM notification_notices WHERE recipient_key=?7 AND template=?8 AND created_at>?10-86400000)<?14)
     AND (?15 IS NULL OR (SELECT count(*) FROM notification_notices WHERE user_id=?2 AND template=?8 AND created_at>?10-86400000)<?15)
    ON CONFLICT(template,event_ref,recipient_key) DO NOTHING RETURNING id`)
@@ -139,11 +139,12 @@ async function attempt(db:Db,deps:DeliveryDeps,job:JobRow,lease:JobLease,ctx:Job
  };
  if(n.expires_at<=now)return deny('expired');
  if(!sendable(n.template)||notificationCatalog.templates[n.template]?.state!=='available')return deny('template-withdrawn');
- // WH-158 customer-configured notices (D3): nothing is sent until the owner sets the monthly spending limit; checked first, before any recipient is read or any attempt is claimed.
+ // WH-158 customer-configured notices (D3, D8): nothing is queued while the owner's monthly spending limit is unset, and this is the second line of defence: a notice that was queued while a limit was set, or by another lane,
+ // is cancelled here before any recipient is read or attempt claimed. `!(x>0)` so NaN cannot pass.
  const spendingLimit=Math.max(0,Math.floor(settings.customerCeilingCents??0));
  let recipient:string,code:string|undefined,confirm=false,configured:ConfiguredSend|undefined;
  if(isConfiguredTemplate(n.template)){
-  if(spendingLimit<=0)return deny('ceiling-unset');
+  if(!(spendingLimit>0))return deny('ceiling-unset');
   const r=await resolveConfiguredNotice(db,n);
   if(typeof r==='string')return deny(r);
   configured=r;
@@ -170,8 +171,8 @@ async function attempt(db:Db,deps:DeliveryDeps,job:JobRow,lease:JobLease,ctx:Job
  else return deny('recipient-revoked');
  const ceiling=Math.max(0,Math.min(100000,Math.floor(settings.sendCeiling)));
  // The owner's limit for configured notices is a dollar figure; the catalog price turns it into calls. The ledger above keeps the platform ceiling, so a low limit never throttles contact notices.
- const limitCalls=configured?Math.floor(spendingLimit*10000/notificationCatalog.providers[noticeProvider].price!.microsPerCall):ceiling;
- if(await noticeSendsInWindow(db,noticeProvider,now)>=Math.min(ceiling,limitCalls))return deny('ceiling');
+ const limitCalls=configured?Math.min(Math.floor(ceiling*0.8),Math.floor(spendingLimit*10000/notificationCatalog.providers[noticeProvider].price!.microsPerCall)):ceiling; // D10: configured notices never use the last fifth, kept for security and contact notices
+ if(await noticeSendsInWindow(db,noticeProvider,now)>=limitCalls)return deny('ceiling');
  const day=new Date(now).toISOString().slice(0,10);
  // Claim the attempt and count it against the ceiling in one transaction BEFORE the call. The ledger row keeps the lowest ceiling any run applied;
  // the notice trigger counts the send; the ledger trigger refuses the whole claim (journal intent included) past the 32-day ceiling.
@@ -260,7 +261,8 @@ const evidence:Record<string,{state:string;from:string}>={
 export async function applyNoticeEvent(db:Db,event:NoticeEvent,now:number=Date.now()){
  if(event.authenticated!==true)throw new NoticeError('EVENT_NOT_AUTHENTICATED');
  if(!(event.noticeId&&uuid.test(event.noticeId))&&!(typeof event.providerRef==='string'&&event.providerRef.length>=1&&event.providerRef.length<=100))throw new NoticeError('INVALID_NOTICE');
- const row=await db.prepare(`SELECT n.id,n.user_id,coalesce(d.address,lower(u.email)) AS address FROM notification_notices n JOIN users u ON u.id=n.user_id LEFT JOIN contact_notification_destinations d ON d.id=n.destination_id
+ const row=await db.prepare(`SELECT n.id,n.user_id,coalesce(d.address,va.address,lower(u.email)) AS address FROM notification_notices n JOIN users u ON u.id=n.user_id LEFT JOIN contact_notification_destinations d ON d.id=n.destination_id
+  LEFT JOIN visitor_notification_addresses va ON va.visitor_id=n.recipient_ref AND n.scope IN ('project-staff','submitter')
   WHERE (?1 IS NOT NULL AND n.id=?1) OR (?1 IS NULL AND n.provider_ref=?2)`).bind(event.noticeId??null,event.providerRef??null).first<{id:string;user_id:string;address:string}>();
  if(!row)return {applied:false};
  const move=evidence[event.type];

@@ -6401,8 +6401,9 @@ CREATE TRIGGER notification_notices_new BEFORE INSERT ON notification_notices BE
  SELECT RAISE(ABORT,'notification_notice_scope') WHERE
   (NEW.scope='owner-destination' AND NOT EXISTS(SELECT 1 FROM contact_notification_destinations d WHERE d.id=NEW.destination_id AND d.user_id=NEW.user_id AND d.project_id=NEW.project_id AND d.state IN ('unverified','verified')))
   OR (NEW.scope IN ('project-staff','submitter') AND NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id AND owner_user_id=NEW.user_id));
- SELECT RAISE(ABORT,'notification_notice_rate') WHERE (SELECT count(*) FROM notification_notices WHERE recipient_key=NEW.recipient_key AND created_at>NEW.created_at-3600000)>=10
-  OR (SELECT count(*) FROM notification_notices WHERE recipient_key=NEW.recipient_key AND created_at>NEW.created_at-86400000)>=50;
+ -- Customer-configured appointment notices (WH-158) count in their own bucket per recipient, so a form burst cannot use up the contact notice caps.
+ SELECT RAISE(ABORT,'notification_notice_rate') WHERE (SELECT count(*) FROM notification_notices WHERE recipient_key=NEW.recipient_key AND (template GLOB 'appointment.*')=(NEW.template GLOB 'appointment.*') AND created_at>NEW.created_at-3600000)>=10
+  OR (SELECT count(*) FROM notification_notices WHERE recipient_key=NEW.recipient_key AND (template GLOB 'appointment.*')=(NEW.template GLOB 'appointment.*') AND created_at>NEW.created_at-86400000)>=50;
 END;
 
 -- The frozen state table (docs/notifications.md). Nothing leaves unknown-outcome for queued, deferred or dispatching; it goes to an evidence state,

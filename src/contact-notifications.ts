@@ -157,11 +157,11 @@ export async function queueContactNotices(db:Pick<D1Database,'prepare'|'batch'>,
 }
 /** The contact adapter on journalLane (the every-minute registry entry): queues contact notices, then drains due attempts. Same caps, ceiling, suppression and at-most-one provider call per attempt as WH-036. */
 export function contactDeliveryLane(db:Pick<D1Database,'prepare'|'batch'>,deps:Omit<DeliveryDeps,'tally'>&{tally?:DeliveryDeps['tally']}):JobType{
- return notificationLane(db,{type:'contact_delivery',...deps,tally:deps.tally??{enabled:false,queued:0,accepted:0,retried:0,failed:0,cancelled:0,refused:0},queue:async now=>await queueContactNotices(db,deps.settings,now)+await queueConfiguredNotices(db,now)});
+ return notificationLane(db,{type:'contact_delivery',...deps,tally:deps.tally??{enabled:false,queued:0,accepted:0,retried:0,failed:0,cancelled:0,refused:0},queue:async now=>await queueContactNotices(db,deps.settings,now)+await queueConfiguredNotices(db,deps.settings,now)});
 }
 /** One dispatcher pass for tests and one-shot callers; the scheduled handler registers `contactDeliveryLane`. */
 export async function runContactDelivery(db:Pick<D1Database,'prepare'|'batch'>,settings:ContactNotificationSettings|null,sender:ContactSender,options:{now?:Date;timeoutMs?:number}={}){
- return runNotificationDelivery(db,settings,sender,{...options,queue:async now=>await queueContactNotices(db,settings!,now)+await queueConfiguredNotices(db,now)});
+ return runNotificationDelivery(db,settings,sender,{...options,queue:async now=>await queueContactNotices(db,settings!,now)+await queueConfiguredNotices(db,settings,now)});
 }
 export const destinationReviewMs=600000;
 /**

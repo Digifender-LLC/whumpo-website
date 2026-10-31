@@ -80,6 +80,7 @@ export {cleanPhoto} from './src/photo-format';
   export * as notificationConfigurations from './src/notification-configurations';
   export * as notificationOutbox from './src/notification-outbox';
   export * as contactEmail from './src/contact-email';
+  export * as supportDelivery from './src/support-delivery';
   export * as directory from './src/directory';
   export * as reviewTurnover from './src/review-turnover';
   export {contactPage} from './src/contact-page';

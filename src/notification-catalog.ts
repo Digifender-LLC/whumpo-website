@@ -71,7 +71,8 @@ function noRelayOrSecret(v:unknown,path:string,depth=0):void{
 }
 const separators=[String.fromCharCode(0x2028),String.fromCharCode(0x2029)];
 const lineSafe=(v:string)=>!/[\u0000-\u001f\u007f]/.test(v)&&!separators.some(c=>v.includes(c));
-const urlOrAddress=(v:string)=>/@|[a-z][a-z0-9+.-]*:\/\/|\bwww\.|\.(com|net|org|io|site|app)\b/i.test(v);
+// Domain-shaped text in general (a letter or digit, a dot, then two or more letters), not a list of endings; also addresses, schemes, www and dotted numbers.
+const urlOrAddress=(v:string)=>/@|[a-z][a-z0-9+.-]*:\/\/|\bwww\.|[\p{L}\p{N}-]\.\p{L}{2,}|\d+\.\d+\.\d+/iu.test(v);
 /** Variable types. Every value is validated at render; values are inserted as data and never re-parsed. */
 export const variableTypes:Readonly<Record<VariableSpec['type'],(v:unknown,field?:{options?:unknown})=>boolean>>=Object.freeze({
  'text-line':v=>typeof v==='string'&&v.length>=1&&v.length<=80&&lineSafe(v)&&!/[<>]/.test(v)&&!urlOrAddress(v),

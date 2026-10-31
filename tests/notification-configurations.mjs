@@ -12,7 +12,7 @@ Error.stackTraceLimit=0;
 const m=await currentSiteFixtureHandlers(),fixture=await databaseFixture({d1:process.argv.includes('--d1')}),{db}=fixture,id=()=>crypto.randomUUID();
 const originalFetch=globalThis.fetch;let network=0;globalThis.fetch=async()=>{network++;throw Error('No network or inference is available');};
 const row=(q,...p)=>db.prepare(q).bind(...p).first(),rows=async(q,...p)=>(await db.prepare(q).bind(...p).all()).results,run=(q,...p)=>db.prepare(q).bind(...p).run();
-let cases=0;const check=async(name,fn)=>{try{await fn();cases++;}catch(error){console.error('FAILED:',name);throw error;}};
+let cases=0,forged_n=0;const check=async(name,fn)=>{try{await fn();cases++;}catch(error){console.error('FAILED:',name);throw error;}};
 const {appAuth:auth,appGateway}=m,C=m.notificationConfigurations,Contact=m.contactNotifications;
 const pins=kind=>{const e=m.moduleCatalog.find(x=>x.kind===kind);return {module:{...e.module},schema:{...e.schema}};};
 const env={DB:db,ENVIRONMENT:'test',AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})}};
@@ -53,7 +53,10 @@ async function gateway(o,payload,v){
  const response=await appGateway.applicationGateway(new Request(o.host+'/modules',{method:'POST',headers:{'cf-connecting-ip':'192.0.2.9','content-type':'application/json',origin:o.host,cookie:v.cookie},body:JSON.stringify(payload)}),env);
  return {status:response.status,body:await response.json()};
 }
+// Events are whole seconds, ordered by (second, id) behind a cursor. The suite's clock runs ahead (`soon`), so each submission takes a second of its own, as real time would.
+let lastSecond=0;
 const submit=async(o,records,v,{consent=false,service='repair',day='monday',form='appointment'}={})=>{
+ while(Math.floor(Date.now()/1000)<=lastSecond)await new Promise(r=>setTimeout(r,50));lastSecond=Math.floor(Date.now()/1000);
  const r=await gateway(o,{api:'whumpo-modules',version:1,operation:'forms.submit',resourceId:records.id,configRevision:records.config_revision,requestId:id(),target:{formId:form},input:{values:{name:PRIVATE,service,day},...(consent?{receiptConsent:true}:{})}},v);
  assert.equal(r.status,200,JSON.stringify(r.body));return r.body.result.entryId;
 };
@@ -82,9 +85,11 @@ function provider(){
  p.send=async notice=>{p.calls.push(notice);return {accepted:true,providerRef:'ref-'+p.calls.length};};
  return p;
 }
-const settings=cents=>({provider:'cloudflare-email',review:'r',sendCeiling:1000,...(cents?{customerCeilingCents:cents}:{})});
+const settings=cents=>({provider:'cloudflare-email',review:'r',sendCeiling:1000,...(cents===undefined?{}:{customerCeilingCents:cents})});
 // The lane leases a few attempts per pass, so a test drains it with repeated passes.
-async function pass(p,cents,at){let total={cancelled:0,accepted:0};for(let i=0;i<8;i++){const t=await Contact.runContactDelivery(db,settings(cents),p.send,{now:at??new Date(),timeoutMs:200});total={cancelled:total.cancelled+t.cancelled,accepted:total.accepted+t.accepted};if(t.cancelled+t.accepted+t.refused+t.failed+t.retried===0)break;}return total;}
+// Accepted events are queued once their second has settled (two seconds), so the suite lets the clock run ahead instead of sleeping.
+const soon=()=>Date.now()+4000;
+async function pass(p,cents,at){let total={cancelled:0,accepted:0};for(let i=0;i<30;i++){const t=await Contact.runContactDelivery(db,settings(cents),p.send,{now:at??new Date(soon()),timeoutMs:200});total={cancelled:total.cancelled+t.cancelled,accepted:total.accepted+t.accepted};if(t.cancelled+t.accepted+t.refused+t.failed+t.retried===0)break;}return total;}
 const notices=project=>rows("SELECT n.*,j.state AS job_state FROM notification_notices n LEFT JOIN job_journal j ON j.id=n.job_id WHERE n.project_id=? AND n.template LIKE 'appointment.%' ORDER BY n.created_at,n.id",project);
 const sourceOf=f=>readFileSync(new URL('../'+f,import.meta.url),'utf8');
 
@@ -96,13 +101,14 @@ try{
  await verifyVisitor(v1,'receipt-one@example.com');await verifyVisitor(v2,'receipt-two@example.com');await verifyVisitor(staff,'staff@example.com');await grantStaff(a,staff,access);
  await verifyOwnerAddress(a,'owner-a@example.com');await verifyOwnerAddress(b,'owner-b@example.com');await verifyVisitor(bv,'receipt-b@example.com');
  const beforeEntry=await submit(a,records,v1,{consent:true});
- await new Promise(r=>setTimeout(r,1100)); // events are whole seconds; a configuration takes effect from its own second
-
+ await new Promise(r=>setTimeout(r,1100)); // a configuration takes effect from its own second
+ 
  await check('an exact review binds the notices, price and business name; preparing changes nothing and provisions nothing',async()=>{
   const ledger0=(await row('SELECT count(*) n FROM notification_send_ledger')).n,jobs0=(await row('SELECT count(*) n FROM job_journal')).n,dest0=(await row('SELECT count(*) n FROM contact_notification_destinations')).n;
   const r=await reviewControl(a,['owner','receipt','staff'],'Garden Salon');assert.equal(r.status,200,r.error);
   const turn=(await m.readChat(a.scope,a.user)).turns.find(t=>t.id===r.id);
-  assert.match(turn.assistant_text,/Business name in the emails: Garden Salon/);assert.match(turn.assistant_text,/\$0\.00035 per email/);assert.match(turn.assistant_text,/Not sending yet/);assert.match(turn.assistant_text,/not a confirmed booking/);
+  assert.match(turn.assistant_text,/Business name in the emails: Garden Salon/);
+  const siteName=(await row('SELECT name FROM projects WHERE id=?',a.project)).name;assert.ok(turn.assistant_text.includes('on the website “'+siteName+'”'),'The review names the site as well as the form');assert.match(turn.assistant_text,/\$0\.00035 per email/);assert.match(turn.assistant_text,/Not sending yet/);assert.match(turn.assistant_text,/not a confirmed booking/);
   assert.equal(turn.notification_configuration_confirmation_id,r.id,'The chat turn carries the confirmation id');
   const review=await row('SELECT * FROM notification_configuration_reviews WHERE id=?',r.id);
   assert.equal(review.status,'pending');assert.equal(review.price_micros,350);assert.equal(review.base_revision,0);assert.equal(JSON.parse(review.config_json).length,3);assert.match(review.digest,/^[0-9a-f]{64}$/);
@@ -134,6 +140,12 @@ try{
   await assert.rejects(()=>run("UPDATE notification_configuration_reviews SET status='applied',confirmed_by=? WHERE id=?",prepared.id,review.id),/notification_configuration_changed/);
   const other=await control(a,{type:'moduleActivationReview',projectId:a.project,instanceId:'requests',action:'disable'});
   await assert.rejects(()=>run("UPDATE notification_configuration_reviews SET status='applied',confirmed_by=? WHERE id=?",other.id,review.id),/notification_configuration_changed/);
+  for(const [mode,action] of [['ai',JSON.stringify({type:'confirm',kind:'notificationConfiguration',reviewId:review.id})],['guided',null],['guided',JSON.stringify({type:'confirm',kind:'notificationConfiguration',reviewId:id()})],['guided',JSON.stringify({type:'confirm',kind:'contactNotification',reviewId:review.id})]]){
+   const forged=id();
+   try{await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status,action_json) VALUES(?,?,?,'forged','forged',datetime('now'),?,'completed',?)",forged,a.user,200000+(++forged_n),mode,action);}
+   catch(error){assert.match(String(error),/chat_action_mode/,'A model turn cannot even carry a control');continue;}
+   await assert.rejects(()=>run("UPDATE notification_configuration_reviews SET status='applied',confirmed_by=? WHERE id=?",forged,review.id),/notification_configuration_changed/,'Only a guided typed confirm for this review applies it');
+  }
   assert.equal((await row('SELECT status FROM notification_configuration_reviews WHERE id=?',review.id)).status,'pending');
   // Typed chat text cannot confirm either: the handler needs the reviewed reply and the trigger needs a confirm control turn.
   const text=await typed(a,'/confirm-notification-setup '+review.id);assert.equal(text.result.status,409);
@@ -177,6 +189,8 @@ try{
   assert.match((await reviewControl(a,['receipt'],'Garden Salon','walk-in')).error??'',/sign in/);
   assert.equal((await reviewControl(a,['owner'],'Garden Salon','missing')).status,404);
   assert.equal((await reviewControl(a,['owner'],'visit www.example.com')).status,400);
+  for(const bad of ['evil.xyz','Salon.shop','Visit salon.co.uk','10.0.0.1'])assert.equal((await reviewControl(a,['owner'],bad)).status,400,bad+' is domain-shaped text');
+  assert.equal((await reviewControl(a,['owner'],'Peluquería Ñandú')).status,200,'Accented names pass on the control path, as on the model path');
   assert.equal((await typed(a,`/review-notification-setup ${a.project} requests appointment owner a@example.com`)).result.status,400);
   const stranger=await control(b,{type:'notificationSetupReview',projectId:a.project,instanceId:'requests',formId:'appointment',notices:['owner'],businessName:'Intruder'});assert.ok(stranger.status===403||stranger.status===404,String(stranger.status));assert.equal((await row('SELECT count(*) n FROM notification_configuration_reviews WHERE id=?',stranger.id)).n,0);
   const c=await owner({grants:false});
@@ -189,14 +203,14 @@ try{
  await check('accepted forms queue notices for the owner, opted-in staff and consenting visitors only; no backfill; duplicates once',async()=>{
   assert.equal((await notices(a.project)).length,0,'The submission made before configuration is not backfilled');
   const e1=await submit(a,records,v1,{consent:true}),e2=await submit(a,records,v2,{consent:false});
-  assert.equal(await C.queueConfiguredNotices(db,Date.now()),5,'owner+staff+receipt for the consenting submission, owner+staff for the other');
-  assert.equal(await C.queueConfiguredNotices(db,Date.now()),0,'Another pass queues nothing');
+  assert.equal(await C.queueConfiguredNotices(db,settings(500),soon()),5,'owner+staff+receipt for the consenting submission, owner+staff for the other');
+  assert.equal(await C.queueConfiguredNotices(db,settings(500),soon()),0,'Another pass queues nothing');
   const list=await notices(a.project);
   const key=n=>`${n.template}|${n.scope}`;
   assert.deepEqual(list.map(key).sort(),['appointment.request-receipt@1|submitter','appointment.staff-notice@1|owner-destination','appointment.staff-notice@1|owner-destination','appointment.staff-notice@1|project-staff','appointment.staff-notice@1|project-staff'].sort());
   assert.ok(list.every(n=>n.state==='queued'&&n.job_state!==null),'Each is one queued notice with its journal envelope');
   assert.ok(list.every(n=>n.event_ref.startsWith('form:')&&!JSON.stringify(n).includes(PRIVATE)),'Rows carry ids, never values');
-  assert.equal(list.filter(n=>n.scope==='submitter').length,1);assert.equal(list.find(n=>n.scope==='submitter').recipient_ref,e1);
+  assert.equal(list.filter(n=>n.scope==='submitter').length,1);assert.equal(list.find(n=>n.scope==='submitter').recipient_ref,v1.visitorId,'A receipt is keyed to the visitor, not the record');
   assert.equal(list.filter(n=>n.event_ref.includes(e2)&&n.scope==='submitter').length,0,'No consent, no receipt');
   assert.equal((await notices(b.project)).length,0,'Another tenant has no configuration and gets nothing');
   assert.notEqual(beforeEntry,e1);
@@ -219,7 +233,7 @@ try{
 
  await check('with the limit set, owner and staff notices are content-free and receipts carry only reference, service and day',async()=>{
   const e=await submit(a,records,v1,{consent:true,service:'visit',day:'tuesday'});
-  assert.equal(await C.queueConfiguredNotices(db,Date.now()),3);
+  assert.equal(await C.queueConfiguredNotices(db,settings(500),soon()),3);
   const p=provider();await pass(p,500);
   const mine=p.calls.filter(c=>c.projectId===a.project);assert.equal(mine.length,3);
   const by=r=>mine.find(c=>c.recipient===r);
@@ -237,20 +251,21 @@ try{
  });
 
  await check('the owner limit bounds spending: past it a configured notice is cancelled with ceiling',async()=>{
-  await submit(a,records,v2,{consent:false});await C.queueConfiguredNotices(db,Date.now());
+  await submit(a,records,v2,{consent:false});await C.queueConfiguredNotices(db,settings(500),soon());
   // $0.01 buys 28 calls at the catalog price of $0.00035 per email; the 32-day window already holds that many sends.
   await run("UPDATE notification_send_ledger SET sends=sends+28 WHERE day=(SELECT max(day) FROM notification_send_ledger)");
   const p=provider();
   await pass(p,1);
   const left=(await notices(a.project)).filter(n=>n.reason==='ceiling');
-  assert.ok(left.length>=1&&p.calls.length===0,'Used up: nothing is sent');
+  assert.ok(left.length>=1&&p.calls.length===0,'Used up: nothing is sent '+left.length+' '+JSON.stringify(p.calls.map(c=>[c.template,c.recipient]))+JSON.stringify((await notices(a.project)).slice(-4).map(n=>[n.scope,n.state,n.reason])));
   assert.ok(left.every(n=>n.state==='cancelled'));
  });
 
  await check('eligibility is read again at send time: revoked consent, opt-out, suppression, removed record, switched-off or changed configuration, lost plan, containment',async()=>{
   const v3=await visitor(a);await verifyVisitor(v3,'receipt-three@example.com');
+  const vf=await visitor(a);await verifyVisitor(vf,'receipt-fresh@example.com'); // a visitor with a clean 3-an-hour receipt allowance
   const e=await submit(a,records,v3,{consent:true});
-  const queue=()=>C.queueConfiguredNotices(db,Date.now());
+  const queue=()=>C.queueConfiguredNotices(db,settings(500),soon());
   await queue();
   const mine=async()=>(await notices(a.project)).filter(n=>n.event_ref.includes(e));
   assert.equal((await mine()).length,3);
@@ -272,10 +287,10 @@ try{
   assert.ok(!p2.calls.some(c=>c.idempotencyKey.includes(e2+':r'+oldRevision)),'Nothing queued under the old revision is sent');
   // Back to the full preset; a removed record, a lost plan feature and containment each cancel.
   await configure(a,['owner','staff','receipt'],'Garden Salon');
-  const e3=await submit(a,records,v1,{consent:true}),e4=await submit(a,records,v1,{consent:true}),e5=await submit(a,records,v1,{consent:true});await queue();
+  const e3=await submit(a,records,vf,{consent:true}),e4=await submit(a,records,v1,{consent:true}),e5=await submit(a,records,v1,{consent:true});await queue();
   await run('DELETE FROM module_records WHERE id=?',e3);
   const p3=provider();
-  await pass(p3,500,new Date(Date.now()-0));
+  await pass(p3,500);
   const of=ev=>notices(a.project).then(l=>l.filter(n=>n.event_ref.includes(ev)));
   assert.ok((await of(e3)).length>=1&&(await of(e3)).every(n=>n.state==='cancelled'&&n.reason==='record-removed'),JSON.stringify((await of(e3)).map(n=>[n.state,n.reason])));
   // Plan feature lost: nothing is queued for a new submission, and a queued notice is cancelled at send time.
@@ -283,10 +298,10 @@ try{
   const eLost=await submit(a,records,v1,{consent:true});assert.equal(await queue(),0,'Not admitted: nothing queued');
   assert.equal((await of(eLost)).length,0);
   await run("INSERT INTO feature_preview_grants VALUES(?,1,?,?,'core.forms','dispatch','private-test-acceptance','restored',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",id(),a.user,a.project);
-  assert.ok(await queue()>=1,'Admitted again: the still-recent submission is queued (owner and staff may be at their hourly cap)');
+  await queue();assert.equal((await row('SELECT cursor_entry e FROM notification_configurations WHERE project_id=?',a.project)).e,eLost,'Admitted again: the held event is handled (its recipients may be at their hourly caps by now)');
   // Contained project: nothing more is sent for it.
   await run("INSERT INTO operator_containments(id,scope,subject_kind,subject_id,allowance,operator_ref,reason,request_digest,expires_at) VALUES(?,'contact','project',?,NULL,'human:test','reason',?,?)",id(),a.project,'f'.repeat(64),new Date(Date.now()+3600000).toISOString());
-  const e6=await submit(a,records,v1,{consent:true});await queue();const p4=provider();await pass(p4,500);
+  const e6=await submit(a,records,vf,{consent:true});await queue();const p4=provider();await pass(p4,500);
   assert.ok((await of(e6)).length>=1&&(await of(e6)).every(n=>n.state==='cancelled'&&n.reason==='contained'),JSON.stringify((await of(e6)).map(n=>[n.state,n.reason])));
   assert.equal(p4.calls.filter(c=>c.projectId===a.project).length,0,JSON.stringify(p4.calls.map(c=>[c.template,c.recipient])));
   void e4;void e5;
@@ -295,7 +310,7 @@ try{
  await check('two tenants are isolated: events, recipients and configurations never cross',async()=>{
   const cfg=await configure(b,['owner','receipt'],'Other Salon');void cfg;
   const eb=await submit(b,theirs,bv,{consent:true});
-  await C.queueConfiguredNotices(db,Date.now());
+  await C.queueConfiguredNotices(db,settings(500),soon());
   const list=await notices(b.project);
   assert.deepEqual(list.map(n=>n.event_ref.includes(eb)).filter(Boolean).length,list.length);
   assert.ok(list.every(n=>n.user_id===b.user));
@@ -313,7 +328,79 @@ try{
   const response=await m.worker.fetch(new Request('https://whumpo.com/api/projects/'+a.project+'/module-records',{headers:{cookie:`__Host-whumpo_session=${a.token}`,origin:'https://whumpo.com'}}),{...(fixture.env??{}),...env},{waitUntil(){}});
   assert.equal(response.status,200);const body=await response.json();
   assert.equal(body.notifications.delivery,'inactive','No CONTACT_EMAIL binding in this environment');assert.equal(body.notifications.forms[0].formId,'appointment');assert.ok(Array.isArray(body.items));
-  const cancelled=body.notifications.notices;assert.ok(cancelled.notSent>=1);assert.ok(!JSON.stringify(body.notifications).includes('@'));
+  const mine=body.notifications.forms[0];assert.equal(mine.sending,'inactive','Nothing is sending in this environment');assert.ok(mine.counts.notSent>=1&&mine.counts.sent>=1,JSON.stringify(mine.counts));assert.ok(!JSON.stringify(body.notifications).includes('@'));
+ });
+
+
+ await check('D8-D10: nothing is queued while the limit is unset, appointment volume cannot use the contact caps, receipts are capped per visitor, the customer limit keeps a reserve',async()=>{
+  const c=await owner(),cr=await setup(c),cv=await visitor(c),cacc=await row("SELECT * FROM module_instances WHERE project_id=? AND local_id='members'",c.project);void cacc;
+  const dest=await verifyOwnerAddress(c,'owner-c@example.com');await verifyVisitor(cv,'receipt-c@example.com');
+  const r=await reviewControl(c,['owner','receipt'],'Cap Salon');assert.equal((await control(c,{type:'confirm',kind:'notificationConfiguration',reviewId:r.id})).status,200);
+  for(let i=0;i<12;i++)await submit(c,cr,cv,{consent:true});
+  // D8: with no limit, the queue step writes nothing at all, so no cancelled row can ever count against a cap.
+  for(const unset of [undefined,{},{customerCeilingCents:0},{customerCeilingCents:NaN},{customerCeilingCents:-5}])assert.equal(await C.queueConfiguredNotices(db,unset===undefined?null:unset,soon()),0);
+  assert.equal((await notices(c.project)).length,0,'No row exists while the limit is unset');
+  const contactNotice=n=>m.notificationOutbox.enqueueNotice(db,{userId:c.user,scope:'owner-destination',projectId:c.project,destinationId:dest,template:'contact.new-message@1',eventRef:'message:'+n,now:Date.now()});
+  // The same twelve requests with the limit set: owner notices stop at their own 10 an hour, receipts at 3 per visitor.
+  await C.queueConfiguredNotices(db,settings(500),soon());
+  const list=await notices(c.project);
+  assert.equal(list.filter(n=>n.scope==='owner-destination').length,10,'The owner notice bucket holds 10 an hour');
+  assert.equal(list.filter(n=>n.scope==='submitter').length,3,'3 receipts an hour per visitor, however many submissions');
+  assert.ok(list.filter(n=>n.scope==='submitter').every(n=>n.recipient_ref===cv.visitorId));
+  // D9: those ten rows do not count against the contact notice bucket of the same destination, in the guarded insert or in the trigger.
+  for(let i=0;i<10;i++)assert.equal((await contactNotice(i)).queued,true,'Contact notice '+i+' is still accepted after the appointment burst');
+  assert.equal((await contactNotice(10)).queued,false,'Contact notices keep their own 10 an hour');
+  // The send-time gate stands behind the queue: a row queued under a limit that is later removed, or is NaN, is cancelled before any call.
+  const p=provider();await pass(p,NaN);assert.equal(p.calls.filter(x=>x.template.startsWith('appointment.')).length,0,'A NaN limit is no limit');
+  assert.ok((await notices(c.project)).every(n=>n.state==='cancelled'&&n.reason==='ceiling-unset'),JSON.stringify((await notices(c.project)).map(n=>[n.scope,n.state,n.reason])));
+  // D10: the customer limit is clamped to 80% of the platform ledger ceiling; the last fifth is kept for security and contact notices.
+  const cv2=await visitor(c);await verifyVisitor(cv2,'receipt-c2@example.com');await submit(c,cr,cv2,{consent:true});await run("UPDATE notification_configurations SET cursor_at=0,cursor_entry='' WHERE project_id=?",c.project);
+  const used=(await row("SELECT coalesce(sum(sends),0) n FROM notification_send_ledger")).n;
+  await run("UPDATE notification_send_ledger SET sends=sends+? WHERE day=(SELECT max(day) FROM notification_send_ledger)",800-used);
+  const q=await C.queueConfiguredNotices(db,settings(100000),soon());assert.ok(q>=1);
+  const p2=provider();await pass(p2,100000);const sent=p2.calls.filter(x=>x.template.startsWith('appointment.')).length;
+  assert.equal(sent,0,'800 of the 1000 platform calls are used: the owner limit (100000 cents) is clamped to 80%, so the last fifth is kept');
+  assert.ok((await notices(c.project)).some(n=>n.reason==='ceiling'),'Past 800 of 1000 a configured notice is cancelled with ceiling');
+  assert.ok((await row("SELECT coalesce(sum(sends),0) n FROM notification_send_ledger")).n<=800);
+  assert.equal(Contact.contactNotificationConfig({CONTACT_NOTIFICATION_PROVIDER:'cloudflare-email',CONTACT_NOTIFICATION_REVIEW:'r',NOTIFICATION_CUSTOMER_CEILING_CENTS:'100000'}).settings.customerCeilingCents,100000);
+ });
+
+ await check('the resolver cursor: pages advance, no event is lost behind recipientless ones, a repeat queues nothing, the event index is used',async()=>{
+  const c=await owner(),cr=await setup(c),cv=await visitor(c);await verifyOwnerAddress(c,'owner-d@example.com');
+  const r=await reviewControl(c,['owner'],'Cursor Salon');assert.equal((await control(c,{type:'confirm',kind:'notificationConfiguration',reviewId:r.id})).status,200);
+  const got=[];for(let i=0;i<5;i++)got.push(await submit(c,cr,cv,{consent:false}));
+  const one=()=>C.queueConfiguredNotices(db,settings(500),soon(),2);
+  assert.equal(await one(),2);assert.equal(await one(),2);assert.equal(await one(),1);assert.equal(await one(),0,'All five were queued, in pages of two');
+  assert.deepEqual((await notices(c.project)).map(n=>n.event_ref.slice(5,41)).sort(),[...got].sort());
+  // An event nobody could receive is final: it never blocks the ones after it, and a later recipient is not given the old event.
+  await run("DELETE FROM contact_notification_destinations WHERE project_id=?",c.project);
+  const lone=await submit(c,cr,cv,{consent:false});assert.equal(await one(),0);
+  await verifyOwnerAddress(c,'owner-e@example.com');const next=await submit(c,cr,cv,{consent:false});assert.equal(await one(),1);
+  assert.ok((await notices(c.project)).some(n=>n.event_ref.includes(next))&&!(await notices(c.project)).some(n=>n.event_ref.includes(lone)));
+  const cursor=await row('SELECT cursor_at,cursor_entry FROM notification_configurations WHERE project_id=?',c.project);assert.equal(cursor.cursor_entry,next>lone?next:next,'The cursor stands on the newest handled event');
+  const plan=(await rows("EXPLAIN QUERY PLAN SELECT e.entry_id FROM module_record_events e WHERE e.instance_id=?1 AND e.event='form.accepted' AND e.created_at>=?2 ORDER BY e.created_at,e.entry_id",cr.id,0)).map(x=>x.detail).join(' ');
+  assert.match(plan,/module_record_events_resolver/,'The resolver reads events through its index, not a full scan');
+  // Not admitted: nothing moves, and the event is picked up once admission returns.
+  await run("UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE user_id=? AND feature_id='core.forms' AND operation='dispatch'",c.user);
+  const held=await submit(c,cr,cv,{consent:false});assert.equal(await one(),0);
+  await run("INSERT INTO feature_preview_grants VALUES(?,1,?,?,'core.forms','dispatch','private-test-acceptance','restored',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",id(),c.user,c.project);
+  assert.equal(await one(),1);assert.ok((await notices(c.project)).some(n=>n.event_ref.includes(held)));
+ });
+
+ await check('the lanes agree on the limit, and a bounce or complaint suppresses the recipient, not the owner',async()=>{
+  const env={SUPPORT_NOTIFICATION_PROVIDER:'cloudflare-email',SUPPORT_NOTIFICATION_REVIEW:'r',CONTACT_NOTIFICATION_PROVIDER:'cloudflare-email',CONTACT_NOTIFICATION_REVIEW:'r',CONTACT_EMAIL:{send:async()=>({})}};
+  assert.equal(m.supportDelivery.supportDelivery({...env,NOTIFICATION_CUSTOMER_CEILING_CENTS:'500'}).shared.customerCeilingCents,500);
+  assert.equal(m.supportDelivery.supportDelivery(env).shared.customerCeilingCents,undefined);
+  assert.equal(m.contactEmail.contactDelivery({...env,NOTIFICATION_CUSTOMER_CEILING_CENTS:'500'}).settings.customerCeilingCents,500);
+  const ownerAddress='owner-a@example.com',pick=scope=>row("SELECT * FROM notification_notices WHERE project_id=? AND scope=? AND state='accepted' ORDER BY created_at LIMIT 1",a.project,scope);
+  const staffNotice=await pick('project-staff'),receiptNotice=await pick('submitter');assert.ok(staffNotice&&receiptNotice);
+  const suppressed=async()=>(await rows('SELECT address,reason FROM contact_notification_suppressions WHERE user_id=?',a.user)).map(x=>x.address);
+  assert.ok(!(await suppressed()).includes(ownerAddress));
+  await m.notificationOutbox.applyNoticeEvent(db,{noticeId:staffNotice.id,type:'bounce',authenticated:true});
+  assert.deepEqual((await suppressed()).filter(x=>x==='staff@example.com'||x===ownerAddress),['staff@example.com'],'The staff address is suppressed, not the owner');
+  await m.notificationOutbox.applyNoticeEvent(db,{noticeId:receiptNotice.id,type:'complaint',authenticated:true});
+  assert.ok((await suppressed()).includes('receipt-one@example.com')&&!(await suppressed()).includes(ownerAddress));
+  assert.equal((await row("SELECT state FROM contact_notification_destinations WHERE project_id=?",a.project)).state,'verified','The owner destination is untouched');
  });
 
  await check('no inference path: the configuration, resolver and send path import no model, maintainer or gateway code; the network was never used',async()=>{

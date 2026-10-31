@@ -14,8 +14,12 @@ import {ConfirmButton,ProjectSelect,QueryStatus,StaleProject,useProjectSelection
 type Item=RecordsSummaryFacts['items'][number];
 type RecordPage={resourceId:string;recordId:string;configRevision:number;fields:{key:string;label:string;type:string}[];
  items:{entryId:string;revision:number;createdAt:string;updatedAt:string;submittedBy:'public'|'visitor'|'staff';visitorId:string|null;values:Record<string,unknown>}[];next:string|null};
-export type Setup={delivery:'inactive'|'spending-limit-unset'|'active';forms:{instanceId:string;formId:string;notices:{owner:boolean;staff:boolean;receipt:boolean};businessName:string;revision:number}[];notices:{sent:number;waiting:number;notSent:number}};
-const sending={inactive:'Not sending yet. Whumpo has not turned on email delivery.','spending-limit-unset':'Not sending yet. Whumpo has not set its monthly spending limit, so appointment emails are held back and cancelled, not sent later.',active:'Sending is on. Each email is checked again just before it goes out.'} as const;
+export type FormSending='inactive'|'spending-limit-unset'|'active'|'off'|'plan'|'needs-address';
+export type Setup={delivery:'inactive'|'spending-limit-unset'|'active';forms:{instanceId:string;formId:string;notices:{owner:boolean;staff:boolean;receipt:boolean};businessName:string;revision:number;sending:FormSending;counts:{sent:number;waiting:number;notSent:number}}[]};
+const sending:Record<FormSending,string>={inactive:'Not sending yet. Whumpo has not turned on email delivery.','spending-limit-unset':'Not sending yet. Whumpo has not set its monthly spending limit, so appointment emails are not queued or sent, and a request that arrives now is not emailed later.',
+ active:'Sending is on for this form. Each email is checked again just before it goes out.',off:'All appointment emails are turned off for this form.',plan:'Not sending: appointment emails need Starter or a higher plan for this website.','needs-address':'Not sending yet: you turned on the notice to yourself, but no notification address is verified. Verify one in Dashboard → Contact inbox.'};
+const plainName=/^[\p{L}\p{N}][\p{L}\p{N} '&.,-]{0,79}$/u;
+const nameProblem=(name:string)=>!name?'Enter the business name to show in the emails.':!plainName.test(name)||/ {2}/.test(name)?'Use letters, numbers, spaces and . , \' & - only, up to 80 characters.':/@|:\/\/|\bwww\.|[\p{L}\p{N}-]\.\p{L}{2,}|\d+\.\d+\.\d+/iu.test(name)?'Leave out links, domain names and email addresses.':'';
 const states={inactive:'Disabled',active:'Active',suspended:'Suspended',migrating:'Migrating'} as const;
 const who={public:'Anonymous form',visitor:'Visitor',staff:'Staff'} as const;
 const total=(s:Item['schemas'][number])=>s.records.public+s.records.visitor+s.records.staff;
@@ -37,22 +41,25 @@ export function RecordsSummaryCard({facts,projectId}:{facts:RecordsSummaryFacts;
 
 
 /** WH-158 appointment email notices for one records form. Choosing only prepares an exact review in Chat (notificationSetupReview); the separate
- * confirmation there saves it. The card says plainly whether anything is being sent. Counts and switches only: no address and no submitted value. */
+ * confirmation there saves it. The status is for THIS form: whether it would send, and its own counts. Switches and counts only: no address and no submitted value. */
 export function NoticeSetup({project,instance,form,submit,setup}:{project:string;instance:string;form:string;submit:string;setup:Setup}){
  const {runAction,commandBusy}=useWorkspace(),saved=setup.forms.find(f=>f.instanceId===instance&&f.formId===form),[error,setError]=useState('');
- const [on,setOn]=useState(saved?.notices??{owner:true,staff:false,receipt:false}),[name,setName]=useState(saved?.businessName??''),id=`${instance}-${form}`;
- const notices=(['owner','staff','receipt'] as const).filter(k=>on[k]),valid=/^[A-Za-z0-9][A-Za-z0-9 '&.,-]{0,79}$/.test(name.trim())&&!/ {2}/.test(name.trim());
- const rows=[['owner','Tell me when a request arrives','Email to your verified notification address. It only says a request arrived.'],['staff','Tell staff who opted in','Email to staff with a verified address. It only says a request arrived.'],['receipt','Email a receipt to the visitor',submit==='public'?'Needs a form visitors sign in to use.':'Only for a signed-in visitor with a verified address who asks for it. Shows a reference, service and day.']] as const;
- async function review(){setError('');try{await runAction({type:'notificationSetupReview',projectId:project,instanceId:instance,formId:form,notices,businessName:name.trim()});}catch(e){setError(message(e));}}
+ const receiptBlocked=submit==='public',[on,setOn]=useState({...(saved?.notices??{owner:true,staff:false,receipt:false}),...(receiptBlocked?{receipt:false}:{})}),[name,setName]=useState(saved?.businessName??''),id=`${instance}-${form}`;
+ const notices=(['owner','staff','receipt'] as const).filter(k=>on[k]),clean=name.trim().normalize('NFC'),problem=nameProblem(clean),shown=!!name&&!!problem;
+ const rows=[['owner','Tell me when a request arrives','Email to your verified notification address. It only says a request arrived.'],['staff','Tell staff who opted in','Email to staff with a verified address. It only says a request arrived.'],['receipt','Email a receipt to the visitor',receiptBlocked?'Off: this form is open to anonymous visitors, and a receipt needs a signed-in visitor.':'Only for a signed-in visitor with a verified address who asks for it. Shows a reference, service and day.']] as const;
+ const nothing=!notices.length&&!saved,why=commandBusy?'Another Chat request is running.':problem||(nothing?'Choose at least one notice.':'');
+ async function review(){setError('');try{await runAction({type:'notificationSetupReview',projectId:project,instanceId:instance,formId:form,notices,businessName:clean});}catch(e){setError(message(e));}}
  return <section aria-labelledby={id+'-t'} className="space-y-4 rounded-md bg-surface-sunken p-4 text-body-sm">
   <h3 id={id+'-t'} className="font-semibold break-words">Appointment emails for “{form}”</h3>
-  <p role="status" className="rounded-md border border-line bg-surface-raised p-3">{sending[setup.delivery]}{saved?` Saved settings: revision ${saved.revision}.`:' No settings saved yet.'}{setup.notices.sent+setup.notices.waiting+setup.notices.notSent>0&&` Emails so far: ${setup.notices.sent} sent, ${setup.notices.waiting} waiting, ${setup.notices.notSent} not sent.`}</p>
+  <p role="status" className="rounded-md border border-line bg-surface-raised p-3">{sending[saved?.sending??setup.delivery]}{saved?` Saved settings: revision ${saved.revision}.`:' No settings saved yet.'}{saved&&saved.counts.sent+saved.counts.waiting+saved.counts.notSent>0&&` Emails for this form so far: ${saved.counts.sent} sent, ${saved.counts.waiting} waiting, ${saved.counts.notSent} not sent.`}</p>
+  {receiptBlocked&&saved?.notices.receipt&&<p role="note" className="rounded-md border border-line p-3">This form is now open to anonymous visitors, so its saved receipt cannot be sent. Reviewing from here turns the receipt off and keeps your other choices.</p>}
   <fieldset className="grid gap-3"><legend className="mb-1 font-medium">Choose notices</legend>
-   {rows.map(([key,label,help])=><label key={key} className="flex min-h-11 items-start gap-3"><input type="checkbox" className="mt-1 size-5 shrink-0" checked={on[key]} disabled={commandBusy||key==='receipt'&&submit==='public'} aria-describedby={`${id}-${key}`} onChange={e=>setOn({...on,[key]:e.target.checked})}/><span><span className="block font-medium">{label}</span><span id={`${id}-${key}`} className="block text-ink-muted">{help}</span></span></label>)}
+   {rows.map(([key,label,help])=><label key={key} className="flex min-h-11 items-start gap-3"><input type="checkbox" className="mt-1 size-5 shrink-0" checked={on[key]} disabled={commandBusy||key==='receipt'&&receiptBlocked} aria-describedby={`${id}-${key}`} onChange={e=>setOn({...on,[key]:e.target.checked})}/><span><span className="block font-medium">{label}</span><span id={`${id}-${key}`} className="block text-ink-muted">{help}</span></span></label>)}
   </fieldset>
-  <Field label="Business name shown in the emails"><Input value={name} onChange={e=>setName(e.target.value)} maxLength={80} autoComplete="organization" aria-invalid={!!name&&!valid} aria-describedby={id+'-name'}/></Field>
-  <p id={id+'-name'} className="text-caption text-ink-muted">Plain text only: no link or email address.</p>
-  <Button type="button" variant="secondary" className="min-h-11" disabled={commandBusy||!valid||!notices.length&&!saved} onClick={()=>void review()}>Review in Chat</Button>
+  <Field label="Business name shown in the emails"><Input value={name} onChange={e=>setName(e.target.value)} maxLength={80} autoComplete="organization" aria-invalid={shown} aria-describedby={id+'-name'}/></Field>
+  <p id={id+'-name'} className={shown?'text-caption':'text-caption text-ink-muted'}>{shown?problem:'Plain text only: no link, domain name or email address.'}</p>
+  <Button type="button" variant="secondary" className="min-h-11" disabled={commandBusy||!!problem||nothing} aria-describedby={id+'-why'} onClick={()=>void review()}>Review in Chat</Button>
+  {!!why&&!shown&&<p id={id+'-why'} className="text-caption text-ink-muted">{why}</p>}
   {error&&<p role="alert">{error}</p>}
   <p className="text-caption text-ink-muted">Saving only records these settings. Chat shows the exact review first; it sets up no sender or provider.</p>
  </section>;
