@@ -199,7 +199,9 @@ async function attempt(db:Db,deps:DeliveryDeps,job:JobRow,lease:JobLease,ctx:Job
    ...(verifier?[db.prepare("UPDATE owner_email_changes SET token_verifier=?1,revision=revision+1 WHERE change_id=?2 AND account_id=?3 AND state='pending' AND revision=?4").bind(verifier,n.event_ref,n.user_id,n.c_revision)]:[]),
    db.prepare(`UPDATE notification_notices SET state='dispatching',attempts=attempts+1,dispatched_at=?1,outcome_at=NULL,reason=NULL,sent_to=?7
     WHERE id=?2 AND state IN ('queued','deferred') AND job_id=?3 AND EXISTS(SELECT 1 FROM job_journal WHERE id=?3 AND state='awaiting' AND fence=?4)
-     AND (?5 IS NULL OR EXISTS(SELECT 1 FROM owner_email_changes WHERE change_id=?6 AND token_verifier=?5)) RETURNING attempts`).bind(now,n.id,job.id,lease.fence,verifier,n.event_ref,recipient)]);
+     AND (?5 IS NULL OR EXISTS(SELECT 1 FROM owner_email_changes WHERE change_id=?6 AND token_verifier=?5))
+     AND (notification_notices.scope NOT IN ('project-staff','submitter') OR EXISTS(SELECT 1 FROM visitor_notification_addresses WHERE visitor_id=notification_notices.recipient_ref AND address=?7 AND verified_at IS NOT NULL)) RETURNING attempts`).bind(now,n.id,job.id,lease.fence,verifier,n.event_ref,recipient)]);
+ // The last clause serializes the claim with an erasure: an address removed, changed or deleted after it was read is never written to sent_to, and the attempt takes the not-sent path below.
   begun=claimed[1];dispatched=claimed[claimed.length-1];
  }catch(cause){
   if(String(cause).includes('notification_send_ceiling'))return deny('ceiling');

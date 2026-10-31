@@ -725,10 +725,10 @@ END;
 -- WH-158: a notice remembers the exact address of its last attempt (`notification_notices.sent_to`) so a bounce can suppress exactly that address. It is the
 -- visitor's address, so it leaves with it: removing or changing the address, or deleting the visitor (the cascade deletes the address row), clears it on that visitor's notices.
 CREATE TRIGGER visitor_notification_address_erased AFTER DELETE ON visitor_notification_addresses BEGIN
- UPDATE notification_notices SET sent_to=NULL WHERE recipient_ref=OLD.visitor_id AND scope IN ('project-staff','submitter') AND sent_to IS NOT NULL;
+ UPDATE notification_notices SET sent_to=NULL WHERE recipient_key IN ('project-staff:'||OLD.visitor_id,'submitter:'||OLD.visitor_id) AND sent_to IS NOT NULL;
 END;
 CREATE TRIGGER visitor_notification_address_replaced AFTER UPDATE OF address ON visitor_notification_addresses WHEN NEW.address IS NOT OLD.address BEGIN
- UPDATE notification_notices SET sent_to=NULL WHERE recipient_ref=OLD.visitor_id AND scope IN ('project-staff','submitter') AND sent_to IS NOT NULL;
+ UPDATE notification_notices SET sent_to=NULL WHERE recipient_key IN ('project-staff:'||OLD.visitor_id,'submitter:'||OLD.visitor_id) AND sent_to IS NOT NULL;
 END;
 -- The single place recipients are derived (read at enqueue and again before every provider call): `ref` is the destination id (owner),
 -- the visitor id (staff) or the record id (submitter). Suppression is the project owner's, across all three scopes.

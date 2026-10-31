@@ -386,6 +386,30 @@ try{
   assert.equal((await row("SELECT state FROM contact_notification_destinations WHERE project_id=?",a.project)).state,'suppressed','Only the owner destination whose own address bounced is suppressed');
  });
 
+ await check('the claim serializes with erasure: an address removed, changed or deleted between the read and the claim is never written and nothing is sent; the erasure triggers use the recipient index',async()=>{
+  limit(500);
+  const race=async(label,act)=>{
+   const o=await owner(),rec=await setup(o),v=await visitor(o);await verifyVisitor(v,label+'-private@example.test');await configure(o,['receipt'],'Garden Salon');
+   await submit(o,rec,v,{consent:true});
+   const real=db.batch.bind(db);let fired=false;
+   // The hook fires once, on the batch that carries the sent_to claim, i.e. after the recipient was read and before the claim commits.
+   db.batch=async st=>{if(!fired&&st.some(x=>/sent_to=\?7/.test(x.sql??x.statement??x.query??JSON.stringify(x)??''))){fired=true;await act(v);}return real(st);};
+   const p=provider();try{await pass(p,500);}finally{db.batch=real;}
+   assert.ok(fired,label+': the race hook fired');
+   assert.equal(p.calls.length,0,label+': no provider call');
+   assert.equal((await row("SELECT count(*) n FROM notification_notices WHERE project_id=? AND sent_to IS NOT NULL",o.project)).n,0,label+': sent_to stays null');
+   assert.equal((await row("SELECT count(*) n FROM notification_notices WHERE sent_to LIKE ?",label+'-private%')).n,0);
+   assert.equal((await row("SELECT count(*) n FROM notification_notices WHERE project_id=? AND state='accepted'",o.project)).n,0);
+  };
+  await race('remove',v=>run('DELETE FROM visitor_notification_addresses WHERE visitor_id=?',v.visitorId));
+  await race('change',v=>run("UPDATE visitor_notification_addresses SET address='new@example.test',code_hash=NULL,code_expires_at=NULL,code_failures=0,verified_at=NULL WHERE visitor_id=?",v.visitorId));
+  await race('delete',v=>run('DELETE FROM app_visitors WHERE id=?',v.visitorId));
+  const plan=(await rows("EXPLAIN QUERY PLAN UPDATE notification_notices SET sent_to=NULL WHERE recipient_key IN ('project-staff:x','submitter:x') AND sent_to IS NOT NULL")).map(x=>x.detail).join(' ');
+  assert.match(plan,/notification_notices_recipient/,'The erasure update uses the recipient_key index, not a scan: '+plan);
+  const triggers=(await rows("SELECT sql FROM sqlite_master WHERE type='trigger' AND name IN ('visitor_notification_address_erased','visitor_notification_address_replaced')")).map(x=>x.sql);
+  assert.ok(triggers.length===2&&triggers.every(t=>t.includes("recipient_key IN ('project-staff:'||OLD.visitor_id,'submitter:'||OLD.visitor_id)")));
+ });
+
  await check('D8-D10: appointment volume cannot use the contact caps, an over-cap request is still admitted, receipts are capped per visitor, the customer limit keeps a reserve',async()=>{
   const c=await owner(),cr=await setup(c),cv=await visitor(c);
   const dest=await verifyOwnerAddress(c,'owner-c@example.com');await verifyVisitor(cv,'receipt-c@example.com');
@@ -435,7 +459,7 @@ try{
  });
 
  await check('business names: one rule on every path; scripts with combining marks pass, look-alike dots, invisible and control characters and template syntax are refused',async()=>{
-  const ok=['Joe’s Hair','Peluquería Ñandú','सुंदर सैलून','ร้านเสริมสวย','சென்னை சலூன்',"Joe's Hair & Co., Ltd.",'Salon 21'],bad=['live．com','live。com','live​.com','live\u0085x','{{businessName}}','evil.xyz','a‍b','x y','Dr Smith','www.example','user@host','10.0.0.1','<b>x</b>','ㅤ','Gardenㅤ Salon','aﾠb','a\u034fb','a\ufe0fb','a\u{E0100}b','a\u180bb','a\u17b4b','example\u0660com','exampleꓸcom','exampleꞏcom','example .com','١٢٧.٠.٠.١','１２７.０.０.１'];
+  const ok=['ジョー・サロン','صالون، الورد','Joe’s Hair','Peluquería Ñandú','सुंदर सैलून','ร้านเสริมสวย','சென்னை சலூன்',"Joe's Hair & Co., Ltd.",'Salon 21'],bad=['live．com','live。com','live​.com','live\u0085x','{{businessName}}','evil.xyz','a‍b','x y','Dr Smith','www.example','user@host','10.0.0.1','<b>x</b>','ㅤ','Gardenㅤ Salon','aﾠb','a\u034fb','a\ufe0fb','a\u{E0100}b','a\u180bb','a\u17b4b','example\u0660com','exampleꓸcom','exampleꞏcom','example .com','١٢٧.٠.٠.١','１２７.０.０.１'];
   for(const name of ok){
    assert.ok(m.chatControl({type:'notificationSetupReview',projectId:a.project,instanceId:'requests',formId:'appointment',notices:['owner'],businessName:name}),'control accepts '+name);
    assert.equal((await reviewControl(a,['owner'],name)).status,200,'build accepts '+name);
