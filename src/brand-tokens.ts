@@ -118,3 +118,17 @@ export function describeBrand(b: Brand | null): string | null {
   const c = (p: BrandColors) => `text ${p.ink}, background ${p.paper}, accent ${p.accent}`;
   return [`Light: ${c(b.light)}`, b.dark ? `Dark: ${c(b.dark)}` : 'Dark: not set (the site stays light)', `Type: ${brandFonts[b.font].label}`, `Corners: ${brandRadii[b.radius].label}`, `Spacing: ${brandDensities[b.density].label}`, b.logo ? `Logo: image ${b.logo.id.slice(0, 8)}, described as “${b.logo.alt}”` : 'Logo: none', b.source ? `From brand kit version ${b.source.version}` : 'Not linked to a saved kit'].join('\n');
 }
+
+export type ContrastPair = {id: string; label: string; ratio: number; pass: boolean};
+/** Every pairing the site relies on, with its measured ratio, for the owner screen's readable report. */
+export function contrastPairs(c: BrandColors): ContrastPair[] {
+  if (![c.ink, c.paper, c.accent].every(isHex)) return [];
+  const panel = tintOf(c), row = (id: string, label: string, fg: string, bg: string): ContrastPair => { const ratio = contrast(fg, bg); return {id, label, ratio, pass: ratio >= minimumContrast}; };
+  return [row('ink-paper', 'Text on the background', c.ink, c.paper), row('accent-paper', 'Accent on the background', c.accent, c.paper), row('ink-panel', 'Text on soft panels', c.ink, panel), row('accent-panel', 'Accent on soft panels', c.accent, panel)];
+}
+/** What `adjustColors` changed, in plain words. */
+export function describeAdjustment(before: BrandColors, after: BrandColors): string[] {
+  const names = {ink: 'text color', accent: 'accent color'} as const, out: string[] = [];
+  for (const key of ['ink', 'accent'] as const) if (before[key] !== after[key]) out.push(`Changed the ${names[key]} from ${before[key]} to ${after[key]}, which is ${luminance(after[key]) < luminance(before[key]) ? 'darker' : 'lighter'}, so it reads at ${minimumContrast} to 1 or better.`);
+  return out;
+}
