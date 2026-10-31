@@ -11470,7 +11470,7 @@
       },
       {
        "file": "src/app-gateway.ts",
-       "contains": "if(await servingStopped(env.DB,project)&&!(method==='GET'&&(path==='export'||path==='data'||"
+       "contains": "if(stopped&&!(method==='GET'&&(path==='export'||path==='data'||"
       }
      ],
      "tests": [
@@ -12393,7 +12393,7 @@
     },
     "admission": {
      "state": "evidenced",
-     "detail": "Per-IP gateway limiter on every step; the sign-in limiter on starting and completing verification; at most 3 verification notices an hour, 10 a day and 5 of this template a day per visitor; five wrong codes lock a code.",
+     "detail": "Per-IP gateway limiter on every step; the sign-in limiter on address and both verification steps; per visitor at most 3 verification notices an hour, 10 a day and 5 a day, per owner 50 a day, per target address 3 a day across owners (a hash kept in the notice, surviving erasure); five wrong codes lock a code.",
      "enforcedAt": [
       {
        "file": "src/app-gateway.ts",
@@ -12401,11 +12401,11 @@
       },
       {
        "file": "src/app-gateway.ts",
-       "contains": "if(step.startsWith('verify/')&&!(await env.AUTH_LIMITER.limit({key:'app-notify:'+ip})).success)"
+       "contains": "if((step.startsWith('verify/')||step==='address')&&!(await env.AUTH_LIMITER.limit({key:'app-notify:'+ip})).success)"
       },
       {
        "file": "src/notification-recipients.ts",
-       "contains": "caps:{hour:3,day:10,templateDay:5}"
+       "contains": "caps:{hour:3,day:10,templateDay:5,userTemplateDay:50,eventPrefixDay:{prefix,max:3}}"
       }
      ],
      "tests": [
@@ -12503,7 +12503,7 @@
       },
       {
        "file": "tests/visitor-notification-routes.mjs",
-       "contains": "assert.equal((await notices(a5.who)).at(-1).reason,'recipient-revoked');",
+       "contains": "let v=await queued();await go(a,v,N+'address/remove',{body:{}});await nothingSent(v,'recipient-revoked');",
        "asserts": "a removed address stops its queued notice"
       }
      ]

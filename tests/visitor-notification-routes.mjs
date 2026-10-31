@@ -35,14 +35,21 @@ const address=async(a,v,value)=>{secrets.add(value);return go(a,v,N+'address',{b
 async function verified(a,v,value){
  assert.equal((await address(a,v,value)).status,200);
  assert.equal((await go(a,v,N+'verify/start',{body:{},overrides:ceiling})).json.status,'queued');await deliver();
- const done=await go(a,v,N+'verify/complete',{body:{code:code()}});assert.equal(done.status,200);assert.equal(done.json.verified,true);
+
+ const done=await go(a,v,N+'verify/complete',{body:{code:sent.findLast(n=>n.recipient===value).verificationCode}});assert.equal(done.status,200);assert.equal(done.json.verified,true);
 }
 // Seeding a staff grant writes the row the reviewed Chat path writes; that path is off for the seed and restored after.
 const roleTrigger=await one("SELECT sql FROM sqlite_master WHERE name='module_access_role_insert'");
+// The caps cases leave codes queued behind the ones later cases wait for; cancel them as the lane would (a queued notice may be cancelled).
+const dropQueued=()=>run("UPDATE notification_notices SET state='cancelled',reason='expired',outcome_at=? WHERE state='queued' AND event_ref GLOB 'verify:*'",Date.now());
+const journalAttempts=async v=>(await one('SELECT j.attempt a FROM job_journal j JOIN notification_notices n ON n.job_id=j.id WHERE n.recipient_key=? ORDER BY n.created_at DESC LIMIT 1','submitter:'+v.who)).a;
 const grant=async(a,v)=>{await run('DROP TRIGGER module_access_role_insert');try{await run("INSERT INTO module_access_roles(instance_id,visitor_id,project_id,role,state,review_id,access_revision,granted_at,updated_at) SELECT access_id,id,project_id,'staff','granted',?,1,unixepoch(),unixepoch() FROM app_visitors WHERE id=?",id(),v.who);}finally{await run(roleTrigger.sql);}};
 try{
  const a=await app(),b=await app(),a1=await visitor(a),a2=await visitor(a),a3=await visitor(a),a4=await visitor(a),b1=await visitor(b);
  const ALICE='alice@example.test',BOB='bob@example.test';
+ // Containment and serving stops are views over operator tables; the fixture swaps in one table it can fill.
+ await run('CREATE TABLE fx_contained(project_id TEXT,scope TEXT)');await run('DROP VIEW operator_serving_stopped');await run('DROP VIEW operator_contained_projects');
+ await run('CREATE VIEW operator_contained_projects AS SELECT project_id,scope FROM fx_contained');await run("CREATE VIEW operator_serving_stopped AS SELECT DISTINCT project_id FROM fx_contained WHERE scope='serving'");
 
  await check('every step needs a session; nothing is stored',async()=>{
   const before=await snap();
@@ -55,7 +62,7 @@ try{
 
  await check('a visitor sets, reads, changes and removes only their own address, and the response is a hint',async()=>{
   const r=await address(a,a1,' Alice@Example.test ');assert.equal(r.status,200);
-  assert.deepEqual(r.json,{address:'a***@e***.test',verified:false,codePending:false,staffRole:false,staffOptIn:false,deliveryAvailable:false});
+  assert.deepEqual(r.json,{address:'a***@e***.test',verified:false,codePending:false,staffRole:false,staffOptIn:false,deliveryAvailable:false,stopped:false});
   assert.equal((await row(a1.who)).address,ALICE);
   assert.deepEqual((await go(a,a1,'account/notifications')).json,r.json);
   assert.equal((await go(a,a2,'account/notifications')).json.address,null,'another visitor of the same project sees nothing of it');
@@ -175,30 +182,85 @@ try{
   assert.equal((await go(a,a2,N+'verify/complete',{body:{code:code()}})).json.verified,true);
  });
 
- await check('rate limits: the per-IP and sign-in limiters refuse, and the per-visitor cap stops a fourth code in an hour',async()=>{
+ await check('rate limits: the per-IP and sign-in limiters refuse (verification and address steps), and the per-visitor hourly cap stops a fourth code',async()=>{
   const before=await snap(),no={limit:async()=>({success:false})};
   for(const [step,body] of steps)assert.equal((await go(a,a1,P(step),{body,overrides:{API_LIMITER:no,...ceiling}})).status,429,'API '+step);
   assert.equal((await go(a,a4,N+'verify/start',{body:{},overrides:{AUTH_LIMITER:no,...ceiling}})).status,429);
   assert.equal((await go(a,a1,N+'verify/complete',{body:{code:'AAAAAAAA'},overrides:{AUTH_LIMITER:no}})).status,429);
-  assert.equal((await go(a,a1,N+'address',{body:{address:ALICE},overrides:{AUTH_LIMITER:no}})).status,200,'the sign-in limiter bounds only the verification steps');
+  assert.equal((await go(a,a1,N+'address',{body:{address:ALICE},overrides:{AUTH_LIMITER:no}})).status,429,'the address step can be probed (suppression, owner mailbox), so it is bounded too');
+  assert.equal((await go(a,a1,N+'staff/opt-out',{body:{},overrides:{AUTH_LIMITER:no}})).status,200,'the sign-in limiter bounds only address and verification steps');
   assert.equal(await snap(),before);
-  await address(a,a4,'dave@example.test');
-  for(let i=0;i<3;i++){assert.equal((await go(a,a4,N+'verify/start',{body:{},overrides:ceiling})).json.status,'queued','request '+i);await deliver();}
+  for(let i=0;i<3;i++){await address(a,a4,`dave${i}@example.test`);assert.equal((await go(a,a4,N+'verify/start',{body:{},overrides:ceiling})).json.status,'queued','request '+i);await deliver();}
+  await address(a,a4,'dave3@example.test');
   const capped=await go(a,a4,N+'verify/start',{body:{},overrides:ceiling});assert.equal(capped.status,429);assert.equal((await notices(a4.who)).length,3);
  });
 
- await check('the lane sends nothing while the limit is unset or the address is gone, suppressed, verified, or the project contained',async()=>{
-  const a5=await visitor(a),before=sent.length;
-  await address(a,a5,'erin@example.test');await go(a,a5,N+'verify/start',{body:{},overrides:ceiling});await deliver(null);
-  assert.equal(sent.length,before);assert.deepEqual((await notices(a5.who)).map(n=>[n.state,n.reason]),[['cancelled','ceiling-unset']]);assert.equal((await row(a5.who)).code_hash,null);
-  await go(a,a5,N+'verify/start',{body:{},overrides:ceiling});await go(a,a5,N+'address/remove',{body:{}});await deliver();
-  assert.equal(sent.length,before);assert.equal((await notices(a5.who)).at(-1).reason,'recipient-revoked');
-  await address(a,a5,'erin@example.test');await go(a,a5,N+'verify/start',{body:{},overrides:ceiling});
-  await run('INSERT INTO contact_notification_suppressions(user_id,address,reason,created_at) VALUES(?,?,?,?)',a.user,'erin@example.test','bounce',new Date().toISOString());
-  await deliver();assert.equal(sent.length,before);assert.equal((await notices(a5.who)).at(-1).reason,'suppressed');
-  await run('INSERT INTO contact_notification_suppressions(user_id,address,reason,created_at) VALUES(?,?,?,?)',a.user,'frank@example.test','bounce',new Date().toISOString());
-  const refusal=await address(a,a5,'frank@example.test');assert.equal(refusal.status,409);assert.equal(refusal.json.error,'That address cannot receive notices from Whumpo.');
-  const queuedBefore=(await notices(a5.who)).length;assert.equal((await go(a,a5,N+'verify/start',{body:{},overrides:ceiling})).status,409,'a suppressed stored address is not queued');assert.equal((await notices(a5.who)).length,queuedBefore);
+ // ---- The delivery lane re-reads everything at send time. Each case queues a real notice through the route, changes one fact, and runs the lane. ----
+ const lane={provider:'cloudflare-email',review:'r',sendCeiling:1000,customerCeilingCents:500};
+ // Runs the lane once; `hook` fires between the lane's read of the notice and its claim (the claim batch is the only four-statement batch it issues).
+ const laneRace=async(hook,settings=lane)=>{let fired=false;const raced=new Proxy(db,{get(t,k){if(k==='batch')return async s=>{if(hook&&!fired&&s.length===4){fired=true;await hook();}return t.batch(s);};const v=t[k];return typeof v==='function'?v.bind(t):v;}});
+  for(let i=0;i<3;i++)await O.runNotificationDelivery(raced,settings,sender,{now:new Date()});return fired;};
+ let fresh=0;const queued=async(addressValue)=>{const v=await visitor(a);await address(a,v,addressValue??`lane${++fresh}@example.test`);assert.equal((await go(a,v,N+'verify/start',{body:{},overrides:ceiling})).json.status,'queued');return v;};
+ const last=async v=>(await notices(v.who)).at(-1);
+ const attempts=async v=>(await one('SELECT attempts,dispatched_at FROM notification_notices WHERE recipient_key=?','submitter:'+v.who));
+ const nothingSent=async(v,reason,hook,settings)=>{const before=sent.length;await laneRace(hook,settings);assert.equal(sent.length,before,'nothing is sent');const n=await last(v);assert.deepEqual([n.state,n.reason],['cancelled',reason]);assert.equal((await row(v.who))?.code_hash??null,null,'no code is stored');};
+
+ await check('the lane sends nothing while the owner limit is unset',async()=>{const v=await queued();await nothingSent(v,'ceiling-unset',null,{...lane,customerCeilingCents:undefined});assert.equal((await attempts(v)).attempts,0);});
+ await check('the lane stops for an address removed, suppressed, verified, a revoked visitor, a contained project or a serving stop, before any attempt',async()=>{
+  let v=await queued();await go(a,v,N+'address/remove',{body:{}});await nothingSent(v,'recipient-revoked');assert.equal((await attempts(v)).attempts,0);
+  v=await queued();await run('INSERT INTO contact_notification_suppressions(user_id,address,reason,created_at) VALUES(?,?,?,?)',a.user,(await row(v.who)).address,'bounce',new Date().toISOString());await nothingSent(v,'suppressed');assert.equal((await attempts(v)).attempts,0);
+  v=await queued();await run("UPDATE visitor_notification_addresses SET code_hash=?,code_expires_at=unixepoch()+600 WHERE visitor_id=?",await sha256('ABCD2345'),v.who);await run('UPDATE visitor_notification_addresses SET verified_at=unixepoch(),code_hash=NULL,code_expires_at=NULL WHERE visitor_id=?',v.who);
+  await nothingSent(v,'recipient-revoked');assert.equal((await journalAttempts(v)),0,'an already verified address is stopped before the attempt is begun');
+  v=await queued();await run('UPDATE app_visitors SET revoked=1 WHERE id=?',v.who);await nothingSent(v,'recipient-revoked');assert.equal((await journalAttempts(v)),0);
+  for(const scope of ['contact','serving']){
+   v=await queued();await run('INSERT INTO fx_contained VALUES(?,?)',a.project,scope);await nothingSent(v,'contained');assert.equal((await journalAttempts(v)),0,scope);await run('DELETE FROM fx_contained');
+  }
+ });
+ await check('races: an address removed, changed or verified between the lane read and its claim is never sent to, and the notice is cancelled, not left queued',async()=>{
+  let v=await queued();await nothingSent(v,'recipient-revoked',()=>go(a,v,N+'address/remove',{body:{}}));
+  assert.equal((await go(a,v,N+'verify/start',{body:{},overrides:ceiling})).status,404,'no address to verify');
+  v=await queued();const old=(await row(v.who)).address;await nothingSent(v,'recipient-revoked',()=>address(a,v,'moved'+fresh+'@example.test'));assert.notEqual((await row(v.who)).address,old);
+  assert.equal((await go(a,v,N+'verify/start',{body:{},overrides:ceiling})).json.status,'queued','a cancelled notice is not "pending"');
+  await go(a,v,N+'address/remove',{body:{}});await laneRace(null);
+  v=await queued();await nothingSent(v,'recipient-revoked',async()=>{await run("UPDATE visitor_notification_addresses SET code_hash=?,code_expires_at=unixepoch()+600 WHERE visitor_id=?",await sha256('ABCD2345'),v.who);await run('UPDATE visitor_notification_addresses SET verified_at=unixepoch(),code_hash=NULL,code_expires_at=NULL WHERE visitor_id=?',v.who);});
+  assert.ok((await row(v.who)).verified_at,'the race left the address verified and its code untouched');
+ });
+
+ await check('caps: three codes a day to one address across every owner, and the count survives removing the address',async()=>{
+  const target='target.cap@example.test',owners=[a,b],visitors=[];
+  for(let i=0;i<4;i++){const v=await visitor(owners[i%2]);visitors.push([owners[i%2],v]);await go(owners[i%2],v,N+'address',{body:{address:target}});secrets.add(target);}
+  for(const [app_,v] of visitors.slice(0,3))assert.equal((await go(app_,v,N+'verify/start',{body:{},overrides:ceiling})).json.status,'queued');
+  const fourth=visitors[3];assert.equal((await go(fourth[0],fourth[1],N+'verify/start',{body:{},overrides:ceiling})).status,429,'the fourth owner-visitor is refused for the same address');
+  await deliver();
+  // Sent, then removed: sent_to is erased with the address, and the cap still holds.
+  for(const [app_,v] of visitors.slice(0,3)){await go(app_,v,N+'address/remove',{body:{}});}
+  assert.ok((await db.prepare("SELECT sent_to FROM notification_notices WHERE event_ref GLOB 'verify:*'").all()).results.every(r=>r.sent_to!==target));
+  await go(fourth[0],fourth[1],N+'address/remove',{body:{}});await go(fourth[0],fourth[1],N+'address',{body:{address:target}});
+  assert.equal((await go(fourth[0],fourth[1],N+'verify/start',{body:{},overrides:ceiling})).status,429,'removing and re-adding the address does not reset the cap');
+  assert.notEqual((await go(fourth[0],fourth[1],N+'address',{body:{address:'different.cap@example.test'}})).status,0);
+  assert.equal((await go(fourth[0],fourth[1],N+'verify/start',{body:{},overrides:ceiling})).json.status,'queued','another address is not affected');
+  await dropQueued();
+ });
+ await check('caps: one owner is limited to 50 codes a day however many visitors it has, and other owners are not affected',async()=>{
+  const c=await app();let refusedAt=0;
+  for(let i=1;i<=52&&!refusedAt;i++){const v=await visitor(c);await address(c,v,`bulk${i}@example.test`);const r=await go(c,v,N+'verify/start',{body:{},overrides:ceiling});if(r.status===429)refusedAt=i;else assert.equal(r.json.status,'queued');}
+  assert.equal(refusedAt,51,'the 51st code of one owner is refused');
+  const other=await visitor(a);await address(a,other,'bulk.other@example.test');assert.equal((await go(a,other,N+'verify/start',{body:{},overrides:ceiling})).json.status,'queued');
+  await dropQueued();
+ });
+ await check('caps: five codes in a day per visitor, spaced beyond the hourly cap',async()=>{
+  const v=await visitor(a),now=Date.now();
+  for(let i=0;i<5;i++){await address(a,v,`spread${i}@example.test`);const r=await R.startVisitorVerification(db,a.project,v.who,{ceilingCents:500,now:now-(5-i)*4*3600000});assert.equal(r.status,'queued',String(i));await deliver();}
+  await address(a,v,'spread5@example.test');
+  await assert.rejects(R.startVisitorVerification(db,a.project,v.who,{ceilingCents:500,now}),e=>e.status===429,'the sixth in a day is refused');
+ });
+ await check('the owner\'s own mailboxes and suppressed addresses are refused at address with a fixed message',async()=>{
+  const v=await visitor(a),email=(await one('SELECT email FROM users WHERE id=?',a.user)).email;
+  assert.equal((await address(a,v,email.toUpperCase())).status,409);
+  const d=id();await run('INSERT INTO contact_notification_destinations(id,user_id,project_id,address,created_at) VALUES(?,?,?,?,?)',d,a.user,a.project,'owner.inbox@example.test',new Date().toISOString());
+  const r=await address(a,v,'owner.inbox@example.test');assert.equal(r.status,409);assert.equal(r.json.error,'That address cannot receive notices from Whumpo.');
+  assert.equal(await row(v.who),null,'nothing stored');
+  assert.equal((await go(a,v,N+'address',{body:{address:'owner.inbox@example.test'},overrides:{AUTH_LIMITER:{limit:async()=>({success:false})}}})).status,429,'the probe is bounded by the sign-in limiter');
  });
 
  await check('staff opt-in needs the role and a verified address, applies only to the caller, and ends with the address or the role',async()=>{
@@ -229,9 +291,9 @@ try{
 
  await check('consent withdrawal and reads stay available during a serving stop; setting, verifying and opting in do not',async()=>{
   const stopped=new Proxy(db,{get(target,key){if(key==='prepare')return sql=>target.prepare(sql.replace('FROM operator_serving_stopped WHERE project_id=?','FROM (SELECT ? AS project_id)'));const v=target[key];return typeof v==='function'?v.bind(target):v;}});
-  await verified(a,a1,ALICE);await go(a,a1,N+'staff/opt-in',{body:{}});
+  await verified(a,a1,'alice.stop@example.test');await go(a,a1,N+'staff/opt-in',{body:{}});
   const s={db:stopped};
-  assert.equal((await go(a,a1,'account/notifications',s)).status,200);
+  const paused=await go(a,a1,'account/notifications',s);assert.equal(paused.status,200);assert.equal(paused.json.stopped,true,'the page is told, so it can hide what would be refused');assert.equal((await go(a,a1,'account/notifications')).json.stopped,false);
   for(const [step,body] of [['address',{address:BOB}],['verify/start',{}],['verify/complete',{code:'AAAAAAAA'}],['staff/opt-in',{}]])assert.equal((await go(a,a1,P(step),{body,...s,overrides:ceiling})).status,404,step);
   assert.equal((await go(a,a1,N+'staff/opt-out',{body:{},...s})).json.staffOptIn,false);
   assert.equal((await go(a,a1,N+'address/remove',{body:{},...s})).json.address,null);assert.equal(await row(a1.who),null);
@@ -241,11 +303,20 @@ try{
   const a6=await visitor(a);await verified(a,a6,'gina@example.test');
   const read=async(who,v)=>{const r=await go(a,v,'export',{keep:false});assert.equal(r.status,200);return r.text;};
   const mine=JSON.parse(await read(a,a6));assert.deepEqual(mine.notifications,{address:'gina@example.test',verified:true,staffOptIn:false});
+  assert.deepEqual(mine.notices.map(n=>[n.template,n.state,n.sentTo]),[['visitor.address-verification@1','accepted','gina@example.test']],'the address a notice went to is part of the visitor\'s own export');
+  assert.equal(JSON.parse(await read(a,a2)).notices.some(n=>n.sentTo==='gina@example.test'),false);
   const theirs=await read(a,a2);assert.equal(theirs.includes('gina@example.test'),false);assert.equal(JSON.parse(theirs).notifications.address,BOB);
   assert.equal(JSON.parse(await read(a,a4)).notifications.verified,false);
   assert.equal(JSON.parse(await read(a,await visitor(a))).notifications,null);
   assert.equal((await go(a,b1,'export',{keep:false})).status,401);
   assert.equal(JSON.stringify(mine).includes('code'),false);
+ });
+
+ await check('the verification reserve: the lane never uses the last fifth of the platform ceiling',async()=>{
+  // The ledger keeps the lowest ceiling any run applied for the day, so this runs last. S calls are counted in the 32-day window; a ceiling C gives the lane floor(0.8 C) of them.
+  const S=(await one("SELECT coalesce(sum(sends),0) n FROM notification_send_ledger WHERE provider='cloudflare-email'")).n,ceilingFor=limit=>Math.ceil(limit/0.8);
+  const v=await queued();await nothingSent(v,'ceiling',null,{...lane,sendCeiling:ceilingFor(S)});
+  const w=await queued();const before=sent.length;await laneRace(null,{...lane,sendCeiling:ceilingFor(S+1)});assert.equal(sent.length,before+1,'one call under the reserve is sent');
  });
 
  await check('no response carries a full address (the visitor sees a hint of their own)',async()=>{

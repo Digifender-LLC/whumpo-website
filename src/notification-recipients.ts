@@ -1,6 +1,7 @@
 import {ContactError} from './contacts';
 import {normalizeDestination} from './contact-notifications';
 import {enqueueNotice,visitorVerifyTemplate} from './notification-outbox';
+import {hashToken} from './security';
 /**
  * WH-157 recipient scopes (docs/notifications.md#recipient-scopes, gap G-N7). Recipients are only what the `notification_recipients`
  * view derives from current records (the owner's verified destination, opted-in verified staff, the consenting verified submitter),
@@ -26,7 +27,10 @@ const suppressed=(cause:unknown)=>String(cause).includes('notification_address_s
 /** Sets the visitor's notification address; it starts unverified, and a changed address drops its verification and any staff opt-in. */
 export async function setVisitorAddress(db:Db,projectId:string,visitorId:string,value:unknown){
  await visitorIn(db,projectId,visitorId);
- const address=normalizeDestination(value),existing=await db.prepare('SELECT address FROM visitor_notification_addresses WHERE visitor_id=?').bind(visitorId).first<{address:string}>();
+ const address=normalizeDestination(value);
+ // The owner's own mailboxes (account address, any notification destination) are not a visitor's to use: a complaint about a code sent there would suppress the owner's own destination.
+ if(await db.prepare('SELECT 1 FROM projects p JOIN users u ON u.id=p.owner_user_id WHERE p.id=?1 AND (lower(u.email)=?2 OR EXISTS(SELECT 1 FROM contact_notification_destinations d WHERE d.user_id=p.owner_user_id AND d.address=?2))').bind(projectId,address).first())throw new ContactError(409,refused);
+ const existing=await db.prepare('SELECT address FROM visitor_notification_addresses WHERE visitor_id=?').bind(visitorId).first<{address:string}>();
  try{
   if(!existing)await db.prepare('INSERT INTO visitor_notification_addresses(visitor_id,address) VALUES(?,?)').bind(visitorId,address).run();
   else if(existing.address!==address)await db.prepare('UPDATE visitor_notification_addresses SET address=?,code_hash=NULL,code_expires_at=NULL,code_failures=0,verified_at=NULL WHERE visitor_id=?').bind(address,visitorId).run();
@@ -41,19 +45,23 @@ export async function removeVisitorAddress(db:Db,projectId:string,visitorId:stri
 /**
  * Starts address verification. Without the owner's spending limit (`ceilingCents`) delivery is unavailable: it answers `delivery_unavailable`, stores
  * no code and queues nothing, so no address can become verified. With it, one notice is queued through the shared outbox; the code is minted in the
- * claimed attempt and only its hash is stored (notification-outbox.ts), so a notice that never sends leaves no code. One open request at a time.
+ * claimed attempt and only its hash is stored (notification-outbox.ts); a notice that never sends stores nothing, and a send that is refused after the claim leaves a hash nobody holds.
+ * One open request at a time; per visitor 3 an hour and 10 a day, per owner 50 a day, and per target address 3 a day across every owner. The address cap is keyed by a hash of the address (pseudonymous, kept with the notice for its retention) in
+ * the notice's event reference, which survives the erasure of `sent_to`, so removing the address after a send does not reset it.
  */
 export async function startVisitorVerification(db:Pick<D1Database,'prepare'|'batch'>,projectId:string,visitorId:string,options:{ceilingCents?:number;now?:number}={}){
  await visitorIn(db,projectId,visitorId);
- const row=await db.prepare('SELECT verified_at FROM visitor_notification_addresses WHERE visitor_id=?').bind(visitorId).first<{verified_at:number|null}>();
+ const row=await db.prepare('SELECT address,verified_at FROM visitor_notification_addresses WHERE visitor_id=?').bind(visitorId).first<{address:string;verified_at:number|null}>();
  if(!row)throw new ContactError(404,'Add a notification address first.');
  if(row.verified_at)throw new ContactError(409,'This address is already verified.');
  if(!((options.ceilingCents??0)>0))return {status:'delivery_unavailable' as const};
- if(await db.prepare("SELECT 1 FROM notification_notices WHERE recipient_key=? AND template=? AND state IN ('queued','deferred','dispatching')").bind('submitter:'+visitorId,visitorVerifyTemplate).first())return {status:'pending' as const};
+ const now=options.now??Date.now();
+ if(await db.prepare("SELECT 1 FROM notification_notices WHERE recipient_key=? AND template=? AND state IN ('queued','deferred','dispatching') AND expires_at>?").bind('submitter:'+visitorId,visitorVerifyTemplate,now).first())return {status:'pending' as const};
  const owner=await db.prepare('SELECT owner_user_id id FROM projects WHERE id=?').bind(projectId).first<{id:string}>();
  if(!owner)throw new ContactError(404,'Not found.');
  if(await db.prepare('SELECT 1 FROM contact_notification_suppressions s JOIN visitor_notification_addresses a ON a.address=s.address WHERE s.user_id=? AND a.visitor_id=?').bind(owner.id,visitorId).first())throw new ContactError(409,refused);
- const queued=await enqueueNotice(db,{userId:owner.id,scope:'submitter',projectId,recipientRef:visitorId,template:visitorVerifyTemplate,eventRef:'verify:'+crypto.randomUUID(),now:options.now??Date.now(),caps:{hour:3,day:10,templateDay:5}});
+ const prefix='verify:'+(await hashToken('visitor-verify|'+row.address)).slice(0,32)+':';
+ const queued=await enqueueNotice(db,{userId:owner.id,scope:'submitter',projectId,recipientRef:visitorId,template:visitorVerifyTemplate,eventRef:prefix+crypto.randomUUID(),now,caps:{hour:3,day:10,templateDay:5,userTemplateDay:50,eventPrefixDay:{prefix,max:3}}});
  if(!queued.queued)throw new ContactError(429,'Too many verification messages. Try again tomorrow.');
  return {status:'queued' as const};
 }

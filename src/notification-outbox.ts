@@ -28,7 +28,9 @@ const withTimeout=<T>(promise:Promise<T>,ms:number)=>new Promise<T>((resolve,rej
 export type NoticeSpec={
  userId:string;scope:RecipientScope;projectId?:string;destinationId?:string;recipientRef?:string;template:string;eventRef:string;now:number;
  /** Guarded insert caps per recipient_key (the triggers hold the same 10/hour and 50/day behind it). `templateDay` and `userTemplateDay` bound one template per recipient and per account. */
- caps?:{hour:number;day:number;templateDay?:number;userTemplateDay?:number};
+ caps?:{hour:number;day:number;templateDay?:number;userTemplateDay?:number;
+  /** One template, one day, across every account: notices whose event_ref starts with `prefix` (a hashed target the caller put there) are capped at `max`. shortcut: a scan of one template's last day, no index; fine at these volumes, add one if the template ever carries volume. */
+  eventPrefixDay?:{prefix:string;max:number}};
  /** Statements that must commit with the notice and only when it was newly queued (guard them with EXISTS on the notice id). */
  after?:(noticeId:string)=>D1PreparedStatement[];
 };
@@ -64,9 +66,10 @@ export async function noticeStatements(db:Db,spec:NoticeSpec&{safe?:boolean}){
    SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11 WHERE (SELECT count(*) FROM notification_notices WHERE recipient_key=?7 AND (template GLOB 'appointment.*')=(?8 GLOB 'appointment.*') AND created_at>?10-3600000)<?12
     AND (SELECT count(*) FROM notification_notices WHERE recipient_key=?7 AND (template GLOB 'appointment.*')=(?8 GLOB 'appointment.*') AND created_at>?10-86400000)<?13
     AND (?14 IS NULL OR (SELECT count(*) FROM notification_notices WHERE recipient_key=?7 AND template=?8 AND created_at>?10-86400000)<?14)
-    AND (?15 IS NULL OR (SELECT count(*) FROM notification_notices WHERE user_id=?2 AND template=?8 AND created_at>?10-86400000)<?15)${valid}
+    AND (?15 IS NULL OR (SELECT count(*) FROM notification_notices WHERE user_id=?2 AND template=?8 AND created_at>?10-86400000)<?15)
+    AND (?16 IS NULL OR (SELECT count(*) FROM notification_notices WHERE template=?8 AND substr(event_ref,1,length(?16))=?16 AND created_at>?10-86400000)<?17)${valid}
    ON CONFLICT(template,event_ref,recipient_key) DO NOTHING RETURNING id`)
-   .bind(id,spec.userId,spec.scope,spec.projectId??null,spec.destinationId??null,spec.recipientRef??null,key,spec.template,spec.eventRef,spec.now,expires,caps.hour,caps.day,caps.templateDay??null,caps.userTemplateDay??null),
+   .bind(id,spec.userId,spec.scope,spec.projectId??null,spec.destinationId??null,spec.recipientRef??null,key,spec.template,spec.eventRef,spec.now,expires,caps.hour,caps.day,caps.templateDay??null,caps.userTemplateDay??null,caps.eventPrefixDay?.prefix??null,caps.eventPrefixDay?.max??0),
   await admitAttempt(db,envelope,id,"job_id IS NULL AND state='queued'"),
   db.prepare("UPDATE notification_notices SET job_id=?1 WHERE id=?2 AND job_id IS NULL AND state='queued' AND EXISTS(SELECT 1 FROM job_journal WHERE id=?1)").bind(jobId,id),
   ...(spec.after?.(id)??[])];
@@ -89,7 +92,7 @@ export type DeliveryTally={enabled:boolean;queued:number;accepted:number;retried
 export const newTally=():DeliveryTally=>({enabled:false,queued:0,accepted:0,retried:0,failed:0,cancelled:0,refused:0});
 type Due={id:string;user_id:string;scope:string;project_id:string|null;destination_id:string|null;recipient_ref:string|null;template:string;event_ref:string;state:string;attempts:number;expires_at:number;
  d_state:string|null;d_address:string|null;code:string|null;code_expires_at:string|null;email:string;email_verified_at:number|null;contained:number;submission_exists:number;suppressed:number;support_unread:number;
- v_address:string|null;v_verified:number|null;v_ok:number|null;v_suppressed:number;c_state:string|null;c_new:string|null;c_prev:string|null;c_prev_verified:number|null;c_receipt:number|null;c_deliverable:number|null;c_expires:number|null;c_revision:number|null};
+ v_stopped:number;v_address:string|null;v_verified:number|null;v_ok:number|null;v_suppressed:number;c_state:string|null;c_new:string|null;c_prev:string|null;c_prev_verified:number|null;c_receipt:number|null;c_deliverable:number|null;c_expires:number|null;c_revision:number|null};
 // The same values as addressKey (src/email-change/change.ts) and mintConfirmationToken (token.ts), copied because only the main Worker's route table may import
 // that folder (tests/email-change-contract.mjs); tests/email-change-delivery.mjs checks they agree.
 const addressKey=(address:string)=>hashToken(`email-change-address:${address}`);
@@ -97,7 +100,7 @@ const mintConfirmationToken=()=>btoa(String.fromCharCode(...crypto.getRandomValu
 /** Notices this adapter can render: contact notices, the email-change confirmation (its token is minted in the claimed attempt) and any template without variables. */
 const sendable=(template:string)=>{const t=notificationCatalog.templates[template]?.template;return !!t&&(template==='owner.destination-verification@1'||template===confirmTemplate||template===visitorVerifyTemplate||isConfiguredTemplate(template)||Object.keys(t.variables).length===0);};
 const confirmTemplate='account.email-confirm@1';
-/** WH-214: a project visitor's address verification. It is the only notice that goes to an UNVERIFIED visitor address, and its code is minted in the claimed attempt (only the hash is stored). */
+/** WH-214: a project visitor's address verification. It is the only notice that goes to an UNVERIFIED visitor address, and its code is minted in the claimed attempt (only the hash is stored). Any lane that drains the platform-email journal and holds the owner's limit can claim it (contact_delivery, account_delivery, support_delivery all pass the same ceiling). */
 export const visitorVerifyTemplate='visitor.address-verification@1';
 export const visitorCodeMs=3600000;
 const codeAlphabet='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -144,7 +147,7 @@ async function attempt(db:Db,deps:DeliveryDeps,job:JobRow,lease:JobLease,ctx:Job
    EXISTS(SELECT 1 FROM contact_submissions s WHERE s.id=substr(n.event_ref,9) AND s.project_id=n.project_id) AS submission_exists,
    EXISTS(SELECT 1 FROM contact_notification_suppressions s WHERE s.user_id=n.user_id AND s.address=coalesce(d.address,lower(u.email))) AS suppressed,
    EXISTS(SELECT 1 FROM usage_review_requests q WHERE q.id=n.event_ref AND q.user_id=n.user_id AND q.state='answered' AND q.customer_read_at IS NULL) AS support_unread
-   ,va.address AS v_address,va.verified_at AS v_verified,av.id AS v_ok,EXISTS(SELECT 1 FROM contact_notification_suppressions s WHERE s.user_id=n.user_id AND s.address=va.address) AS v_suppressed
+   ,va.address AS v_address,va.verified_at AS v_verified,av.id AS v_ok,EXISTS(SELECT 1 FROM contact_notification_suppressions s WHERE s.user_id=n.user_id AND s.address=va.address) AS v_suppressed,EXISTS(SELECT 1 FROM operator_serving_stopped x WHERE x.project_id=n.project_id) AS v_stopped
    ,c.state AS c_state,c.new_address AS c_new,c.previous_address AS c_prev,c.previous_verified_at AS c_prev_verified,c.receipt_verified_at AS c_receipt,c.deliverable AS c_deliverable,c.expires_at AS c_expires,c.revision AS c_revision
   FROM notification_notices n JOIN users u ON u.id=n.user_id LEFT JOIN contact_notification_destinations d ON d.id=n.destination_id LEFT JOIN owner_email_changes c ON c.change_id=n.event_ref AND c.account_id=n.user_id AND n.scope='account-email'
    LEFT JOIN visitor_notification_addresses va ON n.template='visitor.address-verification@1' AND va.visitor_id=n.recipient_ref
@@ -193,7 +196,7 @@ async function attempt(db:Db,deps:DeliveryDeps,job:JobRow,lease:JobLease,ctx:Job
   // Only for a current, non-revoked visitor whose address is still unverified; the claim below repeats this against the stored address.
   if(!n.v_ok||!n.v_address||n.v_verified!==null)return deny('recipient-revoked');
   if(n.v_suppressed)return deny('suppressed');
-  if(n.contained)return deny('contained');
+  if(n.contained||n.v_stopped)return deny('contained');
   recipient=n.v_address;
  }else if(configured?.recipient)recipient=configured.recipient; // project-staff and submitter: resolved from current records just now (WH-158)
  else return deny('recipient-revoked');
@@ -219,7 +222,7 @@ async function attempt(db:Db,deps:DeliveryDeps,job:JobRow,lease:JobLease,ctx:Job
      AND (?5 IS NULL OR EXISTS(SELECT 1 FROM owner_email_changes WHERE change_id=?6 AND token_verifier=?5))
      AND (notification_notices.scope NOT IN ('project-staff','submitter') OR EXISTS(SELECT 1 FROM visitor_notification_addresses WHERE visitor_id=notification_notices.recipient_ref AND address=?7 AND (verified_at IS NOT NULL)=(notification_notices.template!='visitor.address-verification@1'))) RETURNING attempts`).bind(now,n.id,job.id,lease.fence,verifier,n.event_ref,recipient)];
   const claimAt=claim.length-1;
-  // Only the hash of the code is stored, in the batch that claims the attempt and only if it was claimed; a new code replaces the last and resets its tries.
+  // Only the hash of the code is stored, in the batch that claims the attempt and only if it was claimed; a new code replaces the last and resets its tries. A refused or lost send leaves that hash, which nobody holds.
   if(n.template===visitorVerifyTemplate)claim.push(db.prepare("UPDATE visitor_notification_addresses SET code_hash=?1,code_expires_at=?2,code_failures=0 WHERE visitor_id=?3 AND address=?4 AND verified_at IS NULL AND EXISTS(SELECT 1 FROM notification_notices WHERE id=?5 AND state='dispatching' AND job_id=?6)").bind(await hashToken(code!),Math.floor((now+visitorCodeMs)/1000),n.recipient_ref,recipient,n.id,job.id));
   const claimed=await db.batch(claim);
  // The last clause serializes the claim with an erasure: an address removed, changed or deleted after it was read is never written to sent_to, and the attempt takes the not-sent path below.
@@ -233,6 +236,8 @@ async function attempt(db:Db,deps:DeliveryDeps,job:JobRow,lease:JobLease,ctx:Job
  if(!attempts||!intent){
   // Another actor stopped the notice between the check and the claim. If the journal recorded an intent, nothing was sent: close it without a call.
   if(intent)await settleStatement(db,owner,job.id,intent,'not-sent',now).first();
+  // A claim that lost to an erasure (the address was removed, changed or verified after it was read) must not leave the notice queued behind a finished job; cancelling is a no-op if another actor already moved it.
+  await deny('recipient-revoked');
   return;
  }
  let outcome:ContactProviderOutcome;

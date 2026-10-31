@@ -15,7 +15,9 @@ await mkdir(shots,{recursive:true});
 const d1=process.argv.includes('--d1'),f=await deletionFixture({d1}),m=await currentSiteFixtureHandlers(),{db}=f;
 const a=await f.app(),who=await f.visitor(a,'Synthetic visitor'),origin=`https://app-${a.project}.whumpo.site`;
 const ADDRESS='gina.browser@example.test';
-let ceiling=undefined,ip=1;const bodies=[],errors=[],sent=[];
+let ceiling=undefined,paused=false,ip=1;
+// An operator serving stop is a view over operator tables; for the one case that needs it the fixture answers the stop predicate itself.
+const stoppedDb=new Proxy(db,{get(t,k){if(k==='prepare')return sql=>t.prepare(sql.replace('FROM operator_serving_stopped WHERE project_id=?','FROM (SELECT ? AS project_id)'));const v=t[k];return typeof v==='function'?v.bind(t):v;}});const bodies=[],errors=[],sent=[];
 const sender=async notice=>{sent.push({...notice});return {accepted:true,providerRef:'sim-'+sent.length};};
 const deliver=async()=>{for(let i=0;i<3;i++)await m.notificationOutbox.runNotificationDelivery(db,{provider:'cloudflare-email',review:'r',sendCeiling:1000,customerCeilingCents:500},sender,{now:new Date()});};
 async function serve(route){
@@ -26,7 +28,7 @@ async function serve(route){
   return route.fulfill({status:200,contentType:asset.endsWith('.js')?'text/javascript':asset.endsWith('.css')?'text/css':'text/html',body:await readFile(resolve('public-app',asset))});
  }
  const post=req.method()==='POST',headers={'content-type':'application/json','cf-connecting-ip':`198.51.100.${(ip++%200)+1}`,cookie:`__Host-whumpo-app-session-${a.project}=${who.session}`,...(post?{origin:req.headers().origin}:{})};
- const response=await m.appGateway.applicationGateway(new Request(req.url(),{method:req.method(),headers,body:post?req.postData():undefined}),{...f.env,DB:db,...(ceiling?{NOTIFICATION_CUSTOMER_CEILING_CENTS:ceiling}:{})});
+ const response=await m.appGateway.applicationGateway(new Request(req.url(),{method:req.method(),headers,body:post?req.postData():undefined}),{...f.env,DB:paused?stoppedDb:db,...(ceiling?{NOTIFICATION_CUSTOMER_CEILING_CENTS:ceiling}:{})});
  const text=await response.text();bodies.push(text);
  return route.fulfill({status:response.status,headers:Object.fromEntries(response.headers),body:text});
 }
@@ -83,7 +85,11 @@ try{
   await page.locator('#notify-delivery').filter({hasText:'A code was requested'}).waitFor();
   assert.equal(sent.length,0,'nothing is sent until the delivery lane runs');
   await deliver();assert.equal(sent.length,1);assert.equal(sent[0].recipient,ADDRESS);
-  await open(390);await page.locator('#notify-code-form').waitFor({state:'visible'});
+  // No reload: the entry form is already up, so the page never says "enter it below" over nothing, and a second click is offered as a replacement.
+  await page.locator('#notify-code-form').waitFor({state:'visible'});
+  assert.equal(await page.locator('#notify-send').innerText(),'Send a new code');
+  assert.equal(await page.locator('#notify-send').isVisible(),true);
+  await deliver();assert.equal(sent.length,1);assert.equal(sent[0].recipient,ADDRESS);
   await page.getByLabel('Verification code').fill('AAAAAAAA');await page.keyboard.press('Enter');
   await page.locator('#notify-code-error').filter({hasText:'not valid'}).waitFor();
   assert.equal(await page.locator('#notify-code').getAttribute('aria-invalid'),'true');
@@ -110,6 +116,13 @@ try{
   await open(1280,{dark:true});await axe('staff, dark');await noScroll('staff dark 1280');await shot('notices-staff-dark-1280');
   await page.locator('#notify-staff-toggle').click();await page.locator('#notify-staff-text').filter({hasText:'You can receive'}).waitFor();
   assert.equal((await db.prepare('SELECT count(*) n FROM staff_notification_optins').first()).n,0);
+ });
+ await check('while the application is paused the controls that would be refused are hidden and only withdrawal is offered',async()=>{
+  paused=true;await open(390);
+  assert.equal(await page.locator('#notify-save, #notify-email, #notify-email-label, #notify-send, #notify-code-form').evaluateAll(l=>l.filter(e=>e.offsetParent).length),0,'no save, send or code control');
+  assert.match(await page.locator('#notify-delivery').innerText(),/paused/);
+  assert.equal(await page.locator('#notify-remove').isVisible(),true);
+  await shot('notices-paused-390');await axe('paused');paused=false;
  });
  await check('removing the address withdraws everything and returns focus to the field',async()=>{
   await page.locator('#notify-remove').click();

@@ -98,13 +98,15 @@ export async function applicationGateway(request:Request,env:AppEnv,fetcher:type
   // request-receipt reads, export and deletion stay available, so existing visitors keep access to their stored data.
   // New signups, modules, configuration and execution are refused with the same response as an application without a
   // live page; the visitor page treats that configuration answer as its account-only view.
-  if(await servingStopped(env.DB,project)&&!(method==='GET'&&(path==='export'||path==='data'||new RegExp(`^receipts/${uuid}$`).test(path)))&&!(notices&&['','address/remove','staff/opt-out'].includes(step))&&!(method==='POST'&&(path==='account/deletion-review'||path==='auth/recover'||path==='auth/logout'||/^auth\/(login|add)\/(options|verify)$/.test(path))))
+  const stopped=await servingStopped(env.DB,project);
+  if(stopped&&!(method==='GET'&&(path==='export'||path==='data'||new RegExp(`^receipts/${uuid}$`).test(path)))&&!(notices&&['','address/remove','staff/opt-out'].includes(step))&&!(method==='POST'&&(path==='account/deletion-review'||path==='auth/recover'||path==='auth/logout'||/^auth\/(login|add)\/(options|verify)$/.test(path))))
    return json({error:'Application page unavailable'},404);
   if(notification){
    if(!notices)return json({error:'Not found'},404);
-   // Starting and completing verification are the guessable and billable steps: the sign-in limiter bounds them per connection on top of the per-visitor caps.
-   if(step.startsWith('verify/')&&!(await env.AUTH_LIMITER.limit({key:'app-notify:'+ip})).success)return json({error:'Too many attempts. Try again in a minute.'},429);
-   return json(await appNotifications(env.DB,session,project,step,step===''?{}:await body(request),{ceilingCents:customerCeilingFromEnv(env as {NOTIFICATION_CUSTOMER_CEILING_CENTS?:string})}));
+   // Starting and completing verification are the guessable and billable steps, and `address` answers differently for an address the owner suppressed or owns, which
+   // could be probed: the sign-in limiter bounds all three per connection on top of the per-visitor caps.
+   if((step.startsWith('verify/')||step==='address')&&!(await env.AUTH_LIMITER.limit({key:'app-notify:'+ip})).success)return json({error:'Too many attempts. Try again in a minute.'},429);
+   return json(await appNotifications(env.DB,session,project,step,step===''?{}:await body(request),{ceilingCents:customerCeilingFromEnv(env as {NOTIFICATION_CUSTOMER_CEILING_CENTS?:string}),stopped}));
   }
   // WH-126 shared module requests (whumpo-modules v1), same-origin POST only. The principal is derived solely from this
   // project's visitor session cookie (never a workspace cookie); module serving checks the instance's own activation.
