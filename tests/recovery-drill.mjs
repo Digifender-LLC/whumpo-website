@@ -343,7 +343,7 @@ try{
  assert.equal((await restoreDiscrepancies(target.DRILL_A,lost)).sourceAvailable,false);
  // WH-019: without the current source there is no ledger to replay; with it, one atomic idempotent replay removes what the
  // current ledger says was erased or revoked, and the gate reports clear. Synthetic and local: sessions are epoch evidence, not ledger rows.
- assert.equal((await reconcileRestoreSuppressions(target.DRILL_A,lost,suppression)).status,'unavailable');
+ {const unavailable=await reconcileRestoreSuppressions(target.DRILL_A,lost,suppression);assert.equal(unavailable.status,'unavailable');assert.deepEqual(unavailable.holds,['suppression-source-unavailable'],'a caller that reads only holds sees a hold');}
  await drillHold(()=>reconcileRestoreSuppressions(target.DRILL_A,db,{}),'suppression-module');
  const reconciled=await phase('reconcileRestoreSuppressions',()=>reconcileRestoreSuppressions(target.DRILL_A,db,suppression));
  assert.equal(reconciled.status,'reconciled');assert.ok(reconciled.pendingBefore.visitor>=1,JSON.stringify(reconciled.pendingBefore));assert.ok(reconciled.applied.visitorsRemoved>=1);

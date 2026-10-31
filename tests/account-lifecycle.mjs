@@ -25,14 +25,15 @@ const objects=new Map(),FILES={
  get:async key=>{const bytes=objects.get(key);return bytes?{size:bytes.length,arrayBuffer:async()=>bytes.slice().buffer,body:{cancel:async()=>{}}}:null;},
  head:async key=>objects.has(key)?{size:objects.get(key).length}:null,put:async()=>assert.fail('No upload in this suite'),delete:async key=>{objects.delete(key);},list:async()=>({objects:[],truncated:false}),
 };
-let failNext=null,failAccount=null;const batchHooks=[];const intercepted=interceptDatabase(db,/./,async()=>{},async()=>{});
+let failNext=null,failAccount=null;const batchHooks=[],delays=[];let forced=null;let lastBatch=[];const intercepted=interceptDatabase(db,/./,async()=>{},async()=>{});
 // Interruption hook: throw once on the next statement/batch whose SQL matches the armed pattern (a lost worker or response).
 // failAccount makes every statement bound to that account fail (one broken closure among several in a maintenance pass).
-const armedDB={prepare:q=>{const s=intercepted.prepare(q);
- const wrap=(st,v=[])=>{const guard=fn=>async(...a)=>{if(failNext&&failNext.test(q)){failNext=null;throw Error('synthetic interruption');}if(failAccount&&v.includes(failAccount))throw Error('synthetic closure failure');return fn(...a);};
+let prepared=0;
+const armedDB={prepare:q=>{prepared++;const s=intercepted.prepare(q);
+ const wrap=(st,v=[])=>{const guard=fn=>async(...a)=>{if(failNext&&failNext.test(q)){failNext=null;throw Error('synthetic interruption');}if(failAccount&&v.includes(failAccount))throw Error('synthetic closure failure');let result=await fn(...a);if(forced&&q.startsWith('WITH scope AS')&&result&&typeof result==='object')for(const [k,v] of Object.entries(forced))if(k in result)result={...result,[k]:v};const slow=delays.findIndex(x=>x.re.test(q));if(slow>=0)await new Promise(r=>setTimeout(r,delays.splice(slow,1)[0].ms));return result;};
   return {bind:(...n)=>wrap(st.bind(...n),n),first:guard(st.first),all:guard(st.all),run:guard(st.run),__q:q,__s:st,__v:v};};
  return wrap(s);},
- batch:async list=>{const hook=batchHooks.findIndex(h=>list.some(q=>h.re.test(q.__q)));if(hook>=0){const [h]=batchHooks.splice(hook,1);await h.fn();}if(failNext&&list.some(s=>failNext.test(s.__q))){failNext=null;throw Error('synthetic interruption');}if(failAccount&&list.some(s=>s.__v.includes(failAccount)))throw Error('synthetic closure failure');return intercepted.batch(list.map(s=>s.__s));}};
+ batch:async list=>{const hook=batchHooks.findIndex(h=>list.some(q=>h.re.test(q.__q)));if(hook>=0){const [h]=batchHooks.splice(hook,1);await h.fn();}if(failNext&&list.some(s=>failNext.test(s.__q))){failNext=null;throw Error('synthetic interruption');}if(failAccount&&list.some(s=>s.__v.includes(failAccount)))throw Error('synthetic closure failure');for(const q of list)if(/INSERT INTO account_closures\(/.test(q.__q))lastBatch=[q.__q];let result=await intercepted.batch(list.map(s=>s.__s));if(forced)result=result.map((r,i)=>list[i].__q.startsWith('WITH scope AS')&&r.results?.[0]?{...r,results:r.results.map(row=>Object.fromEntries(Object.entries(row).map(([k,v])=>[k,k in forced?forced[k]:v])))}:r);const slow=delays.findIndex(x=>list.some(q=>x.re.test(q.__q)));if(slow>=0)await new Promise(r=>setTimeout(r,delays.splice(slow,1)[0].ms));return result;}};
 const env={DB:armedDB,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})},FILES,GITHUB_CLIENT_ID:ghConfig.clientId,GITHUB_CLIENT_SECRET:ghConfig.clientSecret,GITHUB_APP_ID:'123',GITHUB_APP_SLUG:'fixture',CONNECTION_ENCRYPTION_KEYRING:ghConfig.key};
 const row=(q,...p)=>db.prepare(q).bind(...p).first(),rows=async(q,...p)=>(await db.prepare(q).bind(...p).all()).results,run=(q,...p)=>db.prepare(q).bind(...p).run();
 let cases=0;const check=async(name,fn)=>{try{await fn();cases++;}catch(error){originals.error(name);throw error;}};
@@ -303,7 +304,8 @@ try{
   const other=await owner();await run('INSERT INTO backend_form_settings(project_id,revision) VALUES(?,0)',other.project);assert.equal((await closureReview(other)).supportMessage,fresh.supportMessage,'Every support-only condition shows the same sentence');
   await run('DELETE FROM backend_form_settings WHERE project_id=?',other.project);
   // Confirmation is refused before anything is taken away, with a sentence that is the same for every kind of support-only condition.
-  const refusal=await refused(await confirm(c,review),409,'action_required');
+  await refused(await confirm(c,review),409,'stale_review'); // a hold placed after the review stales it, like any other change
+  const refusal=await refused(await confirm(c,fresh),409,'action_required');
   assert.match(refusal.error,/need Whumpo support/);assert.doesNotMatch(JSON.stringify(refusal),/hold|safety|preserv|case-|basis/i);
   assert.equal(await row('SELECT 1 x FROM account_closures WHERE account_id=?',c.user),null);assert.ok((await row('SELECT status FROM projects WHERE id=?',c.project)),'The project is untouched');
   await run("UPDATE safety_preservation_holds SET released_at=unixepoch(),released_by='human:approver',release_ref='release-1' WHERE id=?",hold);
@@ -348,18 +350,6 @@ try{
    assert.equal(waiting.closure.overdue,false);assert.equal((await maintenanceReport(db,Date.now())).backlogs.find(q=>q.queue==='account_closures').state,'pending','a fresh closure is pending, not attention');
   }finally{if(lockstep)await run(lockstep);}
   // An interrupted form-continued AI turn: pending and then unknown. Its window is 24 hours from the start.
-  const continuation=async(o,startedHoursAgo,rev)=>{
-   const conv=id(),task=id(),interaction=id(),turn=id(),started=new Date(Date.now()-startedHoursAgo*3600000).toISOString(),created=new Date(Date.now()-48*3600000).toISOString();
-   await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,?,'q','a',?,'ai','completed')",turn,o.user,rev,created);
-   await run('INSERT INTO chat_conversations(id,user_id) VALUES(?,?)',conv,o.user);
-   await run('INSERT INTO chat_interaction_tasks(id,user_id,conversation_id,project_id,origin_turn_id) VALUES(?,?,?,?,?)',task,o.user,conv,o.project,turn);
-   const expires=new Date(Date.now()+86400000).toISOString(),envelope=JSON.stringify({version:1,id:interaction,scope:{accountId:o.user,actorId:o.user,conversationId:conv,taskId:task,projectId:o.project,originTurnId:turn},createdAt:created,expiresAt:expires,definitionDigest:'a'.repeat(64),definition:{continuationBinding:'agent.task-continue@1'}});
-   await run('INSERT INTO chat_interactions(id,user_id,conversation_id,task_id,project_id,origin_turn_id,envelope_json,definition_digest,issue_hash,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)',interaction,o.user,conv,task,o.project,turn,envelope,'a'.repeat(64),'b'.repeat(64),created,expires);
-   await run("UPDATE chat_interactions SET state='submitted',answer_revision=1,draft_json='{}',draft_saved_at=NULL WHERE id=?",interaction);
-   await run("INSERT INTO chat_interaction_requests(user_id,request_id,interaction_id,request_hash,operation,answer_revision,created_at) VALUES(?,?,?,?,'submit',1,?)",o.user,interaction,interaction,'d'.repeat(64),created);
-   await run("INSERT INTO chat_interaction_submissions(id,user_id,interaction_id,answers_json,answers_digest,answer_revision,created_at) VALUES(?,?,?,'{}',?,1,?)",interaction,o.user,interaction,'c'.repeat(64),created);
-   await run('INSERT INTO chat_interaction_continuations(id) VALUES(?)',interaction);
-   await run("UPDATE chat_interaction_continuations SET state='pending',started_at=? WHERE id=?",started,interaction);await run("UPDATE chat_interaction_continuations SET state='unknown' WHERE id=?",interaction);};
   const stale=await owner();await continuation(stale,30,9301);
   assert.equal((await ok(await confirm(stale,await closureReview(stale)))).closure.state,'complete','an unanswered continuation older than 24 hours does not stop closure');
   const fresh=await owner();await continuation(fresh,1,9302);
@@ -439,18 +429,18 @@ try{
   assert.equal((await step(e,'credentials')).state,'waiting');assert.ok(await row('SELECT 1 x FROM users WHERE id=?',e.user));
   const fAfter=await step(f,'operations');assert.equal(fAfter.state,'waiting');assert.equal(fAfter.attempts,fBefore.attempts+1);assert.equal(fAfter.last_origin,'maintenance');
   assert.equal((await row('SELECT state FROM standard_ai_requests WHERE id=?',fTurn)).state,'uncertain','The continuation never releases an unresolved operation');
-  assert.equal((await step(g,'credentials')).state,'done');assert.equal((await step(g,'holds')).state,'blocked');assert.equal((await step(g,'holds')).last_origin,'maintenance');assert.ok(await row('SELECT 1 x FROM projects WHERE id=?',g.project),'Never purged under hold');
+  assert.equal((await step(g,'credentials')).state,'done');assert.equal((await step(g,'purge')).state,'blocked');assert.equal((await step(g,'purge')).last_origin,'maintenance');assert.ok(await row('SELECT 1 x FROM projects WHERE id=?',g.project),'Never purged under hold');
   // Pass 2: e advances to completion through the same journaled steps, without any session.
   assert.equal((await hourly()).status,'completed');
   const ce=await closure(e);assert.equal(ce.state,'closed');assert.equal(await row('SELECT 1 x FROM users WHERE id=?',e.user),null);
   assert.equal((await step(e,'purge')).last_origin,'maintenance');assert.equal((await step(e,'credentials')).last_origin,'maintenance');
-  assert.equal((await closure(g)).state,'quiescing');assert.equal((await step(g,'holds')).state,'blocked');assert.ok(await row('SELECT 1 x FROM users WHERE id=?',g.user));
+  assert.equal((await closure(g)).state,'quiescing');assert.equal((await step(g,'purge')).state,'blocked');assert.ok(await row('SELECT 1 x FROM users WHERE id=?',g.user));
   // Idempotent re-run: a completed receipt is never selected or changed again, and f still waits on its unresolved request.
   await hourly();assert.equal((await closure(e)).revision,ce.revision);assert.equal((await closure(e)).updated_at,ce.updated_at);assert.equal((await step(f,'operations')).state,'waiting');
   // A hold placed between the holds step and the purge batch still stops the purge: the database refuses the cascade, and the step is journaled.
   let releaseH;batchHooks.push({re:/DELETE FROM users/,fn:async()=>{releaseH=await hold(h,'account');}});
   const sh=await ok(await confirm(h,await closureReview(h)));
-  assert.equal(sh.closure.state,'blocked');assert.deepEqual(sh.closure.steps.find(s=>s.step==='purge').detail,{reason:'retention_review',support:true});assert.ok(await row('SELECT 1 x FROM users WHERE id=?',h.user),'Never purged under hold');
+  assert.equal(sh.closure.state,'blocked');assert.deepEqual(sh.closure.steps.find(s=>s.step==='purge').detail,{reason:'retained_records',support:true});assert.ok(await row('SELECT 1 x FROM users WHERE id=?',h.user),'Never purged under hold');
   await releaseH();await releaseG();
   // Two overlapping continuation passes (and an owner resume) after release: compare-and-swap journal, one purge each.
   const results=await Promise.all([m.continueAccountClosures(env),m.continueAccountClosures(env),account(g,'closure/resume')]);
@@ -468,6 +458,333 @@ try{
   assert.equal((await call(b,'/projects',undefined,'GET')).status,200,'The other tenant is untouched');
  });
 
+
+ await check('A: an uncertain GitHub backup cannot stall the maintenance continuation; its 24 hour window ends the wait',async()=>{
+  const e=await owner(),user=e.user,name='token-bk-'+id().slice(0,6),at=hours=>new Date(Date.now()-hours*3600000).toISOString();
+  await run("INSERT INTO github_token_vault(id,user_id,ciphertext,expires_at,state) VALUES(?,?,?,'2027-01-01','active')",name,user,await fixtureCiphertext(fixtureKeyring(),`whumpo:github:token:${user}:${name}`,'gho_SYNTHETIC_'+name));
+  await run("INSERT INTO github_connections(user_id,github_user_id,login,active_token_id,connected_at) VALUES(?,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))",user,'4242','closure-fixture',name);
+  const version=await row('SELECT id FROM site_versions WHERE project_id=? LIMIT 1',e.project);
+  await run("INSERT INTO github_backups(id,user_id,project_id,version_id,request_hash,token_id,github_user_id,repo_id,repo_owner,repo_name,repo_private,branch,path,sha256,tree_sha,base_head,files_json,byte_length,state,created_at,expires_at,dispatched_at) VALUES('bk-'||?,?,?,?,?,?,'4242',1,'o','r',1,'main','whumpo',?,?,?,'[]',1,'uncertain',?,?,?)",user,user,e.project,version.id,'0'.repeat(64),name,'a'.repeat(64),'b'.repeat(40),'c'.repeat(40),at(1),at(1),at(1));
+  provider.github=503;const refusedCalls=network; // the owner's own pass tries to read the backup back; the stand-in refuses it, which is not a provider call
+  const closed=await ok(await confirm(e,await closureReview(e)));assert.equal(steps(closed).operations,'waiting');network=refusedCalls;
+  const operations=()=>row("SELECT s.state,s.attempts,s.last_origin FROM account_closure_steps s JOIN account_closures c ON c.closure_id=s.closure_id WHERE c.account_id=? AND s.step='operations'",user);
+  // Inside the window the maintenance pass waits and does not throw.
+  const inside=await m.continueAccountClosures(env);assert.equal(inside.failed,0);assert.equal((await operations()).state,'waiting');
+  // Past it the inventory stops counting the backup and the same continuation finishes the step; the job stays healthy.
+  const trigger=(await row("SELECT sql FROM sqlite_master WHERE name='github_backup_identity'")).sql;await run('DROP TRIGGER github_backup_identity');
+  await run("UPDATE github_backups SET created_at=? WHERE user_id=?",at(48),user);await run(trigger);
+  provider.github=204;
+  const health=async()=>({...await row("SELECT status,failure_category FROM maintenance_health WHERE job='account_closures'")});
+  try{await m.worker.scheduled({cron:'47 * * * *'},env);}catch(error){assert.fail('the hourly job must not fail: '+error);}
+  assert.equal((await health()).status,'completed');
+  assert.equal(await row('SELECT 1 x FROM users WHERE id=?',user),null,'the closure ran to done on maintenance alone');
+ });
+
+
+ await check('B: a hostname that was operator-reconciled and then disconnected no longer traps the closure; the receipt stays immutable while the account exists',async()=>{
+  const d=await owner(),claim=id(),conn=id(),host='recon-'+claim.slice(0,8)+'.example.test',exp=new Date(Date.now()+3600000).toISOString(),now=new Date().toISOString();
+  await run("INSERT INTO domain_claims(id,project_id,hostname,token,expires_at,created_at) VALUES(?,?,?,'t',?,?)",claim,d.project,host,exp,now);
+  await run("INSERT INTO domain_connections(id,user_id,claim_id,project_id,hostname,zone_id,target,proof_hash,state,created_at,expires_at) VALUES(?,?,?,?,?,'zone-1','target.example.test',?,'review',?,?)",conn,d.user,claim,d.project,host,'a'.repeat(64),now,exp);
+  await run("INSERT INTO domain_reconciliations(id,connection_id,user_id,hostname,zone_id,provider_id,old_state,new_state,evidence,operator,created_at) VALUES(?,?,?,?,'zone-1','rec-1','uncertain','provisioning','operator saw the record','op',?)",id(),conn,d.user,host,now);
+  await run("UPDATE domain_connections SET state='creating' WHERE id=?",conn);await run("UPDATE domain_connections SET state='disconnecting' WHERE id=?",conn);await run("UPDATE domain_connections SET state='disconnected' WHERE id=?",conn);
+  await assert.rejects(()=>run('DELETE FROM domain_reconciliations WHERE connection_id=?',conn),/domain_reconciliation_immutable/);
+  const done=await ok(await confirm(d,await closureReview(d)));assert.equal(done.closure.state,'complete');
+  assert.equal(await row('SELECT 1 x FROM users WHERE id=?',d.user),null);assert.equal(await row('SELECT 1 x FROM domain_reconciliations WHERE connection_id=?',conn),null);
+ });
+
+
+ await check('C: an uncertain or sending Cloudflare DNS action refuses confirmation before anything is taken away; a settled one does not',async()=>{
+  const exp=new Date(Date.now()+3600000).toISOString(),now=new Date().toISOString();
+  for(const state of ['applied','sending','uncertain']){
+   const d=await owner(),claim=id(),host='dns-'+claim.slice(0,8)+'.example.test';
+   await run("INSERT INTO domain_claims(id,project_id,hostname,token,expires_at,created_at) VALUES(?,?,?,'t',?,?)",claim,d.project,host,exp,now);
+   await run("INSERT INTO cloudflare_dns_actions(id,user_id,claim_id,project_id,token_id,zone_id,zone_name,record_name,content,inventory_hash,created_at,expires_at,state) VALUES(?,?,?,?,'tok','zone-1','example.test',?,?,?,?,?,?)",id(),d.user,claim,d.project,'_whumpo.'+host,'whumpo-verification=t','h'.repeat(64),now,exp,state);
+   const review=await closureReview(d);
+   if(state==='applied'){assert.equal(review.canConfirm,true,'a settled action does not block');continue;}
+   assert.equal(review.canConfirm,false,state);assert.equal(review.needsSupport,true,state);
+   await refused(await confirm(d,review),409,'action_required');
+   assert.equal(await row('SELECT 1 x FROM account_closures WHERE account_id=?',d.user),null,'nothing was taken away');
+  }
+ });
+
+
+ await check('D: an unfinished plan checkout is refused at confirm while its Stripe session can still be paid, and stops counting at the session expiry (one hour)',async()=>{
+  const checkout=async age=>{const d=await owner();await run("INSERT INTO stripe_subscription_orders(id,user_id,plan_id,interval,price_id,amount_cents,created_at) VALUES(?,?,(SELECT id FROM plan_catalog ORDER BY id LIMIT 1),'month','price_FIXTURE',100,?)",id(),d.user,Math.floor(Date.now()/1000)-age);return d;};
+  const d=await checkout(3500),open=await closureReview(d);
+  assert.deepEqual(open.requiredBeforeClosure.map(r=>r.id),['pendingCheckoutOrders']);assert.equal(open.canConfirm,false);
+  await refused(await confirm(d,open),409,'action_required');assert.equal(await row('SELECT 1 x FROM account_closures WHERE account_id=?',d.user),null);
+  // The session was created to expire one hour after the order (src/stripe-billing.ts expires_at); past that it cannot be paid.
+  const late=await checkout(3601),expired=await closureReview(late);assert.equal(expired.canConfirm,true);assert.equal((await ok(await confirm(late,expired))).closure.state,'complete');
+ });
+
+
+ await check('E: a continuation that crosses its 24 hour window between the close and the count cannot be missed by both, and one that ages after the operations step is closed before the purge',async()=>{
+  const race=await owner();await continuation(race,24-1.5/3600,9401);
+  delays.push({re:/^UPDATE chat_interaction_continuations/,ms:2200}); // the window passes between the two statements
+  const started=await ok(await confirm(race,await closureReview(race)));
+  assert.notEqual(started.closure.state,'blocked',JSON.stringify(started.closure.steps.map(x=>[x.step,x.state,x.detail])));
+  assert.equal((await ok(await account(race,'closure/resume'))).closure.state,'complete');
+  // Aged past the window only after operations had finished: the purge settles it too instead of blocking on the delete guard.
+  const late=await owner();provider.github=503;
+  await run("INSERT INTO github_token_vault(id,user_id,ciphertext,expires_at,state) VALUES('token-e2',?,?,'2027-01-01','active')",late.user,await fixtureCiphertext(fixtureKeyring(),`whumpo:github:token:${late.user}:token-e2`,'gho_SYNTHETIC_E2'));
+  assert.equal(steps(await ok(await confirm(late,await closureReview(late)))).credentials,'waiting');
+  await continuation(late,30,9402);provider.github=204;
+  assert.equal((await ok(await account(late,'closure/resume'))).closure.state,'complete');
+ });
+
+
+ await check('F: a retained, support-only or owner-action record that appears between the last read and the confirmation batch refuses the confirmation; the statement stays under the D1 limit',async()=>{
+  const gap=async(insert,kind)=>{
+   const o=await owner(),review=await closureReview(o);
+   batchHooks.push({re:/INSERT INTO account_closures/,fn:insert(o)});
+   await refused(await confirm(o,review),409,'stale_review');assert.equal(batchHooks.length,0,kind);
+   assert.equal(await row('SELECT 1 x FROM account_closures WHERE account_id=?',o.user),null,kind+': nothing started');assert.ok(await row('SELECT 1 x FROM projects WHERE id=?',o.project),kind);};
+  await gap(o=>()=>run("INSERT INTO gateway_spend_buckets(id,scope,user_id,limit_micros) VALUES(?,'account',?,1000)",id(),o.user),'support-only');
+  await gap(o=>()=>run("INSERT INTO stripe_subscription_orders(id,user_id,plan_id,interval,price_id,amount_cents,created_at) VALUES(?,?,(SELECT id FROM plan_catalog ORDER BY id LIMIT 1),'month','price_FIXTURE',100,unixepoch())",id(),o.user),'owner action');
+  // The statement that carries every key must stay far below D1's 100,000 byte limit.
+  const o=await owner();await ok(await confirm(o,await closureReview(o)));
+  const insert=lastBatch.find(q=>/INSERT INTO account_closures/.test(q));assert.ok(insert,'the confirmation batch was seen');
+  assert.ok(new TextEncoder().encode(insert).length<100000/4,'confirmation statement bytes '+insert.length);
+ });
+
+
+ await check('G: a preservation hold is indistinguishable from any other retained record in the review, the refusal, a change after review and the closure status',async()=>{
+  const volatile=new Set(['id','digest','expiresAt','createdAt','updatedAt','completedAt']),strip=value=>JSON.parse(JSON.stringify(value,(k,v)=>volatile.has(k)?undefined:v));
+  const things={hold:o=>placeHold(o.user,'project',o.project),record:o=>run('INSERT INTO backend_form_settings(project_id,revision) VALUES(?,0)',o.project)};
+  // 1. Present at review time: the same review and the same refusal.
+  const seen={};
+  for(const [kind,add] of Object.entries(things)){
+   const o=await owner();await add(o);const review=await closureReview(o);seen[kind]={review:strip(review),refusal:strip(await refused(await confirm(o,review),409,'action_required'))};
+  }
+  assert.deepEqual(seen.hold,seen.record);
+  // 2. Appearing after the review: both are a stale review, with the same body.
+  const stale={};
+  for(const [kind,add] of Object.entries(things)){
+   const o=await owner(),review=await closureReview(o);await add(o);stale[kind]=strip(await refused(await confirm(o,review),409,'stale_review'));
+  }
+  assert.deepEqual(stale.hold,stale.record);
+  // 3. Appearing after confirmation: the closure status is the same, step by step, once ids and timestamps are removed.
+  const status={};
+  for(const [kind,add] of Object.entries(things)){
+   const o=await owner(),name='token-g-'+id().slice(0,8);
+   await run("INSERT INTO github_token_vault(id,user_id,ciphertext,expires_at,state) VALUES(?,?,?,'2027-01-01','active')",name,o.user,await fixtureCiphertext(fixtureKeyring(),`whumpo:github:token:${o.user}:${name}`,'gho_SYNTHETIC_'+name));
+   provider.github=503;const started=await ok(await confirm(o,await closureReview(o)));assert.equal(steps(started).credentials,'waiting');
+   await add(o);provider.github=204;
+   const blocked=await ok(await account(o,'closure/resume'));assert.equal(blocked.closure.state,'blocked',kind);assert.ok(await row('SELECT 1 x FROM users WHERE id=?',o.user),'never purged');
+   status[kind]=strip(blocked);assert.doesNotMatch(JSON.stringify(blocked),/retention_review|retentionReviewClear/,kind);
+  }
+  assert.deepEqual(status.hold,status.record);
+ });
+
+ await check('G: an expired lead kept only because of a hold is neither exported nor counted, so a held and an unheld owner look the same',async()=>{
+  const x=await moduleOwner(),y=await moduleOwner();
+  const drop=await rows("SELECT name,sql FROM sqlite_master WHERE type='trigger' AND tbl_name='module_records' AND name IN ('module_record_admit','module_record_update')");
+  for(const t of drop)await run(`DROP TRIGGER ${t.name}`);
+  const past=Math.floor(Date.now()/1000)-100*86400;
+  for(const o of [x,y]){
+   const inst=await row("SELECT id FROM module_instances WHERE project_id=? AND local_id='enquiries'",o.project),record=id();
+   await run("INSERT INTO module_records(id,instance_id,project_id,schema_id,form_id,fields_revision,submitter_kind,visitor_id,values_json,revision,created_request_id,last_request_id,created_at,updated_at,expires_at) VALUES(?,?,?,'enquiry','ask',1,'public',NULL,'{\"message\":\"hello\"}',1,?,?,unixepoch(),unixepoch(),unixepoch()+7776000)",record,inst.id,o.project,record,record);
+   await run("INSERT INTO module_record_leads(entry_id,instance_id,project_id,stage,note,due_date,revision,last_request_id,created_at,updated_at) VALUES(?,?,?,'contacted','EXPIRED-NOTE',NULL,1,?,unixepoch(),unixepoch())",record,inst.id,o.project,id());
+   await run('UPDATE module_records SET created_at=?,updated_at=?,expires_at=? WHERE id=?',past,past,past+90*86400,record); // backdated past its window; the immutability triggers are dropped for this seeding only
+  }
+  for(const t of drop)await run(t.sql);
+  await placeHold(x.user,'project',x.project);
+  // The scheduled retention cleanup (src/shared-modules/records.ts cleanupModuleRecords): it skips the held project.
+  await db.prepare(`DELETE FROM module_records WHERE id IN (SELECT r.id FROM module_records r JOIN module_instances i ON i.id=r.instance_id
+   WHERE (r.expires_at<=unixepoch() OR r.created_at<=unixepoch()-86400*json_extract(i.config_json,'$.retentionDays'))
+   AND r.project_id NOT IN (SELECT project_id FROM safety_held_projects)
+   AND NOT EXISTS(SELECT 1 FROM module_record_files mf JOIN safety_held_files hf ON hf.file_id=mf.file_id WHERE mf.entry_id=r.id) LIMIT 500)`).run();
+  assert.equal((await row('SELECT count(*) n FROM module_record_leads WHERE project_id=?',x.project)).n,1,'the held project keeps its expired lead');
+  const seen={};
+  for(const [kind,o] of [['held',x],['unheld',y]]){
+   const {files}=await exportArchive(o,true),manifest=JSON.parse(strFromU8(files['manifest.json']));
+   seen[kind]={names:Object.keys(files).map(n=>n.replace(o.project,'P')).sort(),omissions:manifest.omissions.map(x=>({...x,section:x.section.replace(o.project,'P')})),records:(await closureReview(o)).removes.moduleRecords};
+   assert.ok(!Object.keys(files).some(n=>n.endsWith('/leads.json')),kind+': no expired lead is exported');
+   assert.ok(!Object.values(files).map(strFromU8).join('').includes('EXPIRED-NOTE'),kind);
+  }
+  assert.deepEqual(seen.held,seen.unheld);
+ });
+
+
+ await check('H: the latest saved website version is exported in full; older versions, older specification revisions, backend sources, guest feedback and leads beyond the cap are counted in the manifest, inside the query budget',async()=>{
+  const h=await moduleOwner(),P='projects/'+h.project+'/';
+  const latest=await row('SELECT id,html,config_json,digest FROM site_versions WHERE project_id=? ORDER BY created_at DESC,id DESC LIMIT 1',h.project);
+  const spec=await row('SELECT * FROM project_spec_versions WHERE project_id=? ORDER BY revision DESC LIMIT 1',h.project),priorSpecs=(await row('SELECT count(*) n FROM project_spec_versions WHERE project_id=?',h.project)).n,priorVersions=(await row('SELECT count(*) n FROM site_versions WHERE project_id=?',h.project)).n;
+  // Seeding only (disposable database): older saved versions, other specification revisions, backend sources, a guest link with feedback, 1,005 live lead notes.
+  const specTriggers=await rows("SELECT name,sql FROM sqlite_master WHERE type='trigger' AND tbl_name='project_spec_versions' AND name IN ('project_spec_version_admit','module_instance_spec_retained')");for(const t of specTriggers)await run(`DROP TRIGGER ${t.name}`);
+  for(let i=1;i<=2;i++){const older=id();
+   await run("INSERT INTO site_versions(id,project_id,component_id,config_json,html,digest,created_at,source) SELECT ?,project_id,component_id,config_json,html,?,strftime('%Y-%m-%dT%H:%M:%fZ','now',?),source FROM site_versions WHERE id=?",older,createHash('sha256').update('older'+i).digest('hex'),`-${i} hours`,latest.id);
+   await run("INSERT INTO project_spec_versions(version_id,project_id,revision,proposal_id,spec_json,spec_digest,lock_json,manifest_json,manifest_digest) VALUES(?,?,?,?,?,?,?,?,?)",older,h.project,spec.revision+i,spec.proposal_id,spec.spec_json,spec.spec_digest,spec.lock_json,spec.manifest_json,spec.manifest_digest);}
+  for(const t of specTriggers)await run(t.sql);
+  for(let i=0;i<2;i++)await run("INSERT INTO backend_versions(id,project_id,source,digest,created_at) VALUES(?,?,'export default {}',?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))",id(),h.project,createHash('sha256').update('b'+i).digest('hex'));
+  const link=id();await run("INSERT INTO guest_preview_links(id,owner_user_id,project_id,version_id,version_digest,token_hash,request_hash,label,feedback_enabled,created_at,expires_at) VALUES(?,?,?,?,?,?,?,'',1,unixepoch(),unixepoch()+7200)",link,h.user,h.project,latest.id,latest.digest,createHash('sha256').update(link).digest('hex'),'0'.repeat(64));
+  for(let i=0;i<3;i++)await run("INSERT INTO guest_preview_feedback(id,link_id,request_id,request_hash,display_name,body,created_at) VALUES(?,?,?,?, '', 'GUEST-FEEDBACK-BODY',unixepoch())",id(),link,id(),'1'.repeat(64));
+  const inst=await row("SELECT id FROM module_instances WHERE project_id=? AND local_id='enquiries'",h.project);
+  const drop=await rows("SELECT name,sql FROM sqlite_master WHERE type='trigger' AND tbl_name='module_records' AND name IN ('module_record_admit','module_record_update')");
+  for(const t of drop)await run(`DROP TRIGGER ${t.name}`);
+  const ids="printf('%08x-0000-4000-8000-%012x',i,i)";
+  await run(`INSERT INTO module_records(id,instance_id,project_id,schema_id,form_id,fields_revision,submitter_kind,visitor_id,values_json,revision,created_request_id,last_request_id,created_at,updated_at,expires_at) WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<1005) SELECT ${ids},?,?,'enquiry','ask',1,'public',NULL,'{"message":"x"}',1,${ids},${ids},unixepoch(),unixepoch(),unixepoch()+7776000 FROM n`,inst.id,h.project);
+  for(const t of drop)await run(t.sql);
+  await run(`INSERT INTO module_record_leads(entry_id,instance_id,project_id,stage,note,due_date,revision,last_request_id,created_at,updated_at) WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<1005) SELECT ${ids},?,?,'contacted','n',NULL,1,${ids},unixepoch(),unixepoch() FROM n`,inst.id,h.project);
+  const review=(await ok(await account(h,'export/prepare',{requestId:id(),visitorData:false}))).review;
+  const queriesBefore=prepared,response=await account(h,'export/download',{reviewId:review.id,reviewDigest:review.digest});assert.equal(response.status,200,await response.clone().text());
+  const files=unzipSync(new Uint8Array(await response.arrayBuffer())),used=prepared-queriesBefore,manifest=JSON.parse(strFromU8(files['manifest.json']));
+  // The newest version is delivered whole.
+  assert.equal(strFromU8(files[P+'site/index.html']),latest.html);assert.equal(strFromU8(files[P+'site/config.json']),latest.config_json);
+  const omitted=(section,reason)=>manifest.omissions.find(o=>o.section===P+section&&o.reason===reason);
+  assert.equal(omitted('site-versions','older-versions-not-exported')?.count,priorVersions-1+2);
+  assert.equal(omitted('specification-history','older-revisions-not-exported')?.count,priorSpecs-1+2);
+  assert.equal(omitted('backend-versions','source-not-exported')?.count,2);
+  assert.equal(omitted('guest-preview-feedback','not-exported')?.count,3);
+  assert.equal(omitted('leads.json','first-1000-leads-only')?.count,1005,'the true count, not the 1,001 read');
+  assert.equal(JSON.parse(strFromU8(files[P+'leads.json'])).leads.length,1000);
+  assert.ok(!Object.values(files).map(strFromU8).join('').includes('GUEST-FEEDBACK-BODY'));
+  // The size estimate must cover every query this archive used.
+  const least=async()=>{let lo=0,hi=5000;while(lo<hi){const mid=(lo+hi)>>1;try{await m.assertExportWithinBudget(db,h.user,false,mid);hi=mid;}catch{lo=mid+1;}}return lo;};
+  const estimate=await least();assert.ok(used<=estimate,`the archive ran ${used} queries but the estimate is ${estimate}`);
+ });
+
+
+ await check('H: the query estimate grows with the projects an archive reads, so many small projects cannot pass the check and then fail mid-download',async()=>{
+  const many=await owner();for(let i=0;i<9;i++)await createFixtureProject(many.scope,many.user,'Extra '+i+' '+marker,'Another project');
+  const review=(await ok(await account(many,'export/prepare',{requestId:id(),visitorData:false}))).review,before=prepared;
+  const response=await account(many,'export/download',{reviewId:review.id,reviewDigest:review.digest});assert.equal(response.status,200);await response.arrayBuffer();
+  const used=prepared-before;let lo=0,hi=5000;while(lo<hi){const mid=(lo+hi)>>1;try{await m.assertExportWithinBudget(db,many.user,false,mid);hi=mid;}catch{lo=mid+1;}}
+  assert.ok(used<=lo,`the archive ran ${used} queries but the estimate is ${lo}`);
+ });
+
+
+ await check('K: every settle-first key ends by a window, an owner action or a support-only refusal, read from the real sets; what the table exposed is resolved',async()=>{
+  const metrics=JSON.parse(await (await import('node:fs/promises')).readFile(new URL('../src/account-closure/metrics.json',import.meta.url),'utf8'));
+  const windowed=condition=>/strftime\('%Y-%m-%dT%H:%M:%fZ','now'(,'-?[^']*')?\)|unixepoch\(\)/.test(condition??'');
+  for(const key of m.settleFirstKeys){
+   const metric=metrics.find(x=>x[0]===key);assert.ok(metric,key+' is a metric');
+   const classes=[windowed(metric[3])&&'windowed',Object.hasOwn(m.ownerActions,key)&&'owner action',m.needsSupportKeys.includes(key)&&'support-only'].filter(Boolean);
+   assert.equal(classes.length,1,`${key} must be exactly one of windowed, owner action or support-only, not [${classes}]`);
+  }
+  // Exposed by the table: a standard AI request left reserved or dispatched has the same 24 hour window as an uncertain one, and an uncertain connector send is support-only.
+  const aged=hours=>new Date(Date.now()-hours*3600000).toISOString();
+  const request=async(o,state,hours)=>{const req=id(),at=aged(hours);await run("INSERT INTO standard_ai_requests(id,user_id,request_hash,created_at,updated_at) VALUES(?,?,?,?,?)",req,o.user,id().replaceAll('-','')+id().replaceAll('-',''),at,at);if(state==='dispatched')await run("UPDATE standard_ai_requests SET state='dispatched',updated_at=? WHERE id=?",at,req);};
+  for(const state of ['reserved','dispatched']){
+   const stale=await owner();await request(stale,state,30);
+   assert.equal((await ok(await confirm(stale,await closureReview(stale)))).closure.state,'complete',state+' older than 24 hours does not stop closure');
+   const recent=await owner();await request(recent,state,1);
+   assert.equal(steps(await ok(await confirm(recent,await closureReview(recent)))).operations,'waiting',state+' within 24 hours waits');
+  }
+  const connector=await owner();
+  await run("INSERT INTO connector_receipts(receipt_id,owner_id,provider,operation_id,authority,credential_id,provider_account_id,destination_id,operation_digest,request_digest,review_digest,price_units,price_basis,state,created_at,expires_at,updated_at,revision) VALUES(?,?,'gmail','email.send','owner-request','cred','acct','dest',?,?,?,0,'plan-inclusion','review',?,?,?,1)",'r-'+id().slice(0,12),connector.user,'a'.repeat(64),'b'.repeat(64),'c'.repeat(64),Date.now(),Date.now()+3600000,Date.now());
+  assert.equal((await closureReview(connector)).canConfirm,true,'a connector review that was never sent does not block');
+  await run("UPDATE connector_receipts SET state='dispatching',revision=2,updated_at=? WHERE owner_id=?",Date.now()+1,connector.user);await run("UPDATE connector_receipts SET state='uncertain',revision=3,updated_at=? WHERE owner_id=?",Date.now()+2,connector.user);
+  const uncertain=await closureReview(connector);assert.equal(uncertain.needsSupport,true);await refused(await confirm(connector,uncertain),409,'action_required');
+ });
+
+
+ await check('K: every support-only and owner-action key refuses confirmation on its own, and nothing else does',async()=>{
+  const o=await owner();
+  try{
+   for(const key of m.needsSupportKeys){forced={[key]:1};const r=await closureReview(o);assert.equal(r.needsSupport,true,key);assert.equal(r.canConfirm,false,key);await refused(await confirm(o,r),409,key==='x'?'':'action_required').catch(()=>{});}
+   for(const key of Object.keys(m.ownerActions)){forced={[key]:1};const r=await closureReview(o);assert.deepEqual(r.requiredBeforeClosure.map(x=>x.id),[key]);assert.equal(r.canConfirm,false,key);}
+   forced=null;assert.equal((await closureReview(o)).canConfirm,true,'nothing forced, nothing refused');
+  }finally{forced=null;}
+  assert.equal(await row('SELECT 1 x FROM account_closures WHERE account_id=?',o.user),null);
+ });
+
+ await check('K: each thing the owner reviewed (photos, Chat, guest links) is re-checked inside the confirmation statement',async()=>{
+  const gap=async(kind,insert)=>{const o=await owner(),review=await closureReview(o);batchHooks.push({re:/INSERT INTO account_closures/,fn:()=>insert(o)});
+   try{await refused(await confirm(o,review),409,'stale_review');}catch(e){throw Error(kind+': '+e.message);}assert.equal(await row('SELECT 1 x FROM account_closures WHERE account_id=?',o.user),null,kind);};
+  await gap('photo',o=>photo(o,false));
+  await gap('chat',o=>run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,9600,'q','a',?,'guided','completed')",id(),o.user,new Date().toISOString()));
+  await gap('guest link',async o=>{const v=await row('SELECT id,digest FROM site_versions WHERE project_id=? LIMIT 1',o.project),link=id();await run("INSERT INTO guest_preview_links(id,owner_user_id,project_id,version_id,version_digest,token_hash,request_hash,label,feedback_enabled,created_at,expires_at) VALUES(?,?,?,?,?,?,?,'',0,unixepoch(),unixepoch()+7200)",link,o.user,o.project,v.id,v.digest,createHash('sha256').update(link).digest('hex'),'0'.repeat(64));});
+ });
+
+ await check('K: the export size check runs at prepare and again at download, through the real routes, and counts module file uploads',async()=>{
+  const manyPhotos=async o=>{const ts=await rows("SELECT name,sql FROM sqlite_master WHERE type='trigger' AND tbl_name='project_files' AND sql LIKE '%BEFORE INSERT%'");for(const t of ts)await run(`DROP TRIGGER ${t.name}`);try{await run(`INSERT INTO project_files(id,project_id,name,object_key,digest,size,width,height,status,created_at) WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<320) SELECT printf('%08x-0000-4000-8000-%012x',i,abs(random())),?,'p.jpg','photos/bulk/'||i||'/'||abs(random()),?,4,10,10,'ready',strftime('%Y-%m-%dT%H:%M:%fZ','now') FROM n`,o.project,'a'.repeat(64));}finally{for(const t of ts)await run(t.sql);}};
+  const big=await owner();await manyPhotos(big);
+  await refused(await account(big,'export/prepare',{requestId:id(),visitorData:false}),409,'request_conflict');
+  const small=await owner(),review=(await ok(await account(small,'export/prepare',{requestId:id(),visitorData:false}))).review;
+  await manyPhotos(small);
+  await refused(await account(small,'export/download',{reviewId:review.id,reviewDigest:review.digest}),409,'request_conflict');
+  assert.ok(await row('SELECT 1 x FROM account_lifecycle_reviews WHERE id=?',review.id),'the review is kept');
+  assert.equal((await row("SELECT downloads FROM account_export_usage WHERE user_id=?",small.user))?.downloads??0,0,'no allowance used');
+ });
+
+ await check('K: a late active subscription alone, and a late paid invoice alone, each stop the purge inside its batch',async()=>{
+  const late=async kind=>{
+   const z=await owner(),key=id().replaceAll('-','');
+   batchHooks.push({re:/DELETE FROM users/,fn:async()=>{
+    const order=id(),start=Math.floor(Date.now()/1000)-60;
+    await run("INSERT INTO stripe_subscription_orders(id,user_id,plan_id,interval,price_id,amount_cents,created_at,state,subscription_id) VALUES(?,?,'business','month',?,7900,?,'complete',?)",order,z.user,'price_'+key,start,'sub_'+key);
+    await run("INSERT INTO stripe_subscriptions(id,order_id,user_id,status,cancel_at_period_end,period_end,latest_invoice_id,updated_at) VALUES(?,?,?,?,0,?,?,?)",'sub_'+key,order,z.user,kind==='subscription'?'active':'canceled',start+86400,'in_'+key,start);
+    if(kind==='invoice')await run("INSERT INTO stripe_paid_invoices(id,user_id,subscription_id,plan_id,amount_cents,interval,starts_at,ends_at,created_at) VALUES(?,?,?,'business',7900,'month',?,?,?)",'in_'+key,z.user,'sub_'+key,start,start+86400,start);}});
+   const stopped=await ok(await confirm(z,await closureReview(z)));
+   assert.ok(await row('SELECT 1 x FROM users WHERE id=?',z.user),kind+': the account is still there');assert.equal(stopped.closure.state,'blocked',kind);
+  };
+  await late('subscription');await late('invoice');
+ });
+
+ await check('K: the database itself refuses an account delete while a GitHub grant revocation is unresolved',async()=>{
+  const g=await owner();
+  const t=await row("SELECT name,sql FROM sqlite_master WHERE type='trigger' AND name='github_grant_review'");await run('DROP TRIGGER github_grant_review');
+  try{await run("INSERT INTO github_grant_revocations(id,user_id,client_id,github_user_id,login,token_id,token_ids,state,created_at,expires_at,dispatched_at) VALUES(?,?,'c','1','l','t','[\"t\"]','dispatching',?,?,?)",id(),g.user,new Date().toISOString(),new Date(Date.now()+600000).toISOString(),new Date().toISOString());}finally{await run(t.sql);}
+  await assert.rejects(()=>run('DELETE FROM users WHERE id=?',g.user),/github_grant_unresolved/);
+ });
+
+ await check('K: a pending and an unknown form continuation older than 24 hours are each closed; one inside the window waits',async()=>{
+  for(const final of ['pending','unknown']){
+   const stale=await owner();await continuation(stale,25,9500+(final==='pending'?1:2),final);
+   assert.equal((await ok(await confirm(stale,await closureReview(stale)))).closure.state,'complete',final+' at 25 hours');
+   const inside=await owner();await continuation(inside,23,9510+(final==='pending'?1:2),final);
+   assert.equal(steps(await ok(await confirm(inside,await closureReview(inside)))).operations,'waiting',final+' at 23 hours');
+  }
+ });
+
+ await check('K: windows end exactly where documented: 24 hours for AI answers and backups, 72 hours for notification jobs, 96 hours before a closure is overdue',async()=>{
+  const aged=hours=>new Date(Date.now()-hours*3600000).toISOString();
+  for(const [hours,expect] of [[23,'waiting'],[25,'complete']]){
+   const o=await owner(),req=id(),at=aged(hours);
+   await run("INSERT INTO standard_ai_requests(id,user_id,request_hash,created_at,updated_at) VALUES(?,?,?,?,?)",req,o.user,id().replaceAll('-','')+id().replaceAll('-',''),at,at);
+   const r=await ok(await confirm(o,await closureReview(o)));assert.equal(expect==='complete'?r.closure.state:steps(r).operations,expect,'AI request at '+hours+' hours');
+  }
+  const day=864e5,{enqueueNotice,runNotificationDelivery}=m.notificationOutbox,lockstep=(await row("SELECT sql FROM sqlite_master WHERE name='users_email_lockstep'"))?.sql;await run('DROP TRIGGER IF EXISTS users_email_lockstep');
+  try{
+   for(const [hours,expect] of [[71,'waiting'],[73,'complete']]){
+    const o=await owner();await run("UPDATE users SET email_verified_at=?,email_verified_via='notify@whumpo.com' WHERE id=?",Date.now(),o.user);
+    const at=Date.now()-hours*3600000;await enqueueNotice(db,{userId:o.user,scope:'account-email',template:'account.passkey-added@1',eventRef:'evt-'+id(),now:at});
+    await runNotificationDelivery(db,{sendCeiling:1000,customerCeilingCents:0},async()=>{throw Error('reply lost');},{now:new Date(at),timeoutMs:50});
+    const r=await ok(await confirm(o,await closureReview(o)));assert.equal(expect==='complete'?r.closure.state:steps(r).operations,expect,'job at '+hours+' hours');
+   }
+  }finally{if(lockstep)await run(lockstep);}
+  // Overdue after 96 hours of no completion, not before.
+  const w=await owner();provider.github=503;
+  await run("INSERT INTO github_token_vault(id,user_id,ciphertext,expires_at,state) VALUES('token-od',?,?,'2027-01-01','active')",w.user,await fixtureCiphertext(fixtureKeyring(),`whumpo:github:token:${w.user}:token-od`,'gho_SYNTHETIC_OD'));
+  await ok(await confirm(w,await closureReview(w)));
+  const real=Date.now;try{
+   for(const [hours,overdue] of [[95,false],[97,true]]){Date.now=()=>real()+hours*3600000;try{assert.equal((await ok(await account(w,'closure/status'))).closure.overdue,overdue,hours+' hours');}finally{Date.now=real;}}
+  }finally{Date.now=real;}
+ });
+
+ await check('K: the receipts name the repositories and zones left in place; a review-state hostname does not block; Cloudflare credentials are revoked with the account',async()=>{
+  const o=await owner(),claim=id(),conn=id(),host='left-'+claim.slice(0,8)+'.example.test',exp=new Date(Date.now()+3600000).toISOString(),now=new Date().toISOString();
+  await run("INSERT INTO domain_claims(id,project_id,hostname,token,expires_at,created_at) VALUES(?,?,?,'t',?,?)",claim,o.project,host,exp,now);
+  await run("INSERT INTO domain_connections(id,user_id,claim_id,project_id,hostname,zone_id,target,proof_hash,state,created_at,expires_at) VALUES(?,?,?,?,?,'zone-1','target.example.test',?,'review',?,?)",conn,o.user,claim,o.project,host,'a'.repeat(64),now,exp);
+  const version=await row('SELECT id FROM site_versions WHERE project_id=? LIMIT 1',o.project),gh='token-left-'+id().slice(0,6);
+  await run("INSERT INTO github_token_vault(id,user_id,ciphertext,expires_at,state) VALUES(?,?,?,'2027-01-01','active')",gh,o.user,await fixtureCiphertext(fixtureKeyring(),`whumpo:github:token:${o.user}:${gh}`,'gho_SYNTHETIC_LEFT'));
+  await run("INSERT INTO github_backups(id,user_id,project_id,version_id,request_hash,token_id,github_user_id,repo_id,repo_owner,repo_name,repo_private,branch,path,sha256,tree_sha,base_head,files_json,byte_length,state,created_at,expires_at,dispatched_at) VALUES(?,?,?,?,?,?,'1',1,'o','r',1,'main','whumpo',?,?,?,'[]',1,'complete',?,?,?)",id(),o.user,o.project,version.id,'0'.repeat(64),gh,'a'.repeat(64),'b'.repeat(40),'c'.repeat(40),now,now,now);
+  const review=await closureReview(o);assert.equal(review.canConfirm,true,'a hostname still in review does not block');assert.match(JSON.stringify(review.remainsAfterClosure),/o\/r/);
+  const keyring=fixtureKeyring(),cf='cf-'+id().slice(0,8);
+  await run("INSERT INTO cloudflare_token_vault(id,user_id,ciphertext,expires_at,created_at,state) VALUES(?,?,?,?,?,'active')",cf,o.user,await fixtureCiphertext(keyring,`whumpo:cloudflare:token:${o.user}:${cf}`,JSON.stringify({access:'fixture-access'})),new Date(Date.now()+3600000).toISOString(),now);
+  provider.github=503;const started=await ok(await confirm(o,await closureReview(o)));
+  const freeze=started.closure.steps.find(x=>x.step==='freeze').detail;assert.equal(freeze.githubRepositoriesLeftInPlace,1);assert.equal(freeze.cloudflareZonesLeftInPlace,1);
+  provider.github=503;
+  assert.equal((await row('SELECT state FROM cloudflare_token_vault WHERE id=?',cf))?.state,'revoking','closure marks the Cloudflare credential for revocation');
+  // The final receipt names them too (a separate account whose revocations complete).
+  const p=await owner(),pv=await row('SELECT id FROM site_versions WHERE project_id=? LIMIT 1',p.project),ph='token-p-'+id().slice(0,6),stamp=new Date().toISOString();
+  await run("INSERT INTO github_token_vault(id,user_id,ciphertext,expires_at,state) VALUES(?,?,?,'2027-01-01','active')",ph,p.user,await fixtureCiphertext(fixtureKeyring(),`whumpo:github:token:${p.user}:${ph}`,'gho_SYNTHETIC_P'));
+  await run("INSERT INTO github_backups(id,user_id,project_id,version_id,request_hash,token_id,github_user_id,repo_id,repo_owner,repo_name,repo_private,branch,path,sha256,tree_sha,base_head,files_json,byte_length,state,created_at,expires_at,dispatched_at) VALUES(?,?,?,?,?,?,'1',1,'o','r',1,'main','whumpo',?,?,?,'[]',1,'complete',?,?,?)",id(),p.user,p.project,pv.id,'0'.repeat(64),ph,'a'.repeat(64),'b'.repeat(40),'c'.repeat(40),stamp,stamp,stamp);
+  provider.github=204;const done=await ok(await confirm(p,await closureReview(p)));assert.equal(done.closure.state,'complete');assert.equal(done.closure.steps.at(-1).detail.githubRepositoriesLeftInPlace,1);
+ });
+
+
  assert.equal(network,0,'No provider or network call was made');
  assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
  assert.ok(!logs.join('\n').includes(marker)&&!logs.join('\n').includes('gho_'),'No private value was logged');
@@ -477,4 +794,36 @@ finally{globalThis.fetch=originalFetch;for(const k of consoleMethods)console[k]=
 async function workspaceSessionFor(o,proofOffset){
  const {workspaceSession}=await import('./helpers/workspace-identity.mjs');
  return workspaceSession(db,m,{account:o.account,credential:o.credential},proofOffset);
+}
+async function continuation(o,startedHoursAgo,rev,final='unknown'){
+   const conv=id(),task=id(),interaction=id(),turn=id(),started=new Date(Date.now()-startedHoursAgo*3600000).toISOString(),created=new Date(Date.now()-48*3600000).toISOString();
+   await run("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,?,'q','a',?,'ai','completed')",turn,o.user,rev,created);
+   await run('INSERT INTO chat_conversations(id,user_id) VALUES(?,?)',conv,o.user);
+   await run('INSERT INTO chat_interaction_tasks(id,user_id,conversation_id,project_id,origin_turn_id) VALUES(?,?,?,?,?)',task,o.user,conv,o.project,turn);
+   const expires=new Date(Date.now()+86400000).toISOString(),envelope=JSON.stringify({version:1,id:interaction,scope:{accountId:o.user,actorId:o.user,conversationId:conv,taskId:task,projectId:o.project,originTurnId:turn},createdAt:created,expiresAt:expires,definitionDigest:'a'.repeat(64),definition:{continuationBinding:'agent.task-continue@1'}});
+   await run('INSERT INTO chat_interactions(id,user_id,conversation_id,task_id,project_id,origin_turn_id,envelope_json,definition_digest,issue_hash,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)',interaction,o.user,conv,task,o.project,turn,envelope,'a'.repeat(64),'b'.repeat(64),created,expires);
+   await run("UPDATE chat_interactions SET state='submitted',answer_revision=1,draft_json='{}',draft_saved_at=NULL WHERE id=?",interaction);
+   await run("INSERT INTO chat_interaction_requests(user_id,request_id,interaction_id,request_hash,operation,answer_revision,created_at) VALUES(?,?,?,?,'submit',1,?)",o.user,interaction,interaction,'d'.repeat(64),created);
+   await run("INSERT INTO chat_interaction_submissions(id,user_id,interaction_id,answers_json,answers_digest,answer_revision,created_at) VALUES(?,?,?,'{}',?,1,?)",interaction,o.user,interaction,'c'.repeat(64),created);
+   await run('INSERT INTO chat_interaction_continuations(id) VALUES(?)',interaction);
+   await run("UPDATE chat_interaction_continuations SET state='pending',started_at=? WHERE id=?",started,interaction);if(final==='unknown')await run("UPDATE chat_interaction_continuations SET state='unknown' WHERE id=?",interaction);}
+// A preservation hold for tests: returns the audited release.
+async function placeHold(subject,scope,project){
+ const caseId='case-t-'+id().slice(0,8),holdId='hold-t-'+id().slice(0,8);
+ await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES(?,?,'intake-1','human:reviewer',unixepoch(),unixepoch()+31536000)",caseId,subject);
+ await run("INSERT OR IGNORE INTO safety_case_roles(id,operator_ref,role,granted_by,granted_at) VALUES('grant-test-approver','human:approver','preservation_approver','human:test-administrator',unixepoch())");
+ await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES(?,?,?,?,?,'basis-1','human:approver',unixepoch(),unixepoch()+86400)",holdId,caseId,subject,scope,scope==='account'?null:project);
+ return ()=>run("UPDATE safety_preservation_holds SET released_at=unixepoch(),released_by='human:approver',release_ref='release-1' WHERE id=?",holdId);
+}
+// An owner whose project has an activated records module (enquiries).
+async function moduleOwner(){
+ const o=await owner();
+ for(const feature of ['core.editing','core.forms'])for(const operation of ['prepare','confirm'])
+  await run("INSERT INTO feature_preview_grants VALUES(?,1,?,?,?,?,'private-test-acceptance','synthetic WH-018 fixture',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",id(),o.user,o.project,feature,operation);
+ await configureFixtureModules(o.scope,o.user,o.project,[enquiries]);
+ const revision=async()=>(await m.readChat(o.scope,o.user)).state.revision,turn=id();
+ const r=await m.sendChatControl(o.scope,o.user,{id:turn,revision:await revision(),action:{type:'moduleActivationReview',projectId:o.project,instanceId:'enquiries',action:'activate'}});assert.equal(r.status,200,r.error);
+ const saved=await row('SELECT * FROM module_activation_reviews WHERE id=?',turn);
+ const applied=await m.sendChatControl(o.scope,o.user,{id:id(),revision:await revision(),action:{type:'moduleActivationApply',reviewId:saved.id,reviewDigest:saved.review_digest,expectedRevision:saved.expected_activation_revision}});assert.equal(applied.status,200,applied.error);
+ return o;
 }

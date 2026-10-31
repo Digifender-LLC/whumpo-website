@@ -66,7 +66,7 @@ export async function assertExportWithinBudget(db:D1Database,user:string,visitor
   (SELECT coalesce(sum(CASE i.kind WHEN 'records' THEN json_array_length(json_extract(i.config_json,'$.schemas')) WHEN 'files' THEN json_array_length(json_extract(i.config_json,'$.collections')) ELSE 0 END),0) FROM module_instances i JOIN projects p ON p.id=i.project_id WHERE p.owner_user_id=?1) targets,
   (SELECT count(*) FROM projects WHERE owner_user_id=?1) projects`).bind(user).first<{photos:number;records:number;uploads:number;modules:number;targets:number;projects:number}>();
  if(!row)throw new AccountLifecycleError(503,'closure_unavailable','The export could not be sized. Try again later.');
- const estimate=60+row.projects*14+row.modules*6+row.photos*3+(visitorData?row.targets*4+Math.ceil(row.records/200)*4+row.uploads*4:0);
+ const estimate=60+row.projects*21+row.modules*6+row.photos*3+(visitorData?row.targets*4+Math.ceil(row.records/200)*4+row.uploads*4:0);
  if(estimate>budget)throw new AccountLifecycleError(409,'request_conflict','This account is too large to export in one download'+(visitorData?'; try again without visitor datasets':'')+'. Nothing was used from your monthly allowance. Contact support to arrange a split export.');
 }
 
@@ -80,9 +80,9 @@ export async function prepareAccountExport(db:D1Database,user:string,input:unkno
  const modules=binding.projects.flatMap(p=>p.modules);
  return {version:1 as const,review:{id:data.requestId,digest:saved.reviewDigest,expiresAt:saved.expiresAt,format:'whumpo-account-export-v1',visitorData:data.visitorData,
   projects:binding.projects.length,
-  includes:['Account and profile settings (no sign-in credentials)','Approved profile photo','Plan and standard AI usage history','Connection status and GitHub backup destinations','Saved Chat transcript','Each project: details, current saved website specification and saved version list, published directory snapshot, lead stages and notes you recorded, approved photos, staff role list',
+  includes:['Account and profile settings (no sign-in credentials)','Approved profile photo','Plan and standard AI usage history','Connection status and GitHub backup destinations','Saved Chat transcript','Each project: details, current saved website specification, the newest saved website (page and settings), saved version list, published directory snapshot, lead stages and notes you recorded, approved photos, staff role list',
    ...(data.visitorData?['Visitor datasets you selected: module records and approved module file uploads, including visitor identifiers']:[])],
-  excludes:['Passkeys, recovery material, sessions and provider tokens','Safety reviews, preservation records and anything held or not yet approved','Internal review envelopes and other accounts\' data',
+  excludes:['Passkeys, recovery material, sessions and provider tokens','Older saved website versions, other specification revisions, backend sources and guest preview feedback (each counted in manifest.json)','Safety reviews, preservation records and anything held or not yet approved','Internal review envelopes and other accounts\' data',
    ...(data.visitorData?[]:[`Visitor datasets (${modules.filter(m=>m[1]==='records'||m[1]==='files').length} module instances); request them separately`]),'Contact inbox messages (kept in your inbox for 30 days, then deleted)','Visitor application documents (each visitor exports their own)'],
   notice:'The download is a private copy for you. It is not a backup Whumpo can restore, and it is generated from current data when you download it.'}};
 }
@@ -97,6 +97,8 @@ async function reserveExportPhotoRead(db:D1Database,user:string){
  if(!row)throw new StorageLimitError(allowanceMessage);
  await reserveStorage(db,'read');
 }
+// A lead note leaves with its record: the same live window as the records export (src/shared-modules/records.ts `live`), so a record kept past its window only by a safety hold is neither exported nor counted.
+const liveLead="r.expires_at>unixepoch() AND r.created_at>unixepoch()-86400*json_extract(i.config_json,'$.retentionDays')";
 const json=(value:unknown)=>strToU8(JSON.stringify(value,null,2)+'\n');
 async function sha256(bytes:Uint8Array){return [...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(v=>v.toString(16).padStart(2,'0')).join('');}
 const configIds=(value:string,key:'schemas'|'collections')=>{const list=(JSON.parse(value) as Record<string,unknown>)[key];return Array.isArray(list)?list.map(x=>(x as {id:string}).id).filter(x=>typeof x==='string'):[];};
@@ -124,12 +126,23 @@ async function* sections(env:Env,user:string,binding:Awaited<ReturnType<typeof e
   const versions=(await db.prepare('SELECT v.id,v.created_at,v.digest,s.version_id live FROM site_versions v LEFT JOIN publications s ON s.project_id=v.project_id AND s.version_id=v.id WHERE v.project_id=? ORDER BY v.created_at,v.id').bind(p.id).all<{id:string;created_at:string;digest:string;live:string|null}>()).results;
   yield [base+'project.json',json({id:p.id,name:p.name,purpose:p.purpose,status:p.status,audience:p.audience,styleNotes:p.style_notes,preferredTheme:p.preferred_theme,createdAt:p.created_at,updatedAt:p.updated_at,
    savedVersions:versions.map(v=>({id:v.id,createdAt:v.created_at,sha256:v.digest,live:v.live!==null}))})];
+  // The newest saved version is delivered whole; older ones stay listed in project.json and counted in the manifest.
+  const newest=versions.at(-1);
+  if(newest){
+   const site=await db.prepare('SELECT html,config_json FROM site_versions WHERE id=? AND project_id=?').bind(newest.id,p.id).first<{html:string;config_json:string}>();
+   if(site){yield [base+'site/index.html',strToU8(site.html)];yield [base+'site/config.json',strToU8(site.config_json)];}
+  }
+  if(versions.length>1)omissions.push({section:base+'site-versions',reason:'older-versions-not-exported',count:versions.length-1});
+  const kept=await db.prepare('SELECT (SELECT count(*) FROM project_spec_versions WHERE project_id=?1) specs,(SELECT count(*) FROM backend_versions WHERE project_id=?1) backends,(SELECT count(*) FROM guest_preview_feedback f JOIN guest_preview_links l ON l.id=f.link_id WHERE l.project_id=?1) feedback').bind(p.id).first<{specs:number;backends:number;feedback:number}>();
   const head=await db.prepare('SELECT h.revision,h.version_id,v.spec_json,v.spec_digest FROM project_spec_heads h JOIN project_spec_versions v ON v.version_id=h.version_id WHERE h.project_id=?').bind(p.id).first<{revision:number;version_id:string;spec_json:string;spec_digest:string}>();
+  if(kept&&kept.specs>(head?1:0))omissions.push({section:base+'specification-history',reason:'older-revisions-not-exported',count:kept.specs-(head?1:0)});
+  if(kept?.backends)omissions.push({section:base+'backend-versions',reason:'source-not-exported',count:kept.backends});
+  if(kept?.feedback)omissions.push({section:base+'guest-preview-feedback',reason:'not-exported',count:kept.feedback});
   if(head)yield [base+'specification.json',json({format:'whumpo-project-specification',revision:head.revision,versionId:head.version_id,specDigest:head.spec_digest,specification:JSON.parse(head.spec_json) as unknown})];
   // Owner-only lead stages, notes and due dates are the owner's own data: exported without the visitor-dataset choice (they hold no visitor identifier).
-  const leads=(await db.prepare('SELECT l.entry_id,i.local_id,l.stage,l.note,l.due_date,l.created_at,l.updated_at FROM module_record_leads l JOIN module_instances i ON i.id=l.instance_id WHERE l.project_id=? ORDER BY l.created_at,l.entry_id LIMIT 1001').bind(p.id).all<{entry_id:string;local_id:string;stage:string;note:string;due_date:string|null;created_at:number;updated_at:number}>()).results;
+  const leads=(await db.prepare(`SELECT l.entry_id,i.local_id,l.stage,l.note,l.due_date,l.created_at,l.updated_at FROM module_record_leads l JOIN module_instances i ON i.id=l.instance_id JOIN module_records r ON r.id=l.entry_id WHERE l.project_id=? AND ${liveLead} ORDER BY l.created_at,l.entry_id LIMIT 1001`).bind(p.id).all<{entry_id:string;local_id:string;stage:string;note:string;due_date:string|null;created_at:number;updated_at:number}>()).results;
   if(leads.length){
-   if(leads.length>1000)omissions.push({section:base+'leads.json',reason:'first-1000-leads-only'});
+   if(leads.length>1000)omissions.push({section:base+'leads.json',reason:'first-1000-leads-only',count:(await db.prepare(`SELECT count(*) n FROM module_record_leads l JOIN module_instances i ON i.id=l.instance_id JOIN module_records r ON r.id=l.entry_id WHERE l.project_id=? AND ${liveLead}`).bind(p.id).first<{n:number}>())?.n??leads.length});
    yield [base+'leads.json',json({format:'whumpo-lead-notes',leads:leads.slice(0,1000).map(l=>({entryId:l.entry_id,module:l.local_id,stage:l.stage,note:l.note,dueDate:l.due_date,createdAt:l.created_at,updatedAt:l.updated_at}))})];
   }
   const history=await directoryHistory(db,user,p.id);
@@ -204,7 +217,7 @@ export async function downloadAccountExport(env:Env,user:string,input:unknown){
   {section:'contacts',reason:'separate-inbox-retention'},{section:'visitor-application-documents',reason:'exported-by-each-visitor'},
  ];
  const files:{path:string;bytes:number;sha256:string}[]=[],generatedAt=new Date().toISOString();
- const readme=`Whumpo account export (whumpo-account-export-v1)\n\nGenerated ${generatedAt} for account ${user} from review ${data.reviewId}.\n\nThis archive is your private copy of the account data listed in manifest.json. It is not a Whumpo backup and cannot be restored or imported. manifest.json is written last; if it is missing, the download was interrupted and is incomplete.\n\nIncluded: account and profile settings, an approved profile photo, plan and standard AI usage, connection status and GitHub backup destinations, the saved Chat transcript, and for each project its details, current saved website specification, saved version list, published directory snapshot, approved photos and staff role list.${stored.visitorData?' You also selected visitor datasets: module records and approved module file uploads, which contain other people\'s submissions and identifiers. Store and share them accordingly.':''}\n\nNever included: passkeys, recovery material, sessions, provider tokens or keys, safety reviews and preserved records, media that is held or not currently approved, internal review envelopes and other accounts' data. manifest.json lists each omission.\n\nData stays with providers you connected (GitHub repositories, Cloudflare zones) and in this download; Whumpo cannot recall copies you keep. Sections are read one after another, so a project changed during the download may show slightly different times between files.\n`;
+ const readme=`Whumpo account export (whumpo-account-export-v1)\n\nGenerated ${generatedAt} for account ${user} from review ${data.reviewId}.\n\nThis archive is your private copy of the account data listed in manifest.json. It is not a Whumpo backup and cannot be restored or imported. manifest.json is written last; if it is missing, the download was interrupted and is incomplete.\n\nIncluded: account and profile settings, an approved profile photo, plan and standard AI usage, connection status and GitHub backup destinations, the saved Chat transcript, and for each project its details, current saved website specification, the newest saved website (page and settings), saved version list, published directory snapshot, approved photos and staff role list.${stored.visitorData?' You also selected visitor datasets: module records and approved module file uploads, which contain other people\'s submissions and identifiers. Store and share them accordingly.':''}\n\nNever included: passkeys, recovery material, sessions, provider tokens or keys, safety reviews and preserved records, media that is held or not currently approved, internal review envelopes and other accounts' data. manifest.json lists each omission.\n\nData stays with providers you connected (GitHub repositories, Cloudflare zones) and in this download; Whumpo cannot recall copies you keep. Sections are read one after another, so a project changed during the download may show slightly different times between files.\n`;
  const entries=(async function*():AsyncGenerator<[string,Uint8Array]>{
   yield ['README.txt',strToU8(readme)];
   yield* sections(env,user,stored,omissions);

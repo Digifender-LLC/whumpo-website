@@ -306,8 +306,10 @@ try{
     'restore-suppression.ts:DELETE FROM app_visitors',          // WH-019 operator replay on an isolated candidate only (no Worker imports it); hold triggers refuse inside held scope
     'restore-suppression.ts:DELETE FROM module_records',        // same replay, same triggers
     'restore-suppression.ts:DELETE FROM project_files',         // same replay, same triggers
+    'restore-suppression.ts:DELETE FROM project_files',         // same replay: attached files of removed records and erased visitors
     'restore-suppression.ts:UPDATE app_visitors',               // same replay: revocation flag only
     'restore-suppression.ts:UPDATE module_access_roles',        // same replay: a grant older than the ledger's revocation is revoked
+    'restore-suppression.ts:UPDATE module_access_roles',        // same replay: grants of a visitor the ledger revoked, as the revocation trigger does
     'shared-modules/files-gallery.ts:DELETE FROM module_files',  // removes the collection link only, never the photo
     'shared-modules/records.ts:DELETE FROM module_records',      // owner removal, held by safety_hold_module_record_retained
     'shared-modules/records.ts:DELETE FROM module_records',      // retention expiry, same trigger and held-project/object filter

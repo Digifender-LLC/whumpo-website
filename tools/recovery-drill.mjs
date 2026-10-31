@@ -5,6 +5,7 @@ import {join} from 'node:path';
 import {stableCMSDatabase,captureCMSDatabase,restoreCapturedCMSDatabase} from './cms-database-snapshot.mjs';
 import {fileInventory,copyTree,same} from './release-manifest.mjs';
 import {writePrivate,readPrivate,pathCheck} from './operator-private-files.mjs';
+import {currentSchema} from './current-schema.mjs';
 import {captureRestoreArchive,captureRestoreRecordSnapshot,restoreRecordIdentity} from './restore-admission.mjs';
 
 // WH-008 local disaster-recovery drill helpers. Operator/local only: there is no
@@ -217,13 +218,20 @@ export async function restoreDiscrepancies(candidateDb,sourceDb){
  * idempotent; the gate must then report clear. Counts and codes only. Without a current source there is no ledger to replay, so
  * reconciliation is unavailable and the candidate stays held. */
 export async function reconcileRestoreSuppressions(candidateDb,sourceDb,suppression){
- hold(suppression&&['captureRestoreSuppressions','replayRestoreSuppressions','checkRestoreSuppressions'].every(n=>typeof suppression[n]==='function'),'suppression-module');
- let ledger;try{ledger=await suppression.captureRestoreSuppressions(sourceDb);}catch{return {...fenced,status:'unavailable',reconciliation:'unavailable-without-current-source'};}
- const before=await suppression.checkRestoreSuppressions(candidateDb,ledger);
- let replay;try{replay=await suppression.replayRestoreSuppressions(candidateDb,ledger);}catch{throw new DrillHold('suppression-replay-refused');}
- const after=await suppression.checkRestoreSuppressions(candidateDb,ledger);
+ hold(suppression&&['captureRestoreSuppressions','replayRestoreSuppressions','checkRestoreSuppressions','triggerSetDigest'].every(n=>typeof suppression[n]==='function'),'suppression-module');
+ // A caller that reads only `holds` must see a hold when there is nothing to reconcile with.
+ let ledger;try{ledger=await suppression.captureRestoreSuppressions(sourceDb);}catch{return {...fenced,status:'unavailable',holds:['suppression-source-unavailable'],reconciliation:'unavailable-without-current-source'};}
+ const expected={triggerSha256:await currentTriggerSha256(suppression)};
+ const before=await suppression.checkRestoreSuppressions(candidateDb,ledger,expected);
+ let replay;try{replay=await suppression.replayRestoreSuppressions(candidateDb,ledger,{source:sourceDb,name:'recovery drill candidate'});}catch{throw new DrillHold('suppression-replay-refused');}
+ const after=await suppression.checkRestoreSuppressions(candidateDb,ledger,expected);
  hold(after.clear,'suppression-not-clear');
- return {...fenced,status:'reconciled',entries:ledger.entries.length,ledgerSha256:ledger.sha256,pendingBefore:before.pending,applied:replay.applied};
+ return {...fenced,status:'reconciled',holds:[],entries:ledger.entries.length,ledgerSha256:ledger.sha256,pendingBefore:before.pending,applied:replay.applied};
+}
+/** The trigger set of the current schema artifact, which a reconciled candidate must carry exactly. */
+async function currentTriggerSha256(suppression){
+ const sql=new DatabaseSync(':memory:');
+ try{sql.exec(await currentSchema());return await suppression.triggerSetDigest(sql.prepare("SELECT name,sql FROM sqlite_master WHERE type='trigger'").all());}finally{sql.close();}
 }
 
 // WH-008 refresh (2026-10-29): coverage, key-version and interrupted-cutover inventories.

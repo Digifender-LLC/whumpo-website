@@ -26,6 +26,8 @@ try{
  sql.exec(`INSERT INTO lookup_consents(consent_id,owner_id,provider,operation_id,credential_id,params_digest,destination,created_at,expires_at,state,revision) VALUES('consent-b1','owner-b','gmail','messages.search','credential-b','${key}','owner-panel',${now},${now+600000},'issued',1);
   INSERT INTO rule_approvals(approval_id,owner_id,rule_id,rule_revision,provider,operation_id,destination_digest,template_digest,credential_id,max_per_period,period_start,used_count,created_at,revision) VALUES('approval-b1','owner-b','rule-b',1,'hubspot','contact.create','${key}','${key}','credential-b',2,0,0,${now},1);
   INSERT INTO connector_receipts(receipt_id,owner_id,provider,operation_id,authority,credential_id,provider_account_id,destination_id,operation_digest,request_digest,review_digest,price_units,price_basis,state,created_at,expires_at,updated_at,revision) VALUES('receipt-b1','owner-b','gmail','message.send','owner-request','credential-b','account-b','dest-b','${key}','${key}','${key}',0,'plan-inclusion','review',${now},${now+3600000},${now},1);`);
+ // An open receipt is one whose provider outcome is unresolved (dispatching or uncertain); an unsent review expires by itself and is not counted.
+ sql.exec("UPDATE connector_receipts SET state='dispatching',revision=revision+1,updated_at=updated_at+1");
  // WH-052 P-2: one unfinished ready job and one with a dispatch intent recorded (an unresolved outside effect).
  for(const id of ['0b0b0b0b-0000-4000-8000-00000000000a','0b0b0b0b-0000-4000-8000-00000000000b']){
   const envelope=JSON.stringify({jobId:id,limits:{maxAttempts:3},ownerAccountId:'owner-b',purpose:'platform-email',schedule:{createdAt:0,expiresAt:604800000,notBefore:0}});

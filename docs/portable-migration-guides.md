@@ -286,7 +286,7 @@ process.exitCode=problems.length?1:0;
   - owner notices.
 
   Messages become inaccessible after 30 days ([inbox and retention](contact-forms.md#inbox-and-retention)).
-- **Replacement:** Unavailable: Whumpo publishes no standalone inbox. Messages also have no file download or other export today. The owner reads them in the private inbox, which shows at most 100 unexpired messages per project, and can delete them one at a time. The WH-018 account export (unmerged PR #170) also leaves them out, listing the inbox only as an omission (reason `separate-inbox-retention`).
+- **Replacement:** Unavailable: Whumpo publishes no standalone inbox. Messages also have no file download or other export today. The owner reads them in the private inbox, which shows at most 100 unexpired messages per project, and can delete them one at a time. The WH-018 account export (unmerged PR #554) also leaves them out, listing the inbox only as an omission (reason `separate-inbox-retention`).
 - **Your steps:**
   1. Before the 30-day window ends, read the inbox and copy what you need into your own system.
   2. Build your own contact handler with bot protection and email ([forms guide](#forms-and-public-intake-forms), [notifications guide](#notifications-notifications)).
@@ -335,7 +335,7 @@ process.exitCode=problems.length?1:0;
 ## Maintainer AI (maintainer-ai)
 
 - **Report status:** always `unavailable`. Report cost flag: `none`. Contract: [maintainer AI](portable-exports.md#maintainer-ai).
-- **In the bundle:** Nothing. Chat history belongs to the WH-018 account export (unmerged PR #170), not this bundle.
+- **In the bundle:** Nothing. Chat history belongs to the WH-018 account export (unmerged PR #554), not this bundle.
 - **Does not port:** The owner-maintenance model, its prompts, context, tools, credentials and funding.
 - **Replacement:** Unavailable by design: nothing in the exported subset needs it. Whumpo provides no model, prompt or inference credit outside Whumpo. You may maintain the exported files with any tool you choose.
 - **Your steps:** None required. If you use another AI tool, review its data terms yourself before you give it your exported data.
@@ -353,7 +353,7 @@ process.exitCode=problems.length?1:0;
 | WH-068 [notification contract](notifications.md) | Merged (#180) | Notifications guide: platform sender only, no customer-domain sender, consent not portable. |
 | WH-070 presentation contract (`docs/customer-presentation.md`) | Unmerged; re-ported onto `main` as branch `claude/wh-070-presentation-contract-main`, not linked here | Its planned deterministic composition export (WH-167) is labelled as needing Whumpo module APIs. That matches the frozen rule that `frontend/<id>/` is never runnable. Re-check when it merges. |
 | WH-061 review retention design (`docs/review-retention.md`) | Now on `main` as a design and offline reference (`docs/review-retention.md`, `tools/prototypes/review-retention.mjs`, `tests/review-retention-contract.mjs`; merged as #275); formerly branch `claude/wh-061-review-retention-design-rb` | Proposes digest-only directory snapshots outside a history window. That affects history restore inside Whumpo, not the one snapshot in the bundle. |
-| WH-018 account export | Unmerged (PR #170) | Chat history and the contact inbox omission. |
+| WH-018 account export | Unmerged (PR #554) | Chat history and the contact inbox omission. |
 
 ## Sources (retrieved October 9, 2026 UTC)
 

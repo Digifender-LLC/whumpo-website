@@ -53,7 +53,6 @@ CREATE TRIGGER restore_suppress_cloudflare_revoked AFTER UPDATE OF state ON clou
 BEGIN INSERT OR IGNORE INTO restore_suppressions(kind,subject_id,effect,recorded_at) VALUES('cloudflare_token',NEW.id,'revoked',unixepoch()); END;
 CREATE TRIGGER restore_suppress_cloudflare_deleted AFTER DELETE ON cloudflare_token_vault
 BEGIN INSERT OR IGNORE INTO restore_suppressions(kind,subject_id,effect,recorded_at) VALUES('cloudflare_token',OLD.id,'deleted',unixepoch()); END;
--- report identifier; the address itself is never recorded.
 
 -- Consultation inside later commits: an erased or revoked subject cannot come back through a logical restore.
 -- Opaque identifiers are random and never reused, so a legitimate new row never matches.

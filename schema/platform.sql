@@ -2523,7 +2523,10 @@ END;
 
 CREATE TRIGGER domain_reconciliation_no_update BEFORE UPDATE ON domain_reconciliations BEGIN SELECT RAISE(ABORT,'domain_reconciliation_immutable'); END;
 
-CREATE TRIGGER domain_reconciliation_no_delete BEFORE DELETE ON domain_reconciliations BEGIN SELECT RAISE(ABORT,'domain_reconciliation_immutable'); END;
+-- Immutable while the account exists; the receipt leaves only with the account's cascade, like the other retained rows.
+CREATE TRIGGER domain_reconciliation_no_delete BEFORE DELETE ON domain_reconciliations
+WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+BEGIN SELECT RAISE(ABORT,'domain_reconciliation_immutable'); END;
 
 CREATE TRIGGER photo_removal_identity BEFORE UPDATE ON photo_removals
 WHEN NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.project_id!=OLD.project_id OR NEW.file_id!=OLD.file_id OR NEW.name!=OLD.name OR NEW.expires_at!=OLD.expires_at OR OLD.status!='pending' OR NEW.status!='applied'

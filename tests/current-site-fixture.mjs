@@ -45,7 +45,8 @@ export async function currentSiteFixtureHandlers(){
   export * as modulePolicy from './src/shared-modules/policy';
   export {moduleCatalog} from './src/project-specification/catalog';
   export {moduleCompositions} from './src/module-compositions';
-  export {continueAccountClosures,closureContinuation} from './src/account-lifecycle/closure';
+  export {continueAccountClosures,closureContinuation,ownerActions,needsSupportKeys} from './src/account-lifecycle/closure';
+  export {settleFirstKeys} from './src/account-closure/review';
   export {assertExportWithinBudget} from './src/account-lifecycle/export';
   export * as githubConnection from './src/github-connection';
   export * as githubGrant from './src/github-grant-revocation';

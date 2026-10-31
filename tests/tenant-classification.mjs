@@ -153,10 +153,10 @@ assert.ok(baselined.has('safety_held_projects')&&baselined.has('operator_contain
 // 44 objects at ca17c6a plus WH-050's operator_containment_retained (same hold-subject comparison as the safety_hold_* triggers).
 assert.ok(baselined.has('operator_containment_retained'));
 // WH-181 adds 19 objects: the review_receipts delete guards (users.id and hold-subject comparisons with each family's user_id).
-assert.equal(baselined.size,76);
+assert.equal(baselined.size,77);
 const current=await runChecks();
 assert.deepEqual(current.problems,[]);
-assert.deepEqual([current.bodies.findings.total,current.bodies.findings.new,current.bodies.findings.stale],[85,0,0]);
+assert.deepEqual([current.bodies.findings.total,current.bodies.findings.new,current.bodies.findings.stale],[86,0,0]);
 
 // ---- the command line ----
 const cli=args=>spawnSync(process.execPath,['tools/tenant-classification.mjs',...args],{encoding:'utf8'});
