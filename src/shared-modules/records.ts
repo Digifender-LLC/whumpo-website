@@ -5,6 +5,9 @@ import {instanceOf,publicFormState,registeredInstances,type RegistryRow} from '.
 import type {RecordsSummaryFacts} from './shape';
 import type {ModuleContext,ModuleHandlers,ModuleReadHandler,ModuleWriteHandler} from './api';
 import {admissionNotices} from '../notification-configurations';
+import {assertFeature,featurePredicate} from '../feature-admission';
+import {featureRequest,FeatureInclusionError} from '../feature-inclusion';
+import type {RecordsLeadsSummaryFacts} from './shape';
 
 /** WH-127 records and forms module (docs/shared-modules.md#records-and-forms-module-wh-127--october-4-2026-utc).
  * Deterministic handlers over `module_records` in the shared control D1: no inference, provider, network, model context
@@ -22,6 +25,8 @@ const exact=(v:unknown,keys:string[]):v is Record<string,unknown>=>plain(v)&&Obj
 const iso=(seconds:number)=>new Date(seconds*1000).toISOString();
 const control=/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
 const recordColumns='r.id,r.schema_id,r.form_id,r.fields_revision,r.submitter_kind,r.visitor_id,r.values_json,r.revision,r.created_at,r.updated_at,r.expires_at';
+/** WH-093 lead columns joined onto an owner read only (never a visitor or staff read): no row reads as stage `new`, revision 0. */
+type LeadColumns={lead_stage:string|null;lead_note:string|null;lead_due:string|null;lead_revision:number|null};
 export type {RecordRow};
 
 function config(context:ModuleContext):RecordsConfig{
@@ -138,11 +143,11 @@ function decode(value:unknown):Cursor|null{
 }
 /** Opaque cursor bound to the project resource, view, principal, configRevision and access revision: after any of them
  * changes (reconfiguration, role change, revocation) the cursor is stale and the client reloads from the start. */
-export async function page(db:D1Database,where:{sql:string;params:unknown[]},binding:{key:string;configRevision:number;accessRevision:number},limit:number,after:unknown){
+export async function page(db:D1Database,where:{sql:string;params:unknown[]},binding:{key:string;configRevision:number;accessRevision:number},limit:number,after:unknown,leads=false){
  const cursor=decode(after);
  if(cursor&&(cursor.k!==binding.key||cursor.c!==binding.configRevision||cursor.a!==binding.accessRevision))throw new ModuleError('stale_configuration');
- const {results}=await db.prepare(`SELECT ${recordColumns} FROM module_records r WHERE ${where.sql}${cursor?' AND (r.created_at<? OR r.created_at=? AND r.id<?)':''} ORDER BY r.created_at DESC,r.id DESC LIMIT ?`)
-  .bind(...where.params,...(cursor?[cursor.t,cursor.t,cursor.i]:[]),limit+1).all<RecordRow>();
+ const {results}=await db.prepare(`SELECT ${recordColumns}${leads?',l.stage lead_stage,l.note lead_note,l.due_date lead_due,l.revision lead_revision':''} FROM module_records r${leads?' LEFT JOIN module_record_leads l ON l.entry_id=r.id':''} WHERE ${where.sql}${cursor?' AND (r.created_at<? OR r.created_at=? AND r.id<?)':''} ORDER BY r.created_at DESC,r.id DESC LIMIT ?`)
+  .bind(...where.params,...(cursor?[cursor.t,cursor.t,cursor.i]:[]),limit+1).all<RecordRow&Partial<LeadColumns>>();
  const rows=results.slice(0,limit),last=rows.at(-1);
  return {rows,next:results.length>limit&&last?encode({v:1,k:binding.key,c:binding.configRevision,a:binding.accessRevision,t:last.created_at,i:last.id}):null};
 }
@@ -183,6 +188,45 @@ const update:ModuleWriteHandler=async(db,context)=>{
  ],result:{entryId:row.id,revision:next}};
 };
 
+export const leadStages=['new','contacted','qualified','won','lost'] as const;
+export const dateOnly=(v:unknown):v is string=>{
+ if(typeof v!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(v)||v<'2020-01-01'||v>'2100-12-31')return false;
+ const d=new Date(v+'T00:00:00Z');return !Number.isNaN(d.getTime())&&d.toISOString().startsWith(v);
+};
+const leadView=(row:Partial<LeadColumns>)=>({stage:row.lead_stage??'new',note:row.lead_note??'',dueDate:row.lead_due??null,revision:row.lead_revision??0});
+const leadMessage='This lead changed. Reload it and try again.';
+
+/** leads.update (WH-093) — owner only. `target.changes` may carry `stage`, `note` (up to 2,000 characters) and `dueDate` (a date only, no
+ * time or zone; `null` clears it). `target.revision` is the lead revision the owner saw (0 = no lead row yet, which reads as stage `new`):
+ * one upsert creates the row or advances it by one, and `module_record_lead_admit`/`module_record_lead_update` repeat the compare-and-swap, the
+ * live record and the safety hold inside the commit. Writing needs `business.leads` (re-read in the receipt's admission); the result is
+ * the entry id and revision only, never a stage, note or date. */
+const leadsUpdate:ModuleWriteHandler=async(db,context)=>{
+ const t=context.request.target;
+ if(context.principal.kind!=='owner')throw new ModuleError('forbidden');
+ if(!exact(t,['recordId','entryId','revision','changes'])||!uuid(t.entryId)||!Number.isSafeInteger(t.revision)||Number(t.revision)<0||!plain(t.changes)||context.request.input!==null)throw invalid();
+ const schema=schemaOf(context,t.recordId),changes=t.changes,keys=Object.keys(changes);
+ if(!keys.length||keys.some(k=>!['stage','note','dueDate'].includes(k)))throw invalid();
+ if(Object.hasOwn(changes,'stage')&&!(leadStages as readonly unknown[]).includes(changes.stage))throw invalid();
+ if(Object.hasOwn(changes,'note')&&(typeof changes.note!=='string'||Array.from(changes.note).length>2000||control.test(changes.note)))throw invalid();
+ if(Object.hasOwn(changes,'dueDate')&&changes.dueDate!==null&&!dateOnly(changes.dueDate))throw invalid();
+ try{await assertFeature(db,featureRequest({userId:context.principal.userId,projectId:context.resource.projectId,featureId:'business.leads',operation:'confirm'}));}
+ catch(error){if(error instanceof FeatureInclusionError)throw new ModuleError('forbidden','Lead tracking needs the Business plan. Your saved leads stay readable and exportable.');throw error;}
+ const row=await readRecord(db,context,schema.id,t.entryId);
+ if(await heldRecord(db,row.id,context.resource.projectId))throw new ModuleError('unavailable',heldMessage);
+ const current=await db.prepare('SELECT stage,note,due_date,revision,updated_at FROM module_record_leads WHERE entry_id=? AND instance_id=? AND project_id=?')
+  .bind(row.id,context.resource.resourceId,context.resource.projectId).first<{stage:string;note:string;due_date:string|null;revision:number;updated_at:number}>();
+ if((current?.revision??0)!==t.revision)throw new ModuleError('stale_configuration',leadMessage);
+ const stage=Object.hasOwn(changes,'stage')?changes.stage as string:current?.stage??'new',note=Object.hasOwn(changes,'note')?changes.note as string:current?.note??'',
+  due=Object.hasOwn(changes,'dueDate')?changes.dueDate as string|null:current?.due_date??null;
+ const now=Math.max(Math.floor(Date.now()/1000),current?.updated_at??0),next=(current?.revision??0)+1;
+ return {statements:[
+  db.prepare(`INSERT INTO module_record_leads(entry_id,instance_id,project_id,stage,note,due_date,revision,last_request_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)
+   ON CONFLICT(entry_id) DO UPDATE SET stage=excluded.stage,note=excluded.note,due_date=excluded.due_date,revision=excluded.revision,last_request_id=excluded.last_request_id,updated_at=excluded.updated_at`)
+   .bind(row.id,context.resource.resourceId,context.resource.projectId,stage,note,due,next,context.request.requestId,now,now)
+ ],result:{entryId:row.id,revision:next}};
+};
+
 const heldMessage='This record is kept unchanged while a safety review is open. It cannot be edited or removed until the review ends.';
 /** A record is frozen while its project or account is inside an active preservation hold, or an attached file is held on its own. The
  * `safety_hold_module_record_*` triggers repeat this inside the commit. */
@@ -205,12 +249,21 @@ const remove:ModuleWriteHandler=async(db,context)=>{
 };
 
 /** Delivered records handlers (WH-127). */
-export const recordsHandlers:ModuleHandlers=Object.freeze({'forms.submit':submit,'records.get':get,'records.view':list,'records.update':update,'records.remove':remove});
+export const recordsHandlers:ModuleHandlers=Object.freeze({'forms.submit':submit,'records.get':get,'records.view':list,'records.update':update,'records.remove':remove,'leads.update':leadsUpdate});
 
 /** Owner records list for the dashboard (workspace origin only): every field of one schema of one owned records instance,
  * newest first, 50 per page, in every activation state so owners keep access to collected data after disable or plan
  * loss. Never a Chat binding or model input. */
-export async function readOwnerRecords(db:D1Database,user:string,project:string,resourceId:string,schemaId:string,after:string|null){
+export type LeadFilter={stage:string|null;due:string|null;today:string|null};
+/** Bounded owner list filters (WH-093): `stage` is one of the five stages (`new` includes records with no lead row); `due` is `set`, `none` or
+ * `overdue`, and `overdue` needs the owner's own `today` date (the browser knows the owner's zone; the server compares dates only) and
+ * counts open leads (not won or lost) whose due date is before it. */
+export function leadFilter(stage:string|null,due:string|null,today:string|null):LeadFilter&{sql:string;params:unknown[]}{
+ if(stage!==null&&!(leadStages as readonly string[]).includes(stage)||due!==null&&!['set','none','overdue'].includes(due)||(due==='overdue')!==(today!==null)||today!==null&&!dateOnly(today))throw invalid();
+ const sql=[stage!==null?"coalesce(l.stage,'new')=?":'',due==='set'?'l.due_date IS NOT NULL':due==='none'?'l.due_date IS NULL':due==='overdue'?"l.due_date<? AND coalesce(l.stage,'new') NOT IN ('won','lost')":''].filter(Boolean).map(x=>' AND '+x).join('');
+ return {stage,due,today,sql,params:[...stage!==null?[stage]:[],...due==='overdue'?[today]:[]]};
+}
+export async function readOwnerRecords(db:D1Database,user:string,project:string,resourceId:string,schemaId:string,after:string|null,filter:LeadFilter&{sql:string;params:unknown[]}=leadFilter(null,null,null)){
  if(!uuid(project)||!uuid(resourceId)||!localId(schemaId))throw new ModuleError('not_found');
  const row=await db.prepare(`SELECT i.id,i.project_id,i.local_id,i.kind,i.module_digest,i.schema_digest,i.config_json,i.config_digest,i.config_revision FROM module_instances i JOIN projects p ON p.id=i.project_id
   WHERE i.id=? AND i.project_id=? AND p.owner_user_id=? AND i.kind='records'`).bind(resourceId,project,user).first<RegistryRow>();
@@ -218,9 +271,13 @@ export async function readOwnerRecords(db:D1Database,user:string,project:string,
  const instance=await instanceOf(row);if(instance.kind!=='records')throw new ModuleError('not_found');
  const schema=instance.config.schemas.find(s=>s.id===schemaId);if(!schema)throw new ModuleError('not_found');
  const window=live(instance.config.retentionDays),fields=schema.fields.map(f=>f.key);
- const {rows,next}=await page(db,{sql:`r.instance_id=? AND r.project_id=? AND r.schema_id=? AND ${window.sql}`,params:[resourceId,project,schema.id,...window.params]},
-  {key:await jsonDigest(['owner',resourceId,schema.id,user]),configRevision:row.config_revision,accessRevision:0},50,after);
- return {resourceId,recordId:schema.id,configRevision:row.config_revision,fields:schema.fields.map(f=>({key:f.key,label:f.label,type:f.type})),items:rows.map(r=>view(r,fields,true)),next};
+ const {rows,next}=await page(db,{sql:`r.instance_id=? AND r.project_id=? AND r.schema_id=? AND ${window.sql}${filter.sql}`,params:[resourceId,project,schema.id,...window.params,...filter.params]},
+  {key:await jsonDigest(['owner',resourceId,schema.id,user,filter.stage,filter.due,filter.today]),configRevision:row.config_revision,accessRevision:0},50,after,true);
+ // Whether this owner may change leads now (Business, or a scoped test grant); reading and export never need it.
+ const gate=featurePredicate(db,featureRequest({userId:user,projectId:project,featureId:'business.leads',operation:'confirm'}));
+ const editable=!!await db.prepare(`SELECT 1 WHERE ${gate.sql}`).bind(...gate.params).first();
+ return {resourceId,recordId:schema.id,configRevision:row.config_revision,fields:schema.fields.map(f=>({key:f.key,label:f.label,type:f.type})),leads:{editable,stages:leadStages},
+  items:rows.map(r=>({...view(r,fields,true),lead:leadView(r)})),next};
 }
 
 /** Retention expiry (scheduled): records past their stored window or the instance's current `retentionDays`, in bounded
@@ -251,6 +308,28 @@ export async function readRecordsSummary(db:D1Database,user:string,project:strin
    schemas:c.schemas.map(s=>({recordId:s.id,fieldsRevision:s.fieldsRevision,fields:s.fields.length,records:{public:n(s.id,'public'),visitor:n(s.id,'visitor'),staff:n(s.id,'staff')}})),
    forms:c.forms.map(f=>({formId:f.id,recordId:f.recordId,submit:f.submit,attachments:f.uploadCollectionId!==null})),
    views:c.views.map(v=>({viewId:v.id,recordId:v.recordId,audience:v.audience,scope:v.scope}))});
+ }
+ return {items};
+}
+
+/** `records.leads-summary@1`: per registered records instance of one owned project and schema, the count of currently retained records by lead
+ * stage (`new` includes records with no lead row) and how many of them have a due date. Counts only: never a record, note, date or entry id, so
+ * it is safe for the Chat temporary view and the model's view facts (owner decision 2). Identity and ownership only, so it survives plan loss. */
+export async function readLeadsSummary(db:D1Database,user:string,project:string):Promise<RecordsLeadsSummaryFacts>{
+ if(!uuid(project)||!await db.prepare('SELECT 1 FROM projects WHERE id=? AND owner_user_id=?').bind(project,user).first())throw new ModuleError('not_found','Project not found.');
+ const items:RecordsLeadsSummaryFacts['items']=[];
+ for(const row of (await registeredInstances(db,project)).filter(r=>r.kind==='records').slice(0,8)){
+  if(row.state===null)continue;
+  const instance=await instanceOf(row);if(instance.kind!=='records')continue;
+  const window=live(instance.config.retentionDays);
+  const {results}=await db.prepare(`SELECT r.schema_id,coalesce(l.stage,'new') stage,count(*) n,count(l.due_date) due FROM module_records r LEFT JOIN module_record_leads l ON l.entry_id=r.id
+   WHERE r.instance_id=? AND r.project_id=? AND ${window.sql} GROUP BY r.schema_id,coalesce(l.stage,'new')`).bind(row.id,project,...window.params).all<{schema_id:string;stage:string;n:number;due:number}>();
+  items.push({localId:row.local_id,resourceId:row.id,state:row.state as RecordsLeadsSummaryFacts['items'][number]['state'],
+   schemas:instance.config.schemas.map(sc=>{
+    const at=(stage:string)=>results.find(x=>x.schema_id===sc.id&&x.stage===stage);
+    return {recordId:sc.id,stages:{new:at('new')?.n??0,contacted:at('contacted')?.n??0,qualified:at('qualified')?.n??0,won:at('won')?.n??0,lost:at('lost')?.n??0},
+     withDueDate:leadStages.reduce((n,stage)=>n+(at(stage)?.due??0),0)};
+   })});
  }
  return {items};
 }

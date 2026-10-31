@@ -126,6 +126,7 @@ Class, lane and turnover values:
 | `module_activation_reviews` | `module_activation_review_admit` | project 25 (filtered) · owner 25 (filtered) · owner 100 (filtered) · platform 2500 (filtered) · platform 5000 (filtered) | review | R1 | active-only | cascade | module-registry |
 | `module_files` | `module_file_admit` | visitor+instance 10 (window) | inventory | R6 | window | app+cascade | module-files |
 | `module_record_files` | `module_record_file_admit` | other 4 | inventory | R6 | lifetime | cascade | module-records |
+| `module_record_leads` | `module_record_lead_admit` | none (one row per record) | inventory | R6 | lifetime | cascade | module-records |
 | `module_records` | `module_record_admit` | project 20000 · visitor+instance 20 (window) · instance 10000 | inventory | R6 | expiring | app+cascade | module-records |
 | `module_request_receipts` | `module_record_admit`, `module_request_admit` | project 100 (window) · owner 100 (window) · instance 60 (window) · instance 20000 (window) · platform 500 (window) · platform 1000 (window) | receipt | R2 | window | app+cascade | module-registry |
 | `notification_notices` | `notification_notices_new` | other 10 (window) · other 50 (window) | operation | R3 | window | app+cascade | contact-notifications |

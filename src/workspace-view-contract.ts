@@ -21,7 +21,9 @@ export const viewComponents={
  'access-roles':{version:1,binding:'access.roles@1',feature:null},
  // WH-127: records counts per registered records instance (states, revisions, counts by submitter kind). Identity and
  // ownership only, so owners keep collected-data status after plan loss. Never field labels, values or visitor ids.
- 'records-summary':{version:1,binding:'records.summary@1',feature:null}
+ 'records-summary':{version:1,binding:'records.summary@1',feature:null},
+ // WH-093: lead counts by stage per records instance (counts only; never a note, due date or value). Identity and ownership only, so it survives plan loss.
+ 'records-leads-summary':{version:1,binding:'records.leads-summary@1',feature:null}
 } as const;
 export type WidgetKind=keyof typeof viewComponents;
 export const widgetKinds=Object.keys(viewComponents) as WidgetKind[];

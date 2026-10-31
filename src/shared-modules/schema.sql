@@ -567,6 +567,54 @@ CREATE TRIGGER module_record_files_removed BEFORE DELETE ON module_records BEGIN
 END;
 CREATE TRIGGER module_record_event_immutable BEFORE UPDATE ON module_record_events BEGIN SELECT RAISE(ABORT,'module_request_immutable'); END;
 
+-- WH-093 record leads (schema batch 6; docs/shared-modules.md#record-leads-wh-093--october-31-2026-utc). One owner-only working row per
+-- record (lifecycle class module-records): stage, a private note and a date-only due date, created at the owner's first edit; a record
+-- with no row reads as stage `new`, so duplicate delivery of a submission can never create a second lead. The row is never returned to a
+-- visitor, staff or public principal, never a Chat, model, receipt, event or log value, and it lives and dies with its record (retention
+-- is the record's, never a CRM retention). Written only by the owner `leads.update` operation as one upsert beside the module request
+-- receipt; the triggers below repeat the record, revision compare-and-swap and safety-hold decisions inside the commit.
+CREATE TABLE module_record_leads (
+ entry_id TEXT PRIMARY KEY REFERENCES module_records(id) ON DELETE CASCADE,
+ instance_id TEXT NOT NULL REFERENCES module_instances(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ stage TEXT NOT NULL CHECK(stage IN ('new','contacted','qualified','won','lost')),
+ note TEXT NOT NULL CHECK(length(note)<=2000),
+ due_date TEXT CHECK(due_date IS NULL OR (length(due_date)=10 AND due_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND date(due_date)=due_date AND due_date BETWEEN '2020-01-01' AND '2100-12-31')),
+ revision INTEGER NOT NULL CHECK(revision>=1),
+ last_request_id TEXT NOT NULL CHECK(length(last_request_id)=36),
+ created_at INTEGER NOT NULL CHECK(created_at>0),
+ updated_at INTEGER NOT NULL CHECK(updated_at>=created_at)
+) STRICT;
+CREATE INDEX module_record_leads_stage ON module_record_leads(instance_id,stage);
+CREATE INDEX module_record_leads_project ON module_record_leads(project_id);
+-- A lead exists only for a live record of the same instance and project (a removed or expired record cannot be resurrected). The first
+-- write is revision 1; the upsert's update branch carries the expected revision plus one, so a stale or concurrent writer fails here or in
+-- module_record_lead_update and the whole batch, receipt included, rolls back.
+CREATE TRIGGER module_record_lead_admit BEFORE INSERT ON module_record_leads BEGIN
+ SELECT RAISE(ABORT,'module_request_stale') WHERE NOT EXISTS(SELECT 1 FROM module_records r WHERE r.id=NEW.entry_id AND r.instance_id=NEW.instance_id AND r.project_id=NEW.project_id AND r.expires_at>unixepoch())
+  OR NEW.revision!=1 AND NOT EXISTS(SELECT 1 FROM module_record_leads l WHERE l.entry_id=NEW.entry_id AND l.revision=NEW.revision-1)
+  OR NEW.updated_at!=NEW.created_at OR abs(NEW.created_at-unixepoch())>60;
+END;
+-- Identity never changes; every change advances the revision by one under a new request (the compare-and-swap), and an expired record's lead cannot change.
+CREATE TRIGGER module_record_lead_update BEFORE UPDATE ON module_record_leads
+WHEN NEW.entry_id IS NOT OLD.entry_id OR NEW.instance_id IS NOT OLD.instance_id OR NEW.project_id IS NOT OLD.project_id OR NEW.created_at IS NOT OLD.created_at
+ OR NEW.revision!=OLD.revision+1 OR NEW.last_request_id=OLD.last_request_id OR NEW.updated_at<OLD.updated_at
+ OR NOT EXISTS(SELECT 1 FROM module_records r WHERE r.id=OLD.entry_id AND r.expires_at>unixepoch())
+BEGIN SELECT RAISE(ABORT,'module_request_stale'); END;
+-- A held record's lead is frozen exactly like the record (safety_hold_module_record_frozen): no first edit, change or removal under a project or
+-- account hold, or while a file attached to the record is held on its own.
+CREATE TRIGGER safety_hold_module_record_lead_created BEFORE INSERT ON module_record_leads
+WHEN EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=NEW.project_id)
+ OR EXISTS(SELECT 1 FROM module_record_files mf JOIN safety_held_files hf ON hf.file_id=mf.file_id WHERE mf.entry_id=NEW.entry_id)
+BEGIN SELECT RAISE(ABORT,'safety_preservation_hold'); END;
+CREATE TRIGGER safety_hold_module_record_lead_frozen BEFORE UPDATE ON module_record_leads
+WHEN EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
+ OR EXISTS(SELECT 1 FROM module_record_files mf JOIN safety_held_files hf ON hf.file_id=mf.file_id WHERE mf.entry_id=OLD.entry_id)
+BEGIN SELECT RAISE(ABORT,'safety_preservation_hold'); END;
+CREATE TRIGGER safety_hold_module_record_lead_retained BEFORE DELETE ON module_record_leads
+WHEN EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
+BEGIN SELECT RAISE(ABORT,'safety_preservation_hold'); END;
+
 -- WH-128 files and galleries module (docs/shared-modules.md#files-and-galleries-module-wh-128--october-4-2026-utc).
 -- A module upload is an ordinary project photo row (project_files: cleaned JPEG up to 1 MiB, create-only private R2
 -- object under photos/, project/account/platform quotas, pending safety receipt written by project_photo_safety_insert,

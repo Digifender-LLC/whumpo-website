@@ -86,7 +86,7 @@ import {dispatchJobs} from './job-dispatcher';
 import {handleModuleRequest,cleanupModuleRequestReceipts} from './shared-modules/api';
 import {ModuleError} from './shared-modules/policy';
 import {readNotificationSetup,deliveryState} from './notification-configurations';
-import {readOwnerRecords,readRecordsSummary,cleanupModuleRecords} from './shared-modules/records';
+import {readOwnerRecords,readRecordsSummary,cleanupModuleRecords,leadFilter} from './shared-modules/records';
 import {readOwnerFileCollections,removeOwnerFileFromCollection} from './shared-modules/files-gallery';
 import {listDNSActions,reviewTXT,reviewCNAME,confirmDNS} from './cloudflare-dns';
 import {cloudflareConfig,cloudflareStatus,startCloudflare,cancelCloudflare,finishCloudflare,disconnectCloudflare,cloudflareZones,cleanupCloudflare} from './cloudflare-connection';
@@ -437,8 +437,9 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
   const ownerRecords=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/module-records\/([0-9a-f-]{36})\/([a-z][a-z0-9-]{0,39})$/);
   if(method==='GET'&&ownerRecords){
     const params=new URL(request.url).searchParams;
-    if([...params.keys()].some(key=>key!=='after'||params.getAll(key).length!==1))return error(400,'Use the current records link.');
-    return json(await readOwnerRecords(env.DB,user.id,ownerRecords[1],ownerRecords[2],ownerRecords[3],params.get('after')));
+    if([...params.keys()].some(key=>!['after','stage','due','today'].includes(key)||params.getAll(key).length!==1))return error(400,'Use the current records link.');
+    // WH-093 lead filters (owner only): a stage, and whether a due date is set, missing or overdue as of the owner's own date.
+    return json(await readOwnerRecords(env.DB,user.id,ownerRecords[1],ownerRecords[2],ownerRecords[3],params.get('after'),leadFilter(params.get('stage'),params.get('due'),params.get('today'))));
   }
   const inboxMatch=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/inbox$/);
   if(method==='GET'&&inboxMatch)return json(await contactInbox(env.DB,user.id,inboxMatch[1]));

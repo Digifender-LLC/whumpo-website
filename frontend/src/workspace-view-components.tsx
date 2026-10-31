@@ -11,11 +11,11 @@ import {GuestPreviewsPanel} from './guest-previews-panel';
 import {SiteHealthCard} from './site-health-card';
 import {ModuleInstancesCard} from './module-instances-card';
 import {AccessRolesCard} from './access-roles-card';
-import {RecordsSummaryCard} from './records-panel';
+import {RecordsLeadsSummaryCard,RecordsSummaryCard} from './records-panel';
 import {RelativeTime,SkeletonCard,StateNote} from './view-states';
 import {ServiceTile} from './components/whumpo/service-tile';
 
-export const viewLabels:Record<WidgetKind,string>={projects:'Projects',usage:'AI assistance',storage:'File storage',activity:'Recent activity',traffic:'Page requests',cms:'Publishing desk',performance:'Processing performance',reviews:'Website reviews','guest-previews':'Guest preview links','site-health':'Website health',modules:'Modules','access-roles':'Staff roles','records-summary':'Form records'};
+export const viewLabels:Record<WidgetKind,string>={projects:'Projects',usage:'AI assistance',storage:'File storage',activity:'Recent activity',traffic:'Page requests',cms:'Publishing desk',performance:'Processing performance',reviews:'Website reviews','guest-previews':'Guest preview links','site-health':'Website health',modules:'Modules','access-roles':'Staff roles','records-leads-summary':'Lead stages','records-summary':'Form records'};
 export function CheckedAt({value}:{value:string}){return <p className="text-caption text-ink-muted"><RelativeTime value={value} prefix="Updated"/>. Saved status; refresh to check again.</p>;}
 const projectStatus:Record<ProjectFacts['state'],Status>={draft:'idle',building:'working',live:'ready',error:'attention'};
 /** The same trusted project element appears in Chat and saved/temporary views. */
@@ -40,6 +40,7 @@ export function ViewComponentDisplay({value,owner,onChanged}:{value:unknown;owne
   {c.kind==='modules'&&c.projectId&&<ModuleInstancesCard facts={c.data} projectId={c.projectId} owner={!!owner}/>}
   {c.kind==='access-roles'&&c.projectId&&<AccessRolesCard facts={c.data} projectId={c.projectId} owner={!!owner}/>}
   {c.kind==='records-summary'&&c.projectId&&<RecordsSummaryCard facts={c.data} projectId={c.projectId}/>}
+  {c.kind==='records-leads-summary'&&c.projectId&&<RecordsLeadsSummaryCard facts={c.data} projectId={c.projectId}/>}
   {c.kind==='cms'&&<div className="space-y-4">{c.data.items.map(p=><div key={p.projectId}><p className="font-semibold break-words">{p.name}</p><p className="text-body-sm text-ink-muted">{p.publishedArticles} published articles</p></div>)}</div>}
   <CheckedAt value={c.asOf}/>
  </div>;

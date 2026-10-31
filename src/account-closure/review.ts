@@ -106,6 +106,7 @@ const c:Record<string,[string,string,Disposition]>={
  accessRoleReceipts:['module_access_role_applies','project-roles','delete'],
  moduleRecords:['module_records','module-records','delete'],
  moduleRecordFiles:['module_record_files','module-records','delete'],
+ moduleRecordLeads:['module_record_leads','module-records','delete'],
  moduleFiles:['module_files','module-files','delete'],
  staffNotificationOptins:['staff_notification_optins','contact-notifications','delete'],
  visitorNotificationAddresses:['visitor_notification_addresses','contact-notifications','delete'],

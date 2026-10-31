@@ -8059,6 +8059,14 @@
     {
      "file": "src/shared-modules/policy.ts",
      "kind": "exact",
+     "match": "leads.update",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/shared-modules/policy.ts",
+     "kind": "exact",
      "match": "files.prepareUpload",
      "methods": [
       "POST"
@@ -8217,7 +8225,7 @@
     },
     "freshness": {
      "state": "evidenced",
-     "detail": "moduleActivationApply and accessRoleApply are recentAuth controls (machine-checked); the owner REST /modules route has no handler for role or activation writes. records.remove via /modules needs no fresh proof or review (design note).",
+     "detail": "moduleActivationApply and accessRoleApply are recentAuth controls (machine-checked); the owner REST /modules route has no handler for role or activation writes. records.remove via /modules needs no fresh proof or review (design note). leads.update via /modules is owner-only, needs current business.leads inclusion in its receipt, and changes only the owner's own working row (no fresh proof or review by design).",
      "enforcedAt": [
       {
        "file": "src/chat.ts",

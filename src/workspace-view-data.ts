@@ -2,7 +2,7 @@ import {readSpecificationReviewIdentity,type SpecificationReviewIdentity} from '
 import {copyJSON} from './project-specification/v2/json';
 import {exact,object,uuid,viewComponents,type WidgetKind} from './workspace-view-contract';
 import type {GuestPreviewFacts} from './guest-previews/shape';
-import {validAccessRoleFacts,validModuleInstanceFacts,validRecordsSummaryFacts,type AccessRoleFacts,type ModuleInstanceFacts,type RecordsSummaryFacts} from './shared-modules/shape';
+import {validAccessRoleFacts,validModuleInstanceFacts,validRecordsLeadsSummaryFacts,validRecordsSummaryFacts,type AccessRoleFacts,type ModuleInstanceFacts,type RecordsSummaryFacts,type RecordsLeadsSummaryFacts} from './shared-modules/shape';
 import type {SiteDiagnosticsFacts,TrafficTelemetry} from './site-diagnostics-shape';
 import {healthStatuses,domainStates,telemetryStates,recommendedCommand} from './site-diagnostics-shape';
 
@@ -23,6 +23,7 @@ export type ViewFacts={
  modules:ModuleInstanceFacts;
  'access-roles':AccessRoleFacts;
  'records-summary':RecordsSummaryFacts;
+ 'records-leads-summary':RecordsLeadsSummaryFacts;
 };
 type Header<K extends WidgetKind>={version:1;kind:K;binding:string;projectId:string|null;asOf:string};
 export type ViewComponentData={[K in WidgetKind]:Header<K>&({status:'ready';data:ViewFacts[K]}|{status:'denied'|'unavailable';data:null})}[WidgetKind];
@@ -69,6 +70,7 @@ export function readViewComponentData(input:unknown):ViewComponentData|null{
   if(c.kind==='modules')valid=c.projectId!==null&&validModuleInstanceFacts(d);
   if(c.kind==='access-roles')valid=c.projectId!==null&&validAccessRoleFacts(d);
   if(c.kind==='records-summary')valid=c.projectId!==null&&validRecordsSummaryFacts(d);
+  if(c.kind==='records-leads-summary')valid=c.projectId!==null&&validRecordsLeadsSummaryFacts(d);
   if(c.kind==='cms')valid=exact(d,['items'])&&Array.isArray(d.items)&&d.items.length<=20&&(c.projectId===null||d.items.length===1)&&d.items.every(p=>shape(p,['projectId','name','publishedArticles'])&&scoped(p.projectId)&&text(p.name,100)&&integer(p.publishedArticles));
   return valid?c as ViewComponentData:null;
  }catch{return null;}
