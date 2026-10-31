@@ -8011,7 +8011,7 @@
     {
      "file": "src/index.ts",
      "kind": "regex",
-     "match": "/^\\/api\\/projects\\/([0-9a-f-]{36})\\/module-records\\/([0-9a-f-]{36})\\/([a-z][a-z0-9-]{0,39})$/",
+     "match": "/^\\/api\\/projects\\/([0-9a-f-]{36})\\/module-records\\/([0-9a-f-]{36})\\/([a-z][a-z0-9-]{0,39})(\\/conversions)?$/",
      "methods": [
       "GET"
      ]
