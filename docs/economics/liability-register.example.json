@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "entries": [
+    {"id": "workers-account-floor", "dimension": "liability.account-minimum", "pool": "shared-account", "period": "2026-10", "amountMicros": null, "ref": null, "revision": 1, "observedAt": "2026-10-31T00:00:00.000Z"},
+    {"id": "synthetic-license", "dimension": "liability.license", "pool": "shared-account", "period": "2026-10", "amountMicros": null, "ref": null, "revision": 1, "observedAt": "2026-10-31T00:00:00.000Z"},
+    {"id": "synthetic-renewal", "dimension": "liability.renewal", "pool": "control-plane", "period": "2026-10", "amountMicros": null, "ref": null, "revision": 1, "observedAt": "2026-10-31T00:00:00.000Z"}
+  ]
+}
