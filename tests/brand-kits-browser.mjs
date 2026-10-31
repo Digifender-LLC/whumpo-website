@@ -27,6 +27,10 @@ try{
  page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(['error','warning'].includes(m.type()))errors.push(m.text()+' @'+m.location().url+':'+m.location().lineNumber);});
  await page.goto(origin);await page.locator('#new form').waitFor();
  const ed=id=>page.locator('#'+id),log=async id=>JSON.parse(await page.locator('#'+id+'-log').textContent()),axe=async label=>{const r=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21a','wcag21aa']).analyze();assert.deepEqual(r.violations.map(v=>[v.id,v.nodes.map(n=>n.target)]),[],'axe: '+label);};
+ const shot=async(id,path)=>{// the workspace scrolls inside its main; open the frame up so one capture holds the whole form, then restore it
+  await page.evaluate(()=>{const g=document.querySelector('.workspace-grid'),m=document.querySelector('main.workspace-main');g.style.height='auto';g.style.overflow='visible';m.style.overflow='visible';});
+  await ed(id).screenshot({path});
+  await page.evaluate(()=>{const g=document.querySelector('.workspace-grid'),m=document.querySelector('main.workspace-main');g.style.height='';g.style.overflow='';m.style.overflow='';});};
  const hex=(id,label)=>ed(id).getByLabel(label,{exact:true});
  const preview=(id,sel)=>ed(id).getByTestId('brand-preview').evaluate((el,s)=>{const pv=el.shadowRoot.querySelector('.pv');const target=s?pv.querySelector(s):pv;const c=getComputedStyle(target);return [c.backgroundColor,c.color,c.fontFamily,c.borderRadius];},sel);
 
@@ -120,8 +124,8 @@ try{
   if(width===1280){// the preview is sticky here, so a viewport capture (top, then scrolled into the colors) shows what the owner sees
    await page.evaluate(()=>document.querySelector('#new').scrollIntoView({block:'start'}));await page.screenshot({path:`${shots}/whumpo-brand-kit-editor-${width}-top.png`});
    await page.evaluate(()=>document.querySelector('main.workspace-main').scrollBy(0,650));await page.screenshot({path:`${shots}/whumpo-brand-kit-editor-${width}-scrolled.png`});
-  }else await ed('new').screenshot({path:`${shots}/whumpo-brand-kit-editor-${width}.png`});
-  await ed('section').screenshot({path:`${shots}/whumpo-saved-section-${width}.png`});
+  }else await shot('new',`${shots}/whumpo-brand-kit-editor-${width}.png`);
+  await shot('section',`${shots}/whumpo-saved-section-${width}.png`);
  }
  phase='the preview sits right after the kit name and shows an about panel and a section panel without scrolling';
  await page.setViewportSize({width:1280,height:900});
@@ -146,18 +150,18 @@ try{
  for(const width of [360,1280]){
   await page.setViewportSize({width,height:width===1280?900:800});await page.evaluate(()=>{document.documentElement.style.fontSize='32px';});
   const f=await frame();assert.deepEqual(f.bad,[],'200% text inside the form at '+width);assert(f.mainFits,'main has no sideways scroll at 200% and '+width);assert(f.pageFits);
-  if(width===360)await ed('new').screenshot({path:`${shots}/whumpo-brand-kit-editor-200pct.png`});
+  if(width===360)await shot('new',`${shots}/whumpo-brand-kit-editor-200pct.png`);
   await page.evaluate(()=>{document.documentElement.style.fontSize='';});
  }
  phase='saved section preview shows the section itself, at the top';
  await page.setViewportSize({width:1280,height:900});
  const sec=await ed('section').getByTestId('brand-preview').evaluate(el=>{const r=el.getBoundingClientRect(),f=el.shadowRoot.querySelector('.feature'),b=f.getBoundingClientRect();return {hero:getComputedStyle(el.shadowRoot.querySelector('.hero')).display,top:b.top-r.top,fits:b.bottom<=r.bottom,text:f.textContent};});
  assert.equal(sec.hero,'none');assert(sec.top<90,'section is near the top of its preview: '+sec.top);assert(sec.fits);assert.match(sec.text,/Hours/);
- await ed('section').screenshot({path:`${shots}/whumpo-saved-section-preview-1280.png`});
+ await shot('section',`${shots}/whumpo-saved-section-preview-1280.png`);
  phase='dark workspace';
  await page.setViewportSize({width:390,height:844});await page.evaluate(()=>document.documentElement.classList.add('dark'));
  assert((await frame()).mainFits);
- await ed('edit').screenshot({path:`${shots}/whumpo-brand-kit-editor-dark.png`});
+ await shot('edit',`${shots}/whumpo-brand-kit-editor-dark.png`);
  assert.equal(errors.length,0,[...new Set(errors)].join('\n'));
  console.log('Brand kit browser passed: actual built editors at 360, 390 and 1280px, 200% text, light and dark, keyboard radio groups, axe, plain-words contrast refusal with automatic fix, real renderer preview under the workspace CSP, exact saved tokens.');
 }catch(error){console.error('Brand kit browser phase:',phase);if(page)await page.screenshot({path:shots+'/whumpo-brand-kit-failure.png',fullPage:true}).catch(()=>{});throw error;}
