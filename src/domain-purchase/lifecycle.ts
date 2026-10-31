@@ -81,17 +81,22 @@ export async function syncRegistration({db,hostname,registrar,now}:{db:Db;hostna
  const found=await registrar.lookup(hostname);
  const registered=found.status==='registered'&&typeof found.orderRef==='string'&&found.orderRef.length>0;
  const ours=found.status==='registered'&&found.orderRef===row.order_id;
- const foreign=registered&&!ours;
+ const left=found.status==='transferred-out'||(registered&&!ours);
+ const evidence=found.status==='transferred-out'?'registrar-reported':'registered-elsewhere';
+ // Every write below names this row's order, so a slow sync can never touch a new owner's row for the same name.
  if(ours&&found.status==='registered'&&Number.isSafeInteger(found.expiresAt)&&(row.expires_at===null||found.expiresAt>row.expires_at))
-  await db.prepare('UPDATE domain_registrations SET expires_at=?1 WHERE hostname=?2 AND (expires_at IS NULL OR expires_at<?1)').bind(found.expiresAt,hostname).run();
- else if(foreign){
+  await db.prepare('UPDATE domain_registrations SET expires_at=?1 WHERE hostname=?2 AND order_id=?3 AND (expires_at IS NULL OR expires_at<?1)').bind(found.expiresAt,hostname,row.order_id).run();
+ else if(left){
   if(row.state==='transfer-out'){
-   const open=await db.prepare(`SELECT ${transferColumns} FROM domain_transfer_requests WHERE hostname=?1 AND state IN ('requested','unlocked','unknown-outcome')`).bind(hostname).first<TransferRow>();
-   if(open)await db.prepare(`UPDATE domain_transfer_requests SET state='completed',completion_evidence='registered-elsewhere',updated_at=max(?1,updated_at),version=version+1 WHERE request_id=?2 AND version=?3`).bind(now,open.request_id,open.version).run();
-  }else await db.prepare("UPDATE domain_registrations SET state='lapsed',auto_renew=0,renewal_review_id=NULL,renewal_total_cents=NULL WHERE hostname=?1 AND state='active'").bind(hostname).run();
+   let open=await db.prepare(`SELECT ${transferColumns} FROM domain_transfer_requests WHERE hostname=?1 AND state IN ('requested','unlocked','unknown-outcome')`).bind(hostname).first<TransferRow>();
+   // A claim still in `requested` has no edge to completed: it becomes an unknown outcome first, then completes on this evidence.
+   if(open&&open.state==='requested')open=await bump(db,toTransfer(open),'unknown-outcome',now,{}).then(r=>r&&{request_id:r.requestId,hostname:r.hostname,owner_user_id:r.ownerId,state:r.state,requested_at:r.requestedAt,version:r.version});
+   if(open)await db.prepare(`UPDATE domain_transfer_requests SET state='completed',completion_evidence=?1,updated_at=max(?2,updated_at),version=version+1 WHERE request_id=?3 AND version=?4`).bind(evidence,now,open.request_id,open.version).run();
+  }else if(found.status==='transferred-out')await db.prepare("UPDATE domain_registrations SET state='transferred-out',auto_renew=0,renewal_review_id=NULL,renewal_total_cents=NULL WHERE hostname=?1 AND order_id=?2 AND state='active'").bind(hostname,row.order_id).run();
+  else await db.prepare("UPDATE domain_registrations SET state='lapsed',auto_renew=0,renewal_review_id=NULL,renewal_total_cents=NULL WHERE hostname=?1 AND order_id=?2 AND state='active'").bind(hostname,row.order_id).run();
  }
  else if(found.status==='not-found'&&row.state==='active'&&row.expires_at!==null&&now>=row.expires_at)
-  await db.prepare("UPDATE domain_registrations SET state='lapsed',auto_renew=0,renewal_review_id=NULL,renewal_total_cents=NULL WHERE hostname=?1 AND state='active' AND expires_at<=?2").bind(hostname,now).run();
+  await db.prepare("UPDATE domain_registrations SET state='lapsed',auto_renew=0,renewal_review_id=NULL,renewal_total_cents=NULL WHERE hostname=?1 AND order_id=?2 AND state='active' AND expires_at<=?3").bind(hostname,row.order_id,now).run();
  const next=await db.prepare(`SELECT ${registrationColumns} FROM domain_registrations WHERE hostname=?`).bind(hostname).first<RegistrationRow>();
  return next?toRegistration(next):null;
 }
@@ -117,9 +122,9 @@ export async function queueDueReminders(db:Db,now:number,limit=100){
  return {queued};
 }
 
-type TransferRow={request_id:string;hostname:string;owner_user_id:string;state:'requested'|'unlocked'|'unknown-outcome'|'failed'|'completed';requested_at:number;version:number;missing_reads:number};
-const transferColumns='request_id,hostname,owner_user_id,state,requested_at,version,missing_reads';
-const toTransfer=(r:TransferRow)=>({requestId:r.request_id,hostname:r.hostname,ownerId:r.owner_user_id,state:r.state,requestedAt:r.requested_at,version:r.version,missingReads:r.missing_reads});
+type TransferRow={request_id:string;hostname:string;owner_user_id:string;state:'requested'|'unlocked'|'unknown-outcome'|'failed'|'completed';requested_at:number;version:number};
+const transferColumns='request_id,hostname,owner_user_id,state,requested_at,version';
+const toTransfer=(r:TransferRow)=>({requestId:r.request_id,hostname:r.hostname,ownerId:r.owner_user_id,state:r.state,requestedAt:r.requested_at,version:r.version});
 export type TransferRequest=ReturnType<typeof toTransfer>;
 async function moveTransfer(db:Db,r:TransferRequest,to:TransferRequest['state'],now:number){
  const row=await db.prepare(`UPDATE domain_transfer_requests SET state=?1,updated_at=?2,version=version+1 WHERE request_id=?3 AND version=?4 RETURNING ${transferColumns}`).bind(to,now,r.requestId,r.version).first<TransferRow>();
@@ -154,11 +159,14 @@ export async function startTransferOut({db,actor,hostname,registrar,requestId,no
  const kind=(result as {kind?:unknown})?.kind;
  const to=kind==='unlocked'?'unlocked':kind==='rejected'?'failed':'unknown-outcome';
  const request=await moveTransfer(db,toTransfer(claimed),to,now);
- return {request:request as TransferRequest,replayed:false as const};
+ // A sweep or another worker moved the claim first: return the request as it stands now, never null.
+ if(!request)return {request:await loadTransfer(db,actor.ownerId,hostname) as TransferRequest,replayed:true as const};
+ return {request,replayed:false as const};
 }
-/** Settle unknown or open transfers by reading the registrar. "Unlocked" is the registrar's own report. A registration naming another order proves the name has
- * left; "not found" is not proof, so it counts as one absent read and the transfer completes only on a second one at least the reconcile spacing later (and only
- * after we unlocked it). Reads are spaced and round-robin (least recently touched first); one failing lookup does not stop the batch; nothing repeats the unlock. */
+/** Settle unknown or open transfers by reading the registrar. Only positive evidence completes one: a registration naming another order, or the registrar's own
+ * transfer-complete report. Absence ("not found", a lookup gap, an outage) is never evidence, however often it repeats; a request that stays open is failed after
+ * fourteen days by `sweepTransfers`, which returns the name to active. "Unlocked" is the registrar's own report. Reads are spaced and round-robin (least recently
+ * touched first); one failing lookup costs that request one retry; nothing repeats the unlock. */
 export async function reconcileTransfers(db:Db,registrar:RegistrarAdapter,now:number,limit=20){
  const rows=(await db.prepare(`SELECT ${transferColumns} FROM domain_transfer_requests WHERE state IN ('unknown-outcome','unlocked') AND updated_at<=?2 ORDER BY updated_at LIMIT ?1`).bind(limit,now-domainPurchaseBounds.reconcileSpacingMs).all<TransferRow>()).results;
  let moved=0;
@@ -166,21 +174,20 @@ export async function reconcileTransfers(db:Db,registrar:RegistrarAdapter,now:nu
   try{
    const r=toTransfer(row),found=await registrar.lookup(r.hostname);
    let result:TransferRequest|null=null;
-   if(found.status==='registered'&&typeof found.orderRef==='string'&&found.orderRef.length>0&&!(await ours(db,r.hostname,found.orderRef)))
+   if(found.status==='transferred-out')result=await bump(db,r,'completed',now,{evidence:'registrar-reported'});
+   else if(found.status==='registered'&&typeof found.orderRef==='string'&&found.orderRef.length>0&&!(await ours(db,r.hostname,found.orderRef)))
     result=await bump(db,r,'completed',now,{evidence:'registered-elsewhere'});
-   else if(found.status==='not-found')
-    result=await bump(db,r,r.missingReads+1>=2&&r.state==='unlocked'?'completed':r.state,now,{missing:true});
    else if(found.status==='registered'&&found.unlocked===true&&r.state==='unknown-outcome')result=await bump(db,r,'unlocked',now,{});
-   else result=await bump(db,r,r.state,now,{});// touched: it goes to the back of the line
+   else result=await bump(db,r,r.state,now,{});// touched, nothing proven: it goes to the back of the line
    if(result&&result.state!==r.state)moved++;
   }catch{/* one failing lookup costs this request one retry later */}
  }
  return {moved};
 }
 const ours=async(db:Db,hostname:string,orderRef:string)=>!!await db.prepare('SELECT 1 x FROM domain_registrations WHERE hostname=?1 AND order_id=?2').bind(hostname,orderRef).first();
-async function bump(db:Db,r:TransferRequest,to:TransferRequest['state'],now:number,{evidence,missing}:{evidence?:'registered-elsewhere';missing?:boolean}){
- const row=await db.prepare(`UPDATE domain_transfer_requests SET state=?1,updated_at=max(?2,updated_at),version=version+1,missing_reads=missing_reads+?3,completion_evidence=?4 WHERE request_id=?5 AND version=?6 RETURNING ${transferColumns}`)
-  .bind(to,now,missing?1:0,evidence??null,r.requestId,r.version).first<TransferRow>();
+async function bump(db:Db,r:TransferRequest,to:TransferRequest['state'],now:number,{evidence}:{evidence?:'registered-elsewhere'|'registrar-reported'}){
+ const row=await db.prepare(`UPDATE domain_transfer_requests SET state=?1,updated_at=max(?2,updated_at),version=version+1,completion_evidence=coalesce(?3,completion_evidence) WHERE request_id=?4 AND version=?5 RETURNING ${transferColumns}`)
+  .bind(to,now,evidence??null,r.requestId,r.version).first<TransferRow>();
  return row?toTransfer(row):null;
 }
 /** A transfer request no worker will finish never traps the owner: a claim older than the lease becomes an unknown outcome, and a request that stays unresolved or

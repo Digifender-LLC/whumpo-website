@@ -149,6 +149,7 @@ CREATE TRIGGER domain_orders_transition BEFORE UPDATE ON domain_orders BEGIN
   OR (NEW.charge_mismatch IS NOT OLD.charge_mismatch AND NOT (NEW.state='registered' AND OLD.state!='registered'));
 END;
 CREATE TRIGGER domain_orders_final BEFORE UPDATE ON domain_orders WHEN OLD.state IN ('registered','failed','cancelled','expired') AND NOT (OLD.state='registered' AND OLD.released=0 AND NEW.released=1
+ AND EXISTS(SELECT 1 FROM domain_registrations g WHERE g.order_id=OLD.order_id AND g.state IN ('transferred-out','lapsed'))
  AND NEW.state=OLD.state AND NEW.history_json=OLD.history_json AND NEW.attempts=OLD.attempts AND NEW.attempt_id IS OLD.attempt_id AND NEW.uncertain_at IS OLD.uncertain_at
  AND NEW.reconcile_reads=OLD.reconcile_reads AND NEW.registration_expires_at IS OLD.registration_expires_at AND NEW.charge_mismatch IS OLD.charge_mismatch) BEGIN SELECT RAISE(ABORT,'domain_order_final'); END;
 -- A dispatch needs a live quote: the claim cannot be written after the quote expired, whoever writes it.
@@ -255,8 +256,22 @@ END;
 -- A registration exists only for a registered order of the same name, owner and project, new and not auto-renewing; no direct insert forges proof or consent.
 CREATE TRIGGER domain_registrations_admit BEFORE INSERT ON domain_registrations BEGIN
  SELECT RAISE(ABORT,'domain_registration_admit') WHERE NEW.state!='active' OR NEW.auto_renew!=0 OR NEW.renewal_review_id IS NOT NULL
-  OR NOT EXISTS(SELECT 1 FROM domain_orders o WHERE o.order_id=NEW.order_id AND o.state='registered' AND o.hostname=NEW.hostname AND o.owner_user_id=NEW.owner_user_id AND o.project_id=NEW.project_id AND o.released=0);
+  OR NOT EXISTS(SELECT 1 FROM domain_orders o WHERE o.order_id=NEW.order_id AND o.state='registered' AND o.hostname=NEW.hostname AND o.owner_user_id=NEW.owner_user_id AND o.project_id=NEW.project_id AND o.released=0
+   AND NEW.expires_at IS o.registration_expires_at AND NEW.created_at=o.updated_at AND NEW.charge_mismatch IS o.charge_mismatch);
 END;
+-- INSERT OR REPLACE deletes the colliding row without running delete triggers (and cascades through foreign keys), so every guarded table refuses an
+-- insert whose key already exists, whatever the conflict clause. Plain inserts that collide would fail anyway; this closes only the REPLACE path.
+CREATE TRIGGER domain_quotes_once BEFORE INSERT ON domain_quotes BEGIN SELECT RAISE(ABORT,'domain_row_exists') WHERE EXISTS(SELECT 1 FROM domain_quotes WHERE quote_id=NEW.quote_id); END;
+CREATE TRIGGER domain_reviews_once BEFORE INSERT ON domain_reviews BEGIN SELECT RAISE(ABORT,'domain_row_exists') WHERE EXISTS(SELECT 1 FROM domain_reviews WHERE review_id=NEW.review_id OR quote_id=NEW.quote_id); END;
+CREATE TRIGGER domain_registrant_contacts_once BEFORE INSERT ON domain_registrant_contacts BEGIN SELECT RAISE(ABORT,'domain_row_exists') WHERE EXISTS(SELECT 1 FROM domain_registrant_contacts WHERE review_id=NEW.review_id); END;
+CREATE TRIGGER domain_orders_once BEFORE INSERT ON domain_orders BEGIN
+ SELECT RAISE(ABORT,'domain_row_exists') WHERE EXISTS(SELECT 1 FROM domain_orders WHERE order_id=NEW.order_id OR idempotency_key=NEW.idempotency_key OR review_id=NEW.review_id
+  OR (hostname=NEW.hostname AND state NOT IN ('failed','cancelled','expired') AND released=0));
+END;
+CREATE TRIGGER domain_funding_holds_once BEFORE INSERT ON domain_funding_holds BEGIN SELECT RAISE(ABORT,'domain_row_exists') WHERE EXISTS(SELECT 1 FROM domain_funding_holds WHERE order_id=NEW.order_id); END;
+CREATE TRIGGER domain_order_attempts_once BEFORE INSERT ON domain_order_attempts BEGIN SELECT RAISE(ABORT,'domain_row_exists') WHERE EXISTS(SELECT 1 FROM domain_order_attempts WHERE attempt_id=NEW.attempt_id OR order_id=NEW.order_id); END;
+CREATE TRIGGER domain_registrar_events_once BEFORE INSERT ON domain_registrar_events BEGIN SELECT RAISE(ABORT,'domain_row_exists') WHERE EXISTS(SELECT 1 FROM domain_registrar_events WHERE event_id=NEW.event_id); END;
+CREATE TRIGGER domain_registrations_once BEFORE INSERT ON domain_registrations BEGIN SELECT RAISE(ABORT,'domain_row_exists') WHERE EXISTS(SELECT 1 FROM domain_registrations WHERE hostname=NEW.hostname OR order_id=NEW.order_id); END;
 -- Registrant contact leaves when the registration does.
 CREATE TRIGGER domain_registrations_release AFTER UPDATE OF state ON domain_registrations WHEN NEW.state IN ('transferred-out','lapsed') AND OLD.state NOT IN ('transferred-out','lapsed') BEGIN
  DELETE FROM domain_registrant_contacts WHERE review_id=(SELECT review_id FROM domain_orders WHERE order_id=NEW.order_id);
@@ -271,7 +286,7 @@ CREATE TRIGGER domain_registrations_change BEFORE UPDATE ON domain_registrations
  SELECT RAISE(ABORT,'domain_registration_final') WHERE OLD.state IN ('transferred-out','lapsed');
  SELECT RAISE(ABORT,'domain_registration_state') WHERE NEW.state IS NOT OLD.state AND NOT (
    (OLD.state='active' AND NEW.state IN ('transfer-out','transferred-out','lapsed')) OR (OLD.state='transfer-out' AND NEW.state IN ('active','transferred-out','lapsed')));
- SELECT RAISE(ABORT,'domain_registration_renewal') WHERE NEW.auto_renew=1 AND (OLD.auto_renew=0 OR NEW.renewal_review_id IS NOT OLD.renewal_review_id)
+ SELECT RAISE(ABORT,'domain_registration_renewal') WHERE NEW.auto_renew=1 AND (OLD.auto_renew=0 OR NEW.renewal_review_id IS NOT OLD.renewal_review_id OR NEW.renewal_total_cents IS NOT OLD.renewal_total_cents)
   AND NOT EXISTS(SELECT 1 FROM domain_renewal_reviews r WHERE r.review_id=NEW.renewal_review_id AND r.hostname=NEW.hostname AND r.owner_user_id=NEW.owner_user_id
    AND r.confirmed_at IS NOT NULL AND r.renewal_total_cents=NEW.renewal_total_cents);
 END;
@@ -293,6 +308,7 @@ CREATE INDEX domain_renewal_reviews_name ON domain_renewal_reviews(hostname,crea
 CREATE TRIGGER domain_renewal_reviews_admit BEFORE INSERT ON domain_renewal_reviews BEGIN
  SELECT RAISE(ABORT,'domain_renewal_scope') WHERE NEW.confirmed_at IS NOT NULL OR NOT EXISTS(SELECT 1 FROM domain_registrations WHERE hostname=NEW.hostname AND owner_user_id=NEW.owner_user_id AND state='active');
 END;
+CREATE TRIGGER domain_renewal_reviews_once BEFORE INSERT ON domain_renewal_reviews BEGIN SELECT RAISE(ABORT,'domain_row_exists') WHERE EXISTS(SELECT 1 FROM domain_renewal_reviews WHERE review_id=NEW.review_id); END;
 CREATE TRIGGER domain_renewal_reviews_confirm BEFORE UPDATE ON domain_renewal_reviews BEGIN
  SELECT RAISE(ABORT,'domain_renewal_frozen') WHERE OLD.confirmed_at IS NOT NULL OR NEW.confirmed_at IS NULL OR NEW.review_id IS NOT OLD.review_id OR NEW.hostname IS NOT OLD.hostname
   OR NEW.owner_user_id IS NOT OLD.owner_user_id OR NEW.renewal_total_cents IS NOT OLD.renewal_total_cents OR NEW.consent_text_digest IS NOT OLD.consent_text_digest
@@ -346,8 +362,7 @@ CREATE TABLE domain_transfer_requests (
  requested_at INTEGER NOT NULL CHECK(typeof(requested_at)='integer' AND requested_at>0),
  updated_at INTEGER NOT NULL CHECK(typeof(updated_at)='integer' AND updated_at>=requested_at),
  version INTEGER NOT NULL DEFAULT 0 CHECK(typeof(version)='integer' AND version>=0),
- missing_reads INTEGER NOT NULL DEFAULT 0 CHECK(typeof(missing_reads)='integer' AND missing_reads BETWEEN 0 AND 5),
- completion_evidence TEXT CHECK(completion_evidence IS NULL OR completion_evidence='registered-elsewhere')
+ completion_evidence TEXT CHECK(completion_evidence IS NULL OR completion_evidence IN ('registered-elsewhere','registrar-reported'))
 ) STRICT;
 CREATE UNIQUE INDEX domain_transfer_requests_open ON domain_transfer_requests(hostname) WHERE state IN ('requested','unlocked','unknown-outcome');
 CREATE INDEX domain_transfer_requests_owner ON domain_transfer_requests(owner_user_id,state);
@@ -365,12 +380,13 @@ CREATE TRIGGER domain_transfer_requests_transition BEFORE UPDATE ON domain_trans
    (OLD.state='requested' AND NEW.state IN ('unlocked','unknown-outcome','failed'))
    OR (OLD.state='unknown-outcome' AND NEW.state IN ('unlocked','failed','completed'))
    OR (OLD.state='unlocked' AND NEW.state IN ('completed','failed'))));
- -- "Not found" is not proof (registrar.ts): a transfer completes on two spaced absent reads or on a registration naming another order, and nothing else.
- SELECT RAISE(ABORT,'domain_transfer_reads') WHERE NEW.missing_reads<OLD.missing_reads OR NEW.missing_reads>OLD.missing_reads+1
-  OR (NEW.state='completed' AND OLD.state!='completed' AND NEW.missing_reads<2 AND NEW.completion_evidence IS NOT 'registered-elsewhere')
+ -- Absence is never evidence (registrar.ts: "not found" proves nothing, and an outage looks the same): a transfer completes only on positive evidence, a registration
+ -- naming another order or the registrar's own transfer-complete report. Nothing else, however often it is read, can reach `completed`.
+ SELECT RAISE(ABORT,'domain_transfer_evidence') WHERE (NEW.state='completed' AND OLD.state!='completed' AND NEW.completion_evidence IS NULL)
   OR (NEW.completion_evidence IS NOT OLD.completion_evidence AND NOT (NEW.state='completed' AND OLD.state!='completed'));
 END;
 CREATE TRIGGER domain_transfer_requests_settle AFTER UPDATE OF state ON domain_transfer_requests WHEN NEW.state IN ('failed','completed') BEGIN
  UPDATE domain_registrations SET state=CASE NEW.state WHEN 'completed' THEN 'transferred-out' ELSE 'active' END WHERE hostname=NEW.hostname AND state='transfer-out';
 END;
 CREATE TRIGGER domain_transfer_requests_keep BEFORE DELETE ON domain_transfer_requests WHEN OLD.state IN ('requested','unknown-outcome') BEGIN SELECT RAISE(ABORT,'domain_transfer_unresolved'); END;
+CREATE TRIGGER domain_transfer_requests_once BEFORE INSERT ON domain_transfer_requests BEGIN SELECT RAISE(ABORT,'domain_row_exists') WHERE EXISTS(SELECT 1 FROM domain_transfer_requests WHERE request_id=NEW.request_id); END;

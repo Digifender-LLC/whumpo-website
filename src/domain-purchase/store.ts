@@ -87,8 +87,10 @@ export async function consent(input:ConsentRequest):Promise<OrderStep&{order:Sto
  // The server-resolved project revision and funding source are bound into the inserting statement; the triggers repeat the review, owner and expiry predicates.
  const row=await db.prepare(`INSERT INTO domain_orders(order_id,idempotency_key,review_id,quote_id,quote_digest,owner_user_id,project_id,hostname,state,history_json,consented_at,updated_at)
   SELECT ?1,?2,r.review_id,r.quote_id,r.quote_digest,r.owner_user_id,r.project_id,r.hostname,'consented','["quoted","consented"]',?3,?3 FROM domain_reviews r
-  WHERE r.review_id=?4 AND r.project_revision=?5 AND r.funding_source_id=?6 ON CONFLICT DO NOTHING RETURNING ${orderColumns}`)
-  .bind(orderId,key,now,review.reviewId,project!.revision,review.fundingSourceId).first<OrderRow>();
+  WHERE r.review_id=?4 AND r.project_revision=?5 AND r.funding_source_id=?6
+   AND NOT EXISTS(SELECT 1 FROM domain_orders x WHERE x.order_id=?1 OR x.idempotency_key=?2 OR x.review_id=r.review_id OR (x.hostname=r.hostname AND x.state NOT IN ('failed','cancelled','expired') AND x.released=0))
+  RETURNING ${orderColumns}`)
+  .bind(orderId,key,now,review.reviewId,project!.revision,review.fundingSourceId).first<OrderRow>().catch(()=>null);// a racing winner makes the schema refuse this insert: fall through to the replay path
  if(row)return {...step,order:toOrder(row)};
  // Nothing inserted: the same consent won elsewhere (replay), or another order holds the name.
  const existing=(await relatedOrders(db,key,review.hostname));
@@ -168,13 +170,15 @@ export async function receiveRegistrarEvent(db:Db,event:RegistrarEvent,now:numbe
  if(seen||!order)return outcome;
  const remember=(applied:number)=>db.prepare('INSERT INTO domain_registrar_events(event_id,order_id,attempt_id,event_type,applied,received_at) SELECT ?1,?2,?3,?4,?5,?6 WHERE ?5=0 OR changes()=1 ON CONFLICT DO NOTHING')
   .bind(event.eventId,event.orderId,event.attemptId,event.type,applied,now);
- if(!step){await remember(0).run();return outcome;}
+ const duplicate=async()=>!!await db.prepare('SELECT 1 x FROM domain_registrar_events WHERE event_id=?').bind(event.eventId).first();
+ if(!step){try{await remember(0).run();}catch(error){if(await duplicate())return {applied:false as const,duplicate:true as const};throw error;}return outcome;}
  const o=step.order as StoredOrder,reg=step.registration;
  // The order change and the event receipt are one batch: the receipt is written only if the change won.
- const [update]=await db.batch([
+ let update;
+ try{[update]=await db.batch([
   db.prepare(`UPDATE domain_orders SET state=?1,history_json=?2,registration_expires_at=?3,charge_mismatch=?4,updated_at=max(?5,updated_at),version=version+1 WHERE order_id=?6 AND version=?7 RETURNING version`)
    .bind(o.state,JSON.stringify(o.history),reg?.expiresAt??null,reg?(reg.chargeMismatch===null?null:Number(reg.chargeMismatch)):null,now,o.orderId,o.version),
-  remember(1)]);
+  remember(1)]);}catch(error){if(await duplicate())return {applied:false as const,duplicate:true as const};throw error;}// a racing copy of the same event won: the whole batch, change included, rolled back
  return update.results.length===1?outcome:{applied:false as const,stale:true as const};
 }
 
