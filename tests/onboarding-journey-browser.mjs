@@ -117,7 +117,7 @@ async function walk(page,cdp,{db,hashToken,width,height=844,label,reduced=false,
   // Ten minutes pass in one call. Any timer, interval or frame loop that would save the kit or leave this step fires now.
   phase=`${label}: nothing moves past the kit`;
   await page.clock.fastForward('10:00');await page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
-  assert.equal(await button('I’ve saved my recovery kit').isEnabled(),true,'Nothing started saving the kit');assert.equal(await page.getByRole('status').filter({hasText:'One moment'}).count(),0);
+  assert.equal(await page.getByRole('button',{name:'I’ve saved my recovery kit',exact:true,disabled:false}).count(),1,'Nothing started saving the kit or left the step');assert.equal(await page.getByRole('status').filter({hasText:'One moment'}).count(),0);
   await focused('Save your recovery kit');await page.getByText('Ready for you to save').waitFor();assert.equal(kitSaves.count,0,'The kit stays unsaved until the person confirms it');
   return null;
  }
