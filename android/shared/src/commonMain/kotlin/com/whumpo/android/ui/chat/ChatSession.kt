@@ -56,7 +56,7 @@ enum class ReviewStep { Ready, Reauthenticating, Confirming, Done, Failed, NoLon
 
 data class ReviewFlow(
     val turnId: String,
-    /** The turn's revision, sent as `expectedRevision` on confirm. */
+    /** The conversation revision when the sheet opened, sent as `expectedRevision` on confirm and kept for every retry of it. */
     val revision: Int,
     val review: Review,
     /** One ID per review sheet, reused for every retry of the confirm. */
@@ -99,7 +99,7 @@ data class ChatState(
  * The rules that matter:
  * - A send takes its request ID once. A lost reply is resolved by reading `chat/turns/{id}` ([MobileApiClient.resolveSend]).
  *   This class never re-sends on its own; [sendAgain] is an explicit owner action with the same ID, revision and text.
- * - A confirm uses the turn's revision and one request ID per sheet. A fresh-passkey demand goes through [ReauthHook]
+ * - A confirm uses the conversation revision from when its sheet opened and one request ID per sheet. A fresh-passkey demand goes through [ReauthHook]
  *   and then retries with the same ID.
  */
 class ChatSession(
@@ -310,7 +310,9 @@ class ChatSession(
             else -> ReviewStep.NoLongerCurrent to "This review is no longer current."
         }
         val id = confirmIds.getOrPut(review.reviewId) { newId() }
-        mutable.update { it.copy(review = ReviewFlow(turn.id, turn.revision, review, id, step, message)) }
+        // The confirm is a new turn, so the server wants the CURRENT workspace revision (stale_revision otherwise). The turn's own
+        // revision is old as soon as anything is said after the review; the control still binds the exact reviewed change.
+        mutable.update { it.copy(review = ReviewFlow(turn.id, it.revision, review, id, step, message)) }
     }
 
     /** Closing a sheet confirms nothing. A confirm already sent keeps going and reports through the live region. */
