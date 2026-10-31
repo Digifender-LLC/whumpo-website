@@ -10,7 +10,7 @@ import {createServer} from 'node:http';
 import {resolve,sep} from 'node:path';
 import {createRequire} from 'node:module';
 import {build as viteBuild} from 'vite';
-const {chromium}=createRequire(import.meta.url)(process.env.WHUMPO_PLAYWRIGHT||'@playwright/test');
+const {chromium,expect}=createRequire(import.meta.url)(process.env.WHUMPO_PLAYWRIGHT||'@playwright/test');
 const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-checkout-browser-'),name=`checkout-fixture-${process.pid}`,html=`frontend/${name}.html`,entry=`frontend/${name}.tsx`;
 const publishable='pk_test_'+'a'.repeat(40),shots=process.env.WHUMPO_SHOTS;
 // What the stand-in Stripe.js does. window.__stripe is read back by the test.
@@ -91,7 +91,7 @@ createRoot(document.getElementById('root')!).render(<QueryClientProvider client=
   // Checkout page: order summary + form, the heading takes focus.
   const heading=page.getByRole('heading',{name:'Order summary'});await heading.waitFor();
   await page.locator('[data-fake-payment-element]').waitFor();
-  assert.equal(await heading.evaluate(el=>el===document.activeElement),true,`${width}: focus moves to the checkout heading`);
+  await expect(heading,`${width}: focus moves to the checkout heading`).toBeFocused();
   assert.ok(foreign.length>=1,`${width}: Stripe.js is requested once the card form opens`);
   for(const text of ['Whumpo Creator','$300','Renews every year','Stripe sandbox','Charged today'])assert.ok(await page.getByText(text).first().isVisible(),`${width}: ${text}`);
   const submit=page.getByRole('button',{name:'Subscribe · $300/year'});assert.ok(await submit.isVisible());
@@ -109,7 +109,7 @@ createRoot(document.getElementById('root')!).render(<QueryClientProvider client=
   await page.evaluate(()=>{window.__stripe.next='error';});
   await tabTo(page,submit);await page.keyboard.press('Enter');
   const alert=page.getByRole('alert').filter({hasText:'declined'});await alert.waitFor();
-  assert.equal(await alert.evaluate(el=>el===document.activeElement),true,`${width}: focus moves to the error`);
+  await expect(alert,`${width}: focus moves to the error`).toBeFocused();
   assert.equal(await submit.isEnabled(),true);
   const box=await alert.boundingBox(),formBox=await page.locator('[data-fake-payment-element]').boundingBox();
   assert.ok(box.y>=formBox.y,'error is next to the form');
@@ -138,7 +138,7 @@ createRoot(document.getElementById('root')!).render(<QueryClientProvider client=
   await page.getByRole('heading',{name:'Order summary'}).waitFor();
   const back=page.getByRole('button',{name:'Back to plans'});await tabTo(page,back);await page.keyboard.press('Enter');
   await page.getByRole('heading',{name:'Your subscription'}).waitFor();
-  assert.equal(await page.getByRole('heading',{name:'Your subscription'}).evaluate(el=>el===document.activeElement),true,'focus returns to the billing heading');
+  await expect(page.getByRole('heading',{name:'Your subscription'}),'focus returns to the billing heading').toBeFocused();
   const resume=page.getByRole('button',{name:/Resume test checkout/});await tabTo(page,resume);await page.keyboard.press('Enter');await page.getByRole('heading',{name:'Order summary'}).waitFor();
   assert.equal(state.ids.length,2);assert.equal(new Set(state.ids).size,1,'the same order id is reused after going back');
   assert.equal(await page.evaluate(()=>JSON.stringify([...Object.entries(localStorage),...Object.entries(sessionStorage)])),'[]','nothing is persisted client-side');
@@ -249,7 +249,7 @@ createRoot(document.getElementById('root')!).render(<QueryClientProvider client=
   const dialog=page.getByRole('dialog');await dialog.waitFor();
   const text=await dialog.innerText();assert.match(text,/stays active until/);assert.match(text,/will not renew/);assert.match(text,/(11\/30\/2026|30\/11\/2026|2026)/);
   await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});
-  assert.equal(state.cancel,0);assert.equal(await cancel.evaluate(el=>el===document.activeElement),true,'focus returns to the trigger');
+  assert.equal(state.cancel,0);await expect(cancel,'focus returns to the trigger').toBeFocused();
   await page.keyboard.press('Enter');await dialog.waitFor();
   const confirm=dialog.getByRole('button',{name:'Cancel at end of period'});await tabTo(page,confirm);await page.keyboard.press('Enter');
   await page.getByText('Cancellation scheduled').first().waitFor();assert.equal(state.cancel,1);
