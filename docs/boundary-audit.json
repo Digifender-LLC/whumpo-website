@@ -8302,6 +8302,14 @@
     {
      "id": "confirm:directory",
      "recentAuth": false
+    },
+    {
+     "id": "confirm:notificationConfiguration",
+     "recentAuth": false
+    },
+    {
+     "id": "notificationSetupReview",
+     "recentAuth": false
     }
    ],
    "cells": {
@@ -13132,7 +13140,7 @@
    "cells": {
     "authority": {
      "state": "evidenced",
-     "detail": "No cron run sends without the binding and the reviewed provider settings. The outbox only delivers the scopes it supports: the project-staff and submitter scopes (staff and submitter delivery arrives with WH-158) and an account notice to an unverified address are cancelled before any provider call.",
+     "detail": "No cron run sends without the binding and the reviewed provider settings. The outbox only delivers the scopes it supports: a project-staff or submitter notice without a current recipient, a configured notice while no spending limit is set (`ceiling-unset`) and an account notice to an unverified address are cancelled before any provider call.",
      "enforcedAt": [
       {
        "file": "src/contact-email.ts",
@@ -13140,7 +13148,7 @@
       },
       {
        "file": "src/notification-outbox.ts",
-       "contains": "else return deny('recipient-revoked'); // staff and submitter delivery arrives with WH-158."
+       "contains": "else return deny('recipient-revoked');"
       }
      ],
      "tests": [

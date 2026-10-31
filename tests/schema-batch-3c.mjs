@@ -9,10 +9,10 @@ const all=async(sql,...v)=>(await db.prepare(sql).bind(...v).all()).results.map(
 let cases=0;const check=async(name,fn)=>{try{await fn();cases++;}catch(e){console.error('FAILED:',name);throw e;}};
 try{
  await check('both tables, their index and triggers exist with the declared keys',async()=>{
-  const names=(await all("SELECT type,name FROM sqlite_master WHERE name LIKE 'visitor\\_notification%' ESCAPE '\\' OR name LIKE 'staff\\_notification%' ESCAPE '\\' OR name IN ('notification_recipients','module_record_consent_admit') ORDER BY type,name")).map(r=>r.type+':'+r.name);
-  assert.deepEqual(names,['index:staff_notification_optins_visitor','table:staff_notification_optins','table:visitor_notification_addresses','trigger:module_record_consent_admit',
+  const names=(await all("SELECT type,name FROM sqlite_master WHERE name LIKE 'visitor\\_notification%' ESCAPE '\\' OR name LIKE 'staff\\_notification%' ESCAPE '\\' OR name IN ('notification_recipients') ORDER BY type,name")).map(r=>r.type+':'+r.name);
+  assert.deepEqual(names,['index:staff_notification_optins_visitor','table:staff_notification_optins','table:visitor_notification_addresses',
    'trigger:staff_notification_optin_admit','trigger:staff_notification_optin_immutable','trigger:staff_notification_optin_revoked',
-   'trigger:visitor_notification_address_admit','trigger:visitor_notification_address_changed','trigger:visitor_notification_address_removed','trigger:visitor_notification_address_update','view:notification_recipients']);
+   'trigger:visitor_notification_address_admit','trigger:visitor_notification_address_changed','trigger:visitor_notification_address_erased','trigger:visitor_notification_address_removed','trigger:visitor_notification_address_replaced','trigger:visitor_notification_address_update','view:notification_recipients']);
   assert.deepEqual((await all("SELECT name,pk FROM pragma_table_info('visitor_notification_addresses') ORDER BY cid")).map(r=>[r.name,r.pk]),[['visitor_id',1],['address',0],['code_hash',0],['code_expires_at',0],['code_failures',0],['verified_at',0]]);
   assert.deepEqual((await all("SELECT name,pk FROM pragma_table_info('staff_notification_optins') ORDER BY cid")).map(r=>[r.name,r.pk]),[['instance_id',1],['visitor_id',2],['opted_in_at',0]]);
   assert.deepEqual((await all("SELECT \"from\",\"table\",on_delete FROM pragma_foreign_key_list('staff_notification_optins') ORDER BY \"from\"")).map(r=>[r.from,r.table,r.on_delete]),[['instance_id','module_instances','CASCADE'],['visitor_id','app_visitors','CASCADE']]);

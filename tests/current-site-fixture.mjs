@@ -6,8 +6,8 @@ import {build} from 'esbuild';
 // are module-private and cannot be passed between separately bundled runtimes.
 let module;
 // WH-004 R2: the SQL confirm triggers accept only a guided turn that carries the typed confirm control for the exact review, which is what the UI
-// sends. Offline suites still type `/confirm <id>`; this wrapper stores the equivalent guided control turn for those five commands (same handler and reply as before, no extra receipt precheck) and leaves everything else alone.
-const confirmKinds={'/confirm':'site','/confirm-contact':'contact','/confirm-contact-notify':'contactNotification','/confirm-photo-delete':'photo','/confirm-version-delete':'version'};
+// sends. Offline suites still type `/confirm <id>`; this wrapper stores the equivalent guided control turn for those six commands (same handler and reply as before, no extra receipt precheck) and leaves everything else alone.
+const confirmKinds={'/confirm':'site','/confirm-contact':'contact','/confirm-contact-notify':'contactNotification','/confirm-photo-delete':'photo','/confirm-version-delete':'version','/confirm-notification-setup':'notificationConfiguration'};
 export const confirmControlFor=content=>{const [verb,review,...rest]=String(content??'').trim().split(/\s+/);return !rest.length&&Object.hasOwn(confirmKinds,verb)&&/^[0-9a-f-]{36}$/.test(review??'')?{type:'confirm',kind:confirmKinds[verb],reviewId:review}:undefined;};
 const withTypedConfirms=m=>({...m,sendChat:(db,user,input,ai,options,conversationOnly,control)=>{const typed=!control&&!conversationOnly?m.chatControl(confirmControlFor(input?.content)):undefined;return typed?m.sendChat(db,user,{...input,content:typed.command},ai,options,false,typed):m.sendChat(db,user,input,ai,options,conversationOnly,control);}});
 export async function currentSiteFixtureHandlers(){
@@ -82,7 +82,10 @@ export {cleanPhoto} from './src/photo-format';
   export * as contacts from './src/contacts';
   export * as contactNotifications from './src/contact-notifications';
   export * as notificationRecipients from './src/notification-recipients';
+  export * as notificationConfigurations from './src/notification-configurations';
+  export * as notificationOutbox from './src/notification-outbox';
   export * as contactEmail from './src/contact-email';
+  export * as supportDelivery from './src/support-delivery';
   export * as directory from './src/directory';
   export * as reviewTurnover from './src/review-turnover';
   export {contactPage} from './src/contact-page';

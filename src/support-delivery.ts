@@ -1,7 +1,7 @@
 import {supportConfig,type NotificationSettings,type SupportEnv} from './support';
 import {enqueueNotice,newTally,notificationLane} from './notification-outbox';
 import {cloudflareEmailSender,type ContactEmailBinding} from './contact-email';
-import {implementedContactNotificationProviders,type ContactNotificationSettings,type ContactSender} from './contact-notifications';
+import {contactNotificationConfig,type ContactNotificationEnv,implementedContactNotificationProviders,type ContactNotificationSettings,type ContactSender} from './contact-notifications';
 import type {JobType} from './job-dispatcher';
 /**
  * Queues the content-free "a response is saved" notice for answered, unread support requests on the shared notification outbox (WH-156). Delivery,
@@ -27,8 +27,9 @@ export async function queueSupportNotices(db:Pick<D1Database,'prepare'|'batch'>,
  */
 export function supportDelivery(env:SupportEnv&{CONTACT_EMAIL?:unknown}):{settings:NotificationSettings;shared:ContactNotificationSettings;sender:ContactSender}|null{
  const {settings}=supportConfig(env),binding=env.CONTACT_EMAIL as {send?:unknown}|undefined;
+ const customerCeilingCents=contactNotificationConfig(env as ContactNotificationEnv).settings?.customerCeilingCents;
  if(!settings||!Object.hasOwn(implementedContactNotificationProviders,settings.provider)||!binding||typeof binding.send!=='function')return null;
- return {settings,shared:{...settings,sendCeiling:implementedContactNotificationProviders[settings.provider].sendCeiling},sender:cloudflareEmailSender(binding as ContactEmailBinding)};
+ return {settings,shared:{...settings,sendCeiling:implementedContactNotificationProviders[settings.provider].sendCeiling,...(customerCeilingCents?{customerCeilingCents}:{})},sender:cloudflareEmailSender(binding as ContactEmailBinding)};
 }
 /** The support adapter on the every-minute trigger: queues unread answered responses for verified accounts, then drains due attempts. */
 export function supportDeliveryLane(db:Pick<D1Database,'prepare'|'batch'>,deps:{settings:NotificationSettings;shared:ContactNotificationSettings;sender:ContactSender;now:()=>number}):JobType{

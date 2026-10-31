@@ -384,7 +384,7 @@ try{
   assert.equal((await m.readViewBinding(a.scope,a.user,'records-summary',b.project)).status,'unavailable');
   assert.equal((await m.readViewBinding(b.scope,b.user,'records-summary',a.project)).status,'unavailable');
   // The owner panel reads the same counts and then values from the list route; foreign owners and visitor cookies get nothing.
-  const panel=await workspace(a,`/api/projects/${a.project}/module-records`);assert.equal(panel.status,200);assert.deepEqual(panel.body,view.data);
+  const panel=await workspace(a,`/api/projects/${a.project}/module-records`);assert.equal(panel.status,200);const {notifications,...facts}=panel.body;assert.deepEqual(facts,view.data);assert.deepEqual(Object.keys(notifications).sort(),['delivery','forms'],'WH-158: the notice settings ride on the owner route; the view binding stays counts-only');
   assert.equal((await workspace(b,`/api/projects/${a.project}/module-records`)).status,404);
   assert.equal((await workspace(a,`/api/projects/${a.project}/module-records`,{cookie:v1.cookie})).status,401);
   // Disabled instances stay readable for the owner; the summary still never needs a paid feature grant.

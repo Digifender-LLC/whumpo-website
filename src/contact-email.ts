@@ -34,6 +34,7 @@ export function contactEmailMessage(notice:ContactNotice){
   if(!notice.verificationCode||!/^[A-Z0-9]{8}$/.test(notice.verificationCode))throw Error('Invalid verification notice');
   return renderCatalogNotification('owner.destination-verification@1',{code:notice.verificationCode});
  }
+ if(notice.kind==='configured'&&notice.configured)return renderCatalogNotification(notice.template,notice.configured.variables,notice.configured.fields);
  if(notice.kind==='account'&&notice.template==='account.email-confirm@1')return renderCatalogNotification(notice.template,{confirmationCode:notice.confirmationToken});
  if(notice.kind==='account')return renderCatalogNotification(notice.template);
  return renderCatalogNotification('contact.new-message@1');
