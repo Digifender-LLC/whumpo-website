@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import {currentSiteFixtureHandlers,createFixtureProject,changeFixtureWebsite,enableFixtureVisitorAccess} from './current-site-fixture.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
+import {fixtureKeyring,initializeFixtureKeys} from './helpers/connection-keyring.mjs';
+import {paidPlan} from './helpers/paid-plan.mjs';
 // WH-212 / D-5: with no model binding, a Chat-prepared review is confirmed the way Saved work does it:
 // a fresh read of `/api/chat/turns/:id`, then the existing `/api/chat/actions` confirm using that turn's own
 // revision as the conversation fence. No Chat read, no model, no second approval path.
@@ -10,10 +12,10 @@ import {workspaceFixture} from './helpers/workspace-identity.mjs';
 //  Covered, prepared by a typed command and confirmed locally:
 //   site, application (first sections), then version, photo, contact, contactNotification, domainProof, directory,
 //   backendForm, backendPublication, backendState, cmsSetup (the per-kind table below, each with one negative control).
-//  NOT covered (untested), because preparing the review needs a live provider or a model:
-//   appPage        prepared only by `/design-app-page`, which needs a model (no model-free prepare path).
-//   backup         prepare reads the GitHub API (installation, repository, branch head, tree); a stub would fake the provider.
-//   cmsImport      prepare reads a live WordPress site.
+//  Also covered at the end (D6): appPage (prepared by the scripted-model harness, confirmed model-free) and backup
+//   (GitHub provider boundary stubbed through global fetch), each with stale and foreign negative controls.
+//  NOT covered, owner-deferred CMS testing (D6):
+//   cmsImport     prepare reads a live WordPress site.
 //   cmsPublish, cmsUnpublish, cmsDiscard   prepare reads the live EmDash/WordPress CMS instance and its staged content.
 //  The dashboard /confirm-dns and /confirm-hosting routes and the appMaintenance controls are out of scope here.
 // Run `node tests/saved-review-confirm-outage.mjs` (SQLite) or add `--d1`.
@@ -41,7 +43,7 @@ const read=async(account,id)=>{const r=await http(account,'/api/chat/turns/'+id)
 const control=reviewId=>({type:'confirm',kind:'site',reviewId});
 try{
  const owner=await workspaceFixture(db,m),foreign=await workspaceFixture(db,m);
- const a=await review(owner,'Alpha'),modelCalls=await count('SELECT count(*) n FROM inference_calls');
+ const a=await review(owner,'Alpha');let modelCalls=await count('SELECT count(*) n FROM inference_calls');
  await createFixtureProject(await foreign.scope(),foreign.account,'Beta','A synthetic beta website.');
 
  // Cross-owner: the foreign account cannot read the turn or use the review.
@@ -168,6 +170,73 @@ try{
   equal(await count('SELECT count(*) n FROM activity_events WHERE user_id=?',o.account),events,label+'replay ran no second effect');
   equal(await count('SELECT count(*) n FROM chat_turns WHERE user_id=?',o.account),turns,label+'replay added no turn');equal(calls.n,runs,label+'replay ran no backend');
   equal(await count('SELECT count(*) n FROM inference_calls'),spent,label+'no inference call');
+ }
+ // appPage: the only prepare path is the scripted model (/design-app-page); the confirm that follows is model-free.
+ {
+  const o=await workspaceFixture(db,m),other=await workspaceFixture(db,m),s=await o.scope(),p=jid(),v=jid(),t=jid(),rv=jid(),label='appPage: ';
+  await createFixtureProject(await other.scope(),other.account,'Foreign','A synthetic foreign website.');
+  const form={title:'Private notebook',description:'A private note',buttonLabel:'Save note',fields:[{key:'note',label:'Your note',type:'text'}]};
+  await db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'Private notebook','A private note','draft',?,?)").bind(p,o.account,stamp(),stamp()).run();
+  await m.backend.saveBackend(s,o.account,p,v,'export default ({input})=>({state:{note:input.note},result:"Saved"})');
+  await m.backend.testBackend(s,{fetch:async()=>Response.json({ok:true,value:{state:{},result:'Saved'}})},o.account,p,v,t,{state:{},input:{note:'x'}});
+  await enableFixtureVisitorAccess(s,o.account,p);
+  await m.appActivation.prepareApplication(s,o.account,p,rv,'enable',v,t);await m.appActivation.confirmApplication(s,o.account,rv);
+  const ai={baseURL:'https://opencode.ai/zen/go/v1',apiKey:'synthetic',model:'muse-spark-1.3-contributor',protocol:'responses'};
+  const scripted=async()=>Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({reply:'Proposed page',action:{kind:'backend',operation:'reviewAppPage',projectId:p,form}})}]}],usage:{input_tokens:10,output_tokens:10}});
+  const prepare=async()=>{const id=jid();equal((await m.sendAIChat(s,o.account,id,(await http(o,'/api/chat')).json.state.revision,'/design-app-page '+p,ai,scripted,undefined,true)).status,200,label+'prepared by the scripted model');return id;};
+  const status=async id=>(await db.prepare('SELECT status s FROM app_page_reviews WHERE id=?').bind(id).first())?.s??null;
+  const post=async(who,revision,reviewId,id=jid())=>{const body={id,revision,action:{type:'confirm',kind:'appPage',reviewId}};return {body,res:await http(who,'/api/chat/actions','POST',body)};};
+  const stale=await prepare(),staleRead=await read(o,stale);
+  equal(staleRead.turn.app_page_confirmation_id,stale,label+'fresh read offers the review');
+  equal((await http(o,'/api/chat/actions','POST',{id:jid(),revision:(await http(o,'/api/chat')).json.state.revision,action:{type:'shortcut',kind:'versions',projectId:a.project}})).status,200,label+'conversation advances');
+  equal((await post(o,staleRead.turn.revision,stale)).res.status,409,label+'stale revision refused');equal(await status(stale),'pending',label+'stale refusal applied nothing');
+  const id=await prepare();modelCalls=await count('SELECT count(*) n FROM inference_calls');
+  equal((await read(other,id)).status,404,label+'foreign account cannot read the turn');
+  await post(other,(await http(other,'/api/chat')).json.state.revision,id);equal(await status(id),'pending',label+'foreign confirm applied nothing');
+  const confirmation=await post(o,(await read(o,id)).turn.revision,id);equal(confirmation.res.status,200,label+'confirm from the fresh read');equal(await status(id),'applied',label+'review applied');
+  const turns=await count('SELECT count(*) n FROM chat_turns WHERE user_id=?',o.account);
+  equal((await http(o,'/api/chat/actions','POST',confirmation.body)).status,200,label+'same-ID replay reads the saved result');
+  equal(await count('SELECT count(*) n FROM chat_turns WHERE user_id=?',o.account),turns,label+'replay added no turn');
+  equal(await count('SELECT count(*) n FROM inference_calls'),modelCalls,label+'confirm and replay made no model call');
+ }
+ // backup: the GitHub provider boundary is a stubbed global fetch (the Worker's githubTransport); preparing and confirming stay model-free.
+ {
+  const o=await workspaceFixture(db,m),other=await workspaceFixture(db,m),label='backup: ',config={clientId:'Iv1.test',clientSecret:'synthetic-secret',appId:123,slug:'test',key:fixtureKeyring('ab'.repeat(32))};
+  await createFixtureProject(await other.scope(),other.account,'Foreign','A synthetic foreign website.');
+  await initializeFixtureKeys(db,config.key);
+  Object.assign(env,{GITHUB_CLIENT_ID:config.clientId,GITHUB_CLIENT_SECRET:config.clientSecret,GITHUB_APP_ID:'123',GITHUB_APP_SLUG:'test',CONNECTION_ENCRYPTION_KEYRING:config.key,FILES:{get:async()=>null}});
+  await paidPlan(db,o.account,'business');
+  const token=jid();
+  await db.prepare('INSERT INTO github_token_vault(id,user_id,ciphertext,expires_at,state) VALUES(?,?,?,?,?)').bind(token,o.account,await m.seal(config.key,`whumpo:github:token:${o.account}:${token}`,'ghu_synthetic_private'),new Date(Date.now()+3600000).toISOString(),'active').run();
+  await db.prepare('INSERT INTO github_connections(user_id,github_user_id,login,active_token_id,connected_at) VALUES(?,?,?,?,?)').bind(o.account,'44','test',token,stamp()).run();
+  const {version}=await createFixtureProject(await o.scope(),o.account,'Bakery','A local bakery','clay');
+  const repo={id:17,owner:{login:'test'},name:'backup',private:true,default_branch:'main',permissions:{push:true}};let writes=0,committedTree=null,reviewedTree=null;const realFetch=globalThis.fetch;
+  globalThis.fetch=async(url,init={})=>{
+   if(url==='https://api.github.com/user/installations?per_page=100')return Response.json({total_count:1,installations:[{id:1,app_id:123,suspended_at:null,account:{login:'test'},repository_selection:'selected'}]});
+   if(url==='https://api.github.com/user/installations/1/repositories?per_page=20&page=1')return Response.json({repositories:[repo]});
+   if(url==='https://api.github.com/repos/test/backup')return Response.json(repo);
+   if(String(url).includes('/git/ref/heads/'))return Response.json({object:{sha:'a'.repeat(40)}});
+   assert.equal(url,'https://api.github.com/graphql');
+   if(JSON.parse(init.body).query.startsWith('query'))return Response.json({data:{repository:{p0:null,p1:null,p2:null,p3:committedTree?{__typename:'Tree',oid:committedTree}:null}}});
+   writes++;committedTree=reviewedTree;return Response.json({data:{createCommitOnBranch:{commit:{oid:'b'.repeat(40)}}}});
+  };
+  try{
+   const status=async id=>(await db.prepare('SELECT state s FROM github_backups WHERE id=?').bind(id).first())?.s??null;
+   const options={github:config,githubTransport:globalThis.fetch,files:env.FILES};
+   const prepare=async()=>{const id=jid();equal((await m.sendChat(await o.scope(),o.account,{id,revision:(await http(o,'/api/chat')).json.state.revision,content:'/review-backup '+version+' test/backup 17'},undefined,options)).status,200,label+'review prepared without a model');return id;};
+   const post=async(who,revision,reviewId,id=jid())=>{const body={id,revision,action:{type:'confirm',kind:'backup',reviewId}};return {body,res:await http(who,'/api/chat/actions','POST',body)};};
+   const spent=await count('SELECT count(*) n FROM inference_calls');
+   const stale=await prepare(),staleRead=await read(o,stale);equal(staleRead.turn.backup_confirmation_id,stale,label+'fresh read offers the review');
+   equal((await http(o,'/api/chat/actions','POST',{id:jid(),revision:(await http(o,'/api/chat')).json.state.revision,action:{type:'shortcut',kind:'versions',projectId:a.project}})).status,200,label+'conversation advances');
+   equal((await post(o,staleRead.turn.revision,stale)).res.status,409,label+'stale revision refused');equal(await status(stale),'pending',label+'stale refusal applied nothing');equal(writes,0,label+'stale refusal wrote nothing to GitHub');
+   const id=await prepare();
+   equal((await read(other,id)).status,404,label+'foreign account cannot read the turn');
+   await post(other,(await http(other,'/api/chat')).json.state.revision,id);equal(await status(id),'pending',label+'foreign confirm applied nothing');equal(writes,0,label+'foreign confirm wrote nothing to GitHub');
+   reviewedTree=(await db.prepare('SELECT tree_sha t FROM github_backups WHERE id=?').bind(id).first()).t;
+   const confirmation=await post(o,(await read(o,id)).turn.revision,id);equal(confirmation.res.status,200,label+'confirm from the fresh read');equal(await status(id),'complete',label+'review applied');equal(writes,1,label+'one GitHub write');
+   equal((await http(o,'/api/chat/actions','POST',confirmation.body)).status,200,label+'same-ID replay reads the saved result');equal(writes,1,label+'replay made no second GitHub write');
+   equal(await count('SELECT count(*) n FROM inference_calls'),spent,label+'no model call');
+  }finally{globalThis.fetch=realFetch;}
  }
  equal(await count('SELECT count(*) n FROM inference_calls'),modelCalls,'No model call was recorded');
  console.log(`Saved review confirm outage passed (${checks} checks, ${process.argv.includes('--d1')?'local D1':'SQLite'}).`);
