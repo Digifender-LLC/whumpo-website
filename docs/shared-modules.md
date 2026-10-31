@@ -517,6 +517,7 @@ Result: two passing runs back to back (`success:true`, `cleanupVerified:true`, `
 - **What it cannot say.** It keeps no history. A lead moved back, a deleted record or one that expired lowers a figure, so a past period can shrink; the panel says so and shows no trend. A form younger than 30 days is marked a partial period with the date it started collecting. A failed read shows "unavailable", never zero. Site requests are not shown here and are never called visitors or used as a denominator.
 - **UI.** Plain text: one sentence ("3 of 12 records ... are now Won (25%)"), a label/count list per stage, the counting rule and the no-history note. No chart and no colour meaning.
 - **Verification.** `node tests/module-record-conversions.mjs` (add `--d1`): known counts, duplicate delivery, reversal, removal and expiry, partial period, plan gate, two tenants, visitor refusal, nothing in the Chat summary. `tests/record-leads-browser.mjs` covers the panel at 360, 390 and 1280 px, 200% text and dark.
+- **Connected lead journey and the two WH-095 lines (2026-10-31).** `node tests/record-leads-journey.mjs` (add `--d1`) runs the built `RecordList` in Chromium with every `/api` call answered by the actual Worker: inbox, stage, due date, note, save, reload, filter, stale refusal. `tests/module-record-conversions.mjs` also asserts that request counts are never reported as visitors (WH-095 line 2) and that telemetry failure neither blocks intake nor reads as zero (line 5).
 
 
 ## Public forms bound to the published version (WH-127) — October 31, 2026 UTC

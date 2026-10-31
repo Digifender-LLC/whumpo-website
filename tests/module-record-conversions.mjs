@@ -137,6 +137,26 @@ try{
   assert.equal((await conv(a,records,undefined,'?x=1')).status,400);
   assert.equal((await workspace(a,`/api/projects/${a.project}/module-records/${records.id}/nothing/conversions`)).status,404);
  });
+ await check('WH-095 line 2: request counts stay request counts, and nothing here calls anything a visitor figure',async()=>{
+  // The conversion read carries no request, visit or visitor figure (exact key list is asserted above); the traffic read is a different surface and says what it counts.
+  await run("INSERT INTO feature_preview_grants VALUES(?,1,?,NULL,'core.insights','read','private-test-acceptance','synthetic WH-095 fixture',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",id(),a.user);
+  await m.recordTraffic(db,a.project);await m.recordTraffic(db,a.project);
+  const traffic=await m.readTraffic(a.scope,a.user);assert.equal(traffic.metric,'successful_html_requests');assert.equal(traffic.rows.reduce((n,r)=>n+r.requests,0),2);
+  assert.match(m.trafficNotice,/not unique visitors/i);assert.match(m.trafficNotice,/repeat visits and unrecognized checks may still be included/i);
+  const said=m.trafficDescription(traffic);assert.match(said,/Recorded page requests: 2/);assert.ok(!/unique visitors/i.test(said.replace(/not unique visitors/i,'')),'Requests are never described as unique visitors');
+  const {readFile}=await import('node:fs/promises');const panel=await readFile('frontend/src/records-panel.tsx','utf8');
+  for(const hit of panel.match(/.{0,40}\bunique\b.{0,40}/gi)??[])assert.match(hit,/\bnot\b/i,'The records panel only mentions unique visitors to deny it: '+hit);
+  assert.ok(!/successful_html_requests|requests:/.test(JSON.stringify(await stageOf(a,records))),'The conversion read reports no request count');
+ });
+ await check('WH-095 line 5: telemetry failure does not block accepted intake, and a failed conversion read is an error, not zero',async()=>{
+  const before=await count(a);
+  // Every statement that touches traffic telemetry or the lead aggregate throws; intake writes neither.
+  const broken=new Proxy(db,{get:(t,p)=>p==='prepare'?sql=>{if(/site_traffic|module_record_leads/.test(sql))throw Error('synthetic telemetry failure');return db.prepare(sql);}:typeof t[p]==='function'?t[p].bind(t):t[p]});
+  const intake=await appGateway.applicationGateway(new Request(a.host+'/modules',{method:'POST',headers:{'cf-connecting-ip':'192.0.2.9','content-type':'application/json',origin:a.host,cookie:v1.cookie},body:JSON.stringify(submission(records))}),{...env,DB:broken});
+  assert.equal(intake.status,200,'Intake is accepted while telemetry is down');assert.equal(await count(a),before+1,'The record is stored');
+  const down=await m.worker.fetch(new Request(`https://whumpo.com/api/projects/${a.project}/module-records/${records.id}/request/conversions`,{headers:{cookie:`__Host-whumpo_session=${a.token}`,origin:'https://whumpo.com'}}),{...(fixture.env??{}),...env,DB:broken},{waitUntil(){}});
+  const body=await down.json();assert.ok(down.status>=400,'The read fails visibly: '+down.status);assert.ok(!('stages' in body)&&!('submitted' in body),'A failed read is never a zero');
+ });
  await check('stages and counts never reach Chat bindings or the owner summary',async()=>{
   const summary=JSON.stringify(await ownerSummary(a));assert.ok(!/won|stages|conversion|contacted/i.test(summary),summary);
   assert.ok(!logs.join('\n').match(/"won"/),'No figure logged');assert.equal(network,0);
