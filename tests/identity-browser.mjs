@@ -11,10 +11,29 @@ import {createRequire} from 'node:module';
 import {build} from 'esbuild';
 import {build as viteBuild} from 'vite';
 import {identityDatabase} from './helpers/identity-database.mjs';
+import {execFile} from 'node:child_process';import {promisify} from 'node:util';
 const require=createRequire(import.meta.url),{chromium}=require(process.env.WHUMPO_PLAYWRIGHT||'@playwright/test');
 const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-identity-browser-'),html=`frontend/identity-fixture-${process.pid}.html`,origin='http://localhost:8787';
 let browser,server,fixture,phase='build';const originalFetch=globalThis.fetch,originalEqual=crypto.subtle.timingSafeEqual;
 const requests=[],errors=[];let loseSecureReply=false;
+// Chromium page.pdf() of the print document; poppler reads back the text, page boxes and metadata.
+async function printedPdfs(context,printed,kit,key,pageTitle){
+ const run=promisify(execFile),p=await context.newPage();
+ try{
+  assert.equal(printed.title,'Whumpo recovery kit');assert(!printed.title.includes(key)&&!pageTitle.includes(key),'The secret must not reach a document title (the default Save as PDF file name)');
+  await p.setContent(printed.html);
+  for(const [format,width,height] of [['A4',595.28,841.89],['Letter',612,792]]){
+   const file=dir+'/kit-'+format+'.pdf';await writeFile(file,await p.pdf({format,printBackground:true}));
+   const info=(await run('pdfinfo',[file])).stdout,text=(await run('pdftotext',['-layout',file,'-'])).stdout;
+   assert.match(info,/Title:\s+Whumpo recovery kit\n/);assert(!info.includes(key));assert.match(info,/Pages:\s+[12]\n/);
+   assert.equal(text.replace(/\s+/g,' ').trim(),kit.replace(/\s+/g,' ').trim(),format+' PDF text must hold the whole kit');
+   assert(text.replace(/\s/g,'').includes(key),format+' PDF must hold the unbroken recovery key');
+   const words=[...(await run('pdftotext',['-bbox',file,'-'])).stdout.matchAll(/xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)"/g)].map(m=>m.slice(1).map(Number));
+   assert(words.length>10&&words.every(([x0,y0,x1,y1])=>x0>=18&&x1<=width-18&&y0>=0&&y1<=height),format+' PDF text is clipped at print size');
+   await writeFile('/tmp/whumpo-identity-kit-'+format+'.pdf',await readFile(file));
+  }
+ }finally{await p.close();}
+}
 try{
  await writeFile(html,'<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Whumpo identity acceptance</title></head><body><div id="root"></div><script type="module" src="/@fs/'+resolve('tests/fixtures/identity-browser.tsx')+'"></script></body></html>');
  await viteBuild({build:{outDir:dir+'/web',rollupOptions:{input:resolve(html)}},logLevel:'error'});
@@ -46,7 +65,7 @@ try{
  const context=await browser.newContext({viewport:{width:390,height:844},deviceScaleFactor:2,isMobile:true,hasTouch:true,permissions:['clipboard-read','clipboard-write'],acceptDownloads:true});
  await context.addInitScript(()=>{
   window.turnstile={render:()=> 'synthetic',remove:()=>{},reset:()=>{},getResponse:()=> 'synthetic-turnstile'};
-  const append=Element.prototype.append;Element.prototype.append=function(...nodes){const result=append.apply(this,nodes);for(const node of nodes)if(node instanceof HTMLIFrameElement&&node.title==='Recovery kit print view')node.contentWindow.print=()=>{window.__printedKit=node.contentDocument.body.textContent;node.contentWindow.dispatchEvent(new Event('afterprint'));};return result;};
+  const append=Element.prototype.append;Element.prototype.append=function(...nodes){const result=append.apply(this,nodes);for(const node of nodes)if(node instanceof HTMLIFrameElement&&node.title==='Recovery kit print view')node.contentWindow.print=()=>{window.__printedKit=node.contentDocument.body.textContent;window.__printedHtml=node.contentDocument.documentElement.outerHTML;window.__printedTitle=node.contentDocument.title;node.contentWindow.dispatchEvent(new Event('afterprint'));};return result;};
  });
  const page=await context.newPage();page.setDefaultTimeout(15000);page.on('pageerror',e=>errors.push(e.message));
  const {activate,enter}=keyboardJourney(page,!!process.env.WHUMPO_ORCA_LOG);
@@ -67,6 +86,8 @@ try{
  const downloaded=page.waitForEvent('download');await activate(page.getByRole('button',{name:'Download',exact:true}));const download=await downloaded;assert.equal(download.suggestedFilename(),'whumpo-recovery-kit.txt');const kit=await readFile(await download.path(),'utf8'),key=kit.match(/Recovery key:\n([a-f0-9]{64})/)[1];
  await activate(page.getByRole('button',{name:'Copy',exact:true}));assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),kit);
  await activate(page.getByRole('button',{name:'Print / PDF',exact:true}));assert.equal(await page.evaluate(()=>window.__printedKit),kit);assert.equal(await page.locator('iframe').count(),0);
+ // The stub cannot show a printable page, so render the exact print document to real PDFs (A4 and Letter) and inspect them.
+ await printedPdfs(context,await page.evaluate(()=>({html:window.__printedHtml,title:window.__printedTitle})),kit,key,await page.title());
  await page.evaluate(()=>window.dispatchEvent(new PageTransitionEvent('pagehide',{persisted:true})));await page.getByRole('button',{name:'Copy',exact:true}).waitFor({state:'detached'});
  await activate(page.getByRole('button',{name:'I’ve saved my recovery kit'}));await page.getByRole('heading',{name:'Your kit is saved'}).waitFor();
  assert(!(await page.locator('body').innerText()).includes(key));assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);

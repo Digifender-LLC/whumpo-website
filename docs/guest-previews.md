@@ -266,3 +266,9 @@ The same day `RUN_LIVE_WORKSPACE_SMOKE=1 node tests/workspace-smoke-live.mjs` ex
 - Physical phones and tablets (the live and local journeys use headless Chromium only).
 - Real human guests and owners; all identities were synthetic `example.test` rows, deleted and verified gone.
 - Customer acceptance; the catalogue entry means bounded foundation only, not launch acceptance.
+
+## WH-153 live /view header readback and release readback — October 31, 2026 UTC
+
+`RUN_LIVE_GUEST_PREVIEW=1 node tests/guest-preview-live.mjs` now POSTs the valid link to `/view` on `preview.whumpo.site` and asserts the response headers before the revoke step. It exited 0 at 2026-10-31T09:04:07Z against release 077c051b-adf1-432a-b43d-cd3752c21a37, DB whumpo-control-2026-10-31d, with `cleanupVerified` true. `/view` returned 200 with `content-security-policy: sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'`, `x-frame-options: SAMEORIGIN`, `cache-control: no-store`, `x-content-type-options: nosniff`, `referrer-policy: no-referrer`, `x-robots-tag: noindex, nofollow, noarchive, nosnippet`, same-origin COOP/CORP and no `set-cookie`; after revoke `/api/link` and `/view` answered 404.
+
+Release readback was read-only through the Cloudflare API: four Workers each with one active version, apps/sites/platform bound to `dba36bb8-4d6b-4798-baf3-2572809b2919` (`whumpo-control-2026-10-31d`), and a schema fingerprint equal to source (241 tables, 1230 objects, sha256 `53be90ebb97a500aefc0c89a53abffe49cfcae31dd16c56167422fdd9c64d59d`). The archive `.secrets/releases/077c051b-...` is not on the checking host, so this is live state, not a byte comparison against that manifest. WH-153 and WH-092 are closed on this evidence.
