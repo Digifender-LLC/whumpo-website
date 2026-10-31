@@ -1,0 +1,32 @@
+# Brand kits, saved sections and design configuration (WH-091, WH-070 levels 1 and 2)
+
+**Status: October 31, 2026. Source and local verification only. NOT deployed and NOT live-tested.** Schema group C3 with compiler identities `project-content@7` and `project-service-clients@5`; merging needs the C3 cutover (see [releases](releases.md)). WH-070 level 3 (a custom frontend component) stays blocked on WH-014 and [composition architecture](roadmap/composition-architecture.md) section 3: no owner CSS or JavaScript exists anywhere in this feature.
+
+## What an owner can do
+
+- **Design configuration (level 1).** The specification's `design` is now `{theme, brand}`. `brand` is `null` or a closed set of tokens: light colors (text, background, accent), optional dark colors, one of five type styles, one of three corner styles, one of three spacing options and an optional logo. The published site renders them as CSS variables; with dark colors set it also follows the visitor's `prefers-color-scheme`. Without dark colors the site stays light.
+- **Composition (level 2).** Every section has a style (`plain`, `card`, `callout`, `quote`), a closed set rendered as fixed class names. A saved section is one reusable heading, text and style.
+- **Kits and saved sections.** `brand_kits` / `brand_kit_versions` and `saved_sections` / `saved_section_versions` (`src/brand-kits/schema.sql`) hold the owner's own versioned kits and sections. A version never changes. A stale save (another tab saved first) is refused, not merged. Limits: 20 kits, 60 sections, 50 versions each, enforced in the commit.
+
+## Decisions
+
+- **Snapshot, not link (D57).** Applying a kit copies one version's tokens into the project's specification through the existing exact private website review. The compiler and the serving Worker never read a kit table, so a build is a pure function of the specification (A3 by construction). Editing or deleting a kit never changes a saved or published site; `brand.source` only records which kit version the copy came from.
+- **Contrast is enforced, not advised.** `src/brand-tokens.ts` is the one rule, used by the owner screen, the save handler and the compiler (it is a pinned compiler input). Text on the background, accent on the background, and both on the soft panel color (the background mixed 10% toward the text color, always derived) must reach 4.5:1 in light mode and again in dark mode. A failing palette is refused with the reason in plain words and the numbers. The screen offers "Fix automatically", which moves only the failing colors toward black or white in 4% steps and never touches the background; if no text color can be read on a background, it says to choose another background.
+- **Only validated values reach CSS.** Colors are lowercase `#rrggbb`; type, corners and spacing are keys into fixed tables. No owner text enters a `<style>`. The published CSP is unchanged (`style-src 'unsafe-inline'`, no script), and `tests/brand-compiler.mjs` asserts no `script`, `url(` or `@import` in branded output.
+- **The logo is an approved photo of the target project.** A kit stores only the logo's description. At apply the owner picks one of the project's own approved photos; it goes through `requireSpecificationPhotos` (ownership, clearance, digest) and is a `version_photos` row like a page photo, served from the project's own `assets/` path. There is no new upload or publish path. With scanning deferred, approval is proved on fixture approval only (A4).
+- **Apply is a typed owner control, never a model action.** `brandKitReview {projectId,kitId,version,logoId|null}`, `brandRemoveReview {projectId}` and `savedSectionReview {projectId,sectionId,version,pageId}` prepare the review; saving stays the recent-sign-in `specificationApply`. `project_spec_proposal_admit` admits them; `project_spec_brand_apply_admit` repeats in the commit that the proposal equals the saved head with only `design.brand` replaced, and that the brand is one saved version of a kit the same user owns (or null). Saved-section apply is checked by the handler and the exact review only (no commit trigger): it changes only the page's section list.
+- **Plan.** `creator.brand-kits`, `creator.saved-sections` and `creator.shared-styles` are `private-test`. Creating, saving a version and preparing an apply need current inclusion; listing, reading, deleting and earlier reviews do not.
+- **Compiler identities.** `project-content@6` becomes `@7` and `project-service-clients@4` becomes `@5` (directory `v4` to `v5`), because `components.ts` is a pinned input of both. Per the current-version policy there is no downgrade reader: schema-3 drafts saved under `@6` are test data and are reset at the cutover. Locks are `compiler-locks/project-content-v7.json` and `compiler-locks/project-service-clients-v5.json`; the superseded v6 and v4 lock files are removed in the same change, as in #525.
+- **D50.** Every owner-text `String.replace` in `components.ts`, `published-html.ts`, the service-client core and `specification-photos.ts` now passes a function replacer, so `$&`, `$'` and `` $` `` render literally. Regression: `tests/brand-compiler.mjs`.
+
+## Not built here
+
+Chat view binding (WH-105/107/109) for kits, a kit-wide "update every project" action (WH-103), exporting kits in the portable bundle beyond the account export hook below, a commit trigger for saved-section apply, and web fonts or uploaded fonts (system font stacks only).
+
+## Data lifecycle
+
+Class `brand-kits` in [data-lifecycle.json](data-lifecycle.json): owner-only, deleted with the owner's account, exported with the account export, never in agent or model context, Chat history or the public site source. Another owner never sees a kit; project export carries the copied tokens as part of the specification.
+
+## Verification
+
+`tests/brand-compiler.mjs`, `tests/brand-kits.mjs` (SQLite and `--d1`), `tests/brand-kits-browser.mjs` (Chromium at 360, 390 and 1280 px, 200% text, light and dark, keyboard, axe).
