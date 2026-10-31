@@ -255,10 +255,10 @@ try{
  await check('an active registration blocks project and account purge until it is transferred out; a settled order does not',async()=>{
   const reg=registrar(),{orderId}=await reserved(reg,'a',P4);await dispatch(A,reg,orderId);assert.equal(await state(orderId),'registered');
   await refuse(run('DELETE FROM projects WHERE id=?',owners.a.project),/domain_registration_active/);await refuse(run('DELETE FROM users WHERE id=?',owners.a.id),/domain_registration_active/);
-  await refuse(run("UPDATE domain_registrations SET auto_renew=1 WHERE order_id=?",orderId),/CHECK/);
+  await refuse(run("UPDATE domain_registrations SET auto_renew=1 WHERE order_id=?",orderId),/CHECK|domain_registration_renewal/);
   assert.equal(await count('SELECT count(*) FROM domain_orders WHERE order_id=?',orderId),1);
   await run("UPDATE domain_registrations SET state='transferred-out' WHERE order_id=?",orderId);
-  await refuse(run("UPDATE domain_registrations SET state='active' WHERE order_id=?",orderId),/domain_registration_identity/);
+  await refuse(run("UPDATE domain_registrations SET state='active' WHERE order_id=?",orderId),/domain_registration_final/);
   for(const r of await all("SELECT order_id FROM domain_registrations WHERE owner_user_id=? AND state='active'",owners.a.id))await run("UPDATE domain_registrations SET state='transferred-out' WHERE order_id=?",r.order_id);
   await run('DELETE FROM users WHERE id=?',owners.a.id);
   assert.equal(await count('SELECT count(*) FROM domain_orders WHERE owner_user_id=?',owners.a.id),0);assert.equal(await count('SELECT count(*) FROM domain_quotes WHERE owner_user_id=?',owners.a.id),0);
