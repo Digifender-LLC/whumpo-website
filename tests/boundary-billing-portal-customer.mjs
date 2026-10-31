@@ -21,7 +21,7 @@ const store=await databaseFixture(),db=store.db,scopes=new Map(),scope=u=>scopes
 // Fixture values are built at runtime from short, obviously fake parts; none is a real or credential-shaped literal.
 const prices={};for(const p of publicPlans.filter(p=>p.monthlyCents))for(const interval of ['month','year'])prices[p.id+':'+interval]=['price',p.id.replaceAll('-','')+interval].join('_');
 const portalConfiguration=['bpc','fixture'].join('_');
-const stripeEnv={STRIPE_TEST_KEY:['sk','test','fixture'].join('_'),STRIPE_WEBHOOK_SECRET:['whsec','fixture'].join('_'),STRIPE_SANDBOX_CATALOG:JSON.stringify({version:1,prices,portal:portalConfiguration})};
+const stripeEnv={STRIPE_TEST_KEY:['sk','test','fixture'].join('_'),STRIPE_WEBHOOK_SECRET:['whsec','fixture'].join('_'),STRIPE_CHECKOUT_OPEN:'true',STRIPE_SANDBOX_CATALOG:JSON.stringify({version:1,prices,portal:portalConfiguration})};
 const env={...store.env,DB:db,ENVIRONMENT:'test',...stripeEnv,API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})}};
 const ctx={waitUntil(){throw Error('No background work is expected');}};
 

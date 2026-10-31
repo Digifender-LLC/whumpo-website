@@ -61,3 +61,13 @@ A synthetic owner used the mobile welcome flow (name, default avatar, optional b
 Private artifacts: `.secrets/stripe-release-verification.json`, `stripe-webhook-acceptance.json`, `stripe-cancellation-acceptance.json`, `stripe-mobile-billing.png` and the immutable release archive. The archive's dirty flag covers only the dependency symlink and inspected generated visitor dependency-path comments; implementation source was committed. Browser checks are narrow viewport emulation, not physical-device acceptance. Failed renewal, annual expiry, duplicates/out-of-order delivery and uncertain writes were verified with local synthetic providers; those are not claimed as additional real Stripe transactions.
 
 The sandbox slice is deployed and accepted to this scope. WH-042 remains open for the remaining commercial lifecycle; real-money activation remains unavailable.
+
+## Checkout is blocked (Q-007, 2026-10-31)
+
+Owner decision: keep the live Stripe keys, but block checkout for now.
+
+- **What is blocked.** `catalog()` in `src/stripe-billing.ts` refuses with `503 Checkout isn't open yet. Explore is still available.` unless `env.STRIPE_CHECKOUT_OPEN === 'true'` exactly. Every Stripe path calls it (start subscription, billing portal, refresh, webhook after signature, `subscriptionsEnabled`), so `/api/plans` reports `subscriptionsEnabled:false` and no Stripe request is made. The landing page has no `prctbl_` ids in `frontend/public/stripe-pricing.json`, so it shows the plan cards and "Plans are coming soon" and loads no Stripe script.
+- **Lock 1.** `STRIPE_CHECKOUT_OPEN` is registered as a public variable and is set in no `wrangler*.jsonc`. Unset is the default and means closed.
+- **Lock 2.** `stripeTestConfigured` accepts only `sk_test_` keys and every Stripe object must have `livemode===false`. Even with the variable set, a live key cannot charge until a reviewed code change relaxes these checks.
+- **Held keys.** `STRIPE_SECRET_KEY` (live) is registered in secret custody with no readers; `STRIPE_PUBLISHABLE_KEY` is a registered public variable, set nowhere. `STRIPE_TEST_KEY` stays on the Worker, unused behind the block.
+- **Opening checkout later (owner).** 1. Land the reviewed code change that reads the live key and relaxes lock 2 (the custom payment flow work). 2. Create live products, prices, portal configuration and webhook endpoint, then set `STRIPE_SANDBOX_CATALOG` and `STRIPE_WEBHOOK_SECRET` for them. 3. Restore the pricing table ids in `frontend/public/stripe-pricing.json` if the pricing table is still used. 4. Set `STRIPE_CHECKOUT_OPEN=true` in the Worker configuration and deploy. 5. Run one acceptance purchase and refund.
