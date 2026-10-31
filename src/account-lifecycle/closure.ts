@@ -50,30 +50,31 @@ const classes=[...new Set(Object.values(closureCategories).map(x=>x[1]))].map(id
 
 /** What the owner can do before closing, each through its own reviewed control. Anything here refuses confirmation, so nothing
  * (site, authorizations) is taken away until it is done. */
-const ownerActions={
+export const ownerActions={
  unresolvedDomainRecords:'Disconnect each custom domain in Domains. Your Cloudflare zone and DNS records outside Whumpo are not changed.',
  githubRefreshCustody:'Ask Chat to review and confirm removing Whumpo\'s GitHub access. That revokes all access granted to the Whumpo GitHub App for your GitHub account, including authorizations outside this workspace, and your repositories stay.',
+ pendingCheckoutOrders:'A plan checkout is still open. Finish it or let it expire (within an hour), then prepare a new review.',
  activeSubscriptions:'Your paid plan is still active. Cancel it and let the paid period end first: closing now would forfeit what you paid for.',
 } as const;
 /** Conditions only Whumpo support can clear (retained history with no owner control, an unresolved provider outcome or an
  * unfinished key rotation, or a paid invoice: invoice records follow a finance retention schedule nobody has approved, so closure never deletes one silently). Known at review time, so confirmation is refused before anything is taken away. One generic sentence
- * is shown for all of them and for a preservation hold alike: the review never says which, so it never discloses a hold. */
+ * is shown for all of them, a preservation hold included: nothing in the review, the refusal or the closure status tells them apart. */
 /** WINDOWS: `metrics.json` ends the wait for three kinds of work so one lost reply cannot stop a closure forever: an uncertain standard AI answer and an
  * unanswered form continuation after 24 hours, an unconfirmed GitHub backup after 24 hours, a scan ticket at its expiry, and a job-journal job after 72 hours
  * (`last_at`). That is right only for work whose lost outcome has no effect that must still be settled: every job type today is a content-free email notice.
  * A FUTURE JOB TYPE WITH A REAL SIDE EFFECT (money moved, a resource created) MUST NOT inherit the 72 hour window: exclude its purpose from the window in
  * metrics.json or add it to needsSupportKeys before it ships. */
-const needsSupportKeys=['cmsInstances','visitorApplications','backendPublicationReviews','backendFormReviews','backendFormSettings','appActivationReviews','gatewaySpendBuckets','gatewaySpendAttempts','githubGrantUncertain','unresolvedConnectionExchanges','connectionRotationGuards','paidInvoices','activePreservationHolds'] as const;
+export const needsSupportKeys=['cmsInstances','visitorApplications','backendPublicationReviews','backendFormReviews','backendFormSettings','appActivationReviews','gatewaySpendBuckets','gatewaySpendAttempts','githubGrantUncertain','unresolvedConnectionExchanges','connectionRotationGuards','unresolvedDnsActions','openConnectorReceipts','paidInvoices','activePreservationHolds'] as const;
 /** The one support-only reason shown by name, because it is not sensitive and the owner needs to know that support cannot act yet either. */
 const paidInvoiceNotice='You have paid invoices. Whumpo keeps paid invoice records until a finance retention schedule is approved, so this account cannot be closed yet, by you or by support. Nothing has been changed. You can still download your data.';
 const supportMessage='Some records on this account need Whumpo support before it can be closed automatically. Nothing has been changed and your site stays online. Contact support from this page.';
 const credentials=['githubCredentials','cloudflareCredentials','githubRefreshCustody'] as const;
 /** Identity rows change with every reauthentication ceremony and funnel rows with hourly derivation; both are removed
  * by the purge and are excluded from the exact binding so a fresh-passkey retry does not invalidate the review.
- * Restricted safety state (preservation holds, risk-ledger evidence and corrections) is never shown to the subject, so it
- * is not part of what the owner reviews either: a hold placed or released never changes a review or makes it stale, and
- * the holds step pauses the closure with a generic retention reason instead. A hold is never disclosed. */
-const restricted:ReadonlySet<string>=new Set(['activePreservationHolds','riskEvidence','riskCorrections']);
+ * Risk-ledger evidence and corrections are restricted safety state the subject never sees, so they are not reviewed either.
+ * A preservation hold IS bound, like every other support-only record: one placed after the review makes the review stale exactly
+ * as any other change does, and nothing about a hold is presented differently from another retained record (decision D72). */
+const restricted:ReadonlySet<string>=new Set(['riskEvidence','riskCorrections']);
 const excluded=(k:string)=>k.startsWith('identity')||k==='funnelEvents'||restricted.has(k);
 const bound=(counts:ClosureCounts)=>Object.fromEntries(Object.entries(counts).filter(([k])=>!excluded(k)).sort(([a],[b])=>a<b?-1:1));
 /** The machine's inventory view of the bound counts: every category present, the unbound ones zero. */
@@ -91,16 +92,17 @@ const digest=(value:unknown)=>{if(typeof value!=='string'||!/^[a-f0-9]{64}$/.tes
 async function closureBinding(db:D1Database,user:string){
  const counts=await closureCounts(db,user),needsSupport=needsSupportKeys.some(k=>counts[k]>0);
  const required=Object.entries(ownerActions).filter(([k])=>counts[k]>0).map(([k,action])=>({id:k,count:counts[k],action}));
+ const liveRecords=(await db.prepare("SELECT count(*) n FROM module_records r JOIN module_instances i ON i.id=r.instance_id WHERE r.project_id IN (SELECT id FROM projects WHERE owner_user_id=?) AND r.expires_at>unixepoch() AND r.created_at>unixepoch()-86400*json_extract(i.config_json,'$.retentionDays')").bind(user).first<{n:number}>())?.n??0;
  const repositories=(await db.prepare("SELECT DISTINCT repo_owner||'/'||repo_name AS name FROM github_backups WHERE user_id=? AND state='complete' ORDER BY 1 LIMIT 50").bind(user).all<{name:string}>()).results.map(r=>r.name);
- return {counts,required,needsSupport,repositories,binding:{version:1,kind:'closure',accountId:user,counts:bound(counts),required:required.map(r=>r.id)}};
+ return {counts,required,needsSupport,repositories,liveRecords,binding:{version:1,kind:'closure',accountId:user,counts:bound(counts),required:required.map(r=>r.id)}};
 }
-/** What the owner reviews. Preservation holds are deliberately not shown (no case detail reaches the subject); the
- * holds step reports a generic retention pause instead. */
+/** What the owner reviews. A hold is one of the support-only conditions (no case detail reaches the subject). Record counts cover only records still inside
+ * their retention window (the same window as the export), so an expired record kept solely because of a hold is not shown. */
 function presentClosure(id:string,reviewDigest:string,expiresAt:number,b:Awaited<ReturnType<typeof closureBinding>>){
  const c=b.counts;
  return {id,digest:reviewDigest,expiresAt,canConfirm:b.required.length===0&&!b.needsSupport,requiredBeforeClosure:b.required,needsSupport:b.needsSupport,supportMessage:b.needsSupport?supportMessage:null,
   paidInvoiceNotice:c.paidInvoices>0?paidInvoiceNotice:null,
-  removes:{projects:c.projects,liveWebsites:c.liveProjects,savedWebsiteVersions:c.specificationSnapshots,photos:c.projectFileRecords,chatTurns:c.chatTurns,moduleRecords:c.moduleRecords,moduleFiles:c.moduleFiles,guestPreviewLinks:c.guestPreviewLinks,connectedProviders:Number(c.githubCredentials>0)+Number(c.cloudflareCredentials>0)},
+  removes:{projects:c.projects,liveWebsites:c.liveProjects,savedWebsiteVersions:c.specificationSnapshots,photos:c.projectFileRecords,chatTurns:c.chatTurns,moduleRecords:b.liveRecords,moduleFiles:c.moduleFiles,guestPreviewLinks:c.guestPreviewLinks,connectedProviders:Number(c.githubCredentials>0)+Number(c.cloudflareCredentials>0)},
   effects:[
    'Closing starts immediately after you confirm. Chat, publishing, uploads, new connections and every other workspace action stop at once and are not restored automatically. There is no cancellation window in this test release.',
    'Live websites are taken offline, guest preview links are revoked and active website modules are suspended before anything is deleted.',
@@ -183,7 +185,8 @@ export async function confirmClosure(env:Pick<Env,'DB'>&Partial<Env>,user:string
  }
  const advance=(from:string,to:string,revision:number,set='',...bind:unknown[])=>db.prepare(`UPDATE account_closures SET state='${to}',revision=${revision+1},updated_at=?${set},history=json_insert(history,'$[#]','${to}') WHERE closure_id=? AND account_id=? AND revision=? AND state='${from}'`).bind(at,...bind,reviewId,user,revision);
  // What the owner saw (projects, versions, photos, Chat, records, uploads, guest links) must still be what exists when the closure is created.
- const same=closureCountsMatchSQL(b.counts,['projects','liveProjects','specificationSnapshots','projectFileRecords','chatTurns','moduleRecords','moduleFiles','guestPreviewLinks']);
+ // The refusals checked above are repeated in the same statement (each is zero here), so a retained or owner-action record that appears in the gap refuses the confirmation instead of closing the account around it.
+ const same=closureCountsMatchSQL(b.counts,['projects','liveProjects','specificationSnapshots','projectFileRecords','chatTurns','moduleRecords','moduleFiles','guestPreviewLinks',...Object.keys(ownerActions),...needsSupportKeys]);
  const statements=[
   db.prepare(`INSERT INTO account_closures(closure_id,account_id,state,revision,requested_at,updated_at,history) SELECT ?,?,'requested',1,?,?,'["requested"]' WHERE EXISTS(SELECT 1 FROM account_lifecycle_reviews WHERE id=? AND user_id=? AND kind='closure' AND review_digest=? AND expires_at>?) AND ${same.sql}`)
    .bind(reviewId,user,at,at,reviewId,user,reviewDigest,now(),user,...same.numbers),
@@ -250,26 +253,29 @@ async function revokeCredentials(env:Pick<Env,'DB'>&Partial<Env>,user:string,tra
  const counts=await closureCounts(db,user),pending=sum(counts,credentials);
  return pending?{state:'waiting',detail:{pendingProviderRevocations:pending,providerRetry:retry}}:{state:'done',detail:{providerRevocationsConfirmed:true}};
 }
-async function holds(db:D1Database,user:string):Promise<StepResult>{
- const row=await db.prepare(`SELECT count(*) n FROM safety_preservation_holds WHERE released_at IS NULL AND ((scope='account' AND subject_user_id=?) OR (scope IN ('project','object') AND project_id IN (${owned})))`).bind(user,user).first<{n:number}>();
- // Generic customer wording: no case, basis or scope detail reaches the account holder.
- return row&&row.n>0?{state:'blocked',detail:{reason:'retention_review',support:true}}:{state:'done',detail:{retentionReviewClear:true}};
-}
+/** Kept as a journal step so every receipt has the same six; a preservation hold is handled exactly like any other retained record at the purge (counted by
+ * `activePreservationHolds`, refused by the database inside the batch), so this step never differs between a held and an unheld account. */
+const holds=async():Promise<StepResult>=>({state:'done',detail:{}});
+/** A form-continued AI turn that has been pending or unknown for over 24 hours can no longer be applied (the fenced Chat route is its only resolver), so it is closed as
+ * unavailable through the table's own legal transition; the inventory window ends the wait and this lets the database delete the row with the account. */
+const closeStaleContinuations=(db:D1Database,user:string)=>db.prepare("UPDATE chat_interaction_continuations SET state='failed',reason='unavailable',finished_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE state IN ('pending','unknown') AND started_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 day') AND id IN (SELECT id FROM chat_interaction_submissions WHERE user_id=?)").bind(user).run();
 /** Closure's own reconciliation authority. The Chat and backup routes that normally settle these are behind the stop-new-work fence, so the
  * step settles them itself, read-only toward providers and never repeating a write: a pending Chat turn is released if it never reached
  * the model or marked uncertain if it did (src/standard-ai-recovery.ts), and an unconfirmed GitHub backup is re-read once per pass. Anything
  * still open then waits; the inventory's own windows end the wait (an uncertain AI answer after 24 hours can no longer be applied and uses no
  * customer credits, an unconfirmed backup after 24 hours is left to the owner's repository, an expired scan ticket is stale). */
-async function operations(env:Pick<Env,'DB'>&Partial<Env>,user:string,transport:typeof fetch):Promise<StepResult>{
+async function operations(env:Pick<Env,'DB'>&Partial<Env>,user:string,transport:typeof fetch,origin:Origin):Promise<StepResult>{
  const db=env.DB;let turnsChecked=0,backupsChecked=0;
  const turns=(await db.prepare("SELECT id,input_tokens,output_tokens,created_at FROM chat_turns WHERE user_id=? AND mode='ai' AND status='pending' ORDER BY created_at LIMIT 20").bind(user).all<{id:string;input_tokens:number|null;output_tokens:number|null;created_at:string}>()).results;
  for(const turn of turns){try{await reconcileStandardChat(db,user,turn);turnsChecked++;}catch(error){if(error instanceof IdentityError)throw error;}}
- const backups=(await db.prepare("SELECT id FROM github_backups WHERE user_id=? AND state IN ('dispatching','uncertain') ORDER BY created_at LIMIT 5").bind(user).all<{id:string}>()).results;
- for(const backup of backups){try{await confirmBackup(db,env.FILES,user,backup.id,githubConfig(env as Env),transport);backupsChecked++;}catch(error){if(error instanceof IdentityError)throw error;}}
- // A form-continued AI turn that has been pending or unknown for over 24 hours can no longer be applied (the fenced Chat route is its only resolver), so it is closed as
- // unavailable through the table's own legal transition; the inventory window ends the wait and this lets the database delete the row with the account.
- await db.prepare("UPDATE chat_interaction_continuations SET state='failed',reason='unavailable',finished_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE state IN ('pending','unknown') AND started_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 day') AND id IN (SELECT id FROM chat_interaction_submissions WHERE user_id=?)").bind(user).run();
+ // Reading a backup back needs the owner's session (GitHub access is workspace-scoped), so only the owner's pass does it; the maintenance continuation lets the 24 hour window end the wait.
+ if(origin==='owner'){
+  const backups=(await db.prepare("SELECT id FROM github_backups WHERE user_id=? AND state IN ('dispatching','uncertain') AND created_at>strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 day') ORDER BY created_at LIMIT 5").bind(user).all<{id:string}>()).results;
+  for(const backup of backups){try{await confirmBackup(db,env.FILES,user,backup.id,githubConfig(env as Env),transport);backupsChecked++;}catch(error){if(error instanceof IdentityError)throw error;}}
+ }
+ // Count first, then close: a continuation that crosses the window between the two is counted now and closed here, never missed by both.
  const counts=await closureCounts(db,user),open=sum(counts,settleFirstKeys);
+ await closeStaleContinuations(db,user);
  return open?{state:'waiting',detail:{unresolvedOperations:open,chatTurnsChecked:turnsChecked,backupsChecked}}:{state:'done',detail:{unresolvedOperations:0,chatTurnsChecked:turnsChecked,backupsChecked}};
 }
 
@@ -295,14 +301,8 @@ async function runClosure(env:Pick<Env,'DB'>&Partial<Env>,user:string,transport:
   const {closure,steps}=current,next=steps.find(s=>s.state!=='done');
   if(closure.state!=='quiescing'||!next)return presentStatus(closure,steps);
   if(next.step==='purge'){
-   // A hold placed after the holds step finished still stops the purge before any delete is attempted (the account,
-   // project and file hold triggers refuse the cascade inside the batch as well).
-   const held=await holds(db,user);
-   if(held.state!=='done'){
-    if(!await journal(db,closure,next,held,origin))continue;
-    const after=await readClosure(db,user);return presentStatus(after!.closure,after!.steps);
-   }
-   const counts=await closureCounts(db,user),retained=[...Object.keys(ownerActions),...needsSupportKeys.filter(k=>k!=='activePreservationHolds')].filter(k=>counts[k]>0);
+   await closeStaleContinuations(db,user); // a window that passed since the operations step
+   const counts=await closureCounts(db,user),retained=[...Object.keys(ownerActions),...needsSupportKeys].filter(k=>counts[k]>0);
    if(retained.length){
     const result:StepResult={state:'blocked',detail:{reason:'retained_records',retainedRecordKinds:retained.length,support:true}};
     if(!await journal(db,closure,next,result,origin))continue;
@@ -312,7 +312,7 @@ async function runClosure(env:Pick<Env,'DB'>&Partial<Env>,user:string,transport:
    try{checkClosable({counts,pendingBilling:counts.activeSubscriptions,observedAt:Date.now()},closure.quiesced_at as number);}
    catch(error){
     if(!(error instanceof ClosureError))throw error;
-    const result:StepResult=error.code==='preservation-hold'?{state:'blocked',detail:{reason:'retention_review',support:true}}:error.code==='billing-pending'?{state:'blocked',detail:{reason:'paid_plan_active',support:true}}:{state:'waiting',detail:{unresolvedOperations:sum(counts,settleFirstKeys)}};
+    const result:StepResult=error.code==='preservation-hold'?{state:'blocked',detail:{reason:'retained_records',retainedRecordKinds:1,support:true}}:error.code==='billing-pending'?{state:'blocked',detail:{reason:'paid_plan_active',support:true}}:{state:'waiting',detail:{unresolvedOperations:sum(counts,settleFirstKeys)}};
     if(!await journal(db,closure,next,result,origin))continue;
     const after=await readClosure(db,user);return presentStatus(after!.closure,after!.steps);
    }
@@ -337,7 +337,7 @@ async function runClosure(env:Pick<Env,'DB'>&Partial<Env>,user:string,transport:
     const text=String(error),hold=text.includes('safety_preservation_hold');
     // A transient failure leaves the journal unfinished for a plain retry; only a database refusal is journaled.
     if(!hold&&!/FOREIGN KEY|constraint|RAISE|_retained|_guard|unresolved/i.test(text))throw error;
-    const blocked:StepResult={state:'blocked',detail:hold?{reason:'retention_review',support:true}:{reason:'retained_records',support:true}};
+    const blocked:StepResult={state:'blocked',detail:{reason:'retained_records',support:true}};
     const again=await readClosure(db,user);if(!again)throw error;
     const step=again.steps.find(s=>s.step==='purge');
     if(step&&step.state!=='done')await journal(db,again.closure,step,blocked,origin);
@@ -347,7 +347,7 @@ async function runClosure(env:Pick<Env,'DB'>&Partial<Env>,user:string,transport:
    return {version:1 as const,closure:{id:closure.closure_id,state:'complete' as const,completedAt:at,
     steps:[...steps.filter(s=>s.step!=='purge').map(presentStep),{step:'purge' as const,state:'done' as const,attempts:next.attempts+1,updatedAt:at,origin,detail:result.detail}]}};
   }
-  const result=next.step==='withdraw'?await withdraw(db,user):next.step==='credentials'?await revokeCredentials(env,user,transport):next.step==='holds'?await holds(db,user):await operations(env,user,transport);
+  const result=next.step==='withdraw'?await withdraw(db,user):next.step==='credentials'?await revokeCredentials(env,user,transport):next.step==='holds'?await holds():await operations(env,user,transport,origin);
   if(!await journal(db,closure,next,result,origin))continue;
   if(result.state!=='done'){const after=await readClosure(db,user);return presentStatus(after!.closure,after!.steps);}
  }

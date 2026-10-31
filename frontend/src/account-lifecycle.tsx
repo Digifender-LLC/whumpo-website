@@ -9,7 +9,7 @@ import {StatusBadge,type Status} from './components/whumpo/status-badge';
 import {identityCeremony} from './lib/identity';
 import {identityGeneration} from './lib/identity-invalidation';
 import {useLocation} from '@tanstack/react-router';
-import {prepareAccountExport,downloadAccountExport,prepareAccountClosure,confirmAccountClosure,resumeAccountClosure,readAccountClosure,newAccountRequestId,closureStepLabels,closureStateLabels,closureDetail,
+import {prepareAccountExport,downloadAccountExport,prepareAccountClosure,confirmAccountClosure,resumeAccountClosure,readAccountClosure,newAccountRequestId,closureStepLabels,closureStateLabels,closureDetail,supportControls,
  type AccountTransport,type ExportReview,type ClosureReview,type ClosureStatus} from './lib/account-lifecycle';
 
 const wrap='min-h-11 h-auto whitespace-normal text-left';
@@ -102,7 +102,8 @@ function ClosureSection({onStarted}:{onStarted:(status:ClosureStatus)=>void}){
    <h3 className="font-semibold">What happens</h3><ol className="list-decimal pl-5 text-body-sm space-y-1">{review.effects.map(e=><li key={e}>{e}</li>)}</ol>
    <h3 className="font-semibold">What remains after closure</h3><ul className="list-disc pl-5 text-body-sm space-y-1">{review.remainsAfterClosure.map(e=><li key={e}>{e}</li>)}</ul>
    {review.paidInvoiceNotice&&<div className="rounded-md border border-attention-ink/40 bg-attention-soft p-4 text-body-sm text-attention-ink space-y-2" role="group" aria-labelledby="closure-invoices"><h3 id="closure-invoices" className="font-semibold">Paid invoices are kept</h3><p>{review.paidInvoiceNotice}</p></div>}
-   {review.needsSupport&&!review.paidInvoiceNotice&&<div className="rounded-md border border-attention-ink/40 bg-attention-soft p-4 text-body-sm text-attention-ink space-y-3" role="group" aria-labelledby="closure-support"><h3 id="closure-support" className="font-semibold">Support is needed first</h3><p>{review.supportMessage}</p><Button asChild variant="secondary" className={wrap}><Link to="/workspace/$view" params={{view:'support'}} search={{}}>Contact support</Link></Button></div>}
+   {supportControls(review).message&&<div className="rounded-md border border-attention-ink/40 bg-attention-soft p-4 text-body-sm text-attention-ink space-y-3" role="group" aria-labelledby="closure-support"><h3 id="closure-support" className="font-semibold">Support is needed first</h3><p>{review.supportMessage}</p><Button asChild variant="secondary" className={wrap}><Link to="/workspace/$view" params={{view:'support'}} search={{}}>Contact support</Link></Button></div>}
+   {supportControls(review).contact&&!supportControls(review).message&&<Button asChild variant="secondary" className={wrap}><Link to="/workspace/$view" params={{view:'support'}} search={{}}>Contact support</Link></Button>}
    {review.canConfirm?<>
     <label className="grid gap-2 text-body-sm font-medium">Type CLOSE to confirm<Input value={confirmation} onChange={e=>setConfirmation(e.target.value)} disabled={busy} autoComplete="off" autoCapitalize="characters" spellCheck={false} className="min-h-11"/></label>
     <div className="flex flex-wrap gap-3"><Button variant="destructive" className={wrap} disabled={busy||confirmation!=='CLOSE'} onClick={()=>void confirm()}>{busy?'Closing…':'Check passkey and close account'}</Button><Button variant="quiet" className={wrap} disabled={busy} onClick={()=>{setReview(null);setError('');}}>Cancel</Button></div>

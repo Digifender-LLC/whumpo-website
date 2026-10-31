@@ -94,6 +94,10 @@ try{
  assert.deepEqual(blocked.value.requiredBeforeClosure,[]);assert.equal(blocked.value.needsSupport,true);assert.match(blocked.value.supportMessage,/need Whumpo support/);
  assert.equal((await client.confirmAccountClosure(blocked.value,b.t)).code,'action_required');assert.equal(await row('SELECT 1 x FROM account_closures WHERE account_id=?',b.account),null);
  await run('DELETE FROM backend_form_settings WHERE project_id=?',bProject.project);
+ // The support button is offered whenever support is needed, also beside the paid-invoice notice; the message block only without it.
+ assert.deepEqual(client.supportControls({needsSupport:true,paidInvoiceNotice:'x'}),{message:false,contact:true});
+ assert.deepEqual(client.supportControls({needsSupport:true,paidInvoiceNotice:null}),{message:true,contact:true});
+ assert.deepEqual(client.supportControls({needsSupport:false,paidInvoiceNotice:null}),{message:false,contact:false});checks++;
  assert.deepEqual(await client.readAccountClosure(b.t),{state:'ok',value:null});assert.ok(await row('SELECT id FROM users WHERE id=?',b.account));checks++;
  assert.ok(a.state.paths.every(p=>p.startsWith(accountLifecyclePrefix)));assert.equal(network,0);
  console.log(`Account lifecycle client passed (${d1?'local D1':'SQLite'}): ${checks} checks. Six-action client only reachable from the identity-only account page; export review replay/conflict and one-reauth download of a complete archive; stale, foreign and unrefreshable proofs refused; closure review with removals, remains and blockers; one-reauth confirm, waiting journal, status/replay, export while closing, resume to the final receipt; other tenant intact; no network.`);
