@@ -168,8 +168,8 @@ Docs-only check against `origin/main`; no source, test or schema change. Node 24
 
 | Command | Result |
 | --- | --- |
-| `node tests/guest-previews.mjs` | pass, 12 groups (SQLite) |
-| `node tests/guest-previews.mjs --d1` | pass, 12 groups (local D1) |
+| `node tests/guest-previews.mjs` | pass, 12 groups (SQLite); 18 groups after the October 31 close-out below |
+| `node tests/guest-previews.mjs --d1` | pass, 12 groups (local D1); 18 groups after the October 31 close-out below |
 | `node tests/boundary-guest-preview-race.mjs` | pass, 1 check (B3: a guest-preview delete refused with 409 leaves the link unchanged) |
 | `node tests/boundary-guest-preview-read-pool.mjs` | pass, 1 check (B6: guest photo reads charge the link's project budget, fair share and per-client limit) |
 | `node tests/guest-preview-photos.mjs` | pass, 1 check (local D1/R2, synthetic clearance) |
@@ -226,19 +226,24 @@ Group names are the `check(...)` titles in `tests/guest-previews.mjs`. The link 
 
 Pass counts in the Results table were observed. The per-assertion descriptions above come from reading the test and source files, not from instrumenting the runs.
 
-### Gaps (limits or acceptance cases with no test)
+### Gaps closed by the WH-150 close-out — October 31, 2026 UTC
 
-1. **Comment cap of 200 per link.** The trigger exists (`src/guest-previews/schema.sql`, `guest_feedback_rate`); no test reaches 200 comments on one link.
-2. **Stored comments, 2,000 per owner and 100,000 platform.** The trigger exists (`guest_preview_capacity`); not tested.
-3. **Retained links, 200 per project and 20,000 platform.** The trigger exists; the tests cover only the 20 active links per project.
-4. **In-flight cases other than revocation.** The race test injects only a revoke during a view. Expiry, version removal, a content hold, lost inclusion and an operator serving stop during a view rely on the same `stillCurrent()` re-check but have no test of their own.
-5. **In-flight comment.** No test races a comment against revocation. The insert is gated by the same `current()` predicate in one statement, so the race is closed by construction, but nothing exercises it.
-6. **Comment replay after expiry, removal or a hold.** Replay after revocation is tested; the other states are not.
-7. **Raw token in exports.** There is no account-wide export (planned). The owner listing is tested for token and hash absence; no test checks the closure inventory or any export JSON for tokens.
+The seven gaps recorded above each have a test now, in `tests/guest-previews.mjs` (18 groups; `node tests/guest-previews.mjs` and `--d1` both pass on main `be4e6bf` plus this change, Node 24.21.0, pnpm 11.19.0). Cap fixtures lift one admission trigger for a single bulk `INSERT ... SELECT` on the disposable database, then restore the identical trigger, so the real trigger enforces the boundary and no 100,000-row loop runs. Seeded rows are removed by their `SEEDED` marker.
+
+| Former gap | Group | What it asserts |
+| --- | --- | --- |
+| 1. 200 comments per link | "comment caps: 200 per link, 2,000 per owner, 100,000 platform" | 199 seeded older than the burst window; the 200th is 200, the 201st is 429 ("Too many comments"); the link holds exactly 200. |
+| 2. 2,000 per owner, 100,000 platform | same group | Owner reaches exactly 2,000 on another link, then 429 ("not accepting more comments"); with the table at exactly 100,000, a different owner with no comments gets the same 429 and stores nothing; deleting the seeded rows reopens it (200). |
+| 3. 200 retained per project, 20,000 platform | "retained link caps: 200 per project, 20,000 platform" | 199 seeded plus one issued is 200, the next issue is 409 ("guest link limit") and the count stays 200; with the table at exactly 20,000 a different owner's issue is 409 with no row; removing the seeded rows reopens it. |
+| 4. In-flight view for expiry, version removal, hold, lost inclusion, operator stop (and revoke) | "in-flight view: every ending between admission and response wins over the read" | Each ending runs on the final `stillCurrent()` query, after the page is rendered and before it is returned: 404, no page content, and the link stays ended. Disabling `stillCurrent()` makes this group fail (checked by mutation). Version removal uses the real remove-and-confirm command on a non-head version and asserts the version row is gone. |
+| 5. In-flight comment | "in-flight comment: no comment is stored once the link has ended" | The same six endings run immediately before the gated `INSERT`: 404 and no `guest_preview_feedback` row. |
+| 6. Replay after expiry, removal, hold | "comment replay stops after revocation, expiry, removal, a hold, lost inclusion or a serving stop" | The same `requestId` returns the original receipt while current, and 404 after each of the six endings. |
+| 7. Raw token in exports | "raw tokens are absent from owner listings, the closure inventory and every stored table" | The owner link listing, the feedback listing and the account-closure inventory contain neither the raw token nor its hash; no column of any table in the complete schema contains the raw token. There is still no account-wide export (planned), so this covers the owner listings and the closure inventory only. |
+
+`node tests/guest-preview-browser.mjs` also passes now (desktop 1280x800 keyboard and mobile 390x844) with `WHUMPO_PLAYWRIGHT` pointing at an existing local Playwright and `WHUMPO_CHROMIUM=/usr/bin/chromium`. The full Chromium build asks for `/favicon.ico`, which the fixture owner server answered with a 500 and failed the console-error check; the fixture now answers 204 (test-only change, no product code). `tests/guest-preview-photos.mjs`, `guest-preview-bindings.mjs` (SQLite and `--d1`), `guest-preview-chat-atomic.mjs` (SQLite and `--d1`), `boundary-guest-preview-race.mjs` and `boundary-guest-preview-read-pool.mjs` pass unchanged. No defect was found in the product code.
 
 ### Unverified
 
-- `tests/guest-preview-browser.mjs` and the WH-152 browser journey (Playwright absent from `main`).
 - `preview.whumpo.site` routing, deployment and real devices (WH-153).
 - PR #123 as the merging PR is inferred from `git log` subjects, not from GitHub.
 

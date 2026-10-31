@@ -1156,68 +1156,6 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 - 2026-10-02 UTC: consume WH-117D candidate release 7c4f9344-bd6c-4fc7-a3ab-964e631ad8f3 and docs/protection-candidate.md for exact current schema/bindings/assets, stored-key readback, signed project-first HTTP checks and measured CPU/bytes/storage. This is actual deployed test evidence, not closed WH-117 or beta acceptance: independent/off-device custody, human enrollment/devices, real providers and full recovery retain their separate gates.
 
-## WH-050 — Measure capacity, distributed abuse and tenant fairness
-
-Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **ready**. Kind: verification. Size: M.
-
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-Enrollment limits reflect tested serving/runtime/D1 behavior and available operating budget.
-
-### Scope
-
-- Load-test contact, site/photo, public backend and visitor paths with synthetic distributed clients locally
-- Measure latency, failure rate, D1 work, runtime saturation and noisy-neighbor effects
-- Define account-level alerts and conservative cohort admission limits
-
-### Acceptance criteria
-
-- [ ] One tenant cannot consume the entire allowed public execution budget in the tested envelope
-- [ ] Traffic serving and recovery remain available after saturation
-- [ ] Per-IP limits are not claimed as financial caps
-- [ ] Any live load/cost experiment requires an exact bounded plan; no unreviewed cloud load
-
-### Verification
-
-- Local/disposable workload harness with bounded duration
-- pnpm test:backend-runtime and related quota/concurrency suites
-- Report measured envelope and untested scale assumptions
-
-### Dependencies and blockers
-
-Planning dependencies: WH-006, WH-004. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/security-risk-actions.md](../../docs/security-risk-actions.md)
-- [docs/backend-execution.md](../../docs/backend-execution.md)
-- [docs/contact-forms.md](../../docs/contact-forms.md)
-- [src/backend-publication.ts](../../src/backend-publication.ts)
-- [src/runtime/worker.ts](../../src/runtime/worker.ts)
-- [src/site-traffic.ts](../../src/site-traffic.ts)
-- [docs/workload-placement.md](../../docs/workload-placement.md)
-
-### Execution coordination
-
-Issue: https://github.com/zemdregon/whumpo/issues/111. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-- 2026-10-04 first slice (main ae96716 plus uncommitted work, Node 22.22.0, repository requires 24): local-only synthetic-client harness tools/capacity.mjs (pnpm capacity) and docs/capacity-and-fairness.md. Four synthetic tenants including one noisy tenant drove site, photo, contact, public backend and visitor-application paths over loopback against disposable local D1/R2 and the real QuickJS runtime; recorded latency percentiles, 429/503 responses, runtime bounds, D1 statements per request and a victim-versus-noisy comparison (victim p50 512 to 1084 ms, p95 1129 to 4091 ms; 4 of 120 victim public-backend calls refused busy). One tenant held to its project/account allowances; two filler accounts drained the shared 1,000/day backend budget and a victim under its own cap was refused; a pre-set shared R2 read counter denied every tenant's photos while HTML kept serving. Findings F1-F8 (shared first-come budgets, no admission control on the public site host, global tenant-blind runtime gate, allowances keyed by target, narrow per-IP coverage, time-only recovery, no alerts) are recorded, not fixed. Alerts and cohort limits are proposals pending owner decision. No live load, deployment, Cloudflare or provider contact; figures are not Cloudflare production limits and not cost evidence. Open: owner decision on cohort limits/alerts, remedies for F1-F5, Node 24 re-record, any live experiment (needs an exact bounded reviewed plan). Acceptance not complete.
-- 2026-10-08 UTC owner decisions (issue #111): retain completed containment records 90 days after resolution, active/unresolved until resolved; separate project serving stop and account session revocation, each with exact review and audit receipt, preserving data and recovery access. Implemented in source with local verification only on branch claude/wh-050-approved-controls (base main ca17c6a, Node 24.21.0); not pushed, deployed, configured, rehearsed or accepted. Composed-schema change (operator_containments explicit resolution lifted/closed and serving scope; operator_serving_stopped view; operator_session_revocations and operator_retention_receipts; 221 tables) needs the owner-authorized empty-D1 cutover. tools/operator-containment.mjs adds stop-serving, revoke-sessions, close and cleanup. Expiry is not resolution; cleanup is reviewed, never automatic, refuses unresolved and safety-held records and cutoffs under 90 days. Local checks: node tests/operator-containment.mjs and --d1, node tests/operator-session-revocation.mjs and --d1 (16 groups), node tests/guest-previews.mjs and --d1 (12 groups), plus SQLite maintenance-inventory (14 counters), lifecycle-catalog (221 tables), restore-admission, current-schema (SQLite and local D1), build-jobs, contact-notifications, shared-modules-records, identity-http; pnpm check. Open: cutover, PR #170/#174 schema integration, visitor-page UI during a stop, individual visitor session revocation, and unanswered owner questions (raise maxima, contact hourly vs retained, customer notices, report cadence, alert provider, cohort limits). Acceptance not complete.
-- 2026-10-08 UTC correction on the same branch (after bae93d2, Node 24.21.0, pnpm 11.19.0; local only, not pushed, deployed or configured): (1) A serving stop no longer refuses the visitor page. The same static visitor client (web/visitor.js, built to public-app) is served; its configuration request gets the existing generic 404, so it opens an account-only view: passkey sign-in, recovery with lost-response retry, replacement passkey, sign-out, saved data, last-request receipt readback, export, and deletion with lost-response readback. Configuration, execution, modules, uploads and signup stay refused. It uses the existing visitor handlers and access-module identity; there is no new page, identity or compatibility path. (2) Cleanup receipt capacity moved from operator_retention_admit (BEFORE INSERT, which blocked cleanup at 10,000 even when old receipts were eligible) into operator_retention_apply after the listed deletions in the same statement: at most 10,000 receipts may remain. The tool previews receiptCapacity and refuses a full store with no old receipt. Checks: node tests/operator-containment.mjs (SQLite) and --d1, including a full 10,000-receipt fixture reclaiming 3 old receipts, racing-hold rollback at full capacity, refused replay after receipt purge, and full-store refusal by both the tool and the schema; node tests/operator-serving-browser.mjs and --d1 (Chromium 151 via Playwright 1.62.1 with virtual authenticators, actual app-host handler on 127.0.0.1:8787); node tests/operator-session-revocation.mjs and --d1; node tests/shared-modules-access.mjs and --d1; app-auth and app-lifecycle (local D1); visitor-data, visitor-deletion-review, build-snapshot, current-schema (SQLite and local D1), lifecycle-catalog (221 tables), restore-admission and maintenance-inventory on SQLite; pnpm check with verify-deps-before-run disabled, because pnpm's pre-run reinstall aborted without a TTY. The new containment and browser tests fail at bae93d2: the stopped page returns 404, and with the old schema the full-store cleanup is refused for capacity. T3 preview browser unavailable (host AppArmor blocks its sandbox), so the browser proof is local Playwright only. Remote D1 reports trigger refusals as a generic query failure, so remotely the tool cannot name stale versus capacity refusals; it prechecks capacity and then reads back. Unchanged open items: owner-authorized empty-D1 cutover, PR #170/#174 integration, restore ordering (WH-008/019), owner-deferred CMS Workers not covered, individual visitor session revocation, and the unanswered owner questions. Acceptance not complete.
-- 2026-10-22 UTC (WH-001 static reconciliation at 7bf3cd2; git history and file existence only, no test, GitHub or Cloudflare call; supersedes the not-merged/not-pushed wording above): the operator controls and retention work merged to main in PR #143 (5eb1c8b) and PR #186 (4dea09c), after the local capacity harness in PR #112 (a42fd9d) and admission in PR #129 (dab9a8f); src/operator-serving.ts and the operator_* schema objects are on main. This supersedes the branch-only wording above. The test cutover, rehearsal and any live acceptance are not established by this entry.
-- 2026-10-23 UTC (WH-001 verification at 3a12d53, local node tests and file/import checks only; no GitHub, Cloudflare or provider call; adds to the 2026-10-22 history-only entry): 5eb1c8b, 4dea09c, a42fd9d and dab9a8f are ancestors of main; src/operator-serving.ts (imported by src/site-host.ts, src/app-gateway.ts and src/contact-page.ts), tools/operator-containment.mjs and tests/operator-containment.mjs exist. node tests/operator-containment.mjs and node tests/operator-session-revocation.mjs pass on local SQLite; --d1 and the browser test were not run. The owner-authorized empty-D1 cutover, rehearsal and live acceptance are not evidenced. Source controls verified delivered; the task stays planned and open.
-- 2026-10-30 UTC (main bcbe2de, Node 24.21.0, pnpm 11.19.0; local harness only, no Cloudflare, provider or deployment call, no source change; docs-only slice, WH-050 NOT done): re-recorded pnpm capacity twice (exit 0, 127.7 s and 126.2 s, host 1 minute load average 0.40 to 1.04, 8 CPUs reported), runs within 3% so no third run; the October 4 numbers were Node 22.22.0 on a 4 vCPU report, so absolutes are not comparable. All-victim latency A p50/p95 224/483 ms (was 512/1129), B p50/p95 577/1682 ms (was 1084/4091); B/A p95 ratio 3.5x (was 3.6x); P probes, D (platform 604/1000, fair share 100 per filler account), C, E and L outcomes unchanged from the WH-075 record. The #186 serving-stop check adds one indexed D1 SELECT (operator_serving_stopped by project_id) per request at the site, contact and visitor-app gates (code-derived: +1 statement, 0 runtime calls, 0 R2 reads); harness statement means moved site 5 to 6, photo 4 to 8.5, contact POST 4 to 6, backend 2 to 3 but include other merges since October 4. The 're-record' section in docs/capacity-and-fairness.md has the before/after tables and host load. Still owner-gated and unchanged: cohort limits (proposed 10 active accounts), alert provider, F2 rate-limit binding on whumpo-sites. Local harness numbers are not Cloudflare numbers.
-- 2026-10-30 UTC (WH-001 reconciliation against origin/main 475a3a9, read from git log and gh pr view; docs only, nothing re-run unless stated, no GitHub issue, Cloudflare or provider mutation): merged PR #484 (6da8009, Node 24 re-record with the serving-stop check), #487 (fdaf731, D1 statement accounting and trimming on public request paths) and #497 (560649f, repeat request-path work on custom-domain photos). Readiness unchanged: local synthetic harness only; no live capacity or distributed-abuse acceptance.
-- 2026-10-31 UTC: promoted planned to ready. Every dependency is done now that WH-004 is closed (see its entry). Nothing is built or accepted by this change; the close-out sweep still has to map each acceptance line to evidence before this task can be marked done.
-
 ## WH-059 — Rehearse release rollback and an end-to-end recovery incident
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **planned**. Kind: verification. Size: M.
@@ -1269,96 +1207,6 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 ### Evidence
 
 No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
-
-## WH-114 — Implement passkey-only access and resumable two-passkey enrollment
-
-Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **ready**. Kind: implementation. Size: L.
-
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-Workspace signup requires two distinct verified passkeys, preserves incomplete progress and closes password and incomplete-enrollment access paths in one coordinated current-policy test cutover.
-
-### Scope
-
-- Implement the shared server-enforced enrollment/completion policy for workspace owners and future member admission; keep visitor handlers under their existing policy
-- Add resumable first/second-key setup, optional passkey/backup explanations and actionable provider/device guidance with no required purchase
-- Disable password signup/login/creation in backend and frontend at the reviewed cutover; preserve invitation, eligibility, Turnstile and recent-authentication guards
-- Implement the WH-113 current-only test cutover: reset obsolete identities and remove retired routes; reuse deterministic enrollment/recovery/help, with no legacy stage, migration grant or parallel policy
-- Allow immediate compromised-key revocation below two and guide replacement without adding repeated prompts to ordinary sessions
-
-### Acceptance criteria
-
-- [ ] Duplicate credential IDs and synchronized copies cannot satisfy two-key completion; do not infer independent storage from two registrations
-- [ ] One-key, cancelled, stale and incomplete setup cannot access workspace content, projects, Chat, provider actions or normal mobile sessions through direct APIs or UI
-- [ ] Reload, a cancelled prompt, invitation retry and lost verification response resume owned progress without duplicated accounts/credentials or weaker enrollment requirements
-- [ ] Backend password routes cannot authenticate, register or add a password under the new current policy; fresh enrollment establishes replacement test access
-- [ ] Existing passkey verification, ownership, origin, replay and revocation guards remain effective; ordinary sessions and visitor identity retain their intended behavior
-- [ ] Connected synthetic/browser evidence precedes WH-005 physical-device acceptance; no real user credential is changed by automated fixtures
-
-### Verification
-
-- Run pnpm check and focused passkey/profile/onboarding/recovery suites after inspecting fixture setup
-- Add meaningful connected D1/handler cases for partial enrollment, direct access bypasses, duplicate credentials, concurrent completion and current-policy test cutover
-- Use quality-managed browser checks and inspect desktop/mobile screenshots with synthetic credentials; leave real passkey/provider acceptance to WH-005
-
-### Dependencies and blockers
-
-Planning dependencies: WH-113, WH-004. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/roadmap/identity-and-data-protection.md](../../docs/roadmap/identity-and-data-protection.md)
-- [docs/owner-recovery.md](../../docs/owner-recovery.md)
-- [docs/onboarding.md](../../docs/onboarding.md)
-- [docs/android-app.md](../../docs/android-app.md)
-- [src/index.ts](../../src/index.ts)
-- [src/workspace-identity/ceremonies.ts](../../src/workspace-identity/ceremonies.ts)
-- [frontend/src/identity/flow.tsx](../../frontend/src/identity/flow.tsx)
-- [schema/platform.sql](../../schema/platform.sql)
-- [src/workspace-identity/schema.sql](../../src/workspace-identity/schema.sql)
-- [tools/current-schema.mjs](../../tools/current-schema.mjs)
-- [docs/workspace-identity.md](../../docs/workspace-identity.md)
-- [docs/identity-authority.md](../../docs/identity-authority.md)
-- [docs/identity-ceremonies.md](../../docs/identity-ceremonies.md)
-- [docs/identity-kits.md](../../docs/identity-kits.md)
-- [docs/identity-recovery.md](../../docs/identity-recovery.md)
-- [docs/identity-web.md](../../docs/identity-web.md)
-
-### Execution coordination
-
-Issue: https://github.com/zemdregon/whumpo/issues/68. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-- 2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.
-- 2026-10-01: WH-114A #70 implements the isolated current-policy account/attempt/credential/session/grant schema and shared principal/committing guard. WH-114B #71 owns verified ceremonies/enrollment, WH-115 #69 owns shared kits/restricted recovery, and WH-114C #72 connects them for one current-only test cutover. No live schema, auth route, credential or deployment changes; full implementation and acceptance remain open.
-- 2026-10-01: #71 adds isolated cryptographic WebAuthn signup, restricted resumption, reviewed key addition, same-purpose reauthentication, current login, one-use challenge/receipt records and bounded cleanup. Target canonical identity inputs remove password fields and retain invitation spending after owner deletion. Kit-bound completion/cancellation and WH-115 recovery remain open; no active route, remote schema, owner credential or deployment changed.
-- 2026-10-01: Shared current kit offers, one-time text preparation, exact save acknowledgment, guarded ordinary rotation, two-key/fresh-assertion enrollment completion and authenticated cancellation now complete #71 backend scope and part of #69. Actual cryptographic signup-to-session journeys and 47 refusal/race checks passed on SQLite/local D1; 62 ceremony and 72 authority checks also pass. Restricted recovery, kit delivery UI, shared transport/lifecycle admission and one current-only cutover remain open under #69/#72; no remote or active authentication change.
-- 2026-10-01: #69 source now implements current-kit restricted entry, exact all/some/none review, saved-kit securing/revocation, replacement-specific assertion completion, restricted kit rotation and emergency removal including compromised staged keys. It reuses the shared authority, verification, offers and receipts; recovery-commit grants preserve original proof time/expiry. Actual cryptographic journeys and 64 refusal/race checks pass on SQLite/local D1, with 47 kit/62 ceremony/72 authority regressions. Browser kit delivery, HTTP/admission/lifecycle and the coordinated current-only test reset remain open; no remote schema, active auth or deployment change.
-- 2026-10-01: #69/#72 now add the isolated current-version HTTP adapter and trusted React identity gate/security flow: strict cookie selection, private bounded/no-store transport, progress reads, logout, two-key setup and reviewed recovery with download/copy/print kit delivery. Twenty-two HTTP refusal cases plus real signed journeys pass on SQLite/local D1; mobile Chromium with virtual authenticators verifies signup, saved-kit resume, lost secure reply, partial recovery, replacement completion and removal. No active platform route, identity schema or owner credential changed. Common HTTP/Chat/provider admission, lifecycle registration, current-only reset and deployed acceptance remain open.
-- 2026-10-01: Current source now installs the identity router, identity-before-profile web gate and atomic common workspace admission at HTTP/Chat/provider boundaries. Complete-schema HTTP (36 refusals), workspace admission (21) and feature/provider (37) checks pass on SQLite/local D1; real mobile app signup/welcome/Chat revocation passes. Lifecycle catalog covers 156 tables/37 classes and bounded expiry cleanup. Service-client compiler v3 has a new immutable lock. Remaining fixture/release-schema alignment, remote reset/deployment and owner-device acceptance stay open. No remote mutation.
-- 2026-10-01 current identity release foundation: review v3/archive v2 pins the complete 156-table schema and exact database bindings, removes numbered SQL replay from deployment/local initialization, refuses occupied or active-database reset targets, and initializes only a distinct empty database. Actual local D1/SQLite catalog and current identity invariants, no-write reinitialization, drift refusal, release interruption/no-replay and build/lifecycle checks pass. No remote mutation; fixture/operator conversion, external cleanup, new database selection, coordinated live cutover and owner/device acceptance remain open in #72. See docs/releases.md and draft PR #79.
-- 2026-10-01 current onboarding follow-through: API, React and canonical SQL require exact non-null question/stage checkpoints; chapter-only client fallbacks are removed. Welcome fixtures now use current admitted identity and full schema. SQLite/local D1 pass private profile/project steps, lost-response/concurrent completion, HTTP gates and identity revocation immediately before commit with no project created. The actual mobile React/WebAuthn journey passes again. Source/local only; full test cutover and physical-device acceptance remain open in #72.
-- 2026-10-02 current identity follow-through: billing/plan, subscription, GitHub/Cloudflare connection, token custody, GitHub backup/Chat, TXT/CNAME routing, standard AI cost/history/recovery and signed HTTP/workspace smoke fixtures now use current schemas and admitted owner scopes. Focused SQLite/local D1 suites pass with synthetic providers; no real charges, DNS writes, GitHub backups or inference. The smoke command exercises actual signed identity before workspace isolation/quota/logout. Specific coverage is in docs/verification.md. Remaining older domain/operator fixtures, remote resource reconciliation and coordinated test cutover are still open under #72; no remote mutation or device-acceptance claim.
-- 2026-10-02 domains/workspace identity follow-through: fourteen local D1 suites now initialize the complete current schema and use admitted owner scopes for domain proof/removal, synthetic DNS/hosting/Chat, exact operator recovery, specification approvals, project details, dashboard/inspection, health/traffic and Chat history/export. Actual current website transactions replace retired guided fixtures; aged proofs use distinct sessions and fault injection matches committed operations. Exact coverage and synthetic/provider/device boundaries are in docs/verification.md. Remaining fixtures and coordinated remote reset/deployment remain open in #72; no provider activation, CMS functional testing or remote mutation.
-- 2026-10-02 maintenance/PWA/asset follow-through: eight additional suites pass with current schemas and authority: three SQLite maintenance tests, freshly built mobile Chromium/D1 PWA acceptance, and four D1/R2 photo/export/version-comparison/removal journeys. Actual scheduled identity expiry preserves unfinished enrollment; overdue reporting now matches the hourly identity schedule. Offline reconnect refuses revoked identity, worker updates preserve drafts, caches contain only four public resources, and screenshots were inspected. Asset/version checks cover tenant isolation, exact downloads, commit-time races and lost replies. No remote reset/deployment, scanner/provider activation or physical-device acceptance; #72 remains open. Exact commands and boundaries: docs/verification.md.
-- 2026-10-02 backend/application authority follow-through: fifteen focused current-D1 suites pass for private code/tests/state, exact comparisons and expected-output checks, publication/forms, quarantined imports, activation, signed visitor passkeys/data and 17 visitor-deletion cases. Four loopback HTTP suites run the actual workerd/QuickJS service using current owner cookies and complete schema. Owner, visitor, public and scheduled authority remain separate; operation-matched lost replies and admitted-batch source corruption are verified. Exact scope and remaining fixture/device limits are in docs/verification.md. No remote reset/deployment, scanner/provider activation or CMS functional testing; #72 remains open.
-- 2026-10-02 application recovery/lifecycle follow-through: three more complete-schema D1 suites pass for signed visitor signup/export/erasure, sealed document snapshots/restoration, and actual workerd/QuickJS upgrades with retained-program/data restoration. Current owner scopes/cookies authorize typed controls; aged proof uses distinct sessions. Operation-matched lost acknowledgments, atomic rollback, roster/deletion/cancellation fences, metadata-only inventory and zero inference are verified. These current-contract customer data changes do not replay platform migrations. Source/local evidence only; remaining build/design/library/content/operator fixtures, coordinated remote cutover and physical-device acceptance remain open in #72.
-- 2026-10-02 reuse/build/planning follow-through: seven complete-schema D1 suites pass for library copies, exact private nomination consent, backend Chat, application builds, focused page design, bounded agent inspection and composition planning. Library/build examples execute in real isolated workerd/QuickJS; inference is synthetic. Same-scope commit, operation-matched lost responses, immutable provenance, plan/revision/owner gates, private-context exclusion and no automatic publication are verified. The connected supported-site fixture uses two model calls and generates zero backend source. The updated live model harness remains unrun. Exact commands/limits: docs/verification.md. Remaining fixture alignment, coordinated remote cutover and physical-device acceptance stay open in #72; no scanner/provider activation or CMS functional testing.
-- 2026-10-01: #72 adds six passing complete-schema local D1 suites for contacts, directories/history, publication, current site-agent drafts and first-project site/application handoff. Owner admission and independent public/scheduled authority are preserved; transaction-matched expiry/removal/lost-response cases pass. Competing website fixtures use actual current builders. Directory docs now match natural Chat/typed reviews and zero standard-AI customer debits. Model, runtime and Turnstile transports are synthetic. Remaining observation/operator/service-client/live/deferred fixtures, resource review, coordinated remote cutover and physical-device acceptance remain open. No provider, scanner or CMS functional activation.
-- 2026-10-01: #72 adds five passing complete-schema suites for current-cookie profile identity/revocation (SQLite), connection metadata, atomic workspace projects/exports, a four-turn website journey and service authority (local D1). Owner statements share admitted scope; visitor execution uses real isolated QuickJS with maintainer/provider fetch disabled. Model transports and vault/hold metadata are synthetic. Required current photos configuration and transaction-matched lost creation recovery are verified; standard AI remains zero customer debit. No remote cutover, provider/scanner activation or CMS functional testing; remaining observation/operator/live/deferred fixtures and owner/device acceptance stay open.
-- 2026-10-01: #72 adds eight passing complete-schema D1 suites for fair-use observation/reviews, private usage support, dormant Gateway spend/dispatch, stored screening requirements, scripted conversation and current signup eligibility. Customer admission and independent operator/ledger authority remain distinct. Actual ES256 registration verifies mandatory declaration/invitation/Turnstile in local/test, enrollment-only grants and atomic receipt-failure rollback/fresh retry. Financial, model, gateway, Turnstile and risk-history inputs are synthetic. No scanner, routing/provider activation or remote cutover. Remaining media/live/deferred fixtures and physical/live acceptance stay open.
-- 2026-10-02: #72 adds passing complete-schema local D1/R2 photo-version and removal suites. Current owner admission, private dependency/digest checks, publication withdrawal, portable ZIP/JPEG exports, retained-version races, exact lost-response recovery and delayed orphan cleanup are verified. Ready accounts, images, clearance and domain records are synthetic; no scanner implementation, DNS/provider activation, CMS functional testing or remote cutover. Live/deferred fixtures and physical/live acceptance remain open.
-- 2026-10-02: #72 aligns six opt-in model/deployment probes with current schemas/scopes. Shared probe support passes local D1 exact-schema refusal before writes, two signed credentials, current cookie/login/state/logout, onboarding checkpoint, workspace admission, cleanup and all opt-in refusals. Remote probes retain cleanup journals and refuse obsolete deployments. No live model/deployment, scanner or CMS functional acceptance; only deferred-lane obsolete fixture setup, resource reconciliation and coordinated cutover remain.
-- 2026-10-02: Removed 120 retired platform migrations and preservation-only fixture; complete-schema initialization passes SQLite/local D1. Current content-risk/operator, eligibility, 728 feature-inclusion decisions (SQLite/D1), website specification and signed probe-loader checks pass. Deferred CMS/scanner setup is source-aligned and syntax-checked only, not functionally accepted. Imported exact already-shipped Stripe pricing overlay 18e9e88 as 0c8fa8c and reconciled live JSON. See docs/verification.md and docs/identity-web.md. New empty database selection, coordinated test cutover and physical-device acceptance remain open under #72.
-- 2026-10-02: #72 current-only test cutover completed with release 40e45c39-037a-42da-802c-5eacc75bde77 (6c73ac5). New empty D1 has exact 156-table/702-object schema; four Workers, all 39 served assets and binding/secret inventories pass independent readback. Live signed synthetic two-key login, welcome/first-project, logout and revocation pass with fixture cleanup and zero inference. Mobile entry screenshot inspected. Old test account/database and PASSWORD_PEPPER retired, remaining script/bindings unchanged; fresh owner invite saved privately. Physical-device enrollment, human Turnstile/live recovery and native/parent beta gates remain open. CSAM, Daybreak and CMS testing remain deferred. See docs/identity-web.md final release evidence.
-- 2026-10-31 UTC: promoted planned to ready. Every dependency is done now that WH-004 is closed (see its entry). Nothing is built or accepted by this change; the close-out sweep still has to map each acceptance line to evidence before this task can be marked done.
 
 ## WH-115 — Implement recovery-kit download and restricted replacement enrollment
 
@@ -1432,6 +1280,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/69. Planning owner: Unassigned
 - 2026-10-01: #69/#72 now add the isolated current-version HTTP adapter and trusted React identity gate/security flow: strict cookie selection, private bounded/no-store transport, progress reads, logout, two-key setup and reviewed recovery with download/copy/print kit delivery. Twenty-two HTTP refusal cases plus real signed journeys pass on SQLite/local D1; mobile Chromium with virtual authenticators verifies signup, saved-kit resume, lost secure reply, partial recovery, replacement completion and removal. No active platform route, identity schema or owner credential changed. Common HTTP/Chat/provider admission, lifecycle registration, current-only reset and deployed acceptance remain open.
 - 2026-10-01: Current source now installs the identity router, identity-before-profile web gate and atomic common workspace admission at HTTP/Chat/provider boundaries. Complete-schema HTTP (36 refusals), workspace admission (21) and feature/provider (37) checks pass on SQLite/local D1; real mobile app signup/welcome/Chat revocation passes. Lifecycle catalog covers 156 tables/37 classes and bounded expiry cleanup. Service-client compiler v3 has a new immutable lock. Remaining fixture/release-schema alignment, remote reset/deployment and owner-device acceptance stay open. No remote mutation.
 - 2026-10-02: #72 current-only test cutover completed with release 40e45c39-037a-42da-802c-5eacc75bde77 (6c73ac5). New empty D1 has exact 156-table/702-object schema; four Workers, all 39 served assets and binding/secret inventories pass independent readback. Live signed synthetic two-key login, welcome/first-project, logout and revocation pass with fixture cleanup and zero inference. Mobile entry screenshot inspected. Old test account/database and PASSWORD_PEPPER retired, remaining script/bindings unchanged; fresh owner invite saved privately. Physical-device enrollment, human Turnstile/live recovery and native/parent beta gates remain open. CSAM, Daybreak and CMS testing remain deferred. See docs/identity-web.md final release evidence.
+- 2026-10-31 UTC, NOT closed (PR #529; main be4e6bf (origin/main at 2026-10-31), Node 24.21.0, pnpm 11.19.0, disposable local SQLite/local D1, no network, credential, secret or provider call). Re-run today and passing: identity-authority (74 checks), identity-ceremonies (67), identity-kits (47), identity-recovery (64), identity-http (46), workspace-admission (22), identity-browser --d1 and workspace-identity-browser --d1 in Chromium with virtual authenticators. Acceptance lines 2 to 6 map to those suites. Line 1 is NOT met by the evidence: tests/identity-browser.mjs replaces the print iframe's window.print with a stub and compares the print document's text with the kit, so Print / Save as PDF is not shown to produce a printable page or a saved PDF, and no desktop or mobile print layout or saved PDF was inspected (the verification list asks for it); no screen-reader pass over the kit and recovery flow is recorded either (keyboard operation is covered by the browser journey). Missing to close: render the print view to a PDF in Chromium and check its text and layout at desktop and mobile widths, and one recorded screen-reader pass. Physical-device enrollment, human Turnstile and live recovery stay in WH-005.
 
 ## WH-133 — Qualified review and activation of restricted case and preservation procedure
 
@@ -1598,7 +1447,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/82. Planning owner: Unassigned
 - 2026-10-02 UTC: explicit DP-02/03/04 acceptance audit at 964fa38 maps every original child C criterion to actual handlers and synthetic/isolated verification, completing the bounded source/local scope. Parent and child D remain open for combined candidate, configured custody, measures and coordinated release; continuous suppression/whole-platform recovery retain their original WH-008/018/019/059 ownership. Fresh live metadata/count inventory found zero test users/projects/credential/provider/billing records, 156 tables and the obsolete single-key binding; the candidate has 165 tables and needs an explicit current-only reset/binding transition. The operator D1 adapter now supplies immutable statements and one batch request for the existing key initializer, with twelve synthetic refusal cases and real read-only batch verification. No remote mutation, key creation, deployment, CMS/scanner test or offsite-custody acceptance occurred.
 - 2026-10-02 UTC: WH-117D current test release 7c4f9344-bd6c-4fc7-a3ab-964e631ad8f3 (runtime source df90276) deployed all four Workers onto the exact 165-table/760-object schema. Actual current-key initialization and stored-capsule readback passed; deployed PKCE ciphertext decrypts with recovered material and matches its challenge. Thirty-nine assets and signed project-first/profile/Chat/session-refusal HTTP checks pass, with fixture cleanup and no provider authorization/model/CMS/scanner calls. Old key binding and unreferenced empty DB retired after all 13 Worker references and old table counts were checked; other databases preserved and fresh private invitation issued. Twenty bounded encryption writes plus sampled deployed CPU and account storage inventory are recorded in docs/protection-candidate.md. Status observation now follows the active platform database, with focused synthetic and live after-retirement verification. Off-device/independently operated custody and final D/parent acceptance remain open; no provider/device/confidential-inference or whole-platform recovery claim.
 
-# F1 — Done (10)
+# F1 — Done (12)
 
 Verified complete with recorded evidence; kept for history and dependency context. Not candidates for new work.
 
@@ -1857,6 +1706,69 @@ Issue: https://github.com/zemdregon/whumpo/issues/137. Planning owner: Unassigne
 - 2026-10-08 UTC: source and local verification only; the mapped issue #137 is open and owner questions on quarantine-before-native-import (S04), blocked-state ownership, blocked-object retention and permanent hold for native media remain open. PR #138 (728e068) added src/cms-media-safety.ts, wired exact-artifact coverage into CMS uploads, previews, WordPress comparison/import, publication and public CMS media delivery, and added tests/cms-media-safety.mjs. Re-run on 2026-10-08 UTC at origin/main ca17c6a (Node 24.21.0, aarch64 Linux, disposable local SQLite/local D1, no network, credential or remote Cloudflare/GitHub operation). node tests/cms-media-safety.mjs passed 15 checks (pending, missing, stale, incomplete, ambiguous and blocked coverage hold owner preview, draft preview, WordPress comparison, publication review/freeze/inline and GET/HEAD public CMS media; blocked media withdraw referencing articles; custom hosts never route CMS media; clearance grants no publication) and node tests/cms-media-preview.mjs passed; pnpm check passed. The first run failed only because the host python3 lacks Pillow (fixture JPEGs); it passed with a PATH shim to an existing virtualenv that has Pillow, with no repository change. Synthetic JPEGs on disposable local D1/R2 only: this is not CMS feature acceptance, live CMS testing or detector testing, and delivery aliases not named above (for example export) were not separately re-traced. Re-checked on 2026-10-09 UTC after rebasing onto origin/main 92a001f (plus the test-only TMPDIR fix 9847281, PR #202), with #175, #178 and #180 merged: the cited artifacts still exist, #137 is still open and node tests/cms-media-safety.mjs (15 checks) and tests/cms-media-preview.mjs passed again.
 - 2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): readiness planned to ready. Every dependency (WH-010) is accepted in its own evidence, so this is an open planning candidate; its acceptance is unchanged and not claimed.
 
+## WH-050 — Measure capacity, distributed abuse and tenant fairness
+
+Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: verification. Size: M.
+
+Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Enrollment limits reflect tested serving/runtime/D1 behavior and available operating budget.
+
+### Scope
+
+- Load-test contact, site/photo, public backend and visitor paths with synthetic distributed clients locally
+- Measure latency, failure rate, D1 work, runtime saturation and noisy-neighbor effects
+- Define account-level alerts and conservative cohort admission limits
+
+### Acceptance criteria
+
+- [ ] One tenant cannot consume the entire allowed public execution budget in the tested envelope
+- [ ] Traffic serving and recovery remain available after saturation
+- [ ] Per-IP limits are not claimed as financial caps
+- [ ] Any live load/cost experiment requires an exact bounded plan; no unreviewed cloud load
+
+### Verification
+
+- Local/disposable workload harness with bounded duration
+- pnpm test:backend-runtime and related quota/concurrency suites
+- Report measured envelope and untested scale assumptions
+
+### Dependencies and blockers
+
+Planning dependencies: WH-006, WH-004. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/security-risk-actions.md](../../docs/security-risk-actions.md)
+- [docs/backend-execution.md](../../docs/backend-execution.md)
+- [docs/contact-forms.md](../../docs/contact-forms.md)
+- [src/backend-publication.ts](../../src/backend-publication.ts)
+- [src/runtime/worker.ts](../../src/runtime/worker.ts)
+- [src/site-traffic.ts](../../src/site-traffic.ts)
+- [docs/workload-placement.md](../../docs/workload-placement.md)
+
+### Execution coordination
+
+Issue: https://github.com/zemdregon/whumpo/issues/111. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-04 first slice (main ae96716 plus uncommitted work, Node 22.22.0, repository requires 24): local-only synthetic-client harness tools/capacity.mjs (pnpm capacity) and docs/capacity-and-fairness.md. Four synthetic tenants including one noisy tenant drove site, photo, contact, public backend and visitor-application paths over loopback against disposable local D1/R2 and the real QuickJS runtime; recorded latency percentiles, 429/503 responses, runtime bounds, D1 statements per request and a victim-versus-noisy comparison (victim p50 512 to 1084 ms, p95 1129 to 4091 ms; 4 of 120 victim public-backend calls refused busy). One tenant held to its project/account allowances; two filler accounts drained the shared 1,000/day backend budget and a victim under its own cap was refused; a pre-set shared R2 read counter denied every tenant's photos while HTML kept serving. Findings F1-F8 (shared first-come budgets, no admission control on the public site host, global tenant-blind runtime gate, allowances keyed by target, narrow per-IP coverage, time-only recovery, no alerts) are recorded, not fixed. Alerts and cohort limits are proposals pending owner decision. No live load, deployment, Cloudflare or provider contact; figures are not Cloudflare production limits and not cost evidence. Open: owner decision on cohort limits/alerts, remedies for F1-F5, Node 24 re-record, any live experiment (needs an exact bounded reviewed plan). Acceptance not complete.
+- 2026-10-08 UTC owner decisions (issue #111): retain completed containment records 90 days after resolution, active/unresolved until resolved; separate project serving stop and account session revocation, each with exact review and audit receipt, preserving data and recovery access. Implemented in source with local verification only on branch claude/wh-050-approved-controls (base main ca17c6a, Node 24.21.0); not pushed, deployed, configured, rehearsed or accepted. Composed-schema change (operator_containments explicit resolution lifted/closed and serving scope; operator_serving_stopped view; operator_session_revocations and operator_retention_receipts; 221 tables) needs the owner-authorized empty-D1 cutover. tools/operator-containment.mjs adds stop-serving, revoke-sessions, close and cleanup. Expiry is not resolution; cleanup is reviewed, never automatic, refuses unresolved and safety-held records and cutoffs under 90 days. Local checks: node tests/operator-containment.mjs and --d1, node tests/operator-session-revocation.mjs and --d1 (16 groups), node tests/guest-previews.mjs and --d1 (12 groups), plus SQLite maintenance-inventory (14 counters), lifecycle-catalog (221 tables), restore-admission, current-schema (SQLite and local D1), build-jobs, contact-notifications, shared-modules-records, identity-http; pnpm check. Open: cutover, PR #170/#174 schema integration, visitor-page UI during a stop, individual visitor session revocation, and unanswered owner questions (raise maxima, contact hourly vs retained, customer notices, report cadence, alert provider, cohort limits). Acceptance not complete.
+- 2026-10-08 UTC correction on the same branch (after bae93d2, Node 24.21.0, pnpm 11.19.0; local only, not pushed, deployed or configured): (1) A serving stop no longer refuses the visitor page. The same static visitor client (web/visitor.js, built to public-app) is served; its configuration request gets the existing generic 404, so it opens an account-only view: passkey sign-in, recovery with lost-response retry, replacement passkey, sign-out, saved data, last-request receipt readback, export, and deletion with lost-response readback. Configuration, execution, modules, uploads and signup stay refused. It uses the existing visitor handlers and access-module identity; there is no new page, identity or compatibility path. (2) Cleanup receipt capacity moved from operator_retention_admit (BEFORE INSERT, which blocked cleanup at 10,000 even when old receipts were eligible) into operator_retention_apply after the listed deletions in the same statement: at most 10,000 receipts may remain. The tool previews receiptCapacity and refuses a full store with no old receipt. Checks: node tests/operator-containment.mjs (SQLite) and --d1, including a full 10,000-receipt fixture reclaiming 3 old receipts, racing-hold rollback at full capacity, refused replay after receipt purge, and full-store refusal by both the tool and the schema; node tests/operator-serving-browser.mjs and --d1 (Chromium 151 via Playwright 1.62.1 with virtual authenticators, actual app-host handler on 127.0.0.1:8787); node tests/operator-session-revocation.mjs and --d1; node tests/shared-modules-access.mjs and --d1; app-auth and app-lifecycle (local D1); visitor-data, visitor-deletion-review, build-snapshot, current-schema (SQLite and local D1), lifecycle-catalog (221 tables), restore-admission and maintenance-inventory on SQLite; pnpm check with verify-deps-before-run disabled, because pnpm's pre-run reinstall aborted without a TTY. The new containment and browser tests fail at bae93d2: the stopped page returns 404, and with the old schema the full-store cleanup is refused for capacity. T3 preview browser unavailable (host AppArmor blocks its sandbox), so the browser proof is local Playwright only. Remote D1 reports trigger refusals as a generic query failure, so remotely the tool cannot name stale versus capacity refusals; it prechecks capacity and then reads back. Unchanged open items: owner-authorized empty-D1 cutover, PR #170/#174 integration, restore ordering (WH-008/019), owner-deferred CMS Workers not covered, individual visitor session revocation, and the unanswered owner questions. Acceptance not complete.
+- 2026-10-22 UTC (WH-001 static reconciliation at 7bf3cd2; git history and file existence only, no test, GitHub or Cloudflare call; supersedes the not-merged/not-pushed wording above): the operator controls and retention work merged to main in PR #143 (5eb1c8b) and PR #186 (4dea09c), after the local capacity harness in PR #112 (a42fd9d) and admission in PR #129 (dab9a8f); src/operator-serving.ts and the operator_* schema objects are on main. This supersedes the branch-only wording above. The test cutover, rehearsal and any live acceptance are not established by this entry.
+- 2026-10-23 UTC (WH-001 verification at 3a12d53, local node tests and file/import checks only; no GitHub, Cloudflare or provider call; adds to the 2026-10-22 history-only entry): 5eb1c8b, 4dea09c, a42fd9d and dab9a8f are ancestors of main; src/operator-serving.ts (imported by src/site-host.ts, src/app-gateway.ts and src/contact-page.ts), tools/operator-containment.mjs and tests/operator-containment.mjs exist. node tests/operator-containment.mjs and node tests/operator-session-revocation.mjs pass on local SQLite; --d1 and the browser test were not run. The owner-authorized empty-D1 cutover, rehearsal and live acceptance are not evidenced. Source controls verified delivered; the task stays planned and open.
+- 2026-10-30 UTC (main bcbe2de, Node 24.21.0, pnpm 11.19.0; local harness only, no Cloudflare, provider or deployment call, no source change; docs-only slice, WH-050 NOT done): re-recorded pnpm capacity twice (exit 0, 127.7 s and 126.2 s, host 1 minute load average 0.40 to 1.04, 8 CPUs reported), runs within 3% so no third run; the October 4 numbers were Node 22.22.0 on a 4 vCPU report, so absolutes are not comparable. All-victim latency A p50/p95 224/483 ms (was 512/1129), B p50/p95 577/1682 ms (was 1084/4091); B/A p95 ratio 3.5x (was 3.6x); P probes, D (platform 604/1000, fair share 100 per filler account), C, E and L outcomes unchanged from the WH-075 record. The #186 serving-stop check adds one indexed D1 SELECT (operator_serving_stopped by project_id) per request at the site, contact and visitor-app gates (code-derived: +1 statement, 0 runtime calls, 0 R2 reads); harness statement means moved site 5 to 6, photo 4 to 8.5, contact POST 4 to 6, backend 2 to 3 but include other merges since October 4. The 're-record' section in docs/capacity-and-fairness.md has the before/after tables and host load. Still owner-gated and unchanged: cohort limits (proposed 10 active accounts), alert provider, F2 rate-limit binding on whumpo-sites. Local harness numbers are not Cloudflare numbers.
+- 2026-10-30 UTC (WH-001 reconciliation against origin/main 475a3a9, read from git log and gh pr view; docs only, nothing re-run unless stated, no GitHub issue, Cloudflare or provider mutation): merged PR #484 (6da8009, Node 24 re-record with the serving-stop check), #487 (fdaf731, D1 statement accounting and trimming on public request paths) and #497 (560649f, repeat request-path work on custom-domain photos). Readiness unchanged: local synthetic harness only; no live capacity or distributed-abuse acceptance.
+- 2026-10-31 UTC: promoted planned to ready. Every dependency is done now that WH-004 is closed (see its entry). Nothing is built or accepted by this change; the close-out sweep still has to map each acceptance line to evidence before this task can be marked done.
+- 2026-10-31 UTC, CLOSED by PR #529 on decision D28, on the local envelope only (main be4e6bf (origin/main at 2026-10-31), Node 24.21.0, pnpm 11.19.0, disposable local SQLite/local D1, no network, credential, secret or provider call). Line 1 was re-read against the WH-075 fair-share result, not the October 4 table: scenario D after the fix has the two filler accounts stopped at 100 each (200 ok, 799 x 429), platform 606/1,000, victim probes 5/5 ok and a new account 10/10 ok; a single IP stops at 20 backend, 10 contact and 400 photo requests per project per day (L); the October 30 Node 24 re-record left D, C, E, L unchanged. It holds only while light accounts fit the 50% reserve (about five accounts at full share) and does not hold against distributed callers spending one project's allowance. Line 2: recovery went 0/3 to 3/3 (C); one project at its photo budget gets 503 while others serve 5/5 (E); many tenants together can still reach the unchanged 100,000/month R2 read ceiling and photos then fail platform-wide. Line 3: per-IP limits are not described as spend caps. Line 4: no live load was run. D28 is applied in docs/capacity-and-fairness.md: at most 10 active accounts, about 5 while the R2 read ceiling is shared, by manual invitation (no code); 50%/80% thresholds as proposed; pull-based node tools/report-maintenance.mjs --counters once per UTC day while any cohort account is active and before each invitation, no provider; F2 moves to WH-075. These are reversible and listed for the end-of-roadmap review. Re-run today: pnpm capacity exited 0 in 143 s on this host and gave, for the criteria above: D fillers 200 ok, 789 x 429, 11 x 503 busy (refunded), platform 603/1,000, victim probes 5/5 ok, new account 10/10 ok; C victim backend after the fillers 3/3 and site, photo, contact, visitor paths all ok; E noisy project 10 ok then 10 x 503, victims 5/5, platform ceiling 5 ok then 5 x 503; L one IP 20/20 backend, 10/5 contact, 400/50 photo with other IPs unaffected; P site page one IP 150/150 with no limiter (F2). Timing is host dependent. Limits that stay: local harness, not Cloudflare limits or cost; the Cloudflare rate-limit binding price was not verified.
+
 ## WH-113 — Freeze current workspace identity, recovery, cutover and usability contracts
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: decision. Size: M.
@@ -1918,6 +1830,97 @@ Issue: https://github.com/zemdregon/whumpo/issues/42. Planning owner: Unassigned
 - 2026-10-01: docs/workspace-identity.md freezes the protocol against d415398: separate restricted grants/current account epochs, invitation-safe two-key signup/resume, shared kit prepare/save/commit, reviewed partial/all-loss recovery, fresh replacement assertion, emergency revocation and staged existing-account retirement with compatible rollback. Source and failure-transition review completed; WH-114/115 implementation and physical/live/native acceptance remain separate. No runtime, schema, credential or deployment change. Issue #42 records verification and delivery.
 - 2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.
 - 2026-10-30 UTC (WH-001 reconciliation against origin/main 475a3a9, read from git log and gh pr view; docs only, nothing re-run unless stated, no GitHub issue, Cloudflare or provider mutation): CLOSED per decision D1. Every acceptance line maps to docs/workspace-identity.md at origin/main: two-key signup and resume, kit prepare/save/commit and fresh replacement assertion (Signup and resumption, Recovery kit lifecycle, Recovery after losing passkeys A/B); no password, recovery-key-only restricted enrollment, no email/support alternative (Authority and persistent state); failure transitions preserving progress (Versioned operation contract); emergency revocation below the minimum, no routine prompts, recovery without AI (Emergency removal and normal use); sanitized progress example, browser/native compatibility and named physical-device evidence (Versioned operation contract, Browser, Android and accessibility acceptance). Earlier 2026-10-01 evidence records the source and failure-transition review. This closes the policy decision only: WH-114/115 implementation and physical, live-recovery and native acceptance stay open under their own tasks.
+
+## WH-114 — Implement passkey-only access and resumable two-passkey enrollment
+
+Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: L.
+
+Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Workspace signup requires two distinct verified passkeys, preserves incomplete progress and closes password and incomplete-enrollment access paths in one coordinated current-policy test cutover.
+
+### Scope
+
+- Implement the shared server-enforced enrollment/completion policy for workspace owners and future member admission; keep visitor handlers under their existing policy
+- Add resumable first/second-key setup, optional passkey/backup explanations and actionable provider/device guidance with no required purchase
+- Disable password signup/login/creation in backend and frontend at the reviewed cutover; preserve invitation, eligibility, Turnstile and recent-authentication guards
+- Implement the WH-113 current-only test cutover: reset obsolete identities and remove retired routes; reuse deterministic enrollment/recovery/help, with no legacy stage, migration grant or parallel policy
+- Allow immediate compromised-key revocation below two and guide replacement without adding repeated prompts to ordinary sessions
+
+### Acceptance criteria
+
+- [ ] Duplicate credential IDs and synchronized copies cannot satisfy two-key completion; do not infer independent storage from two registrations
+- [ ] One-key, cancelled, stale and incomplete setup cannot access workspace content, projects, Chat, provider actions or normal mobile sessions through direct APIs or UI
+- [ ] Reload, a cancelled prompt, invitation retry and lost verification response resume owned progress without duplicated accounts/credentials or weaker enrollment requirements
+- [ ] Backend password routes cannot authenticate, register or add a password under the new current policy; fresh enrollment establishes replacement test access
+- [ ] Existing passkey verification, ownership, origin, replay and revocation guards remain effective; ordinary sessions and visitor identity retain their intended behavior
+- [ ] Connected synthetic/browser evidence precedes WH-005 physical-device acceptance; no real user credential is changed by automated fixtures
+
+### Verification
+
+- Run pnpm check and focused passkey/profile/onboarding/recovery suites after inspecting fixture setup
+- Add meaningful connected D1/handler cases for partial enrollment, direct access bypasses, duplicate credentials, concurrent completion and current-policy test cutover
+- Use quality-managed browser checks and inspect desktop/mobile screenshots with synthetic credentials; leave real passkey/provider acceptance to WH-005
+
+### Dependencies and blockers
+
+Planning dependencies: WH-113, WH-004. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/roadmap/identity-and-data-protection.md](../../docs/roadmap/identity-and-data-protection.md)
+- [docs/owner-recovery.md](../../docs/owner-recovery.md)
+- [docs/onboarding.md](../../docs/onboarding.md)
+- [docs/android-app.md](../../docs/android-app.md)
+- [src/index.ts](../../src/index.ts)
+- [src/workspace-identity/ceremonies.ts](../../src/workspace-identity/ceremonies.ts)
+- [frontend/src/identity/flow.tsx](../../frontend/src/identity/flow.tsx)
+- [schema/platform.sql](../../schema/platform.sql)
+- [src/workspace-identity/schema.sql](../../src/workspace-identity/schema.sql)
+- [tools/current-schema.mjs](../../tools/current-schema.mjs)
+- [docs/workspace-identity.md](../../docs/workspace-identity.md)
+- [docs/identity-authority.md](../../docs/identity-authority.md)
+- [docs/identity-ceremonies.md](../../docs/identity-ceremonies.md)
+- [docs/identity-kits.md](../../docs/identity-kits.md)
+- [docs/identity-recovery.md](../../docs/identity-recovery.md)
+- [docs/identity-web.md](../../docs/identity-web.md)
+
+### Execution coordination
+
+Issue: https://github.com/zemdregon/whumpo/issues/68. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-01 WH-120 amendment: active planning now requires current-only admission, reviewed obsolete-test resets and forward repair. Legacy identity stages, old-client/module coexistence and old-runtime rollback are not implementation requirements. This is documentation alignment only, not implementation, policy activation or device acceptance.
+- 2026-10-01: WH-114A #70 implements the isolated current-policy account/attempt/credential/session/grant schema and shared principal/committing guard. WH-114B #71 owns verified ceremonies/enrollment, WH-115 #69 owns shared kits/restricted recovery, and WH-114C #72 connects them for one current-only test cutover. No live schema, auth route, credential or deployment changes; full implementation and acceptance remain open.
+- 2026-10-01: #71 adds isolated cryptographic WebAuthn signup, restricted resumption, reviewed key addition, same-purpose reauthentication, current login, one-use challenge/receipt records and bounded cleanup. Target canonical identity inputs remove password fields and retain invitation spending after owner deletion. Kit-bound completion/cancellation and WH-115 recovery remain open; no active route, remote schema, owner credential or deployment changed.
+- 2026-10-01: Shared current kit offers, one-time text preparation, exact save acknowledgment, guarded ordinary rotation, two-key/fresh-assertion enrollment completion and authenticated cancellation now complete #71 backend scope and part of #69. Actual cryptographic signup-to-session journeys and 47 refusal/race checks passed on SQLite/local D1; 62 ceremony and 72 authority checks also pass. Restricted recovery, kit delivery UI, shared transport/lifecycle admission and one current-only cutover remain open under #69/#72; no remote or active authentication change.
+- 2026-10-01: #69 source now implements current-kit restricted entry, exact all/some/none review, saved-kit securing/revocation, replacement-specific assertion completion, restricted kit rotation and emergency removal including compromised staged keys. It reuses the shared authority, verification, offers and receipts; recovery-commit grants preserve original proof time/expiry. Actual cryptographic journeys and 64 refusal/race checks pass on SQLite/local D1, with 47 kit/62 ceremony/72 authority regressions. Browser kit delivery, HTTP/admission/lifecycle and the coordinated current-only test reset remain open; no remote schema, active auth or deployment change.
+- 2026-10-01: #69/#72 now add the isolated current-version HTTP adapter and trusted React identity gate/security flow: strict cookie selection, private bounded/no-store transport, progress reads, logout, two-key setup and reviewed recovery with download/copy/print kit delivery. Twenty-two HTTP refusal cases plus real signed journeys pass on SQLite/local D1; mobile Chromium with virtual authenticators verifies signup, saved-kit resume, lost secure reply, partial recovery, replacement completion and removal. No active platform route, identity schema or owner credential changed. Common HTTP/Chat/provider admission, lifecycle registration, current-only reset and deployed acceptance remain open.
+- 2026-10-01: Current source now installs the identity router, identity-before-profile web gate and atomic common workspace admission at HTTP/Chat/provider boundaries. Complete-schema HTTP (36 refusals), workspace admission (21) and feature/provider (37) checks pass on SQLite/local D1; real mobile app signup/welcome/Chat revocation passes. Lifecycle catalog covers 156 tables/37 classes and bounded expiry cleanup. Service-client compiler v3 has a new immutable lock. Remaining fixture/release-schema alignment, remote reset/deployment and owner-device acceptance stay open. No remote mutation.
+- 2026-10-01 current identity release foundation: review v3/archive v2 pins the complete 156-table schema and exact database bindings, removes numbered SQL replay from deployment/local initialization, refuses occupied or active-database reset targets, and initializes only a distinct empty database. Actual local D1/SQLite catalog and current identity invariants, no-write reinitialization, drift refusal, release interruption/no-replay and build/lifecycle checks pass. No remote mutation; fixture/operator conversion, external cleanup, new database selection, coordinated live cutover and owner/device acceptance remain open in #72. See docs/releases.md and draft PR #79.
+- 2026-10-01 current onboarding follow-through: API, React and canonical SQL require exact non-null question/stage checkpoints; chapter-only client fallbacks are removed. Welcome fixtures now use current admitted identity and full schema. SQLite/local D1 pass private profile/project steps, lost-response/concurrent completion, HTTP gates and identity revocation immediately before commit with no project created. The actual mobile React/WebAuthn journey passes again. Source/local only; full test cutover and physical-device acceptance remain open in #72.
+- 2026-10-02 current identity follow-through: billing/plan, subscription, GitHub/Cloudflare connection, token custody, GitHub backup/Chat, TXT/CNAME routing, standard AI cost/history/recovery and signed HTTP/workspace smoke fixtures now use current schemas and admitted owner scopes. Focused SQLite/local D1 suites pass with synthetic providers; no real charges, DNS writes, GitHub backups or inference. The smoke command exercises actual signed identity before workspace isolation/quota/logout. Specific coverage is in docs/verification.md. Remaining older domain/operator fixtures, remote resource reconciliation and coordinated test cutover are still open under #72; no remote mutation or device-acceptance claim.
+- 2026-10-02 domains/workspace identity follow-through: fourteen local D1 suites now initialize the complete current schema and use admitted owner scopes for domain proof/removal, synthetic DNS/hosting/Chat, exact operator recovery, specification approvals, project details, dashboard/inspection, health/traffic and Chat history/export. Actual current website transactions replace retired guided fixtures; aged proofs use distinct sessions and fault injection matches committed operations. Exact coverage and synthetic/provider/device boundaries are in docs/verification.md. Remaining fixtures and coordinated remote reset/deployment remain open in #72; no provider activation, CMS functional testing or remote mutation.
+- 2026-10-02 maintenance/PWA/asset follow-through: eight additional suites pass with current schemas and authority: three SQLite maintenance tests, freshly built mobile Chromium/D1 PWA acceptance, and four D1/R2 photo/export/version-comparison/removal journeys. Actual scheduled identity expiry preserves unfinished enrollment; overdue reporting now matches the hourly identity schedule. Offline reconnect refuses revoked identity, worker updates preserve drafts, caches contain only four public resources, and screenshots were inspected. Asset/version checks cover tenant isolation, exact downloads, commit-time races and lost replies. No remote reset/deployment, scanner/provider activation or physical-device acceptance; #72 remains open. Exact commands and boundaries: docs/verification.md.
+- 2026-10-02 backend/application authority follow-through: fifteen focused current-D1 suites pass for private code/tests/state, exact comparisons and expected-output checks, publication/forms, quarantined imports, activation, signed visitor passkeys/data and 17 visitor-deletion cases. Four loopback HTTP suites run the actual workerd/QuickJS service using current owner cookies and complete schema. Owner, visitor, public and scheduled authority remain separate; operation-matched lost replies and admitted-batch source corruption are verified. Exact scope and remaining fixture/device limits are in docs/verification.md. No remote reset/deployment, scanner/provider activation or CMS functional testing; #72 remains open.
+- 2026-10-02 application recovery/lifecycle follow-through: three more complete-schema D1 suites pass for signed visitor signup/export/erasure, sealed document snapshots/restoration, and actual workerd/QuickJS upgrades with retained-program/data restoration. Current owner scopes/cookies authorize typed controls; aged proof uses distinct sessions. Operation-matched lost acknowledgments, atomic rollback, roster/deletion/cancellation fences, metadata-only inventory and zero inference are verified. These current-contract customer data changes do not replay platform migrations. Source/local evidence only; remaining build/design/library/content/operator fixtures, coordinated remote cutover and physical-device acceptance remain open in #72.
+- 2026-10-02 reuse/build/planning follow-through: seven complete-schema D1 suites pass for library copies, exact private nomination consent, backend Chat, application builds, focused page design, bounded agent inspection and composition planning. Library/build examples execute in real isolated workerd/QuickJS; inference is synthetic. Same-scope commit, operation-matched lost responses, immutable provenance, plan/revision/owner gates, private-context exclusion and no automatic publication are verified. The connected supported-site fixture uses two model calls and generates zero backend source. The updated live model harness remains unrun. Exact commands/limits: docs/verification.md. Remaining fixture alignment, coordinated remote cutover and physical-device acceptance stay open in #72; no scanner/provider activation or CMS functional testing.
+- 2026-10-01: #72 adds six passing complete-schema local D1 suites for contacts, directories/history, publication, current site-agent drafts and first-project site/application handoff. Owner admission and independent public/scheduled authority are preserved; transaction-matched expiry/removal/lost-response cases pass. Competing website fixtures use actual current builders. Directory docs now match natural Chat/typed reviews and zero standard-AI customer debits. Model, runtime and Turnstile transports are synthetic. Remaining observation/operator/service-client/live/deferred fixtures, resource review, coordinated remote cutover and physical-device acceptance remain open. No provider, scanner or CMS functional activation.
+- 2026-10-01: #72 adds five passing complete-schema suites for current-cookie profile identity/revocation (SQLite), connection metadata, atomic workspace projects/exports, a four-turn website journey and service authority (local D1). Owner statements share admitted scope; visitor execution uses real isolated QuickJS with maintainer/provider fetch disabled. Model transports and vault/hold metadata are synthetic. Required current photos configuration and transaction-matched lost creation recovery are verified; standard AI remains zero customer debit. No remote cutover, provider/scanner activation or CMS functional testing; remaining observation/operator/live/deferred fixtures and owner/device acceptance stay open.
+- 2026-10-01: #72 adds eight passing complete-schema D1 suites for fair-use observation/reviews, private usage support, dormant Gateway spend/dispatch, stored screening requirements, scripted conversation and current signup eligibility. Customer admission and independent operator/ledger authority remain distinct. Actual ES256 registration verifies mandatory declaration/invitation/Turnstile in local/test, enrollment-only grants and atomic receipt-failure rollback/fresh retry. Financial, model, gateway, Turnstile and risk-history inputs are synthetic. No scanner, routing/provider activation or remote cutover. Remaining media/live/deferred fixtures and physical/live acceptance stay open.
+- 2026-10-02: #72 adds passing complete-schema local D1/R2 photo-version and removal suites. Current owner admission, private dependency/digest checks, publication withdrawal, portable ZIP/JPEG exports, retained-version races, exact lost-response recovery and delayed orphan cleanup are verified. Ready accounts, images, clearance and domain records are synthetic; no scanner implementation, DNS/provider activation, CMS functional testing or remote cutover. Live/deferred fixtures and physical/live acceptance remain open.
+- 2026-10-02: #72 aligns six opt-in model/deployment probes with current schemas/scopes. Shared probe support passes local D1 exact-schema refusal before writes, two signed credentials, current cookie/login/state/logout, onboarding checkpoint, workspace admission, cleanup and all opt-in refusals. Remote probes retain cleanup journals and refuse obsolete deployments. No live model/deployment, scanner or CMS functional acceptance; only deferred-lane obsolete fixture setup, resource reconciliation and coordinated cutover remain.
+- 2026-10-02: Removed 120 retired platform migrations and preservation-only fixture; complete-schema initialization passes SQLite/local D1. Current content-risk/operator, eligibility, 728 feature-inclusion decisions (SQLite/D1), website specification and signed probe-loader checks pass. Deferred CMS/scanner setup is source-aligned and syntax-checked only, not functionally accepted. Imported exact already-shipped Stripe pricing overlay 18e9e88 as 0c8fa8c and reconciled live JSON. See docs/verification.md and docs/identity-web.md. New empty database selection, coordinated test cutover and physical-device acceptance remain open under #72.
+- 2026-10-02: #72 current-only test cutover completed with release 40e45c39-037a-42da-802c-5eacc75bde77 (6c73ac5). New empty D1 has exact 156-table/702-object schema; four Workers, all 39 served assets and binding/secret inventories pass independent readback. Live signed synthetic two-key login, welcome/first-project, logout and revocation pass with fixture cleanup and zero inference. Mobile entry screenshot inspected. Old test account/database and PASSWORD_PEPPER retired, remaining script/bindings unchanged; fresh owner invite saved privately. Physical-device enrollment, human Turnstile/live recovery and native/parent beta gates remain open. CSAM, Daybreak and CMS testing remain deferred. See docs/identity-web.md final release evidence.
+- 2026-10-31 UTC: promoted planned to ready. Every dependency is done now that WH-004 is closed (see its entry). Nothing is built or accepted by this change; the close-out sweep still has to map each acceptance line to evidence before this task can be marked done.
+- 2026-10-31 UTC, CLOSED by PR #529 (main be4e6bf (origin/main at 2026-10-31), Node 24.21.0, pnpm 11.19.0, disposable local SQLite/local D1, no network, credential, secret or provider call). Every acceptance line maps to a suite that was run today. (1) Duplicate IDs and synced copies: tests/identity-ceremonies.mjs re-registering an existing credential ID is refused with identity_changed and rolls back, and credential IDs are globally unique in SQL; two distinct IDs are not taken as proof of independent providers (docs/identity-ceremonies.md); synchronized copies of one ID cannot count twice, but independence of storage is only recommended, not detected. (2) One-key, cancelled, stale and incomplete setup: assertCurrentIdentity refuses an enrollment grant with identity_incomplete; tests/identity-http.mjs gets 401 from /profile, /projects, /chat and the provider-connection route for an enrollment-only browser, before and after its first passkey, and 409 from Chat and the dashboard until welcome completes; tests/workspace-admission.mjs refuses revoked, stale-epoch and aged proofs at the batch; tests/workspace-identity-browser.mjs --d1 shows the identity gate before profile, welcome and Chat. (3) Resume: ceremonies cover failed verification that leaves the invitation unspent and no user row, resumption from saved progress and receipt readback; identity-kits covers the lost secure reply; identity-browser --d1 covers cancelled second prompt, reload and resume with no duplicated account or credential. (4) Password routes: tests/identity-http.mjs gets 404 for /api/auth/login, /register and /recover; the canonical identity inputs and schema/platform.sql hold no password field. (5) Existing guards: wrong origin, rpID, user verification and cross-origin registrations are refused, single-use challenges, replay and revocation (identity-ceremonies, identity-authority 74 checks); visitor identity unchanged (tests/app-auth.mjs, 4 sections pass). (6) Synthetic and browser evidence only: no real user credential was changed; the 2026-10-02 current-only test cutover and live synthetic two-key login are recorded above. Suites run today: identity-authority 74, identity-ceremonies 67, identity-kits 47, identity-recovery 64, identity-http 46, workspace-admission 22, identity-browser --d1, workspace-identity-browser --d1, app-auth. Not verified and not claimed: physical-device enrollment, human Turnstile, live recovery usability (WH-005), and that two registrations sit on independent storage.
 
 ## WH-121 — Accept inference privacy and offline benchmark handoff
 
@@ -3311,6 +3314,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/121. Planning owner: Unassigne
 
 - 2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.
 - 2026-10-04 UTC: decomposed into WH-150 (link authority, isolated delivery, bounded feedback, owner API and lifecycle; implemented in source with local tests), WH-151 (shared Chat/view adapters), WH-152 (browser acceptance) and WH-153 (release and live acceptance). The parent stays open until all four pass.
+- 2026-10-31 UTC (PR #529): WH-150, WH-151 and WH-152 are closed with line-by-line evidence. The parent stays open only because WH-153 is open: the sandbox CSP on a live /view response and the release-manifest readback were not read live (see WH-153). Parent acceptance lines 1 to 5 map to the closed children (docs/guest-previews.md) apart from that live readback. Not verified: real human guests and physical devices.
 
 ## WH-093 — Extend maintained records into the Business lead pipeline
 
@@ -3563,162 +3567,6 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 - 2026-10-27 UTC, still open and needs a person: the WH-112 device and Orca checks remain open (checklist docs/wh-112-device-acceptance.md, added by PR #396, merged 2026-10-27T07:03:05Z), and a signed-in session with the owner account remains open and needs re-enrollment via a fresh invitation. Nothing in today's agent-run evidence (WH-181, WH-003, WH-153, WH-212) is device, screen-reader or human acceptance. Readiness unchanged.
 - 2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): readiness set to blocked. Blocker: Physical-device and Orca screen-reader checks (docs/wh-112-device-acceptance.md) need a person and real devices, and the owner account needs re-enrollment through a fresh invitation; agent-run evidence cannot stand in for them.
 
-## WH-150 — Bind guest preview links to exact saved versions with bounded accountless feedback
-
-Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **ready**. Kind: implementation. Size: M.
-
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-An owner with current inclusion issues an expiring, revocable, hash-stored link to one immutable saved version; guests view only that isolated preview on a separate host and may leave bounded plain-text comments the owner can read, resolve and delete.
-
-### Scope
-
-- Current schema for guest_preview_links/guest_preview_feedback with immutability, capacity, rate and preservation-hold guards
-- Owner HTTP handlers under current workspace identity; issuance composes creator.guest-feedback inclusion; list/revoke/resolve/delete stay outside the paid gate
-- Anonymous sites-Worker guest page, status, sandboxed view and feedback on preview.whumpo.site with the token only in the URL fragment and POST bodies
-- Lifecycle class, closure inventory counts, daily retention job and feature contract document
-
-### Acceptance criteria
-
-- [ ] Forged, replayed, expired, revoked, removed, held and no-longer-included links stop reads and comments, including an in-flight view
-- [ ] Guests see only the exact bound version through the shared isolated preview rendering; no other version, asset alias, draft, project or account data
-- [ ] Raw tokens are never stored, listed, exported or logged; comment markup and instructions stay inert and never reach Chat or a model
-- [ ] Owner identity loss and foreign owners are refused; rate, size and capacity limits hold on SQLite and local D1
-
-### Verification
-
-- node tests/guest-previews.mjs and node tests/guest-previews.mjs --d1
-- node tests/guest-preview-photos.mjs (local D1/R2, synthetic clearance)
-- Lifecycle catalog, closure inventory, maintenance and related preview/specification/publication suites
-
-### Dependencies and blockers
-
-Planning dependencies: WH-089, WH-066, WH-004, WH-009, WH-010, WH-122, WH-116. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/guest-previews.md](../../docs/guest-previews.md)
-- [docs/project-specification-storage.md](../../docs/project-specification-storage.md)
-- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
-- [docs/feature-inclusion.md](../../docs/feature-inclusion.md)
-
-### Execution coordination
-
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-- 2026-10-04 UTC: implemented in source on branch claude/wh-092-preview-links with local SQLite, local D1 and local D1/R2 fixtures; not deployed. See docs/guest-previews.md.
-- 2026-10-20 UTC, source and docs only, no live read and nothing re-run (WH-001 readiness reconciliation against main 52e885b; see docs/roadmap/readiness-reconciliation-2026-10-20.md): the branch-only wording above is superseded. The WH-150 source is on main (src/guest-previews/owner.ts, guest.ts and policy.ts, with tests/guest-previews.mjs and tests/guest-preview-photos.mjs), and the WH-151 adapter merged in PR #131 (src/guest-previews/bindings.ts) is built over these handlers. The merging PR for WH-150 was not identified (GitHub was not read). Readiness stays ready because the schema has no completion value. Source and local only; not deployed or customer-accepted, and WH-092, WH-152 and WH-153 stay open.
-- 2026-10-27 UTC, source and local only, not deployed: PR #345 (merged 2026-10-26T02:22:10Z, merge commit 2e74dc7) is docs only (docs/guest-previews.md) and adds a dated acceptance mapping from each WH-150 acceptance line to its test and enforcing source. Reported (Node 24.21.0, pnpm 11.19.0): node tests/guest-previews.mjs pass (12 groups), the same with --d1 pass (12 groups), tests/boundary-guest-preview-race.mjs pass, tests/boundary-guest-preview-read-pool.mjs pass, tests/guest-preview-photos.mjs pass. Gaps with no test, per the PR: 200-comments-per-link cap, per-owner (2,000) and platform (100,000) comment caps, retained-link caps (200 per project, 20,000 platform), in-flight views for expiry, version removal, hold, lost inclusion and operator stop (only in-flight revocation is tested), in-flight comment race, comment replay after expiry, removal or a hold, and raw token absence in exports. Unverified: tests/guest-preview-browser.mjs (Playwright not in main) and live preview.whumpo.site routing, deployment and real devices (WH-153). Read from gh pr view and the PR body; nothing re-run here. Readiness unchanged.
-
-## WH-151 — Register guest preview owner operations with shared Chat and view adapters
-
-Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
-
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-Owners list, issue, revoke, resolve and delete guest preview links and comments from the shared Chat/view surface using the WH-150 domain handlers, with exact confirmation before a link is issued.
-
-### Scope
-
-- Register read/action bindings for the existing WH-150 handlers; no second authority or storage
-- Issuance shows the exact version, expiry and comment setting and requires explicit owner confirmation; a model may only prepare it
-- Comments are shown to the owner as inert text and enter model context only by an explicit owner request with a reviewed privacy route
-- Keep the direct revoke control reachable without inference
-
-### Acceptance criteria
-
-- [ ] Chat and views enforce the same identity, ownership and inclusion as the HTTP handlers; hidden UI or forged identifiers cannot bypass them
-- [ ] The one-time token is shown only to the owner and never stored in Chat history, transcripts or model context
-- [ ] Revocation and deletion remain available after inclusion ends
-
-### Verification
-
-- Connected Chat/view fixtures over the actual handlers with forged identifiers and lost inclusion
-- Transcript/model-context checks that no token or unrequested comment text is present
-
-### Dependencies and blockers
-
-Planning dependencies: WH-150, WH-105, WH-107, WH-109, WH-110. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/guest-previews.md](../../docs/guest-previews.md)
-- [docs/project-specification-storage.md](../../docs/project-specification-storage.md)
-- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
-- [docs/feature-inclusion.md](../../docs/feature-inclusion.md)
-- [docs/chat-interactions.md](../../docs/chat-interactions.md)
-
-### Execution coordination
-
-Issue: https://github.com/zemdregon/whumpo/issues/130. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-- 2026-10-08 UTC: the Chat guestPreview revoke/delete controls now save their effect in the same revision-checked batch as the Chat turn (WH-004 finding B3), so a request refused with 409 changes nothing. Verified only locally by node tests/guest-preview-chat-atomic.mjs on SQLite and --d1; not deployed. See docs/guest-previews.md.
-- 2026-10-08 UTC: source and local verification only; the mapped issue #130 is open and its owner questions were answered on 2026-10-04. PR #131 (f991b18) added src/guest-previews/bindings.ts, ids-only Chat controls and the guest-previews view/panel over the existing WH-150 handlers. Re-run on 2026-10-08 UTC at origin/main ca17c6a (Node 24.21.0, aarch64 Linux, disposable local SQLite/local D1, no network, credential or remote Cloudflare/GitHub operation). node tests/guest-preview-bindings.mjs passed 8 groups on SQLite and with --d1 on local D1 (exact prepared confirmation before issuance, token only in the issuing response and never in any table, Chat turn, transcript, view or model context, forged/foreign/null identifiers, inert comments out of model context, management after inclusion ends); pnpm check passed. Synthetic data with fetch disabled; no deployment or real-browser acceptance is implied (see WH-152). Re-checked on 2026-10-09 UTC after rebasing onto origin/main 92a001f (plus the test-only TMPDIR fix 9847281, PR #202), with #175, #178 and #180 merged: the cited artifacts still exist, #130 is still open and tests/guest-preview-bindings.mjs passed 8 groups on SQLite and local D1 again; the B3 entry above (#178) is separate evidence.
-
-## WH-152 — Accept the accountless guest preview journey in real browsers
-
-Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: verification. Size: M.
-
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-A guest on mobile and keyboard-only desktop opens a link, views the preview, sends a comment and sees the link stop working after the owner revokes it from the shared owner surface.
-
-### Scope
-
-- Playwright journey at 390x844 and desktop with keyboard-only operation and screen-reader names for the guest page
-- Owner issue/revoke/resolve through the WH-151 surface with synthetic approved photo assets
-- Check headers, sandbox, no cookies, no horizontal overflow and focus order
-
-### Acceptance criteria
-
-- [ ] Accountless preview, comment and revoke journey passes on mobile and keyboard
-- [ ] No workspace cookie, token in a URL path/query or guest text in logs
-
-### Verification
-
-- Local browser fixtures over the platform and sites Workers with disposable D1/R2
-
-### Dependencies and blockers
-
-Planning dependencies: WH-150, WH-151. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/guest-previews.md](../../docs/guest-previews.md)
-- [docs/project-specification-storage.md](../../docs/project-specification-storage.md)
-- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
-- [docs/feature-inclusion.md](../../docs/feature-inclusion.md)
-
-### Execution coordination
-
-Issue: https://github.com/zemdregon/whumpo/issues/141. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-- 2026-10-08 UTC: local browser verification only; the mapped issue #141 is open. PR #142 (be5662a) added the Chromium owner and guest journey in tests/guest-preview-browser.mjs. Re-run on 2026-10-08 UTC at origin/main ca17c6a (Node 24.21.0, aarch64 Linux, disposable local SQLite/local D1, no network, credential or remote Cloudflare/GitHub operation). node tests/guest-preview-browser.mjs passed in headless Chromium at desktop 1280x800 keyboard and mobile 390x844 against the built owner panel, the platform Worker and the sites handler with local D1/R2 (owner prepare/confirm/revoke/resolve/delete, one-time link, accountless sandboxed preview with an approved private photo, keyboard comment, no cookie or stored/logged token, large text and reflow). The run used a Playwright module and Pillow borrowed from other existing local installs (WHUMPO_PLAYWRIGHT and a PATH shim) with no repository change. This is not a deployed, real-device, screen-reader or customer acceptance, and the release and live acceptance of guest previews remain WH-153. Re-checked on 2026-10-09 UTC after rebasing onto origin/main 92a001f (plus the test-only TMPDIR fix 9847281, PR #202), with #175, #178 and #180 merged: the cited artifacts still exist, #141 is still open and the journey passed again in headless Chromium; because the test hard-codes a /tmp prefix and /tmp was quota-limited on this host, it ran from a throwaway copy whose only change was that prefix (set to TMPDIR), deleted afterwards.
-
 ## WH-153 — Release and live-accept guest previews on the test platform
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: release. Size: S.
@@ -3769,6 +3617,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 - 2026-10-27 UTC, source and local only; nothing deployed and nothing run live: Phase A adds the opt-in fixture tests/guest-preview-live.mjs, which refuses unless RUN_LIVE_GUEST_PREVIEW=1 and was NOT run with it. After the test-platform cutover it checks read-only (node:dns, no DNS write) that preview.whumpo.site resolves into Cloudflare address ranges, seeds a synthetic example.test owner with the real website-creation builders and a one-hour project-scoped private-test feature_preview_grants row for creator.guest-feedback (no billing rows), prepares and issues a link through the owner HTTP routes, opens it in headless Chromium, posts one comment, revokes it, confirms /api/link and /view answer 404 and the page shows the unavailable state, then deletes the owner (cascade) and verifies every row is gone, writing .secrets/guest-preview-live-evidence.json. Reported (Node 24.21.0, pnpm 11.19.0): pnpm check pass; node tests/guest-preview-browser.mjs pass; node tests/guest-preview-live.mjs without the variable refuses (exit 1); an offline simulation of the seeding, grant inclusion and cascade cleanup over the D1 REST adapter against local SQLite passed. A read-only DNS lookup from this host resolved preview.whumpo.site to Cloudflare addresses (104.21.56.76, 172.67.180.73, 2606:4700:3030::6815:384c, 2606:4700:3032::ac43:b449). Not verified: the live journey itself, the live seeding and cleanup against the real test database, routing and headers on the deployed Worker, and real devices. Scope, acceptance and readiness are unchanged; the catalogue entry is unchanged.
 - 2026-10-27 UTC, live acceptance run by the orchestrator against https://whumpo.com on main 054da5c (all merged work deployed): RUN_LIVE_GUEST_PREVIEW=1 node tests/guest-preview-live.mjs exited 0 at 2026-10-27T06:44:06.895Z with {"success":true,"steps":{"dns":4,"issued":true,"viewed":true,"commented":true,"revokedRefused":true},"dnsCloudflare":["172.67.180.73","104.21.56.76","2606:4700:3030::6815:384c","2606:4700:3032::ac43:b449"],"cleanupVerified":true}. Phase B (this change): the creator.guest-feedback catalogue implementation in src/plan-features.ts moves from planned to private-test (tests/plan-catalogue.mjs pins the new value) by orchestrator decision under delegated authority; no money involved. Access still requires an explicit project-scoped grant or invoice coverage; nothing becomes public. Not verified: physical devices and real human guests. Readiness unchanged.
 - 2026-10-27 UTC, live guest-preview check against the test platform after the review schema cutovers to whumpo-control-2026-10-27 and whumpo-control-2026-10-27c (receipts, PR #419): RUN_LIVE_GUEST_PREVIEW=1 node tests/guest-preview-live.mjs exited 0 with cleanupVerified true. Not verified: physical devices and real human guests. Readiness unchanged.
+- 2026-10-31 UTC, read-only live header readback, STILL OPEN (PR #529). curl against https://preview.whumpo.site (no token, no secret, no write): GET / returned 200 with cache-control no-store, content-security-policy default-src 'none' with hashed script-src and style-src, frame-ancestors 'none', x-frame-options DENY, x-robots-tag noindex, nofollow, noarchive, nosnippet, referrer-policy same-origin, x-content-type-options nosniff, cross-origin-opener-policy and cross-origin-resource-policy same-origin, and no set-cookie. POST /api/link with a forged 43-character token and the exact origin returned 404 {"error":"This preview link is unavailable."} with no-store, noindex and no cookie. These match tests/guest-previews.mjs. Still missing for the acceptance line 'live readback of host routing, headers and refusal paths': the response headers of /view for a valid link (the sandbox CSP and frame-ancestors 'self') were never read live, because that needs a live link and so a run of tests/guest-preview-live.mjs, which writes to the live database and is task 2 territory; and the verification line 'release manifest readback' is not recorded for the guest-preview schema and Workers in this task. Readiness unchanged.
 
 ## WH-200 — Source email-change state machine and confirmation-token handling over the current identity engine
 
@@ -4243,7 +4092,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
 
-# F2 — Done (19)
+# F2 — Done (22)
 
 Verified complete with recorded evidence; kept for history and dependency context. Not candidates for new work.
 
@@ -4803,6 +4652,165 @@ Issue: https://github.com/zemdregon/whumpo/issues/49. Planning owner: Unassigned
 - 2026-10-01T16:55:49.916Z test acceptance: corrected release e6edca89-4021-494c-a4b0-0875531e3132, source aa8b2c38b4c69e1a4dba76fb01b0fe0bea544778, deployed and reconciled. Twenty selected assets match archive bytes; live Chromium reports zero manifest/installability errors, active worker, four public cached files and successful offline/reconnect to sign-in. Health 200, anonymous session 401/no-store. No new migration/service/paid activation. Physical-phone OS installation remains unverified. See docs/dashboard-pwa.md and issue #49.
 - 2026-10-27 UTC, local only, not deployed, no device: PR #348 (merged 2026-10-26T14:46:03Z, merge commit a42c626) is docs only (docs/dashboard-pwa.md, new 'Local revalidation - October 2026' section) and records a re-acceptance on origin/main 2e74dc7 with Node 24.21.0, pnpm 11.19.0 and the installed Chromium. Reported: node tests/dashboard-pwa.mjs exit 0 (needs dist/ from pnpm build), node tests/dashboard-pwa-browser.mjs exit 0, pnpm check exit 0, pnpm build exit 0 (existing chunk-size warnings). The browser test covers zero manifest and installability errors (CDP), offline reload and Try again reconnect, unsent draft and the exact 4-entry cache surviving a worker update, revoked identity refused after offline reconnect, and no overflow at 390px. Gaps stated by the PR: deployed or test-domain checks, physical phones, installed-PWA/standalone behavior; the install prompt is a synthetic event (dismiss path only), the worker update is a synthetic byte append, and screenshots were not inspected. Read from gh pr view and the PR body; nothing re-run here. Readiness unchanged.
 - 2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #50 (zemdregon/whumpo) is the merged change(s) behind the evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open.
+
+## WH-150 — Bind guest preview links to exact saved versions with bounded accountless feedback
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
+
+Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+An owner with current inclusion issues an expiring, revocable, hash-stored link to one immutable saved version; guests view only that isolated preview on a separate host and may leave bounded plain-text comments the owner can read, resolve and delete.
+
+### Scope
+
+- Current schema for guest_preview_links/guest_preview_feedback with immutability, capacity, rate and preservation-hold guards
+- Owner HTTP handlers under current workspace identity; issuance composes creator.guest-feedback inclusion; list/revoke/resolve/delete stay outside the paid gate
+- Anonymous sites-Worker guest page, status, sandboxed view and feedback on preview.whumpo.site with the token only in the URL fragment and POST bodies
+- Lifecycle class, closure inventory counts, daily retention job and feature contract document
+
+### Acceptance criteria
+
+- [ ] Forged, replayed, expired, revoked, removed, held and no-longer-included links stop reads and comments, including an in-flight view
+- [ ] Guests see only the exact bound version through the shared isolated preview rendering; no other version, asset alias, draft, project or account data
+- [ ] Raw tokens are never stored, listed, exported or logged; comment markup and instructions stay inert and never reach Chat or a model
+- [ ] Owner identity loss and foreign owners are refused; rate, size and capacity limits hold on SQLite and local D1
+
+### Verification
+
+- node tests/guest-previews.mjs and node tests/guest-previews.mjs --d1
+- node tests/guest-preview-photos.mjs (local D1/R2, synthetic clearance)
+- Lifecycle catalog, closure inventory, maintenance and related preview/specification/publication suites
+
+### Dependencies and blockers
+
+Planning dependencies: WH-089, WH-066, WH-004, WH-009, WH-010, WH-122, WH-116. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/guest-previews.md](../../docs/guest-previews.md)
+- [docs/project-specification-storage.md](../../docs/project-specification-storage.md)
+- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
+- [docs/feature-inclusion.md](../../docs/feature-inclusion.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-04 UTC: implemented in source on branch claude/wh-092-preview-links with local SQLite, local D1 and local D1/R2 fixtures; not deployed. See docs/guest-previews.md.
+- 2026-10-20 UTC, source and docs only, no live read and nothing re-run (WH-001 readiness reconciliation against main 52e885b; see docs/roadmap/readiness-reconciliation-2026-10-20.md): the branch-only wording above is superseded. The WH-150 source is on main (src/guest-previews/owner.ts, guest.ts and policy.ts, with tests/guest-previews.mjs and tests/guest-preview-photos.mjs), and the WH-151 adapter merged in PR #131 (src/guest-previews/bindings.ts) is built over these handlers. The merging PR for WH-150 was not identified (GitHub was not read). Readiness stays ready because the schema has no completion value. Source and local only; not deployed or customer-accepted, and WH-092, WH-152 and WH-153 stay open.
+- 2026-10-27 UTC, source and local only, not deployed: PR #345 (merged 2026-10-26T02:22:10Z, merge commit 2e74dc7) is docs only (docs/guest-previews.md) and adds a dated acceptance mapping from each WH-150 acceptance line to its test and enforcing source. Reported (Node 24.21.0, pnpm 11.19.0): node tests/guest-previews.mjs pass (12 groups), the same with --d1 pass (12 groups), tests/boundary-guest-preview-race.mjs pass, tests/boundary-guest-preview-read-pool.mjs pass, tests/guest-preview-photos.mjs pass. Gaps with no test, per the PR: 200-comments-per-link cap, per-owner (2,000) and platform (100,000) comment caps, retained-link caps (200 per project, 20,000 platform), in-flight views for expiry, version removal, hold, lost inclusion and operator stop (only in-flight revocation is tested), in-flight comment race, comment replay after expiry, removal or a hold, and raw token absence in exports. Unverified: tests/guest-preview-browser.mjs (Playwright not in main) and live preview.whumpo.site routing, deployment and real devices (WH-153). Read from gh pr view and the PR body; nothing re-run here. Readiness unchanged.
+- 2026-10-31 UTC, CLOSED by PR #529 (main be4e6bf (origin/main at 2026-10-31), Node 24.21.0, pnpm 11.19.0, disposable local SQLite/local D1, no network, credential, secret or provider call). Every acceptance line maps to a test that was run. The gaps recorded on 2026-10-27 now have tests in tests/guest-previews.mjs, which passes 18 groups on SQLite and with --d1 on local D1 (was 12): 200 comments per link (199 seeded, the 200th accepted, the 201st 429, exactly 200 stored); 2,000 comments per owner and 100,000 platform (exactly at each ceiling the next comment is 429 and stores nothing; deleting the seeded rows reopens it); 200 retained links per project and 20,000 platform (exactly at each ceiling the next issue is 409 and adds no row); in-flight views for revocation, expiry, version removal, a content hold, lost inclusion and an operator serving stop (each fired on the final stillCurrent() check, after render and before the response: 404, no page content; disabling stillCurrent() makes the group fail); the same six endings racing an in-flight comment (404, no row stored); comment replay after each ending (same requestId returns the original receipt while current, 404 after); raw token and its hash absent from the owner link listing, the feedback listing, the account-closure inventory and every column of every table in the complete schema. Cap fixtures lift one admission trigger for one bulk INSERT...SELECT and restore the identical trigger, so the real trigger enforces each boundary and no 100,000-row loop runs. Also passing unchanged: tests/guest-preview-photos.mjs, guest-preview-bindings.mjs, guest-preview-chat-atomic.mjs, boundary-guest-preview-race.mjs, boundary-guest-preview-read-pool.mjs, and tests/guest-preview-browser.mjs (desktop keyboard and mobile 390x844 Chromium). No product defect was found. Acceptance line 4 (rate, size and capacity limits on SQLite and local D1) is the line the new cap groups complete. Not verified and not claimed: real human guests, real devices (WH-153 and WH-005), customer acceptance. Mapping per line: docs/guest-previews.md.
+
+## WH-151 — Register guest preview owner operations with shared Chat and view adapters
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
+
+Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Owners list, issue, revoke, resolve and delete guest preview links and comments from the shared Chat/view surface using the WH-150 domain handlers, with exact confirmation before a link is issued.
+
+### Scope
+
+- Register read/action bindings for the existing WH-150 handlers; no second authority or storage
+- Issuance shows the exact version, expiry and comment setting and requires explicit owner confirmation; a model may only prepare it
+- Comments are shown to the owner as inert text and enter model context only by an explicit owner request with a reviewed privacy route
+- Keep the direct revoke control reachable without inference
+
+### Acceptance criteria
+
+- [ ] Chat and views enforce the same identity, ownership and inclusion as the HTTP handlers; hidden UI or forged identifiers cannot bypass them
+- [ ] The one-time token is shown only to the owner and never stored in Chat history, transcripts or model context
+- [ ] Revocation and deletion remain available after inclusion ends
+
+### Verification
+
+- Connected Chat/view fixtures over the actual handlers with forged identifiers and lost inclusion
+- Transcript/model-context checks that no token or unrequested comment text is present
+
+### Dependencies and blockers
+
+Planning dependencies: WH-150, WH-105, WH-107, WH-109, WH-110. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/guest-previews.md](../../docs/guest-previews.md)
+- [docs/project-specification-storage.md](../../docs/project-specification-storage.md)
+- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
+- [docs/feature-inclusion.md](../../docs/feature-inclusion.md)
+- [docs/chat-interactions.md](../../docs/chat-interactions.md)
+
+### Execution coordination
+
+Issue: https://github.com/zemdregon/whumpo/issues/130. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-08 UTC: the Chat guestPreview revoke/delete controls now save their effect in the same revision-checked batch as the Chat turn (WH-004 finding B3), so a request refused with 409 changes nothing. Verified only locally by node tests/guest-preview-chat-atomic.mjs on SQLite and --d1; not deployed. See docs/guest-previews.md.
+- 2026-10-08 UTC: source and local verification only; the mapped issue #130 is open and its owner questions were answered on 2026-10-04. PR #131 (f991b18) added src/guest-previews/bindings.ts, ids-only Chat controls and the guest-previews view/panel over the existing WH-150 handlers. Re-run on 2026-10-08 UTC at origin/main ca17c6a (Node 24.21.0, aarch64 Linux, disposable local SQLite/local D1, no network, credential or remote Cloudflare/GitHub operation). node tests/guest-preview-bindings.mjs passed 8 groups on SQLite and with --d1 on local D1 (exact prepared confirmation before issuance, token only in the issuing response and never in any table, Chat turn, transcript, view or model context, forged/foreign/null identifiers, inert comments out of model context, management after inclusion ends); pnpm check passed. Synthetic data with fetch disabled; no deployment or real-browser acceptance is implied (see WH-152). Re-checked on 2026-10-09 UTC after rebasing onto origin/main 92a001f (plus the test-only TMPDIR fix 9847281, PR #202), with #175, #178 and #180 merged: the cited artifacts still exist, #130 is still open and tests/guest-preview-bindings.mjs passed 8 groups on SQLite and local D1 again; the B3 entry above (#178) is separate evidence.
+- 2026-10-31 UTC, CLOSED by PR #529 (main be4e6bf (origin/main at 2026-10-31), Node 24.21.0, pnpm 11.19.0, disposable local SQLite/local D1, no network, credential, secret or provider call). All three acceptance lines map to tests re-run today: tests/guest-preview-bindings.mjs passes 8 groups on SQLite and with --d1 (same identity, ownership and inclusion as the HTTP handlers; forged, foreign and null identifiers; exact prepared confirmation before issuance; the one-time token only in the issuing response and never in any table, Chat turn, transcript, view or model context; inert comments out of model context; revocation and deletion still available after inclusion ends) and tests/guest-preview-chat-atomic.mjs passes 7 groups on SQLite and with --d1 (Chat revoke/delete apply in the same revision-checked batch as the turn; a 409 changes nothing). The new raw-token group in tests/guest-previews.mjs adds the token and hash absent from every stored table. Not verified: a deployed Chat session against the guest-preview controls and real devices.
+
+## WH-152 — Accept the accountless guest preview journey in real browsers
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: verification. Size: M.
+
+Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+A guest on mobile and keyboard-only desktop opens a link, views the preview, sends a comment and sees the link stop working after the owner revokes it from the shared owner surface.
+
+### Scope
+
+- Playwright journey at 390x844 and desktop with keyboard-only operation and screen-reader names for the guest page
+- Owner issue/revoke/resolve through the WH-151 surface with synthetic approved photo assets
+- Check headers, sandbox, no cookies, no horizontal overflow and focus order
+
+### Acceptance criteria
+
+- [ ] Accountless preview, comment and revoke journey passes on mobile and keyboard
+- [ ] No workspace cookie, token in a URL path/query or guest text in logs
+
+### Verification
+
+- Local browser fixtures over the platform and sites Workers with disposable D1/R2
+
+### Dependencies and blockers
+
+Planning dependencies: WH-150, WH-151. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/guest-previews.md](../../docs/guest-previews.md)
+- [docs/project-specification-storage.md](../../docs/project-specification-storage.md)
+- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
+- [docs/feature-inclusion.md](../../docs/feature-inclusion.md)
+
+### Execution coordination
+
+Issue: https://github.com/zemdregon/whumpo/issues/141. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-08 UTC: local browser verification only; the mapped issue #141 is open. PR #142 (be5662a) added the Chromium owner and guest journey in tests/guest-preview-browser.mjs. Re-run on 2026-10-08 UTC at origin/main ca17c6a (Node 24.21.0, aarch64 Linux, disposable local SQLite/local D1, no network, credential or remote Cloudflare/GitHub operation). node tests/guest-preview-browser.mjs passed in headless Chromium at desktop 1280x800 keyboard and mobile 390x844 against the built owner panel, the platform Worker and the sites handler with local D1/R2 (owner prepare/confirm/revoke/resolve/delete, one-time link, accountless sandboxed preview with an approved private photo, keyboard comment, no cookie or stored/logged token, large text and reflow). The run used a Playwright module and Pillow borrowed from other existing local installs (WHUMPO_PLAYWRIGHT and a PATH shim) with no repository change. This is not a deployed, real-device, screen-reader or customer acceptance, and the release and live acceptance of guest previews remain WH-153. Re-checked on 2026-10-09 UTC after rebasing onto origin/main 92a001f (plus the test-only TMPDIR fix 9847281, PR #202), with #175, #178 and #180 merged: the cited artifacts still exist, #141 is still open and the journey passed again in headless Chromium; because the test hard-codes a /tmp prefix and /tmp was quota-limited on this host, it ran from a throwaway copy whose only change was that prefix (set to TMPDIR), deleted afterwards.
+- 2026-10-31 UTC, CLOSED by PR #529 (main be4e6bf (origin/main at 2026-10-31), Node 24.21.0, pnpm 11.19.0, disposable local SQLite/local D1, no network, credential, secret or provider call). node tests/guest-preview-browser.mjs passes in Chromium at desktop 1280x800 with keyboard and mobile 390x844 against the built owner panel, the platform Worker and the sites handler with local D1/R2 (owner prepare, confirm, revoke, resolve and delete; one-time link; accountless sandboxed preview with an approved private photo; keyboard comment; no workspace cookie on any guest request and no Set-Cookie; the token in exactly one owner response and in no request path or query; no token or guest text in Worker logs; large text and reflow; no horizontal overflow or control outside the viewport). The run used an existing local Playwright module (WHUMPO_PLAYWRIGHT) and the system Chromium (WHUMPO_CHROMIUM=/usr/bin/chromium). The full Chromium build requests /favicon.ico, which the fixture owner server answered with a 500 and failed the console-error assertion; the fixture now answers 204 (test-only change, one line). Not verified: physical phones and tablets, screen readers, real human guests.
 
 ## WH-180 — Freeze the review and receipt retention contract and decompose WH-061
 
@@ -8443,69 +8451,6 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Configure and compose maintained modules first; generate only missing custom behavior; preserve isolated customer data and execution with workload-appropriate infrastructure. Whumpo AI maintains projects and chats with owners only.
 
-## WH-073 — Serve published content and standard actions without maintenance inference
-
-Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
-
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-Published sites and deterministic customer services remain functional while Whumpo owner AI is unavailable.
-
-### Scope
-
-- Pre-render supported public content on approved changes and serve immutable assets repeatedly
-- Use shared APIs only for real dynamic reads/writes; ordinary menus/forms/galleries/availability rules use no model
-- Choose delivery/cache invalidation that preserves current unpublish, permission and safety-revocation behavior
-- Measure direct-asset versus Worker-routed requests accurately
-
-### Acceptance criteria
-
-- [ ] Visitor/service route inventories and transport stubs prove zero Whumpo maintainer model dispatch
-- [ ] Maintenance model outage or exhausted owner premium balance does not break published standard services
-- [ ] No serving optimization makes pending/private/revoked content publicly cacheable
-- [ ] A routing/auth Worker is counted as execution; direct static-asset allowances are not applied to dynamic traffic
-- [ ] Model-required customer extensions are separately configured under WH-079 and never fall back to Whumpo AI
-
-### Verification
-
-- Connected visitor/site journeys with maintainer transport unavailable and dispatch count asserted zero
-- Publish/restore/unpublish, permission-change and scanner-revocation cache tests
-- Measured request path and cold/warm cost evidence before delivery changes
-
-### Dependencies and blockers
-
-Planning dependencies: WH-066, WH-067, WH-071. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
-- [docs/mvp.md](../../docs/mvp.md)
-- [docs/site-health.md](../../docs/site-health.md)
-- [docs/content-safety.md](../../docs/content-safety.md)
-- [src/site-host.ts](../../src/site-host.ts)
-- [src/app-host.ts](../../src/app-host.ts)
-- [src/app-gateway.ts](../../src/app-gateway.ts)
-- [docs/workload-placement.md](../../docs/workload-placement.md)
-
-### Execution coordination
-
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-- 2026-10-08 UTC: verification slice only; local synthetic evidence, not deployed, not live-accepted; no Worker, schema, cache or delivery change; WH-073 stays open. tests/standard-service-no-maintainer.mjs (SQLite and --d1 on local D1; in the site verify profile) proves that src/site-host.ts, app-host.ts, app-gateway.ts, runtime/worker.ts and contact-page.ts reach no owner-maintenance inference module (src/index.ts is the positive control), and that the published site, directory, CMS, asset, guest-preview, visitor-app, contact form/submission, unpublish and safety-hold routes plus all three cron schedules record zero network calls, inference_calls, gateway_spend_attempts, standard-AI and gateway requests and Chat turns, with no cacheable response, both with no AI configuration and with a provider answering 503. The same route inventory and crons also run with the owners' funding exhausted in the durable rows (the standard usage allowance, inference_budgets, spent to its ceiling; and premium credit, premium approval and task, account and platform operator gateway buckets all spent to their limits), still with zero network calls and inference rows, every seeded budget/bucket/attempt row unchanged (no new attempt, reservation, dispatch or balance movement); the same rows refuse owner maintenance admission (inference_budget trigger, gateway reservation 409) while funded controls are admitted. Six mutations (inference import, provider fetch, public cache header, spend row) plus four funding mutations (a reservation import in the site root, a site-root check refusing on an exhausted allowance, a site-root write to a premium bucket, a site-root write to the usage allowance) each failed the test. Not proven: cache/pre-render/direct-asset delivery and revocation cache tests, request-path cost measurement, purchased credits or a real provider outage, WH-079 extensions, runtime Worker execution and live behavior. See docs/workload-placement.md.
-- 2026-10-08 UTC: measurement and design slice only; local synthetic evidence, not deployed, not live-accepted; no Worker source, wrangler configuration, schema, cache header or delivery change; WH-073 stays open. tools/request-path-inventory.mjs derives each visitor route class's entry Worker, run_worker_first behavior and service-binding targets from wrangler*.jsonc and measures the real sites, apps (via APP_HOST) and platform handlers on the current schema with counting D1, R2, service-binding, ASSETS, limiter, waitUntil and fetch stand-ins; docs/request-path-inventory.json and the generated docs/workload-placement.md table are checked by tests/request-path-inventory.mjs (SQLite and --d1 with identical counts; in the site verify profile). Findings: all 21 measured route classes invoke Worker code and none is a direct static-asset request (whumpo-sites has no assets; whumpo-platform and whumpo-apps are run_worker_first: true, so their bundled assets are Worker-first too, correcting two earlier doc rows); every response is no-store; a published root GET runs 4 D1 reads plus 1 traffic write, an approved photo GET 3 reads, 3 writes and 1 R2 get; repeat requests do identical work (no in-isolate cache; a true isolate cold start is not measurable locally); unpublish, safety hold, blocked photo approval and custom-domain disconnect each stop serving on the next request with no-store. Seven mutations (sites route pattern, public cache header on site-host, apps and platform run_worker_first narrowed, a Workers Caching block, a removed specification/safety check, an in-isolate form cache) plus a tampered committed count and a removed photo admission write each failed the test. Cloudflare Static Assets, Workers, Workers Caching, Cache API, purge, D1 and R2 billing facts were read on 2026-10-08 (entitlement and pricing require verification); four delivery designs are proposals only, recommending current no-store Worker delivery now and a revocation-gate plus version-keyed private body cache only after live volume justifies it, with Workers Caching and pre-rendered Static Assets rejected for customer content. Not proven: positive app/CMS/directory/backend-form paths, D1 rows read/written, CPU time, latency, live traffic volume, any cache implementation or its revocation cache tests, and owner decisions on latency bound, platform run_worker_first narrowing, photo counter writes and Workers Caching. See docs/workload-placement.md.
-- 2026-10-08 UTC: owner decision (AskUserQuestion in the roadmap session): keep the current no-store Worker delivery (design A) for customer content; schedule design B only if live volume shows material D1/R2/CPU cost. The decision authorizes no delivery change, cache, purge, configuration or deployment; the other four open decisions in docs/workload-placement.md remain open and the cache/revocation negative tests stay required before any caching.
-- 2026-10-09 UTC: verification slice 3 only; local synthetic evidence in workerd under Miniflare, not Cloudflare, not deployed, not live-accepted; no src, Worker, schema, cache or delivery change; WH-073 stays open. tests/standard-service-runtime-execution.mjs (pnpm test:standard-service-runtime-execution, SQLite and --d1; not in a verification profile) builds the real whumpo-runtime Worker (bundled QuickJS, wrangler dry-run) as tests/backend-runtime.mjs does, saves, owner-tests and publishes customer backends with the real backend transactions, and serves them through the real src/site-host.ts /backend route (publicBackend) with the maintainer absent and failing (503), owner funding unset, the standard allowance spent and premium, approval, task, account and platform buckets spent. The calls return the expected deterministic QuickJS values (84 runtime executions across 12 groups), with zero network calls in the host process (global fetch is a counting thrower), zero outbound connections from the runtime Worker (a copy with a counting outboundService, proven armed by a probe Worker), zero inference_calls, gateway_spend_attempts, standard_ai_requests, gateway_inference_requests and Chat turns, every funding row unchanged, and no cacheable response including refusals, preflight, failed-test and unpublished backends. The runtime Worker has no binding or outbound service (Miniflare options, wrangler.runtime.jsonc keys, wrangler No bindings found, workerd getBindings empty); a guest probing fetch, env, process and AI sees none. Four mutations (host fetch in publicBackend, awaited runtime fetch, public cache header, an ai binding in wrangler.runtime.jsonc) each failed the test; a fire-and-forget runtime fetch was cancelled by workerd before the counter and is not detected. Not proven: cache, pre-render and direct-asset delivery and revocation cache tests, request-path cost, purchased credits or a real provider outage, WH-079 extensions, a deployed runtime Worker or Cloudflare service binding, and live behavior. See docs/workload-placement.md.
-- 2026-10-27 UTC, local synthetic evidence only, not Cloudflare billing, CPU or latency, not deployed: PR #360 (merged 2026-10-26T14:50:05Z, merge commit 1246e5a) regenerates docs/request-path-inventory.json and the docs/workload-placement.md table. node tests/request-path-inventory.mjs had failed only in its last group (committed inventory differs from the measurement). 14 of 21 route classes each gained one D1 call/statement/read and operator_serving_stopped in the tables read, attributed to 4dea09c (WH-050 operator serving check wired into src/site-host.ts, src/contact-page.ts and src/app-gateway.ts); no cache-control, status, Worker-run, R2, service-hop, subrequest or revocation-probe change. The PR reports node tests/request-path-inventory.mjs pass (6 groups, SQLite, 21 routes, 4 revocation probes), --d1 pass (6 groups, local D1), node tools/verify.mjs site exit 0 and pnpm check exit 0. Stated limits: the row-to-commit mapping rests on the shared table name and file history, not a per-route bisect, and whether one extra D1 read on every public request (including 404s) is acceptable cost is left to the WH-073 owner. WH-073 stays open. Read from gh pr view and the PR body; nothing re-run here. Readiness unchanged.
-- 2026-10-29 UTC, local synthetic evidence only, not Cloudflare billing, CPU or latency, not deployed, not live-accepted: successful request paths slice (WH-073 stays open). tools/request-path-inventory.mjs now seeds a second published synthetic site through the real owner paths (tests/helpers/success-paths.mjs: Chat directory add and publish, tested backend with publication and a confirmed website form, a CMS instance deployed against a stub bridge service with one published post, application activation with a live page, and a passkey visitor) and measures eight success route classes beside the existing 404/400 forms: site.directory.json.live, site.directory.html.live, site.cms.index.live, site.cms.article.get, site.root.backend-form, site.backend.post, app.page.live and app.module.access.me (signed-in visitor, access.me). All return 200, are no-store (the directory also carries its snapshot digest as an ETag), make no subrequest, do identical repeat work, and the 21 earlier route classes and the 4 revocation probes are byte-identical. Cost shape from the regenerated table (SQLite statements, reads/writes): directory JSON 2 (2/0), directory page 3 (2/1), CMS index 3 (2/1), CMS article 3 (2/1), root with live form 6 (5/1, the same as the root without one: the form lookup is already read on every root request), backend form submission 3 (1/2) plus one BACKEND_RUNTIME hop, app page 1 (1/0) plus the APP_HOST hop, app module access.me 7 (7/0) plus the APP_HOST hop. tests/request-path-inventory.mjs gained a group for these routes (SQLite and --d1 pass, 7 groups, 29 routes). tests/standard-service-no-maintainer.mjs now also requests them (31 requests per variant) with the maintainer absent and failing and the owners' funding exhausted: 200s, zero network calls, zero inference, spend or Chat-turn rows, funding rows unchanged, and the backend runtime (the customer's own program, a service binding rather than a provider) called exactly once for the one form submission (SQLite and --d1 pass). The CMS site is seeded once because the platform admits only five CMS projects. A real, unrelated break on main was found and fixed on this branch: tests/safety-case-operations.mjs (run by verify site) failed because the B11 layout receipt cap (#465) added two DELETE sites on workspace_layout_receipts that tools/safety-hold-inventory.mjs did not classify; they are now classified as excluded (dashboard layout history, no project, visitor or customer content), which a reviewer should confirm. No schema, product or Worker change. Not decided here, left to the owner: live cold/warm cost on Cloudflare, and whether the extra D1 read on every public request (including 404s, from the WH-050 serving check) is acceptable. Readiness unchanged.
-
 ## WH-075 — Bound shared capacity and separate interactive from batch failures
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
@@ -8563,6 +8508,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/128. Planning owner: Unassigne
 ### Evidence
 
 - 2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.
+- 2026-10-31 UTC (PR #529, decision D28): WH-050 F2, the missing rate-limit binding on whumpo-sites (site HTML has no per-IP limit; one IP sent 150/150 in the P probe), moves here from WH-050. Check the Cloudflare Workers rate limiting binding's availability and price first (the Cloudflare docs connector needed re-authentication and it was not verified); it costs money only if that check says so. See docs/capacity-and-fairness.md.
 
 ## WH-078 — Measure composition reuse and full lifecycle cost per outcome
 
@@ -9709,7 +9655,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
 
-# F5 — Done (17)
+# F5 — Done (18)
 
 Verified complete with recorded evidence; kept for history and dependency context. Not candidates for new work.
 
@@ -10031,6 +9977,70 @@ Issue: https://github.com/zemdregon/whumpo/issues/47. Planning owner: Unassigned
 - 2026-10-01 WH-120 amendment: offline descriptors remove read/restore compatibility lists; retired fields and mismatched schema versions/digests reject. docs/workload-placement.md removes the proposed legacy placement adapter and specifies forward repair/current-schema restoration. All 60 offline checks pass; no production consumer, provider call, deployment or CMS functional test.
 - 2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #47 (zemdregon/whumpo) for the workload placement and bounded execution specification, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place.
 - 2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #48 (zemdregon/whumpo) is the merged change(s) behind the evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open.
+
+## WH-073 — Serve published content and standard actions without maintenance inference
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
+
+Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Published sites and deterministic customer services remain functional while Whumpo owner AI is unavailable.
+
+### Scope
+
+- Pre-render supported public content on approved changes and serve immutable assets repeatedly
+- Use shared APIs only for real dynamic reads/writes; ordinary menus/forms/galleries/availability rules use no model
+- Choose delivery/cache invalidation that preserves current unpublish, permission and safety-revocation behavior
+- Measure direct-asset versus Worker-routed requests accurately
+
+### Acceptance criteria
+
+- [ ] Visitor/service route inventories and transport stubs prove zero Whumpo maintainer model dispatch
+- [ ] Maintenance model outage or exhausted owner premium balance does not break published standard services
+- [ ] No serving optimization makes pending/private/revoked content publicly cacheable
+- [ ] A routing/auth Worker is counted as execution; direct static-asset allowances are not applied to dynamic traffic
+- [ ] Model-required customer extensions are separately configured under WH-079 and never fall back to Whumpo AI
+
+### Verification
+
+- Connected visitor/site journeys with maintainer transport unavailable and dispatch count asserted zero
+- Publish/restore/unpublish, permission-change and scanner-revocation cache tests
+- Measured request path and cold/warm cost evidence before delivery changes
+
+### Dependencies and blockers
+
+Planning dependencies: WH-066, WH-067, WH-071. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
+- [docs/mvp.md](../../docs/mvp.md)
+- [docs/site-health.md](../../docs/site-health.md)
+- [docs/content-safety.md](../../docs/content-safety.md)
+- [src/site-host.ts](../../src/site-host.ts)
+- [src/app-host.ts](../../src/app-host.ts)
+- [src/app-gateway.ts](../../src/app-gateway.ts)
+- [docs/workload-placement.md](../../docs/workload-placement.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-08 UTC: verification slice only; local synthetic evidence, not deployed, not live-accepted; no Worker, schema, cache or delivery change; WH-073 stays open. tests/standard-service-no-maintainer.mjs (SQLite and --d1 on local D1; in the site verify profile) proves that src/site-host.ts, app-host.ts, app-gateway.ts, runtime/worker.ts and contact-page.ts reach no owner-maintenance inference module (src/index.ts is the positive control), and that the published site, directory, CMS, asset, guest-preview, visitor-app, contact form/submission, unpublish and safety-hold routes plus all three cron schedules record zero network calls, inference_calls, gateway_spend_attempts, standard-AI and gateway requests and Chat turns, with no cacheable response, both with no AI configuration and with a provider answering 503. The same route inventory and crons also run with the owners' funding exhausted in the durable rows (the standard usage allowance, inference_budgets, spent to its ceiling; and premium credit, premium approval and task, account and platform operator gateway buckets all spent to their limits), still with zero network calls and inference rows, every seeded budget/bucket/attempt row unchanged (no new attempt, reservation, dispatch or balance movement); the same rows refuse owner maintenance admission (inference_budget trigger, gateway reservation 409) while funded controls are admitted. Six mutations (inference import, provider fetch, public cache header, spend row) plus four funding mutations (a reservation import in the site root, a site-root check refusing on an exhausted allowance, a site-root write to a premium bucket, a site-root write to the usage allowance) each failed the test. Not proven: cache/pre-render/direct-asset delivery and revocation cache tests, request-path cost measurement, purchased credits or a real provider outage, WH-079 extensions, runtime Worker execution and live behavior. See docs/workload-placement.md.
+- 2026-10-08 UTC: measurement and design slice only; local synthetic evidence, not deployed, not live-accepted; no Worker source, wrangler configuration, schema, cache header or delivery change; WH-073 stays open. tools/request-path-inventory.mjs derives each visitor route class's entry Worker, run_worker_first behavior and service-binding targets from wrangler*.jsonc and measures the real sites, apps (via APP_HOST) and platform handlers on the current schema with counting D1, R2, service-binding, ASSETS, limiter, waitUntil and fetch stand-ins; docs/request-path-inventory.json and the generated docs/workload-placement.md table are checked by tests/request-path-inventory.mjs (SQLite and --d1 with identical counts; in the site verify profile). Findings: all 21 measured route classes invoke Worker code and none is a direct static-asset request (whumpo-sites has no assets; whumpo-platform and whumpo-apps are run_worker_first: true, so their bundled assets are Worker-first too, correcting two earlier doc rows); every response is no-store; a published root GET runs 4 D1 reads plus 1 traffic write, an approved photo GET 3 reads, 3 writes and 1 R2 get; repeat requests do identical work (no in-isolate cache; a true isolate cold start is not measurable locally); unpublish, safety hold, blocked photo approval and custom-domain disconnect each stop serving on the next request with no-store. Seven mutations (sites route pattern, public cache header on site-host, apps and platform run_worker_first narrowed, a Workers Caching block, a removed specification/safety check, an in-isolate form cache) plus a tampered committed count and a removed photo admission write each failed the test. Cloudflare Static Assets, Workers, Workers Caching, Cache API, purge, D1 and R2 billing facts were read on 2026-10-08 (entitlement and pricing require verification); four delivery designs are proposals only, recommending current no-store Worker delivery now and a revocation-gate plus version-keyed private body cache only after live volume justifies it, with Workers Caching and pre-rendered Static Assets rejected for customer content. Not proven: positive app/CMS/directory/backend-form paths, D1 rows read/written, CPU time, latency, live traffic volume, any cache implementation or its revocation cache tests, and owner decisions on latency bound, platform run_worker_first narrowing, photo counter writes and Workers Caching. See docs/workload-placement.md.
+- 2026-10-08 UTC: owner decision (AskUserQuestion in the roadmap session): keep the current no-store Worker delivery (design A) for customer content; schedule design B only if live volume shows material D1/R2/CPU cost. The decision authorizes no delivery change, cache, purge, configuration or deployment; the other four open decisions in docs/workload-placement.md remain open and the cache/revocation negative tests stay required before any caching.
+- 2026-10-09 UTC: verification slice 3 only; local synthetic evidence in workerd under Miniflare, not Cloudflare, not deployed, not live-accepted; no src, Worker, schema, cache or delivery change; WH-073 stays open. tests/standard-service-runtime-execution.mjs (pnpm test:standard-service-runtime-execution, SQLite and --d1; not in a verification profile) builds the real whumpo-runtime Worker (bundled QuickJS, wrangler dry-run) as tests/backend-runtime.mjs does, saves, owner-tests and publishes customer backends with the real backend transactions, and serves them through the real src/site-host.ts /backend route (publicBackend) with the maintainer absent and failing (503), owner funding unset, the standard allowance spent and premium, approval, task, account and platform buckets spent. The calls return the expected deterministic QuickJS values (84 runtime executions across 12 groups), with zero network calls in the host process (global fetch is a counting thrower), zero outbound connections from the runtime Worker (a copy with a counting outboundService, proven armed by a probe Worker), zero inference_calls, gateway_spend_attempts, standard_ai_requests, gateway_inference_requests and Chat turns, every funding row unchanged, and no cacheable response including refusals, preflight, failed-test and unpublished backends. The runtime Worker has no binding or outbound service (Miniflare options, wrangler.runtime.jsonc keys, wrangler No bindings found, workerd getBindings empty); a guest probing fetch, env, process and AI sees none. Four mutations (host fetch in publicBackend, awaited runtime fetch, public cache header, an ai binding in wrangler.runtime.jsonc) each failed the test; a fire-and-forget runtime fetch was cancelled by workerd before the counter and is not detected. Not proven: cache, pre-render and direct-asset delivery and revocation cache tests, request-path cost, purchased credits or a real provider outage, WH-079 extensions, a deployed runtime Worker or Cloudflare service binding, and live behavior. See docs/workload-placement.md.
+- 2026-10-27 UTC, local synthetic evidence only, not Cloudflare billing, CPU or latency, not deployed: PR #360 (merged 2026-10-26T14:50:05Z, merge commit 1246e5a) regenerates docs/request-path-inventory.json and the docs/workload-placement.md table. node tests/request-path-inventory.mjs had failed only in its last group (committed inventory differs from the measurement). 14 of 21 route classes each gained one D1 call/statement/read and operator_serving_stopped in the tables read, attributed to 4dea09c (WH-050 operator serving check wired into src/site-host.ts, src/contact-page.ts and src/app-gateway.ts); no cache-control, status, Worker-run, R2, service-hop, subrequest or revocation-probe change. The PR reports node tests/request-path-inventory.mjs pass (6 groups, SQLite, 21 routes, 4 revocation probes), --d1 pass (6 groups, local D1), node tools/verify.mjs site exit 0 and pnpm check exit 0. Stated limits: the row-to-commit mapping rests on the shared table name and file history, not a per-route bisect, and whether one extra D1 read on every public request (including 404s) is acceptable cost is left to the WH-073 owner. WH-073 stays open. Read from gh pr view and the PR body; nothing re-run here. Readiness unchanged.
+- 2026-10-29 UTC, local synthetic evidence only, not Cloudflare billing, CPU or latency, not deployed, not live-accepted: successful request paths slice (WH-073 stays open). tools/request-path-inventory.mjs now seeds a second published synthetic site through the real owner paths (tests/helpers/success-paths.mjs: Chat directory add and publish, tested backend with publication and a confirmed website form, a CMS instance deployed against a stub bridge service with one published post, application activation with a live page, and a passkey visitor) and measures eight success route classes beside the existing 404/400 forms: site.directory.json.live, site.directory.html.live, site.cms.index.live, site.cms.article.get, site.root.backend-form, site.backend.post, app.page.live and app.module.access.me (signed-in visitor, access.me). All return 200, are no-store (the directory also carries its snapshot digest as an ETag), make no subrequest, do identical repeat work, and the 21 earlier route classes and the 4 revocation probes are byte-identical. Cost shape from the regenerated table (SQLite statements, reads/writes): directory JSON 2 (2/0), directory page 3 (2/1), CMS index 3 (2/1), CMS article 3 (2/1), root with live form 6 (5/1, the same as the root without one: the form lookup is already read on every root request), backend form submission 3 (1/2) plus one BACKEND_RUNTIME hop, app page 1 (1/0) plus the APP_HOST hop, app module access.me 7 (7/0) plus the APP_HOST hop. tests/request-path-inventory.mjs gained a group for these routes (SQLite and --d1 pass, 7 groups, 29 routes). tests/standard-service-no-maintainer.mjs now also requests them (31 requests per variant) with the maintainer absent and failing and the owners' funding exhausted: 200s, zero network calls, zero inference, spend or Chat-turn rows, funding rows unchanged, and the backend runtime (the customer's own program, a service binding rather than a provider) called exactly once for the one form submission (SQLite and --d1 pass). The CMS site is seeded once because the platform admits only five CMS projects. A real, unrelated break on main was found and fixed on this branch: tests/safety-case-operations.mjs (run by verify site) failed because the B11 layout receipt cap (#465) added two DELETE sites on workspace_layout_receipts that tools/safety-hold-inventory.mjs did not classify; they are now classified as excluded (dashboard layout history, no project, visitor or customer content), which a reviewer should confirm. No schema, product or Worker change. Not decided here, left to the owner: live cold/warm cost on Cloudflare, and whether the extra D1 read on every public request (including 404s, from the WH-050 serving check) is acceptable. Readiness unchanged.
+- 2026-10-31 UTC, CLOSED by PR #529 on the D29 decision (main be4e6bf (origin/main at 2026-10-31), Node 24.21.0, pnpm 11.19.0, disposable local SQLite/local D1, no network, credential, secret or provider call). No delivery change is planned, so the live cold/warm measurement is not required. Acceptance lines: (1) zero maintainer dispatch: tests/standard-service-no-maintainer.mjs passes 9 groups on SQLite and --d1 (import graphs of the site, app, gateway, runtime and contact entry points reach no inference module, with the platform entry as the positive control; 31 requests per variant across published site, directory, CMS, backend form, visitor app and signed-in module call, guest-preview, unpublish and safety-hold routes plus all three cron schedules: zero network calls, inference_calls, gateway spend attempts, standard-AI requests and Chat turns). (2) Outage or exhausted balance: the same requests run with no AI configuration, with the provider answering 503, and with the owners' allowance and premium buckets spent; all still succeed and no funding row moves. (3) Nothing made cacheable: no delivery change was made; tests/request-path-inventory.mjs passes 7 groups on SQLite and --d1 (29 route classes, every response no-store, identical repeat work, and 4 revocation probes for unpublish, safety hold, photo approval and custom-domain mapping stop serving on the next request). (4) Routing Worker counted as execution: the same inventory shows all 29 route classes invoke Worker code and none is a direct static-asset request (whumpo-sites has no assets; whumpo-platform and whumpo-apps are run_worker_first), and docs/workload-placement.md records that Worker-first handling is billable code. (5) Model-required customer extensions: none exists (WH-079 is deferred), and every visitor and service route above makes zero inference calls, so nothing can fall back to Whumpo AI; this line is satisfied by absence, not by an extension test, and WH-079's own acceptance carries the forward constraint. Also tests/standard-service-runtime-execution.mjs (2026-10-09) is not re-run here. Not decided and not needed to close: whether the extra D1 read per public request (operator_serving_stopped) is acceptable, a latency bound, run_worker_first narrowing, photo counter writes and Workers Caching; these matter only if a delivery change is proposed. Not measured: Cloudflare billing, CPU, latency, cold start.
 
 ## WH-123 — Freeze the shared module contract and decompose WH-067
 
