@@ -345,6 +345,9 @@ try{
  // current ledger says was erased or revoked, and the gate reports clear. Synthetic and local: sessions are epoch evidence, not ledger rows.
  {const unavailable=await reconcileRestoreSuppressions(target.DRILL_A,lost,suppression);assert.equal(unavailable.status,'unavailable');assert.deepEqual(unavailable.holds,['suppression-source-unavailable'],'a caller that reads only holds sees a hold');}
  await drillHold(()=>reconcileRestoreSuppressions(target.DRILL_A,db,{}),'suppression-module');
+ // The hold names why the replay was refused (error name, code and a bounded message), never row data.
+ {const refusing={...suppression,replayRestoreSuppressions:async()=>{throw Object.assign(Error('FOREIGN KEY constraint failed '+'f'.repeat(64)),{code:'ERR_SQLITE_ERROR'});}};
+  await assert.rejects(()=>reconcileRestoreSuppressions(target.DRILL_A,db,refusing),e=>e instanceof DrillHold&&e.code==='suppression-replay-refused'&&/^Error ERR_SQLITE_ERROR: FOREIGN KEY constraint failed/.test(e.detail)&&!/f{64}/.test(e.detail)&&e.detail.length<=240,'the replay refusal carries its real, bounded cause');}
  const reconciled=await phase('reconcileRestoreSuppressions',()=>reconcileRestoreSuppressions(target.DRILL_A,db,suppression));
  assert.equal(reconciled.status,'reconciled');assert.ok(reconciled.pendingBefore.visitor>=1,JSON.stringify(reconciled.pendingBefore));assert.ok(reconciled.applied.visitorsRemoved>=1);
  assert.equal(await target.DRILL_A.prepare('SELECT id FROM app_visitors WHERE id=?').bind(erased.who).first(),null,'The erased visitor is not resurrected');

@@ -18,7 +18,9 @@ const id=v=>typeof v==='string'&&/^[a-zA-Z0-9_-]{1,128}$/.test(v);
 const ident=s=>'"'+s.replaceAll('"','""')+'"';
 const fenced={servingAllowed:false,providerDispatchAllowed:false,retirementAllowed:false};
 const limits={objects:10000,objectBytes:1048576,statements:20000,sqlBytes:64*1024*1024};
-export class DrillHold extends Error{constructor(code){super('Recovery drill step held: '+code);this.code=code;}}
+export class DrillHold extends Error{constructor(code,cause){super('Recovery drill step held: '+code);this.code=code;if(cause!==undefined)this.detail=causeDetail(cause);}}
+// Error name, code and a bounded message with long hex runs and quoted values removed: why a step refused, never the data it touched.
+const causeDetail=e=>`${e&&e.name||'Error'}${e&&e.code?' '+e.code:''}: ${String(e&&e.message||e).replace(/[0-9a-fA-F]{32,}/g,'<hex>').replace(/'[^']*'/g,"'<v>'").slice(0,160)}`;
 const hold=(value,code)=>{if(!value)throw new DrillHold(code);};
 const pointFile='recovery-point.json';
 
@@ -223,7 +225,7 @@ export async function reconcileRestoreSuppressions(candidateDb,sourceDb,suppress
  let ledger;try{ledger=await suppression.captureRestoreSuppressions(sourceDb);}catch{return {...fenced,status:'unavailable',holds:['suppression-source-unavailable'],reconciliation:'unavailable-without-current-source'};}
  const expected={triggerSha256:await currentTriggerSha256(suppression)};
  const before=await suppression.checkRestoreSuppressions(candidateDb,ledger,expected);
- let replay;try{replay=await suppression.replayRestoreSuppressions(candidateDb,ledger,{source:sourceDb,name:'recovery drill candidate'});}catch{throw new DrillHold('suppression-replay-refused');}
+ let replay;try{replay=await suppression.replayRestoreSuppressions(candidateDb,ledger,{source:sourceDb,name:'recovery drill candidate'});}catch(error){throw new DrillHold('suppression-replay-refused',error);}
  const after=await suppression.checkRestoreSuppressions(candidateDb,ledger,expected);
  hold(after.clear,'suppression-not-clear');
  return {...fenced,status:'reconciled',holds:[],entries:ledger.entries.length,ledgerSha256:ledger.sha256,pendingBefore:before.pending,applied:replay.applied};
