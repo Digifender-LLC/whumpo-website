@@ -4,7 +4,7 @@ import {validateInstances,type RecordField} from '../project-specification/v3/mo
 import {assertWorkspace} from '../workspace-identity/admission';
 import {ModuleError} from './policy';
 import {instanceOf,type RegistryRow} from './registry';
-import {fieldValue,live,page} from './records';
+import {dateOnly,fieldValue,leadStages,live,page} from './records';
 import {recordsExportHook} from './export-hooks';
 
 /** WH-127 records descriptor export hook `records-export-v1` (WH-071 lifecycle; WH-077 composes it, no route serves it).
@@ -20,7 +20,7 @@ const local=/^[a-z][a-z0-9-]{0,39}$/;
 const iso=(seconds:number)=>new Date(seconds*1000).toISOString();
 const pageSize=200;
 type ExportField={key:string;label:string;type:RecordField['type'];optional:boolean;read:RecordField['read'];options?:{value:string;label:string}[]};
-type ExportRecord={entryId:string;formId:string;fieldsRevision:number;submittedBy:'public'|'visitor'|'staff';visitorId:string|null;revision:number;createdAt:string;updatedAt:string;expiresAt:string;values:Record<string,unknown>;attachments:string[]};
+type ExportRecord={entryId:string;formId:string;fieldsRevision:number;submittedBy:'public'|'visitor'|'staff';visitorId:string|null;revision:number;createdAt:string;updatedAt:string;expiresAt:string;values:Record<string,unknown>;attachments:string[];lead?:{stage:string;note:string;dueDate:string|null;revision:number}|null};
 export type RecordsExportOptions={recordId:string;visitorId?:string|null;after?:string|null};
 
 /** Owner only (current workspace identity and project ownership), in every activation state and with the catalog pin
@@ -41,12 +41,14 @@ export async function exportRecords(db:D1Database,user:string,project:string,res
  if(subject&&!await db.prepare('SELECT 1 FROM app_visitors WHERE id=? AND project_id=?').bind(subject,project).first())throw new ModuleError('not_found');
  const window=live(instance.config.retentionDays);
  const where={sql:`r.instance_id=? AND r.project_id=? AND r.schema_id=? AND ${window.sql}${subject?' AND r.visitor_id=?':''}`,params:[resourceId,project,schema.id,...window.params,...(subject?[subject]:[])]};
- const {rows,next}=await page(db,where,{key:await jsonDigest(['records-export',resourceId,schema.id,user,subject??'']),configRevision:row.config_revision,accessRevision:0},pageSize,after);
+ // WH-093: the owner's own lead notes ride in the owner export only; a visitor-subject slice is that visitor's data and never carries them.
+ const {rows,next}=await page(db,where,{key:await jsonDigest(['records-export',resourceId,schema.id,user,subject??'']),configRevision:row.config_revision,accessRevision:0},pageSize,after,!subject);
  // Attachment file ids only (the bytes belong to the files module export); sorted so the digest is stable.
  const linked=new Map<string,string[]>();
  if(rows.length)for(const l of (await db.prepare(`SELECT entry_id,file_id FROM module_record_files WHERE entry_id IN (${rows.map(()=>'?').join()}) ORDER BY file_id`).bind(...rows.map(r=>r.id)).all<{entry_id:string;file_id:string}>()).results)linked.set(l.entry_id,[...linked.get(l.entry_id)??[],l.file_id]);
  const records:ExportRecord[]=rows.map(r=>({entryId:r.id,formId:r.form_id,fieldsRevision:r.fields_revision,submittedBy:r.submitter_kind,visitorId:r.visitor_id,revision:r.revision,
-  createdAt:iso(r.created_at),updatedAt:iso(r.updated_at),expiresAt:iso(r.expires_at),values:JSON.parse(r.values_json) as Record<string,unknown>,attachments:linked.get(r.id)??[]}));
+  createdAt:iso(r.created_at),updatedAt:iso(r.updated_at),expiresAt:iso(r.expires_at),values:JSON.parse(r.values_json) as Record<string,unknown>,attachments:linked.get(r.id)??[],
+  lead:subject||r.lead_revision==null?null:{stage:r.lead_stage!,note:r.lead_note!,dueDate:r.lead_due??null,revision:r.lead_revision}}));
  const fields:ExportField[]=schema.fields.map(f=>({key:f.key,label:f.label,type:f.type,optional:f.optional,read:f.read,...(f.type==='choice'?{options:f.options.map(o=>({value:o.value,label:o.label}))}:{})}));
  return {format:'whumpo-module-records',schemaVersion:1,project:{id:project},
   instance:{resourceId,localId:row.local_id,configRevision:row.config_revision,retentionDays:instance.config.retentionDays},
@@ -82,12 +84,16 @@ export async function validateRecordsExport(value:unknown){
  if(value.next!==null&&(typeof value.next!=='string'||value.next.length>400||!/^[A-Za-z0-9_-]+$/.test(value.next)))return fail();
  const seen=new Set<string>();let previous:string|null=null;
  for(const r of records as unknown[]){
-  if(!exact(r,['entryId','formId','fieldsRevision','submittedBy','visitorId','revision','createdAt','updatedAt','expiresAt','values','attachments'])||typeof r.entryId!=='string'||!uuid.test(r.entryId)||seen.has(r.entryId)
+  // `lead` (WH-093) is optional so an export made before leads existed still validates; it is null in a visitor-subject slice.
+  if(!exact(r,['entryId','formId','fieldsRevision','submittedBy','visitorId','revision','createdAt','updatedAt','expiresAt','values','attachments',...plain(r)&&Object.hasOwn(r,'lead')?['lead']:[]])||typeof r.entryId!=='string'||!uuid.test(r.entryId)||seen.has(r.entryId)
    ||typeof r.formId!=='string'||!local.test(r.formId)||!count(r.fieldsRevision)||(r.fieldsRevision as number)>(schema.fieldsRevision as number)||!count(r.revision)
    ||!['public','visitor','staff'].includes(r.submittedBy as string)||(r.submittedBy==='public')!==(r.visitorId===null)||r.visitorId!==null&&(typeof r.visitorId!=='string'||!uuid.test(r.visitorId))
    ||subject!==null&&r.visitorId!==subject.visitorId||!time(r.createdAt)||!time(r.updatedAt)||!time(r.expiresAt)
    ||String(r.updatedAt)<String(r.createdAt)||Date.parse(String(r.expiresAt))<=Date.parse(String(r.createdAt))||Date.parse(String(r.expiresAt))-Date.parse(String(r.createdAt))>365*86400000
    ||previous!==null&&String(r.createdAt)>previous||!plain(r.values)||!Array.isArray(r.attachments)||r.attachments.length>4||new Set(r.attachments).size!==r.attachments.length||!r.attachments.every(a=>typeof a==='string'&&uuid.test(a)))return fail();
+  const lead=Object.hasOwn(r,'lead')?r.lead:null;
+  if(lead!==null&&(subject!==null||!exact(lead,['stage','note','dueDate','revision'])||!(leadStages as readonly unknown[]).includes(lead.stage)||typeof lead.note!=='string'||Array.from(lead.note).length>2000
+   ||lead.dueDate!==null&&!dateOnly(lead.dueDate)||!count(lead.revision)))return fail();
   seen.add(r.entryId);previous=String(r.createdAt);
   const values=r.values;
   if(Object.keys(values).some(k=>!fields.some(f=>f.key===k)))return fail();

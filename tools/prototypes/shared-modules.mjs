@@ -139,6 +139,7 @@ export function admitInstance(input,catalog){
 export const moduleOperations=Object.freeze({
  'records.view':{kind:'records',write:false},'records.get':{kind:'records',write:false},
  'forms.submit':{kind:'records',write:true},'records.update':{kind:'records',write:true},'records.remove':{kind:'records',write:true},
+ 'leads.update':{kind:'records',write:true},
  'files.prepareUpload':{kind:'files',write:true},'files.putBytes':{kind:'files',write:true},'files.read':{kind:'files',write:false},
  'files.gallery':{kind:'files',write:false},'files.requestRemoval':{kind:'files',write:true},
  'access.me':{kind:'access',write:false},'access.list':{kind:'access',write:false},
@@ -203,6 +204,8 @@ export function decide(principalInput,instanceInput,operation,target){
    return keys.length&&keys.every(k=>s.staffWrite.includes(k))?allow({fields:keys}):deny('field_forbidden');
   }
   case 'records.remove':return p.kind==='owner'?allow():deny('forbidden');
+  // WH-093 lead stage, note and due date: owner only, never staff, visitor or public.
+  case 'leads.update':{if(p.kind!=='owner')return deny('forbidden');return c.schemas.some(x=>x.id===target?.recordId)?allow():deny('not_found');}
   case 'records.get':{
    const s=c.schemas.find(x=>x.id===target?.recordId);if(!s)return deny('not_found');
    if(p.kind==='owner')return allow({fields:s.fields.map(f=>f.key),scope:'all'});

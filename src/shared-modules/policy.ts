@@ -33,6 +33,7 @@ export class ModuleError extends Error{
 export const moduleOperations=Object.freeze({
  'records.view':{kind:'records',write:false},'records.get':{kind:'records',write:false},
  'forms.submit':{kind:'records',write:true},'records.update':{kind:'records',write:true},'records.remove':{kind:'records',write:true},
+ 'leads.update':{kind:'records',write:true},
  'files.prepareUpload':{kind:'files',write:true},'files.putBytes':{kind:'files',write:true},'files.read':{kind:'files',write:false},
  'files.gallery':{kind:'files',write:false},'files.requestRemoval':{kind:'files',write:true},
  'access.me':{kind:'access',write:false},'access.list':{kind:'access',write:false},
@@ -40,6 +41,9 @@ export const moduleOperations=Object.freeze({
  'collections.readPublic':{kind:'content',write:false},
 } as const satisfies Record<string,{kind:ModuleKind;write:boolean}>);
 export type ModuleOperation=keyof typeof moduleOperations;
+/** WH-093: owner-only operations that also need a current launch feature at the commit (the receipt's `admitted` predicate). Reading, export and
+ * removal of the data they wrote stay available without it. Lead stages, notes and due dates are never a visitor, staff or public operation. */
+export const ownerFeatureOperations=Object.freeze({'leads.update':'business.leads'} as const satisfies Partial<Record<ModuleOperation,string>>);
 /** WH-067 decision D4 (October 31, 2026): these four operations stay in the closed set but are permanently replaced by delivered
  * paths and never get a handler (an engine request for one is `unavailable`). A test fails if one gains a handler or if any other
  * operation lacks one. */
@@ -102,7 +106,7 @@ export function decideModule(p:ModulePrincipal,instance:ModuleInstance,operation
    return (v.audience==='staff'?staff:p.kind==='visitor')?allow([...v.fields],v.scope):anonymous();
   }
   const s=c.schemas.find(x=>x.id===t.recordId);
-  if(operation==='records.remove')return p.kind==='owner'?(s?allow():deny('not_found')):deny('forbidden');
+  if(operation==='records.remove'||operation==='leads.update')return p.kind==='owner'?(s?allow():deny('not_found')):deny('forbidden');
   if(!s)return deny('not_found');
   if(operation==='records.update'){
    if(p.kind==='owner')return allow(s.fields.map(f=>f.key));

@@ -298,7 +298,7 @@ try{
   // LC-06 mechanism (D4): any new statement that deletes or rewrites module-held data must be examined for safety holds before this list grows.
   // Each is backed by a BEFORE DELETE/UPDATE trigger the hold tests execute (records, files via project_files, visitor erasure) or removes no content.
   {const {readdir}=await import('node:fs/promises');const found=[];
-   for(const f of (await readdir('src',{recursive:true})).filter(f=>f.endsWith('.ts')))for(const [,verb,table] of (await readFile('src/'+f,'utf8')).matchAll(/(DELETE FROM|UPDATE) (module_records|module_files|module_record_files|module_record_events|project_files|app_visitors|module_instances|module_access_roles)\b/g))found.push(f+':'+verb+' '+table);
+   for(const f of (await readdir('src',{recursive:true})).filter(f=>f.endsWith('.ts')))for(const [,verb,table] of (await readFile('src/'+f,'utf8')).matchAll(/(DELETE FROM|UPDATE) (module_records|module_files|module_record_files|module_record_leads|module_record_events|project_files|app_visitors|module_instances|module_access_roles)\b/g))found.push(f+':'+verb+' '+table);
    assert.deepEqual(found.sort(),[
     'app-auth.ts:UPDATE app_visitors',                           // revocation flag only
     'app-lifecycle.ts:DELETE FROM app_visitors',                 // safety_hold_visitor_retained + module cascades; tests/boundary-visitor-deletion-hold.mjs, shared-modules-records.mjs
@@ -312,7 +312,7 @@ try{
   const handled=Object.keys(m.sharedModules.moduleHandlers),replaced=Object.keys(m.modulePolicy.replacedOperations);
   assert.deepEqual([...handled,...replaced].sort(),Object.keys(m.modulePolicy.moduleOperations).sort());
   assert.deepEqual(replaced.sort(),['access.confirmRole','access.prepareRole','files.prepareUpload','files.requestRemoval']);
-  assert.deepEqual(Object.keys(m.modulePolicy.moduleOperations).sort(),['access.confirmRole','access.list','access.me','access.prepareRole','collections.readPublic','files.gallery','files.prepareUpload','files.putBytes','files.read','files.requestRemoval','forms.submit','records.get','records.remove','records.update','records.view']);
+  assert.deepEqual(Object.keys(m.modulePolicy.moduleOperations).sort(),['access.confirmRole','access.list','access.me','access.prepareRole','collections.readPublic','files.gallery','files.prepareUpload','files.putBytes','files.read','files.requestRemoval','forms.submit','leads.update','records.get','records.remove','records.update','records.view']);
   const inference=/^src\/(ai|ai-chat|ai-gateway|acknowledgment|site-agent|agent-[a-z-]+|standard-ai[a-z-]*|chat|backend-chat|app-upgrade-chat|app-recovery-chat|app-page-design)\.ts$|^src\/chat-interactions\/(agent|agent-request|model-continuation|continuation)\.ts$/;
   for(const entry of ['tests/fixtures/module-compositions/staff-portal.mjs','tests/fixtures/module-compositions/visitor-intake.mjs','src/app-gateway.ts','src/shared-modules/api.ts','src/shared-modules/records.ts','src/shared-modules/files.ts','src/shared-modules/access.ts','src/shared-modules/collections.ts']){
    const out=await build({entryPoints:[entry],bundle:true,format:'esm',platform:'node',write:false,metafile:true,logLevel:'silent'});

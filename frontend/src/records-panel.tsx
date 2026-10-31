@@ -3,7 +3,8 @@ import {useQuery} from '@tanstack/react-query';
 import {Link} from '@tanstack/react-router';
 import type {PublicFormState,RecordsSetup,RecordsSummaryFacts} from '../../src/shared-modules/shape';
 import {appointmentSetupView} from './lib/appointment-form';
-import {api,message} from './lib/api';
+import {APIError,api,message} from './lib/api';
+import {Textarea} from './components/ui/textarea';
 import {Button} from './components/ui/button';
 import {Section} from './workspace-layout';
 import {StateNote} from './view-states';
@@ -14,8 +15,12 @@ import {Field} from './workspace-layout';
 import {ConfirmButton,ProjectSelect,QueryStatus,StaleProject,useProjectSelection} from './workspace-controls';
 
 type Item=RecordsSummaryFacts['items'][number];
-type RecordPage={resourceId:string;recordId:string;configRevision:number;fields:{key:string;label:string;type:string}[];
- items:{entryId:string;revision:number;createdAt:string;updatedAt:string;submittedBy:'public'|'visitor'|'staff';visitorId:string|null;values:Record<string,unknown>}[];next:string|null};
+export const stages=['new','contacted','qualified','won','lost'] as const;
+export type Stage=typeof stages[number];
+export type Lead={stage:Stage;note:string;dueDate:string|null;revision:number};
+export type LeadChanges=Partial<{stage:Stage;note:string;dueDate:string|null}>;
+type RecordPage={resourceId:string;recordId:string;configRevision:number;fields:{key:string;label:string;type:string}[];leads:{editable:boolean};
+ items:{entryId:string;revision:number;createdAt:string;updatedAt:string;submittedBy:'public'|'visitor'|'staff';visitorId:string|null;values:Record<string,unknown>;lead:Lead}[];next:string|null};
 export type FormSending='inactive'|'spending-limit-unset'|'active'|'off'|'plan'|'no-recipient'|'contained';
 export type Setup={delivery:'inactive'|'spending-limit-unset'|'active';forms:{instanceId:string;formId:string;notices:{owner:boolean;staff:boolean;receipt:boolean};businessName:string;revision:number;sending:FormSending;counts:{sent:number;waiting:number;notSent:number}}[]};
 const sending:Record<FormSending,string>={inactive:'Not sending yet. Whumpo has not turned on email delivery.','spending-limit-unset':'Not sending yet. Whumpo has not set its monthly spending limit, so appointment emails are not queued or sent, and a request that arrives now is not emailed later.',
@@ -24,6 +29,11 @@ const nameProblem=businessNameProblem;
 const states={inactive:'Disabled',active:'Active',suspended:'Suspended',migrating:'Migrating'} as const;
 const who={public:'Anonymous form',visitor:'Visitor',staff:'Staff'} as const;
 const total=(s:Item['schemas'][number])=>s.records.public+s.records.visitor+s.records.staff;
+const stageLabel:Record<Stage,string>={new:'New',contacted:'Contacted',qualified:'Qualified',won:'Won',lost:'Lost'};
+const noteLimit=2000;
+/** The owner's own calendar date (not UTC): leads store a date only, so "overdue" is decided here, never on the server. */
+export const localDate=(at=new Date())=>`${at.getFullYear()}-${String(at.getMonth()+1).padStart(2,'0')}-${String(at.getDate()).padStart(2,'0')}`;
+export const overdue=(lead:Pick<Lead,'stage'|'dueDate'>,today:string)=>!!lead.dueDate&&lead.dueDate<today&&lead.stage!=='won'&&lead.stage!=='lost';
 const shown=(v:unknown)=>typeof v==='boolean'?(v?'Yes':'No'):String(v);
 
 const publicForm:Record<Exclude<PublicFormState,'none'>,string>={bound:'Bound to the live website version.',inactive:'Anonymous submissions are closed: this module is not active. Review activation in Chat to turn it on.',
@@ -113,13 +123,21 @@ export function RecordsPanel(){
    {summary.data?.items.flatMap(i=>i.forms.filter(f=>i.resourceId+'/'+f.recordId===current).map(f=><NoticeSetup key={project+i.localId+f.formId+(summary.data!.notifications.forms.find(x=>x.instanceId===i.localId&&x.formId===f.formId)?.revision??0)} project={project} instance={i.localId} form={f.formId} submit={f.submit} setup={summary.data!.notifications}/>))}
    {current&&<RecordList key={project+current} project={project} resourceId={current.split('/')[0]} recordId={current.split('/')[1]} onChanged={()=>void summary.refetch()}/>}
   </>}
-  <p className="text-caption text-ink-muted">Records are private to you and expire after the module's retention period. They are not shown in Chat or sent to AI.</p>
+  <p className="text-caption text-ink-muted">Records, and the stages, notes and dates you add to them, are private to you. They expire with the record after the module's retention period and are not shown in Chat or sent to AI.</p>
  </div>;
 }
 
 function RecordList({project,resourceId,recordId,onChanged}:{project:string;resourceId:string;recordId:string;onChanged:()=>void}){
- const [cursor,setCursor]=useState<string|null>(null),[error,setError]=useState(''),pending=useRef(new Map<string,string>());
- const q=useQuery({queryKey:['module-records',project,resourceId,recordId,cursor],queryFn:()=>api<RecordPage>(`/projects/${project}/module-records/${resourceId}/${recordId}${cursor?'?after='+encodeURIComponent(cursor):''}`),gcTime:0});
+ const [cursor,setCursor]=useState<string|null>(null),[error,setError]=useState(''),pending=useRef(new Map<string,string>()),[filter,setFilter]=useState({stage:'',due:''}),today=localDate();
+ const query=new URLSearchParams({...cursor?{after:cursor}:{},...filter.stage?{stage:filter.stage}:{},...filter.due?{due:filter.due}:{},...filter.due==='overdue'?{today}:{}}).toString();
+ const q=useQuery({queryKey:['module-records',project,resourceId,recordId,query],queryFn:()=>api<RecordPage>(`/projects/${project}/module-records/${resourceId}/${recordId}${query?'?'+query:''}`),gcTime:0});
+ async function saveLead(entryId:string,revision:number,changes:LeadChanges){
+  // One request id per exact change, kept until a result is confirmed, so a retry after an unclear failure reads the saved receipt back.
+  const key=entryId+revision+JSON.stringify(changes),requestId=pending.current.get(key)??crypto.randomUUID();pending.current.set(key,requestId);
+  try{await api(`/projects/${project}/modules`,{method:'POST',body:JSON.stringify({api:'whumpo-modules',version:1,operation:'leads.update',resourceId,configRevision:q.data!.configRevision,requestId,target:{recordId,entryId,revision,changes},input:null})});}
+  catch(e){if(e instanceof APIError&&e.code==='stale_configuration')pending.current.delete(key);throw e;}
+  pending.current.delete(key);await q.refetch();
+ }
  async function remove(entryId:string){
   setError('');
   const requestId=pending.current.get(entryId)??crypto.randomUUID();pending.current.set(entryId,requestId);
@@ -129,13 +147,63 @@ function RecordList({project,resourceId,recordId,onChanged}:{project:string;reso
   }catch(e){setError(message(e));throw e;}
  }
  return <div className="space-y-4"><QueryStatus pending={q.isPending} error={q.error}/>
+  <LeadFilters stage={filter.stage} due={filter.due} onChange={f=>{setFilter(f);setCursor(null);}}/>
   {q.data?.items.map(item=><Section key={item.entryId} title={who[item.submittedBy]+' · '+new Date(item.createdAt).toLocaleString()}>
    <p className="text-caption text-ink-muted">Reference {item.entryId.slice(0,8).toUpperCase()}</p>
    <dl className="space-y-2 text-body-sm">{q.data.fields.map(f=><div key={f.key} className="flex flex-wrap gap-x-3"><dt className="text-ink-muted">{f.label}</dt><dd className="whitespace-pre-wrap break-words">{Object.hasOwn(item.values,f.key)?shown(item.values[f.key]):'—'}</dd></div>)}</dl>
+   <div className="mt-4"><LeadEditor key={item.entryId} id={'lead-'+item.entryId} lead={item.lead} editable={q.data.leads.editable} today={today} onSave={changes=>saveLead(item.entryId,item.lead.revision,changes)} onReload={()=>void q.refetch()}/></div>
    <div className="mt-4"><ConfirmButton label="Delete record" description="Permanently delete this record? It cannot be restored." run={()=>remove(item.entryId)}/></div>
   </Section>)}
-  {q.data&&!q.data.items.length&&<StateNote title={cursor?'No more records.':'No records yet.'}>{cursor?'':'Submitted form entries will appear here.'}</StateNote>}
+  {q.data&&!q.data.items.length&&(filter.stage||filter.due?<StateNote title="No records match these filters.">Clear the filters to see every record.</StateNote>:<StateNote title={cursor?'No more records.':'No records yet.'}>{cursor?'':'Submitted form entries will appear here.'}</StateNote>)}
   {error&&<p role="alert" className="text-body-sm">{error}</p>}
   <div className="flex flex-wrap gap-2">{cursor&&<Button variant="secondary" onClick={()=>setCursor(null)}>Newest records</Button>}{q.data?.next&&<Button variant="secondary" onClick={()=>setCursor(q.data!.next)}>Older records</Button>}</div>
  </div>;
+}
+
+/** WH-093 lead filters for the owner list: visible labels, native selects, and a way back to every record. */
+export function LeadFilters({stage,due,onChange}:{stage:string;due:string;onChange:(next:{stage:string;due:string})=>void}){
+ const select='h-11 min-h-11 px-3 border border-line rounded-md bg-surface-raised';
+ return <fieldset className="grid gap-3 sm:grid-cols-2"><legend className="mb-2 text-body-sm font-medium">Filter leads</legend>
+  <div className="flex flex-col gap-2 text-body-sm"><label htmlFor="lead-filter-stage" className="font-medium">Stage</label><select id="lead-filter-stage" value={stage} onChange={e=>onChange({stage:e.target.value,due})} className={select}><option value="">All stages</option>{stages.map(x=><option key={x} value={x}>{stageLabel[x]}</option>)}</select></div>
+  <div className="flex flex-col gap-2 text-body-sm"><label htmlFor="lead-filter-due" className="font-medium">Follow-up date</label><select id="lead-filter-due" value={due} onChange={e=>onChange({stage,due:e.target.value})} className={select}><option value="">Any</option><option value="set">Has a date</option><option value="none">No date</option><option value="overdue">Overdue</option></select></div>
+  {(stage||due)&&<Button type="button" variant="secondary" className="min-h-11 sm:col-span-2 sm:justify-self-start" onClick={()=>onChange({stage:'',due:''})}>Clear filters</Button>}
+ </fieldset>;
+}
+
+/** WH-093 lead editor for one record: stage, a private note and a follow-up date. Text carries the stage and "Overdue" (never colour alone).
+ * Saving sends only what changed with the revision this editor was opened on; a stale revision shows a plain conflict message and a reload,
+ * never a silent overwrite. Without Business the fields are read-only and say why. Owner-private: not shown in Chat or sent to AI. */
+export function LeadEditor({id,lead,editable,today,onSave,onReload}:{id:string;lead:Lead;editable:boolean;today:string;onSave:(changes:LeadChanges)=>Promise<void>;onReload:()=>void}){
+ const [stage,setStage]=useState<Stage>(lead.stage),[note,setNote]=useState(lead.note),[due,setDue]=useState(lead.dueDate??''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[conflict,setConflict]=useState(false),[saved,setSaved]=useState(false);
+ // A newer saved revision (after our own save or a reload) updates each field the owner has not touched since the last one; a field with an unsaved draft keeps the draft, so a conflict reload never discards typing.
+ const [seen,setSeen]=useState(lead),[last,setLast]=useState(lead);
+ if(seen.revision!==lead.revision){setSeen(lead);setLast(lead);setConflict(false);if(stage===last.stage)setStage(lead.stage);if(note===last.note)setNote(lead.note);if((due||null)===last.dueDate)setDue(lead.dueDate??'');}
+ const length=Array.from(note).length,tooLong=length>noteLimit,changes:LeadChanges={...stage!==lead.stage?{stage}:{},...note!==lead.note?{note}:{},...(due||null)!==lead.dueDate?{dueDate:due||null}:{}};
+ const changed=Object.keys(changes).length>0,why=!editable?'':busy?'Saving.':tooLong?'Shorten the note to save.':!changed?'Change something to save.':'';
+ const late=overdue(lead,today);
+ async function save(){
+  setError('');setSaved(false);setBusy(true);
+  try{await onSave(changes);setSaved(true);}
+  catch(e){if(e instanceof APIError&&e.code==='stale_configuration')setConflict(true);else setError(message(e));}
+  finally{setBusy(false);}
+ }
+ return <fieldset className="space-y-4 rounded-md bg-surface-sunken p-4 text-body-sm"><legend className="px-1 font-semibold">Lead</legend>
+  <p>Saved stage: <span className="font-medium">{stageLabel[lead.stage]}</span>{late&&<span className="font-medium"> · Overdue</span>}{lead.dueDate&&<span className="text-ink-muted"> · Follow up {lead.dueDate}</span>}</p>
+  {!editable&&<p id={id+'-plan'} className="rounded-md border border-line bg-surface-raised p-3">Changing leads needs the Business plan. You can still read and export what you saved.</p>}
+  <div className="grid gap-4 sm:grid-cols-2">
+   <div className="flex flex-col gap-2"><label htmlFor={id+'-stage'} className="font-medium">Stage</label><select id={id+'-stage'} value={stage} disabled={!editable||busy} aria-describedby={editable?undefined:id+'-plan'} onChange={e=>{setStage(e.target.value as Stage);setSaved(false);}} className="h-11 min-h-11 px-3 border border-line rounded-md bg-surface-raised disabled:opacity-60">{stages.map(x=><option key={x} value={x}>{stageLabel[x]}</option>)}</select></div>
+   <div className="flex flex-col gap-2"><label htmlFor={id+'-due'} className="font-medium">Follow-up date</label>
+    <div className="flex flex-wrap gap-2"><Input id={id+'-due'} type="date" value={due} min="2020-01-01" max="2100-12-31" readOnly={!editable} disabled={busy} aria-describedby={id+'-due-help'} onChange={e=>{setDue(e.target.value);setSaved(false);}} className="w-auto min-w-0 flex-1"/>
+     {due&&editable&&<Button type="button" variant="secondary" className="min-h-11" disabled={busy} onClick={()=>{setDue('');setSaved(false);}}>Clear date</Button>}</div>
+    <p id={id+'-due-help'} className="text-caption text-ink-muted">A date only, in your own calendar. Nothing is sent or scheduled.</p></div>
+  </div>
+  <div className="flex flex-col gap-2"><label htmlFor={id+'-note'} className="font-medium">Private note</label>
+   <Textarea id={id+'-note'} value={note} rows={4} readOnly={!editable} disabled={busy} aria-invalid={tooLong} aria-describedby={id+'-note-help'} onChange={e=>{setNote(e.target.value);setSaved(false);}}/>
+   <p id={id+'-note-help'} className={tooLong?'text-caption font-medium':'text-caption text-ink-muted'}>{tooLong?`This note is ${length-noteLimit} characters too long. Keep it to ${noteLimit.toLocaleString('en-US')}.`:`${length.toLocaleString('en-US')} of ${noteLimit.toLocaleString('en-US')} characters. Only you can see this.`}</p></div>
+  {conflict?<div role="alert" className="space-y-2 rounded-md border border-line bg-surface-raised p-3"><p>This lead changed in another window, or the module was updated. Reload it. Your unsaved changes stay in the fields so you can decide what to keep.</p><Button type="button" variant="secondary" className="min-h-11" onClick={()=>{setConflict(false);onReload();}}>Reload lead</Button></div>
+   :editable&&<div className="flex flex-wrap items-center gap-3"><Button type="button" className="min-h-11" disabled={busy||!changed||tooLong} aria-describedby={why?id+'-why':undefined} onClick={()=>void save()}>{busy?'Saving…':'Save lead'}</Button>
+    {why&&<span id={id+'-why'} className="text-caption text-ink-muted">{why}</span>}</div>}
+  {saved&&!changed&&<p role="status" className="font-medium">Lead saved.</p>}
+  {error&&<p role="alert">{error}</p>}
+ </fieldset>;
 }

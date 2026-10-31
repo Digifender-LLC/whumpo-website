@@ -117,6 +117,10 @@ test('staff updates only staff-writable fields',()=>{
  assert.equal(reason(staff,records(),'records.update',{recordId:'appointment',changes:{notes:'x'}}),'field_forbidden');
  assert.equal(reason(visitor,records(),'records.update',{recordId:'appointment',changes:{status:'done'}}),'forbidden');
 });
+test('only owner updates leads, and only on a known schema',()=>{
+ assert.ok(allowed(owner,records(),'leads.update',{recordId:'appointment'}));assert.equal(reason(owner,records(),'leads.update',{recordId:'other'}),'not_found');
+ for(const who of [staff,visitor,{kind:'public',projectId:project}])assert.equal(reason(who,records(),'leads.update',{recordId:'appointment'}),'forbidden');
+});
 test('only owner removes records',()=>{assert.ok(allowed(owner,records(),'records.remove',{}));assert.equal(reason(staff,records(),'records.remove',{}),'forbidden');});
 test('staff-only upload is a role policy',()=>{
  assert.ok(allowed(staff,files(),'files.prepareUpload',{collectionId:'uploads'}));

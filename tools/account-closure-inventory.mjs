@@ -79,6 +79,8 @@ const metrics={
  moduleFiles:['module_files','project_id IN (SELECT id FROM owned_projects)'],
  // WH-127 form attachments (schema batch 3b): links from records to the submitter's uploads, deleted with the project.
  moduleRecordFiles:['module_record_files','project_id IN (SELECT id FROM owned_projects)'],
+ // WH-093 owner-only lead rows over records (schema batch 6), deleted with the project.
+ moduleRecordLeads:['module_record_leads','project_id IN (SELECT id FROM owned_projects)'],
  // WH-157 recipient consent (schema batch 3c): visitor notification addresses and staff opt-ins, deleted with the project's visitors.
  visitorNotificationAddresses:['visitor_notification_addresses','visitor_id IN (SELECT id FROM app_visitors WHERE project_id IN (SELECT id FROM owned_projects))'],
  staffNotificationOptins:['staff_notification_optins','instance_id IN (SELECT id FROM module_instances WHERE project_id IN (SELECT id FROM owned_projects))'],
@@ -111,21 +113,24 @@ const metrics={
  openJobJournal:['job_journal','owner_user_id',"state NOT IN ('complete','cancelled','expired')"],
  unresolvedJobs:['job_journal','owner_user_id',"state IN ('awaiting','uncertain') OR (state='operator' AND attempt_id IS NOT NULL)"],
 };
-export const closureInventorySQL=`WITH scope AS (SELECT id FROM users WHERE (?1 IS NULL OR id=?1)),
+const inventorySQL=entries=>`WITH scope AS (SELECT id FROM users WHERE (?1 IS NULL OR id=?1)),
  owned_projects AS (SELECT id FROM projects WHERE owner_user_id IN (SELECT id FROM scope))
- SELECT ${Object.entries(metrics).map(([name,[table,owner,condition]])=>
+ SELECT ${entries.map(([name,[table,owner,condition]])=>
  `(SELECT COUNT(*) FROM ${table} WHERE ${owner.includes(' IN ')?owner:`${owner} IN (SELECT id FROM scope)`}${condition?` AND (${condition})`:''}) AS ${name}`).join(',\n')}`;
+export const closureInventorySQL=inventorySQL(Object.entries(metrics));
+// D1 refuses a result set above 100 columns, so the same metrics run as several statements of at most 50 and are merged.
+const chunks=Object.entries(metrics).reduce((all,entry,i)=>(i%50?all.at(-1).push(entry):all.push([entry]),all),[]);
 
 export async function accountClosureInventory(db,userId=null){
  if(userId!==null&&(typeof userId!=='string'||!userId.length||userId.length>128))throw Error('Invalid account scope');
- const row=await db.prepare(closureInventorySQL).bind(userId).first();
+ const row=Object.assign({},...await Promise.all(chunks.map(chunk=>db.prepare(inventorySQL(chunk)).bind(userId).first())));
  if(!row||Object.keys(metrics).some(key=>!Number.isSafeInteger(row[key])||row[key]<0))throw Error('Closure inventory unavailable');
  if(userId!==null&&row.accounts!==1)throw Error('Account scope unavailable');
  const counts=Object.fromEntries(Object.keys(metrics).map(key=>[key,row[key]]));
  return {observedAt:new Date().toISOString(),scope:userId===null?'platform_aggregate':'single_account',counts,
   readyForDeletion:false,
   limitations:[
-   'Read-only control-database snapshot; not a complete data export or deletion authorization.',
+   'Read-only control-database counts taken in three separate statements (D1 limits a result to 100 columns), so they are not one atomic snapshot; not a complete data export or deletion authorization.',
    'Identity counts cover rows linked to extant accounts; anonymous login/signup challenges and detached effect receipts need separate platform retention.',
    'Provider resources, R2 objects and backups have not been reconciled. Row counts are not resource counts.',
    'Saved configuration/proposal counts include full content copies. Metadata receipt counts do not prove independent restore suppression or safe deletion order.',

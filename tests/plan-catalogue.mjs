@@ -30,6 +30,7 @@ for(const id of ['creator','launch','studio','__proto__','constructor','toString
 assert.ok(features.every(f=>f.customerAcceptance==='pending'));
 assert.ok(features.filter(f=>f.connection).every(f=>f.configuration==='per-account-consent-required'));
 assert.equal(features.find(f=>f.id==='creator.guest-feedback').implementation,'private-test');
+assert.equal(features.find(f=>f.id==='business.leads').implementation,'private-test','WH-093 accepted locally');
 const chat=describePlans();for(const label of ['Creator: $30/month or $300/year','Creator includes Starter','Business includes Creator','Business Pro includes Business','GitHub','Cloudflare','Gmail','Google Calendar','Outlook email','Microsoft Calendar','HubSpot','no customer credits','expire and can be revoked','no workspace, editing, publishing or spending access','sandbox subscriptions are available when configured','Real payments are not enabled'])assert.ok(chat.includes(label),label);
 assert.ok(!chat.includes('Personal:'));
 const {renderPreference,renderDetails,renderPricing}=await load("import {createElement} from 'react';import {renderToStaticMarkup} from 'react-dom/server';import {PlanPreferenceField,PlanFeatureDetails} from './frontend/src/plan-features';import {Pricing} from './frontend/src/pricing';export const renderPreference=plan=>renderToStaticMarkup(createElement(PlanPreferenceField,{initialPlan:plan}));export const renderDetails=plan=>renderToStaticMarkup(createElement(PlanFeatureDetails,{planId:plan}));export const renderPricing=()=>renderToStaticMarkup(createElement(Pricing));",{

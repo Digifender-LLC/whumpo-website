@@ -3373,6 +3373,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 ### Evidence
 
 - 2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.
+- 2026-10-31 UTC (schema batch 6, branch wh-093-record-leads from 123556f; source and local verification on disposable SQLite and actual local D1, one built-editor browser test; no deploy, secret, Stripe call or dependency): D32 delivered. Owner-only `module_record_leads` (one row per record, created at the first owner edit, cascading with the record, so retention is the record's), the owner `leads.update` module operation with revision compare-and-swap in triggers and a held-record freeze matching `safety_hold_module_record_frozen`, `business.leads` inclusion repeated in the receipt, `stage`/`due` filters on the owner records list a `lead` entry in the owner export, closure/lifecycle/restore registration, and the records-panel editor and filters. `business.leads` moves `planned` -> `private-test`. Tests: tests/module-record-leads.mjs (SQLite and --d1) and tests/record-leads-browser.mjs. Not deployed: it needs the schema batch 6 cutover. WH-093 stays `planned` until that cutover and the deployed module check pass; the Business plan is still sold nowhere, so only preview grants reach it.
 
 ## WH-095 — Report Business submission and lead conversion outcomes honestly
 

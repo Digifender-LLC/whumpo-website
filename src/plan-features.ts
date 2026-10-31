@@ -31,7 +31,7 @@ const business = [
   {id:'connections.outlook-email',name:'Outlook email connection',implementation:'planned',connection:'outlook-email'},
   {id:'connections.microsoft-calendar',name:'Microsoft Calendar connection',implementation:'planned',connection:'microsoft-calendar'},
   {id:'connections.hubspot',name:'HubSpot connection',implementation:'planned',connection:'hubspot'},
-  {id:'business.leads',name:'Lead stages, notes and due dates',implementation:'planned'},
+  {id:'business.leads',name:'Lead stages, notes and due dates',implementation:'private-test'},
   {id:'business.reminders',name:'Follow-up reminders',implementation:'planned'},
   {id:'business.workflows',name:'Reviewed form-to-record-to-notification workflows',implementation:'planned'},
   {id:'business.conversions',name:'Conversion summaries',implementation:'planned'}

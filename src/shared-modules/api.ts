@@ -1,7 +1,9 @@
 import type {AdmissionNotice} from '../notification-configurations';
 import {canonicalJSON,jsonDigest} from '../project-specification/v2/json';
 import {workspacePredicate} from '../workspace-identity/admission';
-import {ModuleError,decideModule,moduleOperations,moduleRequest,type ModuleDecision,type ModuleOperation,type ModulePrincipal,type ModuleRequest} from './policy';
+import {featurePredicate} from '../feature-admission';
+import {featureRequest} from '../feature-inclusion';
+import {ModuleError,decideModule,moduleOperations,moduleRequest,ownerFeatureOperations,type ModuleDecision,type ModuleOperation,type ModulePrincipal,type ModuleRequest} from './policy';
 import {resolveResource,type ResolvedResource} from './registry';
 import {accessHandlers,visitorPredicate} from './access';
 import {recordsHandlers} from './records';
@@ -81,7 +83,9 @@ export async function handleModuleRequest(db:D1Database,principal:ModulePrincipa
   await options.publicAdmission(context);
  }
  const {statements,result}=await (handler as ModuleWriteHandler)(db,context),resultJSON=canonicalJSON(result,2048);
- const gate=principalPredicate(db,principal),r=context.resource;
+ let gate=principalPredicate(db,principal);const r=context.resource,feature=Object.hasOwn(ownerFeatureOperations,request.operation)?ownerFeatureOperations[request.operation as keyof typeof ownerFeatureOperations]:null;
+ // WH-093: a feature-gated owner write re-reads its current Business inclusion in the receipt, so plan loss between the check and the commit rolls the batch back.
+ if(feature&&principal.kind==='owner'){const included=featurePredicate(db,featureRequest({userId:principal.userId,projectId:principal.projectId,featureId:feature,operation:'confirm'}));gate={sql:`${gate.sql} AND ${included.sql}`,params:[...gate.params,...included.params]};}
  const receipt=db.prepare(`INSERT INTO module_request_receipts(instance_id,request_id,project_id,operation,principal_kind,principal_hash,request_hash,config_revision,activation_revision,module_digest,schema_digest,admitted,result_json,created_at)
   VALUES(?,?,?,?,?,?,?,?,?,?,?,(SELECT 1 WHERE ${gate.sql}),?,unixepoch())`)
   .bind(r.resourceId,request.requestId,r.projectId,request.operation,principal.kind,await jsonDigest(principalKey(principal)),requestHash,r.configRevision,r.activationRevision,r.moduleDigest,r.schemaDigest,...gate.params,resultJSON);
