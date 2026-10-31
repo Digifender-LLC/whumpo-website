@@ -17,6 +17,8 @@ export type TransferOutResult=|{kind:'unlocked'}|{kind:'rejected';code:string}|{
 export type RegistrarLookup=
  |{status:'registered';orderRef:string|null;expiresAt:number;renewal:{currency:'USD';wholesaleCents:number};unlocked?:boolean}
  |{status:'failed'|'in_progress';orderRef:string|null}
+ /** The registrar's own report that this registration has left (a completed transfer-out). The only absence-like answer that is proof. */
+ |{status:'transferred-out'}
  |{status:'not-found'};
 export interface RegistrarAdapter {
  readonly adapterId:string;
@@ -40,7 +42,7 @@ const year=365*86400000;
 /** Synthetic in-memory registrar: synthetic names and prices only, no network. Counts every call so tests can prove
  * that register is called at most once per order. `next` scripts the next register outcome. */
 export function createSyntheticRegistrar({adapterId='synthetic-registrar',adapterVersion=1,prices={},clock=()=>0}:{adapterId?:string;adapterVersion?:number;prices?:Record<string,SyntheticPrice>;clock?:()=>number}={}){
- const s={prices:structuredClone(prices),registrations:{} as Record<string,{orderRef:string|null;createdAt:number;expiresAt:number}>,workflows:{} as Record<string,{orderRef:string;status:'in_progress'|'succeeded'|'failed'}>,script:[] as SyntheticOutcome[],transferScript:[] as SyntheticTransfer[],unlocked:new Set<string>()};
+ const s={prices:structuredClone(prices),registrations:{} as Record<string,{orderRef:string|null;createdAt:number;expiresAt:number}>,workflows:{} as Record<string,{orderRef:string;status:'in_progress'|'succeeded'|'failed'}>,script:[] as SyntheticOutcome[],transferScript:[] as SyntheticTransfer[],unlocked:new Set<string>(),transferred:new Set<string>()};
  const calls={check:0,register:0,lookup:0,transferOut:0,authCode:0},registerLog:string[]=[];
  const record=(hostname:string,orderRef:string|null)=>{const now=clock();return s.registrations[hostname]={orderRef,createdAt:now,expiresAt:now+year};};
  return {
@@ -51,7 +53,9 @@ export function createSyntheticRegistrar({adapterId='synthetic-registrar',adapte
   next(kind:SyntheticOutcome){s.script.push(kind);},
   nextTransfer(kind:SyntheticTransfer){s.transferScript.push(kind);},
   /** The owner took the name to another registrar. */
-  completeTransfer(name:string){delete s.registrations[name];s.unlocked.delete(name);},
+  completeTransfer(name:string){delete s.registrations[name];s.unlocked.delete(name);s.transferred.add(name);},
+  /** The name simply stops being found (an outage, a lookup gap): absence, which proves nothing. */
+  vanish(name:string){delete s.registrations[name];s.unlocked.delete(name);},
   finishPending(name:string,ok:boolean){const w=s.workflows[name];if(!w)return;w.status=ok?'succeeded':'failed';if(ok)record(name,w.orderRef);},
   async check(name:string):Promise<RegistrarCheck>{
    calls.check++;const p=s.prices[name];
@@ -87,6 +91,7 @@ export function createSyntheticRegistrar({adapterId='synthetic-registrar',adapte
    const reg=s.registrations[name],p=s.prices[name];
    if(reg)return {status:'registered',orderRef:reg.orderRef,expiresAt:reg.expiresAt,renewal:{currency:'USD',wholesaleCents:p?.renewal??0},unlocked:s.unlocked.has(name)};
    const w=s.workflows[name];if(w)return {status:w.status==='failed'?'failed':'in_progress',orderRef:w.orderRef};
+   if(s.transferred.has(name))return {status:'transferred-out'};
    return {status:'not-found'};
   },
  } satisfies RegistrarAdapter&Record<string,unknown>;

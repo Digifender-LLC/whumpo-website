@@ -143,10 +143,12 @@ try{
   assert.doesNotMatch(dump,/SYNTHETIC-AUTH/,'the code has no column, event or job');
   for(const t of ['domain_quotes','domain_reviews','domain_orders','domain_funding_holds','domain_order_attempts','domain_registrar_events','domain_registrations','domain_registrant_contacts','domain_renewal_reviews','domain_renewal_approvals','domain_transfer_requests'].map(name=>({name})))assert.deepEqual((await all(`SELECT name FROM pragma_table_info('${t.name}')`)).map(r=>r.name).filter(n=>/auth|epp|secret|token|password|card|credential/i.test(n)),[],t.name);
   // The registrar reports the name gone: the request completes and the registration is released for purge.
-  // One absent read is not proof (registrar.ts): the first leaves the transfer open, a second one six hours later completes it.
-  reg.completeTransfer(host);assert.deepEqual(await m.reconcileTransfers(A,reg,T0+62*DAY),{moved:0});assert.equal((await m.loadTransfer(A,owners.a.id,host)).state,'unlocked');assert.equal((await renewalState(host)).state,'transfer-out');
+  // Absence is never evidence: the name vanishing from lookups, however often it is read, leaves the transfer open; the registrar's own transfer-complete report completes it.
+  reg.vanish(host);for(let i=0;i<4;i++)assert.deepEqual(await m.reconcileTransfers(A,reg,T0+62*DAY+i*7*HOUR),{moved:0});
+  assert.equal((await m.loadTransfer(A,owners.a.id,host)).state,'unlocked');assert.equal((await renewalState(host)).state,'transfer-out');
+  reg.completeTransfer(host);
   assert.deepEqual(await m.reconcileTransfers(A,reg,T0+62*DAY+HOUR),{moved:0},'inside the spacing');
-  assert.deepEqual(await m.reconcileTransfers(A,reg,T0+62*DAY+7*HOUR),{moved:1});
+  assert.deepEqual(await m.reconcileTransfers(A,reg,T0+64*DAY),{moved:1});
   assert.equal((await renewalState(host)).state,'transferred-out');assert.equal((await m.loadTransfer(A,owners.a.id,host)).state,'completed');
   await refuse(run("UPDATE domain_registrations SET state='active' WHERE hostname=?",host),/domain_registration_final/);
  });
@@ -196,7 +198,7 @@ try{
   assert.equal((await m.syncRegistration({db:A,hostname:host,registrar:reg,now:T0+DAY})).expiresAt,expiry);
   await refuse(run('UPDATE domain_registrations SET expires_at=expires_at-1 WHERE hostname=?',host),/domain_registration_expiry/);
   // Absence ("not found") is not proof: the name stays active until its expiry has passed.
-  reg.completeTransfer(host);
+  reg.vanish(host);
   assert.equal((await m.syncRegistration({db:A,hostname:host,registrar:reg,now:expiry-DAY})).state,'active');
   assert.equal((await m.syncRegistration({db:A,hostname:host,registrar:reg,now:expiry+DAY})).state,'lapsed');
   // A registration naming another known order is proof at any time.
@@ -253,7 +255,7 @@ try{
   const d=await registered('b'),e=await registered('b');await start(d,T0+100*DAY);await start(e,T0+100*DAY);
   const lookup=shared.lookup;let boom=true;shared.lookup=async n=>{if(boom&&n===d.host){boom=false;throw Error('down');}return lookup.call(shared,n);};
   shared.completeTransfer(e.host);
-  await m.reconcileTransfers(A,shared,T0+101*DAY);await m.reconcileTransfers(A,shared,T0+101*DAY+7*HOUR);shared.lookup=lookup;
+  await m.reconcileTransfers(A,shared,T0+101*DAY);shared.lookup=lookup;
   assert.equal((await m.loadTransfer(A,owners.b.id,e.host)).state,'completed');assert.equal((await renewalState(e.host)).state,'transferred-out');
   assert.equal((await m.loadTransfer(A,owners.b.id,d.host)).state,'unlocked','the failed read cost d one retry only');
  });
@@ -271,6 +273,60 @@ try{
   for(let i=0;i<open+3;i++)await m.queueDueReminders(A,expiry-6*DAY+i*2*HOUR,1);/* two hours apart: the per-recipient hourly cap is the outbox's own */
   const week=await count("SELECT count(*) FROM notification_notices WHERE template='domain.expiry-week@1'");
   assert.equal(week>=3,true,`later names are reached past the ones already reminded (${week} of ${open}; the rest wait on the outbox's own per-recipient caps)`);
+ });
+ await check('absence never completes a transfer: stray absent reads, a long lookup outage and every interleaving leave it open; it ends in a bounded failure that returns the name to active',async()=>{
+  const open=async r=>(await m.loadTransfer(A,owners.b.id,r.host)).state;
+  const start=(r,at)=>m.startTransferOut({db:A,actor:actorOf('b'),hostname:r.host,registrar:r.reg,requestId:id('transfer'),now:at});
+  // Every interleaving of absent, present and thrown reads, each at least the spacing apart, then a long outage of absence: nothing completes it.
+  const y=await registered('b');await start(y,T0+120*DAY);
+  const lookup=shared.lookup;let mode='absent';
+  shared.lookup=async n=>{if(n!==y.host)return lookup.call(shared,n);if(mode==='absent')return {status:'not-found'};if(mode==='throw')throw Error('outage');return lookup.call(shared,n);};
+  const modes=['absent','present','absent','absent','throw','throw','absent','present','absent','throw','absent'];
+  for(const [i,next] of modes.entries()){mode=next;await m.reconcileTransfers(A,shared,T0+121*DAY+i*7*HOUR);assert.notEqual(await open(y),'completed',`after ${next} read ${i}`);}
+  mode='absent';for(let i=0;i<20;i++)await m.reconcileTransfers(A,shared,T0+123*DAY+i*7*HOUR);
+  assert.notEqual(await open(y),'completed');assert.equal((await renewalState(y.host)).state,'transfer-out');
+  assert.equal(await count("SELECT count(*) FROM domain_registrant_contacts WHERE review_id=(SELECT review_id FROM domain_orders WHERE order_id=(SELECT order_id FROM domain_registrations WHERE hostname=?))",y.host),0);
+  // the schema agrees: no row reaches completed without positive evidence, however it is written
+  await refuse(run("UPDATE domain_transfer_requests SET state='completed',version=version+1 WHERE hostname=? AND state IN ('unlocked','unknown-outcome')",y.host),/domain_transfer_evidence/);
+  // it ends in a bounded failure that returns the name to active, never in transferred-out
+  const swept=await m.sweepTransfers(A,T0+120*DAY+15*DAY);assert.ok(swept.moved>=1);
+  assert.equal(await open(y),'failed');assert.equal((await renewalState(y.host)).state,'active');
+  shared.lookup=lookup;
+ });
+
+ await check('a slow sync cannot lapse a new owner; a raised total on the same review is refused; sync during requested completes on positive evidence; a lost swap returns the winning request',async()=>{
+  const old=await registered('a');const host=old.host;
+  const again=registrar(host);// the name will be bought again by tenant b
+  const original=shared.lookup;
+  shared.lookup=async n=>{
+   if(n===host){
+    shared.lookup=original;
+    await run("UPDATE domain_registrations SET state='transferred-out' WHERE hostname=?",host);
+    shared.completeTransfer(host);
+    const prep=await m.prepareDomainPurchase({actor:actorOf('b'),request:{contractVersion:1,projectId:owners.b.project,hostname:host},project:projectOf('b'),owner:fundingOf('b'),registrar:again,policy,ids:{quoteId:id('quote'),reviewId:id('review')},now:T0+DAY});
+    await m.saveReview(A,prep.quote,prep.review,T0+DAY);
+    const st=await m.consent({db:A,actor:actorOf('b'),submission:{contractVersion:1,reviewId:prep.review.reviewId,quoteDigest:prep.review.quoteDigest,consentTextDigest:prep.review.consentTextDigest,decision:'accept'},reviewId:prep.review.reviewId,project:projectOf('b'),owner:fundingOf('b'),registrar:again,policy,orderId:id('order'),now:T0+DAY+1});
+    await m.reserve(A,owners.b.id,st.order.orderId,T0+DAY+2);
+    await m.dispatch({db:A,ownerId:owners.b.id,orderId:st.order.orderId,owner:fundingOf('b'),project:projectOf('b'),registrar:again,policy,now:T0+DAY+3});
+    return {status:'registered',orderRef:'someone-elses-order',expiresAt:T0+9*DAY,renewal:{currency:'USD',wholesaleCents:1}};
+   }
+   return original.call(shared,n);
+  };
+  const row=await m.syncRegistration({db:A,hostname:host,registrar:shared,now:T0+DAY+10});
+  assert.equal(row.ownerId,owners.b.id);assert.equal(row.state,'active','the new owner row was not lapsed by a sync that started on the old one');
+  // A raised total on the same review is refused in the schema, so decideRenewal cannot approve it.
+  const r=await registered('a');const prep=await prepare(A,'a',r.host,r.reg,id('renewal'),r.registration.expiresAt-40*DAY);await confirm(A,'a',prep,r.reg,r.registration.expiresAt-40*DAY+1);
+  await refuse(run('UPDATE domain_registrations SET renewal_total_cents=renewal_total_cents+500 WHERE hostname=?',r.host),/domain_registration_renewal/);
+  // sync during `requested` (a claim whose reply was lost) completes on a registration naming another order
+  const q=await registered('b');
+  await run("INSERT INTO domain_transfer_requests(request_id,hostname,owner_user_id,state,requested_at,updated_at) VALUES(?,?,?,'requested',?,?)",id('transfer'),q.host,owners.b.id,T0+70*DAY,T0+70*DAY);
+  q.reg.takeBy(q.host,'new-owner-order');
+  const done=await m.syncRegistration({db:A,hostname:q.host,registrar:q.reg,now:T0+71*DAY});assert.equal(done.state,'transferred-out');assert.equal((await m.loadTransfer(A,owners.b.id,q.host)).state,'completed');
+  // a sweep moves the claim while the unlock is in flight: the caller gets the request as it stands, not null
+  const w=await registered('b');const beginTransferOut=w.reg.beginTransferOut;
+  w.reg.beginTransferOut=async req=>{await m.sweepTransfers(A,T0+80*DAY+2*MINUTE);return beginTransferOut.call(w.reg,req);};
+  const res=await m.startTransferOut({db:A,actor:actorOf('b'),hostname:w.host,registrar:w.reg,requestId:id('transfer'),now:T0+80*DAY});
+  assert.ok(res.request,'never null');assert.equal(res.request.state,'unknown-outcome');w.reg.beginTransferOut=beginTransferOut;
  });
 }finally{for(const f of files)f.close();}
 console.log(`Domain purchase lifecycle passed: ${cases} cases on ${d1?'actual local D1':'SQLite'}.`);
