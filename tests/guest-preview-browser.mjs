@@ -50,6 +50,7 @@ try{
  const root=resolve(dir+'/web'),ownerEnv={...env,ENVIRONMENT:'local',API_LIMITER:{limit:async()=>({success:true})},AUTH_LIMITER:{limit:async()=>({success:true})}};
  ownerServer=createServer(async(req,res)=>{try{
   const url=new URL(req.url,ownerOrigin);if(req.headers.host!==new URL(ownerOrigin).host){res.writeHead(403).end();return;}
+  if(url.pathname==='/favicon.ico'){res.writeHead(204).end();return;}// full Chromium asks for it; the headless shell does not
   if(url.pathname==='/_fixture/start'){res.writeHead(302,{'set-cookie':'__Host-whumpo_session='+actor.token+'; Secure; HttpOnly; SameSite=Lax; Path=/',location:'/workspace/tab-previews'}).end();return;}
   if(url.pathname.startsWith('/api/')){
    const chunks=[];for await(const chunk of req)chunks.push(chunk);const body=Buffer.concat(chunks);
