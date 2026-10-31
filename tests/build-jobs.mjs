@@ -226,5 +226,30 @@ try{
  assert.equal(await active(),0,'A busy build holds no capacity afterwards');
  const retry=await build(lena,await project(lena),await turn(lena),note,noteIn('l2'),noteOut('l2'),service);assert.match(retry,/Application review/,'The next build runs normally');
 
+ // 13. WH-074 sweep (A1, A2, A4): no per-customer always-on capacity in any Worker config, no credential or tenant identity
+ // in the runtime request, and only a succeeded job's own owner and project can claim its output.
+ for(const file of ['wrangler.jsonc','wrangler.apps.jsonc','wrangler.sites.jsonc','wrangler.runtime.jsonc']){
+  const config=await readFile(resolve(root,file),'utf8');assert.doesNotMatch(config,/"(containers|durable_objects|migrations|browser|vectorize)"\s*:/,file+' allocates no per-customer container or stateful instance');
+ }
+ const seen=[],spy={fetch:(url,init)=>{seen.push(init);return service.fetch(url,init);}},zed=await account(undefined,2),mP=await project(zed),mT=await turn(zed);
+ assert.match(await build(zed,mP,mT,note,noteIn('m'),noteOut('m'),spy),/Application review/);
+ assert.ok(seen.length>0);
+ for(const init of seen){
+  assert.deepEqual(Object.keys(init.headers).sort(),['content-type','x-whumpo-class','x-whumpo-lane'],'The runtime request carries no credential header');
+  assert.deepEqual(Object.keys(JSON.parse(init.body)).sort(),['input','source','version']);
+  const wire=JSON.stringify(init);for(const secret of [zed,mP,mT])assert.ok(!wire.includes(secret),'No owner, project or job identity reaches the runtime');
+ }
+ // Output ownership while the job is succeeded and unpublished (the only state that can publish): the owner and project
+ // that ran it can claim it; another tenant, or the same owner's other project, cannot.
+ const oP=await project(zed),oT=await turn(zed),oPlan=await fixtureExtensionPlan(scope(zed),zed,oP,oT,'custom.visitor-transition'),otherZ=await project(zed),claims=[];
+ const claiming=await owners.get(zed).scope(interceptDatabase(db,/^INSERT INTO app_activation_reviews/,async()=>{
+  for(const [u,p] of [[zed,oP],[bob,oP],[bob,bP],[zed,otherZ]])claims.push(await J.assertBuildOutput(db,u,p,oT).then(()=>'allowed',e=>e.status));
+ }));
+ assert.match((await rawBackendAction(claiming,zed,oT,{kind:'backend',operation:'buildApplication',projectId:oP,source:note,input:noteIn('o'),expected:noteOut('o'),planId:oPlan},service)).reply,/Application review/);
+ assert.deepEqual(claims,['allowed',409,409,409]);
+ // No other state can publish: published, cancelled, expired and failed jobs all refuse, even for their own owner.
+ for(const [u,p,t] of [[alice,aP,aT],[alice,cP,cT],[carol,two.p,two.t],[dave,fP,fT]])await assert.rejects(J.assertBuildOutput(scope(u),u,p,t),e=>e.status===409);
+ await assert.rejects(prepareApplication(scope(carol),carol,two.p,id(),'enable',two.t,two.t),e=>e.status===409,'An expired job never publishes');
+
  console.log('Build jobs passed: two-tenant fresh runtime memory, shared toolchain vs private artifact keys, output ownership, cancellation before/during/after execution, lease isolation, single spend, expiry, recorded cleanup failure holding capacity, per-project/account/pool bounds, owner replay/concurrency/lost lease, no visitor/workflow/scheduled wake path, deterministic diagnostics before an optional model repair, and the operator build freeze (refuses new jobs, cancels running and unpublished jobs in scope, generic response, lift restores admission).');
 }finally{await runtime?.dispose();await store.close();await rm(dir,{recursive:true,force:true});}
