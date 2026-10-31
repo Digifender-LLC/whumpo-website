@@ -56,6 +56,15 @@ Panels:
 
 The Security role here reviews one PR. It is not the scheduled no-network audit, which sweeps the repo on its own schedule and does not gate PRs.
 
+## Browser suites no CI job runs
+
+`pnpm check` and the verify profiles do not drive a browser, so a stale browser fixture goes unnoticed until someone runs it (the WH-004 R2 confirm triggers broke the site-safety fixture this way). Before merging a change to identity, publication, confirm triggers or safety flows, run these one at a time with `WHUMPO_CHROMIUM` (system Chromium) and `WHUMPO_PLAYWRIGHT` (a Playwright install) set:
+
+- `node tests/workspace-identity-browser.mjs --site-safety`
+- `node tests/workspace-identity-browser.mjs --recovery-axe`
+
+They use disposable local D1, no secret, no network and no provider. They are not in CI because the Ampere ARM64 runner has no browser provisioned and each run takes minutes; adding them means installing Chromium on that runner (or `CI_RUNNER=github`) and a path-filtered job. A seed fixture must confirm a site review through `sendChatControl` with a `confirm` action (a guided turn), never a `/confirm` command in an `ai` turn.
+
 ## What NOT to flag
 
 Every reviewer prompt includes the common list plus the list for its role.
