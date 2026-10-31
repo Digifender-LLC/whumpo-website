@@ -260,9 +260,9 @@ try{
 
  await check('hostnames are one registrable label pair everywhere: a trailing dot, an empty label or a bad edge never reaches a table',async()=>{
   const reg=registrar(),prep=await prepare(reg,'a','synthetic-p5.com');
-  for(const bad of ['example.com.','.example.com','a..com','-a.com','a-.com','a.-com','a.b.com','a.c0m','A.com'])
+  for(const bad of ['example.com.','.example.com','a..com','-a.com','a-.com','a.-com','a.b.com','a.c0m','A.com','a_b.com'])
    await refuse(m.saveReview(A,{...prep.quote,quoteId:id('quote'),hostname:bad},{...prep.review,hostname:bad},T0),/INVALID_HOSTNAME/);
-  for(const bad of ['example.com.','.example.com','a..com','-a.com','a-.com','a.-com','a.b.com','a.c0m'])
+  for(const bad of ['example.com.','.example.com','a..com','-a.com','a-.com','a.-com','a.b.com','a.c0m','a_b.com','a b.com'])
    {const quoteId=id('quote');await refuse(run('INSERT INTO domain_quotes(quote_id,owner_user_id,project_id,hostname,quote_json,quote_digest,quoted_at,expires_at) VALUES(?,?,?,?,?,?,?,?)',quoteId,owners.a.id,owners.a.project,bad,JSON.stringify({...prep.quote,quoteId,hostname:bad}),prep.review.quoteDigest,prep.quote.quotedAt,prep.quote.expiresAt),/CHECK constraint failed/);}
  });
 
@@ -309,6 +309,7 @@ try{
  await check('forged writes: a registration without its registered order, a hold deleted or replaced, and a claim after the quote expired are refused; a bought name can be bought again once released; contacts are erased',async()=>{
   const reg=registrar(),{orderId}=await reserved(reg,'a','synthetic-p14.com');
   await refuse(run("INSERT INTO domain_registrations(hostname,order_id,owner_user_id,project_id,created_at) VALUES('forged-name.com',?,?,?,?)",orderId,owners.a.id,owners.a.project,T0),/domain_registration_admit/);
+  await refuse(run("INSERT INTO domain_registrations(hostname,order_id,owner_user_id,project_id,created_at) VALUES('synthetic-p14.com',?,?,?,?)",orderId,owners.a.id,owners.a.project,T0),/domain_registration_admit/);// right name and order, but the order is only reserved
   await refuse(run('DELETE FROM domain_funding_holds WHERE order_id=?',orderId),/domain_hold_open/);
   await refuse(run('INSERT INTO domain_funding_holds(order_id,source_id,amount_cents,state,placed_at) VALUES(?,?,1,?,5)',id('order'),'pm-a','held'),/domain_hold_admit/);
   await refuse(run("UPDATE domain_orders SET state='dispatching',attempts=1,attempt_id=?,attempt_started_at=?,version=version+1,updated_at=? WHERE order_id=?",orderId+':a1',T0+MINUTE*20,T0+MINUTE*20,orderId),/domain_order_expired/);

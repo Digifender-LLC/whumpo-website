@@ -6,15 +6,17 @@
 
 An order that may have reached the registrar is never sent again. There is no retry, no bulk redispatch and no operator action that calls the registrar's purchase call. Every way out is evidence: a read-only lookup, or an event the adapter authenticated. If you cannot show which of the two happened, the order stays as it is and the funding hold stays held.
 
+**Sweeps are functions, not scheduled passes.** `sweepStranded`, `sweepLeases`, `reconcileUnknown`, `sweepTransfers`, `reconcileTransfers` and `queueDueReminders` exist and are tested, but no scheduled pass or route calls any of them yet, and no order can exist outside a test. Until the first route that creates an order also schedules them, an operator would have to run them by hand; do not rely on any "wait for the sweep" line below before that wiring exists.
+
 ## Reading the state
 
 All reads are owner-scoped in the product. An operator reads with a restricted, audited diagnostic query; nothing below edits a row.
 
 | State | Meaning | What to do |
 | --- | --- | --- |
-| `reserved` | Hold placed, registrar not asked. | Nothing. It expires with its quote, or the owner cancels. A reserved order older than its quote expiry is released by the next dispatch or sweep. |
+| `reserved` | Hold placed, registrar not asked. | Nothing. It expires with its quote, or the owner cancels. A consented or reserved order past its quote expiry is expired and its hold released by `sweepStranded`. |
 | `dispatching` older than 60 seconds | A worker claimed it and may have called the registrar, then stopped. | Wait for the lease sweep (`sweepLeases`); it moves the order to `unknown-outcome` once. Never reset it. |
-| `unknown-outcome` | The purchase may have happened. Hold kept. | Wait for bounded reconciliation: at most three read-only lookups within 72 hours (`reconcileUnknown`). A registration naming this order ends it as `registered`; this order's failed workflow, or the name held by someone else, ends it as `failed`. "Not found" and "in progress" prove nothing. |
+| `unknown-outcome` | The purchase may have happened. Hold kept. | Wait for bounded reconciliation: at most three read-only lookups within 72 hours, at least six hours apart (`reconcileUnknown`). A registration naming this order ends it as `registered`; this order's failed workflow, or the name held by someone else, ends it as `failed`. "Not found" and "in progress" prove nothing. |
 | `unresolved` | The bound ran out with no evidence. Hold kept; the account cannot be purged; closure waits. | Obtain evidence outside Whumpo (the registrar's order record for the client reference equal to the order ID). Apply it only as an authenticated registrar event (`receiveRegistrarEvent`: `registered` or `failed`, naming the current attempt). Duplicates and stale attempts are ignored by design. |
 | `registered` | Registrar evidence names this order. Hold captured. | Nothing. Check the charge mismatch flag below. |
 | `failed`, `cancelled`, `expired` | Settled before or without a purchase. Hold released. | Nothing. |

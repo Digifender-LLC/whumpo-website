@@ -9,9 +9,9 @@ import {sqliteD1Adapter} from './sqlite-d1.mjs';
 import {currentSchema} from '../tools/current-schema.mjs';
 
 // WH-197 slice, evidence level SYNTHETIC: the whole purchase journey over the actual current schema, with the in-memory synthetic registrar and a stubbed payment
-// (a funding hold row is the whole payment: no Stripe key, SDK, request or sandbox is involved). Two tenants; the failure list of docs/domain-purchases.md S2;
-// maintainer inference unavailable (every network call and every AI binding is absent, and a single call fails the test); Chat and Domains read one server
-// review. A stub is not a Stripe sandbox and the synthetic registrar is not a registrar: the connected run with owner-approved sandbox credentials stays
+// (a funding hold row is the whole payment: no Stripe key, SDK, request or sandbox is involved). Two tenants; the failure list of the WH-197 scope (duplicate consent, timeouts before and after the registrar acts, interrupted worker, price change, expiry, foreign owner, cancellation, premium exclusion);
+// maintainer inference unavailable (every network call and every AI binding is absent, and a single call fails the test); one server review reader
+// (no Chat card or Domains page reads it yet). A stub is not a Stripe sandbox and the synthetic registrar is not a registrar: the connected run with owner-approved sandbox credentials stays
 // blocked on WH-197 V1 and A1 (see docs/roadmap/backlog.json).
 const bundle=await build({stdin:{contents:"export * from './src/domain-purchase/store';export * from './src/domain-purchase/lifecycle';export * from './src/domain-purchase/order';export * from './src/domain-purchase/quote';export * from './src/domain-purchase/registrar';export {bindings} from './src/chat-interactions/protocol';",resolveDir:process.cwd(),loader:'ts'},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
 const m=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
@@ -29,7 +29,7 @@ const count=async(sql,...v)=>Object.values(await one(sql,...v))[0];
 const refuse=(p,re)=>assert.rejects(p,re);
 let steps=0;const step=async(name,fn)=>{try{await fn();steps++;}catch(e){console.error('FAILED:',name);throw e;}};
 
-const T0=1_800_000_000_000,MINUTE=60000;
+const T0=1_800_000_000_000,MINUTE=60000,HOUR=3600000;
 const policy={pricing:{markupCents:0,feeCents:30,taxBasisPoints:800},allowPremium:false};
 const tenants={a:{id:'tenant-a',project:'project-a',pm:'pm-a'},b:{id:'tenant-b',project:'project-b',pm:'pm-b'}};
 for(const t of Object.values(tenants)){
@@ -39,14 +39,14 @@ for(const t of Object.values(tenants)){
 const funding=t=>({coverage:null,paymentMethod:{kind:'payment-method',id:tenants[t].pm}});
 const actor=t=>({kind:'owner',ownerId:tenants[t].id});
 const project=t=>({projectId:tenants[t].project,ownerId:tenants[t].id,revision:1});
-const names=Object.fromEntries(['happy-a','happy-b','dup','before','after','crash','price','late','expired','cancel','late-cancel'].map(n=>[n,`synthetic-j-${n}.com`]));
+const names=Object.fromEntries(['happy-a','happy-b','dup','before','after','crash','price','late','expired','moved','cancel','late-cancel'].map(n=>[n,`synthetic-j-${n}.com`]));
 const PREMIUM='synthetic-j-premium.com';
 const registrar=m.createSyntheticRegistrar({clock:()=>T0,prices:{...Object.fromEntries(Object.values(names).map(n=>[n,{registration:1200,renewal:1200}])),[PREMIUM]:{registration:45000,renewal:45000,premium:true}}});
 let seq=0;const id=p=>`${p}-${String(++seq).padStart(4,'0')}`;
 const prepare=(t,hostname,now=T0)=>m.prepareDomainPurchase({actor:actor(t),request:{contractVersion:1,projectId:tenants[t].project,hostname},project:project(t),owner:funding(t),registrar,policy,ids:{quoteId:id('quote'),reviewId:id('review')},now}).then(async p=>{await m.saveReview(A,p.quote,p.review,now);return p;});
 const accept=p=>({contractVersion:1,reviewId:p.review.reviewId,quoteDigest:p.review.quoteDigest,consentTextDigest:p.review.consentTextDigest,decision:'accept'});
 const consent=(db,t,p,now=T0+1)=>m.consent({db,actor:actor(t),submission:accept(p),reviewId:p.review.reviewId,project:project(t),owner:funding(t),registrar,policy,orderId:id('order'),now});
-const dispatch=(db,t,orderId,now=T0+3)=>m.dispatch({db,ownerId:tenants[t].id,orderId,owner:funding(t),registrar,policy,now});
+const dispatch=(db,t,orderId,now=T0+3)=>m.dispatch({db,ownerId:tenants[t].id,orderId,owner:funding(t),project:project(t),registrar,policy,now});
 async function toReserved(t,hostname,db=A){const p=await prepare(t,hostname),s=await consent(db,t,p);await m.reserve(db,tenants[t].id,s.order.orderId,T0+2);return {p,orderId:s.order.orderId};}
 const state=async orderId=>(await one('SELECT state FROM domain_orders WHERE order_id=?',orderId)).state;
 const hold=async orderId=>{const r=await one('SELECT state FROM domain_funding_holds WHERE order_id=?',orderId);return r&&r.state;};
@@ -71,7 +71,7 @@ try{
   const {orderId}=await toReserved('a',names.before);registrar.next('timeout-before');
   assert.equal((await dispatch(A,'a',orderId)).order.state,'unknown-outcome');assert.equal(await hold(orderId),'held');
   await refuse(dispatch(A,'a',orderId),/NO_REDISPATCH/);
-  for(let i=0;i<3;i++)await m.reconcileUnknown(A,registrar,T0+10+i);
+  for(let i=0;i<3;i++)await m.reconcileUnknown(A,registrar,T0+(8+7*i)*HOUR);
   assert.equal(await state(orderId),'unresolved');assert.equal(await hold(orderId),'held');
   await refuse(run('DELETE FROM projects WHERE id=?',tenants.a.project),/domain_order_unresolved|domain_registration_active/);
   assert.deepEqual(await m.receiveRegistrarEvent(A,{eventId:'j-evt-1',orderId,attemptId:`${orderId}:a1`,type:'failed',authenticated:true},T0+20),{applied:true});
@@ -81,7 +81,7 @@ try{
  await step('timeout after the registrar acted: reconciliation reads the registration and captures the hold; register ran once',async()=>{
   const {orderId}=await toReserved('b',names.after);registrar.next('timeout-after');
   assert.equal((await dispatch(A,'b',orderId)).order.state,'unknown-outcome');
-  assert.equal((await m.reconcileUnknown(A,registrar,T0+10)).moved,1);
+  assert.equal((await m.reconcileUnknown(A,registrar,T0+7*HOUR)).moved,1);
   assert.equal(await state(orderId),'registered');assert.equal(await hold(orderId),'captured');assert.equal(registrar.registerLog.filter(h=>h===names.after).length,1);
  });
 
@@ -106,6 +106,12 @@ try{
   assert.equal((await m.reserve(A,tenants.b.id,s.order.orderId,late.quote.expiresAt+1)).state,'expired');assert.equal(await hold(s.order.orderId),null);
  });
 
+ await step('a project that changed since the review cancels the order before the register call and releases the hold',async()=>{
+  const {orderId}=await toReserved('a',names.moved);
+  const r=await m.dispatch({db:A,ownerId:tenants.a.id,orderId,owner:funding('a'),project:{...project('a'),revision:2},registrar,policy,now:T0+3});
+  assert.equal(r.order.state,'cancelled');assert.equal(registrar.registerLog.includes(names.moved),false);assert.equal(await hold(orderId),'released');
+ });
+
  await step('foreign owner, cancellation and premium: another tenant can neither consent nor cancel, cancel works only before the call, premium is never offered',async()=>{
   const p=await prepare('a',names.cancel);
   await refuse(consent(A,'b',p),/UNKNOWN_REVIEW/);
@@ -116,7 +122,8 @@ try{
   await refuse(prepare('a',PREMIUM),/PREMIUM_NOT_OFFERED/);assert.equal(registrar.registerLog.includes(PREMIUM),false);
  });
 
- await step('Chat and Domains read one server review: one registered reader, one registered binding, identical output',async()=>{
+ // No Chat card or Domains page reads this yet: this proves the one server reader both are meant to share and the binding registered to it, nothing more.
+ await step('one server review reader: the registered binding points at it and two connections read identical output',async()=>{
   const row=await one("SELECT review_id FROM domain_reviews WHERE owner_user_id='tenant-a' LIMIT 1");
   const chat=await m.readDomainReview(A,tenants.a.id,row.review_id,T0+1),domains=await m.readDomainReview(B,tenants.a.id,row.review_id,T0+1);
   assert.deepEqual(chat,domains);assert.equal(await m.readDomainReview(A,tenants.b.id,row.review_id,T0+1),null);
