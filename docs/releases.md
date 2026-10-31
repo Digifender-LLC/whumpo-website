@@ -299,3 +299,11 @@ Owner-instructed test-platform cutover for schema batch 2: #465 (layout receipt 
 - Live checks: `/` and `/api/health` 200; anonymous `/api/chat` and `/api/profile` 401; the smoke and guest-preview suites passed with cleanup verified.
 - The old databases `whumpo-control-2026-10-28` and `-10-29` are kept, not deleted.
 - Not done: owner re-enrollment.
+
+## Test-platform cutover — October 31, 2026 UTC (schema batch 6)
+
+Release `077c051b-adf1-432a-b43d-cd3752c21a37`; binding commit PR #533 (main `07d97eb`). New empty database `whumpo-control-2026-10-31d` (`dba36bb8-4d6b-4798-baf3-2572809b2919`): 241 tables, 1230 objects, inventory sha256 `53be90ebb97a500aefc0c89a53abffe49cfcae31dd16c56167422fdd9c64d59d`.
+
+- Independent read-only readback after the cutover: one active version per Worker (runtime `1aad55b9`, apps `28b94bdc`, sites `cd3c8a84`, platform `e8fcf4ab`); apps, sites and platform bind the database above; the live schema fingerprint equals source. Only the platform Worker lists secrets (including `TURNSTILE_SECRET`); `whumpo-apps` lists none, so the public appointment form stays closed live (WH-070).
+- `tests/guest-preview-live.mjs` (with the new `/view` header assertions) and `tests/module-live.mjs` pass with cleanup verified.
+- The release archive was not on the checking host, so `pnpm run deploy status` was not run.

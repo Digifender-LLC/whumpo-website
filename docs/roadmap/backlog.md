@@ -1281,6 +1281,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/69. Planning owner: Unassigned
 - 2026-10-01: Current source now installs the identity router, identity-before-profile web gate and atomic common workspace admission at HTTP/Chat/provider boundaries. Complete-schema HTTP (36 refusals), workspace admission (21) and feature/provider (37) checks pass on SQLite/local D1; real mobile app signup/welcome/Chat revocation passes. Lifecycle catalog covers 156 tables/37 classes and bounded expiry cleanup. Service-client compiler v3 has a new immutable lock. Remaining fixture/release-schema alignment, remote reset/deployment and owner-device acceptance stay open. No remote mutation.
 - 2026-10-02: #72 current-only test cutover completed with release 40e45c39-037a-42da-802c-5eacc75bde77 (6c73ac5). New empty D1 has exact 156-table/702-object schema; four Workers, all 39 served assets and binding/secret inventories pass independent readback. Live signed synthetic two-key login, welcome/first-project, logout and revocation pass with fixture cleanup and zero inference. Mobile entry screenshot inspected. Old test account/database and PASSWORD_PEPPER retired, remaining script/bindings unchanged; fresh owner invite saved privately. Physical-device enrollment, human Turnstile/live recovery and native/parent beta gates remain open. CSAM, Daybreak and CMS testing remain deferred. See docs/identity-web.md final release evidence.
 - 2026-10-31 UTC, NOT closed (PR #529; main be4e6bf (origin/main at 2026-10-31), Node 24.21.0, pnpm 11.19.0, disposable local SQLite/local D1, no network, credential, secret or provider call). Re-run today and passing: identity-authority (74 checks), identity-ceremonies (67), identity-kits (47), identity-recovery (64), identity-http (46), workspace-admission (22), identity-browser --d1 and workspace-identity-browser --d1 in Chromium with virtual authenticators. Acceptance lines 2 to 6 map to those suites. Line 1 is NOT met by the evidence: tests/identity-browser.mjs replaces the print iframe's window.print with a stub and compares the print document's text with the kit, so Print / Save as PDF is not shown to produce a printable page or a saved PDF, and no desktop or mobile print layout or saved PDF was inspected (the verification list asks for it); no screen-reader pass over the kit and recovery flow is recorded either (keyboard operation is covered by the browser journey). Missing to close: render the print view to a PDF in Chromium and check its text and layout at desktop and mobile widths, and one recorded screen-reader pass. Physical-device enrollment, human Turnstile and live recovery stay in WH-005.
+- 2026-10-31 UTC, NOT closed. Line 1 print half now has evidence: tests/identity-browser.mjs --d1 (headless Chromium, Node 24.21.0) takes the exact print iframe document the page builds (the window.print stub still stands in for the OS dialog), renders it with page.pdf() to A4 and Letter, and reads the PDFs back with poppler: one page, PDF Title 'Whumpo recovery kit' (the default Save as PDF name) with the secret in neither it nor the page title, extracted text equals the kit text exactly, the 64-hex recovery key is unbroken, and every word box lies inside the page with an 18pt margin (no clipping). The download name stays whumpo-recovery-kit.txt. The PDF is of the print document in a fresh page, not the OS print dialog or a physical printer. Still open: the one recorded screen-reader pass needs Orca, which is not installed and needs sudo (not attempted); desktop/mobile print on real printers and devices.
 
 ## WH-133 — Qualified review and activation of restricted case and preservation procedure
 
@@ -3254,68 +3255,6 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 - 2026-10-09 UTC: decomposed into WH-199 to WH-205 with the planned contract in docs/email-change-and-compromise.md (WH-199). Planning and offline reference only: no table, route, binding, provider, sender, DNS record or deployment, and no src/ or schema change. Confirmed from source that the account email (users.email) is an unverified signup identifier with no verification state or change path; it stays a lookup identifier and never a recovery or authorization factor. The parent acceptance is unchanged and closes only after every child; no child reaches WH-048, WH-049 or WH-104, only WH-205 waits on WH-005 and only WH-202/WH-205 wait on the WH-036 live sender. Exact source gaps G-E1 to G-E11 are mapped in the contract; owner decisions are listed there, not assumed.
 
-## WH-092 — Deliver expiring private preview links and guest feedback
-
-Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
-
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-A Creator shares one immutable private preview for accountless comments and can revoke access without granting workspace or release authority.
-
-### Scope
-
-- Bind expiring revocable guest capability to an exact owner/project/version and approved preview assets
-- Add guest comments and owner resolution with safe rendering, abuse/rate limits and lifecycle/export coverage; unverified display names are not verified identities
-- Keep feedback separate from edits, team membership, publication approval, spending and model authority
-- Split link/asset authority, comment lifecycle and browser acceptance; remove access when the referenced preview is removed or no longer permitted
-- Expose routine owner operations through WH-105 registered read/action bindings and WH-107/109/110 Chat/view adapters; implement domain handlers once. Feature acceptance uses the shared owner surface, with essential direct recovery/security controls retained.
-- Use WH-116 feedback/guest-capability data classification before storage and WH-105 registered owner bindings before clients. Guest capabilities remain separate from member identity and cannot grant workspace access.
-
-### Acceptance criteria
-
-- [ ] Direct APIs, Chat and background work enforce shared current feature eligibility; hidden UI and forged identifiers cannot bypass the tier or tenant boundary
-- [ ] No Whumpo account is required; guests see only the exact preview/allowed assets, never source exports, other versions, account data or secrets
-- [ ] Expiry/revocation/removal stops reads and comments across asset aliases, caches and in-flight races
-- [ ] Comment markup and embedded instructions remain inert and cannot publish, spend, expand sharing or invoke the maintainer
-- [ ] Owner resolution, deletion/export, retention and safety-preservation behavior are explicit and tested
-
-### Verification
-
-- Guest/owner/foreign-tenant matrix with expiry/revocation, token replay, asset aliases and cache checks
-- Comment injection, duplicate/stale posting, deletion and retention fixtures
-- Accountless mobile/keyboard preview/comment/revoke journey with synthetic approved assets
-
-### Dependencies and blockers
-
-Planning dependencies: WH-089, WH-066, WH-004, WH-009, WH-010, WH-122, WH-105, WH-116, WH-150, WH-151, WH-152, WH-153. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/pricing-and-model-policy.md](../../docs/pricing-and-model-policy.md)
-- [docs/mvp.md](../../docs/mvp.md)
-- [docs/version-retention.md](../../docs/version-retention.md)
-- [docs/content-safety.md](../../docs/content-safety.md)
-- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
-- [docs/project-specification-storage.md](../../docs/project-specification-storage.md)
-- [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
-- [docs/plan-feature-contract.md](../../docs/plan-feature-contract.md)
-
-### Execution coordination
-
-Issue: https://github.com/zemdregon/whumpo/issues/121. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-- 2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.
-- 2026-10-04 UTC: decomposed into WH-150 (link authority, isolated delivery, bounded feedback, owner API and lifecycle; implemented in source with local tests), WH-151 (shared Chat/view adapters), WH-152 (browser acceptance) and WH-153 (release and live acceptance). The parent stays open until all four pass.
-- 2026-10-31 UTC (PR #529): WH-150, WH-151 and WH-152 are closed with line-by-line evidence. The parent stays open only because WH-153 is open: the sandbox CSP on a live /view response and the release-manifest readback were not read live (see WH-153). Parent acceptance lines 1 to 5 map to the closed children (docs/guest-previews.md) apart from that live readback. Not verified: real human guests and physical devices.
-
 ## WH-093 — Extend maintained records into the Business lead pipeline
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
@@ -3374,6 +3313,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 - 2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.
 - 2026-10-31 UTC (schema batch 6, branch wh-093-record-leads from 123556f; source and local verification on disposable SQLite and actual local D1, one built-editor browser test; no deploy, secret, Stripe call or dependency): D32 delivered. Owner-only `module_record_leads` (one row per record, created at the first owner edit, cascading with the record, so retention is the record's), the owner `leads.update` module operation with revision compare-and-swap in triggers and a held-record freeze matching `safety_hold_module_record_frozen`, `business.leads` inclusion repeated in the receipt, `stage`/`due` filters on the owner records list a `lead` entry in the owner export, closure/lifecycle/restore registration, and the records-panel editor and filters. `business.leads` moves `planned` -> `private-test`. Tests: tests/module-record-leads.mjs (SQLite and --d1) and tests/record-leads-browser.mjs. Not deployed: it needs the schema batch 6 cutover. WH-093 stays `planned` until that cutover and the deployed module check pass; the Business plan is still sold nowhere, so only preview grants reach it.
+- 2026-10-31 UTC, NOT closed. Batch 6 is cut over (PR #533, release 077c051b-adf1-432a-b43d-cd3752c21a37, DB whumpo-control-2026-10-31d): the live schema fingerprint equals source (241 tables, 1230 objects, sha256 53be90eb...d59d), which includes module_record_leads. tests/module-live.mjs passed on it (reported by the orchestrator; it covers records, intake fail-closed and cleanup but has no lead stage/note/due step). The acceptance lines are evidenced locally (tests/module-record-leads.mjs, tests/record-leads-browser.mjs) but the owner leads.update path was not exercised on the deployed platform, so the deployed module check the previous note requires is not complete. Stays planned.
 
 ## WH-095 — Report Business submission and lead conversion outcomes honestly
 
@@ -3567,58 +3507,6 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 - 2026-10-01: accepted planning direction against 628c16f and the existing working tree; implementation and customer acceptance remain open. Live GitHub refresh was blocked by local command approval policy; no issue or claim created.
 - 2026-10-27 UTC, still open and needs a person: the WH-112 device and Orca checks remain open (checklist docs/wh-112-device-acceptance.md, added by PR #396, merged 2026-10-27T07:03:05Z), and a signed-in session with the owner account remains open and needs re-enrollment via a fresh invitation. Nothing in today's agent-run evidence (WH-181, WH-003, WH-153, WH-212) is device, screen-reader or human acceptance. Readiness unchanged.
 - 2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): readiness set to blocked. Blocker: Physical-device and Orca screen-reader checks (docs/wh-112-device-acceptance.md) need a person and real devices, and the owner account needs re-enrollment through a fresh invitation; agent-run evidence cannot stand in for them.
-
-## WH-153 — Release and live-accept guest previews on the test platform
-
-Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: release. Size: S.
-
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-The guest preview host is verified to route to the sites Worker, the current schema and Workers are deployed in a reviewed test release, and a synthetic live journey passes before the catalogue marks the feature private-test.
-
-### Scope
-
-- Verify preview.whumpo.site resolves through the existing *.whumpo.site route without a customer DNS change; request explicit approval if a Whumpo-zone record is missing
-- Reviewed four-Worker release with the current schema cutover
-- Live synthetic issue/view/comment/revoke with cleanup; then set creator.guest-feedback implementation to private-test
-
-### Acceptance criteria
-
-- [ ] Live readback of host routing, headers and refusal paths with a disposable identity
-- [ ] Catalogue changes only after live acceptance; no paid service, purchase or customer DNS change
-
-### Verification
-
-- Release manifest readback and an opt-in live fixture with cleanup evidence
-
-### Dependencies and blockers
-
-Planning dependencies: WH-150, WH-152. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/guest-previews.md](../../docs/guest-previews.md)
-- [docs/project-specification-storage.md](../../docs/project-specification-storage.md)
-- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
-- [docs/feature-inclusion.md](../../docs/feature-inclusion.md)
-- [docs/releases.md](../../docs/releases.md)
-
-### Execution coordination
-
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-- 2026-10-27 UTC, source and local only; nothing deployed and nothing run live: Phase A adds the opt-in fixture tests/guest-preview-live.mjs, which refuses unless RUN_LIVE_GUEST_PREVIEW=1 and was NOT run with it. After the test-platform cutover it checks read-only (node:dns, no DNS write) that preview.whumpo.site resolves into Cloudflare address ranges, seeds a synthetic example.test owner with the real website-creation builders and a one-hour project-scoped private-test feature_preview_grants row for creator.guest-feedback (no billing rows), prepares and issues a link through the owner HTTP routes, opens it in headless Chromium, posts one comment, revokes it, confirms /api/link and /view answer 404 and the page shows the unavailable state, then deletes the owner (cascade) and verifies every row is gone, writing .secrets/guest-preview-live-evidence.json. Reported (Node 24.21.0, pnpm 11.19.0): pnpm check pass; node tests/guest-preview-browser.mjs pass; node tests/guest-preview-live.mjs without the variable refuses (exit 1); an offline simulation of the seeding, grant inclusion and cascade cleanup over the D1 REST adapter against local SQLite passed. A read-only DNS lookup from this host resolved preview.whumpo.site to Cloudflare addresses (104.21.56.76, 172.67.180.73, 2606:4700:3030::6815:384c, 2606:4700:3032::ac43:b449). Not verified: the live journey itself, the live seeding and cleanup against the real test database, routing and headers on the deployed Worker, and real devices. Scope, acceptance and readiness are unchanged; the catalogue entry is unchanged.
-- 2026-10-27 UTC, live acceptance run by the orchestrator against https://whumpo.com on main 054da5c (all merged work deployed): RUN_LIVE_GUEST_PREVIEW=1 node tests/guest-preview-live.mjs exited 0 at 2026-10-27T06:44:06.895Z with {"success":true,"steps":{"dns":4,"issued":true,"viewed":true,"commented":true,"revokedRefused":true},"dnsCloudflare":["172.67.180.73","104.21.56.76","2606:4700:3030::6815:384c","2606:4700:3032::ac43:b449"],"cleanupVerified":true}. Phase B (this change): the creator.guest-feedback catalogue implementation in src/plan-features.ts moves from planned to private-test (tests/plan-catalogue.mjs pins the new value) by orchestrator decision under delegated authority; no money involved. Access still requires an explicit project-scoped grant or invoice coverage; nothing becomes public. Not verified: physical devices and real human guests. Readiness unchanged.
-- 2026-10-27 UTC, live guest-preview check against the test platform after the review schema cutovers to whumpo-control-2026-10-27 and whumpo-control-2026-10-27c (receipts, PR #419): RUN_LIVE_GUEST_PREVIEW=1 node tests/guest-preview-live.mjs exited 0 with cleanupVerified true. Not verified: physical devices and real human guests. Readiness unchanged.
-- 2026-10-31 UTC, read-only live header readback, STILL OPEN (PR #529). curl against https://preview.whumpo.site (no token, no secret, no write): GET / returned 200 with cache-control no-store, content-security-policy default-src 'none' with hashed script-src and style-src, frame-ancestors 'none', x-frame-options DENY, x-robots-tag noindex, nofollow, noarchive, nosnippet, referrer-policy same-origin, x-content-type-options nosniff, cross-origin-opener-policy and cross-origin-resource-policy same-origin, and no set-cookie. POST /api/link with a forged 43-character token and the exact origin returned 404 {"error":"This preview link is unavailable."} with no-store, noindex and no cookie. These match tests/guest-previews.mjs. Still missing for the acceptance line 'live readback of host routing, headers and refusal paths': the response headers of /view for a valid link (the sandbox CSP and frame-ancestors 'self') were never read live, because that needs a live link and so a run of tests/guest-preview-live.mjs, which writes to the live database and is task 2 territory; and the verification line 'release manifest readback' is not recorded for the guest-preview schema and Workers in this task. Readiness unchanged.
 
 ## WH-200 — Source email-change state machine and confirmation-token handling over the current identity engine
 
@@ -4093,9 +3981,72 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
 
-# F2 — Done (22)
+# F2 — Done (24)
 
 Verified complete with recorded evidence; kept for history and dependency context. Not candidates for new work.
+
+## WH-092 — Deliver expiring private preview links and guest feedback
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: L.
+
+Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+A Creator shares one immutable private preview for accountless comments and can revoke access without granting workspace or release authority.
+
+### Scope
+
+- Bind expiring revocable guest capability to an exact owner/project/version and approved preview assets
+- Add guest comments and owner resolution with safe rendering, abuse/rate limits and lifecycle/export coverage; unverified display names are not verified identities
+- Keep feedback separate from edits, team membership, publication approval, spending and model authority
+- Split link/asset authority, comment lifecycle and browser acceptance; remove access when the referenced preview is removed or no longer permitted
+- Expose routine owner operations through WH-105 registered read/action bindings and WH-107/109/110 Chat/view adapters; implement domain handlers once. Feature acceptance uses the shared owner surface, with essential direct recovery/security controls retained.
+- Use WH-116 feedback/guest-capability data classification before storage and WH-105 registered owner bindings before clients. Guest capabilities remain separate from member identity and cannot grant workspace access.
+
+### Acceptance criteria
+
+- [ ] Direct APIs, Chat and background work enforce shared current feature eligibility; hidden UI and forged identifiers cannot bypass the tier or tenant boundary
+- [ ] No Whumpo account is required; guests see only the exact preview/allowed assets, never source exports, other versions, account data or secrets
+- [ ] Expiry/revocation/removal stops reads and comments across asset aliases, caches and in-flight races
+- [ ] Comment markup and embedded instructions remain inert and cannot publish, spend, expand sharing or invoke the maintainer
+- [ ] Owner resolution, deletion/export, retention and safety-preservation behavior are explicit and tested
+
+### Verification
+
+- Guest/owner/foreign-tenant matrix with expiry/revocation, token replay, asset aliases and cache checks
+- Comment injection, duplicate/stale posting, deletion and retention fixtures
+- Accountless mobile/keyboard preview/comment/revoke journey with synthetic approved assets
+
+### Dependencies and blockers
+
+Planning dependencies: WH-089, WH-066, WH-004, WH-009, WH-010, WH-122, WH-105, WH-116, WH-150, WH-151, WH-152, WH-153. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/pricing-and-model-policy.md](../../docs/pricing-and-model-policy.md)
+- [docs/mvp.md](../../docs/mvp.md)
+- [docs/version-retention.md](../../docs/version-retention.md)
+- [docs/content-safety.md](../../docs/content-safety.md)
+- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
+- [docs/project-specification-storage.md](../../docs/project-specification-storage.md)
+- [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [docs/plan-feature-contract.md](../../docs/plan-feature-contract.md)
+
+### Execution coordination
+
+Issue: https://github.com/zemdregon/whumpo/issues/121. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.
+- 2026-10-04 UTC: decomposed into WH-150 (link authority, isolated delivery, bounded feedback, owner API and lifecycle; implemented in source with local tests), WH-151 (shared Chat/view adapters), WH-152 (browser acceptance) and WH-153 (release and live acceptance). The parent stays open until all four pass.
+- 2026-10-31 UTC (PR #529): WH-150, WH-151 and WH-152 are closed with line-by-line evidence. The parent stays open only because WH-153 is open: the sandbox CSP on a live /view response and the release-manifest readback were not read live (see WH-153). Parent acceptance lines 1 to 5 map to the closed children (docs/guest-previews.md) apart from that live readback. Not verified: real human guests and physical devices.
+- 2026-10-31 UTC, CLOSED. WH-153 is closed with the live /view header readback (sandbox CSP with frame-ancestors 'self', SAMEORIGIN, no-store, noindex, no cookie), host routing, refusal paths after revoke and verified cleanup on release 077c051b-adf1-432a-b43d-cd3752c21a37, DB whumpo-control-2026-10-31d; WH-150, WH-151, WH-152 and WH-153 are all done and parent acceptance lines 1 to 5 map to them (docs/guest-previews.md). Not verified: real human guests and physical devices.
 
 ## WH-105 — Define the primary Chat experience and interactive element contract
 
@@ -4812,6 +4763,59 @@ Issue: https://github.com/zemdregon/whumpo/issues/141. Planning owner: Unassigne
 
 - 2026-10-08 UTC: local browser verification only; the mapped issue #141 is open. PR #142 (be5662a) added the Chromium owner and guest journey in tests/guest-preview-browser.mjs. Re-run on 2026-10-08 UTC at origin/main ca17c6a (Node 24.21.0, aarch64 Linux, disposable local SQLite/local D1, no network, credential or remote Cloudflare/GitHub operation). node tests/guest-preview-browser.mjs passed in headless Chromium at desktop 1280x800 keyboard and mobile 390x844 against the built owner panel, the platform Worker and the sites handler with local D1/R2 (owner prepare/confirm/revoke/resolve/delete, one-time link, accountless sandboxed preview with an approved private photo, keyboard comment, no cookie or stored/logged token, large text and reflow). The run used a Playwright module and Pillow borrowed from other existing local installs (WHUMPO_PLAYWRIGHT and a PATH shim) with no repository change. This is not a deployed, real-device, screen-reader or customer acceptance, and the release and live acceptance of guest previews remain WH-153. Re-checked on 2026-10-09 UTC after rebasing onto origin/main 92a001f (plus the test-only TMPDIR fix 9847281, PR #202), with #175, #178 and #180 merged: the cited artifacts still exist, #141 is still open and the journey passed again in headless Chromium; because the test hard-codes a /tmp prefix and /tmp was quota-limited on this host, it ran from a throwaway copy whose only change was that prefix (set to TMPDIR), deleted afterwards.
 - 2026-10-31 UTC, CLOSED by PR #529 (main be4e6bf (origin/main at 2026-10-31), Node 24.21.0, pnpm 11.19.0, disposable local SQLite/local D1, no network, credential, secret or provider call). node tests/guest-preview-browser.mjs passes in Chromium at desktop 1280x800 with keyboard and mobile 390x844 against the built owner panel, the platform Worker and the sites handler with local D1/R2 (owner prepare, confirm, revoke, resolve and delete; one-time link; accountless sandboxed preview with an approved private photo; keyboard comment; no workspace cookie on any guest request and no Set-Cookie; the token in exactly one owner response and in no request path or query; no token or guest text in Worker logs; large text and reflow; no horizontal overflow or control outside the viewport). The run used an existing local Playwright module (WHUMPO_PLAYWRIGHT) and the system Chromium (WHUMPO_CHROMIUM=/usr/bin/chromium). The full Chromium build requests /favicon.ico, which the fixture owner server answered with a 500 and failed the console-error assertion; the fixture now answers 204 (test-only change, one line). Not verified: physical phones and tablets, screen readers, real human guests.
+
+## WH-153 — Release and live-accept guest previews on the test platform
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: release. Size: S.
+
+Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+The guest preview host is verified to route to the sites Worker, the current schema and Workers are deployed in a reviewed test release, and a synthetic live journey passes before the catalogue marks the feature private-test.
+
+### Scope
+
+- Verify preview.whumpo.site resolves through the existing *.whumpo.site route without a customer DNS change; request explicit approval if a Whumpo-zone record is missing
+- Reviewed four-Worker release with the current schema cutover
+- Live synthetic issue/view/comment/revoke with cleanup; then set creator.guest-feedback implementation to private-test
+
+### Acceptance criteria
+
+- [ ] Live readback of host routing, headers and refusal paths with a disposable identity
+- [ ] Catalogue changes only after live acceptance; no paid service, purchase or customer DNS change
+
+### Verification
+
+- Release manifest readback and an opt-in live fixture with cleanup evidence
+
+### Dependencies and blockers
+
+Planning dependencies: WH-150, WH-152. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/guest-previews.md](../../docs/guest-previews.md)
+- [docs/project-specification-storage.md](../../docs/project-specification-storage.md)
+- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
+- [docs/feature-inclusion.md](../../docs/feature-inclusion.md)
+- [docs/releases.md](../../docs/releases.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-27 UTC, source and local only; nothing deployed and nothing run live: Phase A adds the opt-in fixture tests/guest-preview-live.mjs, which refuses unless RUN_LIVE_GUEST_PREVIEW=1 and was NOT run with it. After the test-platform cutover it checks read-only (node:dns, no DNS write) that preview.whumpo.site resolves into Cloudflare address ranges, seeds a synthetic example.test owner with the real website-creation builders and a one-hour project-scoped private-test feature_preview_grants row for creator.guest-feedback (no billing rows), prepares and issues a link through the owner HTTP routes, opens it in headless Chromium, posts one comment, revokes it, confirms /api/link and /view answer 404 and the page shows the unavailable state, then deletes the owner (cascade) and verifies every row is gone, writing .secrets/guest-preview-live-evidence.json. Reported (Node 24.21.0, pnpm 11.19.0): pnpm check pass; node tests/guest-preview-browser.mjs pass; node tests/guest-preview-live.mjs without the variable refuses (exit 1); an offline simulation of the seeding, grant inclusion and cascade cleanup over the D1 REST adapter against local SQLite passed. A read-only DNS lookup from this host resolved preview.whumpo.site to Cloudflare addresses (104.21.56.76, 172.67.180.73, 2606:4700:3030::6815:384c, 2606:4700:3032::ac43:b449). Not verified: the live journey itself, the live seeding and cleanup against the real test database, routing and headers on the deployed Worker, and real devices. Scope, acceptance and readiness are unchanged; the catalogue entry is unchanged.
+- 2026-10-27 UTC, live acceptance run by the orchestrator against https://whumpo.com on main 054da5c (all merged work deployed): RUN_LIVE_GUEST_PREVIEW=1 node tests/guest-preview-live.mjs exited 0 at 2026-10-27T06:44:06.895Z with {"success":true,"steps":{"dns":4,"issued":true,"viewed":true,"commented":true,"revokedRefused":true},"dnsCloudflare":["172.67.180.73","104.21.56.76","2606:4700:3030::6815:384c","2606:4700:3032::ac43:b449"],"cleanupVerified":true}. Phase B (this change): the creator.guest-feedback catalogue implementation in src/plan-features.ts moves from planned to private-test (tests/plan-catalogue.mjs pins the new value) by orchestrator decision under delegated authority; no money involved. Access still requires an explicit project-scoped grant or invoice coverage; nothing becomes public. Not verified: physical devices and real human guests. Readiness unchanged.
+- 2026-10-27 UTC, live guest-preview check against the test platform after the review schema cutovers to whumpo-control-2026-10-27 and whumpo-control-2026-10-27c (receipts, PR #419): RUN_LIVE_GUEST_PREVIEW=1 node tests/guest-preview-live.mjs exited 0 with cleanupVerified true. Not verified: physical devices and real human guests. Readiness unchanged.
+- 2026-10-31 UTC, read-only live header readback, STILL OPEN (PR #529). curl against https://preview.whumpo.site (no token, no secret, no write): GET / returned 200 with cache-control no-store, content-security-policy default-src 'none' with hashed script-src and style-src, frame-ancestors 'none', x-frame-options DENY, x-robots-tag noindex, nofollow, noarchive, nosnippet, referrer-policy same-origin, x-content-type-options nosniff, cross-origin-opener-policy and cross-origin-resource-policy same-origin, and no set-cookie. POST /api/link with a forged 43-character token and the exact origin returned 404 {"error":"This preview link is unavailable."} with no-store, noindex and no cookie. These match tests/guest-previews.mjs. Still missing for the acceptance line 'live readback of host routing, headers and refusal paths': the response headers of /view for a valid link (the sandbox CSP and frame-ancestors 'self') were never read live, because that needs a live link and so a run of tests/guest-preview-live.mjs, which writes to the live database and is task 2 territory; and the verification line 'release manifest readback' is not recorded for the guest-preview schema and Workers in this task. Readiness unchanged.
+- 2026-10-31 UTC, CLOSED. RUN_LIVE_GUEST_PREVIEW=1 node tests/guest-preview-live.mjs exited 0 at 2026-10-31T09:04:07Z against https://whumpo.com (release 077c051b-adf1-432a-b43d-cd3752c21a37, DB whumpo-control-2026-10-31d): steps issued, viewHeaders, viewed, commented, revokedRefused true, cleanupVerified true. The valid-link POST /view returned 200 with content-security-policy "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'" (no script-src), x-frame-options SAMEORIGIN, cache-control no-store, x-content-type-options nosniff, referrer-policy no-referrer, x-robots-tag noindex, nofollow, noarchive, nosnippet, cross-origin-opener-policy and cross-origin-resource-policy same-origin, no set-cookie; after revoke /api/link and /view answered 404. Release readback (read-only Cloudflare API, no write): the four Workers each have one active version (runtime 1aad55b9, apps 28b94bdc, sites cd3c8a84, platform e8fcf4ab), tags carry one build id (a8bacb9f8b1e42118be16166237271e7); apps, sites and platform bind DB dba36bb8-4d6b-4798-baf3-2572809b2919 (whumpo-control-2026-10-31d) and BACKEND_RUNTIME; the control database schema fingerprint equals the current source artifact (241 tables, 1230 objects, sha256 53be90ebb97a500aefc0c89a53abffe49cfcae31dd16c56167422fdd9c64d59d, the batch 6 inventory digest). The release archive .secrets/releases/077c051b-adf1-432a-b43d-cd3752c21a37 is not on this host, so pnpm run deploy status could not compare against that manifest; the readback is of the live state, not of the archived manifest bytes. Acceptance line 1 (host routing, headers and refusal paths with a disposable identity) is met by the 2026-10-31 read-only readback of / and a forged token plus this run; line 2 (catalogue changed only after live acceptance, no paid service, purchase or customer DNS change) is met by the 2026-10-27 order of events. Not verified: physical devices and real human guests.
 
 ## WH-180 — Freeze the review and receipt retention contract and decompose WH-061
 
@@ -8790,6 +8794,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 ### Evidence
 
 - 2026-10-31 UTC (standard appointment form slice, schema batch 6; source and local verification only; NOT deployed and NOT live-tested): a button-driven owner setup (typed appointmentFormReview control, one trigger project_spec_appointment_setup_admit, the existing exact specification, publication and activation reviews unchanged), a hosted GET /forms/appointment page on the application host (server-rendered from the registered records instance; closed with no submit unless the form is bound and the deployed Worker holds TURNSTILE_SECRET, which whumpo-apps does not yet), and a 'Request an appointment' link on the published site while the form is bound. The records panel's false 'Ask Whumpo in Chat to add a form' copy is replaced by the real action. Acceptance lines of WH-070 are NOT claimed: this is one standard backend and its hosted page, not the three extension levels. Evidence: tests/records-setup.mjs (SQLite and --d1) and tests/appointment-form-browser.mjs (Chromium 360/390/1280px, light and dark, 200% text, axe, keyboard). Anonymous public intake stays not live-accepted until the owner sets TURNSTILE_SECRET on whumpo-apps and confirms the widget hostname list covers app-*.whumpo.site. docs/shared-modules.md#owner-appointment-form-setup-wh-070--october-31-2026-utc.
+- 2026-10-31 UTC, NOT closed. Batch 6 is cut over (PR #533, release 077c051b-adf1-432a-b43d-cd3752c21a37, DB whumpo-control-2026-10-31d) and tests/module-live.mjs passed on it (reported by the orchestrator), so the appointment setup trigger and hosted page are deployed. Live read: the platform Worker holds TURNSTILE_SECRET while whumpo-apps (which serves /forms/appointment) lists no secrets, so the public form path is unproven live until TURNSTILE_SECRET is set on whumpo-apps (not changed here). The task asks for three extension levels with composition conformance, which this one standard backend does not meet. Stays planned.
 
 ## WH-072 — Design project data provisioning, migrations and recovery boundaries
 

@@ -59,11 +59,18 @@ try{
  const issued=await json('/api/projects/'+site.project+'/guest-previews','POST',{...request,confirmation:prepared.confirmation});
  token=issued.token;ids.link=issued.link.id;assert.match(issued.url,/^https:\/\/preview\.whumpo\.site\/#[A-Za-z0-9_-]{43}$/);assert.equal(issued.url,guestOrigin+'/#'+token);
  steps.issued=true;
- chrome=await chromium.launch();const context=await chrome.newContext(),page=await context.newPage();page.setDefaultTimeout(30000);
+ chrome=await chromium.launch(process.env.WHUMPO_CHROMIUM?{executablePath:process.env.WHUMPO_CHROMIUM}:{});const context=await chrome.newContext(),page=await context.newPage();page.setDefaultTimeout(30000);
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto(issued.url);await page.frameLocator('#preview').getByRole('heading',{name}).first().waitFor();
  assert.match(await page.locator('#expiry').textContent(),/^Available until /);
  assert.equal(await page.locator('#preview').getAttribute('sandbox'),'');
+ // Read the valid-link /view response headers live (same request the shell's form makes): sandbox CSP, framing, no cookie.
+ const view=await context.request.post(guestOrigin+'/view',{form:{token},headers:{origin:guestOrigin}}),vh=view.headers();
+ assert.equal(view.status(),200);assert.match(await view.text(),new RegExp(name));
+ assert.match(vh['content-security-policy'],/^sandbox; default-src 'none'; /);assert.match(vh['content-security-policy'],/frame-ancestors 'self'/);assert.doesNotMatch(vh['content-security-policy'],/script-src|allow-scripts/);
+ assert.equal(vh['x-frame-options'],'SAMEORIGIN');assert.equal(vh['cache-control'],'no-store');assert.equal(vh['x-content-type-options'],'nosniff');assert.equal(vh['referrer-policy'],'no-referrer');
+ assert.equal(vh['x-robots-tag'],'noindex, nofollow, noarchive, nosnippet');assert.equal(vh['cross-origin-opener-policy'],'same-origin');assert.equal(vh['cross-origin-resource-policy'],'same-origin');assert.equal(vh['set-cookie'],undefined);
+ steps.viewHeaders={csp:vh['content-security-policy'],xfo:vh['x-frame-options'],cache:vh['cache-control'],robots:vh['x-robots-tag']};
  steps.viewed=true;
  const said='Live acceptance comment '+tag;
  await page.locator('#guest-name').fill('Guest '+tag);await page.locator('#guest-comment').fill(said);await page.getByRole('button',{name:'Send comment'}).click();
