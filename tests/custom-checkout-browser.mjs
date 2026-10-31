@@ -177,7 +177,7 @@ createRoot(document.getElementById('root')!).render(<QueryClientProvider client=
   state.closed=true;state.calls=[];
   const context=await browser.newContext({viewport:{width:390,height:844}}),page=await context.newPage(),foreign=[];
   await page.route(/^(?!http:\/\/localhost)/,route=>{foreign.push(route.request().url());return route.abort();});
-  await page.goto(origin+'/');await page.getByText('Checkout is not open yet').waitFor();
+  await page.goto(origin+'/');await page.getByText("Checkout isn't open yet").waitFor();
   assert.equal(await page.getByRole('button').count(),0,'no buttons while checkout is closed');assert.equal(await page.locator('a[href]').count(),0);
   assert.deepEqual(foreign,[]);assert.deepEqual(state.calls.filter(c=>c!=='GET /billing/subscription'),[]);assert.equal(await noOverflow(page),true);
   state.closed=false;await context.close();
