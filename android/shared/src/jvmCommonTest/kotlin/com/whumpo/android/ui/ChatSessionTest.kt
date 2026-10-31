@@ -30,6 +30,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -225,7 +226,21 @@ class ChatSessionTest {
         { reply(200, ChatFixtures.body("review.confirm")) }
 
     @Test
-    fun confirmUsesTheTurnRevisionAndShowsAReceipt() = runTest {
+    fun confirmUsesTheCurrentConversationRevisionEvenWhenTheReviewTurnIsOlder() = runTest {
+        // Found on the emulator against the real Worker: after any later turn the review turn's own revision is stale.
+        val server = Server().apply {
+            chatBody = Json.parseToJsonElement(chatBody).jsonObject.let { JsonObject(it + ("revision" to JsonPrimitive(9))) }.toString()
+            confirmWith(ok)
+        }
+        val s = loaded(server)
+        s.openReview(ChatFixtures.SITE_TURN)
+        s.confirmReview()
+        s.awaitIdle()
+        assertEquals(9, server.posts.single().second["expectedRevision"]!!.jsonPrimitive.int)
+    }
+
+    @Test
+    fun confirmShowsAReceiptAndSendsTheSheetsRevision() = runTest {
         val server = Server().apply { confirmWith(ok) }
         val s = loaded(server)
         s.openReview(ChatFixtures.SITE_TURN)

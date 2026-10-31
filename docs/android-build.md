@@ -100,6 +100,26 @@ Server side nothing changed: `tests/push-fcm.mjs` already proves the adapter aga
 
 **Stopped, deliberately:** the plan's "V1 fixtures for the dispatch lane" (event and outbox recovery, lease races, fencing, fairness, expiry) have nothing to test. `src/` holds no dispatcher: `pushSender` is called by no Worker path, and a lane needs new production code in `src/` that reads `push_events`, leases rows and calls the sender. That is the production wiring this slice must not add, and it belongs with activation review (WH-086 B1, WH-052 and WH-075 dispatcher gates). A test that defined its own lane would only test itself. No FCM call, token, Firebase project or `google-services.json` was used.
 
+## Emulator journey against the local Worker (WH-084 slice, emulator evidence only)
+
+`tests/android-local-worker.mjs` serves the real Worker module (`src/index`) on disposable SQLite over plain HTTP on 127.0.0.1. It is not `wrangler dev` and not workerd or D1: the node suites already run the same module that way, and this adds only an HTTP front. Every request goes through `worker.fetch` with the node suites' `test` environment (permissive limiters, no model, no Stripe, no provider, no secret). It seeds one synthetic owner, one passkey, one project and one pending specification review, issues no session, and prints the request log when stopped. There is no server bypass.
+
+```sh
+SEED_FILE=/tmp/seed.json node tests/android-local-worker.mjs        # prints READY 8787; SIGTERM prints the request log
+adb reverse tcp:8787 tcp:8787
+cd android && ./gradlew connectedLocalDebugAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.class=com.whumpo.android.WorkerJourneyTest \
+  -Pandroid.testInstrumentationRunnerArguments.seed=$(base64 -w0 /tmp/seed.json)
+```
+
+Start a fresh worker for each run: the journey consumes the seeded review. Without a `seed` argument `WorkerJourneyTest` skips, which is what CI does. The passkey is `SoftwarePasskeys`, a test double installed through `AppContainer.passkeys.override`: it signs the server's WebAuthn request with the seeded ES256 key and claims the Android origin the Worker allowlists (`androidPasskeyOrigins`). It proves the app's sign-in state machine and the server's verification of a well-formed assertion. It does not prove Credential Manager, the app-signature to origin binding, Digital Asset Links, a credential provider or a physical device.
+
+Observed on 2026-10-31 (API 35 emulator): login options and verify, session, bootstrap and chat (all 200), a Chat message, the review sheet with the exact lines, and `POST /reviews/confirm` 200 with the sheet showing "Saved. Your private website is updated." The local origin did accept the software authenticator's Android-origin assertion, so the risk the plan flagged did not materialise.
+
+Defect found and fixed by this run: the review sheet sent the review turn's own revision as `expectedRevision`, so after any later turn the Worker answered `409 stale_revision` and the sheet said "no longer current". It now sends the conversation revision from when the sheet opened (`ChatSessionTest.confirmUsesTheCurrentConversationRevisionEvenWhenTheReviewTurnIsOlder`).
+
+Not covered by this slice: a fresh-passkey re-prompt, process death mid-confirm, duplicate taps (JVM tests cover them), two-owner isolation and replay rules (`tests/mobile-slice.mjs`), real model replies (the Worker has no model, so the Chat reply is the deterministic export notice), photo publication and application activation, Custom Tab previews, a physical device.
+
 ## Verification record
 
 - **October 4, 2026 (original shell):** Gradle wrapper hashes matched; `:core:test` passed 19/19 locally; the Android modules were CI-only.
