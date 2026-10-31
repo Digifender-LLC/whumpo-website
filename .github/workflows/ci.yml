@@ -33,6 +33,9 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # High and critical advisories in the dependency tree fail the build (WH-004). A registry outage also fails the job, the safe direction.
+      - name: Dependency advisories (high and above)
+        run: pnpm audit --audit-level=high
       - run: pnpm check
       - run: pnpm build
       # The Workers Builds gate runs this too; checking it here catches an unregistered route before merge, not after.
@@ -55,7 +58,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 1
+          fetch-depth: 0 # full history: the scan below covers every commit
           persist-credentials: false
       - name: Install gitleaks
         run: |
@@ -67,5 +70,5 @@ jobs:
           curl -sSfL -o gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_${arch}.tar.gz"
           echo "${sha}  gitleaks.tgz" | sha256sum -c -
           tar xzf gitleaks.tgz gitleaks
-      - name: Scan working tree
-        run: ./gitleaks detect --no-banner --redact --config .gitleaks.toml --source . --no-git
+      - name: Scan full history
+        run: ./gitleaks detect --no-banner --redact --config .gitleaks.toml --source .

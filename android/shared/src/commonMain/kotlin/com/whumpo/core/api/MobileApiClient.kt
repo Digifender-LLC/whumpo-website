@@ -347,7 +347,9 @@ class MobileApiClient(
             e
         }
         val reauth = lastReauth
-        if (!auth || reauth == null || reauth.elapsedNow() > REAUTH_RACE_WINDOW) return reject(first)
+        // An anonymous call carries no session, so a refusal of it (a full challenge table, say) says nothing about the stored one.
+        if (!auth) throw first
+        if (reauth == null || reauth.elapsedNow() > REAUTH_RACE_WINDOW) return reject(first)
         return try {
             execOnce(method, path, auth, params, body, extraHeaders, write)
         } catch (e: MobileApiException.IdentityChanged) {

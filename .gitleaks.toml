@@ -24,3 +24,28 @@ regexes = [
   '''^qIuPjqrfQ6lf1stq7YPW5L2KAdPjL4gb2S3uMfLp3P4$''',
   '''^JjnfpHbcaqW-f-R2JEeiuSIvfNgU_baB5l9HWB5zwGM$''',
 ]
+
+# Full-history findings reviewed October 31, 2026 UTC and confirmed false positives. Each entry is one file in one commit (condition AND), nothing broader.
+[[allowlists]]
+description = "tests/boundary-operator-environment.mjs: a 21-character synthetic sk_test value used as a negative fixture"
+condition = "AND"
+commits = ["1c0f70db56bd603c8fa17a8a961af124441c1814"]
+paths = ['''^tests/boundary-operator-environment\.mjs$''']
+
+[[allowlists]]
+description = "tests/push-fcm.mjs: a fake private-key block spanning into a regex literal"
+condition = "AND"
+commits = ["f49b855a313d4a2697b779efbff49ba521b4e163"]
+paths = ['''^tests/push-fcm\.mjs$''']
+
+[[allowlists]]
+description = "PhotoPipelineTest.kt: a GPSLatitude EXIF constant"
+condition = "AND"
+commits = ["37c2f52c2738be2756b1d58bf10735df948a1a7c"]
+paths = ['''^android/shared/src/androidHostTest/kotlin/com/whumpo/android/ui/PhotoPipelineTest\.kt$''']
+
+[[allowlists]]
+description = "tests/cost-events-store.mjs: a code expression, not a credential"
+condition = "AND"
+commits = ["8be2896f0d450f087bef635d95c3d2ea7eafd6d6"]
+paths = ['''^tests/cost-events-store\.mjs$''']

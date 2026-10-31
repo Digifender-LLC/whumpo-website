@@ -145,10 +145,27 @@ try{
   const before=await snapshot(a);
   const fresh=await send(sb.token,id(),await revision(b));assert.equal(fresh.status,200,fresh.text);
   assert.equal(await snapshot(a),before,'B\'s send leaves A\'s transcript and revision untouched');
-  const reused=await send(sb.token,own,await revision(b));
-  assert.ok(reused.status!==200||reused.data?.requestId!==own,'B reusing A\'s id must not be answered as A\'s accepted turn: '+reused.text);
+  // B reuses A's id with the revision that aligns with A's committed turn and the same text: a replay lookup that ignores the owner would accept it.
+  for(const expected of [first.data.revision-1,await revision(b)]){
+   const reused=await send(sb.token,own,expected);
+   assert.equal(reused.status,409,'B reusing A\'s id (expected revision '+expected+'): '+reused.text);assert.equal(reused.code,'request_conflict');
+  }
   assert.equal(await snapshot(a),before,'B reusing A\'s request id leaves A\'s transcript and revision untouched');
   assert.equal((await db.prepare('SELECT user_id FROM chat_turns WHERE id=?').bind(own).first()).user_id,a.account,'the turn keeps its owner');
+ });
+
+ await check('overload is never a changed identity: a flood of anonymous login challenges is capped to its own share (503) while signed-in reauthentication still works, and a full table answers unavailable (503) with the session intact',async()=>{
+  const fill=n=>run("INSERT INTO identity_challenges(id,token_hash,challenge,kind,policy_version,client,origin,rp_id,request_id,request_hash,created_at,expires_at) WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<?) SELECT lower(hex(randomblob(18))),lower(hex(randomblob(32))),'x'||lower(hex(randomblob(32))),'login',1,'web','https://whumpo.com','whumpo.com',lower(hex(randomblob(18))),lower(hex(randomblob(32))),unixepoch(),unixepoch()+300 FROM n LIMIT ?-(SELECT count(*) FROM identity_challenges WHERE kind='login')",n,n);
+  const refused=async(path,token)=>{const r=await call('POST',path,{token,body:json});assert.equal(r.status,503,path+': '+r.text);assert.equal(r.code,'unavailable',path);};
+  try{
+   await fill(2500);
+   await refused('/session/login/options');
+   const reauth=await call('POST','/session/reauth/options',{token:sa.token,body:json});
+   assert.equal(reauth.status,200,'signed-in reauthentication keeps working while the anonymous share is full: '+reauth.text);
+   await run("DELETE FROM identity_challenges WHERE kind='reauth'");await fill(5000);
+   await refused('/session/login/options');await refused('/session/reauth/options',sa.token);
+   assert.equal((await call('GET','/session',{token:sa.token})).status,200,'overload does not end the session');
+  }finally{await run("DELETE FROM identity_challenges WHERE client='web' AND kind='login' AND account_id IS NULL");}
  });
 
  await check('logout ends only the bearer\'s own session: a sibling session and another account keep working, and a repeated logout is proof_required',async()=>{

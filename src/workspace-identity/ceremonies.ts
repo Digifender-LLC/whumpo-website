@@ -75,14 +75,19 @@ async function consumeNativeChallenge(db:D1Database,id:unknown,kind:Kind){
  if(typeof id!=='string'||!uuid.test(id))throw proof();
  return admitted(await db.prepare('DELETE FROM identity_challenges WHERE id=? RETURNING *,unixepoch() AS consumed_at').bind(id).first<Challenge>(),kind,nativeRp(),'android');
 }
+/** Platform-wide ceiling on unexpired anonymous login challenges; the table cap is 5,000 (identity_challenge_limit). */
+export const anonymousLoginChallengeCap=2500;
 export async function saveIdentityChallenge(db:D1Database,rp:ReturnType<typeof context>,kind:Kind,challenge:string,fields:{accountId?:string;email?:string;inviteHash?:string;p?:IdentityPrincipal;requestId:string;requestHash:string;name?:string},client:Client='web'){
  const id=crypto.randomUUID(),token=newSessionToken(),p=fields.p;
  const gate=p?identityPredicate(db,p,(kind==='reauth'||kind==='recovery_complete')?{purpose:p.purpose,freshPasskey:false,bindIdentityRevision:true}:operationPolicy(p)):null;
  // INSERT ... SELECT allows the same committing guard as credential changes.
- const query=`INSERT INTO identity_challenges SELECT ?,?,?,?,1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,unixepoch(),unixepoch()+300${gate?` WHERE ${gate.sql}`:''}`;
+ // Anonymous login challenges get their own share of the table (no schema change: the check is part of the same INSERT), so a flood cannot use up
+ // the 5,000 platform slots that signed-in reauthentication and key changes need. A full share is overload (503), not a changed identity.
+ const anonymous=kind==='login'&&!gate,where=gate?` WHERE ${gate.sql}`:anonymous?` WHERE (SELECT count(*) FROM identity_challenges WHERE kind='login')<${anonymousLoginChallengeCap}`:'';
+ const query=`INSERT INTO identity_challenges SELECT ?,?,?,?,1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,unixepoch(),unixepoch()+300${where}`;
  const statement=db.prepare(query).bind(id,await hashToken(token),challenge,kind,client,rp.origin,rp.rpID,fields.accountId??p?.accountId??null,fields.email??null,fields.inviteHash??null,kind==='signup'?customerEligibilityVersion:null,
   p?.authorityId??null,p?.kind??null,p?.authEpoch??null,p?.credentialRevision??null,p?.attempt?.id??null,p?.attempt?.revision??null,fields.requestId,fields.requestHash,fields.name??null,...(gate?.params??[]));
- try{if((await statement.run()).meta.changes!==1)throw changed();}catch(error){databaseError(error);}
+ try{if((await statement.run()).meta.changes!==1)throw anonymous?unavailable():changed();}catch(error){databaseError(error);}
  return {challengeToken:token,challengeId:id};
 }
 async function registration(db:D1Database,rp:ReturnType<typeof context>,accountId:string,email:string){

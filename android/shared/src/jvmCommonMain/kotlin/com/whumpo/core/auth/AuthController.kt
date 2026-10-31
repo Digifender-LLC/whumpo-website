@@ -184,10 +184,12 @@ class AuthController(
      * is ignored. The hand-off is single use: it is dropped before the exchange, so a replayed link does nothing.
      *
      * Strict (WH-083): exactly `code` (64 lowercase hex) and `state` (equal to what was sent), each once, nothing else.
+     * A link whose `state` is not the pending one is ignored and leaves the hand-off waiting; a matching `state` with a bad `code` or extra parameters still spends it.
      */
     fun onReturn(uri: String) {
         val params = returnParams(uri) ?: return
-        if (handoff == null) return
+        // A link for another hand-off (a stray or hostile explicit intent) is not ours: ignore it and keep the pending one.
+        if (params["state"] != handoff?.state) return
         launchStep {
             val pending = handoff ?: return@launchStep
             handoff = null
