@@ -105,6 +105,25 @@ try{
   assert.equal(await state(o.user,cid),'confirmed');
   await lc.consumeLookupConsent(o.scope,o.user,cid,input,approved);
  });
+ await test('WH-143 A1: voiding for one provider ends the owner\'s open consents for it only; a confirmed consent then refuses to be consumed',async()=>{
+  const o=await owner(),other=await owner();
+  const put=async(user,provider,state)=>{const cid=id(),now=Date.now();
+   await run("INSERT INTO lookup_consents(consent_id,owner_id,provider,operation_id,credential_id,params_digest,destination,created_at,expires_at,state,revision) VALUES(?,?,?,?,?,?,?,?,?,'issued',1)",cid,user,provider,'messages.search','credential-1','a'.repeat(64),'owner-panel',now-5000,now+890000);
+   if(state!=='issued')await run("UPDATE lookup_consents SET state='confirmed',confirmed_at=?,revision=2 WHERE consent_id=?",now-3000,cid);
+   if(state==='used')await run("UPDATE lookup_consents SET state='used',settled_at=?,revision=3 WHERE consent_id=?",now-2000,cid);
+   return cid;};
+  const issued=await put(o.user,'gmail','issued'),confirmed=await put(o.user,'gmail','confirmed'),used=await put(o.user,'gmail','used'),calendar=await put(o.user,'google-calendar','confirmed'),theirs=await put(other.user,'gmail','confirmed');
+  const real=await lc.issueLookupConsent(o.scope,o.user,lookup);await lc.confirmLookupConsent(o.scope,o.user,(await card(o,real)).card);
+  // A disconnect commits this statement in its own batch.
+  await db.batch([lc.voidLookupConsents(db,o.user,'gmail')]);
+  assert.deepEqual([await state(o.user,issued),await state(o.user,confirmed),await state(o.user,used),await state(o.user,real)],['voided','voided','used','voided'],'open consents void; a used one is history');
+  assert.equal(await state(o.user,calendar),'confirmed','another provider is untouched');assert.equal(await state(other.user,theirs),'confirmed','another owner is untouched');
+  const voided=await row('SELECT settled_at,revision FROM lookup_consents WHERE consent_id=?',confirmed);assert.ok(voided.settled_at>0&&voided.revision===3);
+  await db.batch([lc.voidLookupConsents(db,o.user,'gmail')]);assert.equal((await row('SELECT revision FROM lookup_consents WHERE consent_id=?',confirmed)).revision,3,'voiding twice changes nothing');
+  await assert.rejects(lc.consumeLookupConsent(o.scope,o.user,real,lookup),code('VOIDED'));
+  await assert.rejects(run("UPDATE lookup_consents SET state='used',settled_at=?,revision=revision+1 WHERE consent_id=?",Date.now(),confirmed),/lookup_consent_guard/);
+  assert.equal(await state(o.user,real),'voided');
+ });
  await test('model-route gate: the current route is training-enabled and not approved',()=>{
   assert.deepEqual({...lc.currentModelRoute},{trainsOnData:true,approvedForConnectorContent:false});
   assert.throws(()=>lc.assertModelRoute('model-context',lc.currentModelRoute),code('MODEL_ROUTE'));
