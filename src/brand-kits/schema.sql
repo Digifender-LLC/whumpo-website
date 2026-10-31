@@ -90,3 +90,10 @@ WHEN NEW.operation='change' AND NOT EXISTS(SELECT 1 FROM chat_turns t WHERE t.id
 END;
 CREATE TRIGGER project_spec_first_draft_no_brand BEFORE INSERT ON project_spec_versions
 WHEN NEW.revision=1 AND json_type(NEW.spec_json,'$.design.brand') IS NOT 'null' BEGIN SELECT RAISE(ABORT,'specification_changed'); END;
+-- A rename would overwrite the held name, so it is refused too. New versions still append: earlier versions are immutable and kept.
+CREATE TRIGGER safety_hold_brand_kit_name BEFORE UPDATE OF name ON brand_kits
+WHEN NEW.name IS NOT OLD.name AND EXISTS(SELECT 1 FROM safety_preservation_holds WHERE released_at IS NULL AND scope='account' AND subject_user_id=OLD.owner_user_id)
+BEGIN SELECT RAISE(ABORT,'safety_preservation_hold'); END;
+CREATE TRIGGER safety_hold_saved_section_name BEFORE UPDATE OF name ON saved_sections
+WHEN NEW.name IS NOT OLD.name AND EXISTS(SELECT 1 FROM safety_preservation_holds WHERE released_at IS NULL AND scope='account' AND subject_user_id=OLD.owner_user_id)
+BEGIN SELECT RAISE(ABORT,'safety_preservation_hold'); END;

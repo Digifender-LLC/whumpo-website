@@ -19,8 +19,8 @@ import {ConfirmButton,QueryStatus} from './workspace-controls';
 export type Kit={id:string;name:string;version:number;tokens:KitTokens};
 export type SavedSection={id:string;name:string;version:number;content:SectionContent};
 export const defaultTokens:KitTokens={light:{ink:'#1f2a44',paper:'#fbf8f1',accent:'#8a2c0d'},dark:null,font:'classic',radius:'soft',density:'comfortable',logoAlt:null};
-const sampleSections:SiteSection[]=[{heading:'Opening hours',text:'Tuesday to Sunday, 7 to 3.',variant:'callout'},{heading:'Order ahead',text:'Call or message us the day before.',variant:'card'}];
-export const sampleSite=(sections:SiteSection[]=sampleSections):SiteConfig=>({name:'Harbour Bakery',description:'Bread, pastry and coffee, baked fresh every morning.',theme:'ocean',headline:'Good bread takes time',aboutTitle:'Our story',aboutText:'We bake in small batches and sell out most days.',sections});
+const sampleSections:SiteSection[]=[{heading:'Opening hours',text:'Tue to Sun, 7 to 3.',variant:'callout'},{heading:'Order ahead',text:'Call the day before.',variant:'card'}];
+export const sampleSite=(sections:SiteSection[]=sampleSections):SiteConfig=>({name:'Harbour Bakery',description:'Bread, pastry and coffee, baked fresh every morning.',theme:'ocean',headline:'Good bread takes time',aboutTitle:'Our story',aboutText:'Small batches, sold out most days.',sections});
 const hexLabel=(c:BrandColors)=>`text ${c.ink}, background ${c.paper}, accent ${c.accent}`;
 
 /** The workspace policy (`style-src 'self'`) blocks `style=` attributes, so owner-chosen sample values are applied through the CSSOM,
@@ -35,7 +35,7 @@ function Dyn({css,className,children}:{css:Record<string,string>;className?:stri
  * `renderSite` over validated tokens; it is parsed inert, never executed, and hidden from assistive technology. */
 /** Preview-only compaction (never part of a published site): a short hero so the about panel and a section panel, which show corners and
  * spacing, sit inside the box without scrolling. A section preview hides the hero and about panel so the section is at the top. */
-const previewCss=(focus:'site'|'sections')=>focus==='sections'?'.hero,.about{display:none}header{padding-block:12px}main{padding-block:0}.sections{margin:12px 0}':'header{padding-block:8px}.tag,.eyebrow,.rule,.intro,footer{display:none}.hero{padding:6px 7%}h1{font-size:24px;margin:2px 0}main{padding-block:8px;display:grid;gap:12px;align-items:start}.about{grid-template-columns:1fr;gap:6px;padding:calc(12px*var(--space))}.about h2{font-size:16px}.about p{font-size:13px;line-height:1.4}.sections{margin:0;grid-template-columns:1fr;gap:calc(8px*var(--space))}.feature{padding:calc(10px*var(--space))}.feature h2{font-size:15px;margin:0}.feature p{font-size:13px;line-height:1.4;margin:4px 0 0}@media(min-width:600px){main{grid-template-columns:1fr 2fr}.hero{grid-column:1/-1}.sections{grid-template-columns:1fr 1fr}}';
+const previewCss=(focus:'site'|'sections')=>focus==='sections'?'.hero,.about{display:none}header{padding-block:12px}main{padding-block:0}.sections{margin:12px 0}':'header{padding-block:6px}.tag,.eyebrow,.rule,.intro,footer{display:none}.hero{padding:2px 7%}h1{font-size:20px;margin:2px 0}main{padding-block:6px;display:grid;gap:8px;align-items:start}.about{grid-template-columns:1fr;gap:6px;padding:calc(12px*var(--space))}.about h2{font-size:16px}.about p{font-size:13px;line-height:1.4}.sections{margin:0;grid-template-columns:1fr;gap:calc(8px*var(--space))}.feature{padding:calc(10px*var(--space))}.feature h2{font-size:15px;margin:0}.feature p{font-size:13px;line-height:1.4;margin:4px 0 0}@media(min-width:600px){main{grid-template-columns:1fr 2fr}.hero{grid-column:1/-1}.sections{grid-template-columns:1fr 1fr}}';
 export function BrandPreview({tokens,mode,sections,label,focus='site'}:{tokens:KitTokens;mode:'light'|'dark';sections?:SiteSection[];label?:string;focus?:'site'|'sections'}){
  const host=useRef<HTMLDivElement>(null);
  const view=useMemo(()=>{
@@ -57,8 +57,8 @@ export function BrandPreview({tokens,mode,sections,label,focus='site'}:{tokens:K
  },[view,focus]);
  return <div className="space-y-2">
   {'error' in view?<p role="status" className="rounded-md border border-line bg-surface-sunken p-4 text-body-sm">{view.error}</p>
-   :<div ref={host} aria-hidden="true" data-testid="brand-preview" className="brand-preview-box max-h-[min(70dvh,560px)] overflow-auto rounded-md border border-line-strong"/>}
-  <p className="text-caption text-ink-muted">{label??'A picture of how the example site below will look. Your own text and photos are used when you apply it.'}</p>
+   :<div ref={host} aria-hidden="true" tabIndex={-1} data-testid="brand-preview" className="brand-preview-box max-h-[min(70dvh,560px)] overflow-auto rounded-md border border-line-strong"/>}
+  <p className="text-caption text-ink-muted">{label??'An example site with this kit. Applying it uses your own text and photos.'}</p>
  </div>;
 }
 
@@ -136,7 +136,7 @@ export function KitEditor({initial,busy,error,onSave,onCancel}:{initial?:Kit;bus
   <h3 id={id+'-h'} ref={heading} tabIndex={-1} className="text-base font-semibold outline-none">{initial?`Edit “${initial.name}” (version ${initial.version})`:'New brand kit'}</h3>
   <div className="grid gap-2"><label htmlFor={id+'-name'} className="text-sm font-medium">Kit name</label>
    <Input id={id+'-name'} value={name} maxLength={60} onChange={e=>setName(e.target.value)} className="h-11 max-w-sm" autoComplete="off"/></div>
-  <section aria-label="Preview" className="brand-sticky space-y-3 rounded-md border border-line bg-surface-raised p-3">
+  <section aria-label="Preview" className="brand-sticky space-y-2 rounded-md border border-line bg-surface-raised p-2">
    <div className="flex flex-wrap items-center gap-2"><h4 className="text-sm font-semibold">Preview</h4>
     <div role="group" aria-label="Preview mode" className="flex gap-2">{(['light','dark'] as const).map(m=><Button key={m} type="button" variant={mode===m?'primary':'secondary'} size="sm" className="h-auto min-h-11 min-w-0 shrink! whitespace-normal py-2 text-center" aria-pressed={mode===m} onClick={()=>setMode(m)}>{m==='light'?<Sun className="size-4" aria-hidden="true"/>:<Moon className="size-4" aria-hidden="true"/>}{m==='light'?'Light':'Dark'}</Button>)}</div></div>
    <BrandPreview tokens={tokens} mode={mode}/>

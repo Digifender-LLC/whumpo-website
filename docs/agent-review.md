@@ -79,6 +79,10 @@ Every reviewer prompt includes the common list plus the list for its role.
 - Coverage percentages. Ask for a test only when you can name the regression it would catch.
 - Suites outside the verify profiles by design: browser suites and the WH-054 tenant gates ([verification](verification.md)).
 
+**Browser suites to run before merging** (CI installs no browsers and runs nothing as root, so these run on a developer or reviewer machine with Chromium: `node tests/<file>`):
+- `tests/brand-kits-browser.mjs`: the brand kit and saved section editors at 360, 390 and 1280px, 1024x800, 200% text, light and dark, keyboard focus order, axe, under the workspace Content-Security-Policy. Run it for any change to `frontend/src/brand-kit-panel.tsx`, `frontend/src/styles.css` or `src/brand-tokens.ts`.
+- The other `tests/*-browser.mjs` suites, for changes to the screens they cover.
+
 **Docs**
 - Wording, tone and heading taste. Flag only a statement that is false against the code, or planned work presented as implemented.
 - Historical dated paragraphs: they keep their own dates and are not re-verified.

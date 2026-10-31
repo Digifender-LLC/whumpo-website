@@ -215,6 +215,7 @@ try{
   assert.match(create.reply,/only be applied by you from Brand & sections/);assert.equal((await rows('SELECT id FROM site_versions WHERE project_id=?',bare)).length,0);
   const names=(await rows('SELECT id FROM projects WHERE owner_user_id=?',a.user)).length;
   const fresh=await modelTurn(a,{kind:'project',purpose:'A bakery',config});
+  assert.match(fresh.reply,/No project was created\. A brand kit can only be applied by you from Brand & sections/);assert.equal((await row('SELECT status FROM chat_turns WHERE id=?',fresh.tid)).status,'completed','the turn ends with a plain reply, not uncertain');
   assert.equal((await rows('SELECT id FROM projects WHERE owner_user_id=?',a.user)).length,names,'no project was created from a branded draft');
   // The commit itself: a model-turn proposal whose brand differs from the head is aborted even if the application layer were bypassed.
   const valid={...forged,source:null};
@@ -253,7 +254,12 @@ try{
   const caseId='case-'+id(),hold='hold-'+id();
   await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES(?,?,'intake-1','human:reviewer',unixepoch(),unixepoch()+31536000)",caseId,c.user);
   await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES(?,?,?,'account','basis-1','human:approver',unixepoch(),unixepoch()+86400)",hold,caseId,c.user);
-  await rejects(()=>kits.deleteSavedSection(c.scope,c.user,s.id),409,/cannot be deleted right now/);await rejects(()=>kits.deleteBrandKit(c.scope,c.user,k.id),409,/cannot be deleted right now/);
+  await rejects(()=>kits.deleteSavedSection(c.scope,c.user,s.id),409,/cannot be renamed or deleted/);await rejects(()=>kits.deleteBrandKit(c.scope,c.user,k.id),409,/cannot be renamed or deleted/);
+  await rejects(()=>kits.saveBrandKitVersion(c.scope,c.user,k.id,{expectedVersion:1,name:'Renamed under hold',tokens:tokens()}),409,/cannot be renamed or deleted/);
+  await rejects(()=>kits.saveSavedSectionVersion(c.scope,c.user,s.id,{expectedVersion:1,name:'Renamed under hold',content:{heading:'H',text:'T',variant:'plain'}}),409,/cannot be renamed or deleted/);
+  assert.equal((await kits.listBrandKits(c.scope,c.user)).kits.find(x=>x.id===k.id).name,'Held kit','the held name is kept');
+  assert.equal((await kits.saveBrandKitVersion(c.scope,c.user,k.id,{expectedVersion:1,name:'Held kit',tokens:tokens({font:'modern'})})).version,2,'a new version with the same name still saves, and version 1 is kept');
+  assert.equal((await kits.readBrandKitVersion(c.scope,c.user,k.id,1)).tokens.font,'editorial');
   assert.equal((await rows('SELECT id FROM saved_sections WHERE id=?',s.id)).length,1);assert.equal((await rows('SELECT id FROM brand_kits WHERE id=?',k.id)).length,1);
   await assert.rejects(()=>run('DELETE FROM users WHERE id=?',c.user),/safety_preservation_hold|constraint|FOREIGN/,'the account cascade is blocked too');
   await run("UPDATE safety_preservation_holds SET released_at=unixepoch(),released_by='human:approver',release_ref='release-1' WHERE id=?",hold);
@@ -266,9 +272,13 @@ try{
   await rejects(()=>kits.saveSavedSectionVersion(d.scope,d.user,section.id,{expectedVersion:50,name:'Many',content:{heading:'H',text:'last',variant:'plain'}}),409,/already has 50 versions/);
  });
 
+ await check('an oversized configuration says so with the right limit; other incompatibilities do not claim to be too large',async()=>{
+  const photo=await approvedPhoto(a);
+  await assert.rejects(()=>proposeFixtureWebsite(a.scope,a.user,a.project,[{type:'pages.setPhotos',pageId:'home',photos:[{id:photo,alt:' '}]}]),e=>e.status===422&&!/too large/.test(e.message)&&/not supported/.test(e.message));
+ });
  await check('an oversized configuration is a clear refusal, not a database CHECK failure',async()=>{
   const big=Array.from({length:6},(_,n)=>({heading:'H'+n,text:'"'.repeat(800)}));
-  await assert.rejects(()=>proposeFixtureWebsite(a.scope,a.user,a.project,[{type:'pages.setSections',pageId:'home',sections:big}]),e=>e.status===422&&/too large to save.*9,216 bytes/.test(e.message));
+  await assert.rejects(()=>proposeFixtureWebsite(a.scope,a.user,a.project,[{type:'pages.setSections',pageId:'home',sections:big}]),e=>e.status===422&&/too large to save.*7,168 bytes.*9,216/.test(e.message));
  });
 
  await check('limits hold in the commit and nothing used the network',async()=>{

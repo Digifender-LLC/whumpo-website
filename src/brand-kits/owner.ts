@@ -21,7 +21,7 @@ async function gate(db:D1Database,userId:string,featureId:typeof brandKitFeature
 }
 function mapFailure(error:unknown,what:string){
  const text=String(error);
- if(text.includes('safety_preservation_hold'))return new BrandKitError(409,'This cannot be deleted right now. Contact support if you need help.');
+ if(text.includes('safety_preservation_hold'))return new BrandKitError(409,'This is being kept right now, so it cannot be renamed or deleted. Contact support if you need help.');
  if(text.includes('capacity'))return new BrandKitError(409,`You have reached the limit of saved ${what}s (${what==='brand kit'?kitLimits.kits:kitLimits.sections}). Delete one you no longer use first.`);
  if(text.includes('version_order')||text.includes('UNIQUE')||text.includes('PRIMARY KEY')||text.includes('CHECK constraint failed'))return new BrandKitError(409,`This ${what} changed since you opened it, or it already has ${kitLimits.versions} versions. Reload it and try again.`);
  return null;

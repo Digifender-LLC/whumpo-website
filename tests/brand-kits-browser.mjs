@@ -133,18 +133,37 @@ try{
  assert.deepEqual(order.slice(0,3),['name','preview','color'],'name, then preview, then the colors');
  for(const [w,h] of [[1280,900],[1024,800],[390,844]]){
   await page.setViewportSize({width:w,height:h});const box=ed('new').getByTestId('brand-preview');await box.scrollIntoViewIfNeeded();
-  const m=await box.evaluate(el=>{const r=el.getBoundingClientRect(),inside=sel=>{const n=el.shadowRoot.querySelector(sel);if(!n)return null;const b=n.getBoundingClientRect();return b.top>=r.top-1&&b.bottom<=r.bottom+1;};return {about:inside('.about'),card:inside('.feature-card'),callout:inside('.feature-callout')};});
+  // What matters: the panels that show corners and spacing are inside the box without scrolling, and the box is not at its height cap, so a
+  // different font's metrics (a few pixels) cannot push one out. The slack is a design margin, not a pass for a tight fit.
+  const m=await box.evaluate(el=>{const r=el.getBoundingClientRect(),inside=sel=>{const n=el.shadowRoot.querySelector(sel);if(!n)return null;const b=n.getBoundingClientRect();return b.top>=r.top-1&&b.bottom<=r.bottom+1;};return {about:inside('.about'),card:inside('.feature-card'),callout:inside('.feature-callout'),scrolls:el.scrollHeight>el.clientHeight+1,spare:parseFloat(getComputedStyle(el).maxHeight)-el.scrollHeight};});
   assert.equal(m.about,true,`${w}x${h}: the about panel (corners, spacing) is fully visible`);assert.equal(m.card,true,`${w}x${h}: a card panel is fully visible`);assert.equal(m.callout,true,`${w}x${h}: a callout panel is fully visible`);
+  assert.equal(m.scrolls,false,`${w}x${h}: the preview needs no scrolling`);assert(m.spare>=24,`${w}x${h}: only ${m.spare}px of room before the preview box height cap; font metrics could push a panel out`);
  }
  phase='sticky only on large tall screens: solid, at most 38dvh, and Tab never lands under it';
  const pos=async(w,h)=>{await page.setViewportSize({width:w,height:h});return ed('new').locator('.brand-sticky').evaluate(el=>{const c=getComputedStyle(el),r=el.getBoundingClientRect();return {position:c.position,bg:c.backgroundColor,h:r.height,vh:innerHeight};});};
  const big=await pos(1280,900);assert.equal(big.position,'sticky');assert.notEqual(big.bg,'rgba(0, 0, 0, 0)','a solid background');assert(big.h<=0.38*big.vh+1,`sticky preview is ${big.h}px of ${big.vh}`);
  assert.equal((await pos(1280,700)).position,'static','short screens keep it in flow');assert.equal((await pos(900,900)).position,'static','narrow screens keep it in flow');assert.equal((await pos(390,844)).position,'static','phones keep it in flow');
- await page.setViewportSize({width:1280,height:900});await ed('new').getByLabel('Kit name').focus();
- for(let i=0;i<60;i++){
-  await page.keyboard.press('Tab');
-  const hidden=await page.evaluate(()=>{const a=document.activeElement,s=document.querySelector('#new .brand-sticky');if(!a||!s||s.contains(a)||!document.querySelector('#new form').contains(a))return null;const sb=s.getBoundingClientRect().bottom,r=a.getBoundingClientRect();return r.top<sb-1&&r.bottom>0?[a.tagName,Math.round(r.top),Math.round(sb)]:null;});
-  assert.equal(hidden,null,'focus landed under the sticky preview at Tab '+i);
+ for(const [w,h] of [[1280,900],[1024,800]]){
+  await page.setViewportSize({width:w,height:h});
+  // Force the aria-hidden scroller to overflow (a browser makes an overflowing scroller keyboard-focusable unless it has tabindex=-1).
+  await page.evaluate(()=>{const b=document.querySelector('#new [data-testid=brand-preview]');b.style.setProperty('max-height','40px','important');});
+  assert.equal(await page.evaluate(()=>{const b=document.querySelector('#new [data-testid=brand-preview]');return b.scrollHeight>b.clientHeight+1&&b.getAttribute('tabindex');}),'-1','the overflowing hidden scroller is taken out of the tab order');
+  await ed('new').getByLabel('Kit name').focus();const seen=new Set();
+  for(let i=0;i<70;i++){
+   await page.keyboard.press('Tab');
+   const where=await page.evaluate(()=>{
+    const a=document.activeElement,s=document.querySelector('#new .brand-sticky'),form=document.querySelector('#new form');
+    if(!a||!form.contains(a))return {skip:true};
+    const r=a.getBoundingClientRect(),sb=s.getBoundingClientRect().bottom,inSticky=s.contains(a);
+    return {tag:a.tagName,label:(a.getAttribute('aria-label')||a.textContent||a.getAttribute('type')||'').slice(0,30),hiddenAncestor:!!a.closest('[aria-hidden=true]'),inSticky,top:Math.round(r.top),bottom:Math.round(r.bottom),stickyBottom:Math.round(sb),vh:innerHeight,visible:r.bottom>0&&r.top<innerHeight};
+   });
+   if(where.skip)continue;seen.add(where.inSticky?'sticky':'form');
+   assert.equal(where.hiddenAncestor,false,`${w}x${h}: Tab ${i} landed on a hidden element: ${JSON.stringify(where)}`);
+   assert.equal(where.visible,true,`${w}x${h}: Tab ${i} landed off screen: ${JSON.stringify(where)}`);
+   if(!where.inSticky)assert(where.top>=where.stickyBottom-1,`${w}x${h}: Tab ${i} landed under the sticky preview: ${JSON.stringify(where)}`);
+  }
+  await page.evaluate(()=>{document.querySelector('#new [data-testid=brand-preview]').style.removeProperty('max-height');});
+  assert(seen.has('sticky')&&seen.has('form'),`${w}x${h}: the walk covered both the sticky preview controls and the form`);
  }
  phase='200% text in the real frame';
  for(const width of [360,1280]){

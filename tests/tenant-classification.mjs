@@ -152,11 +152,11 @@ for(const name of spike)assert.ok(baselined.has(name),name);
 assert.ok(baselined.has('safety_held_projects')&&baselined.has('operator_contained_projects'),'the views the spike called uncounted are found too');
 // 44 objects at ca17c6a plus WH-050's operator_containment_retained (same hold-subject comparison as the safety_hold_* triggers).
 assert.ok(baselined.has('operator_containment_retained'));
-// WH-181 adds 19 objects: the review_receipts delete guards (users.id and hold-subject comparisons with each family's user_id). WH-091 adds two: the account hold guards on brand kits and saved sections.
-assert.equal(baselined.size,76);
+// WH-181 adds 19 objects: the review_receipts delete guards (users.id and hold-subject comparisons with each family's user_id). WH-091 adds four: the account hold guards (delete and rename) on brand kits and saved sections.
+assert.equal(baselined.size,78);
 const current=await runChecks();
 assert.deepEqual(current.problems,[]);
-assert.deepEqual([current.bodies.findings.total,current.bodies.findings.new,current.bodies.findings.stale],[85,0,0]);
+assert.deepEqual([current.bodies.findings.total,current.bodies.findings.new,current.bodies.findings.stale],[87,0,0]);
 
 // ---- the command line ----
 const cli=args=>spawnSync(process.execPath,['tools/tenant-classification.mjs',...args],{encoding:'utf8'});

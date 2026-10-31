@@ -281,7 +281,8 @@ export async function prepareSiteAction(db:D1Database,userId:string,turnId:strin
   let config;try{config=photoConfig(action.config);if(config.photos.length)throw new ProposalError();}catch{throw new ProposalError('project_config');}
   const projectId=newProjectId??turnId;
   if(!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(projectId))throw new ProposalError('project_id');
-  const draft=await createWebsite(db,userId,turnId,projectId,config),now=new Date().toISOString();
+  let draft;try{draft=await createWebsite(db,userId,turnId,projectId,config);}catch(error){if(error instanceof BackendError)return {reply:`No project was created. ${error.message}`,statements:[] as D1PreparedStatement[]};throw error;}
+  const now=new Date().toISOString();
   return {reply:`Created your project “${config.name}” and its first private website draft. Open the preview below, then tell me what to change. Nothing has been published.`,createdProjectId:projectId,statements:[
    db.prepare("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at,preferred_theme) SELECT ?,?,?,?,'draft',?,?,? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=? AND status='pending')").bind(projectId,userId,config.name,action.purpose.trim(),now,now,config.theme,turnId,userId),
    ...draft.statements,
