@@ -1,7 +1,7 @@
 import {canonicalJSON,jsonDigest,plain} from '../project-specification/v2/json';
 import type {RecordField,RecordsConfig} from '../project-specification/v3/modules';
 import {ModuleError,type ModulePrincipal} from './policy';
-import {instanceOf,registeredInstances,type RegistryRow} from './registry';
+import {instanceOf,publicFormState,registeredInstances,type RegistryRow} from './registry';
 import type {RecordsSummaryFacts} from './shape';
 import type {ModuleContext,ModuleHandlers,ModuleReadHandler,ModuleWriteHandler} from './api';
 import {admissionNotices} from '../notification-configurations';
@@ -167,6 +167,7 @@ const update:ModuleWriteHandler=async(db,context)=>{
  const keys=Object.keys(changes);
  if(!keys.length||keys.some(k=>!allowed.includes(k)))throw new ModuleError('forbidden');
  const row=await readRecord(db,context,schema.id,t.entryId);
+ if(await heldRecord(db,row.id,context.resource.projectId))throw new ModuleError('unavailable',heldMessage);
  if(row.revision!==t.revision)throw new ModuleError('stale_configuration','This record changed. Reload it and try again.');
  const values=JSON.parse(row.values_json) as Record<string,unknown>;
  for(const key of keys){
@@ -182,6 +183,10 @@ const update:ModuleWriteHandler=async(db,context)=>{
  ],result:{entryId:row.id,revision:next}};
 };
 
+const heldMessage='This record is kept unchanged while a safety review is open. It cannot be edited or removed until the review ends.';
+/** A record is frozen while its project or account is inside an active preservation hold, or an attached file is held on its own. The
+ * `safety_hold_module_record_*` triggers repeat this inside the commit. */
+const heldRecord=async(db:D1Database,entry:string,project:string)=>!!await db.prepare('SELECT 1 WHERE EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=?) OR EXISTS(SELECT 1 FROM module_record_files mf JOIN safety_held_files hf ON hf.file_id=mf.file_id WHERE mf.entry_id=?)').bind(project,entry).first();
 /** records.remove — owner only, in every activation state. Refused while the project is inside an active safety
  * preservation hold (the `safety_hold_module_record_retained` trigger repeats this inside the commit). */
 const remove:ModuleWriteHandler=async(db,context)=>{
@@ -191,7 +196,7 @@ const remove:ModuleWriteHandler=async(db,context)=>{
  const schema=schemaOf(context,t.recordId);
  const row=await db.prepare('SELECT id,revision FROM module_records WHERE id=? AND instance_id=? AND project_id=? AND schema_id=?').bind(t.entryId,context.resource.resourceId,context.resource.projectId,schema.id).first<{id:string;revision:number}>();
  if(!row)throw new ModuleError('not_found');
- if(await db.prepare('SELECT 1 FROM safety_held_projects WHERE project_id=?').bind(context.resource.projectId).first())throw new ModuleError('unavailable','This record is retained while a safety review is open.');
+ if(await heldRecord(db,row.id,context.resource.projectId))throw new ModuleError('unavailable',heldMessage);
  const now=Math.floor(Date.now()/1000);
  return {statements:[
   db.prepare('DELETE FROM module_records WHERE id=? AND instance_id=? AND project_id=?').bind(row.id,context.resource.resourceId,context.resource.projectId),
@@ -223,7 +228,8 @@ export async function readOwnerRecords(db:D1Database,user:string,project:string,
 export async function cleanupModuleRecords(db:D1Database){
  await db.prepare(`DELETE FROM module_records WHERE id IN (SELECT r.id FROM module_records r JOIN module_instances i ON i.id=r.instance_id
   WHERE (r.expires_at<=unixepoch() OR r.created_at<=unixepoch()-86400*json_extract(i.config_json,'$.retentionDays'))
-  AND r.project_id NOT IN (SELECT project_id FROM safety_held_projects) LIMIT 500)`).run();
+  AND r.project_id NOT IN (SELECT project_id FROM safety_held_projects)
+  AND NOT EXISTS(SELECT 1 FROM module_record_files mf JOIN safety_held_files hf ON hf.file_id=mf.file_id WHERE mf.entry_id=r.id) LIMIT 500)`).run();
 }
 
 /** `records.summary@1`: per registered records instance of one owned project, its state and revisions, and per schema the
@@ -241,7 +247,7 @@ export async function readRecordsSummary(db:D1Database,user:string,project:strin
   const {results}=await db.prepare(`SELECT r.schema_id,r.submitter_kind,count(*) n FROM module_records r WHERE r.instance_id=? AND r.project_id=? AND ${window.sql} GROUP BY r.schema_id,r.submitter_kind`)
    .bind(row.id,project,...window.params).all<{schema_id:string;submitter_kind:'public'|'visitor'|'staff';n:number}>();
   const n=(schema:string,kind:string)=>results.find(x=>x.schema_id===schema&&x.submitter_kind===kind)?.n??0;
-  items.push({localId:row.local_id,resourceId:row.id,state:row.state as RecordsSummaryFacts['items'][number]['state'],configRevision:row.config_revision,retentionDays:c.retentionDays as 30|90|365,
+  items.push({localId:row.local_id,resourceId:row.id,state:row.state as RecordsSummaryFacts['items'][number]['state'],configRevision:row.config_revision,retentionDays:c.retentionDays as 30|90|365,publicForm:await publicFormState(db,row),
    schemas:c.schemas.map(s=>({recordId:s.id,fieldsRevision:s.fieldsRevision,fields:s.fields.length,records:{public:n(s.id,'public'),visitor:n(s.id,'visitor'),staff:n(s.id,'staff')}})),
    forms:c.forms.map(f=>({formId:f.id,recordId:f.recordId,submit:f.submit,attachments:f.uploadCollectionId!==null})),
    views:c.views.map(v=>({viewId:v.id,recordId:v.recordId,audience:v.audience,scope:v.scope}))});

@@ -8436,74 +8436,6 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Configure and compose maintained modules first; generate only missing custom behavior; preserve isolated customer data and execution with workload-appropriate infrastructure. Whumpo AI maintains projects and chats with owners only.
 
-## WH-067 — Expose shared content, forms, records, files and access modules
-
-Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: L.
-
-Reviewed: 2026-10-30. Source baseline: `475a3a9658575a1defd820f2494e06eadfd956ba`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-Composed interfaces and custom frontends reuse the same maintained tenant-scoped standard APIs.
-
-### Scope
-
-- Define stable API/schema boundaries for content, form validation/submissions/record views, scoped files/galleries and project users/roles
-- Adapt existing contact/directory/visitor-data/photo services instead of generating new auth/storage/CRUD implementations
-- Keep module organization independent of deployment count; several modules can share the current backend
-- Evaluate proven libraries or managed services before building complex identity/payment engines
-- Consume WH-071 logical storage/runtime interfaces and WH-116 data classification; freeze module instance/config/version and migration hooks before tables or client APIs. Add services to the delivered WH-066 compiler/catalog instead of replacing its supported adapters.
-- Keep customer-application visitor/staff roles distinct from Whumpo workspace membership in WH-054. A staff upload rule does not grant owner Chat/admin access or require creating a parallel workspace authentication system.
-- Use WH-090 for owner feature admission/configuration and WH-105 for registered owner-facing bindings from the first module. Visitor/staff authorization remains the separate application policy; ordinary published serving does not become a workspace-subscription check or silently stop on plan loss.
-
-### Acceptance criteria
-
-- [ ] Authenticated scope and field/record/file permissions are enforced inside every API, including direct/custom frontend use
-- [ ] Standard form/gallery/record actions execute deterministically with zero maintainer inference
-- [ ] Staff-only upload access is a project role policy, not a filename prefix or public bucket
-- [ ] Shared APIs do not bypass media quarantine, exact publication reviews or restricted preservation
-- [ ] Initial delivery is split into coherent API slices; no universal no-code engine or unsupported booking promise is implied
-
-### Verification
-
-- Cross-tenant/user/role/direct-API fixtures with replay and revocation
-- Existing contact/directory/photo/app lifecycle suites relevant to each slice
-- Two different frontend compositions share one API contract without custom auth/handlers
-
-### Dependencies and blockers
-
-Planning dependencies: WH-065, WH-066, WH-009, WH-010, WH-071, WH-116, WH-122, WH-105, WH-123, WH-124, WH-125, WH-126, WH-127, WH-128, WH-129, WH-130. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
-- [docs/contact-forms.md](../../docs/contact-forms.md)
-- [docs/directories.md](../../docs/directories.md)
-- [docs/photos.md](../../docs/photos.md)
-- [docs/app-data.md](../../docs/app-data.md)
-- [src/contacts.ts](../../src/contacts.ts)
-- [src/app-gateway.ts](../../src/app-gateway.ts)
-- [src/photo-safety.ts](../../src/photo-safety.ts)
-- [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
-- [docs/workload-placement.md](../../docs/workload-placement.md)
-- [docs/chat-interactions.md](../../docs/chat-interactions.md)
-- [docs/shared-modules.md](../../docs/shared-modules.md)
-
-### Execution coordination
-
-Issue: https://github.com/zemdregon/whumpo/issues/107. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-- 2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.
-- 2026-10-04 UTC: decomposed into WH-123–130 with the planned contract in docs/shared-modules.md. Planning only: no module table, API, binding or deployment exists; the parent acceptance is unchanged and closes only after every child.
-- 2026-10-04 UTC status note (WH-130): not complete and not accepted. Local synthetic evidence covers the delivered operations for each criterion; it is mapped in docs/shared-modules.md#wh-067-acceptance-map--october-4-2026-utc and comes from tests/shared-modules-compositions.mjs plus the registry/access/records/files/collections suites, SQLite and local D1/R2. Open before acceptance: the owner-run empty-D1 cutover and release of PR #160; the WH-126 identity ownership cutover (staff still needs an enabled visitor application); the WH-127 records export serializer and hooks, form attachments, TURNSTILE_SECRET on whumpo-apps and publication-revision binding of public forms; the WH-128 owner photo collection, owner module uploads, published galleries and files export; restricted preservation LC-06; an owner-reachable authoring path (the site agent prompt deliberately advertises no module operation, and capability entries are still planned); and a served composition (WH-070) with browser evidence. Live, browser and device acceptance has not been attempted.
-- 2026-10-04 UTC status note (WH-126 identity cutover): module visitor and staff principals now belong to the access instance with no visitor application in any module suite; the acceptance map in docs/shared-modules.md is updated. WH-067 stays open and not accepted (see the remaining gaps there, including the owner path to save an access instance).
-
 ## WH-073 — Serve published content and standard actions without maintenance inference
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
@@ -8736,292 +8668,6 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 ### Evidence
 
 No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
-
-## WH-125 — Add the module instance registry, activation reviews and shared policy engine
-
-Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
-
-Reviewed: 2026-10-30. Source baseline: `475a3a9658575a1defd820f2494e06eadfd956ba`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-Approved module configuration becomes a scoped, activatable instance whose every API call passes one shared resolver and policy decision.
-
-### Scope
-
-- Current-schema instance and activation tables binding descriptor, configuration digest, configRevision and source specification version
-- Exact owner activation/disable reviews with recent authentication, consuming WH-122 inclusion (core.forms/core.editing) and current identity in the committing statement
-- Server-side resolveResource and policy decision composed into commit SQL; request envelope, idempotent receipts, typed errors and client_update_required
-- Register module.instances@1 and moduleActivationApply under WH-105; keep visitor-submitted values out of Chat and model context
-- Static import/fixture check that module handlers never reach owner-maintenance inference
-
-### Acceptance criteria
-
-- [ ] Foreign, stale configRevision, withdrawn pin, inactive instance and changed-input replay fail with the frozen typed errors inside every handler
-- [ ] Plan loss blocks new activation/widening but keeps owner read/export/disable and published serving
-- [ ] Lost acknowledgements read back existing receipts; concurrent activation/disable has one winner
-- [ ] Module paths pass with maintenance inference unavailable
-
-### Verification
-
-- Disposable SQLite/local D1 suite over actual handlers with two owners/projects, revocation and replay
-- node tests/feature-admission.mjs and chat interaction suites remain green
-- tsc for both projects
-
-### Dependencies and blockers
-
-Planning dependencies: WH-124. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/shared-modules.md](../../docs/shared-modules.md)
-- [docs/workload-placement.md](../../docs/workload-placement.md)
-- [docs/feature-admission.md](../../docs/feature-admission.md)
-- [docs/chat-interactions.md](../../docs/chat-interactions.md)
-- [src/project-specification/service-clients/activation.ts](../../src/project-specification/service-clients/activation.ts)
-
-### Execution coordination
-
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-- 2026-10-04 UTC: source and local verification only; not deployed, not accepted, issue not created or claimed from this session. Branch c/great-curie-8ryukc (PR #160) adds the current schema input src/shared-modules/schema.sql (module_instances, module_activations, module_activation_reviews/links/applies, module_request_receipts; lifecycle class module-registry) with commit triggers, src/shared-modules/{policy,registry,activation,api,bindings,shape}.ts (whumpo-modules v1 envelope with client_update_required and typed ModuleError codes; resolveResource and decideModule; exact owner activation/disable reviews via moduleActivationReview/moduleActivationApply ChatControls with recent passkey sign-in, core.forms/core.editing prepare check and confirm inclusion composed into the applied-receipt insert; idempotent request receipts), module.instances@1 as the feature-null modules view with an owner card, and the apply button in Chat. No kind data handler, visitor-origin route or visitor session binding is delivered (moduleHandlers is empty; visitor principals cannot commit until WH-126). The content compiler still refuses instance-bearing specifications (UNAVAILABLE_CAPABILITY); lifting it is a separate compiler identity cutover, so the registry is reachable only from fixtures that rewrite the saved head in a disposable database. Local checks: node tests/shared-modules-registry.mjs passed 11 groups on SQLite and with --d1 on local D1 (two owners/projects, Starter, revocation, stale proof, replay, concurrent winners, lost-ack readback, withdrawn/stale catalog variants, plan loss, commit-time races, closure/cascades, static no-inference check); feature-admission, 14 offline chat-interaction suites, guest-preview, site-diagnostics, workspace-view, lifecycle, closure, release-manifest, restore-admission, pnpm check, verify fast and protection passed. The schema change requires the owner-run empty-database cutover (pnpm run deploy prepare/apply with schemaChange initialize); deploy ci refuses it and the PR must not merge without the owner.
-- 2026-10-04 UTC: project-content@4 compiler identity cutover (owner decision 2026-10-04: lift the compiler gate first). Source and local verification only; not deployed, not accepted. Branch c/great-curie-8ryukc (PR #160) replaces project-content@3 with project-content@4 (lock compiler-locks/project-content-v4.json generated by tools/check-specification-compiler.mjs --init after the v3 lock was removed; module/schema pin digests unchanged; no @3 reader; @3 locks refused by the compiler, the serving check and SQL admission in schema/platform.sql). The content compiler now admits pinned instances as saved, inactive configuration (no artifact; notifications/automation, rules and staff pages stay refused). Owners save instance-bearing specifications through the existing exact review: one comparison row per changed instance, classified review classes (schema/permissions/integration/spending) bound in the proposal envelope and named in the reply, recent-sign-in specificationApply. Restore is classified against the current head (instance or field removal refused with MIGRATION_REQUIRED). Saving activates nothing; the site agent prompt and read inspection are unchanged. This closes the WH-125 known gap: tests/shared-modules-registry.mjs and tests/shared-modules-access.mjs create instances only through the real save path (configureFixtureModules); one direct head seed remains in the registry suite solely to show activation refusing a migration-bearing head, which no owner path can produce. Local checks: shared-modules-registry and shared-modules-access on SQLite and --d1, specification-compiler, specification-journey (local D1), specification-review-details/display, current-website-specifications, current-interfaces, feature-admission, shared-modules-contract, release-manifest, build-snapshot, 12 chat-interaction suites, chat-saved-turn, chat-reply, saved-work, site-agent, lifecycle-catalog, mobile-v1-contract, pnpm check, verify fast, verify protection and pnpm build passed. Rides the same owner-run empty-database cutover as WH-125/126; deploy ci refuses it.
-- 2026-10-04 UTC: never-activated module instance removal (owner decision 2026-10-04). Source and local verification only; not deployed, not accepted. Branch c/great-curie-8ryukc (PR #160) adds the modules.remove specification operation: a saved instance with no module_instances row (never activated) may be removed through the exact owner specification review and recent-sign-in specificationApply (hook none, no review class, one comparison row, reply names the removal); restores may drop never-activated instances too; an instance that was ever activated (including disabled) stays MIGRATION_REQUIRED until WH-077 export exists. The pure compiler takes the removable id list from its caller (default none); prepareSpecification derives it from the registry, and the module_instance_spec_retained trigger on project_spec_versions refuses any saved version that drops or re-kinds a registered instance (commit-time activation race). Compiler classification changed, so project-content@5 replaces @4 (lock compiler-locks/project-content-v5.json via --init; module/schema pin digests unchanged; @3/@4 locks refused by compiler and SQL admission). Verified: tests/shared-modules-registry.mjs (SQLite and --d1, 12 groups), tests/specification-compiler.mjs, tests/current-website-specifications.mjs, shared-modules access/contract suites, pnpm check, verify fast/protection, pnpm build. Schema change: rides the same owner-run empty-database cutover; deploy ci refuses it.
-- 2026-10-04 UTC: review fixes on branch c/great-curie-8ryukc (PR #160); source and local verification only; not deployed, not accepted. module_request_admit now caps visitor/staff/public writes at 20,000 receipts per instance in a sliding 24 hours (owner operations exempt and not counted) and staff/visitor records.update at 60 per identity per instance per hour; receipts keep a documented 30-day replay window and are pruned by the daily contacts maintenance job (cleanupModuleRequestReceipts; safety-hold inventory: excluded content-free receipt). Activation and access role review capacity (500/project, 50,000/platform) counts only pending reviews without an applied receipt. TURNSTILE_SECRET custody lists src/app-gateway.ts (whumpo-apps) and the validator refuses undeclared env readers; incident control C6 adds the wrangler.apps.jsonc step. docs/shared-modules.md states the shared photo quota consequence of visitor uploads. Local checks: shared-modules registry/access/records/files/collections/compositions on SQLite and --d1, contract, maintenance, maintenance-inventory, maintenance-scheduled, safety-case-operations (hold inventory), secret-custody test and tool, lifecycle-catalog, account-closure-inventory, pnpm check, verify fast, verify protection and pnpm build passed. Still requires the owner-run empty-database cutover.
-
-## WH-126 — Deliver the access module for project visitors and staff roles
-
-Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
-
-Reviewed: 2026-10-30. Source baseline: `475a3a9658575a1defd820f2494e06eadfd956ba`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-A project owner can grant and revoke a staff role on an enrolled project visitor without giving that person workspace, Chat or owner authority.
-
-### Scope
-
-- Move project visitor identity ownership from the application space to the access instance by current-schema cutover, reusing passkeys, invitations, recovery and sessions
-- Staff role grant/revoke through exact owner reviews with an access revision that invalidates sessions-bound decisions, cursors and pending writes
-- access.me on the visitor origin; owner access.list and access.roles@1/accessRoleApply bindings
-- Keep the existing per-visitor document and QuickJS transitions as an execution resource depending on the access instance
-
-### Acceptance criteria
-
-- [ ] Staff and visitors cannot use workspace cookies; owners and WH-054 members gain no visitor/staff authority; staff gain no Chat, publication, spending or identity management
-- [ ] Revocation takes effect on the next request and inside in-flight commits; replay never re-grants
-- [ ] Existing visitor sign-in, recovery, document transition, export and erasure suites pass after the cutover
-- [ ] Role grants, reviews and suppressions follow the project-roles lifecycle class
-
-### Verification
-
-- node tests/app-auth.mjs, tests/app-data.mjs and visitor deletion/recovery suites on complete-schema local D1
-- Two-project, revoked-visitor, revoked-staff and cross-origin cookie fixtures
-- tsc for both projects
-
-### Dependencies and blockers
-
-Planning dependencies: WH-125. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/shared-modules.md](../../docs/shared-modules.md)
-- [docs/app-data.md](../../docs/app-data.md)
-- [src/app-gateway.ts](../../src/app-gateway.ts)
-- [src/app-auth.ts](../../src/app-auth.ts)
-- [src/app-access.ts](../../src/app-access.ts)
-
-### Execution coordination
-
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-- 2026-10-04 UTC: partial slice; source and local verification only; not deployed, not accepted, issue not created or claimed from this session; WH-126 stays open. Branch c/great-curie-8ryukc (PR #160) extends the pending current schema input src/shared-modules/schema.sql with module_access_states (access revision), module_access_roles (staff grants and revoked suppressions), module_access_role_reviews/links/applies and commit triggers (lifecycle class project-roles admitted), adds src/shared-modules/access.ts (visitorPrincipal from the project visitor session cookie only, visitorPredicate composed into module commits and read fences, access.me and owner access.list handlers, access.roles@1 roster) and access-roles.ts (exact owner accessRoleReview/accessRoleApply ChatControls with recent passkey sign-in; grant composes core.editing, revoke needs identity and ownership only), the visitor-origin POST /modules route in src/app-gateway.ts, the access-roles view card and the Chat apply button. Visitor revocation and reviewed erasure suppress/delete grants and advance the access revision. Not done: moving visitor identity ownership from app_spaces to the access instance (staff still require an enabled visitor application), registering the per-visitor document as an execution resource, and a roles export serializer; access.prepareRole/confirmRole stay unavailable. Local checks: node tests/shared-modules-access.mjs passed 11 groups on SQLite and with --d1 on local D1 (signed-passkey visitors, actual gateway, anonymous/workspace/foreign/cross-origin cookie refusals, visitor cookie refused on the workspace origin, two projects, non-owner account, replay without re-grant, one-winner race, revoke inside an in-flight staff commit, revoked and erased visitors, plan loss, disable, closure/cascades, static no-inference check); shared-modules-registry (SQLite and --d1), shared-modules-contract, app-auth, app-data, app-recovery, app-lifecycle, visitor-deletion-review, verify app (customer app journey, owner erasure, task-list journey), lifecycle-catalog, restore-admission, account-closure-inventory, feature-admission, 14 offline chat-interaction suites, guest-preview, site-diagnostics, workspace-view-bindings/components, processing-boundaries, pnpm check, verify fast, verify protection and pnpm build passed (browser suites needing @playwright/test were not run). The schema change still requires the owner-run empty-database cutover (pnpm run deploy prepare/apply with schemaChange initialize, one cutover with WH-125); deploy ci refuses it and the PR must not merge without the owner.
-- 2026-10-04 UTC: project-content@4 (see WH-125 evidence) lets owners save an access instance through the exact owner specification review, so the identity ownership cutover is no longer blocked by the compiler; that cutover, the per-visitor document resource and the roles export serializer remain open. tests/shared-modules-access.mjs now creates instances only through the real save path (SQLite and --d1 passed). Source only; not deployed or accepted.
-- 2026-10-04 UTC: WH-126 identity cutover slice (owner decision of October 4, 2026); source and local verification only; not deployed, not accepted, issue not created or claimed from this session; WH-126 stays open. Branch c/great-curie-8ryukc (PR #160) changes the current schema inputs schema/platform.sql and src/shared-modules/schema.sql: app_visitors is keyed by project_id and access_id (no app_spaces reference); app_invitations and app_auth_challenges bind access_id and the access instance's activation revision; sessions drop the page binding; enrollment, passkeys, sign-in, recovery and sessions need only the project's active access instance activated by the current owner; at most one access instance per project (validator plus module_instance_access_single); disabling the access instance deletes its sessions and challenges and re-activation never revives invitations, challenges or sessions. The visitor application consumes identity: app_spaces.access_id/resource_id, enabling needs the active access instance, application disable/page change/migration/restore no longer sign visitors out and each app_runs row binds the page live at admission. The visitor gateway serves auth, export and the deletion review without a page. src/app-resource.ts derives the per-visitor document custom-function descriptor depending on the access instance (validated with the WH-071 reference and manifest check); src/shared-modules/access-export.ts adds the access-roles-export-v1 serializer (whumpo-access-roles v1) with import validation, and the access descriptor names it. Tests save and activate access instances through configureFixtureModules plus the exact activation controls (enableFixtureVisitorAccess). Local checks passed: shared-modules-access/registry/records/files/collections/compositions on SQLite and --d1, shared-modules-contract, app-activation, app-activation-http, app-auth, app-authenticator, app-data, app-lifecycle, app-migration-checks, app-page-design, app-recovery, visitor-data, visitor-deletion-review, customer-app-journey (with the task-list journey), verify app, lifecycle-catalog, account-closure-inventory, restore-admission, restore-inventory, restore-inventory-freshness, safety-case-operations, tools/safety-hold-inventory, service-safety, processing-boundaries, build-jobs, application-build, backend-checks, operator-containment, public-fairness, saved-work, chat-reply, specification-compiler, current-website-specifications, feature-admission, workspace-view-bindings/components, backend-chat, composition-planner, site-diagnostics, site-agent, agent-prompt-focus, prompt-data-boundaries, pnpm check, verify fast, verify protection and pnpm build. Not run: Playwright browser suites (workspace-view-lifecycle, workspace-identity-browser, visitor-deletion browser harness; @playwright/test is not installed) and app-pages-http (needs a .secrets fixture). Remaining: access.prepareRole/confirmRole, a role-review terminal-receipt schedule, staff sign-in in a composed frontend, and an owner product path to save an access instance; after the cutover the Chat visitor-application journey depends on that owner decision. The schema change still requires the owner-run empty-database cutover (pnpm run deploy prepare/apply with schemaChange initialize); deploy ci refuses it and the PR must not merge without the owner.
-- 2026-10-04 UTC: WH-126 owner visitor access setup; source and local verification only; not deployed, not accepted, issue not created or claimed from this session; WH-126 stays open. Branch c/great-curie-8ryukc (PR #160) adds the typed owner ChatControl accessModuleReview (project id only; never a model action; the site agent prompt still advertises no module operation, asserted) and src/shared-modules/access-setup.ts: it prepares the existing exact specification review (prepareSpecification, one modules.put) for the fixed standard access instance (id visitors, current catalog pins, no dependencies, roles [], invitation enrollment), saved by the existing recent-sign-in specificationApply control and activated by the existing exact moduleActivationReview/Apply pair (three separate reviews; nothing combined). Schema input schema/platform.sql: project_spec_proposal_admit admits a completed guided accessModuleReview turn for the same project (change only) and the new project_spec_access_setup_admit trigger requires the proposal to be the head plus exactly that appended instance with nothing else changed. readAppAccess returns accessSetup (states and ids only, not in the agent's application read); the Visitors panel shows Set up visitor access and Review activating visitor access. A project without a website configuration is refused with a reason (website drafting stays an AI path). tests/customer-app-journey.mjs and the shared task-list journey now set up visitor access through these controls on the real /api/chat/actions endpoint (only the first private website draft and the core.editing grant are synthetic); enableFixtureVisitorAccess uses the same owner control. Local checks passed: customer-app-journey, verify app, app-activation(-http), app-auth, app-data, app-lifecycle, app-migration-checks, app-page-design, app-recovery, application-build, shared-modules-access/collections/compositions/contract/files/records/registry on SQLite and --d1, 13 offline chat-interaction suites, feature-admission, tools/safety-hold-inventory, processing-boundaries, build-jobs, backend-checks, operator-containment, public-fairness, saved-work, service-safety, safety-case-operations, visitor-deletion-review, visitor-data, chat-reply, specification-compiler, current-website-specifications, site-agent, agent-prompt-focus, prompt-data-boundaries, workspace-view-bindings/components, pnpm check, verify fast, verify protection, pnpm build, roadmap validate/alignment/render --check. Not run: app-pages-http (needs a .secrets fixture) and Playwright browser suites. Remaining WH-126: access.prepareRole/confirmRole, role-review terminal-receipt schedule, staff sign-in in a composed frontend, an owner path to add the staff role; visitor access setup needs the project's first private website. The schema change still requires the owner-run empty-database cutover; deploy ci refuses it and the PR must not merge without the owner.
-
-## WH-127 — Deliver the records and forms module with contact as a fixed instance
-
-Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
-
-Reviewed: 2026-10-30. Source baseline: `475a3a9658575a1defd820f2494e06eadfd956ba`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-Visitors submit validated forms into private records that owners, staff and submitters read only through their permitted views and fields.
-
-### Scope
-
-- Record storage adapter on shared D1 with forms.submit, records.view/get/update/remove, opaque scoped cursors and field projection
-- Public submissions reuse contact admission: Origin, body bound, rate limiter, Turnstile, atomic caps; visitor/staff submissions use the access session
-- Expose the existing contact inbox as a fixed-schema records instance over its current tables without changing its fields or 30-day retention
-- records.summary@1 binding, descriptor lifecycle hooks and visitor-scoped export serializer; form.accepted event handoff for WH-069
-
-### Acceptance criteria
-
-- [ ] Field/record permissions hold for owner, staff, submitter and anonymous callers on direct requests, including owner-only fields and own-record scope
-- [ ] Replay, changed-payload conflict, stale configRevision, quota and lost-response cases behave per contract; zero maintainer inference
-- [ ] Contact behavior and its suites are unchanged apart from the shared handler path
-- [ ] No booking, scheduling or arbitrary query capability is implied
-
-### Verification
-
-- node tests/contacts.mjs plus a new records suite on disposable D1 with two tenants and role revocation
-- Direct HTTP fixtures against the visitor and workspace origins
-- tsc for both projects
-
-### Dependencies and blockers
-
-Planning dependencies: WH-126. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/shared-modules.md](../../docs/shared-modules.md)
-- [docs/contact-forms.md](../../docs/contact-forms.md)
-- [src/contacts.ts](../../src/contacts.ts)
-- [src/backend-form-shape.ts](../../src/backend-form-shape.ts)
-- [docs/job-envelope.md](../../docs/job-envelope.md)
-
-### Execution coordination
-
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-- 2026-10-04 UTC: partial slice; source and local verification only; not deployed, not accepted, issue not created or claimed from this session; WH-127 stays open. Branch c/great-curie-8ryukc (PR #160) adds module_records and module_record_events to the pending current schema input src/shared-modules/schema.sql (lifecycle class module-records admitted) and src/shared-modules/records.ts handlers registered in the WH-125 engine: visitor/staff forms.submit through the access session (nested values, bounded field validation, opaque entry id), records.get/records.view with the policy field projection and own-record scope repeated in each query and cursors bound to view, principal, configRevision and access revision, records.update (owner any field, staff staffWrite only, revision compare-and-swap) and owner records.remove (any activation state, refused inside safety holds). Commit triggers repeat instance/form/schema/retention/visitor/caps; content-free events prove each write and are the form.accepted handoff. Retention expiry (current retentionDays) runs in the contacts maintenance job and skips held projects; the delete site is classified blocked in tools/safety-hold-inventory.mjs. Owner routes on the workspace origin: POST /api/projects/P/modules and GET /api/projects/P/module-records/R/S. Verified: tests/shared-modules-records.mjs (SQLite and --d1, 9 groups, two owners/projects, roles, revocation, replay), registry/access/lifecycle/restore-admission/contacts/maintenance/app-auth/app-lifecycle suites, pnpm check, verify fast/protection, pnpm build. Remaining: anonymous public intake with Turnstile and caps, contact inbox as a fixed-schema instance, records.summary@1 and dashboard panel, visitor-subject export serializer and descriptor hooks, attachments (WH-128). Schema change: same owner-run empty-database cutover; deploy ci refuses it.
-- 2026-10-04 UTC: anonymous public intake slice; source and local verification only; not deployed, not accepted; WH-127 stays open. Same branch and pending schema cutover. An anonymous forms.submit to a public form passes the resolver and policy, reads an exact replay back without re-verification, then the visitor gateway's public admission reuses the contact form's protections: fail closed without TURNSTILE_SECRET, the contact per-connection allowance (public_client_usage scope contact, shared with the contact form) and the shared Siteverify helper src/turnstile.ts (now also used by the contact page) bound to the visitor host, action module-form and the exact resource id; the engine refuses public writes without that admission. module_record_admit repeats a public form, a live publication and the contact caps over anonymous module receipts (20/hour or the contact containment allowance, 100 per project and 1,000 platform-wide in 30 days, fair share above 500). Anonymous rows have submitter_kind public and no visitor id. Verified: tests/shared-modules-records.mjs (SQLite and --d1, 10 groups), tests/shared-modules-registry.mjs (SQLite and --d1), shared-modules-access, contacts, pnpm check, verify fast/protection, pnpm build. Activation needs the owner to set TURNSTILE_SECRET on whumpo-apps and confirm Turnstile hostnames cover app-PROJECT.whumpo.site (requires verification); no composed visitor frontend renders the widget yet (WH-070).
-- 2026-10-04 UTC: records.summary@1 and owner records panel slice; source and local verification only; not deployed, not accepted; WH-127 stays open. The records-summary view (registry feature null) and GET /api/projects/P/module-records return per registered records instance its state, configuration revision, retention, per schema the field count and retained records by submitter kind, and form/view ids with audiences; never field labels, values, entry ids or visitor ids, so the binding is safe for Chat temporary views. The fixed Form records control page (/workspace/records, frontend/src/records-panel.tsx) reads values only from the owner list route, renders them as text, pages with the opaque cursor and deletes through an owner records.remove request. Verified: tests/shared-modules-records.mjs (SQLite and --d1, 11 groups), shared-modules-registry/access, workspace-view-bindings/components, workspace-layout, chat-temporary-views, chat-interaction-contract, workspace-dashboard suites, pnpm check, verify fast/protection, pnpm build; the panel itself has no browser test (tests/workspace-view-lifecycle.mjs needs @playwright/test, not installed here).
-- 2026-10-04 UTC: contact inbox as a fixed-schema records instance deliberately not built (documentation only, docs/shared-modules.md#contact-inbox-stays-on-its-own-tables--october-4-2026-utc). It cannot be done without duplicating storage or breaking a current contract: contact's 2,000-character message and validated email exceed the frozen records v1 field types (a new type is a compiler identity cutover), contact intake is enabled by publication-bound contact_reviews outside the module registry (a wrapped instance would need a platform-created registry row with no specification source or a second activation authority), and serving contact_submissions through the records handlers would add a second storage path to every handler and trigger. Public module forms reuse the contact admission instead. This scope item needs an owner decision (retire contact in favour of a records instance at a cutover, or add long-text/email field types) before it can close; WH-127 stays open for it and the export serializer.
-- 2026-10-04 UTC: records export serializer slice; source and local verification only; not deployed, not accepted; WH-127 stays open. Records descriptors name exportHook records-export-v1 with the module-records data set separate-approval (hook ids in src/shared-modules/export-hooks.ts). exportRecords (src/shared-modules/records-export.ts) is owner-only in every activation state without a feature grant, refuses a stale configRevision or a descriptor without the hook, and returns whumpo-module-records v1 for one schema: fields and every currently retained record and value, 200 per page with the records cursor, optionally limited to one project visitor's own submissions (the WH-077 separate-approval slice; no visitor route). validateRecordsExport checks the wrapper, the schema with the current field validator, each record and value, the subject scope and the SHA-256; nothing imports. No route, table, Chat surface or compiler identity change; values never reach Chat, model context, receipts, events or logs. Verified: tests/shared-modules-records.mjs (SQLite and --d1, 12 groups), shared-modules-registry/access/collections/compositions/contract, workload-placement-prototype, lifecycle-catalog, safety-hold-inventory, pnpm check, verify fast/protection, pnpm build. Remaining: form attachments, the contact-instance owner decision, public intake activation (TURNSTILE_SECRET, hostname list).
-- 2026-10-29 UTC (schema batch 2, branch schema-batch-2 from 79a39cf; source and local verification on disposable SQLite and actual local D1; no deploy, secret or dependency; the D1 binding and the B4 pin are untouched and the cutover is the orchestrator's): form attachments DROPPED from this batch, not started. The work is larger than a schema plus minimal store change: module_record_admit (src/shared-modules/schema.sql) refuses any form with an uploadCollectionId, so attachment needs a policy-table decision for forms.submit that spans two module instances (the records instance and the files instance that owns the collection), an engine receipt predicate that repeats the files collection's upload role and activation inside the commit, the visitor gateway upload route (POST /modules/upload carries one JPEG body and the envelope in a header) learning a records target, and one atomic batch of project_files, module_files, module_records and the link row with the quota, safety receipt and orphan-sweep behaviour of files.putBytes. Public attachment intake is already refused by validation. Needs its own packet; no row or table was added. WH-127 stays partial.
-- 2026-10-29 UTC (schema batch 3b, branch schema-batch-3b-form-attachments from 69ca613; source and local verification on disposable SQLite and actual local D1; no deploy, secret or dependency; the D1 binding and the B4 pin are untouched and the cutover is the orchestrator's): form attachments delivered. A records form with an uploadCollectionId (never a public form, decision D6) now accepts input.attachments, at most four distinct ids of the submitter's own uploads into that collection; forms.submit writes the record, its form.accepted event and one module_record_files link per file in one db.batch beside the engine receipt, so a lost reply replays the saved receipt and a changed list is request_conflict. New table module_record_files (entry_id cascade, file_id unique, instance_id, project_id, request_id; 234 tables, 1173 objects) with module_record_file_admit (own upload, same collection, files instance a declared dependency, written within 60 seconds, at most four, revision-1 record of this request), an immutability trigger, and module_record_files_removed (a BEFORE DELETE trigger, because SQLite runs the foreign-key cascade before AFTER triggers): INTERIM DEFAULT pending an owner retention decision, attached uploads are deleted with their record. module_record_admit now refuses public forms that have uploads instead of every form with an upload collection. The records export carries attachment file ids. Registered in the lifecycle catalogue (module-records), tenant classification (reviewed schema sha256 bc854b898ac07fa2a72f004ec7600d32599a2144d2cc79227f78495f5fcc3a29), the closure inventory (moduleRecordFiles), the safety-hold inventory (project_files note), the recovery drill (seeded and restored) and the releases SCHEMA CHANGE entry. policy.ts, files.ts and the engine receipt trigger needed no change. Tests: tests/form-attachments.mjs and tests/schema-batch-3b.mjs (plain and --d1), plus the existing records, files, compositions and boundary-module-file-read suites. Open: the owner's retention decision for attachments; the visitor frontend upload flow (WH-070).
-- 2026-10-30 UTC (WH-001 reconciliation against origin/main 475a3a9, read from git log and gh pr view; docs only, nothing re-run unless stated, no GitHub issue, Cloudflare or provider mutation): merged PR #486 (73e423a, schema batch 3b form attachments; cut over by #490). Readiness unchanged: the remaining gaps in docs/shared-modules.md stay open.
-
-## WH-128 — Deliver the files and galleries module over private photo storage
-
-Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
-
-Reviewed: 2026-10-30. Source baseline: `475a3a9658575a1defd820f2494e06eadfd956ba`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-Staff or visitors upload files into collections governed by role policy, and permitted viewers see only approved files, without any public bucket.
-
-### Scope
-
-- Extend project_files with instance/collection and uploader identity by current-schema cutover; keep JPEG cleaning, 1 MiB bound, create-only R2 and reservations
-- files.prepareUpload/putBytes/read/gallery on the visitor origin; owner collection for existing project photos and the Chat upload handoff
-- Pending safety receipt on every upload; approved exact-digest reads with byte re-hash; reviewed removal and cleanup queue
-- Descriptor lifecycle hooks and export serializer for eligible approved files
-
-### Acceptance criteria
-
-- [ ] Staff-only upload is enforced by the collection role policy; names, prefixes and URLs grant nothing; visitors and anonymous callers are refused
-- [ ] Held, blocked or revoked files are never served, referenced or published; removal respects held state and preservation hooks
-- [ ] Existing photo upload, version, removal and publication suites pass
-- [ ] Public exposure happens only through existing exact publication reviews
-
-### Verification
-
-- node tests/files.mjs, tests/photo-versions.mjs and tests/photo-removal.mjs on disposable D1/R2
-- New two-tenant role/revocation/direct-API upload fixtures with synthetic clearances only
-- tsc for both projects
-
-### Dependencies and blockers
-
-Planning dependencies: WH-126, WH-010. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/shared-modules.md](../../docs/shared-modules.md)
-- [docs/photos.md](../../docs/photos.md)
-- [src/files.ts](../../src/files.ts)
-- [src/photo-safety.ts](../../src/photo-safety.ts)
-- [docs/safety-coverage.md](../../docs/safety-coverage.md)
-
-### Execution coordination
-
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-- 2026-10-04 UTC: partial slice; source and local verification only; not deployed, not accepted, issue not created or claimed from this session; WH-128 stays open. Branch c/great-curie-8ryukc (PR #160) adds module_files to the pending current schema input src/shared-modules/schema.sql (lifecycle class module-files admitted, 215 tables) as a 1:1 row beside an ordinary project_files photo row, so the WH-013 pipeline applies unchanged: cleanPhoto, 1 MiB and collection maxBytes, create-only private R2 object under photos/ with a server key, photo quotas, the pending project_photo_safety receipt written with the ready row, the approved_project_photos exact-digest view, byte re-hash, photo removal review, safety holds, cleanup queue and orphan sweep. src/shared-modules/files.ts registers files.putBytes (visitor origin POST /modules/upload, JPEG body with the envelope in a header; declared type/length/SHA-256 checked; no caller name, path, prefix or bucket), files.gallery and files.read (approved bytes only, re-hashed, sandboxed image response). Staff upload is the collection role policy (policy table, engine receipt predicate, module_file_admit with the staff role on the governing access instance and 10/hour/visitor); over-wide galleries are refused by the validator and at serving time. Module uploads are excluded from the owner photo library, Chat pickers, website specifications, the agent's photo context, workspace inspection and saved work, and get server-assigned names. Visitor erasure and files-instance removal delete their photo rows (blocked inside holds; classified in tools/safety-hold-inventory.mjs). whumpo-apps gains the existing private FILES binding. Verified: tests/shared-modules-files.mjs (SQLite with in-memory bucket and --d1 with local R2, 8 groups), tests/files.mjs, photo-versions, photo-removal, shared-modules-records/registry/access, contacts, app-auth, app-lifecycle, chat-interaction-photos, saved-work, workspace-view-bindings, agent-inspection, guest-preview-photos, current-website-specifications, lifecycle-catalog, restore-admission, safety-hold-inventory, pnpm check, verify fast/protection, pnpm build. Remaining: existing photos as an owner collection, owner module uploads and Chat handoff, prepareUpload/requestRemoval as module operations, form attachments, galleries in published websites, descriptor hooks and export serializer, scanner integration (owner-deferred). Schema change: same owner-run empty-database cutover; deploy ci refuses it.
-- 2026-10-04 UTC: files export serializer slice; source and local verification only; not deployed, not accepted; WH-128 stays open. Files descriptors name exportHook files-export-v1 with the module-files data set separate-approval. exportFiles (src/shared-modules/files-export.ts) is owner-only in every activation state, refuses a stale configRevision or a descriptor without the hook, and returns whumpo-module-files v1 for one collection: only ready files with a current exact-digest approval, 8 per page, cleaned JPEG bytes re-hashed against the approved digest (a tampered object fails the export), dimensions, size, digest, uploader kind and visitor id, and a withheld count for held/blocked files; optionally limited to one visitor's own uploads (WH-077 separate approval). No object key, bucket, file name, safety receipt or scanner reference is exported. validateFilesExport checks shapes, bytes (JPEG start, size, SHA-256) and the page SHA-256; nothing imports. Verified: tests/shared-modules-files.mjs (SQLite with an in-memory bucket and --d1 with local R2, 9 groups), tests/files.mjs, photo-versions, photo-removal, shared-modules-registry/access/collections/compositions/contract, lifecycle-catalog, safety-hold-inventory, pnpm check, verify fast/protection, pnpm build. Remaining: existing photos as an owner collection, galleries on published websites, Chat handoff into a collection, prepareUpload/requestRemoval as operations, scanner integration (owner-deferred).
-- 2026-10-04 UTC: owner collections and published galleries slice; source and local verification only; not deployed, not accepted; WH-128 stays open. module_files gains owner rows (uploader_kind owner, no visitor): the owner's files.putBytes on the workspace module route names an existing ready project photo by id and exact SHA-256 and files it into a collection whose upload lists owner, with no second photo row, object or reservation; module_file_admit repeats the active instance, owner upload policy and a ready same-project photo. ownerLibrarySQL and saved work exclude only staff/visitor uploads, so filed photos stay in the owner library; instance removal deletes only staff/visitor photo rows; module_file_not_published refuses staff/visitor uploads as website photos. The typed owner Chat control galleryPageReview (ids only, not advertised to the site agent) prepares the existing exact specification review with one pages.setPhotos of the newest approved owner-filed photos (at most four, photo-page@1); project_spec_gallery_admit repeats the shape inside the commit; saving is specificationApply and going public is the existing exact publication review with the unchanged WH-013 approval and re-hash gates. No compiler identity change (project-content@5 unchanged). Verified: tests/shared-modules-files.mjs (SQLite and --d1 with local R2, 10 groups), files, photo-versions, photo-removal, chat-interaction-photos/contract, chat-temporary-views, saved-work, workspace-view-bindings, agent-inspection, guest-preview-photos, current-website-specifications, restore-admission, specification-compiler, lifecycle-catalog, app-auth, app-lifecycle, contacts, shared-modules-registry/access/records/collections/compositions (SQLite and --d1), safety-hold-inventory, pnpm check, verify fast/protection, pnpm build. Schema change: same owner-run empty-database cutover; deploy ci refuses it. Remaining: Chat upload handoff directly into a collection, removing a photo from a collection, an owner panel control (files instances are fixture-configured only), prepareUpload/requestRemoval as operations, scanner integration (owner-deferred).
-- 2026-10-04 UTC: owner Photos panel controls slice; source and local verification only; not deployed, not accepted, not exercised in a browser; WH-128 stays open. No schema, authority or review change. GET /api/projects/P/module-files (owner only; readOwnerFileCollections in src/shared-modules/files-gallery.ts, OwnerFileCollections in shape.ts) returns saved page ids/paths, unfiled ready owner photos with their exact SHA-256 and owner collections with owner-filed photo ids and safety state (never staff/visitor uploads; dashboard only, not Chat or model context). The Photos panel (frontend/src/photo-collections.tsx, client frontend/src/lib/photo-collections.ts) adds Add to collection on ready photos (owner files.putBytes envelope {fileId, sha256} on the workspace module route, one request id reused per photo and collection until confirmed) and a Collections and gallery pages section whose Prepare gallery page button sends the typed galleryPageReview control through runAction; saving and publishing stay the existing exact reviews. Verified: tests/shared-modules-files.mjs (11 groups, SQLite with in-memory bucket and --d1 with local D1/R2; new group drives the panel client through the real routes: owner-only facts, exact envelope, lost-ack replay with the same request id, gallery refused while held and prepared after approval with nothing saved, disabled instance refused, no staff/visitor uploads listed, no prompt mention), tests/files.mjs, photo-versions, photo-removal, chat-interaction-photos, saved-work, agent-inspection, shared-modules-registry/access/compositions, pnpm check, verify fast/protection, pnpm build. Remaining: Chat upload handoff directly into a collection, removing a photo from a collection without deleting it, prepareUpload/requestRemoval as operations, owner authoring of files instances (fixture-only), scanner integration (owner-deferred).
-- 2026-10-04 UTC: owner photo collection setup slice; source and local verification only; not deployed, not accepted, not exercised in a browser; WH-128 stays open. The typed owner Chat control filesModuleReview {projectId} (src/shared-modules/files-setup.ts; never accepted from model output, not advertised to the site agent) prepares the existing exact specification review with one modules.put of a fixed standard files instance: id photos, current catalog module-files/files-data pins, no dependencies, one collection library (owner read, owner-only upload, 1 MiB, JPEG, no gallery; schema review class only). Refused with reasons for a project without a website (404), an existing saved or registered owner collection, a taken photos instance id or library collection id (400) and foreign projects (404). Saving is specificationApply (recent sign-in) and activation the separate moduleActivationReview/Apply pair. project_spec_proposal_admit gains a filesModuleReview branch and the new project_spec_files_setup_admit trigger (src/shared-modules/schema.sql) requires head plus exactly that appended instance (exact key counts). GET /api/projects/P/module-files returns setup states; the Photos panel Collections and gallery pages section offers Set up photo collection and Review activating photo collection. Verified: tests/shared-modules-files.mjs (12 groups, SQLite with in-memory bucket and --d1 with local D1/R2; new group covers malformed/foreign controls, exact instance and pins, linked review, 13 tampered proposals refused inside the commit, exact copy accepted, separate save and activation, panel setup states and client actions, filing into the set-up collection, disable, repeated setup, existing collection, taken ids, no website, prompt check), shared-modules-access (SQLite and --d1), shared-modules-registry/compositions/contract, chat-interaction-photos, service-safety, current-website-specifications, specification-compiler, safety-hold-inventory, pnpm check, verify fast/protection, pnpm build. Schema change: same owner-run empty-database cutover; deploy ci refuses it. Remaining: Chat upload handoff directly into a collection, removing a photo from a collection without deleting it, prepareUpload/requestRemoval as operations, staff/visitor files instances (fixture-only), scanner integration (owner-deferred).
-- 2026-10-04 UTC: Remove from collection slice; source and local verification only; not deployed, not accepted, not exercised in a browser; WH-128 stays open. No schema, trigger, review, Chat surface or module operation change (the closed WH-123 operation set is unchanged). POST /api/projects/P/module-files/remove (owner only; removeOwnerFileFromCollection in src/shared-modules/files-gallery.ts) takes exactly {resourceId, collectionId, fileId} and deletes one owner-filed photo's module_files row only: the photo, its private object, safety receipt and saved versions stay, nothing is queued, and the photo returns to the unfiled list. Idempotent (removed:false when already out). Staff/visitor uploads are not_found, non-owner collections forbidden, malformed bodies invalid_request; works while disabled and inside a safety hold (deletes no content; new WH-132 inventory site classified excluded). Conservative choice: refused (409) while the current saved head version or the live publication shows the photo, repeated inside the deleting statement, because a gallery page is a snapshot of photo ids; the owner changes the page first or uses the photo removal review. The Photos panel shows Remove from collection on filed photos. Verified: tests/shared-modules-files.mjs (13 groups, SQLite with in-memory bucket and --d1 with local D1/R2; new group drives the panel client through the real route: exact body, lost-ack retry, photo/receipt/object kept, re-filing, foreign/unknown/non-owner/staff-upload/malformed refusals, refusal while the saved website shows the photo, removal while disabled and inside a project hold, prompt check), safety-case-operations, shared-modules-compositions, photo-removal, files, photo-versions, saved-work, safety-hold-inventory (94 sites), pnpm check, verify fast/protection, pnpm build. Remaining: Chat upload handoff directly into a collection, prepareUpload/requestRemoval as operations, staff/visitor files instances (fixture-only), scanner integration (owner-deferred).
-- 2026-10-29 UTC: Chat upload handoff slice; source and local verification only; not deployed, not accepted, not exercised in a browser; WH-128 stays open. No schema, route, SQL or dependency change. After the Chat photo uploader saves a photo, frontend/src/photo-collections.tsx ChatUploadHandoff (rendered by frontend/src/chat-interaction.tsx; ProjectPhotoUpload.onSaved now passes the saved upload) reads the existing GET /api/projects/P/module-files facts and, when the photo is an unfiled candidate and an active owner collection exists, shows the owner a confirmation (photo name, nothing published) with the existing PhotoCollectionControl. Confirming sends the existing owner files.putBytes module request (file id and exact digest, no bytes), reusing one request id until confirmed so a lost reply replays the receipt; the server still scopes the instance, collection and photo to the owner's project and refuses foreign, staff-only and already-filed targets. Scanning, metadata stripping, size limits and recovery keys are the unchanged Chat upload pipeline. Verified: tests/shared-modules-files.mjs on SQLite and --d1 (new group: confirm, replay, foreign and staff-only collection refusal, lost reply, wiring), boundary-audit, tenant-sql-surface, pnpm check, verify fast/protection, pnpm build. Remaining WH-128: files.prepareUpload/files.requestRemoval decision, form attachments, scanner (owner-deferred), activation.
-
-## WH-130 — Accept shared modules across two frontend compositions
-
-Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: verification. Size: M.
-
-Reviewed: 2026-10-30. Source baseline: `475a3a9658575a1defd820f2494e06eadfd956ba`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-Two different frontends use one module API contract with no custom authentication or handlers, and the WH-067 acceptance is evidenced.
-
-### Scope
-
-- Build two synthetic compositions (a staff portal and a visitor intake/gallery) against the same records/files/access instances on the visitor origin
-- Cross-tenant, cross-user, role, direct-API, replay and revocation fixtures over actual handlers with maintenance inference unavailable
-- Run the existing contact, directory, photo and app lifecycle suites relevant to each slice and record evidence levels
-
-### Acceptance criteria
-
-- [ ] Every WH-067 acceptance criterion maps to passing local evidence; live or device acceptance is reported separately
-- [ ] Neither composition contains authentication, authorization or storage code of its own
-- [ ] No universal no-code engine, booking promise or public bucket is introduced
-
-### Verification
-
-- Connected local D1/R2 journey with two compositions and two tenants
-- Existing lifecycle suites listed in each slice
-- Import graph shows no maintainer inference in module paths
-
-### Dependencies and blockers
-
-Planning dependencies: WH-127, WH-128, WH-129. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/shared-modules.md](../../docs/shared-modules.md)
-- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
-- [docs/verification.md](../../docs/verification.md)
-
-### Execution coordination
-
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-- 2026-10-04 UTC: local synthetic evidence only; not deployed, not browser-tested, not live- or customer-accepted; issue not created or claimed from this session; WH-130 stays open. Branch c/great-curie-8ryukc (PR #160, held for the owner empty-D1 cutover) adds two synthetic compositions, tests/fixtures/module-compositions/staff-portal.mjs and visitor-intake.mjs, that call only same-origin POST /modules and /modules/upload with the whumpo-modules v1 envelope and a manifest of resource ids and configRevisions. A static check refuses auth, cookie, session, principal/role, SQL, storage-location, absolute-origin, handler and inference code and any import in both. tests/shared-modules-compositions.mjs (11 groups, passing on SQLite with an in-memory private bucket and with --d1 on local D1/R2) drives both against the same access/records/files/content instances of two tenants through the actual visitor gateway, module engine, handlers, commit triggers, activation/role/directory/publication reviews and owner workspace routes. It covers cross-user, role, cross-tenant and direct-API refusals; replay (a write readback, conflict, anonymous replay without re-verification, replay refused after revocation); staff and visitor revocation, disable and a stale manifest after an additive field; approved-only files with re-hash; no values in Chat, model context, receipts or logs; no public bucket; and no maintainer inference, with fetch throwing and the import graphs checked. The harness plays the browser: no Worker serves a composition yet (WH-070) and Playwright is not installed. The acceptance map and the exact gaps that block the first criterion are in docs/shared-modules.md#wh-067-acceptance-map--october-4-2026-utc: WH-126 identity cutover, WH-127/128 export serializers and form attachments, the owner photo collection, owner uploads and published galleries, LC-06, the owner authoring path, a served composition, and the deployed cutover.
 
 ## WH-068 — Implement shared notification templates and delivery configuration
 
@@ -9546,55 +9192,6 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
 
-## WH-129 — Expose the directory as a content collections module
-
-Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: S.
-
-Reviewed: 2026-10-30. Source baseline: `475a3a9658575a1defd820f2494e06eadfd956ba`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-Directory listings use the shared module envelope and lifecycle while keeping their exact draft, publication and restore reviews.
-
-### Scope
-
-- Wrap directories, directory_reviews and directory_exports as a content-collections instance of type directory-listing@1
-- collections.readPublic through the module envelope; owner edits keep the existing review handlers
-- Descriptor lifecycle hooks and export serializer matching the current directory export
-
-### Acceptance criteria
-
-- [ ] Public reads return only the approved snapshot; drafts and history stay owner-only
-- [ ] Existing directory and history suites pass; stale configRevision and withdrawn pins refuse
-- [ ] No staff editing or new collection types are added
-
-### Verification
-
-- node tests/directories.mjs and node tests/directory-history.mjs on local D1
-- tsc for both projects
-
-### Dependencies and blockers
-
-Planning dependencies: WH-125. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/shared-modules.md](../../docs/shared-modules.md)
-- [docs/directories.md](../../docs/directories.md)
-- [src/directory.ts](../../src/directory.ts)
-
-### Execution coordination
-
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-- 2026-10-04 UTC: source and local verification only; not deployed, not accepted, issue not created or claimed from this session; WH-129 stays open until accepted. Branch c/great-curie-8ryukc (PR #160) makes the project directory the content-collections instance (directory-listing@1) without a schema change: at most one content instance per project governs the existing directories/directory_reviews/directory_exports rows. src/shared-modules/collections.ts registers collections.readPublic (target {collectionId}, read) through the shared resolver, policy table and read fence, serving only the approved snapshot via the same publicDirectory reader as /directory.json (unpublished, offline or parent-restore-invalidated is unavailable; drafts, revisions and history never appear) on the visitor origin and the owner module route. Owner edits keep the existing directory Chat reviews; no write, staff path or collection type is added. The content descriptor marks directories eligible project data with exportHook collections-directory-export-v1 (deleteHook project-cascade, restoreHook unsupported); exportCollectionSnapshot returns exportDirectory's whumpo-directory v1 document (owner, current configRevision, every activation state, withdrawn or restaged pin) and validateDirectoryExport is its import validation. Compiler identity, schema inputs and module pins unchanged. Conservative default: the public site routes /directory and /directory.json keep serving without an instance (requiring activation would gate the free directory behind core.editing; owner decision). Verified: tests/shared-modules-collections.mjs (SQLite and --d1, 7 groups), tests/directories.mjs and tests/directory-history.mjs (local D1), shared-modules-registry/access/records/files (SQLite and --d1), shared-modules-contract, tools/safety-hold-inventory.mjs, pnpm check, verify fast/protection, pnpm build. Remaining: custom-domain directory paths, a lifecycle restore/import hook, the site-route decision; deploys only with the owner-run empty-database cutover that the module registry needs.
-
 ## WH-156 — Shared notification outbox, receipt states and bounded reconciliation
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
@@ -10105,7 +9702,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
 
-# F5 — Done (10)
+# F5 — Done (17)
 
 Verified complete with recorded evidence; kept for history and dependency context. Not candidates for new work.
 
@@ -10292,6 +9889,76 @@ Issue: https://github.com/zemdregon/whumpo/issues/14. Planning owner: Unassigned
 - 2026-10-01 alignment: live GitHub completion evidence re-read. Initial supported compiler scope completed through #15/#16/#17 and merged PR #18 (0002632). Content, fixed contact intake and reviewed stateless clients have deterministic/private apply/restore and scoped connected evidence. General records/access/files and notification/rule services remain WH-067–069.
 - 2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): acceptance met by issue #14 (zemdregon/whumpo) for the initial supported compiler scope; general records, access, files and notifications stay with WH-067 to WH-069, as the earlier evidence entries record. The schema has no completion value, so readiness is unchanged and the item is left in place.
 
+## WH-067 — Expose shared content, forms, records, files and access modules
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: L.
+
+Reviewed: 2026-10-30. Source baseline: `475a3a9658575a1defd820f2494e06eadfd956ba`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Composed interfaces and custom frontends reuse the same maintained tenant-scoped standard APIs.
+
+### Scope
+
+- Define stable API/schema boundaries for content, form validation/submissions/record views, scoped files/galleries and project users/roles
+- Adapt existing contact/directory/visitor-data/photo services instead of generating new auth/storage/CRUD implementations
+- Keep module organization independent of deployment count; several modules can share the current backend
+- Evaluate proven libraries or managed services before building complex identity/payment engines
+- Consume WH-071 logical storage/runtime interfaces and WH-116 data classification; freeze module instance/config/version and migration hooks before tables or client APIs. Add services to the delivered WH-066 compiler/catalog instead of replacing its supported adapters.
+- Keep customer-application visitor/staff roles distinct from Whumpo workspace membership in WH-054. A staff upload rule does not grant owner Chat/admin access or require creating a parallel workspace authentication system.
+- Use WH-090 for owner feature admission/configuration and WH-105 for registered owner-facing bindings from the first module. Visitor/staff authorization remains the separate application policy; ordinary published serving does not become a workspace-subscription check or silently stop on plan loss.
+
+### Acceptance criteria
+
+- [ ] Authenticated scope and field/record/file permissions are enforced inside every API, including direct/custom frontend use
+- [ ] Standard form/gallery/record actions execute deterministically with zero maintainer inference
+- [ ] Staff-only upload access is a project role policy, not a filename prefix or public bucket
+- [ ] Shared APIs do not bypass media quarantine, exact publication reviews or restricted preservation
+- [ ] Initial delivery is split into coherent API slices; no universal no-code engine or unsupported booking promise is implied
+
+### Verification
+
+- Cross-tenant/user/role/direct-API fixtures with replay and revocation
+- Existing contact/directory/photo/app lifecycle suites relevant to each slice
+- Two different frontend compositions share one API contract without custom auth/handlers
+
+### Dependencies and blockers
+
+Planning dependencies: WH-065, WH-066, WH-009, WH-010, WH-071, WH-116, WH-122, WH-105, WH-123, WH-124, WH-125, WH-126, WH-127, WH-128, WH-129, WH-130. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
+- [docs/contact-forms.md](../../docs/contact-forms.md)
+- [docs/directories.md](../../docs/directories.md)
+- [docs/photos.md](../../docs/photos.md)
+- [docs/app-data.md](../../docs/app-data.md)
+- [src/contacts.ts](../../src/contacts.ts)
+- [src/app-gateway.ts](../../src/app-gateway.ts)
+- [src/photo-safety.ts](../../src/photo-safety.ts)
+- [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [docs/workload-placement.md](../../docs/workload-placement.md)
+- [docs/chat-interactions.md](../../docs/chat-interactions.md)
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+
+### Execution coordination
+
+Issue: https://github.com/zemdregon/whumpo/issues/107. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.
+- 2026-10-04 UTC: decomposed into WH-123–130 with the planned contract in docs/shared-modules.md. Planning only: no module table, API, binding or deployment exists; the parent acceptance is unchanged and closes only after every child.
+- 2026-10-04 UTC status note (WH-130): not complete and not accepted. Local synthetic evidence covers the delivered operations for each criterion; it is mapped in docs/shared-modules.md#wh-067-acceptance-map--october-4-2026-utc and comes from tests/shared-modules-compositions.mjs plus the registry/access/records/files/collections suites, SQLite and local D1/R2. Open before acceptance: the owner-run empty-D1 cutover and release of PR #160; the WH-126 identity ownership cutover (staff still needs an enabled visitor application); the WH-127 records export serializer and hooks, form attachments, TURNSTILE_SECRET on whumpo-apps and publication-revision binding of public forms; the WH-128 owner photo collection, owner module uploads, published galleries and files export; restricted preservation LC-06; an owner-reachable authoring path (the site agent prompt deliberately advertises no module operation, and capability entries are still planned); and a served composition (WH-070) with browser evidence. Live, browser and device acceptance has not been attempted.
+- 2026-10-04 UTC status note (WH-126 identity cutover): module visitor and staff principals now belong to the access instance with no visitor application in any module suite; the acceptance map in docs/shared-modules.md is updated. WH-067 stays open and not accepted (see the remaining gaps there, including the owner path to save an access instance).
+- 2026-10-31 UTC (branch wh067-closeout from origin/main 617ce3e; source and local verification on disposable SQLite and actual local D1; no deploy, secret, provider or Stripe use; live and device acceptance NOT run and reported separately): close-out. Gaps 2-6 and 8 of the remaining list are closed or decided: (a) four unregistered operations permanently replaced (D4); (b) public forms bound to the publication revision (schema batch 5); (c) role-review receipts compacted by the daily pass, executed test; (d) the four schema pins re-pinned storage current under compiler project-content@6 (compiler-locks/project-content-v6.json; platform.sql triggers now require compiler version 6); (e) module deletion paths consult preservation holds, executed under a hold for owner removal, expiry, visitor erasure, instance removal and project deletion (LC-06 mechanism per D4; the legal procedure stays with WH-133); (f) local re-run green; the live synthetic check is separate and not run. Item 6 (owner authoring of custom instances and the staff role) is deferred to WH-070's staff page by D4c and is not an acceptance line. All five acceptance criteria map to passing local evidence; children WH-125 to WH-130 done. Schema: sqlSha256 b6c769ce013100c79c7cc00c65e6e64cbc8fac965ddfb92f600ba82ac5396a3c, inventory sha256 00dda74874bdd87ba84cb2d3f61da0099fa3007ecf88a2a306482633915eae1c, 240 tables, 1221 objects. Readiness planned to done.
+- 2026-10-31 UTC (review fixes on PR #525, same branch; source and local verification only; live check NOT run): the Opus review found that a held record could be overwritten or cleared by owner and staff writes, that one object-scope hold aborted retention expiry for every tenant, and that the public-form state could say bound while submissions were refused. Fixed: schema trigger safety_hold_module_record_frozen plus a plain owner message (tests: project, account and object-scope holds in shared-modules-records.mjs and form-attachments.mjs, including staff writes, null clears and raw SQL); cleanupModuleRecords skips records with a held attached file (tenant B's expiry and the receipt prune complete, tested); publicFormState now agrees with resolveResource (dependency and catalog checks, state unavailable, tested with a disabled dependency) and the copy only says the form is bound to the live website version; anonymous-intake wording; static guard now covers UPDATE and DELETE of module-held tables across src; the real visitor erasure handler is driven under holds (generic 503 by design, holds are never disclosed). Digests regenerated: sqlSha256 b6c769ce013100c79c7cc00c65e6e64cbc8fac965ddfb92f600ba82ac5396a3c, inventory sha256 00dda74874bdd87ba84cb2d3f61da0099fa3007ecf88a2a306482633915eae1c, 240 tables, 1221 objects. The live synthetic module check on the test platform must run after the batch 5 cutover; it is required before relying on deployed behavior and is recorded as outstanding.
+
 ## WH-071 — Specify workload placement and bounded custom execution paths
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: decision. Size: M.
@@ -10466,6 +10133,350 @@ Issue: https://github.com/zemdregon/whumpo/issues/157. Planning owner: Unassigne
 
 - 2026-10-08 UTC: source and local verification only; the mapped issue #157 is open. PR #158 (ff3d410) replaced specification schema 2 with schema 3 (module instances pinned to a trusted module catalog, planned module-records/module-files/project-roles lifecycle classes) and removed the schema 2 reader. Re-run on 2026-10-08 UTC at origin/main ca17c6a (Node 24.21.0, aarch64 Linux, disposable local SQLite/local D1, no network, credential or remote Cloudflare/GitHub operation). node tools/check-specification-compiler.mjs --check passed (the compiler identity has since advanced to project-content@5 through the WH-125 cutover in #160, so the project-content@3 identity named in the original change no longer applies), node tests/specification-compiler.mjs, node tests/current-website-specifications.mjs and node tests/specification-journey.mjs (local D1) passed, node tools/lifecycle-catalog.mjs reported 219 tables with 51 current/6 planned classes, and pnpm check (both tsc projects) passed. Individual schema 3 rejection cases (PNG, >1 MiB collections, public read audiences) were not separately traced in this re-run beyond those suites passing. Deployed state was not re-read. Re-checked on 2026-10-09 UTC after rebasing onto origin/main 92a001f (plus the test-only TMPDIR fix 9847281, PR #202), with #175, #178 and #180 merged: the cited artifacts still exist, #157 is still open, check-specification-compiler --check still reports project-content@5 and the same compiler, website-specification and journey suites passed again.
 - 2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): readiness planned to ready. Every dependency (WH-123, WH-009) is accepted in its own evidence, so this is an open planning candidate; its acceptance is unchanged and not claimed.
+
+## WH-125 — Add the module instance registry, activation reviews and shared policy engine
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
+
+Reviewed: 2026-10-30. Source baseline: `475a3a9658575a1defd820f2494e06eadfd956ba`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Approved module configuration becomes a scoped, activatable instance whose every API call passes one shared resolver and policy decision.
+
+### Scope
+
+- Current-schema instance and activation tables binding descriptor, configuration digest, configRevision and source specification version
+- Exact owner activation/disable reviews with recent authentication, consuming WH-122 inclusion (core.forms/core.editing) and current identity in the committing statement
+- Server-side resolveResource and policy decision composed into commit SQL; request envelope, idempotent receipts, typed errors and client_update_required
+- Register module.instances@1 and moduleActivationApply under WH-105; keep visitor-submitted values out of Chat and model context
+- Static import/fixture check that module handlers never reach owner-maintenance inference
+
+### Acceptance criteria
+
+- [ ] Foreign, stale configRevision, withdrawn pin, inactive instance and changed-input replay fail with the frozen typed errors inside every handler
+- [ ] Plan loss blocks new activation/widening but keeps owner read/export/disable and published serving
+- [ ] Lost acknowledgements read back existing receipts; concurrent activation/disable has one winner
+- [ ] Module paths pass with maintenance inference unavailable
+
+### Verification
+
+- Disposable SQLite/local D1 suite over actual handlers with two owners/projects, revocation and replay
+- node tests/feature-admission.mjs and chat interaction suites remain green
+- tsc for both projects
+
+### Dependencies and blockers
+
+Planning dependencies: WH-124. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+- [docs/workload-placement.md](../../docs/workload-placement.md)
+- [docs/feature-admission.md](../../docs/feature-admission.md)
+- [docs/chat-interactions.md](../../docs/chat-interactions.md)
+- [src/project-specification/service-clients/activation.ts](../../src/project-specification/service-clients/activation.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-04 UTC: source and local verification only; not deployed, not accepted, issue not created or claimed from this session. Branch c/great-curie-8ryukc (PR #160) adds the current schema input src/shared-modules/schema.sql (module_instances, module_activations, module_activation_reviews/links/applies, module_request_receipts; lifecycle class module-registry) with commit triggers, src/shared-modules/{policy,registry,activation,api,bindings,shape}.ts (whumpo-modules v1 envelope with client_update_required and typed ModuleError codes; resolveResource and decideModule; exact owner activation/disable reviews via moduleActivationReview/moduleActivationApply ChatControls with recent passkey sign-in, core.forms/core.editing prepare check and confirm inclusion composed into the applied-receipt insert; idempotent request receipts), module.instances@1 as the feature-null modules view with an owner card, and the apply button in Chat. No kind data handler, visitor-origin route or visitor session binding is delivered (moduleHandlers is empty; visitor principals cannot commit until WH-126). The content compiler still refuses instance-bearing specifications (UNAVAILABLE_CAPABILITY); lifting it is a separate compiler identity cutover, so the registry is reachable only from fixtures that rewrite the saved head in a disposable database. Local checks: node tests/shared-modules-registry.mjs passed 11 groups on SQLite and with --d1 on local D1 (two owners/projects, Starter, revocation, stale proof, replay, concurrent winners, lost-ack readback, withdrawn/stale catalog variants, plan loss, commit-time races, closure/cascades, static no-inference check); feature-admission, 14 offline chat-interaction suites, guest-preview, site-diagnostics, workspace-view, lifecycle, closure, release-manifest, restore-admission, pnpm check, verify fast and protection passed. The schema change requires the owner-run empty-database cutover (pnpm run deploy prepare/apply with schemaChange initialize); deploy ci refuses it and the PR must not merge without the owner.
+- 2026-10-04 UTC: project-content@4 compiler identity cutover (owner decision 2026-10-04: lift the compiler gate first). Source and local verification only; not deployed, not accepted. Branch c/great-curie-8ryukc (PR #160) replaces project-content@3 with project-content@4 (lock compiler-locks/project-content-v4.json generated by tools/check-specification-compiler.mjs --init after the v3 lock was removed; module/schema pin digests unchanged; no @3 reader; @3 locks refused by the compiler, the serving check and SQL admission in schema/platform.sql). The content compiler now admits pinned instances as saved, inactive configuration (no artifact; notifications/automation, rules and staff pages stay refused). Owners save instance-bearing specifications through the existing exact review: one comparison row per changed instance, classified review classes (schema/permissions/integration/spending) bound in the proposal envelope and named in the reply, recent-sign-in specificationApply. Restore is classified against the current head (instance or field removal refused with MIGRATION_REQUIRED). Saving activates nothing; the site agent prompt and read inspection are unchanged. This closes the WH-125 known gap: tests/shared-modules-registry.mjs and tests/shared-modules-access.mjs create instances only through the real save path (configureFixtureModules); one direct head seed remains in the registry suite solely to show activation refusing a migration-bearing head, which no owner path can produce. Local checks: shared-modules-registry and shared-modules-access on SQLite and --d1, specification-compiler, specification-journey (local D1), specification-review-details/display, current-website-specifications, current-interfaces, feature-admission, shared-modules-contract, release-manifest, build-snapshot, 12 chat-interaction suites, chat-saved-turn, chat-reply, saved-work, site-agent, lifecycle-catalog, mobile-v1-contract, pnpm check, verify fast, verify protection and pnpm build passed. Rides the same owner-run empty-database cutover as WH-125/126; deploy ci refuses it.
+- 2026-10-04 UTC: never-activated module instance removal (owner decision 2026-10-04). Source and local verification only; not deployed, not accepted. Branch c/great-curie-8ryukc (PR #160) adds the modules.remove specification operation: a saved instance with no module_instances row (never activated) may be removed through the exact owner specification review and recent-sign-in specificationApply (hook none, no review class, one comparison row, reply names the removal); restores may drop never-activated instances too; an instance that was ever activated (including disabled) stays MIGRATION_REQUIRED until WH-077 export exists. The pure compiler takes the removable id list from its caller (default none); prepareSpecification derives it from the registry, and the module_instance_spec_retained trigger on project_spec_versions refuses any saved version that drops or re-kinds a registered instance (commit-time activation race). Compiler classification changed, so project-content@5 replaces @4 (lock compiler-locks/project-content-v5.json via --init; module/schema pin digests unchanged; @3/@4 locks refused by compiler and SQL admission). Verified: tests/shared-modules-registry.mjs (SQLite and --d1, 12 groups), tests/specification-compiler.mjs, tests/current-website-specifications.mjs, shared-modules access/contract suites, pnpm check, verify fast/protection, pnpm build. Schema change: rides the same owner-run empty-database cutover; deploy ci refuses it.
+- 2026-10-04 UTC: review fixes on branch c/great-curie-8ryukc (PR #160); source and local verification only; not deployed, not accepted. module_request_admit now caps visitor/staff/public writes at 20,000 receipts per instance in a sliding 24 hours (owner operations exempt and not counted) and staff/visitor records.update at 60 per identity per instance per hour; receipts keep a documented 30-day replay window and are pruned by the daily contacts maintenance job (cleanupModuleRequestReceipts; safety-hold inventory: excluded content-free receipt). Activation and access role review capacity (500/project, 50,000/platform) counts only pending reviews without an applied receipt. TURNSTILE_SECRET custody lists src/app-gateway.ts (whumpo-apps) and the validator refuses undeclared env readers; incident control C6 adds the wrangler.apps.jsonc step. docs/shared-modules.md states the shared photo quota consequence of visitor uploads. Local checks: shared-modules registry/access/records/files/collections/compositions on SQLite and --d1, contract, maintenance, maintenance-inventory, maintenance-scheduled, safety-case-operations (hold inventory), secret-custody test and tool, lifecycle-catalog, account-closure-inventory, pnpm check, verify fast, verify protection and pnpm build passed. Still requires the owner-run empty-database cutover.
+- 2026-10-31 UTC (branch wh067-closeout from origin/main 617ce3e; source and local verification on disposable SQLite and actual local D1; no deploy, secret, provider or Stripe use; live and device acceptance NOT run and reported separately): acceptance mapped to passing local evidence: tests/shared-modules-registry.mjs (SQLite and --d1) covers foreign, stale configRevision, withdrawn pin, inactive instance and changed-input replay; plan loss, lost-acknowledgement readback, one-winner concurrency; the static no-inference check. tests/feature-admission.mjs passes. Readiness planned to done.
+
+## WH-126 — Deliver the access module for project visitors and staff roles
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
+
+Reviewed: 2026-10-30. Source baseline: `475a3a9658575a1defd820f2494e06eadfd956ba`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+A project owner can grant and revoke a staff role on an enrolled project visitor without giving that person workspace, Chat or owner authority.
+
+### Scope
+
+- Move project visitor identity ownership from the application space to the access instance by current-schema cutover, reusing passkeys, invitations, recovery and sessions
+- Staff role grant/revoke through exact owner reviews with an access revision that invalidates sessions-bound decisions, cursors and pending writes
+- access.me on the visitor origin; owner access.list and access.roles@1/accessRoleApply bindings
+- Keep the existing per-visitor document and QuickJS transitions as an execution resource depending on the access instance
+
+### Acceptance criteria
+
+- [ ] Staff and visitors cannot use workspace cookies; owners and WH-054 members gain no visitor/staff authority; staff gain no Chat, publication, spending or identity management
+- [ ] Revocation takes effect on the next request and inside in-flight commits; replay never re-grants
+- [ ] Existing visitor sign-in, recovery, document transition, export and erasure suites pass after the cutover
+- [ ] Role grants, reviews and suppressions follow the project-roles lifecycle class
+
+### Verification
+
+- node tests/app-auth.mjs, tests/app-data.mjs and visitor deletion/recovery suites on complete-schema local D1
+- Two-project, revoked-visitor, revoked-staff and cross-origin cookie fixtures
+- tsc for both projects
+
+### Dependencies and blockers
+
+Planning dependencies: WH-125. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+- [docs/app-data.md](../../docs/app-data.md)
+- [src/app-gateway.ts](../../src/app-gateway.ts)
+- [src/app-auth.ts](../../src/app-auth.ts)
+- [src/app-access.ts](../../src/app-access.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-04 UTC: partial slice; source and local verification only; not deployed, not accepted, issue not created or claimed from this session; WH-126 stays open. Branch c/great-curie-8ryukc (PR #160) extends the pending current schema input src/shared-modules/schema.sql with module_access_states (access revision), module_access_roles (staff grants and revoked suppressions), module_access_role_reviews/links/applies and commit triggers (lifecycle class project-roles admitted), adds src/shared-modules/access.ts (visitorPrincipal from the project visitor session cookie only, visitorPredicate composed into module commits and read fences, access.me and owner access.list handlers, access.roles@1 roster) and access-roles.ts (exact owner accessRoleReview/accessRoleApply ChatControls with recent passkey sign-in; grant composes core.editing, revoke needs identity and ownership only), the visitor-origin POST /modules route in src/app-gateway.ts, the access-roles view card and the Chat apply button. Visitor revocation and reviewed erasure suppress/delete grants and advance the access revision. Not done: moving visitor identity ownership from app_spaces to the access instance (staff still require an enabled visitor application), registering the per-visitor document as an execution resource, and a roles export serializer; access.prepareRole/confirmRole stay unavailable. Local checks: node tests/shared-modules-access.mjs passed 11 groups on SQLite and with --d1 on local D1 (signed-passkey visitors, actual gateway, anonymous/workspace/foreign/cross-origin cookie refusals, visitor cookie refused on the workspace origin, two projects, non-owner account, replay without re-grant, one-winner race, revoke inside an in-flight staff commit, revoked and erased visitors, plan loss, disable, closure/cascades, static no-inference check); shared-modules-registry (SQLite and --d1), shared-modules-contract, app-auth, app-data, app-recovery, app-lifecycle, visitor-deletion-review, verify app (customer app journey, owner erasure, task-list journey), lifecycle-catalog, restore-admission, account-closure-inventory, feature-admission, 14 offline chat-interaction suites, guest-preview, site-diagnostics, workspace-view-bindings/components, processing-boundaries, pnpm check, verify fast, verify protection and pnpm build passed (browser suites needing @playwright/test were not run). The schema change still requires the owner-run empty-database cutover (pnpm run deploy prepare/apply with schemaChange initialize, one cutover with WH-125); deploy ci refuses it and the PR must not merge without the owner.
+- 2026-10-04 UTC: project-content@4 (see WH-125 evidence) lets owners save an access instance through the exact owner specification review, so the identity ownership cutover is no longer blocked by the compiler; that cutover, the per-visitor document resource and the roles export serializer remain open. tests/shared-modules-access.mjs now creates instances only through the real save path (SQLite and --d1 passed). Source only; not deployed or accepted.
+- 2026-10-04 UTC: WH-126 identity cutover slice (owner decision of October 4, 2026); source and local verification only; not deployed, not accepted, issue not created or claimed from this session; WH-126 stays open. Branch c/great-curie-8ryukc (PR #160) changes the current schema inputs schema/platform.sql and src/shared-modules/schema.sql: app_visitors is keyed by project_id and access_id (no app_spaces reference); app_invitations and app_auth_challenges bind access_id and the access instance's activation revision; sessions drop the page binding; enrollment, passkeys, sign-in, recovery and sessions need only the project's active access instance activated by the current owner; at most one access instance per project (validator plus module_instance_access_single); disabling the access instance deletes its sessions and challenges and re-activation never revives invitations, challenges or sessions. The visitor application consumes identity: app_spaces.access_id/resource_id, enabling needs the active access instance, application disable/page change/migration/restore no longer sign visitors out and each app_runs row binds the page live at admission. The visitor gateway serves auth, export and the deletion review without a page. src/app-resource.ts derives the per-visitor document custom-function descriptor depending on the access instance (validated with the WH-071 reference and manifest check); src/shared-modules/access-export.ts adds the access-roles-export-v1 serializer (whumpo-access-roles v1) with import validation, and the access descriptor names it. Tests save and activate access instances through configureFixtureModules plus the exact activation controls (enableFixtureVisitorAccess). Local checks passed: shared-modules-access/registry/records/files/collections/compositions on SQLite and --d1, shared-modules-contract, app-activation, app-activation-http, app-auth, app-authenticator, app-data, app-lifecycle, app-migration-checks, app-page-design, app-recovery, visitor-data, visitor-deletion-review, customer-app-journey (with the task-list journey), verify app, lifecycle-catalog, account-closure-inventory, restore-admission, restore-inventory, restore-inventory-freshness, safety-case-operations, tools/safety-hold-inventory, service-safety, processing-boundaries, build-jobs, application-build, backend-checks, operator-containment, public-fairness, saved-work, chat-reply, specification-compiler, current-website-specifications, feature-admission, workspace-view-bindings/components, backend-chat, composition-planner, site-diagnostics, site-agent, agent-prompt-focus, prompt-data-boundaries, pnpm check, verify fast, verify protection and pnpm build. Not run: Playwright browser suites (workspace-view-lifecycle, workspace-identity-browser, visitor-deletion browser harness; @playwright/test is not installed) and app-pages-http (needs a .secrets fixture). Remaining: access.prepareRole/confirmRole, a role-review terminal-receipt schedule, staff sign-in in a composed frontend, and an owner product path to save an access instance; after the cutover the Chat visitor-application journey depends on that owner decision. The schema change still requires the owner-run empty-database cutover (pnpm run deploy prepare/apply with schemaChange initialize); deploy ci refuses it and the PR must not merge without the owner.
+- 2026-10-04 UTC: WH-126 owner visitor access setup; source and local verification only; not deployed, not accepted, issue not created or claimed from this session; WH-126 stays open. Branch c/great-curie-8ryukc (PR #160) adds the typed owner ChatControl accessModuleReview (project id only; never a model action; the site agent prompt still advertises no module operation, asserted) and src/shared-modules/access-setup.ts: it prepares the existing exact specification review (prepareSpecification, one modules.put) for the fixed standard access instance (id visitors, current catalog pins, no dependencies, roles [], invitation enrollment), saved by the existing recent-sign-in specificationApply control and activated by the existing exact moduleActivationReview/Apply pair (three separate reviews; nothing combined). Schema input schema/platform.sql: project_spec_proposal_admit admits a completed guided accessModuleReview turn for the same project (change only) and the new project_spec_access_setup_admit trigger requires the proposal to be the head plus exactly that appended instance with nothing else changed. readAppAccess returns accessSetup (states and ids only, not in the agent's application read); the Visitors panel shows Set up visitor access and Review activating visitor access. A project without a website configuration is refused with a reason (website drafting stays an AI path). tests/customer-app-journey.mjs and the shared task-list journey now set up visitor access through these controls on the real /api/chat/actions endpoint (only the first private website draft and the core.editing grant are synthetic); enableFixtureVisitorAccess uses the same owner control. Local checks passed: customer-app-journey, verify app, app-activation(-http), app-auth, app-data, app-lifecycle, app-migration-checks, app-page-design, app-recovery, application-build, shared-modules-access/collections/compositions/contract/files/records/registry on SQLite and --d1, 13 offline chat-interaction suites, feature-admission, tools/safety-hold-inventory, processing-boundaries, build-jobs, backend-checks, operator-containment, public-fairness, saved-work, service-safety, safety-case-operations, visitor-deletion-review, visitor-data, chat-reply, specification-compiler, current-website-specifications, site-agent, agent-prompt-focus, prompt-data-boundaries, workspace-view-bindings/components, pnpm check, verify fast, verify protection, pnpm build, roadmap validate/alignment/render --check. Not run: app-pages-http (needs a .secrets fixture) and Playwright browser suites. Remaining WH-126: access.prepareRole/confirmRole, role-review terminal-receipt schedule, staff sign-in in a composed frontend, an owner path to add the staff role; visitor access setup needs the project's first private website. The schema change still requires the owner-run empty-database cutover; deploy ci refuses it and the PR must not merge without the owner.
+- 2026-10-31 UTC (branch wh067-closeout from origin/main 617ce3e; source and local verification on disposable SQLite and actual local D1; no deploy, secret, provider or Stripe use; live and device acceptance NOT run and reported separately): acceptance mapped: tests/shared-modules-access.mjs (SQLite and --d1) covers workspace-cookie refusal both ways, no Chat/publication authority for staff, revocation at the next request and inside in-flight commits, replay never re-grants; app-auth, app-data, app-lifecycle, app-recovery and visitor-data pass after the identity cutover; project-roles lifecycle class (tests/lifecycle-catalog.mjs). Gap 2 closed: access.prepareRole/confirmRole permanently replaced by the Chat role reviews (D4, replacedOperations in src/shared-modules/policy.ts, asserted in tests/shared-modules-compositions.mjs); the role-review terminal-receipt schedule is the daily maintainReviews pass, now executed for module_access_role_reviews in tests/shared-modules-access.mjs (expired review sealed, removed, retry answered 409 from the receipt). Not done and not acceptance: staff sign-in in a composed frontend and an owner path to add the staff role wait for WH-070's staff page (D4c). Readiness planned to done.
+
+## WH-127 — Deliver the records and forms module with contact as a fixed instance
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
+
+Reviewed: 2026-10-30. Source baseline: `475a3a9658575a1defd820f2494e06eadfd956ba`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Visitors submit validated forms into private records that owners, staff and submitters read only through their permitted views and fields.
+
+### Scope
+
+- Record storage adapter on shared D1 with forms.submit, records.view/get/update/remove, opaque scoped cursors and field projection
+- Public submissions reuse contact admission: Origin, body bound, rate limiter, Turnstile, atomic caps; visitor/staff submissions use the access session
+- Expose the existing contact inbox as a fixed-schema records instance over its current tables without changing its fields or 30-day retention
+- records.summary@1 binding, descriptor lifecycle hooks and visitor-scoped export serializer; form.accepted event handoff for WH-069
+
+### Acceptance criteria
+
+- [ ] Field/record permissions hold for owner, staff, submitter and anonymous callers on direct requests, including owner-only fields and own-record scope
+- [ ] Replay, changed-payload conflict, stale configRevision, quota and lost-response cases behave per contract; zero maintainer inference
+- [ ] Contact behavior and its suites are unchanged apart from the shared handler path
+- [ ] No booking, scheduling or arbitrary query capability is implied
+
+### Verification
+
+- node tests/contacts.mjs plus a new records suite on disposable D1 with two tenants and role revocation
+- Direct HTTP fixtures against the visitor and workspace origins
+- tsc for both projects
+
+### Dependencies and blockers
+
+Planning dependencies: WH-126. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+- [docs/contact-forms.md](../../docs/contact-forms.md)
+- [src/contacts.ts](../../src/contacts.ts)
+- [src/backend-form-shape.ts](../../src/backend-form-shape.ts)
+- [docs/job-envelope.md](../../docs/job-envelope.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-04 UTC: partial slice; source and local verification only; not deployed, not accepted, issue not created or claimed from this session; WH-127 stays open. Branch c/great-curie-8ryukc (PR #160) adds module_records and module_record_events to the pending current schema input src/shared-modules/schema.sql (lifecycle class module-records admitted) and src/shared-modules/records.ts handlers registered in the WH-125 engine: visitor/staff forms.submit through the access session (nested values, bounded field validation, opaque entry id), records.get/records.view with the policy field projection and own-record scope repeated in each query and cursors bound to view, principal, configRevision and access revision, records.update (owner any field, staff staffWrite only, revision compare-and-swap) and owner records.remove (any activation state, refused inside safety holds). Commit triggers repeat instance/form/schema/retention/visitor/caps; content-free events prove each write and are the form.accepted handoff. Retention expiry (current retentionDays) runs in the contacts maintenance job and skips held projects; the delete site is classified blocked in tools/safety-hold-inventory.mjs. Owner routes on the workspace origin: POST /api/projects/P/modules and GET /api/projects/P/module-records/R/S. Verified: tests/shared-modules-records.mjs (SQLite and --d1, 9 groups, two owners/projects, roles, revocation, replay), registry/access/lifecycle/restore-admission/contacts/maintenance/app-auth/app-lifecycle suites, pnpm check, verify fast/protection, pnpm build. Remaining: anonymous public intake with Turnstile and caps, contact inbox as a fixed-schema instance, records.summary@1 and dashboard panel, visitor-subject export serializer and descriptor hooks, attachments (WH-128). Schema change: same owner-run empty-database cutover; deploy ci refuses it.
+- 2026-10-04 UTC: anonymous public intake slice; source and local verification only; not deployed, not accepted; WH-127 stays open. Same branch and pending schema cutover. An anonymous forms.submit to a public form passes the resolver and policy, reads an exact replay back without re-verification, then the visitor gateway's public admission reuses the contact form's protections: fail closed without TURNSTILE_SECRET, the contact per-connection allowance (public_client_usage scope contact, shared with the contact form) and the shared Siteverify helper src/turnstile.ts (now also used by the contact page) bound to the visitor host, action module-form and the exact resource id; the engine refuses public writes without that admission. module_record_admit repeats a public form, a live publication and the contact caps over anonymous module receipts (20/hour or the contact containment allowance, 100 per project and 1,000 platform-wide in 30 days, fair share above 500). Anonymous rows have submitter_kind public and no visitor id. Verified: tests/shared-modules-records.mjs (SQLite and --d1, 10 groups), tests/shared-modules-registry.mjs (SQLite and --d1), shared-modules-access, contacts, pnpm check, verify fast/protection, pnpm build. Activation needs the owner to set TURNSTILE_SECRET on whumpo-apps and confirm Turnstile hostnames cover app-PROJECT.whumpo.site (requires verification); no composed visitor frontend renders the widget yet (WH-070).
+- 2026-10-04 UTC: records.summary@1 and owner records panel slice; source and local verification only; not deployed, not accepted; WH-127 stays open. The records-summary view (registry feature null) and GET /api/projects/P/module-records return per registered records instance its state, configuration revision, retention, per schema the field count and retained records by submitter kind, and form/view ids with audiences; never field labels, values, entry ids or visitor ids, so the binding is safe for Chat temporary views. The fixed Form records control page (/workspace/records, frontend/src/records-panel.tsx) reads values only from the owner list route, renders them as text, pages with the opaque cursor and deletes through an owner records.remove request. Verified: tests/shared-modules-records.mjs (SQLite and --d1, 11 groups), shared-modules-registry/access, workspace-view-bindings/components, workspace-layout, chat-temporary-views, chat-interaction-contract, workspace-dashboard suites, pnpm check, verify fast/protection, pnpm build; the panel itself has no browser test (tests/workspace-view-lifecycle.mjs needs @playwright/test, not installed here).
+- 2026-10-04 UTC: contact inbox as a fixed-schema records instance deliberately not built (documentation only, docs/shared-modules.md#contact-inbox-stays-on-its-own-tables--october-4-2026-utc). It cannot be done without duplicating storage or breaking a current contract: contact's 2,000-character message and validated email exceed the frozen records v1 field types (a new type is a compiler identity cutover), contact intake is enabled by publication-bound contact_reviews outside the module registry (a wrapped instance would need a platform-created registry row with no specification source or a second activation authority), and serving contact_submissions through the records handlers would add a second storage path to every handler and trigger. Public module forms reuse the contact admission instead. This scope item needs an owner decision (retire contact in favour of a records instance at a cutover, or add long-text/email field types) before it can close; WH-127 stays open for it and the export serializer.
+- 2026-10-04 UTC: records export serializer slice; source and local verification only; not deployed, not accepted; WH-127 stays open. Records descriptors name exportHook records-export-v1 with the module-records data set separate-approval (hook ids in src/shared-modules/export-hooks.ts). exportRecords (src/shared-modules/records-export.ts) is owner-only in every activation state without a feature grant, refuses a stale configRevision or a descriptor without the hook, and returns whumpo-module-records v1 for one schema: fields and every currently retained record and value, 200 per page with the records cursor, optionally limited to one project visitor's own submissions (the WH-077 separate-approval slice; no visitor route). validateRecordsExport checks the wrapper, the schema with the current field validator, each record and value, the subject scope and the SHA-256; nothing imports. No route, table, Chat surface or compiler identity change; values never reach Chat, model context, receipts, events or logs. Verified: tests/shared-modules-records.mjs (SQLite and --d1, 12 groups), shared-modules-registry/access/collections/compositions/contract, workload-placement-prototype, lifecycle-catalog, safety-hold-inventory, pnpm check, verify fast/protection, pnpm build. Remaining: form attachments, the contact-instance owner decision, public intake activation (TURNSTILE_SECRET, hostname list).
+- 2026-10-29 UTC (schema batch 2, branch schema-batch-2 from 79a39cf; source and local verification on disposable SQLite and actual local D1; no deploy, secret or dependency; the D1 binding and the B4 pin are untouched and the cutover is the orchestrator's): form attachments DROPPED from this batch, not started. The work is larger than a schema plus minimal store change: module_record_admit (src/shared-modules/schema.sql) refuses any form with an uploadCollectionId, so attachment needs a policy-table decision for forms.submit that spans two module instances (the records instance and the files instance that owns the collection), an engine receipt predicate that repeats the files collection's upload role and activation inside the commit, the visitor gateway upload route (POST /modules/upload carries one JPEG body and the envelope in a header) learning a records target, and one atomic batch of project_files, module_files, module_records and the link row with the quota, safety receipt and orphan-sweep behaviour of files.putBytes. Public attachment intake is already refused by validation. Needs its own packet; no row or table was added. WH-127 stays partial.
+- 2026-10-29 UTC (schema batch 3b, branch schema-batch-3b-form-attachments from 69ca613; source and local verification on disposable SQLite and actual local D1; no deploy, secret or dependency; the D1 binding and the B4 pin are untouched and the cutover is the orchestrator's): form attachments delivered. A records form with an uploadCollectionId (never a public form, decision D6) now accepts input.attachments, at most four distinct ids of the submitter's own uploads into that collection; forms.submit writes the record, its form.accepted event and one module_record_files link per file in one db.batch beside the engine receipt, so a lost reply replays the saved receipt and a changed list is request_conflict. New table module_record_files (entry_id cascade, file_id unique, instance_id, project_id, request_id; 234 tables, 1173 objects) with module_record_file_admit (own upload, same collection, files instance a declared dependency, written within 60 seconds, at most four, revision-1 record of this request), an immutability trigger, and module_record_files_removed (a BEFORE DELETE trigger, because SQLite runs the foreign-key cascade before AFTER triggers): INTERIM DEFAULT pending an owner retention decision, attached uploads are deleted with their record. module_record_admit now refuses public forms that have uploads instead of every form with an upload collection. The records export carries attachment file ids. Registered in the lifecycle catalogue (module-records), tenant classification (reviewed schema sha256 bc854b898ac07fa2a72f004ec7600d32599a2144d2cc79227f78495f5fcc3a29), the closure inventory (moduleRecordFiles), the safety-hold inventory (project_files note), the recovery drill (seeded and restored) and the releases SCHEMA CHANGE entry. policy.ts, files.ts and the engine receipt trigger needed no change. Tests: tests/form-attachments.mjs and tests/schema-batch-3b.mjs (plain and --d1), plus the existing records, files, compositions and boundary-module-file-read suites. Open: the owner's retention decision for attachments; the visitor frontend upload flow (WH-070).
+- 2026-10-30 UTC (WH-001 reconciliation against origin/main 475a3a9, read from git log and gh pr view; docs only, nothing re-run unless stated, no GitHub issue, Cloudflare or provider mutation): merged PR #486 (73e423a, schema batch 3b form attachments; cut over by #490). Readiness unchanged: the remaining gaps in docs/shared-modules.md stay open.
+- 2026-10-31 UTC (branch wh067-closeout from origin/main 617ce3e; source and local verification on disposable SQLite and actual local D1; no deploy, secret, provider or Stripe use; live and device acceptance NOT run and reported separately): acceptance mapped: tests/shared-modules-records.mjs (SQLite and --d1) covers owner/staff/submitter/anonymous projection on direct requests, replay, changed-payload conflict, stale configRevision, quotas and lost responses; contacts.mjs unchanged and passing; no booking capability. Remaining gap closed: public form activation is bound to the exact publication revision (module_activations.publication_revision, module_record_admit; a later publish closes public intake until a fresh activation review; tested for activated-before-publish, publish-after-activation and re-activation), with a plain status line in the records panel and modules card (PublicFormNote; tests/public-form-note-browser.mjs at 360, 390 and 1280px). Activation gap, not an acceptance gap: public intake cannot go live until the owner sets TURNSTILE_SECRET on whumpo-apps. Readiness planned to done.
+- 2026-10-31 UTC (review fixes on PR #525, same branch; source and local verification only; live check NOT run): the Opus review found that a held record could be overwritten or cleared by owner and staff writes, that one object-scope hold aborted retention expiry for every tenant, and that the public-form state could say bound while submissions were refused. Fixed: schema trigger safety_hold_module_record_frozen plus a plain owner message (tests: project, account and object-scope holds in shared-modules-records.mjs and form-attachments.mjs, including staff writes, null clears and raw SQL); cleanupModuleRecords skips records with a held attached file (tenant B's expiry and the receipt prune complete, tested); publicFormState now agrees with resolveResource (dependency and catalog checks, state unavailable, tested with a disabled dependency) and the copy only says the form is bound to the live website version; anonymous-intake wording; static guard now covers UPDATE and DELETE of module-held tables across src; the real visitor erasure handler is driven under holds (generic 503 by design, holds are never disclosed). Digests regenerated: sqlSha256 b6c769ce013100c79c7cc00c65e6e64cbc8fac965ddfb92f600ba82ac5396a3c, inventory sha256 00dda74874bdd87ba84cb2d3f61da0099fa3007ecf88a2a306482633915eae1c, 240 tables, 1221 objects. The live synthetic module check on the test platform must run after the batch 5 cutover; it is required before relying on deployed behavior and is recorded as outstanding.
+
+## WH-128 — Deliver the files and galleries module over private photo storage
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
+
+Reviewed: 2026-10-30. Source baseline: `475a3a9658575a1defd820f2494e06eadfd956ba`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Staff or visitors upload files into collections governed by role policy, and permitted viewers see only approved files, without any public bucket.
+
+### Scope
+
+- Extend project_files with instance/collection and uploader identity by current-schema cutover; keep JPEG cleaning, 1 MiB bound, create-only R2 and reservations
+- files.prepareUpload/putBytes/read/gallery on the visitor origin; owner collection for existing project photos and the Chat upload handoff
+- Pending safety receipt on every upload; approved exact-digest reads with byte re-hash; reviewed removal and cleanup queue
+- Descriptor lifecycle hooks and export serializer for eligible approved files
+
+### Acceptance criteria
+
+- [ ] Staff-only upload is enforced by the collection role policy; names, prefixes and URLs grant nothing; visitors and anonymous callers are refused
+- [ ] Held, blocked or revoked files are never served, referenced or published; removal respects held state and preservation hooks
+- [ ] Existing photo upload, version, removal and publication suites pass
+- [ ] Public exposure happens only through existing exact publication reviews
+
+### Verification
+
+- node tests/files.mjs, tests/photo-versions.mjs and tests/photo-removal.mjs on disposable D1/R2
+- New two-tenant role/revocation/direct-API upload fixtures with synthetic clearances only
+- tsc for both projects
+
+### Dependencies and blockers
+
+Planning dependencies: WH-126, WH-010. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+- [docs/photos.md](../../docs/photos.md)
+- [src/files.ts](../../src/files.ts)
+- [src/photo-safety.ts](../../src/photo-safety.ts)
+- [docs/safety-coverage.md](../../docs/safety-coverage.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-04 UTC: partial slice; source and local verification only; not deployed, not accepted, issue not created or claimed from this session; WH-128 stays open. Branch c/great-curie-8ryukc (PR #160) adds module_files to the pending current schema input src/shared-modules/schema.sql (lifecycle class module-files admitted, 215 tables) as a 1:1 row beside an ordinary project_files photo row, so the WH-013 pipeline applies unchanged: cleanPhoto, 1 MiB and collection maxBytes, create-only private R2 object under photos/ with a server key, photo quotas, the pending project_photo_safety receipt written with the ready row, the approved_project_photos exact-digest view, byte re-hash, photo removal review, safety holds, cleanup queue and orphan sweep. src/shared-modules/files.ts registers files.putBytes (visitor origin POST /modules/upload, JPEG body with the envelope in a header; declared type/length/SHA-256 checked; no caller name, path, prefix or bucket), files.gallery and files.read (approved bytes only, re-hashed, sandboxed image response). Staff upload is the collection role policy (policy table, engine receipt predicate, module_file_admit with the staff role on the governing access instance and 10/hour/visitor); over-wide galleries are refused by the validator and at serving time. Module uploads are excluded from the owner photo library, Chat pickers, website specifications, the agent's photo context, workspace inspection and saved work, and get server-assigned names. Visitor erasure and files-instance removal delete their photo rows (blocked inside holds; classified in tools/safety-hold-inventory.mjs). whumpo-apps gains the existing private FILES binding. Verified: tests/shared-modules-files.mjs (SQLite with in-memory bucket and --d1 with local R2, 8 groups), tests/files.mjs, photo-versions, photo-removal, shared-modules-records/registry/access, contacts, app-auth, app-lifecycle, chat-interaction-photos, saved-work, workspace-view-bindings, agent-inspection, guest-preview-photos, current-website-specifications, lifecycle-catalog, restore-admission, safety-hold-inventory, pnpm check, verify fast/protection, pnpm build. Remaining: existing photos as an owner collection, owner module uploads and Chat handoff, prepareUpload/requestRemoval as module operations, form attachments, galleries in published websites, descriptor hooks and export serializer, scanner integration (owner-deferred). Schema change: same owner-run empty-database cutover; deploy ci refuses it.
+- 2026-10-04 UTC: files export serializer slice; source and local verification only; not deployed, not accepted; WH-128 stays open. Files descriptors name exportHook files-export-v1 with the module-files data set separate-approval. exportFiles (src/shared-modules/files-export.ts) is owner-only in every activation state, refuses a stale configRevision or a descriptor without the hook, and returns whumpo-module-files v1 for one collection: only ready files with a current exact-digest approval, 8 per page, cleaned JPEG bytes re-hashed against the approved digest (a tampered object fails the export), dimensions, size, digest, uploader kind and visitor id, and a withheld count for held/blocked files; optionally limited to one visitor's own uploads (WH-077 separate approval). No object key, bucket, file name, safety receipt or scanner reference is exported. validateFilesExport checks shapes, bytes (JPEG start, size, SHA-256) and the page SHA-256; nothing imports. Verified: tests/shared-modules-files.mjs (SQLite with an in-memory bucket and --d1 with local R2, 9 groups), tests/files.mjs, photo-versions, photo-removal, shared-modules-registry/access/collections/compositions/contract, lifecycle-catalog, safety-hold-inventory, pnpm check, verify fast/protection, pnpm build. Remaining: existing photos as an owner collection, galleries on published websites, Chat handoff into a collection, prepareUpload/requestRemoval as operations, scanner integration (owner-deferred).
+- 2026-10-04 UTC: owner collections and published galleries slice; source and local verification only; not deployed, not accepted; WH-128 stays open. module_files gains owner rows (uploader_kind owner, no visitor): the owner's files.putBytes on the workspace module route names an existing ready project photo by id and exact SHA-256 and files it into a collection whose upload lists owner, with no second photo row, object or reservation; module_file_admit repeats the active instance, owner upload policy and a ready same-project photo. ownerLibrarySQL and saved work exclude only staff/visitor uploads, so filed photos stay in the owner library; instance removal deletes only staff/visitor photo rows; module_file_not_published refuses staff/visitor uploads as website photos. The typed owner Chat control galleryPageReview (ids only, not advertised to the site agent) prepares the existing exact specification review with one pages.setPhotos of the newest approved owner-filed photos (at most four, photo-page@1); project_spec_gallery_admit repeats the shape inside the commit; saving is specificationApply and going public is the existing exact publication review with the unchanged WH-013 approval and re-hash gates. No compiler identity change (project-content@5 unchanged). Verified: tests/shared-modules-files.mjs (SQLite and --d1 with local R2, 10 groups), files, photo-versions, photo-removal, chat-interaction-photos/contract, chat-temporary-views, saved-work, workspace-view-bindings, agent-inspection, guest-preview-photos, current-website-specifications, restore-admission, specification-compiler, lifecycle-catalog, app-auth, app-lifecycle, contacts, shared-modules-registry/access/records/collections/compositions (SQLite and --d1), safety-hold-inventory, pnpm check, verify fast/protection, pnpm build. Schema change: same owner-run empty-database cutover; deploy ci refuses it. Remaining: Chat upload handoff directly into a collection, removing a photo from a collection, an owner panel control (files instances are fixture-configured only), prepareUpload/requestRemoval as operations, scanner integration (owner-deferred).
+- 2026-10-04 UTC: owner Photos panel controls slice; source and local verification only; not deployed, not accepted, not exercised in a browser; WH-128 stays open. No schema, authority or review change. GET /api/projects/P/module-files (owner only; readOwnerFileCollections in src/shared-modules/files-gallery.ts, OwnerFileCollections in shape.ts) returns saved page ids/paths, unfiled ready owner photos with their exact SHA-256 and owner collections with owner-filed photo ids and safety state (never staff/visitor uploads; dashboard only, not Chat or model context). The Photos panel (frontend/src/photo-collections.tsx, client frontend/src/lib/photo-collections.ts) adds Add to collection on ready photos (owner files.putBytes envelope {fileId, sha256} on the workspace module route, one request id reused per photo and collection until confirmed) and a Collections and gallery pages section whose Prepare gallery page button sends the typed galleryPageReview control through runAction; saving and publishing stay the existing exact reviews. Verified: tests/shared-modules-files.mjs (11 groups, SQLite with in-memory bucket and --d1 with local D1/R2; new group drives the panel client through the real routes: owner-only facts, exact envelope, lost-ack replay with the same request id, gallery refused while held and prepared after approval with nothing saved, disabled instance refused, no staff/visitor uploads listed, no prompt mention), tests/files.mjs, photo-versions, photo-removal, chat-interaction-photos, saved-work, agent-inspection, shared-modules-registry/access/compositions, pnpm check, verify fast/protection, pnpm build. Remaining: Chat upload handoff directly into a collection, removing a photo from a collection without deleting it, prepareUpload/requestRemoval as operations, owner authoring of files instances (fixture-only), scanner integration (owner-deferred).
+- 2026-10-04 UTC: owner photo collection setup slice; source and local verification only; not deployed, not accepted, not exercised in a browser; WH-128 stays open. The typed owner Chat control filesModuleReview {projectId} (src/shared-modules/files-setup.ts; never accepted from model output, not advertised to the site agent) prepares the existing exact specification review with one modules.put of a fixed standard files instance: id photos, current catalog module-files/files-data pins, no dependencies, one collection library (owner read, owner-only upload, 1 MiB, JPEG, no gallery; schema review class only). Refused with reasons for a project without a website (404), an existing saved or registered owner collection, a taken photos instance id or library collection id (400) and foreign projects (404). Saving is specificationApply (recent sign-in) and activation the separate moduleActivationReview/Apply pair. project_spec_proposal_admit gains a filesModuleReview branch and the new project_spec_files_setup_admit trigger (src/shared-modules/schema.sql) requires head plus exactly that appended instance (exact key counts). GET /api/projects/P/module-files returns setup states; the Photos panel Collections and gallery pages section offers Set up photo collection and Review activating photo collection. Verified: tests/shared-modules-files.mjs (12 groups, SQLite with in-memory bucket and --d1 with local D1/R2; new group covers malformed/foreign controls, exact instance and pins, linked review, 13 tampered proposals refused inside the commit, exact copy accepted, separate save and activation, panel setup states and client actions, filing into the set-up collection, disable, repeated setup, existing collection, taken ids, no website, prompt check), shared-modules-access (SQLite and --d1), shared-modules-registry/compositions/contract, chat-interaction-photos, service-safety, current-website-specifications, specification-compiler, safety-hold-inventory, pnpm check, verify fast/protection, pnpm build. Schema change: same owner-run empty-database cutover; deploy ci refuses it. Remaining: Chat upload handoff directly into a collection, removing a photo from a collection without deleting it, prepareUpload/requestRemoval as operations, staff/visitor files instances (fixture-only), scanner integration (owner-deferred).
+- 2026-10-04 UTC: Remove from collection slice; source and local verification only; not deployed, not accepted, not exercised in a browser; WH-128 stays open. No schema, trigger, review, Chat surface or module operation change (the closed WH-123 operation set is unchanged). POST /api/projects/P/module-files/remove (owner only; removeOwnerFileFromCollection in src/shared-modules/files-gallery.ts) takes exactly {resourceId, collectionId, fileId} and deletes one owner-filed photo's module_files row only: the photo, its private object, safety receipt and saved versions stay, nothing is queued, and the photo returns to the unfiled list. Idempotent (removed:false when already out). Staff/visitor uploads are not_found, non-owner collections forbidden, malformed bodies invalid_request; works while disabled and inside a safety hold (deletes no content; new WH-132 inventory site classified excluded). Conservative choice: refused (409) while the current saved head version or the live publication shows the photo, repeated inside the deleting statement, because a gallery page is a snapshot of photo ids; the owner changes the page first or uses the photo removal review. The Photos panel shows Remove from collection on filed photos. Verified: tests/shared-modules-files.mjs (13 groups, SQLite with in-memory bucket and --d1 with local D1/R2; new group drives the panel client through the real route: exact body, lost-ack retry, photo/receipt/object kept, re-filing, foreign/unknown/non-owner/staff-upload/malformed refusals, refusal while the saved website shows the photo, removal while disabled and inside a project hold, prompt check), safety-case-operations, shared-modules-compositions, photo-removal, files, photo-versions, saved-work, safety-hold-inventory (94 sites), pnpm check, verify fast/protection, pnpm build. Remaining: Chat upload handoff directly into a collection, prepareUpload/requestRemoval as operations, staff/visitor files instances (fixture-only), scanner integration (owner-deferred).
+- 2026-10-29 UTC: Chat upload handoff slice; source and local verification only; not deployed, not accepted, not exercised in a browser; WH-128 stays open. No schema, route, SQL or dependency change. After the Chat photo uploader saves a photo, frontend/src/photo-collections.tsx ChatUploadHandoff (rendered by frontend/src/chat-interaction.tsx; ProjectPhotoUpload.onSaved now passes the saved upload) reads the existing GET /api/projects/P/module-files facts and, when the photo is an unfiled candidate and an active owner collection exists, shows the owner a confirmation (photo name, nothing published) with the existing PhotoCollectionControl. Confirming sends the existing owner files.putBytes module request (file id and exact digest, no bytes), reusing one request id until confirmed so a lost reply replays the receipt; the server still scopes the instance, collection and photo to the owner's project and refuses foreign, staff-only and already-filed targets. Scanning, metadata stripping, size limits and recovery keys are the unchanged Chat upload pipeline. Verified: tests/shared-modules-files.mjs on SQLite and --d1 (new group: confirm, replay, foreign and staff-only collection refusal, lost reply, wiring), boundary-audit, tenant-sql-surface, pnpm check, verify fast/protection, pnpm build. Remaining WH-128: files.prepareUpload/files.requestRemoval decision, form attachments, scanner (owner-deferred), activation.
+- 2026-10-31 UTC (branch wh067-closeout from origin/main 617ce3e; source and local verification on disposable SQLite and actual local D1; no deploy, secret, provider or Stripe use; live and device acceptance NOT run and reported separately): acceptance mapped: tests/shared-modules-files.mjs (SQLite and --d1) covers the collection role policy, refusal of visitors and anonymous callers, held/blocked/revoked files never served, removal respecting holds (now also visitor erasure, instance removal and project deletion under a hold), and public exposure only through exact reviews; photo-handoff, photo-scan-results and the site/protection gates pass. files.prepareUpload/requestRemoval permanently replaced by files.putBytes and the photo removal review (D4). Scanner integration stays owner-deferred. Readiness planned to done.
+- 2026-10-31 UTC (review fixes on PR #525, same branch; source and local verification only; live check NOT run): the Opus review found that a held record could be overwritten or cleared by owner and staff writes, that one object-scope hold aborted retention expiry for every tenant, and that the public-form state could say bound while submissions were refused. Fixed: schema trigger safety_hold_module_record_frozen plus a plain owner message (tests: project, account and object-scope holds in shared-modules-records.mjs and form-attachments.mjs, including staff writes, null clears and raw SQL); cleanupModuleRecords skips records with a held attached file (tenant B's expiry and the receipt prune complete, tested); publicFormState now agrees with resolveResource (dependency and catalog checks, state unavailable, tested with a disabled dependency) and the copy only says the form is bound to the live website version; anonymous-intake wording; static guard now covers UPDATE and DELETE of module-held tables across src; the real visitor erasure handler is driven under holds (generic 503 by design, holds are never disclosed). Digests regenerated: sqlSha256 b6c769ce013100c79c7cc00c65e6e64cbc8fac965ddfb92f600ba82ac5396a3c, inventory sha256 00dda74874bdd87ba84cb2d3f61da0099fa3007ecf88a2a306482633915eae1c, 240 tables, 1221 objects. The live synthetic module check on the test platform must run after the batch 5 cutover; it is required before relying on deployed behavior and is recorded as outstanding.
+
+## WH-130 — Accept shared modules across two frontend compositions
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: verification. Size: M.
+
+Reviewed: 2026-10-30. Source baseline: `475a3a9658575a1defd820f2494e06eadfd956ba`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Two different frontends use one module API contract with no custom authentication or handlers, and the WH-067 acceptance is evidenced.
+
+### Scope
+
+- Build two synthetic compositions (a staff portal and a visitor intake/gallery) against the same records/files/access instances on the visitor origin
+- Cross-tenant, cross-user, role, direct-API, replay and revocation fixtures over actual handlers with maintenance inference unavailable
+- Run the existing contact, directory, photo and app lifecycle suites relevant to each slice and record evidence levels
+
+### Acceptance criteria
+
+- [ ] Every WH-067 acceptance criterion maps to passing local evidence; live or device acceptance is reported separately
+- [ ] Neither composition contains authentication, authorization or storage code of its own
+- [ ] No universal no-code engine, booking promise or public bucket is introduced
+
+### Verification
+
+- Connected local D1/R2 journey with two compositions and two tenants
+- Existing lifecycle suites listed in each slice
+- Import graph shows no maintainer inference in module paths
+
+### Dependencies and blockers
+
+Planning dependencies: WH-127, WH-128, WH-129. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
+- [docs/verification.md](../../docs/verification.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-04 UTC: local synthetic evidence only; not deployed, not browser-tested, not live- or customer-accepted; issue not created or claimed from this session; WH-130 stays open. Branch c/great-curie-8ryukc (PR #160, held for the owner empty-D1 cutover) adds two synthetic compositions, tests/fixtures/module-compositions/staff-portal.mjs and visitor-intake.mjs, that call only same-origin POST /modules and /modules/upload with the whumpo-modules v1 envelope and a manifest of resource ids and configRevisions. A static check refuses auth, cookie, session, principal/role, SQL, storage-location, absolute-origin, handler and inference code and any import in both. tests/shared-modules-compositions.mjs (11 groups, passing on SQLite with an in-memory private bucket and with --d1 on local D1/R2) drives both against the same access/records/files/content instances of two tenants through the actual visitor gateway, module engine, handlers, commit triggers, activation/role/directory/publication reviews and owner workspace routes. It covers cross-user, role, cross-tenant and direct-API refusals; replay (a write readback, conflict, anonymous replay without re-verification, replay refused after revocation); staff and visitor revocation, disable and a stale manifest after an additive field; approved-only files with re-hash; no values in Chat, model context, receipts or logs; no public bucket; and no maintainer inference, with fetch throwing and the import graphs checked. The harness plays the browser: no Worker serves a composition yet (WH-070) and Playwright is not installed. The acceptance map and the exact gaps that block the first criterion are in docs/shared-modules.md#wh-067-acceptance-map--october-4-2026-utc: WH-126 identity cutover, WH-127/128 export serializers and form attachments, the owner photo collection, owner uploads and published galleries, LC-06, the owner authoring path, a served composition, and the deployed cutover.
+- 2026-10-31 UTC (branch wh067-closeout from origin/main 617ce3e; source and local verification on disposable SQLite and actual local D1; no deploy, secret, provider or Stripe use; live and device acceptance NOT run and reported separately): re-run: shared-modules-compositions.mjs (SQLite and --d1) passes both compositions with the new assertions that every operation is handled or permanently replaced and that the module deletion statements are the known, hold-checked set; the static check that compositions hold no auth, authorization or storage code passes; no public bucket, booking engine or universal engine. Every WH-067 acceptance line maps to passing local evidence (docs/shared-modules.md acceptance map). Live module check on the test platform not run (the batch 5 schema is not cut over yet); reported separately. Readiness planned to done.
+- 2026-10-31 UTC (review fixes on PR #525, same branch; source and local verification only; live check NOT run): the Opus review found that a held record could be overwritten or cleared by owner and staff writes, that one object-scope hold aborted retention expiry for every tenant, and that the public-form state could say bound while submissions were refused. Fixed: schema trigger safety_hold_module_record_frozen plus a plain owner message (tests: project, account and object-scope holds in shared-modules-records.mjs and form-attachments.mjs, including staff writes, null clears and raw SQL); cleanupModuleRecords skips records with a held attached file (tenant B's expiry and the receipt prune complete, tested); publicFormState now agrees with resolveResource (dependency and catalog checks, state unavailable, tested with a disabled dependency) and the copy only says the form is bound to the live website version; anonymous-intake wording; static guard now covers UPDATE and DELETE of module-held tables across src; the real visitor erasure handler is driven under holds (generic 503 by design, holds are never disclosed). Digests regenerated: sqlSha256 b6c769ce013100c79c7cc00c65e6e64cbc8fac965ddfb92f600ba82ac5396a3c, inventory sha256 00dda74874bdd87ba84cb2d3f61da0099fa3007ecf88a2a306482633915eae1c, 240 tables, 1221 objects. The live synthetic module check on the test platform must run after the batch 5 cutover; it is required before relying on deployed behavior and is recorded as outstanding.
+
+## WH-129 — Expose the directory as a content collections module
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: S.
+
+Reviewed: 2026-10-30. Source baseline: `475a3a9658575a1defd820f2494e06eadfd956ba`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Directory listings use the shared module envelope and lifecycle while keeping their exact draft, publication and restore reviews.
+
+### Scope
+
+- Wrap directories, directory_reviews and directory_exports as a content-collections instance of type directory-listing@1
+- collections.readPublic through the module envelope; owner edits keep the existing review handlers
+- Descriptor lifecycle hooks and export serializer matching the current directory export
+
+### Acceptance criteria
+
+- [ ] Public reads return only the approved snapshot; drafts and history stay owner-only
+- [ ] Existing directory and history suites pass; stale configRevision and withdrawn pins refuse
+- [ ] No staff editing or new collection types are added
+
+### Verification
+
+- node tests/directories.mjs and node tests/directory-history.mjs on local D1
+- tsc for both projects
+
+### Dependencies and blockers
+
+Planning dependencies: WH-125. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+- [docs/directories.md](../../docs/directories.md)
+- [src/directory.ts](../../src/directory.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-04 UTC: source and local verification only; not deployed, not accepted, issue not created or claimed from this session; WH-129 stays open until accepted. Branch c/great-curie-8ryukc (PR #160) makes the project directory the content-collections instance (directory-listing@1) without a schema change: at most one content instance per project governs the existing directories/directory_reviews/directory_exports rows. src/shared-modules/collections.ts registers collections.readPublic (target {collectionId}, read) through the shared resolver, policy table and read fence, serving only the approved snapshot via the same publicDirectory reader as /directory.json (unpublished, offline or parent-restore-invalidated is unavailable; drafts, revisions and history never appear) on the visitor origin and the owner module route. Owner edits keep the existing directory Chat reviews; no write, staff path or collection type is added. The content descriptor marks directories eligible project data with exportHook collections-directory-export-v1 (deleteHook project-cascade, restoreHook unsupported); exportCollectionSnapshot returns exportDirectory's whumpo-directory v1 document (owner, current configRevision, every activation state, withdrawn or restaged pin) and validateDirectoryExport is its import validation. Compiler identity, schema inputs and module pins unchanged. Conservative default: the public site routes /directory and /directory.json keep serving without an instance (requiring activation would gate the free directory behind core.editing; owner decision). Verified: tests/shared-modules-collections.mjs (SQLite and --d1, 7 groups), tests/directories.mjs and tests/directory-history.mjs (local D1), shared-modules-registry/access/records/files (SQLite and --d1), shared-modules-contract, tools/safety-hold-inventory.mjs, pnpm check, verify fast/protection, pnpm build. Remaining: custom-domain directory paths, a lifecycle restore/import hook, the site-route decision; deploys only with the owner-run empty-database cutover that the module registry needs.
+- 2026-10-31 UTC (branch wh067-closeout from origin/main 617ce3e; source and local verification on disposable SQLite and actual local D1; no deploy, secret, provider or Stripe use; live and device acceptance NOT run and reported separately): acceptance mapped: tests/shared-modules-collections.mjs (SQLite and --d1) covers approved-snapshot-only public reads, stale configRevision and withdrawn pins; directories.mjs and directory-history.mjs pass on SQLite and --d1; no staff editing or new collection types. Readiness planned to done.
 
 ## WH-154 — Freeze the shared notification contract and decompose WH-068
 

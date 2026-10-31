@@ -512,6 +512,15 @@ try{
   await chat(a,'/confirm-photo-delete '+review.turn).then(r=>assert.notEqual(r.result.status,200),e=>assert.match(String(e),/safety_preservation_hold/));
   assert.equal((await row('SELECT count(*) n FROM module_files WHERE file_id=?',first)).n,1,'Held module uploads are retained');
   await assert.rejects(()=>run('DELETE FROM project_files WHERE id=?',first),/safety_preservation_hold/);
+  // WH-067 (LC-06 mechanism, D4): the cascades from visitor erasure, instance removal and project deletion consult the same hold.
+  const uploader=await row('SELECT visitor_id FROM module_files WHERE project_id=? AND visitor_id IS NOT NULL LIMIT 1',a.project),filesBefore=(await row('SELECT count(*) n FROM module_files WHERE project_id=?',a.project)).n;
+  await assert.rejects(()=>run('DELETE FROM app_visitors WHERE id=?',uploader.visitor_id),/safety_preservation_hold/);
+  await assert.rejects(()=>run('DELETE FROM module_instances WHERE id=?',fresh.id),/safety_preservation_hold/);
+  await assert.rejects(()=>run('DELETE FROM projects WHERE id=?',a.project),/safety_preservation_hold/);
+  assert.equal((await row('SELECT count(*) n FROM module_files WHERE project_id=?',a.project)).n,filesBefore);
+  // The real reviewed erasure is refused too: one unconfirmed deletion that never discloses the hold, with every upload still in place.
+  const refusedErase=await appLifecycle.prepareAppDeletion(db,other.session,a.project);
+  await assert.rejects(()=>appLifecycle.deleteAppAccount(db,other.session,a.project,refusedErase.id,refusedErase.revision,'DELETE'),e=>e.status===503&&/Deletion could not be confirmed\. Check the saved deletion result/.test(e.message)&&!/hold|safety/i.test(e.message));
   await run("UPDATE safety_preservation_holds SET released_at=unixepoch(),released_by='human:approver',release_ref='release-1' WHERE id='hold-wh128'");
   const again=await chat(a,'/delete-photo '+first),done=await chat(a,'/confirm-photo-delete '+again.turn);assert.equal(done.result.status,200,JSON.stringify(done.result));
   assert.equal((await row('SELECT count(*) n FROM module_files WHERE file_id=?',first)).n,0);assert.ok(await row('SELECT 1 FROM file_cleanup WHERE object_key=?',`photos/${a.project}/${first}.jpg`));

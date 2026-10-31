@@ -7,7 +7,7 @@ import {compilerCatalog,moduleCatalog,type CompilerAvailability,type ModuleAvail
 // Catalog availability is current server policy, separate from immutable artifact identity.
 // Withdrawing an artifact prevents new compilation/apply; historical bytes stay unchanged.
 export type {CompilerAvailability,ModuleAvailability} from './catalog';
-const lock={formatVersion:1,schemaVersion:3,compiler:{id:'project-content',version:5,digest:compilerArtifacts.compiler},modules:[{id:'content',version:2,digest:compilerArtifacts.content,dependencies:[]}],components:[{id:'site-page',version:1,digest:compilerArtifacts.component},{id:'photo-page',version:1,digest:compilerArtifacts.component}]};
+const lock={formatVersion:1,schemaVersion:3,compiler:{id:'project-content',version:6,digest:compilerArtifacts.compiler},modules:[{id:'content',version:2,digest:compilerArtifacts.content,dependencies:[]}],components:[{id:'site-page',version:1,digest:compilerArtifacts.component},{id:'photo-page',version:1,digest:compilerArtifacts.component}]};
 export function currentCompilerLock(){return copyJSON(lock);}
 
 /** Availability must come from trusted server state, never a model/request payload. */

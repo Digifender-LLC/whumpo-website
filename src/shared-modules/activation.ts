@@ -7,7 +7,7 @@ import {chatTurnGroups} from '../chat-turn-groups';
 import {ModuleError} from './policy';
 import {compactedReview,turnoverStatements} from '../review-turnover';
 import {linkedReviewedReply,reviewedReplyGuard} from '../chat-review-receipts';
-import {catalogState,currentSpecification,instanceOf,moduleDescriptor,moduleFeature,pin,registeredInstances,type RegistryRow} from './registry';
+import {catalogState,currentSpecification,instanceOf,moduleDescriptor,moduleFeature,pin,publicFormState,registeredInstances,type RegistryRow} from './registry';
 
 /** WH-125 exact owner activation/disable reviews. Both steps are typed owner Chat controls whose statements
  * commit with the Chat turn: `moduleActivationReview` prepares, `moduleActivationApply` (recent sign-in) applies.
@@ -26,7 +26,7 @@ const reviewDigest=(r:Review)=>jsonDigest({contract:'module-activation-review@1'
 function describe(r:Review,dependencies:string[]){
  const name=`“${r.local_id}” ${kindNames[r.kind]} module`;
  if(r.action==='disable')return `Review disabling the ${name}\nVisitor, staff and public requests stop at their next request. Saved configuration, owner reads, export and re-activation stay available. Nothing is deleted.\nApproval requires a recent sign-in. Review expires: ${new Date(r.expires_at*1000).toISOString()}`;
- return `Review activating the ${name}\n${r.expected_config_revision===0?'Registers this module':r.next_config_revision>r.expected_config_revision?'Applies the changed saved configuration':'Re-activates the saved configuration'} at configuration revision ${r.next_config_revision}, from the current saved website configuration.\n${r.widening?'This allows new people to submit or read through this module.\n':''}${dependencies.length?`Depends on active modules: ${dependencies.join(', ')}.\n`:''}While active, the module serves its configured visitors only through its own checks. Activation publishes no page, sends no message and runs no AI. Visitor-submitted values stay in your dashboard and never enter Chat or AI requests.\nApproval requires a recent sign-in. Review expires: ${new Date(r.expires_at*1000).toISOString()}`;
+ return `Review activating the ${name}\n${r.expected_config_revision===0?'Registers this module':r.next_config_revision>r.expected_config_revision?'Applies the changed saved configuration':'Re-activates the saved configuration'} at configuration revision ${r.next_config_revision}, from the current saved website configuration.\n${r.widening?'This allows new people to submit or read through this module.\n':''}${dependencies.length?`Depends on active modules: ${dependencies.join(', ')}.\n`:''}${r.kind==='records'&&r.config_json.includes('"submit":"public"')?'A form open to anonymous visitors accepts submissions only for the website version that is live when you confirm. Publishing, restoring or unpublishing the website later turns it off until you re-activate this module.\n':''}While active, the module serves its configured visitors only through its own checks. Activation publishes no page, sends no message and runs no AI. Visitor-submitted values stay in your dashboard and never enter Chat or AI requests.\nApproval requires a recent sign-in. Review expires: ${new Date(r.expires_at*1000).toISOString()}`;
 }
 function link(db:D1Database,user:string,turn:string,review:string,hash:string){
  return db.prepare('INSERT INTO module_activation_links(turn_id,review_id,reply_digest) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM chat_turns WHERE id=? AND user_id=?)').bind(turn,review,hash,turn,user);
@@ -80,7 +80,7 @@ export async function prepareModuleActivationCommand(db:D1Database,user:string,t
     catch(error){if(error instanceof SpecificationError)throw new ModuleError('incompatible');throw error;}
     next=row.config_revision+1;
    }
-   if(row.state==='active'&&next===row.config_revision&&row.source_version_id===spec.versionId)throw new ModuleError('invalid_request','This module is already active with the current saved configuration.');
+   if(row.state==='active'&&next===row.config_revision&&row.source_version_id===spec.versionId&&await publicFormState(db,row)!=='stale')throw new ModuleError('invalid_request','This module is already active with the current saved configuration.');
   }else widening=classifyModuleChange(undefined,instance).permissions;
   const resourceId=row?.id??crypto.randomUUID(),descriptor=moduleDescriptor(project,resourceId,instance,deps);
   review={id:turn,user_id:user,project_id:project,resource_id:resourceId,local_id:localId,kind:instance.kind,action,feature_id:feature,source_version_id:spec.versionId,source_spec_digest:spec.digest,
