@@ -277,9 +277,9 @@ class ProjectsViewModel(
             } else {
                 val retry = e is MobileApiException.RateLimited || e is MobileApiException.Unavailable
                 val row = UploadRow(uploadId, UploadPhase.Failed, uploadMessage(e), canRetry = retry)
-                // Refused for good: the bytes can never be retried, so they are not kept.
-                setUpload(uploadId, Entry(projectId, if (retry) photo else null, row, gen))
+                // Refused for good: the bytes can never be retried, so they are released first and only then is the failure shown.
                 if (!retry) store.remove(uploadId)
+                setUpload(uploadId, Entry(projectId, if (retry) photo else null, row, gen))
             }
         }
     }

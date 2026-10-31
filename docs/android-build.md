@@ -108,7 +108,17 @@ Upload recovery: the prepared bytes, name, project and upload ID are sealed in t
 | A4 quota and retained-version rules; logout and account change purge | server message shown (`aFullPhotoQuotaShowsTheServersMessage`); `StoredUploadStoreTest` and `ShareIntentTest` check the files are gone after sign-out and account change | JVM, emulator |
 | A5 local synthetic acceptance recorded apart from WH-017/048 | this section. The photos are synthetic bitmaps made by the test. No scanner, provider, real customer or physical device is involved | |
 
+The shared photos in `ShareIntentTest` are served by `TestShareProvider` (test APK only, bytes carried in the URI, nothing written). The first version inserted into MediaStore, which needs a storage permission on API 28 and failed the API 28 CI job with a `SecurityException`; the CI instrumented job now also uploads `androidTest-results` (the XML), not only the HTML reports.
+
 Limits, plainly: `FakeWorker` is a stand-in that returns the shared fixture shapes, so these tests prove what the app sends and keeps, not server behavior. Screenshots of the dialog (light, dark and 200% font, 1080x2400 emulator) were taken with `UiAutomation`; landscape was not captured because the headless emulator would not rotate. Tap-jacking protection (`filterTouchesWhenObscured` on the dialog window) is set but has no automated test. Not covered: a physical device, a real photo picker UI on other images, `adb shell am start` share intents on a signed-in app (the tests deliver the same intents through `ActivityScenario`), TalkBack speech.
+
+## Push stays off (WH-086 slice, emulator and JVM evidence only)
+
+`PushUnwiredTest` (instrumented) pins the shipped build: the container is wired to `NoOpPushMessaging`, `notifications.available` is false and `register()` returns null without a request; the merged manifest requests `INTERNET` but no `POST_NOTIFICATIONS`, no Firebase, C2DM or messaging permission, and declares no messaging service, receiver or provider (`com.google.firebase.MESSAGING_EVENT` resolves to nothing). Wiring push has to change this test on purpose. `DeviceNotificationsTest` (JVM) adds token rotation (the new token is sent, never the old one), permission denial as an opted-out registration (`notificationsEnabled:false`), a signed-out device making no registration call, and that the app's event read model holds only `id`, `kind`, `destination` and `state`. Opening an event is a bearer GET only (existing test), and the link grammar refuses everything but projects and activity (existing `DeepLinkTest`).
+
+Server side nothing changed: `tests/push-fcm.mjs` already proves the adapter against a fake transport and a synthetic key, and that no Worker path references the sender; `tests/mobile-push.mjs` covers registration, revocation and the content-free event table.
+
+**Stopped, deliberately:** the plan's "V1 fixtures for the dispatch lane" (event and outbox recovery, lease races, fencing, fairness, expiry) have nothing to test. `src/` holds no dispatcher: `pushSender` is called by no Worker path, and a lane needs new production code in `src/` that reads `push_events`, leases rows and calls the sender. That is the production wiring this slice must not add, and it belongs with activation review (WH-086 B1, WH-052 and WH-075 dispatcher gates). A test that defined its own lane would only test itself. No FCM call, token, Firebase project or `google-services.json` was used.
 
 ## Emulator journey against the local Worker (WH-084 slice, emulator evidence only)
 

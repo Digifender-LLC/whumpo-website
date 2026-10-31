@@ -1,11 +1,9 @@
 package com.whumpo.android
 
-import android.content.ContentValues
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
-import android.provider.MediaStore
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithText
@@ -44,7 +42,6 @@ class ShareIntentTest {
 
     private lateinit var worker: FakeWorker
     private var scenario: ActivityScenario<MainActivity>? = null
-    private val photoUris = mutableListOf<Uri>()
 
     @Before
     fun signedInWithAFakeWorker() {
@@ -61,7 +58,6 @@ class ShareIntentTest {
     fun cleanUp() {
         scenario?.close()
         if (!::worker.isInitialized) return
-        photoUris.forEach { InstrumentationRegistry.getInstrumentation().targetContext.contentResolver.delete(it, null, null) }
         if (::worker.isInitialized) worker.close()
         Fixtures.reset()
     }
@@ -83,17 +79,10 @@ class ShareIntentTest {
         return java.io.ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }.toByteArray()
     }
 
+    /** A real `content://` URI from [TestShareProvider] in the test APK. MediaStore needs a storage permission to insert on API 28. */
     private fun sharedPhoto(bytes: ByteArray = syntheticJpeg()): Intent {
-        val values = ContentValues().apply {
-            put(MediaStore.Images.Media.DISPLAY_NAME, "synthetic-share.jpg")
-            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/whumpo-synthetic")
-        }
-        val resolver = InstrumentationRegistry.getInstrumentation().targetContext.contentResolver
-        val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)!!
-        resolver.openOutputStream(uri)!!.use { it.write(bytes) }
-        photoUris += uri
-        return Intent(Intent.ACTION_SEND).setType("image/jpeg").putExtra(Intent.EXTRA_STREAM, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        val uri = TestShareProvider.uriFor(InstrumentationRegistry.getInstrumentation().context.packageName, bytes)
+        return Intent(Intent.ACTION_SEND).setType("image/jpeg").putExtra(Intent.EXTRA_STREAM, uri)
     }
 
     /** Emulator screenshots for the PR (app external files, pulled by adb); a failure to capture never fails a test. */
@@ -157,7 +146,6 @@ class ShareIntentTest {
         compose.onNodeWithTag("share-confirm").performClick()
         waitFor { worker.uploads().isNotEmpty() }
         val put = worker.uploads().single()
-        // MediaStore may suffix a repeated display name ("synthetic-share 1"); the upload name is that, made safe, plus .jpg.
         assertTrue(put.headers["x-photo-name"]!!.startsWith("synthetic-share"))
         // A prepared baseline JPEG with no EXIF/APPn segment.
         assertEquals(0xFF.toByte(), put.body[0])

@@ -460,16 +460,34 @@ Run after PR #539 deployed at `5850a4f`. `whumpo-sites` has the `SITE_LIMITER` b
 | `SITE_LIMITER`, sustained | 300 / 60 s | 528 in 66 s | all 404, **0 x 429** |
 | `API_LIMITER`, `/api/plans` | 120 / 60 s | 180 in 30 s | all passed, **0 x 429** |
 | `API_LIMITER`, `/api/profile` | 120 / 60 s | 304 in 38 s | all passed, **0 x 429** |
-| `AUTH_LIMITER` | 10 / 60 s | **not measured** | unknown |
+| `AUTH_LIMITER` | 10 / 60 s | measured later; see the root cause below | see below |
 
-**What this means.**
+**Root cause (found later on October 31).** The binding is enforced per counter, and a counter covers a slice of a Cloudflare location, not the whole location or the IP. A client that **reuses a connection** keeps landing on the same counter and gets close to the exact limit (`AUTH_LIMITER` refused from request 12 against a limit of 10; `API_LIMITER` allowed 121 and then refused). A client that opens **a new connection per request** mostly lands on other counters and mostly avoids the limit (`API_LIMITER` 0 of 480, `SITE_LIMITER` 0 of 1,440, `AUTH_LIMITER` far over its limit). The first probes used a new connection for each request, which is why nothing was refused. The code and the bindings are correct; the semantics are weaker than the name suggests. Upstream issue [cloudflare/workers-sdk#16097](https://github.com/cloudflare/workers-sdk/issues/16097) is open with no answer. The account is on Workers Paid, so this is not a plan limit.
 
-- The existing, long-deployed `API_LIMITER` also refused nothing at roughly 1.5 to 2.5 times its limit, so this is not a fault of the new binding or its code. Neither limiter can be said to enforce live.
-- Cloudflare documents the binding as approximate, local to a location, with counts cached and updated in the background. That does not explain a sustained overrun of this size with no refusal. **The cause is unknown.**
-- Both limiters fail open and serving is unaffected. The controls that are strict on public paths are the D1 per-source counters in public admission (20 backend, 10 contact and 400 photo requests per project per day per source, plus the shared platform counters). Those hold in the local harness; they are the only per-source limits with any evidence.
-- Strict site limiting would need Durable Objects (Cloudflare's own recommendation for exact counts). That is a cost decision for the owner; nothing has been built or bought.
+| Probe (one IP, colo IAD, 2026-10-31) | Limit | Connections | Sent | Result |
+| --- | --- | --- | ---: | --- |
+| `AUTH_LIMITER`, `/api/mobile/v1/config` | 10 / 60 s | reused | 180 in 90 s | 20 allowed, 160 refused; first 429 on request 12 |
+| `AUTH_LIMITER` | 10 / 60 s | reused | 720 in 120 s | 48 allowed, 672 refused |
+| `AUTH_LIMITER` | 10 / 60 s | new each request | 720 in 120 s | 382 allowed, 338 refused (about 20 would be exact) |
+| `API_LIMITER`, `/api/plans` | 120 / 60 s | one | 480 in 120 s | 121 allowed, then refusals; 206 refused in all |
+| `API_LIMITER` | 120 / 60 s | reused (3 to 8 at once) | 450 to 720 | 116 to 352 refused; first 429 at request 146 to 242 |
+| `API_LIMITER` | 120 / 60 s | new each request | 480 in 120 s | **0 refused** |
+| `SITE_LIMITER`, fixed `<uuid>.whumpo.site` | 300 / 60 s | reused | 720 in 120 s | 67 refused, first at request 348 |
+| `SITE_LIMITER`, fixed host | 300 / 60 s | reused | 1,440 in 120 s | 563 refused, first at request 339 |
+| `SITE_LIMITER`, new host or new connection each request | 300 / 60 s | new each request | 720 and 1,440 in 120 s | **0 refused** |
 
-**Status.** F2 is open. WH-075 is reopened (not done), and WH-074 and everything that depends on WH-075 stay behind it. Do not cite `SITE_LIMITER`, `API_LIMITER` or `AUTH_LIMITER` as live protection; the incident runbook C4 says the same. The `AUTH_LIMITER` measurement is a follow-up; it must not be run against real sign-in without a test account.
+Raw numbers: the 15 runs of the probe script (scratch, may be lost).
+
+**What really limits each public path today.**
+
+- **Platform `/api` (`API_LIMITER`, `AUTH_LIMITER`):** stops clients that reuse a connection, at no cost. A client that opens a new connection each time mostly passes. Not a spend cap.
+- **Site HTML (`SITE_LIMITER`):** same: reused connections are limited, new-connection floods are not. No other per-IP limit exists on site HTML.
+- **Public backend, contact and photo routes:** the D1 per-source counters (20 backend, 10 contact, 400 photo requests per project per day per source) and the shared platform counters. These do not depend on connections. They are **proven locally (disposable SQLite and local D1), not live.**
+- Cloudflare's own DDoS protection and caching sit in front of everything and are not measured here.
+
+**Decisions.** D68: keep the bindings; they cost nothing and stop connection-reusing clients. D69: a Cloudflare WAF rate-limit rule is the free next step. It is a live security setting on the owner's zones and could block real traffic, so it is the owner's to set (Q-011; rule text in [owner-review](owner-review.md)). It is untested, and Cloudflare says it shares infrastructure with the binding, so it may have the same weakness; the proof is a live rerun of the new-connection probes with 429s coming from the edge. Durable Objects stay the owner's cost decision (about $1.35 a month at 10M requests, about $390 a month under a sustained 1,000 rps flood).
+
+**Status.** F2 is open. WH-075 stays open (not done), and WH-074 and everything behind WH-075 stay behind it. Do not cite the limiters as protection against a determined client.
 
 ## Account-level alerts and cohort limits (decided D28, 2026-10-31)
 
