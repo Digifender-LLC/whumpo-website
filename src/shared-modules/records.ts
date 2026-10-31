@@ -279,6 +279,27 @@ export async function readOwnerRecords(db:D1Database,user:string,project:string,
   items:rows.map(r=>({...view(r,fields,true),lead:leadView(r)})),next};
 }
 
+/** WH-095 conversion summary (owner only, a read): of the records of one schema submitted in the last 30 days and still kept, how many are in each lead
+ * stage now (no lead row is `new`). It counts current rows, so there is no history: a lead moved back or a record that expired or was removed lowers a
+ * figure, and the response says so through `keptDays` and `since`. Needs `business.conversions`; without it no figure is returned. Never a Chat or model input. */
+export const conversionDays=30;
+export async function readConversions(db:D1Database,user:string,project:string,resourceId:string,schemaId:string){
+ if(!uuid(project)||!uuid(resourceId)||!localId(schemaId))throw new ModuleError('not_found');
+ const row=await db.prepare(`SELECT i.id,i.project_id,i.local_id,i.kind,i.module_digest,i.schema_digest,i.config_json,i.config_digest,i.config_revision,i.created_at FROM module_instances i JOIN projects p ON p.id=i.project_id
+  WHERE i.id=? AND i.project_id=? AND p.owner_user_id=? AND i.kind='records'`).bind(resourceId,project,user).first<RegistryRow&{created_at:number}>();
+ if(!row)throw new ModuleError('not_found');
+ const instance=await instanceOf(row);if(instance.kind!=='records')throw new ModuleError('not_found');
+ if(!instance.config.schemas.some(s=>s.id===schemaId))throw new ModuleError('not_found');
+ const gate=featurePredicate(db,featureRequest({userId:user,projectId:project,featureId:'business.conversions',operation:'read'}));
+ const base={resourceId,recordId:schemaId,windowDays:conversionDays,keptDays:instance.config.retentionDays,since:iso(row.created_at)};
+ if(!await db.prepare(`SELECT 1 WHERE ${gate.sql}`).bind(...gate.params).first())return {...base,eligible:false as const};
+ const window=live(instance.config.retentionDays),stages=Object.fromEntries(leadStages.map(x=>[x,0])) as Record<typeof leadStages[number],number>;
+ const {results}=await db.prepare(`SELECT coalesce(l.stage,'new') stage,count(*) n FROM module_records r LEFT JOIN module_record_leads l ON l.entry_id=r.id
+  WHERE r.instance_id=? AND r.project_id=? AND r.schema_id=? AND ${window.sql} AND r.created_at>unixepoch()-? GROUP BY 1`).bind(resourceId,project,schemaId,...window.params,conversionDays*86400).all<{stage:typeof leadStages[number];n:number}>();
+ for(const r of results)stages[r.stage]=r.n;
+ return {...base,eligible:true as const,submitted:Object.values(stages).reduce((a,b)=>a+b,0),stages,partial:row.created_at>Math.floor(Date.now()/1000)-conversionDays*86400};
+}
+
 /** Retention expiry (scheduled): records past their stored window or the instance's current `retentionDays`, in bounded
  * batches. Projects inside an active safety preservation hold are skipped; the delete trigger backs this. */
 export async function cleanupModuleRecords(db:D1Database){
