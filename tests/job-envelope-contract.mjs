@@ -6,7 +6,7 @@ let checks=0;
 function test(name,fn){try{fn();checks++;}catch(error){throw new Error(name,{cause:error});}}
 const rejects=(fn,code)=>assert.throws(fn,e=>e.code===code);
 function invalid(name,change,code,purpose='project-build'){test(name,()=>{const e=fixture(name,purpose);change(e);rejects(()=>validateJobEnvelope(e),code);});}
-for(const purpose of ['platform-email','deterministic-rule','owner-push','account-cleanup','project-build'])test(purpose+' example',()=>{
+for(const purpose of ['platform-email','deterministic-rule','owner-push','account-cleanup','project-build','domain-registration'])test(purpose+' example',()=>{
  const e=fixture(purpose,purpose);assert.deepEqual(validateJobEnvelope(e),e);assert.notEqual(validateJobEnvelope(e),e);
  const reordered=Object.fromEntries(Object.entries(e).reverse());assert.equal(jobEnvelopeDigest(e),jobEnvelopeDigest(reordered));
  const changed=structuredClone(e);changed.intent.revision++;assert.notEqual(jobEnvelopeDigest(e),jobEnvelopeDigest(changed));
@@ -64,4 +64,9 @@ test('wake contains IDs only and binds the exact envelope',()=>{
  rejects(()=>validateJobWake({...wake,contractVersion:0}),'unsupported_job_version');
 });
 test('job feature identifier exists in current catalogue',()=>assert.match(readFileSync('src/plan-features.ts','utf8'),/id:'business\.workflows'/));
+// WH-194: the domain registration purpose runs under the owner's workspace session, pins no module resource and registers once.
+invalid('domain registration retried',e=>e.limits.maxAttempts=2,'invalid_job_limits','domain-registration');
+invalid('domain registration without a project',e=>e.projectId=null,'invalid_job_scope','domain-registration');
+invalid('domain registration with a platform actor',e=>e.actor={kind:'platform-obligation',obligationId:id('x'),policyRevision:1},'unknown_job_fields','domain-registration');
+invalid('domain registration with a module resource',e=>e.resource=fixture('r','project-build').resource,'invalid_job_scope','domain-registration');
 console.log(`Job envelope contract: ${checks} offline cases passed. Shared resource pins, bounded current metadata and delivery identity only; no runtime authorization, scheduler or provider/scanner execution.`);

@@ -17,7 +17,7 @@ function canonical(v,depth=0){
  check(plain(v));return '{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+canonical(v[k],depth+1)).join(',')+'}';
 }
 function copy(v,max=8192){const json=canonical(v);check(Buffer.byteLength(json)<=max,'job_too_large');return JSON.parse(json);}
-export const jobPurposes=['platform-email','deterministic-rule','owner-push','account-cleanup','project-build'];
+export const jobPurposes=['platform-email','deterministic-rule','owner-push','account-cleanup','project-build','domain-registration'];
 export function validateJobEnvelope(input){
  const e=copy(input);
  shape(e,['contractVersion','jobId','ownerAccountId','projectId','purpose','adapter','actor','resource','intent','eligibility','schedule','limits']);
@@ -27,7 +27,7 @@ export function validateJobEnvelope(input){
  shape(e.intent,['operationId','receiptId','receiptDigest','revision','inputReferenceId','inputDigest']);
  for(const k of ['operationId','receiptId','inputReferenceId'])uuid(e.intent[k]);
  hash(e.intent.receiptDigest);hash(e.intent.inputDigest);integer(e.intent.revision);
- if(e.purpose==='project-build'){
+ if(e.purpose==='project-build'||e.purpose==='domain-registration'){
   shape(e.actor,['kind','accountId','authorityId','authEpoch','purpose','membership']);
   check(e.actor.kind==='workspace-session'&&e.actor.purpose==='workspace','restricted_job_actor');
   uuid(e.actor.accountId);uuid(e.actor.authorityId);integer(e.actor.authEpoch);
@@ -48,7 +48,8 @@ export function validateJobEnvelope(input){
   check(e.resource.ref.projectId===e.projectId,'foreign_job_resource');
  }
  const projectWork=['project-build','deterministic-rule'].includes(e.purpose);
- check(projectWork?(e.projectId!==null&&e.resource!==null):(e.projectId===null&&e.resource===null),'invalid_job_scope');
+ // A domain registration belongs to one project's order but pins no module resource; its register step runs once (docs/domain-purchases.md).
+ check(e.purpose==='domain-registration'?(e.projectId!==null&&e.resource===null):projectWork?(e.projectId!==null&&e.resource!==null):(e.projectId===null&&e.resource===null),'invalid_job_scope');
  if(e.purpose==='deterministic-rule'){
   shape(e.eligibility,['featureId','operation','projectId']);
   check(e.eligibility.featureId==='business.workflows'&&e.eligibility.operation==='dispatch'&&e.eligibility.projectId===e.projectId,'invalid_job_eligibility');
@@ -57,6 +58,7 @@ export function validateJobEnvelope(input){
  check(e.schedule.createdAt<=e.schedule.notBefore&&e.schedule.notBefore<e.schedule.expiresAt,'invalid_job_schedule');
  shape(e.limits,['maxAttempts','deadlineMs']);integer(e.limits.maxAttempts);integer(e.limits.deadlineMs);
  check(e.limits.maxAttempts>=1&&e.limits.maxAttempts<=3&&e.limits.deadlineMs>=1&&e.limits.deadlineMs<=20000,'invalid_job_limits');
+ check(e.purpose!=='domain-registration'||e.limits.maxAttempts===1,'invalid_job_limits');
  return e;
 }
 export const jobEnvelopeDigest=input=>createHash('sha256').update(canonical(validateJobEnvelope(input))).digest('hex');

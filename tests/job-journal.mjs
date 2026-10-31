@@ -231,5 +231,10 @@ try{
   assert.equal(handled.length,2);assert.equal((await m.readJob(A,owners[1],key('lane-d0'))).state,'leased');assert.equal((await m.readJob(A,owners[1],key('lane-d1'))).state,'complete');
   for(const id of handled){const row=await one('SELECT state FROM job_journal WHERE id=?',id);assert.ok(['leased','complete'].includes(row.state));}
  });
+ await check('WH-194: a domain-registration job is admitted with its single attempt and the schema knows the purpose',async()=>{
+  const envelope=job('domain-1','domain-registration'),row=await m.admitJob(A,envelope);
+  assert.equal(row.purpose,'domain-registration');assert.equal(row.max_attempts,1);assert.equal(row.envelope_digest,jobEnvelopeDigest(envelope));assert.ok(m.jobPurposes.includes('domain-registration'));
+  assert.equal(await m.admitJob(A,envelope).then(r=>r.id),key('domain-1'),'a lost admission reply returns the same job');
+ });
  console.log(`Job journal: ${cases} cases passed on ${d1?'local D1':'SQLite (two connections)'}; admission, two claimers, stale fences, lost settle replies, uncertain and operator lanes, atomic chunks, forged writes, pruning and the journal lane. No provider call.`);
 }finally{for(const f of files)f.close();await fixture.close?.();if(directory)await rm(directory,{recursive:true,force:true});}

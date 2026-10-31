@@ -6183,7 +6183,7 @@ BEGIN SELECT RAISE(ABORT,'rule_approval_retained'); END;
 CREATE TABLE job_journal (
  id TEXT PRIMARY KEY CHECK(length(id)=36 AND id NOT GLOB '*[^0-9a-f-]*'),
  owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
- purpose TEXT NOT NULL CHECK(purpose IN ('platform-email','deterministic-rule','owner-push','account-cleanup','project-build')),
+ purpose TEXT NOT NULL CHECK(purpose IN ('platform-email','deterministic-rule','owner-push','account-cleanup','project-build','domain-registration')),
  envelope_json TEXT NOT NULL CHECK(json_valid(envelope_json) AND length(envelope_json)<=8192),
  envelope_digest TEXT NOT NULL CHECK(length(envelope_digest)=64 AND envelope_digest NOT GLOB '*[^0-9a-f]*'),
  created_at INTEGER NOT NULL CHECK(typeof(created_at)='integer' AND created_at>=0),
