@@ -85,3 +85,9 @@ export async function consumeLookupConsent(db:D1Database,owner:string,consentId:
   .bind(owner,consentId,input.provider,input.operationId,input.credentialId,digest,input.destination).run();
  if(done.meta.changes!==1)await refusal(db,owner,consentId,'confirmed');
 }
+
+/** WH-143 A1: a disconnect voids every open consent the owner holds for that provider, in the disconnect's own committing batch, so a
+ * disconnect between confirm and consume makes the consume refuse (VOIDED). Disconnect removes all of the owner's credentials for the
+ * provider, so owner and provider select exactly the consents bound to them. Used, voided and other owners' rows are untouched. */
+export const voidLookupConsents=(db:D1Database,owner:string,provider:string)=>
+ db.prepare("UPDATE lookup_consents SET state='voided',settled_at=unixepoch()*1000,revision=revision+1 WHERE owner_id=? AND provider=? AND state IN ('issued','confirmed')").bind(owner,provider);

@@ -83,6 +83,8 @@ OAuth consent authorizes Whumpo to hold a credential. It does not authorize copy
 
 `owner-control` reads serve only the owner's explicit control or card. Examples are GitHub installations/repositories, Cloudflare zones, and review inputs such as repository identity or DNS inventory. They return minimized metadata, never mailbox/calendar/CRM content, and cannot target `model-context`.
 
+**Disconnect voids open consents (WH-143).** `voidLookupConsents(db, owner, provider)` in `src/lookup-consent.ts` returns one statement that voids the owner's issued and confirmed consents for a provider; a provider's disconnect must put it in its own committing batch, so a disconnect between confirm and consume makes the consume refuse with `VOIDED`. It is proven on SQLite and local D1 (`tests/lookup-consent.mjs`). It is **not wired into any disconnect**: `lookup_consents.provider` allows only `gmail`, `google-calendar`, `outlook-email`, `microsoft-calendar` and `hubspot`, so the existing GitHub and Cloudflare disconnects can never hold a consent (adding them to the check would be a schema change), and the lookup providers have no connection module until WH-096 to WH-100. Each of those tasks must add the call and a test that disconnects between confirm and consume.
+
 ## Actions, receipts and unknown outcomes
 
 Actions reuse the pattern already proven by [GitHub backups](integrations/github-backups.md) and [Cloudflare DNS](integrations/cloudflare-dns.md):

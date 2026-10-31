@@ -5567,67 +5567,6 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
 
-## WH-022 — Collect authoritative shadow resource and task-cost events
-
-Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: L.
-
-Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-Real usage and provider costs can be reconciled without prematurely charging customers.
-
-### Scope
-
-- Define immutable source/event IDs, owner attribution, quantity and tariff version
-- Capture authoritative infrastructure and complete task costs, separating control/retry overhead
-- Reconcile aggregate usage against invoices/account floors
-- Instrument expanded launch workloads: kits/previews, comments, leads, notifications, requested connector reads/actions, collaboration, staging and portfolio/bulk work
-- Deliver the versioned event envelope and existing producer adapters first; later feature packets register additional dimensions through that interface. Initial delivery does not require those future feature implementations or WH-023 closed-period acceptance.
-- Attribute events to WH-071 stable logical project/resource identities, independently of the physical Worker/database. Preserve original provider event IDs and tariff versions across placement changes.
-
-### Acceptance criteria
-
-- [ ] Duplicate and delayed events cannot double-count
-- [ ] Missing dimensions/costs remain unknown
-- [ ] No per-tenant reuse of account-wide free allowance
-- [ ] Standard AI costs remain internal with zero customer units; no shadow event grants billing authority
-- [ ] Include provider licenses/minimums, verification/security-assessment renewals, support, retained staging/feedback and uncertain-operation liabilities; unknown costs stay explicit
-
-### Verification
-
-- Synthetic duplicates, late events, tenant mismatch and unknown-rate tests
-- Compare existing economic scenarios to measured units
-- pnpm test:model-costs and relevant gateway/accounting suites
-
-### Dependencies and blockers
-
-Planning dependencies: WH-020, WH-006, WH-071, WH-168, WH-169, WH-170, WH-171, WH-172. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/resource-pool-economics.md](../../docs/resource-pool-economics.md)
-- [docs/company-finance-review.md](../../docs/company-finance-review.md)
-- [src/resource-economics.ts](../../src/resource-economics.ts)
-- [src/gateway-spend.ts](../../src/gateway-spend.ts)
-- [src/standard-ai-usage.ts](../../src/standard-ai-usage.ts)
-- [docs/pricing-and-model-policy.md](../../docs/pricing-and-model-policy.md)
-- [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
-- [docs/workload-placement.md](../../docs/workload-placement.md)
-- [docs/cost-events.md](../../docs/cost-events.md)
-
-### Execution coordination
-
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-- 2026-10-08 UTC: decomposed into WH-168 to WH-172 with the planned contract in docs/cost-events.md (WH-168). Planning and offline reference only: no table, schema input, binding, producer change, provider call, deployment or customer charge, and no src/ behavior change. The parent acceptance is unchanged and closes only after every child. No child depends on WH-023, WH-044 or WH-104: live shadow collection and closed-period data remain WH-023 inputs. Live dependency refresh: WH-006 (#6) and WH-071 (#47) are closed as completed; WH-020 (#9) is still open (offline/privacy part extracted as WH-121; real-provider cohort outstanding), so real task-cost percentiles and a premium price are not claimed. No execution issue exists for WH-022. Existing producers are mapped with exact gaps G-C1 to G-C11.
-
 ## WH-023 — Reconcile company finance and validate two complete cost periods
 
 Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **planned**. Kind: verification. Size: L.
@@ -5969,62 +5908,6 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 ### Evidence
 
 No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
-
-## WH-172 — Accept shadow cost events end to end locally
-
-Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **planned**. Kind: verification. Size: M.
-
-Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-The WH-022 acceptance list is demonstrated on a disposable database across the real producers, import and reconciliation, without live data or customer charges.
-
-### Scope
-
-- Run synthetic Chat AI turns, a gateway attempt and public photo reads through the real code paths and compare event aggregates with the task-cost, fair-use and economic-scenario outputs
-- Exercise duplicate, delayed, late-after-close, tenant-mismatch, unknown-rate, account-allowance, overhead and uncertain-operation cases end to end
-- State exactly what remains for WH-023 live period data and which provider entitlements are unverified
-
-### Acceptance criteria
-
-- [ ] Every WH-022 acceptance criterion is demonstrated on actual local data and recorded with exact commands
-- [ ] No event, report or import grants billing authority, changes admission or reaches a customer-facing surface
-- [ ] Live provider data, two complete cost periods and entitlement checks are explicitly left to WH-023 and the owner
-
-### Verification
-
-- pnpm check
-- pnpm test:model-costs
-- pnpm test:gateway-spend
-- node tests/task-cost-report.mjs
-- node tests/cost-events-contract.mjs
-- Connected disposable-D1 acceptance script
-
-### Dependencies and blockers
-
-Planning dependencies: WH-170, WH-171. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/cost-events.md](../../docs/cost-events.md)
-- [docs/resource-pool-economics.md](../../docs/resource-pool-economics.md)
-- [docs/economics/resource-pool-scenarios.json](../../docs/economics/resource-pool-scenarios.json)
-- [docs/verification.md](../../docs/verification.md)
-
-### Execution coordination
-
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-- 2026-10-29 UTC (local disposable database only; no GitHub, Cloudflare, provider or paid call; no schema, src or deploy change): added tests/cost-events-acceptance.mjs (pnpm test:cost-events-acceptance; node tests/cost-events-acceptance.mjs, plain in-memory SQLite and with --d1 actual local D1; in the site verify profile). It drives only real producer paths, with no direct cost_events insert: four AI turns through the OpenCode Go adapter (complete, stubbed transport) between the real inference receipt transitions, including a 503 that leaves an uncertain call; two gateway spend attempts through reserve, dispatch, provider receipt, uncertain and settle; and public photo reads. Eight checks pass: events and shadow estimates with zero customer units; unknown outcome stays explicit and holds reconciliation incomplete until a late receipt settles it; replay and settlement replay add no row and a conflicting redelivery is refused; per-task cost report per tenant equals the event-head shadow totals and the tenants sum to the unfiltered report, with a cross-tenant append refused; a WH-171 reconciliation against a synthetic CSV statement excludes every shadow estimate and reports reconciled within a stated 1 micro tolerance (and unexplained-residual at zero tolerance); no billing authority. Task stays planned, not done: still NOT demonstrated connected here are the comparison of event aggregates with the fair-use and economic-scenario outputs, the late-after-close, unknown-rate, account-allowance, overhead and liability cases through producers (the liability and allowance rules are proven only by tests/cost-reconcile.mjs with synthetic appends; no producer emits liability events), and the recorded command list for every WH-022 criterion. Left to WH-023 and the owner as before: live provider data, two complete cost periods and provider entitlement checks.
-- 2026-10-30 UTC (WH-001 reconciliation against origin/main 475a3a9, read from git log and gh pr view; docs only, nothing re-run unless stated, no GitHub issue, Cloudflare or provider mutation): No readiness change. The 2026-10-29 entry already lists what is not yet demonstrated (event aggregates against the fair-use and economic-scenario outputs; late-after-close, unknown-rate, account-allowance, overhead and liability cases through producers; the recorded command list for every WH-022 criterion). Those gaps keep it planned.
-- 2026-10-31 UTC (local disposable database only, plain SQLite and actual local D1; stubbed transport; no GitHub, Cloudflare, provider, Stripe or paid call; no schema, src, price, plan or fair-use change): extended tests/cost-events-acceptance.mjs from 8 to 14 checks, all through real producer paths. W6 late-after-close: a gateway call that settles after its period statement reconciled flips the row to incomplete, then to a visible unexplained residual equal to the late cost, a replay adds no row, and a supplementary line reconciles it again (there is still no period-close table, so lateAfterClose stays null). W7 account allowance: tenant storage events carry the full tariff and an account-wide credit line never reduces them. W8 overhead: an acknowledgment call is a separate control event, storage reads are standing, and no producer emits retry cost. W9 unknown rate: an unpriced call is a settled event with unknown unpriced cost and null exposure, adds no task-cost sample and is not counted as zero. W10 uncertain-operation exposure stays bounded and visible, an unknown invoice liability line stays unknown, and an invoiced liability with no event is a visible residual. W11 comparison: settled shadow events total 740 micros and equal the fair-use inference-operations total and its held exposure; the fair-use completed-turn total and the task-cost report both read 700 (they count completed Chat turns only; 40 micros belong to a turn that failed and then received a late provider receipt); the task-cost report folds control cost into its turn while events keep it apart; six produced storage reads and both scenario read quantities (0.02M and 0.1M Class B) price within one micro of the economic scenario tariff. No mismatch needed tuning. Recorded command list for every WH-022 line: docs/cost-events.md, WH-172 acceptance commands. Commands run on this commit: node tests/cost-events-acceptance.mjs, the same with --d1, pnpm test:model-costs, pnpm test:gateway-spend, node tests/task-cost-report.mjs, node tests/cost-events-contract.mjs, node tests/cost-events-store.mjs, node tests/cost-event-adapters.mjs, node tests/cost-reconcile.mjs, node tests/resource-economics.mjs, node tests/fair-use-finance.mjs. Task stays planned, not done: no producer emits liability events (license, minimum, renewal, support, staging), and a register table for one would be a schema change, which is not in scope here; retry cost has no producer either. Left to WH-023 and the owner as before: live provider data, two complete cost periods and provider entitlement checks.
 
 ## WH-034 — Build reviewed registrar purchase and renewal reconciliation
 
@@ -6988,7 +6871,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 ## WH-143 — Request-bound lookup consent and common minimized connector receipts
 
-Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **blocked**. Kind: implementation. Size: M.
 
 Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
@@ -7021,7 +6904,7 @@ Provider-selected content can be read only through an owner-confirmed, single-us
 
 Planning dependencies: WH-141, WH-009, WH-105, WH-116. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+- Acceptance line 1 end to end ('voided by disconnect'): no disconnect exists for any lookup-eligible provider. lookup_consents.provider is limited to gmail, google-calendar, outlook-email, microsoft-calendar and hubspot, so the GitHub and Cloudflare disconnects cannot hold a consent; the first real disconnect arrives with WH-096 to WH-100 (owner-registered provider apps) and must call voidLookupConsents in its batch
 
 ### References
 
@@ -7043,6 +6926,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 - 2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): #435 (lookup_consents and connector_receipts schema, merged 2026-10-29) and the cutover #436 are merged. Adapter wiring, Chat card binding and the model-route gate remain open, so the item is not met. Readiness unchanged.
 - 2026-10-29 UTC: source and local verification only (disposable SQLite and actual local D1); no schema change, no provider call, no deploy; not merged. Adds the single-use lookup-consent store (src/lookup-consent.ts): issue binds owner, provider, operation, credential, parameter digest and destination for the 15 minutes the schema enforces (catalog-validated request-bound reads only; parameters are digested, never stored); confirm is owner-only and only through the WH-105 card (new binding connector.lookup-consent@1, the card reviewId is the consent ID, maintained definition lookupConsentDefinition, store.prepareLookupConsentIntake, routes lookup-consent and lookup-consent-confirm registered in the boundary audit); consume is one guarded UPDATE that matches only a confirmed, unexpired row with every binding equal. Typed refusals: INVALID, NOT_FOUND (also another account's row), EXPIRED, NOT_CONFIRMED, ALREADY_CONFIRMED, ALREADY_USED, VOIDED, MISMATCH, LIMIT, MODEL_ROUTE, CARD. Model-route gate: model-context is refused at issue, confirm and consume unless the route record says it does not train and is approved for connector content; the current Contributor route is training-enabled (currentModelRoute), so real connected content cannot reach it. Minimal frontend: frontend/src/lookup-consent-card.tsx shows provider, operation, destination and expiry with one "Allow this lookup once" button. connector-content is not admitted (owner retention decision still open). New tests/lookup-consent.mjs: 8 cases plain and --d1. Still open, so WH-143 stays open: provider adapter wiring that calls issue/consume, agent proposal that issues the card, disconnect voiding of open consents, action-review cards, connector-content admission, and an approved non-training route record.
 - 2026-10-31 UTC, NOT closed by the batch 4 closure sweep (origin/main 69451b6; docs only for this entry): acceptance line 1 needs consent voided by disconnect, and src/lookup-consent.ts has no disconnect path; adapter wiring, the agent proposal that issues the card, action-review cards, connector-content admission and an approved non-training route record are open (2026-10-29 entry). The code is merged (#435, #471).
+- 2026-10-31 UTC, NOT closed (origin/main 77b7225 plus this change; Node 24.21.0, pnpm 11.19.0, disposable SQLite and local D1, no network, credential, secret or provider call; no schema change). The plan to wire the void into disconnectGitHub and disconnectCloudflare was tried and is impossible: the lookup_consents.provider CHECK allows only gmail, google-calendar, outlook-email, microsoft-calendar and hubspot, so a GitHub or Cloudflare consent cannot exist (an insert failed the CHECK), and widening it is a schema change. Added instead voidLookupConsents(db, owner, provider) in src/lookup-consent.ts (one statement to put in a disconnect's committing batch) and a tests/lookup-consent.mjs check, 9 cases, SQLite and --d1 both exit 0: it voids the owner's issued and confirmed consents for that provider only, leaves used rows, other providers and other owners untouched, is idempotent, a confirmed consent then refuses consume with VOIDED, and the guard trigger refuses any later use. Line map. A1 (bound to owner, credential, operation, parameter digest and destination, single use, voided by disconnect): binding and single use evidenced by the 2026-10-29 entry and tests/lookup-consent.mjs; the void mechanism is now proven but NOT wired to any disconnect, so 'voided by disconnect' is not met end to end. A2 (external results untrusted and cannot confirm consent, reviews or tools): provenance 'untrusted-external' is a catalog rule in docs/connectors.md and held by node tests/connectors-contract.mjs (86 checks, exit 0); no adapter yet returns a result to test beyond the reference runtime. A3 (real connected content cannot reach the training-enabled route): currentModelRoute refuses model-context at issue, confirm and consume (tests/lookup-consent.mjs, exit 0). A4 (receipts hold digests and identifiers only): the connector_receipts table and tests/connector-records-store.mjs; node tests/lifecycle-catalog.mjs exits 0 (241 tables). Still open and named elsewhere, not here: provider adapter wiring, the agent proposal that issues the card, action-review cards and connector-content admission (WH-146, WH-096 to WH-100).
 
 ## WH-144 — Single-flight refresh custody and honest revocation for refresh-token providers
 
@@ -7444,9 +7328,71 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
 
-# F3 — Done (11)
+# F3 — Done (13)
 
 Verified complete with recorded evidence; kept for history and dependency context. Not candidates for new work.
+
+## WH-022 — Collect authoritative shadow resource and task-cost events
+
+Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: L.
+
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Real usage and provider costs can be reconciled without prematurely charging customers.
+
+### Scope
+
+- Define immutable source/event IDs, owner attribution, quantity and tariff version
+- Capture authoritative infrastructure and complete task costs, separating control/retry overhead
+- Reconcile aggregate usage against invoices/account floors
+- Instrument expanded launch workloads: kits/previews, comments, leads, notifications, requested connector reads/actions, collaboration, staging and portfolio/bulk work
+- Deliver the versioned event envelope and existing producer adapters first; later feature packets register additional dimensions through that interface. Initial delivery does not require those future feature implementations or WH-023 closed-period acceptance.
+- Attribute events to WH-071 stable logical project/resource identities, independently of the physical Worker/database. Preserve original provider event IDs and tariff versions across placement changes.
+
+### Acceptance criteria
+
+- [ ] Duplicate and delayed events cannot double-count
+- [ ] Missing dimensions/costs remain unknown
+- [ ] No per-tenant reuse of account-wide free allowance
+- [ ] Standard AI costs remain internal with zero customer units; no shadow event grants billing authority
+- [ ] Include provider licenses/minimums, verification/security-assessment renewals, support, retained staging/feedback and uncertain-operation liabilities; unknown costs stay explicit
+
+### Verification
+
+- Synthetic duplicates, late events, tenant mismatch and unknown-rate tests
+- Compare existing economic scenarios to measured units
+- pnpm test:model-costs and relevant gateway/accounting suites
+
+### Dependencies and blockers
+
+Planning dependencies: WH-020, WH-006, WH-071, WH-168, WH-169, WH-170, WH-171, WH-172. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/resource-pool-economics.md](../../docs/resource-pool-economics.md)
+- [docs/company-finance-review.md](../../docs/company-finance-review.md)
+- [src/resource-economics.ts](../../src/resource-economics.ts)
+- [src/gateway-spend.ts](../../src/gateway-spend.ts)
+- [src/standard-ai-usage.ts](../../src/standard-ai-usage.ts)
+- [docs/pricing-and-model-policy.md](../../docs/pricing-and-model-policy.md)
+- [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [docs/workload-placement.md](../../docs/workload-placement.md)
+- [docs/cost-events.md](../../docs/cost-events.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-08 UTC: decomposed into WH-168 to WH-172 with the planned contract in docs/cost-events.md (WH-168). Planning and offline reference only: no table, schema input, binding, producer change, provider call, deployment or customer charge, and no src/ behavior change. The parent acceptance is unchanged and closes only after every child. No child depends on WH-023, WH-044 or WH-104: live shadow collection and closed-period data remain WH-023 inputs. Live dependency refresh: WH-006 (#6) and WH-071 (#47) are closed as completed; WH-020 (#9) is still open (offline/privacy part extracted as WH-121; real-provider cohort outstanding), so real task-cost percentiles and a premium price are not claimed. No execution issue exists for WH-022. Existing producers are mapped with exact gaps G-C1 to G-C11.
+- 2026-10-31 UTC, CLOSED on D43 (origin/main 9d5081a plus this change, Node 24.21.0, pnpm 11.19.0, disposable SQLite and actual local D1, stubbed transport; no network, credential, secret, Stripe, provider or paid call, no schema change; local evidence is not live data). Every acceptance line maps to a command in docs/cost-events.md 'WH-172 acceptance commands' that was rerun for this closure: A1 duplicate and delayed events cannot double-count (cost-events-store, cost-events-acceptance W1 to W6, plain and --d1); A2 missing dimensions and costs stay unknown (acceptance W2 and W9, cost-event-adapters); A3 no per-tenant reuse of the account-wide allowance (acceptance W7, cost-reconcile plain and --d1); A4 standard AI costs internal with zero customer units, no shadow event grants billing authority (acceptance A2, model-costs, gateway-spend, task-cost-report); A5 licenses, minimums, renewals, support, retained staging and uncertain-operation liabilities included with unknown costs explicit (acceptance W10 through the new register producer, cost-reconcile). V2 existing economic scenarios compared with measured units: acceptance W11 (resource-economics scenarios, fair-use and task-cost totals). V3 pnpm test:model-costs and pnpm test:gateway-spend pass. LEFT, not claimed: real liability amounts (the register holds none and nothing reads an invoice), two complete cost periods and the Cloudflare billing-API entitlement, which belong to WH-023 and the owner (docs/owner-review.md). The WH-020, WH-006 and WH-071 dependencies are planning order only (D53); no line of this task needs them.
 
 ## WH-168 — Freeze the shadow cost-event contract and decompose WH-022
 
@@ -7681,6 +7627,63 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 - 2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): readiness planned to ready. Every dependency (WH-170) is accepted in its own evidence, so this is an open planning candidate; its acceptance is unchanged and not claimed.
 - 2026-10-29 UTC (branch wh-171-cost-reconcile from origin/main; source and disposable-D1 verification only, no deploy, schema change, secret, provider call or live read): src/cost-reconcile.ts validates and dedupes exported statements by (provider, invoiceId, lineKey), keeps a liability register with explicit unknown amounts and produces the aggregate per provider and period reconciliation report (shadow excluded, account-wide floors and allowances never split across tenants, no identifiers in the output). tools/cost-reconcile.mjs reads CSV or JSON statements and the cost_events heads read-only (local D1 or --remote) and writes nothing. tests/cost-reconcile.mjs passes on in-memory SQLite and local D1 (dedupe, unknown amounts, shadow exclusion, floor and allowance non-splitting, mismatch reporting, malformed, tenant-bearing and content-bearing rows rejected). No statement table, period-close table, live billing call or retention of company totals; lateAfterClose is reported as null until a period-close table exists. WH-171 stays open until the PR merges.
 - 2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #441 (zemdregon/whumpo) is the merged change(s) behind the evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open.
+
+## WH-172 — Accept shadow cost events end to end locally
+
+Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: verification. Size: M.
+
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+The WH-022 acceptance list is demonstrated on a disposable database across the real producers, import and reconciliation, without live data or customer charges.
+
+### Scope
+
+- Run synthetic Chat AI turns, a gateway attempt and public photo reads through the real code paths and compare event aggregates with the task-cost, fair-use and economic-scenario outputs
+- Exercise duplicate, delayed, late-after-close, tenant-mismatch, unknown-rate, account-allowance, overhead and uncertain-operation cases end to end
+- State exactly what remains for WH-023 live period data and which provider entitlements are unverified
+
+### Acceptance criteria
+
+- [ ] Every WH-022 acceptance criterion is demonstrated on actual local data and recorded with exact commands
+- [ ] No event, report or import grants billing authority, changes admission or reaches a customer-facing surface
+- [ ] Live provider data, two complete cost periods and entitlement checks are explicitly left to WH-023 and the owner
+
+### Verification
+
+- pnpm check
+- pnpm test:model-costs
+- pnpm test:gateway-spend
+- node tests/task-cost-report.mjs
+- node tests/cost-events-contract.mjs
+- Connected disposable-D1 acceptance script
+
+### Dependencies and blockers
+
+Planning dependencies: WH-170, WH-171. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/cost-events.md](../../docs/cost-events.md)
+- [docs/resource-pool-economics.md](../../docs/resource-pool-economics.md)
+- [docs/economics/resource-pool-scenarios.json](../../docs/economics/resource-pool-scenarios.json)
+- [docs/verification.md](../../docs/verification.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-29 UTC (local disposable database only; no GitHub, Cloudflare, provider or paid call; no schema, src or deploy change): added tests/cost-events-acceptance.mjs (pnpm test:cost-events-acceptance; node tests/cost-events-acceptance.mjs, plain in-memory SQLite and with --d1 actual local D1; in the site verify profile). It drives only real producer paths, with no direct cost_events insert: four AI turns through the OpenCode Go adapter (complete, stubbed transport) between the real inference receipt transitions, including a 503 that leaves an uncertain call; two gateway spend attempts through reserve, dispatch, provider receipt, uncertain and settle; and public photo reads. Eight checks pass: events and shadow estimates with zero customer units; unknown outcome stays explicit and holds reconciliation incomplete until a late receipt settles it; replay and settlement replay add no row and a conflicting redelivery is refused; per-task cost report per tenant equals the event-head shadow totals and the tenants sum to the unfiltered report, with a cross-tenant append refused; a WH-171 reconciliation against a synthetic CSV statement excludes every shadow estimate and reports reconciled within a stated 1 micro tolerance (and unexplained-residual at zero tolerance); no billing authority. Task stays planned, not done: still NOT demonstrated connected here are the comparison of event aggregates with the fair-use and economic-scenario outputs, the late-after-close, unknown-rate, account-allowance, overhead and liability cases through producers (the liability and allowance rules are proven only by tests/cost-reconcile.mjs with synthetic appends; no producer emits liability events), and the recorded command list for every WH-022 criterion. Left to WH-023 and the owner as before: live provider data, two complete cost periods and provider entitlement checks.
+- 2026-10-30 UTC (WH-001 reconciliation against origin/main 475a3a9, read from git log and gh pr view; docs only, nothing re-run unless stated, no GitHub issue, Cloudflare or provider mutation): No readiness change. The 2026-10-29 entry already lists what is not yet demonstrated (event aggregates against the fair-use and economic-scenario outputs; late-after-close, unknown-rate, account-allowance, overhead and liability cases through producers; the recorded command list for every WH-022 criterion). Those gaps keep it planned.
+- 2026-10-31 UTC (local disposable database only, plain SQLite and actual local D1; stubbed transport; no GitHub, Cloudflare, provider, Stripe or paid call; no schema, src, price, plan or fair-use change): extended tests/cost-events-acceptance.mjs from 8 to 14 checks, all through real producer paths. W6 late-after-close: a gateway call that settles after its period statement reconciled flips the row to incomplete, then to a visible unexplained residual equal to the late cost, a replay adds no row, and a supplementary line reconciles it again (there is still no period-close table, so lateAfterClose stays null). W7 account allowance: tenant storage events carry the full tariff and an account-wide credit line never reduces them. W8 overhead: an acknowledgment call is a separate control event, storage reads are standing, and no producer emits retry cost. W9 unknown rate: an unpriced call is a settled event with unknown unpriced cost and null exposure, adds no task-cost sample and is not counted as zero. W10 uncertain-operation exposure stays bounded and visible, an unknown invoice liability line stays unknown, and an invoiced liability with no event is a visible residual. W11 comparison: settled shadow events total 740 micros and equal the fair-use inference-operations total and its held exposure; the fair-use completed-turn total and the task-cost report both read 700 (they count completed Chat turns only; 40 micros belong to a turn that failed and then received a late provider receipt); the task-cost report folds control cost into its turn while events keep it apart; six produced storage reads and both scenario read quantities (0.02M and 0.1M Class B) price within one micro of the economic scenario tariff. No mismatch needed tuning. Recorded command list for every WH-022 line: docs/cost-events.md, WH-172 acceptance commands. Commands run on this commit: node tests/cost-events-acceptance.mjs, the same with --d1, pnpm test:model-costs, pnpm test:gateway-spend, node tests/task-cost-report.mjs, node tests/cost-events-contract.mjs, node tests/cost-events-store.mjs, node tests/cost-event-adapters.mjs, node tests/cost-reconcile.mjs, node tests/resource-economics.mjs, node tests/fair-use-finance.mjs. Task stays planned, not done: no producer emits liability events (license, minimum, renewal, support, staging), and a register table for one would be a schema change, which is not in scope here; retry cost has no producer either. Left to WH-023 and the owner as before: live provider data, two complete cost periods and provider entitlement checks.
+- 2026-10-31 UTC, CLOSED on D43 (origin/main 9d5081a plus this change, Node 24.21.0, pnpm 11.19.0, disposable SQLite and actual local D1, stubbed transport; no network, credential, secret, Stripe, provider or paid call, no schema change; local evidence is not live data). Adds src/liability-register.ts (pure producer of liability.* events from an operator register), tools/liability-register.mjs (local D1 only, --dry-run, idempotent; ran against local D1: 3 accepted, then 3 duplicates) and docs/economics/liability-register.example.json (synthetic, every amount unknown); sets the liability-register source to source-adapter in src/cost-events.ts (platform scope needed no schema change: cost_events allows a null owner for scope=platform). Extends tests/cost-events-acceptance.mjs W10 (14 checks, plain and --d1, both exit 0): the register through the real store, replay adds nothing, unknown amounts stay unknown and add nothing to the company liability total, an invoiced license stays a residual until a later revision fills it, a known amount cannot become unknown (REVISION_REGRESSION), and the closed shape refuses tenant fields, non-liability dimensions, negative or ref-less amounts, closed-account pool and bad periods. Retry class: no producer sets attempt 2 or later, so none emits a retry event (asserted zero). A1 (every WH-022 criterion on actual local data with exact commands): the table in docs/cost-events.md 'WH-172 acceptance commands' now has no 'not shown' row. A2 (no billing authority, admission change or customer surface): acceptance check A2 (customerUnits 0 on every head, immutable and append-only table, a failing ledger never changes the receipt) and the register has no route. A3 (live data, two periods, entitlements left to WH-023 and the owner): stated in the cost-events doc and in docs/owner-review.md. Verification: pnpm check, pnpm test:model-costs, pnpm test:gateway-spend, node tests/task-cost-report.mjs, node tests/cost-events-contract.mjs, node tests/cost-events-store.mjs, node tests/cost-reconcile.mjs (plain and --d1), node tests/cost-event-adapters.mjs and the acceptance suite all exit 0.
 
 ## WH-089 — Define cumulative tier contracts and roll out the Creator display name
 
@@ -11076,6 +11079,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 ### Evidence
 
 - 2026-10-30 UTC (WH-001 reconciliation against origin/main 475a3a9, read from git log and gh pr view; docs only, nothing re-run unless stated, no GitHub issue, Cloudflare or provider mutation): merged PR #510 (22d737c, server photo list, upload, status and bytes) and #512 (0200453, client shows the server quota message). Stays planned: server and client source only; share-intent device and real safety acceptance are not recorded.
+- 2026-10-31 UTC (Batch A, branch android-wh085-share-intake; emulator and JVM only, no device; no licence accepted, no SDK package installed, no deploy, secret, schema or provider call): share-sheet intake and upload recovery delivered. MainActivity accepts ACTION_SEND for one JPEG/PNG/WebP content URI or plain text; the item waits in memory behind the sign-in gate and ShareDialog asks before anything is uploaded or put in the Chat draft (a link is never opened or fetched); the dialog previews a shared photo, which reads the file on the phone in memory only (same path and caps as the preparer, no disk write, nothing leaves the phone before Add), owner decision 2026-10-31. Prepared bytes, name, project and upload ID are sealed in the account store (StateKind.UPLOAD, at most five, 1 MiB each) before the first request, so a restarted process offers the same request again; sign-out and account change erase them. Observed on the API 35 emulator: ShareIntentTest (5 tests, local flavor; deployed skips because its origin is HTTPS) with real ACTION_SEND intents and a loopback FakeWorker: text reaches the draft only and no non-GET request is made, cancel sends nothing, a photo needs a chosen project and a tap, a dropped reply keeps the bytes and the retry repeats the same path, headers and body, sign-out erases them, unsupported MIME and file:// are ignored. JVM: ProjectsViewModelTest (restart retry, per-project rows, account change, refused upload not kept) and StoredUploadStoreTest (restart, purge, encryption at rest, bounds). Full CI Android command set green on the final commit. A1 to A4 and V1 to V3 are met on the emulator for local synthetic photos; the server half is unchanged (tests/mobile-photos.mjs). Not done: a physical device, TalkBack, real picker UIs on other images, WH-017/048 safety and provider acceptance, an adb-shell share into a signed-in app. Stays planned; the remaining line is device and real-safety acceptance in WH-087. Review round (Opus): a share no longer replays on recreation or from Recents, a pending share and its thumbnail are dropped on sign-out and account change, the projects ViewModel resets per account, late work after an account change is dropped, hostile extras and Keystore failures do not crash, stuck upload slots expire after seven days or when their project is gone, and the dialog scrolls, pages and retries. Tap-jacking filter is set without an automated test; landscape was not captured.
 
 ## WH-086 — Deliver bounded owner push notifications through FCM
 
