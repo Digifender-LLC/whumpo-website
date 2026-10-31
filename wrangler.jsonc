@@ -16,6 +16,7 @@
     "STRIPE_PUBLISHABLE_KEY": "pk_live_51UWOjs0LNjXeQYHLGgSplEzEsN3h4pDWKZ8wsVFTVzkBtkTFrngYHdOyjN14F19DSUs57xZpJY3xl9EG0IywibEJ00s2Lp0ALJ",
     "ENVIRONMENT": "test",
     "TURNSTILE_SITE_KEY": "0x4AAAAAAFIoE2toIv5N36J5",
+    "STRIPE_TEST_PUBLISHABLE_KEY": "pk_test_51ULu0ZEz67CfHgqSd6ClgctWhMGtBA3aGUUSWlwwDjdqvgiuX5uZ207lBztio0Wmx3e6A2QD3wQljskhw3U6EXsF00v792y1CN",
     "AI_BASE_URL": "https://opencode.ai/zen/go/v1",
     "AI_MODEL": "muse-spark-1.3-contributor",
     "AI_PROTOCOL": "responses",

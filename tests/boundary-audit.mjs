@@ -13,7 +13,7 @@ assert.deepEqual(problems,[],'docs/boundary-audit.json is out of date:\n'+proble
 // The extractor must see the whole mounted surface, not a trivially empty one.
 assert.ok(surface.routes.length>=150,`only ${surface.routes.length} route matchers were extracted`);
 assert.ok(surface.controls.length>=30,`only ${surface.controls.length} Chat controls were extracted`);
-for(const path of ['/api/stripe/webhook','/api/cloudflare/dns/review','/api/domain-hosting/review','/api/github/backups/review','/api/billing/portal','/api/auth/identity/v1/passkey/remove','/api/operator/safety-cases/v1/disclosures/approve'])
+for(const path of ['/api/stripe/webhook','/api/cloudflare/dns/review','/api/domain-hosting/review','/api/github/backups/review','/api/billing/subscription/cancel','/api/auth/identity/v1/passkey/remove','/api/operator/safety-cases/v1/disclosures/approve'])
  assert.ok(surface.routes.some(r=>r.path===path),`${path} was not extracted`);
 // A matcher inside a comment or string is not a route.
 assert.ok(!surface.routes.some(r=>/whumpo-modules v1|Dashboard control/.test(r.path)));

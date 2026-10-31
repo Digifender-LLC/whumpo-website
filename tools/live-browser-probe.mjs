@@ -20,8 +20,7 @@ export function classifyConsole({text,url},{knownUrls,scriptLoaded}){
  if(scriptLoaded&&url.startsWith('https://challenges.cloudflare.com/'))return 'turnstile_internal_log';
  return null;
 }
-// Known, accepted block: the Stripe pricing-table script is never loaded by a read-only probe.
-const knownForeign='https://js.stripe.com';
+// The landing and signup pages load no Stripe script (Stripe.js is requested only where a card is collected), so any Stripe request is a foreign-host failure.
 const challengePath='/cdn-cgi/challenge-platform/';
 // Turnstile's own challenge traffic: https targets only; POST on the one host, GET also on its subdomains, only under the challenge path.
 export const isChallengePost=(method,url,origin)=>method==='POST'&&origin.startsWith('https:')&&url.origin===allowedExternal&&url.pathname.startsWith(challengePath);
@@ -38,7 +37,6 @@ export function turnstileProof({iframe,input,scriptLoaded}){
 // The single routing decision: {allow:true}, or {allow:false,reason,known?}.
 export function decideRequest(method,url,origin,postData){
  if(isAllowedPost(method,url,origin,postData)||isChallengePost(method,url,origin)||isChallengeSubdomainGet(method,url,origin))return {allow:true};
- if(method==='GET'&&url.origin===knownForeign)return {allow:false,known:true,reason:'expected_foreign_host'};
  const sameOrigin=url.origin===origin,external=origin.startsWith('https:')&&url.origin===allowedExternal;
  if(method==='GET'&&(sameOrigin||external))return {allow:true};
  return {allow:false,reason:method!=='GET'?(url.pathname.startsWith('/api/')?'api_write':'non_get'):'foreign_host'};
