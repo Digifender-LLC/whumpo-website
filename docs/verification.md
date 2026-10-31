@@ -666,3 +666,9 @@ Time assumptions: the profile table states only per-script ceilings (five minute
 ## WH-018 account closure source contract — October 29, 2026 UTC
 
 `node tests/account-closure-contract.mjs` (`pnpm test:account-closure-contract`; not part of a fast profile) bundles the unwired `src/account-closure/*.ts` with esbuild and checks the closure review, every state transition, each guard and all 15 refusal codes with synthetic counts only. It also checks every inventory key against the lifecycle classes, that the source is pure and unwired, and runs 30 deliberate mutants that must each be caught. See [account-closure.md](account-closure.md).
+
+## Onboarding journey — October 31, 2026 UTC
+
+`node tests/onboarding-journey-browser.mjs` (`pnpm test:onboarding-journey`; browser suites stay outside the profiles) runs the real Worker, current schema, Chromium's virtual authenticator with real signed passkeys and the production bundle, served with the Content-Security-Policy from `frontend/public/_headers`. Turnstile is a stand-in. It walks landing to Chat by keyboard at 360, 390 and 1280px in light and dark, with reduced motion and 200% text, asserting heading focus at every step, no horizontal scroll, 44px controls on phones, no CSP violation, no leftover animation or hidden element, a user gesture on every passkey prompt, and axe at each step. One pass adds a cancelled ceremony, a reload on the kit step, a failed save, a held save, a click and typing during a held transition, an interrupted transition, edits from the review and a simulated phone keyboard.
+
+`WHUMPO_JOURNEY_CAPTURE=<dir>` records video and screenshots, `WHUMPO_JOURNEY_REPORT=<file>` writes frame timings, `WHUMPO_JOURNEY_THROTTLE=<rate>` throttles the CPU and `WHUMPO_JOURNEY_ONLY=<label>` runs one pass. Not run: Safari, Firefox, physical devices, a real Turnstile widget, or a real screen reader.

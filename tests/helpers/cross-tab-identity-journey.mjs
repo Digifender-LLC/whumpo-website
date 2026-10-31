@@ -91,9 +91,9 @@ export async function crossTabIdentityJourney({page,context,db,origin,requests,p
   await page.evaluate(()=>{const get=navigator.credentials.get.bind(navigator.credentials);navigator.credentials.get=async(...args)=>{navigator.credentials.get=get;const result=await get(...args);window.departingPromptReady=true;await new Promise(done=>{window.releaseDepartingPrompt=done;});return result;};});
   const beforeDeparture=requests.filter(r=>r.path.endsWith('/reauth/verify')).length;
   await page.getByRole('button',{name:'Prepare a different kit',exact:true}).click();await page.waitForFunction(()=>window.departingPromptReady);
-  await page.getByRole('link',{name:'Whumpo home',exact:true}).click();await page.getByRole('link',{name:'Meet Whumpo',exact:true}).waitFor();await page.evaluate(()=>window.releaseDepartingPrompt());await page.waitForLoadState('networkidle');
+  await page.getByRole('link',{name:'Whumpo home',exact:true}).click();await page.getByRole('link',{name:'Start with an invite',exact:true}).first().waitFor();await page.evaluate(()=>window.releaseDepartingPrompt());await page.waitForLoadState('networkidle');
   assert.equal(requests.filter(r=>r.path.endsWith('/reauth/verify')).length,beforeDeparture,'An unmounted identity route cannot submit its old prompt');
-  await page.getByRole('link',{name:'Meet Whumpo',exact:true}).click();await composer(page).waitFor();await composer(peer).waitFor();
+  await page.getByRole('link',{name:'Start with an invite',exact:true}).first().click();await composer(page).waitFor();await composer(peer).waitFor();
 
   phase('late reauthentication cookie settles before queued cross-tab sign-out');
   await peer.goto(origin+'/workspace/security');await peer.getByRole('heading',{name:'Account security',exact:true}).waitFor();
