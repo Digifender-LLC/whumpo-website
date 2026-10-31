@@ -37,9 +37,9 @@ async function owner(plan='personal'){
  const site=await createFixtureProject(scope,actor.account,'Garden studio '+marker+' '+id().slice(0,6),'Neighborhood garden care');
  return {...actor,scope,user:actor.account,...site};
 }
-async function command(o,handler,text){
+async function command(o,handler,text,action){
  const turn=id(),state=await row('SELECT revision FROM workspace_state WHERE user_id=?',o.user),prepared=await handler(o.scope,o.user,turn,text);assert.ok(prepared);
- await o.scope.batch([o.scope.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at) VALUES(?,?,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(turn,o.user,state.revision+1,text,prepared.reply),...prepared.statements,o.scope.prepare('UPDATE workspace_state SET revision=revision+1 WHERE user_id=?').bind(o.user)]);return turn;
+ await o.scope.batch([o.scope.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,action_json) VALUES(?,?,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'),?)").bind(turn,o.user,state.revision+1,text,prepared.reply,action?JSON.stringify(action):null),...prepared.statements,o.scope.prepare('UPDATE workspace_state SET revision=revision+1 WHERE user_id=?').bind(o.user)]);return turn;
 }
 /** Test-only clock substitute: the update guard forbids changing lifetimes, so lift it for one
  * statement on this disposable database and restore the identical trigger. */
@@ -217,7 +217,7 @@ try{
   assert.equal((await ok(await api(a,`/guest-previews/${expiring.link.id}/feedback`))).link.state,'expired');
   // Removing the bound saved version ends access; the owner keeps the link record and feedback.
   const old=await issue(a,a.project,a.version);assert.equal((await comment(old.token)).status,200);
-  const removal=await command(a,m.versionRemovalCommand,'/delete-version '+a.version);await command(a,m.versionRemovalCommand,'/confirm-version-delete '+removal);
+  const removal=await command(a,m.versionRemovalCommand,'/delete-version '+a.version);await command(a,m.versionRemovalCommand,'/confirm-version-delete '+removal,{type:'confirm',kind:'version',reviewId:removal});
   assert.equal((await row('SELECT count(*) n FROM site_versions WHERE id=?',a.version)).n,0);
   assert.equal((await status(old.token)).status,404);assert.equal((await view(old.token)).status,404);
   const kept=await ok(await api(a,`/guest-previews/${old.link.id}/feedback`));assert.equal(kept.link.state,'removed');assert.equal(kept.link.versionId,null);assert.equal(kept.feedback.length,1);

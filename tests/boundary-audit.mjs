@@ -151,6 +151,17 @@ for(const cell of surfaces['platform-api'].privileged){
  assert.ok(registryProblems(r,surface,{report}).includes('unregistered Worker whumpo-runtime (wrangler.runtime.jsonc)'));
 }
 
+// WH-004 D2: every native /api/mobile/v1 matcher is the only entry of its own family, so each path carries its own evidence cells and a
+// new path cannot ride on a sibling's. tests/boundary-mobile-paths.mjs executes the shared rules for each of those paths.
+const mobileGrouped=r=>r.families.filter(f=>f.entries?.some(e=>e.file==='src/mobile/router.ts')&&f.entries.length!==1).map(f=>f.id);
+assert.deepEqual(mobileGrouped(registry),[],'a mobile family groups more than one matcher');
+assert.ok(registry.families.filter(f=>f.entries?.some(e=>e.file==='src/mobile/router.ts')).length>=24,'the per-path mobile families are missing');
+{
+ const r=clone(),[a,b]=r.families.filter(f=>f.entries?.[0]?.file==='src/mobile/router.ts');
+ a.entries.push(...b.entries);b.entries=[];
+ assert.deepEqual(mobileGrouped(r),[a.id],'grouping two mobile matchers in one family is reported');
+}
+
 // The human report carries the generated matrix summary for the current registry.
 const start=report.indexOf(summaryStart),end=report.indexOf(summaryEnd);
 assert.ok(start>=0&&end>start,'docs/boundary-audit.md lacks the generated summary block');

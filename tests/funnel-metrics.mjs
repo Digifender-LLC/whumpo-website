@@ -60,7 +60,7 @@ async function journey(o){
  const version=apply.id,publish=id(),state=async()=>(await chat.readChat(o.scope,o.user)).state.revision;
  assert.equal((await chat.sendChat(o.scope,o.user,{content:'/publish '+version,id:publish,revision:await state()})).status,200);
  const confirm=id(),current=await state();
- for(let i=0;i<2;i++)assert.equal((await chat.sendChat(o.scope,o.user,{content:'/confirm '+publish,id:confirm,revision:current})).status,200);
+ for(let i=0;i<2;i++)assert.equal((await chat.sendChat(o.scope,o.user,{content:'/confirm '+publish,id:confirm,revision:current},undefined,undefined,false,{action:{type:'confirm',kind:'site',reviewId:publish},command:'/confirm '+publish,label:'Confirm the reviewed website change.',recentAuth:false})).status,200);
  const second=await store.issueContentBrief(o.scope,o.user,{originTurnId:await origin(o),projectId:o.project,contentIds:['headline']});
  await store.mutateInteraction(o.scope,o.user,{version:1,requestId:id(),interactionId:second.envelope.id,definitionDigest:second.envelope.definitionDigest,expectedAnswerRevision:0,operation:'cancel'});
  return {version};

@@ -6,6 +6,8 @@ import {build} from 'esbuild';
 import {cloudflareClient,remoteD1} from './cms-cloudflare.mjs';
 import {cmsMasterKey,runWrangler,activeWorker} from './cms-release.mjs';
 import {assertArtifactConfiguration} from './artifact-protection.mjs';
+// R14: only the test platform may be deployed from this tool (same rule as prepare-release and feature-preview).
+export function assertTestPlatform(config){if(config?.vars?.ENVIRONMENT!=='test')throw Error('Only the test platform may be deployed');}
 export async function withPlatformLock(db,work){
  const token=crypto.randomUUID();
  await db.prepare("UPDATE cms_platform_deploy_lock SET token=?,expires_at=strftime('%Y-%m-%dT%H:%M:%fZ','now','+15 minutes') WHERE id=1 AND expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now')").bind(token).run();
@@ -18,7 +20,7 @@ export async function withPlatformLock(db,work){
 }
 export async function deployPlatform(prepared){
  const base=prepared?.config??JSON.parse(await readFile('wrangler.jsonc','utf8'));
- assertArtifactConfiguration(base);
+ assertTestPlatform(base);assertArtifactConfiguration(base);
  if(prepared)await prepared.verify();else await verifyBuildSnapshot();
  const api=prepared?.api??cloudflareClient(base.account_id),db=prepared?.db??remoteD1(api,base.d1_databases.find(x=>x.binding==='DB').database_id);
  const expectedSchema=prepared?.schema??(await currentSchemaArtifact()).expected;

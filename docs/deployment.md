@@ -107,7 +107,7 @@ Email is an account identifier, not verified ownership. No special authorization
 
 ## Historical initial operations
 
-Run `pnpm invite` to create a code; open the generated local `.secrets/invitation-*.txt`. These files are ignored by Git and restricted to the local user. `TURNSTILE_SECRET` is a Wrangler secret. The configured site key is public.
+Run `pnpm invite --apply` (plain `pnpm invite` only previews) to create a code; open the generated local `.secrets/invitation-*.txt`. These files are ignored by Git and restricted to the local user. `TURNSTILE_SECRET` is a Wrangler secret. The configured site key is public.
 
 Superseded by the current-version-only policy: there are no numbered migrations or `pnpm db:remote` script now, and releases go through Workers Builds and `pnpm run deploy ci`, or an owner cutover (see the top of this document). The original September instruction was to apply forward migrations with `pnpm db:remote`, then `pnpm run deploy`, because the migrations were additive. `wrangler rollback` can restore a prior Worker version, but never assume that it reverses database migrations. Before future destructive migrations, implement and verify database export/restore.
 
