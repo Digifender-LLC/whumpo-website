@@ -26,9 +26,9 @@ export const hasCleanStatus=statuses=>statuses.find(s=>s.context==='review:clean
 
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  if(process.argv[2]==='--status'){
-  const {GITHUB_REPOSITORY:repo,HEAD_SHA:sha,GITHUB_TOKEN:token}=process.env;
-  if(!/^[\w.-]+\/[\w.-]+$/.test(repo||'')||!/^[0-9a-f]{40}$/.test(sha||'')||!token)throw Error('Needs GITHUB_REPOSITORY, HEAD_SHA and GITHUB_TOKEN.');
-  const response=await fetch(`https://api.github.com/repos/${repo}/commits/${sha}/statuses?per_page=100`,{headers:{authorization:`Bearer ${token}`,accept:'application/vnd.github+json'}});
+  const {GITHUB_REPOSITORY:repo,HEAD_SHA:sha,GITHUB_TOKEN:token,GITHUB_API_URL:api}=process.env; // api is set by Actions
+  if(!/^[\w.-]+\/[\w.-]+$/.test(repo||'')||!/^[0-9a-f]{40}$/.test(sha||'')||!token||!/^https:\/\//.test(api||''))throw Error('Needs GITHUB_REPOSITORY, HEAD_SHA, GITHUB_TOKEN and GITHUB_API_URL.');
+  const response=await fetch(`${api}/repos/${repo}/commits/${sha}/statuses?per_page=100`,{headers:{authorization:`Bearer ${token}`,accept:'application/vnd.github+json'}});
   if(!response.ok)throw Error(`Status lookup failed: ${response.status}`);
   if(!hasCleanStatus(await response.json())){console.error(`::error::No review:clean commit status on ${sha}. A new push clears it; the reviewers must pass this exact commit (docs/agent-review.md).`);process.exit(1);}
   console.log(`review:clean status present on ${sha}.`);
