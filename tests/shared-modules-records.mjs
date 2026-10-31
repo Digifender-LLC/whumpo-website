@@ -69,6 +69,7 @@ async function publicGateway(o,payload,{ip='192.0.2.20',token='fixture-token',ve
  const response=await appGateway.applicationGateway(new Request(o.host+'/modules',{method:'POST',headers:{'cf-connecting-ip':ip,'content-type':'application/json',origin:o.host,...(token?{'whumpo-turnstile-response':token}:{})},body:JSON.stringify(payload)}),{...env,TURNSTILE_SECRET:secret},verify);
  return {status:response.status,body:await response.json()};
 }
+const ownerSummary=async o=>(await m.readViewBinding(o.scope,o.user,'records-summary',o.project)).data;
 async function publish(o){
  const head=await row('SELECT version_id FROM project_spec_heads WHERE project_id=?',o.project),chat=async content=>{const turn=id();return {turn,result:await m.sendChat(o.scope,o.user,{id:turn,revision:await revision(o),content})};};
  const review=await chat('/publish '+head.version_id);assert.equal((await chat('/confirm '+review.turn)).result.status,200);
@@ -167,9 +168,22 @@ try{
   // A verified anonymous submission still needs a published website (repeated inside the commit).
   assert.equal((await publicGateway(a,submission(records,'public-form',publicValues()),{ip:'192.0.2.24',verify:good(records)})).body.code,'unavailable');
   await publish(a);
+  // WH-127: the form was activated against a different (here: no) publication, so it stays closed after the site goes live, says why, and reopens only through a fresh activation review.
+  assert.equal((await publicGateway(a,submission(records,'public-form',publicValues()),{ip:'192.0.2.24',verify:good(records)})).body.code,'unavailable');
+  assert.equal((await ownerSummary(a)).items.find(i=>i.localId===records.local_id).publicForm,'stale');
+  assert.equal((await row('SELECT publication_revision p FROM module_activations WHERE instance_id=?',records.id)).p,-1);
+  await activation(a,records.local_id);
+  assert.equal((await ownerSummary(a)).items.find(i=>i.localId===records.local_id).publicForm,'bound');
+  assert.equal((await row('SELECT publication_revision p FROM module_activations WHERE instance_id=?',records.id)).p,(await row('SELECT revision r FROM publications WHERE project_id=?',a.project)).r);
   const ok=submission(records,'public-form',publicValues()),sent=await publicGateway(a,ok,{ip:'192.0.2.24',verify:good(records)});assert.equal(sent.status,200,JSON.stringify(sent.body));
   assert.deepEqual(Object.keys(sent.body.result).sort(),['accepted','entryId','formId']);assert.ok(!markers.some(x=>JSON.stringify(sent.body).includes(x)));
   const saved=await row('SELECT * FROM module_records WHERE id=?',sent.body.result.entryId);assert.equal(saved.submitter_kind,'public');assert.equal(saved.visitor_id,null);
+  // A later publish moves the live revision: the same public form closes again until the owner re-activates it.
+  await publish(a);
+  assert.equal((await publicGateway(a,submission(records,'public-form',publicValues()),{ip:'192.0.2.27',verify:good(records)})).body.code,'unavailable');
+  assert.equal((await ownerSummary(a)).items.find(i=>i.localId===records.local_id).publicForm,'stale');
+  await activation(a,records.local_id);
+  assert.equal((await publicGateway(a,submission(records,'public-form',publicValues()),{ip:'192.0.2.27',verify:good(records)})).status,200);
   // An exact replay reads the receipt back without another verification or allowance; a changed payload conflicts.
   const before=calls,replay=await publicGateway(a,ok,{ip:'192.0.2.24',verify:good(records)});assert.equal(replay.body.receipt.replayed,true);assert.equal(calls,before);
   assert.equal((await publicGateway(a,{...ok,input:{values:publicValues()}},{ip:'192.0.2.24',verify:good(records)})).body.code,'request_conflict');
@@ -187,7 +201,7 @@ try{
   // A public-only instance needs no access dependency; the hourly project cap is atomic and owner removal never recycles it.
   const enquiries={id:'enquiries',kind:'records',...pins('records'),dependencies:[],config:{retentionDays:90,schemas:[{id:'enquiry',fieldsRevision:1,fields:[{key:'message',label:'Message',type:'text',optional:false,read:'owner'}],staffWrite:[]}],
    forms:[{id:'ask',recordId:'enquiry',submit:'public',uploadCollectionId:null}],views:[]}};
-  await configureFixtureModules(b.scope,b.user,b.project,[accessInstance,recordsInstance(),enquiries]);await activation(b,'enquiries');await publish(b);
+  await configureFixtureModules(b.scope,b.user,b.project,[accessInstance,recordsInstance(),enquiries]);await publish(b);await activation(b,'enquiries');
   const ask=await instance(b,'enquiries'),askGood=siteverify({success:true,hostname:new URL(b.host).hostname,action:'module-form',cdata:ask.id});
   const askOne=(n)=>publicGateway(b,envelope(ask,'forms.submit',{target:{formId:'ask'},input:{values:{message:value('enquiry')}}}),{ip:`198.51.100.${n}`,verify:askGood});
   const results=await Promise.all(Array.from({length:21},(_,n)=>askOne(n+1)));
@@ -279,6 +293,14 @@ try{
   await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES('hold-wh127','case-wh127',?,'project',?,'basis-1','human:approver',unixepoch(),unixepoch()+86400)",a.user,a.project);
   assert.equal((await ownerCall(a,removal(records,target))).body.code,'unavailable');
   await assert.rejects(()=>run('DELETE FROM module_records WHERE id=?',target),/safety_preservation_hold/);
+  // WH-067 (LC-06 mechanism, decision D4): every other module deletion path consults the same hold inside the delete itself, including the
+  // cascades from a visitor erasure, an instance removal and a project deletion. Nothing is removed until the hold is released.
+  const held=async()=>(await row('SELECT count(*) n FROM module_records WHERE project_id=?',a.project)).n,heldBefore=await held();
+  const submitter=await row('SELECT visitor_id FROM module_records WHERE project_id=? AND visitor_id IS NOT NULL LIMIT 1',a.project);
+  await assert.rejects(()=>run('DELETE FROM app_visitors WHERE id=?',submitter.visitor_id),/safety_preservation_hold/);
+  await assert.rejects(()=>run('DELETE FROM module_instances WHERE id=?',records.id),/safety_preservation_hold/);
+  await assert.rejects(()=>run('DELETE FROM projects WHERE id=?',a.project),/safety_preservation_hold/);
+  assert.equal(await held(),heldBefore);
   // Retention: age two records past the 30-day window (test-only clock substitute in this disposable database).
   const aged=[target,first],trigger=await row("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='module_record_update'");
   await run('DROP TRIGGER module_record_update');

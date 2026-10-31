@@ -1,7 +1,7 @@
 import {canonicalJSON,jsonDigest,plain} from '../project-specification/v2/json';
 import type {RecordField,RecordsConfig} from '../project-specification/v3/modules';
 import {ModuleError,type ModulePrincipal} from './policy';
-import {instanceOf,registeredInstances,type RegistryRow} from './registry';
+import {instanceOf,publicFormState,registeredInstances,type RegistryRow} from './registry';
 import type {RecordsSummaryFacts} from './shape';
 import type {ModuleContext,ModuleHandlers,ModuleReadHandler,ModuleWriteHandler} from './api';
 import {admissionNotices} from '../notification-configurations';
@@ -241,7 +241,7 @@ export async function readRecordsSummary(db:D1Database,user:string,project:strin
   const {results}=await db.prepare(`SELECT r.schema_id,r.submitter_kind,count(*) n FROM module_records r WHERE r.instance_id=? AND r.project_id=? AND ${window.sql} GROUP BY r.schema_id,r.submitter_kind`)
    .bind(row.id,project,...window.params).all<{schema_id:string;submitter_kind:'public'|'visitor'|'staff';n:number}>();
   const n=(schema:string,kind:string)=>results.find(x=>x.schema_id===schema&&x.submitter_kind===kind)?.n??0;
-  items.push({localId:row.local_id,resourceId:row.id,state:row.state as RecordsSummaryFacts['items'][number]['state'],configRevision:row.config_revision,retentionDays:c.retentionDays as 30|90|365,
+  items.push({localId:row.local_id,resourceId:row.id,state:row.state as RecordsSummaryFacts['items'][number]['state'],configRevision:row.config_revision,retentionDays:c.retentionDays as 30|90|365,publicForm:await publicFormState(db,row),
    schemas:c.schemas.map(s=>({recordId:s.id,fieldsRevision:s.fieldsRevision,fields:s.fields.length,records:{public:n(s.id,'public'),visitor:n(s.id,'visitor'),staff:n(s.id,'staff')}})),
    forms:c.forms.map(f=>({formId:f.id,recordId:f.recordId,submit:f.submit,attachments:f.uploadCollectionId!==null})),
    views:c.views.map(v=>({viewId:v.id,recordId:v.recordId,audience:v.audience,scope:v.scope}))});

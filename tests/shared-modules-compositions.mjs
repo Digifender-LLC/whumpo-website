@@ -306,6 +306,15 @@ try{
 
  await check('no public bucket, bearer URL, booking engine or maintainer inference in module or composition paths',async()=>{
   for(const config of ['wrangler.jsonc','wrangler.apps.jsonc','wrangler.sites.jsonc','wrangler.runtime.jsonc']){const text=await readFile(config,'utf8');assert.ok(!/r2\.dev|public_access|presign/i.test(text),config);}
+  // D4/LC-06: a new module deletion statement must be examined for safety holds before this list grows. Each is held by a BEFORE DELETE
+  // trigger (records, files via project_files), removes no content (the files-gallery module_files link) or holds no submitted value (receipts).
+  {const {readdir}=await import('node:fs/promises');const found=[];
+   for(const f of await readdir('src/shared-modules'))for(const [,table] of (await readFile('src/shared-modules/'+f,'utf8')).matchAll(/DELETE FROM (module_\w+|app_visitors)/g))found.push(f+':'+table);
+   assert.deepEqual(found.sort(),['files-gallery.ts:module_files','api.ts:module_request_receipts','records.ts:module_records','records.ts:module_records'].sort());}
+  // D4: every closed operation is either handled or permanently replaced, never both and never neither.
+  const handled=Object.keys(m.sharedModules.moduleHandlers),replaced=Object.keys(m.modulePolicy.replacedOperations);
+  assert.deepEqual([...handled,...replaced].sort(),Object.keys(m.modulePolicy.moduleOperations).sort());
+  assert.deepEqual(replaced.sort(),['access.confirmRole','access.prepareRole','files.prepareUpload','files.requestRemoval']);
   assert.deepEqual(Object.keys(m.modulePolicy.moduleOperations).sort(),['access.confirmRole','access.list','access.me','access.prepareRole','collections.readPublic','files.gallery','files.prepareUpload','files.putBytes','files.read','files.requestRemoval','forms.submit','records.get','records.remove','records.update','records.view']);
   const inference=/^src\/(ai|ai-chat|ai-gateway|acknowledgment|site-agent|agent-[a-z-]+|standard-ai[a-z-]*|chat|backend-chat|app-upgrade-chat|app-recovery-chat|app-page-design)\.ts$|^src\/chat-interactions\/(agent|agent-request|model-continuation|continuation)\.ts$/;
   for(const entry of ['tests/fixtures/module-compositions/staff-portal.mjs','tests/fixtures/module-compositions/visitor-intake.mjs','src/app-gateway.ts','src/shared-modules/api.ts','src/shared-modules/records.ts','src/shared-modules/files.ts','src/shared-modules/access.ts','src/shared-modules/collections.ts']){

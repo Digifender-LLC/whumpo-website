@@ -5,7 +5,7 @@ import {jsonDigest,SpecificationError} from '../project-specification/v2/json';
 import {featurePredicate} from '../feature-admission';
 import {featureRequest} from '../feature-inclusion';
 import {ModuleError,type ModulePrincipal} from './policy';
-import type {ModuleInstanceFacts} from './shape';
+import type {ModuleInstanceFacts,PublicFormState} from './shape';
 import {collectionsExportHook} from './collections';
 import {accessRolesExportHook} from './access-export';
 import {filesExportHook,recordsExportHook} from './export-hooks';
@@ -59,8 +59,18 @@ export async function currentSpecification(db:D1Database,user:string,project:str
  }
 }
 
-export type RegistryRow={id:string;project_id:string;local_id:string;kind:ModuleKind;module_digest:string;schema_digest:string;config_json:string;config_digest:string;descriptor_digest:string;dependencies_json:string;config_revision:number;source_version_id:string;source_spec_digest:string;descriptor_json:string;state:string|null;activation_revision:number|null;updated_at:number};
-const columns='i.id,i.project_id,i.local_id,i.kind,i.module_digest,i.schema_digest,i.config_json,i.config_digest,i.descriptor_digest,i.dependencies_json,i.config_revision,i.source_version_id,i.source_spec_digest,i.descriptor_json,i.updated_at,a.state,a.revision activation_revision';
+export type RegistryRow={id:string;project_id:string;local_id:string;kind:ModuleKind;module_digest:string;schema_digest:string;config_json:string;config_digest:string;descriptor_digest:string;dependencies_json:string;config_revision:number;source_version_id:string;source_spec_digest:string;descriptor_json:string;state:string|null;activation_revision:number|null;publication_revision:number|null;updated_at:number};
+const columns='i.id,i.project_id,i.local_id,i.kind,i.module_digest,i.schema_digest,i.config_json,i.config_digest,i.descriptor_digest,i.dependencies_json,i.config_revision,i.source_version_id,i.source_spec_digest,i.descriptor_json,i.updated_at,a.state,a.revision activation_revision,a.publication_revision';
+/** WH-127: whether a records instance's `public` form is open to anonymous visitors. `bound` only while the live website publication is
+ * exactly the revision the activation committed against (`module_record_admit` repeats it); any later publish, restore or unpublish
+ * makes it `stale` (or `unpublished`) until a fresh activation review. `none`: no public form. */
+export async function publicFormState(db:D1Database,row:RegistryRow):Promise<PublicFormState>{
+ let forms:unknown;try{forms=row.kind==='records'?JSON.parse(row.config_json).forms:[];}catch{forms=[];}
+ if(!Array.isArray(forms)||!forms.some(f=>f?.submit==='public'))return 'none';
+ if(row.state!=='active')return 'inactive';
+ const live=await db.prepare('SELECT revision FROM publications WHERE project_id=? AND version_id IS NOT NULL').bind(row.project_id).first<{revision:number}>();
+ return !live?'unpublished':live.revision===row.publication_revision?'bound':'stale';
+}
 export async function instanceOf(row:RegistryRow):Promise<ModuleInstance>{
  const config=JSON.parse(row.config_json);
  if(await jsonDigest(config)!==row.config_digest)throw new ModuleError('unavailable');
@@ -111,7 +121,7 @@ export async function readModuleInstances(db:D1Database,user:string,project:stri
   const catalog=row?catalogState(row.kind,row.module_digest,row.schema_digest):catalogState(configured!.kind,configured!.module.digest,configured!.schema.digest);
   const state=(row?.state??'unregistered') as ModuleInstanceFacts['items'][number]['state'];
   items.push({localId,kind,resourceId:row?.id??null,state,serving:!!row&&state==='active'&&catalog==='available'&&await dependenciesActive(db,row),configRevision:row?.config_revision??null,
-   inSpecification:!!configured,configChanged:!!row&&!!configured&&(row.kind!==configured.kind||await jsonDigest(configured.config)!==row.config_digest),catalog,canActivate:include[moduleFeature(kind)]});
+   inSpecification:!!configured,configChanged:!!row&&!!configured&&(row.kind!==configured.kind||await jsonDigest(configured.config)!==row.config_digest),catalog,canActivate:include[moduleFeature(kind)],publicForm:row?await publicFormState(db,row):'none'});
  }
  return {specification,specificationRevision:spec?.revision??null,items};
 }

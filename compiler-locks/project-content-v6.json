@@ -1,6 +1,6 @@
 {
   "formatVersion": 1,
-  "compiler": "project-content@5",
+  "compiler": "project-content@6",
   "schemaVersion": 3,
   "esbuildVersion": "0.28.2",
   "target": "es2022",
@@ -17,7 +17,7 @@
       "schema": {
         "name": "collections-data",
         "version": 1,
-        "digest": "3895ac44d441c8ea50d738f1b0b0f50febad414b206c20fd29ae0990d6fbc7eb"
+        "digest": "edd021b7f7b6507429827d0a244f55ba42bf0e893c8bf2f5500dafe04895a20f"
       }
     },
     {
@@ -30,7 +30,7 @@
       "schema": {
         "name": "records-data",
         "version": 1,
-        "digest": "a4ad8fdf727ac1fb3476badabb952c0c21e4806ce6a4d203428b64c1ff5f9cb9"
+        "digest": "d5cff01e403fa54995ffed6b75105cc468cfee59de33386b958cc977c7fb845e"
       }
     },
     {
@@ -43,7 +43,7 @@
       "schema": {
         "name": "files-data",
         "version": 1,
-        "digest": "9fb9c402dfb8319789958afc9f089e5f103b3568e78e121201ded2e65528a9ad"
+        "digest": "c371742411ca495cd83d533377bd490903a835ef5196776a0baa3e95f924cdd8"
       }
     },
     {
@@ -56,7 +56,7 @@
       "schema": {
         "name": "access-data",
         "version": 1,
-        "digest": "02a6604b0be2ad8414cfb3dfa3865e152f17b8829e6f41bf71ce01685eabd122"
+        "digest": "56e6d8daf790d021b0c8f841e9ab5a683e3a9fbe8455b49a8be9936c4f72af83"
       }
     }
   ],
@@ -79,7 +79,7 @@
     },
     {
       "path": "src/project-specification/compiler.ts",
-      "digest": "3ff89c575e8a1c7ede093b6a4b51f954650ac92c3e0fd7196dd28610452713cb"
+      "digest": "caebdf47145f182ed860710dd7eca63fee963f4876f277863fa81d8700e0cac1"
     },
     {
       "path": "src/project-specification/v2/json.ts",
@@ -87,7 +87,7 @@
     },
     {
       "path": "src/project-specification/v3/content.ts",
-      "digest": "413224f11dce267a27c58eeeac55c5443630e490543c33807b86c7b3852ed968"
+      "digest": "d9124380b88b0416483a66fb62d399b94da9fd645652a4ddd6d91ce39d136602"
     },
     {
       "path": "src/project-specification/v3/modules.ts",
@@ -102,5 +102,5 @@
       "digest": "f17ec53af0b41810d9b457adb36a1f21a37eeb85e4f3efbf1ae647ab5b678e6a"
     }
   ],
-  "compilerDigest": "a00fe52f67453a586463fa7107ed9788f691bedc75032fa6d211759ed3af627f"
+  "compilerDigest": "c1dbe1a0e206feb8177681685004eeb963f1a74a01182b31ca1a121da0ab9213"
 }

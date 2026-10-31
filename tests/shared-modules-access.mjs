@@ -39,7 +39,7 @@ async function visitor(o){
  const result=await auth.appPasskeyVerify(db,o.project,'signup',options.challengeToken,key.registration(options.options),false);
  return {...result,key,cookie:`__Host-whumpo-app-session-${o.project}=${result.session}`};
 }
-/** Instances reach the saved head only through the real owner path (project-content@5): an exact modules.put review
+/** Instances reach the saved head only through the real owner path (project-content@6): an exact modules.put review
  * prepared as the AI turn's statements, then the recent-sign-in specificationApply control, before the activation reviews. */
 async function configure(o,instances){const saved=await configureFixtureModules(o.scope,o.user,o.project,instances);assert.ok(saved);return saved;}
 const revision=async(o,scope=o.scope)=>(await m.readChat(scope,o.user)).state.revision;
@@ -191,6 +191,17 @@ try{
   const results=await Promise.all([applyRole(a,first),applyRole(a,second)]);
   assert.deepEqual(results.map(r=>r.status).sort(),[200,409]);
   assert.equal(await accessRevision(a),4);assert.deepEqual((await me(a,access,v2)).body.result,{roles:['staff'],accessRevision:4});
+ });
+
+ await check('the daily maintenance pass compacts expired role reviews into a sealed receipt (WH-126 terminal-receipt schedule)',async()=>{
+  const v=await visitor(a),stale=await roleReview(a,v.visitorId,'grant');
+  // Test-only: the immutability trigger forbids moving expiry, so the review is aged past the one-hour grace by dropping it.
+  const guard=await row("SELECT sql FROM sqlite_master WHERE name='module_access_role_review_immutable'");await run('DROP TRIGGER module_access_role_review_immutable');await run('UPDATE module_access_role_reviews SET expires_at=unixepoch()-7200,created_at=unixepoch()-7800 WHERE id=?',stale.id);
+  await m.reviewTurnover.maintainReviews(db);await run(guard.sql);
+  assert.equal(await row('SELECT 1 x FROM module_access_role_reviews WHERE id=?',stale.id),null);
+  assert.equal((await row("SELECT outcome FROM review_receipts WHERE family='module_access_role_reviews' AND id=?",stale.id)).outcome,'expired');
+  assert.equal((await applyRole(a,stale)).status,409);
+  assert.equal((await row('SELECT count(*) n FROM module_access_roles WHERE visitor_id=?',v.visitorId)).n,0);
  });
 
  await check('revoked and erased visitors lose staff at the next request',async()=>{

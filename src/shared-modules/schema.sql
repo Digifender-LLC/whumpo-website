@@ -34,6 +34,10 @@ CREATE TABLE module_activations (
  review_id TEXT NOT NULL CHECK(length(review_id)=36),
  descriptor_digest TEXT NOT NULL CHECK(length(descriptor_digest)=64),
  config_revision INTEGER NOT NULL CHECK(config_revision>=1),
+ -- WH-127: the website publication revision live when this activation committed (-1 when nothing was live). A `public` form
+ -- accepts anonymous submissions only while the live publication is exactly this revision, the way `contact_settings` binds
+ -- the contact form: every publish, restore or unpublish advances the revision and ends public intake until a fresh activation review.
+ publication_revision INTEGER NOT NULL DEFAULT -1 CHECK(publication_revision>=-1),
  updated_at INTEGER NOT NULL CHECK(updated_at>0)
 ) STRICT;
 
@@ -192,12 +196,14 @@ CREATE TRIGGER module_activation_apply AFTER INSERT ON module_activation_applies
   source_spec_digest=(SELECT source_spec_digest FROM module_activation_reviews WHERE id=NEW.review_id),
   updated_at=max(updated_at,NEW.created_at)
   WHERE id=(SELECT resource_id FROM module_activation_reviews WHERE id=NEW.review_id AND action='activate' AND expected_config_revision>0);
- INSERT INTO module_activations(instance_id,state,revision,review_id,descriptor_digest,config_revision,updated_at)
-  SELECT r.resource_id,NEW.state,NEW.activation_revision,r.id,r.descriptor_digest,r.next_config_revision,NEW.created_at FROM module_activation_reviews r
+ INSERT INTO module_activations(instance_id,state,revision,review_id,descriptor_digest,config_revision,publication_revision,updated_at)
+  SELECT r.resource_id,NEW.state,NEW.activation_revision,r.id,r.descriptor_digest,r.next_config_revision,
+   coalesce((SELECT revision FROM publications WHERE project_id=r.project_id AND version_id IS NOT NULL),-1),NEW.created_at FROM module_activation_reviews r
   WHERE r.id=NEW.review_id AND NOT EXISTS(SELECT 1 FROM module_activations WHERE instance_id=r.resource_id);
  UPDATE module_activations SET state=NEW.state,revision=NEW.activation_revision,review_id=NEW.review_id,
   descriptor_digest=(SELECT descriptor_digest FROM module_activation_reviews WHERE id=NEW.review_id),
-  config_revision=(SELECT next_config_revision FROM module_activation_reviews WHERE id=NEW.review_id),updated_at=NEW.created_at
+  config_revision=(SELECT next_config_revision FROM module_activation_reviews WHERE id=NEW.review_id),
+  publication_revision=coalesce((SELECT p.revision FROM publications p JOIN module_activation_reviews r ON r.id=NEW.review_id WHERE p.project_id=r.project_id AND p.version_id IS NOT NULL),-1),updated_at=NEW.created_at
   WHERE instance_id=(SELECT resource_id FROM module_activation_reviews WHERE id=NEW.review_id) AND revision=NEW.activation_revision-1;
  SELECT RAISE(ABORT,'module_activation_changed') WHERE NOT EXISTS(SELECT 1 FROM module_activations WHERE review_id=NEW.review_id AND revision=NEW.activation_revision AND state=NEW.state);
  -- WH-126: an access instance starts at access revision 1; every later activation, disable or configuration
@@ -476,7 +482,7 @@ CREATE INDEX module_record_events_entry ON module_record_events(entry_id);
 
 -- Anonymous (`public`) submissions reuse the contact form's admission (docs/contact-forms.md#submission-boundary): the
 -- visitor gateway runs Turnstile Siteverify and the per-connection allowance before the engine commits, and this trigger
--- repeats a `public` form on a published project and the contact caps over this project's anonymous module receipts
+-- repeats a `public` form on the exact publication revision the activation was bound to and the contact caps over this project's anonymous module receipts
 -- (receipts outlive owner removal, so deleting records never recycles the allowance): 20 per hour (or the operator's
 -- `contact` containment allowance), 100 per project and 1,000 platform-wide in 30 days, and above 500 platform-wide an
 -- account already holding 100 is refused.
@@ -488,7 +494,7 @@ CREATE TRIGGER module_record_admit BEFORE INSERT ON module_records BEGIN
    AND (NEW.submitter_kind!='public' OR json_extract(f.value,'$.submit')='public'))
   AND EXISTS(SELECT 1 FROM json_each(i.config_json,'$.schemas') s WHERE json_extract(s.value,'$.id')=NEW.schema_id AND json_extract(s.value,'$.fieldsRevision')=NEW.fields_revision)
   AND NEW.expires_at=NEW.created_at+86400*json_extract(i.config_json,'$.retentionDays'))
-  OR NEW.submitter_kind='public' AND NOT EXISTS(SELECT 1 FROM publications WHERE project_id=NEW.project_id AND version_id IS NOT NULL);
+  OR NEW.submitter_kind='public' AND NOT EXISTS(SELECT 1 FROM publications p JOIN module_activations a ON a.instance_id=NEW.instance_id WHERE p.project_id=NEW.project_id AND p.version_id IS NOT NULL AND p.revision=a.publication_revision);
  SELECT RAISE(ABORT,'module_request_stale') WHERE NEW.revision!=1 OR NEW.last_request_id!=NEW.created_request_id OR NEW.updated_at!=NEW.created_at OR abs(NEW.created_at-unixepoch())>60;
  SELECT RAISE(ABORT,'module_request_forbidden') WHERE NEW.visitor_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM app_visitors WHERE id=NEW.visitor_id AND project_id=NEW.project_id AND revoked=0);
  SELECT RAISE(ABORT,'module_request_limited') WHERE (SELECT count(*) FROM module_records WHERE instance_id=NEW.instance_id)>=10000

@@ -7,7 +7,7 @@ import type {ProjectSpecification} from './types';
 export async function renderContentSpecification(input:unknown){
  const spec=validateSpecification(input);
  requireSpec(spec.pages.every(page=>page.audience==='public'),'UNSUPPORTED_DELIVERY','pages.audience');
- // project-content@5: pinned instances are saved configuration only. They add no compiled artifact, and serving needs
+ // project-content@6: pinned instances are saved configuration only. They add no compiled artifact, and serving needs
  // the separate WH-125 activation review. Notification/automation modules (so integrations and rules) stay unavailable.
  requireSpec(spec.modules.length===1&&spec.modules[0].id==='content','UNAVAILABLE_CAPABILITY','modules');
  const artifacts=[];

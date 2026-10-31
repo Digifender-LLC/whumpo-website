@@ -234,14 +234,14 @@ try{
  function reorder(value){if(Array.isArray(value))return value.map(reorder);if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).reverse().map(([k,v])=>[k,reorder(v)]));return value;}
  assert.deepEqual(await m.compileProjectSpecification(reorder(content),reorder(lock)),output);
  const mutableLock=m.currentCompilerLock();mutableLock.modules.length=0;assert.deepEqual(m.currentCompilerLock(),lock);
- for(const mutate of [l=>{l.compiler.digest='0'.repeat(64);},l=>{l.compiler.version=1;},l=>{l.compiler.version=2;},l=>{l.compiler.version=3;},l=>{l.compiler.version=4;},l=>{l.schemaVersion=2;},l=>{l.modules[0].digest='0'.repeat(64);},l=>{l.modules[0].dependencies.push('invented');},l=>{l.components=[];},l=>{l.approved=true;}]){const bad=clone(lock);mutate(bad);await rejectsAsync(()=>m.compileProjectSpecification(content,bad),'COMPILER_LOCK_MISMATCH');}
+ for(const mutate of [l=>{l.compiler.digest='0'.repeat(64);},l=>{l.compiler.version=1;},l=>{l.compiler.version=2;},l=>{l.compiler.version=3;},l=>{l.compiler.version=4;},l=>{l.compiler.version=5;},l=>{l.schemaVersion=2;},l=>{l.modules[0].digest='0'.repeat(64);},l=>{l.modules[0].dependencies.push('invented');},l=>{l.components=[];},l=>{l.approved=true;}]){const bad=clone(lock);mutate(bad);await rejectsAsync(()=>m.compileProjectSpecification(content,bad),'COMPILER_LOCK_MISMATCH');}
  const available=[lock.compiler,...lock.modules,...lock.components].map(a=>({...a,state:'available'}));
  m.assertCompilerAvailable(lock,available);
  for(let n=0;n<available.length;n++){const withdrawn=clone(available);withdrawn[n].state='withdrawn';rejects(()=>m.assertCompilerAvailable(lock,withdrawn),'COMPILER_UNAVAILABLE');}
  rejects(()=>m.assertCompilerAvailable(lock,[]),'COMPILER_UNAVAILABLE');
- // project-content@5: instance configuration compiles against exact trusted pins as saved, inactive configuration
+ // project-content@6: instance configuration compiles against exact trusted pins as saved, inactive configuration
  // (serving needs WH-125 activation). Notification/automation modules, integrations and rules stay unavailable.
- assert.deepEqual([lock.compiler.id,lock.compiler.version,lock.schemaVersion],['project-content',5,3]);
+ assert.deepEqual([lock.compiler.id,lock.compiler.version,lock.schemaVersion],['project-content',6,3]);
  await rejectsAsync(()=>m.compileProjectSpecification(detailing,lock),'UNAVAILABLE_CAPABILITY');
  const configured={...clone(content),instances:clone(detailing.instances)},configuredOutput=await m.compileProjectSpecification(configured,lock);
  assert.deepEqual(configuredOutput.artifacts.map(a=>[a.path,a.digest]),output.artifacts.map(a=>[a.path,a.digest]),'Instances add no compiled artifact');
@@ -261,7 +261,7 @@ try{
  await rejectsAsync(()=>m.compileSpecificationRestore(configured,content,lock,['team']),'MIGRATION_REQUIRED');
  assert.deepEqual((await m.compileSpecificationRestore(configured,content,lock,configured.instances.map(i=>i.id))).requiredReviews,[]);
  assert.deepEqual((await m.compileSpecificationChange(configured,[remove('appointments')],lock,['appointments'])).compiled.artifacts[0].digest,output.artifacts[0].digest);
- const priorLock=clone(lock);priorLock.compiler.version=4;await rejectsAsync(()=>m.compileSpecificationRestore(content,configured,priorLock),'COMPILER_LOCK_MISMATCH');
+ const priorLock=clone(lock);priorLock.compiler.version=5;await rejectsAsync(()=>m.compileSpecificationRestore(content,configured,priorLock),'COMPILER_LOCK_MISMATCH');
  assert.deepEqual(m.transitionReviews(content,content),{reviews:[],migration:'none'});
  const stale=clone(detailing);instance(stale,'appointments').module.digest='0'.repeat(64);await rejectsAsync(()=>m.compileProjectSpecification(stale,lock),'STALE_MODULE_VERSION');
  const staleSchema=clone(detailing);instance(staleSchema,'team').schema.digest='f'.repeat(64);rejects(()=>m.assertModulesAvailable(staleSchema,m.moduleCatalog),'STALE_MODULE_VERSION');
@@ -313,19 +313,23 @@ try{
  const incompatible=clone(illustrated.specification);incompatible.pages[0].component='site-page@1';rejects(()=>m.validateSpecification(incompatible),'INCOMPATIBLE');
  const missing=clone(content);delete missing.pages[0].photos;rejects(()=>m.validateSpecification(missing),'MISSING_FIELD');
  const {photos:omitted,...oldInput}=page;await assert.rejects(m.compileNewWebsite(oldInput));
+ // The schema pins bind storage "current", which is only true while every lifecycle class they name is an admitted, current class.
+ const lifecycle=JSON.parse(await readFile('docs/data-lifecycle.json','utf8'));
+ for(const [kind,names] of Object.entries(m.moduleKinds))for(const id of names.lifecycleClasses)assert.equal(lifecycle.classes.find(c=>c.id===id)?.storageStatus,'current',kind+' '+id);
+ for(const e of m.moduleCatalog)assert.equal(e.schema.digest,hash(JSON.stringify({formatVersion:1,kind:e.kind,schema:{name:e.schema.name,version:1},lifecycleClasses:[...m.moduleKinds[e.kind].lifecycleClasses],storage:'current'},null,2)+'\n'));
  assert.equal(networkCalls,0);
- console.log('Compiler fixtures passed: project-content@5 instance-bearing compile/change/restore classification, never-activated modules.remove, and @3/@4 lock refusal, schema 3 module configuration (PNG/size/public audience/role/view/dependency refusals, staff upload/write), permission/additive/migration classification, exact module pins and withdrawals, detached edits, deterministic content/routes/themes/manifests, exact locks and withdrawals, escaped output, direct current creation, photos, sections/name edits and retired schema refusal, zero network/model calls.');
+ console.log('Compiler fixtures passed: project-content@6 instance-bearing compile/change/restore classification, never-activated modules.remove, and @3/@4 lock refusal, schema 3 module configuration (PNG/size/public audience/role/view/dependency refusals, staff upload/write), permission/additive/migration classification, exact module pins and withdrawals, detached edits, deterministic content/routes/themes/manifests, exact locks and withdrawals, escaped output, direct current creation, photos, sections/name edits and retired schema refusal, zero network/model calls.');
 }finally{globalThis.fetch=fetch;}
 
 // A second checkout/process proves input-path independence and that the build gate
 // rejects source/constant drift without rewriting any working-tree file.
 const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-compiler-lock-');
 try{
- const paths=[...checked.sources.map(s=>s.path),'tools/check-specification-compiler.mjs','compiler-locks/project-content-v5.json','src/project-specification/compiler-artifacts.generated.ts','src/project-specification/catalog.ts','package.json'];
+ const paths=[...checked.sources.map(s=>s.path),'tools/check-specification-compiler.mjs','compiler-locks/project-content-v6.json','src/project-specification/compiler-artifacts.generated.ts','src/project-specification/catalog.ts','package.json'];
  for(const path of paths){await mkdir(dirname(join(dir,path)),{recursive:true});await copyFile(path,join(dir,path));}
  await symlink(resolve('node_modules'),join(dir,'node_modules'),'dir');
  const run=args=>spawnSync(process.execPath,['tools/check-specification-compiler.mjs',...args],{cwd:dir,encoding:'utf8'});
- assert.equal(run(['--check']).status,0);
+ {const r=run(['--check']);assert.equal(r.status,0,r.stderr);}
  await writeFile(join(dir,'fixture.json'),JSON.stringify(content));
  await writeFile(join(dir,'compile-fixture.mjs'),`import {build} from 'esbuild';import {readFile} from 'node:fs/promises';
 globalThis.fetch=async()=>{throw Error('No compiler network');};

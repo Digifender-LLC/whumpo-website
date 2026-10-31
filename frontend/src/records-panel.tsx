@@ -1,7 +1,7 @@
 import {useRef,useState} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import {Link} from '@tanstack/react-router';
-import type {RecordsSummaryFacts} from '../../src/shared-modules/shape';
+import type {PublicFormState,RecordsSummaryFacts} from '../../src/shared-modules/shape';
 import {api,message} from './lib/api';
 import {Button} from './components/ui/button';
 import {Section} from './workspace-layout';
@@ -25,6 +25,12 @@ const who={public:'Anonymous form',visitor:'Visitor',staff:'Staff'} as const;
 const total=(s:Item['schemas'][number])=>s.records.public+s.records.visitor+s.records.staff;
 const shown=(v:unknown)=>typeof v==='boolean'?(v?'Yes':'No'):String(v);
 
+const publicForm:Record<Exclude<PublicFormState,'none'>,string>={bound:'Open to anonymous visitors on the live website version.',inactive:'Closed: this module is not active. Review activation in Chat to open it.',
+ unpublished:'Closed: the website is not published. Publish it, then review activation to open the form.',stale:'Closed: the website changed after this module was activated. Review activation to reopen the form for the live version.'};
+/** Whether a public form accepts anonymous submissions and, if not, why. Plain text in a status region; no colour carries the meaning. */
+export function PublicFormNote({state}:{state:PublicFormState}){
+ return state==='none'?null:<p role="status" className="rounded-md border border-line bg-surface-raised p-3 text-body-sm break-words"><span className="font-medium">Public form: </span>{publicForm[state]}</p>;
+}
 /** WH-127 `records.summary@1` card: counts per records instance and schema, never a value. Opening the private records
  * panel is a navigation only; values are read there from the owner list route, not through Chat or this binding. */
 export function RecordsSummaryCard({facts,projectId}:{facts:RecordsSummaryFacts;projectId:string}){
@@ -33,6 +39,7 @@ export function RecordsSummaryCard({facts,projectId}:{facts:RecordsSummaryFacts;
    <p className="font-semibold break-words">{i.localId} · {states[i.state]} · kept {i.retentionDays} days</p>
    <ul className="space-y-1">{i.schemas.map(s=><li key={s.recordId}>{s.recordId}: {total(s)} record{total(s)===1?'':'s'} ({s.records.public} anonymous, {s.records.visitor} visitor, {s.records.staff} staff)</li>)}</ul>
    {i.forms.length>0&&<p className="text-ink-muted">Forms: {i.forms.map(f=>`${f.formId} (${f.submit})`).join(', ')}</p>}
+   <PublicFormNote state={i.publicForm}/>
   </section>)}
   <Button asChild variant="secondary" className="min-h-11"><Link to="/workspace/$view" params={{view:'records'}} search={{project:projectId}}>Open form records</Link></Button>
   <p className="text-caption text-ink-muted">Submitted values stay in the private records panel. They are not shown in Chat or sent to AI.</p>
@@ -78,6 +85,7 @@ export function RecordsPanel(){
   {project&&<><QueryStatus pending={summary.isPending} error={summary.error}/>
    {summary.data&&!options.length&&<StateNote title="No records module is registered for this project.">Ask Whumpo in Chat to add a form that collects records.</StateNote>}
    {options.length>0&&<label className="flex flex-col gap-2 text-body-sm font-medium">Records<select value={current} onChange={e=>setSelected(e.target.value)} className="h-11 px-3 border border-line rounded-md bg-surface-raised">{options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select></label>}
+   {summary.data?.items.filter(i=>i.resourceId===current.split('/')[0]).map(i=><PublicFormNote key={i.resourceId} state={i.publicForm}/>)}
    {summary.data?.items.flatMap(i=>i.forms.filter(f=>i.resourceId+'/'+f.recordId===current).map(f=><NoticeSetup key={project+i.localId+f.formId+(summary.data!.notifications.forms.find(x=>x.instanceId===i.localId&&x.formId===f.formId)?.revision??0)} project={project} instance={i.localId} form={f.formId} submit={f.submit} setup={summary.data!.notifications}/>))}
    {current&&<RecordList key={project+current} project={project} resourceId={current.split('/')[0]} recordId={current.split('/')[1]} onChanged={()=>void summary.refetch()}/>}
   </>}

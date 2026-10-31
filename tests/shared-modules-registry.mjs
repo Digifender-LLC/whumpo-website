@@ -45,7 +45,7 @@ const accessInstance={id:'members',kind:'access',...pins('access'),dependencies:
 const recordFields=[{key:'name',label,type:'text',optional:false,read:'owner'},{key:'note',label:'Note',type:'text',optional:true,read:'staff'}];
 const recordsInstance=(fields=recordFields,fieldsRevision=1)=>({id:'requests',kind:'records',...pins('records'),dependencies:['members'],
  config:{retentionDays:90,schemas:[{id:'request',fieldsRevision,fields,staffWrite:[]}],forms:[{id:'request-form',recordId:'request',submit:'public',uploadCollectionId:null}],views:[]}});
-/** Instances reach the saved head only through the real owner path (project-content@5): an exact modules.put review
+/** Instances reach the saved head only through the real owner path (project-content@6): an exact modules.put review
  * prepared as the AI turn's statements, then the recent-sign-in specificationApply control. */
 const configure=(o,instances)=>configureFixtureModules(o.scope,o.user,o.project,instances);
 const headSpec=async o=>JSON.parse((await row('SELECT v.spec_json FROM project_spec_heads h JOIN project_spec_versions v ON v.version_id=h.version_id WHERE h.project_id=?',o.project)).spec_json);

@@ -40,6 +40,15 @@ export const moduleOperations=Object.freeze({
  'collections.readPublic':{kind:'content',write:false},
 } as const satisfies Record<string,{kind:ModuleKind;write:boolean}>);
 export type ModuleOperation=keyof typeof moduleOperations;
+/** WH-067 decision D4 (October 31, 2026): these four operations stay in the closed set but are permanently replaced by delivered
+ * paths and never get a handler (an engine request for one is `unavailable`). A test fails if one gains a handler or if any other
+ * operation lacks one. */
+export const replacedOperations=Object.freeze({
+ 'files.prepareUpload':'files.putBytes carries the declared metadata and the bytes in one request',
+ 'files.requestRemoval':'the owner photo removal review, which respects saved-version references and safety holds',
+ 'access.prepareRole':'the accessRoleReview Chat control',
+ 'access.confirmRole':'the accessRoleApply Chat control (recent sign-in)',
+} as const satisfies Partial<Record<keyof typeof moduleOperations,string>>);
 export type ModuleRequest={api:'whumpo-modules';version:1;operation:ModuleOperation;resourceId:string;configRevision:number;requestId:string|null;target:Record<string,unknown>|null;input:Record<string,unknown>|null};
 
 const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(v);

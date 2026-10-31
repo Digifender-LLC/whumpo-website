@@ -159,6 +159,7 @@
     "test:mobile-projects": "node tests/mobile-projects.mjs && node tests/mobile-projects.mjs --d1",
     "test:mobile-photos": "node tests/mobile-photos.mjs && node tests/mobile-photos.mjs --d1",
     "test:notification-setup-browser": "node tests/notification-setup-browser.mjs",
+    "test:public-form-note-browser": "node tests/public-form-note-browser.mjs",
     "test:notification-configurations": "node tests/notification-configurations.mjs && node tests/notification-configurations.mjs --d1",
     "test:notification-recipients": "node tests/notification-recipients.mjs && node tests/notification-recipients.mjs --d1",
     "test:form-attachments": "node tests/form-attachments.mjs && node tests/form-attachments.mjs --d1",
