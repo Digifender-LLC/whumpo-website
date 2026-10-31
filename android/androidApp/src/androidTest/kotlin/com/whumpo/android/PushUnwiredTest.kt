@@ -22,10 +22,13 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class PushUnwiredTest {
     private val context get() = Fixtures.app
+    // PackageInfoFlags.of(long) exists only from API 33 and crashed this test on API 28 (NoSuchMethodError). The int overload
+    // is deprecated but is the one that exists on every API level this app supports (minSdk 28), so the pin holds on all of them.
+    @Suppress("DEPRECATION")
     private val info
         get() = context.packageManager.getPackageInfo(
             context.packageName,
-            PackageManager.PackageInfoFlags.of((PackageManager.GET_PERMISSIONS or PackageManager.GET_SERVICES or PackageManager.GET_RECEIVERS or PackageManager.GET_PROVIDERS).toLong()),
+            PackageManager.GET_PERMISSIONS or PackageManager.GET_SERVICES or PackageManager.GET_RECEIVERS or PackageManager.GET_PROVIDERS,
         )
 
     @Test
