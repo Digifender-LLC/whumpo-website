@@ -5,7 +5,7 @@ import {hashToken} from './security';
 
 export const stripeVersion='2025-02-24.acacia';
 export const stripeApp='whumpo-sandbox-v1';
-type Config={STRIPE_TEST_KEY?:string;STRIPE_WEBHOOK_SECRET?:string;STRIPE_SANDBOX_CATALOG?:string};
+type Config={STRIPE_TEST_KEY?:string;STRIPE_WEBHOOK_SECRET?:string;STRIPE_SANDBOX_CATALOG?:string;STRIPE_CHECKOUT_OPEN?:string};
 type Catalog={version:1;prices:Record<string,string>;portal:string};
 type Order={id:string;user_id:string;plan_id:string;interval:'month'|'year';price_id:string;amount_cents:number;created_at:number;state:string;session_id:string|null;subscription_id:string|null};
 type Customer={user_id:string;customer_id:string|null;created_at:number};
@@ -19,6 +19,8 @@ const now=()=>Math.floor(Date.now()/1000);
 const objectId=(id:unknown,prefix:string):id is string=>typeof id==='string'&&new RegExp('^'+prefix+'_[A-Za-z0-9]+$').test(id);
 function requireMatch(value:unknown){if(!value)throw new BillingError(409,'Stripe sandbox details do not match the saved billing record.');}
 function catalog(env:Config):Catalog{
+ // Owner decision Q-007: checkout stays closed unless exactly 'true'. One choke point for every Stripe path.
+ if(env.STRIPE_CHECKOUT_OPEN!=='true')throw new BillingError(503,"Checkout isn't open yet. Explore is still available.");
  try{
   if(!stripeTestConfigured(env))throw Error();
   const c=JSON.parse(env.STRIPE_SANDBOX_CATALOG??'') as Catalog;
