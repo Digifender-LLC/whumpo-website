@@ -19,7 +19,7 @@ function shape(value:unknown,keys:readonly string[],path:string):asserts value i
 
 /** Frozen vocabularies (contract version 1). There is no reader for any other version. */
 export const contractVersion=1;
-export const domainPurchaseBounds=Object.freeze({quoteTtlMs:15*60000,reviewTtlMs:10*60000,leaseMs:60000,reconcileReads:3,reconcileWindowMs:72*3600000,transferLockMs:60*86400000,maxTotalCents:100000});
+export const domainPurchaseBounds=Object.freeze({quoteTtlMs:15*60000,reviewTtlMs:10*60000,leaseMs:60000,reconcileReads:3,reconcileWindowMs:72*3600000,reconcileSpacingMs:6*3600000,transferLockMs:60*86400000,maxTotalCents:100000});
 /** v1 funds a purchase only from the owner's current payment method (WH-042). Premium AI credit (WH-044), build/test units and plan benefits are not domain funding. */
 export const fundingSourceKinds:readonly string[]=Object.freeze(['payment-method']);
 

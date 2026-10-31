@@ -4,10 +4,10 @@
  * statement. The pure module (order.ts) still decides; nothing here calls a registrar except `dispatch`, which calls register only after
  * the claim committed. A caller that loses a race gets `false`/`null`, never a second purchase. No auth code is read or stored here. */
 import {canonicalJSON} from '../project-specification/v2/json';
-import {applyRegistrarEvent,cancelOrder,consentToOrder,dispatchOrder,expireDispatchLease,orderIdempotencyKey,reconcileOrder,reserveOrder} from './order';
+import {applyRegistrarEvent,cancelOrder,consentToOrder,dispatchOrder,expireDispatchLease,expireStale,orderIdempotencyKey,reconcileOrder,reserveOrder} from './order';
 import type {ConsentInput,Order,OrderStep,RegistrarEvent} from './order';
-import {DomainPurchaseError,check,consentText,domainPurchaseBounds} from './quote';
-import type {Actor,DomainPurchaseQuote,DomainPurchaseReview,OwnerFunding,PurchasePolicy} from './quote';
+import {DomainPurchaseError,check,consentText,domainPurchaseBounds,registrableName} from './quote';
+import type {Actor,DomainPurchaseQuote,DomainPurchaseReview,OwnerFunding,ProjectAuthority,PurchasePolicy} from './quote';
 import type {RegistrarAdapter} from './registrar';
 
 type Db=Pick<D1Database,'prepare'|'batch'>;
@@ -26,6 +26,7 @@ const toOrder=(r:OrderRow):StoredOrder=>({contractVersion:1,orderId:r.order_id,i
 
 /** Persist the quote and its exact review in one batch. A repeated prepare with the same ids is an error, never an overwrite. */
 export async function saveReview(db:Db,quote:DomainPurchaseQuote,review:DomainPurchaseReview,now:number){
+ registrableName(quote.hostname);registrableName(review.hostname);
  await db.batch([
   db.prepare('INSERT INTO domain_quotes(quote_id,owner_user_id,project_id,hostname,quote_json,quote_digest,quoted_at,expires_at) VALUES(?,?,?,?,?,?,?,?)')
    .bind(quote.quoteId,quote.ownerId,quote.projectId,quote.hostname,canonicalJSON(quote),review.quoteDigest,quote.quotedAt,quote.expiresAt),
@@ -53,7 +54,7 @@ export async function saveRegistrantContact(db:Db,actor:Actor,reviewId:string,co
 
 /** Orders of any tenant that share the idempotency key or the name: the module's `related` input. */
 export async function relatedOrders(db:Db,idempotencyKey:string,hostname:string):Promise<StoredOrder[]>{
- return (await db.prepare(`SELECT ${orderColumns} FROM domain_orders WHERE idempotency_key=?1 OR hostname=?2`).bind(idempotencyKey,hostname).all<OrderRow>()).results.map(toOrder);
+ return (await db.prepare(`SELECT ${orderColumns} FROM domain_orders WHERE idempotency_key=?1 OR (hostname=?2 AND released=0)`).bind(idempotencyKey,hostname).all<OrderRow>()).results.map(toOrder);
 }
 export async function loadOrder(db:Db,ownerId:string,orderId:string){
  const r=await db.prepare(`SELECT ${orderColumns} FROM domain_orders WHERE order_id=?1 AND owner_user_id=?2`).bind(orderId,ownerId).first<OrderRow>();
@@ -66,7 +67,7 @@ async function loadQuote(db:Db,quoteId:string){
 /** One guarded transition: wins only while the stored version is still the one the step started from. The triggers settle the hold and write the registration. */
 async function commit(db:Db,step:OrderStep,now:number){
  const o=step.order as StoredOrder,reg=step.registration;
- const r=await db.prepare(`UPDATE domain_orders SET state=?1,history_json=?2,attempts=?3,attempt_id=?4,attempt_started_at=?5,reconcile_reads=?6,uncertain_at=?7,registration_expires_at=?8,charge_mismatch=?9,updated_at=?10,version=version+1
+ const r=await db.prepare(`UPDATE domain_orders SET state=?1,history_json=?2,attempts=?3,attempt_id=?4,attempt_started_at=?5,reconcile_reads=?6,uncertain_at=?7,registration_expires_at=?8,charge_mismatch=?9,updated_at=max(?10,updated_at),version=version+1
   WHERE order_id=?11 AND version=?12 RETURNING version`)
   .bind(o.state,JSON.stringify(o.history),o.attempts,o.attempt?.attemptId??null,o.attempt?.startedAt??null,o.reconcileReads,o.uncertainAt,reg?.expiresAt??null,reg?(reg.chargeMismatch===null?null:Number(reg.chargeMismatch)):null,now,o.orderId,o.version).first<{version:number}>();
  return r?r.version:null;
@@ -104,19 +105,24 @@ export async function reserve(db:Db,ownerId:string,orderId:string,now:number){
  if(!noChange(step,order))await commit(db,step,now);// a lost race means someone else already reserved or expired it
  return loadOrder(db,ownerId,orderId);
 }
-export type DispatchRequest={db:Db;ownerId:string;orderId:string;owner:OwnerFunding|null|undefined;registrar:RegistrarAdapter;policy:PurchasePolicy;now:number};
+/** `project` is the server-resolved current project authority; a changed revision or owner since the review cancels the order before the purchase call. */
+export type DispatchRequest={db:Db;ownerId:string;orderId:string;owner:OwnerFunding|null|undefined;project:ProjectAuthority|null|undefined;registrar:RegistrarAdapter;policy:PurchasePolicy;now:number};
 /** Claim, then call register at most once. The claim is the attempt row: a second claim cannot insert one, so a second call cannot follow. */
-export async function dispatch({db,ownerId,orderId,owner,registrar,policy,now}:DispatchRequest){
+export async function dispatch({db,ownerId,orderId,owner,project,registrar,policy,now}:DispatchRequest){
  const order=await loadOrder(db,ownerId,orderId),quote=order&&await loadQuote(db,order.quoteId);
  if(!order||!quote)return null;
- const result=await dispatchOrder({order,quote,owner,registrar,policy,now,claim:async claimed=>{
+ const reviewed=await db.prepare('SELECT project_revision FROM domain_reviews WHERE review_id=?').bind(order.reviewId).first<{project_revision:number}>();
+ const stale=!(project&&project.projectId===order.projectId&&project.ownerId===order.ownerId&&reviewed&&project.revision===reviewed.project_revision);
+ const result=await dispatchOrder({order,quote,owner,registrar,policy,now,stale,claim:async claimed=>{
   const version=await commit(db,{order:claimed,hold:null,registration:null},now);
   if(version===null)return false;
   (claimed as StoredOrder).version=version;return true;
  }});
  // After a claim the outcome step continues from the claimed version; an expiry or price-change step continues from the stored one.
- if(!noChange(result,order)||result.claimed)await commit(db,result,now);
- return {...result,order:(await loadOrder(db,ownerId,orderId)) as StoredOrder};
+ // A step that lost its compare-and-set carries no settlement: a slow worker must not hand a capture or a registration to its caller.
+ const won=(!noChange(result,order)||result.claimed)?await commit(db,result,now):1;
+ const settled=won===null?{...result,hold:null,registration:null}:result;
+ return {...settled,order:(await loadOrder(db,ownerId,orderId)) as StoredOrder};
 }
 /** Owner cancellation, only before the purchase call. */
 export async function cancel(db:Db,actor:Actor,orderId:string,now:number){
@@ -124,20 +130,33 @@ export async function cancel(db:Db,actor:Actor,orderId:string,now:number){
  const step=cancelOrder({actor,order});
  return (await commit(db,step,now))===null?null:loadOrder(db,actor.ownerId,orderId);
 }
+/** Sweep for orders no worker will finish: consented or reserved orders whose quote expired are expired (the hold of a reserved one is released), so they stop blocking the name for every tenant. */
+export async function sweepStranded(db:Db,now:number,limit=50){
+ const rows=(await db.prepare(`SELECT ${orderColumns.split(',').map(c=>'o.'+c).join(',')} FROM domain_orders o JOIN domain_quotes q ON q.quote_id=o.quote_id WHERE o.state IN ('consented','reserved') AND q.expires_at<=?1 ORDER BY q.expires_at LIMIT ?2`).bind(now,limit).all<OrderRow>()).results;
+ let moved=0;
+ for(const row of rows){
+  const order=toOrder(row),quote=await loadQuote(db,order.quoteId);
+  if(!quote)continue;
+  try{if(await commit(db,expireStale({order,quote,now}),now)!==null)moved++;}catch{/* one bad row never stops the sweep */}
+ }
+ return {moved};
+}
 /** Sweep: dispatches claimed longer than the lease ago become unknown-outcome (the purchase may have happened). Bounded; losers of a race are skipped. */
 export async function sweepLeases(db:Db,now:number,limit=50){
  const rows=(await db.prepare(`SELECT ${orderColumns} FROM domain_orders WHERE state='dispatching' AND attempt_started_at<=?1 ORDER BY attempt_started_at LIMIT ?2`).bind(now-domainPurchaseBounds.leaseMs,limit).all<OrderRow>()).results;
  let moved=0;
- for(const row of rows){const order=toOrder(row);if(await commit(db,expireDispatchLease({order,now}),now)!==null)moved++;}
+ for(const row of rows){const order=toOrder(row);try{if(await commit(db,expireDispatchLease({order,now}),now)!==null)moved++;}catch{/* one bad row never stops the sweep */}}
  return {moved};
 }
-/** Bounded read-only reconciliation of unknown outcomes. Never calls register; each read is counted before the next. */
+/** Bounded read-only reconciliation of unknown outcomes: at most three reads, at least six hours apart, within 72 hours. Never calls register. */
 export async function reconcileUnknown(db:Db,registrar:RegistrarAdapter,now:number,limit=20){
- const rows=(await db.prepare(`SELECT ${orderColumns} FROM domain_orders WHERE state='unknown-outcome' ORDER BY uncertain_at LIMIT ?1`).bind(limit).all<OrderRow>()).results;
+ const rows=(await db.prepare(`SELECT ${orderColumns} FROM domain_orders WHERE state='unknown-outcome' AND updated_at<=?2 ORDER BY updated_at LIMIT ?1`).bind(limit,now-domainPurchaseBounds.reconcileSpacingMs).all<OrderRow>()).results;
  let moved=0;
  for(const row of rows){
-  const order=toOrder(row),step=await reconcileOrder({order,registrar,now});
-  if(!noChange(step,order)&&await commit(db,step,now)!==null)moved++;
+  try{
+   const order=toOrder(row),step=await reconcileOrder({order,registrar,now});
+   if(!noChange(step,order)&&await commit(db,step,now)!==null)moved++;
+  }catch{/* a thrown lookup costs this order one retry later, not the whole batch */}
  }
  return {moved};
 }
@@ -153,7 +172,7 @@ export async function receiveRegistrarEvent(db:Db,event:RegistrarEvent,now:numbe
  const o=step.order as StoredOrder,reg=step.registration;
  // The order change and the event receipt are one batch: the receipt is written only if the change won.
  const [update]=await db.batch([
-  db.prepare(`UPDATE domain_orders SET state=?1,history_json=?2,registration_expires_at=?3,charge_mismatch=?4,updated_at=?5,version=version+1 WHERE order_id=?6 AND version=?7 RETURNING version`)
+  db.prepare(`UPDATE domain_orders SET state=?1,history_json=?2,registration_expires_at=?3,charge_mismatch=?4,updated_at=max(?5,updated_at),version=version+1 WHERE order_id=?6 AND version=?7 RETURNING version`)
    .bind(o.state,JSON.stringify(o.history),reg?.expiresAt??null,reg?(reg.chargeMismatch===null?null:Number(reg.chargeMismatch)):null,now,o.orderId,o.version),
   remember(1)]);
  return update.results.length===1?outcome:{applied:false as const,stale:true as const};

@@ -133,19 +133,26 @@ try{
    await run('INSERT INTO module_record_files(entry_id,file_id,instance_id,project_id,request_id) VALUES(?,?,?,?,?)',entry,file,recordsInstance,app,request);
    // WH-093 (schema batch 6): the owner's lead row over that record.
    await run("INSERT INTO module_record_leads(entry_id,instance_id,project_id,stage,note,due_date,revision,last_request_id,created_at,updated_at) VALUES(?,?,?,'contacted','Synthetic drill note','2026-11-05',1,?,?,?)",entry,recordsInstance,app,request,at,at);
-   // WH-194 (schema group C2): a reserved order (its hold is written by the transition) and a registered one with its registration, attempt and event.
-   for(const [label,host] of [['reserved','drill-reserved.example'],['registered','drill-registered.example']]){
+   // WH-194 (schema group C2): a cancelled order (its hold was placed by the reservation and released), a registered one with its registration, attempt and event, and a draft review with the owner's registrant contact. A reserved or dispatching order is not seeded: restore admission refuses to restore one (uncertain-effect).
+   for(const [label,host] of [['cancelled','drill-cancelled.example'],['registered','drill-registered.example']]){
     const quote=id(),review=id(),order=id(),q=JSON.stringify({quoteId:quote,ownerId:owner.account,projectId:app,hostname:host,quotedAt:ms,expiresAt:ms+600000,contractVersion:1,operation:'register',autoRenew:false,premium:false,funding:{sourceKind:'payment-method',sourceId:'pm-drill',benefitCents:0,customerChargeCents:1300},initial:{totalCents:1300}});
     await run('INSERT INTO domain_quotes(quote_id,owner_user_id,project_id,hostname,quote_json,quote_digest,quoted_at,expires_at) VALUES(?,?,?,?,?,?,?,?)',quote,owner.account,app,host,q,hash(q),ms,ms+600000);
     await run('INSERT INTO domain_reviews(review_id,quote_id,quote_digest,owner_user_id,project_id,project_revision,hostname,funding_source_id,consent_text_digest,created_at,expires_at) VALUES(?,?,?,?,?,1,?,?,?,?,?)',review,quote,hash(q),owner.account,app,host,'pm-drill',hash('consent'),ms,ms+300000);
     await run("INSERT INTO domain_orders(order_id,idempotency_key,review_id,quote_id,quote_digest,owner_user_id,project_id,hostname,state,history_json,consented_at,updated_at) VALUES(?,?,?,?,?,?,?,?,'consented','[\"quoted\",\"consented\"]',?,?)",order,hash(order),review,quote,hash(q),owner.account,app,host,ms+1,ms+1);
     const move=(state,history,extra='')=>run(`UPDATE domain_orders SET state=?,history_json=?,updated_at=?,version=version+1${extra} WHERE order_id=?`,state,JSON.stringify(history),ms+2,order);
     await move('reserved',['quoted','consented','reserved']);
+    if(label==='cancelled')await move('cancelled',['quoted','consented','reserved','cancelled:owner-cancelled']);
     if(label==='registered'){
      await move('dispatching',['quoted','consented','reserved','dispatching'],`,attempts=1,attempt_id='${order}:a1',attempt_started_at=${ms+2}`);
      await move('registered',['quoted','consented','reserved','dispatching','registered'],`,registration_expires_at=${ms+365*86400000},charge_mismatch=0`);
      await run("INSERT INTO domain_registrar_events(event_id,order_id,attempt_id,event_type,applied,received_at) VALUES(?,?,?,'registered',1,?)",id(),order,order+':a1',ms+3);
     }
+   }
+   {
+    const quote=id(),review=id(),host='drill-draft.example',q=JSON.stringify({quoteId:quote,ownerId:owner.account,projectId:app,hostname:host,quotedAt:ms,expiresAt:ms+600000,contractVersion:1,operation:'register',autoRenew:false,premium:false,funding:{sourceKind:'payment-method',sourceId:'pm-drill',benefitCents:0,customerChargeCents:1300},initial:{totalCents:1300}});
+    await run('INSERT INTO domain_quotes(quote_id,owner_user_id,project_id,hostname,quote_json,quote_digest,quoted_at,expires_at) VALUES(?,?,?,?,?,?,?,?)',quote,owner.account,app,host,q,hash(q),ms,ms+600000);
+    await run('INSERT INTO domain_reviews(review_id,quote_id,quote_digest,owner_user_id,project_id,project_revision,hostname,funding_source_id,consent_text_digest,created_at,expires_at) VALUES(?,?,?,?,?,1,?,?,?,?,?)',review,quote,hash(q),owner.account,app,host,'pm-drill',hash('consent'),ms,ms+300000);
+    await run("INSERT INTO domain_registrant_contacts(review_id,owner_user_id,contact_name,street,city,country,phone,email,created_at) VALUES(?,?,'Synthetic Owner','1 Test Street','Testville','US','+1.5550100','owner@example.test',?)",review,owner.account,ms);
    }
    // WH-157 recipients (schema batch 3c): a verified visitor notification address, a consenting record and a staff opt-in. The staff grant is
    // written directly (its reviewed Chat path is tests/shared-modules-access.mjs), so that one trigger is off for the seed and restored.
@@ -171,7 +178,7 @@ try{
    await run("INSERT INTO workspace_layout_receipts(request_id,user_id,request_hash,request_json,from_revision,to_revision,previous_json,layout_json,created_at) VALUES(?,?,?,'{}',?,?,?,?,?)",id(),owner.account,hash('layout'+n),previous.revision,previous.revision+1,previous.layout_json,next,iso);
    await run('UPDATE workspace_preferences SET revision=?,layout_json=?,updated_at=? WHERE user_id=?',previous.revision+1,next,iso,owner.account);
   }
-  for(const t of ['review_receipts','cost_events','lookup_consents','connector_receipts','account_closures','rule_approvals','owner_email_changes','owner_email_change_limits','owner_security_reviews','workspace_layout_receipts','job_journal','job_journal_events','job_outbox','module_records','module_files','module_record_files','module_record_leads','domain_quotes','domain_reviews','domain_orders','domain_funding_holds','domain_order_attempts','domain_registrar_events','domain_registrations','visitor_notification_addresses','staff_notification_optins','identity_handoffs','push_devices','push_events','notification_notices','notification_send_ledger'])seeded[t]=(await db.prepare(`SELECT count(*) n FROM ${t}`).first()).n;
+  for(const t of ['review_receipts','cost_events','lookup_consents','connector_receipts','account_closures','rule_approvals','owner_email_changes','owner_email_change_limits','owner_security_reviews','workspace_layout_receipts','job_journal','job_journal_events','job_outbox','module_records','module_files','module_record_files','module_record_leads','domain_quotes','domain_reviews','domain_orders','domain_funding_holds','domain_registrant_contacts','domain_order_attempts','domain_registrar_events','domain_registrations','visitor_notification_addresses','staff_notification_optins','identity_handoffs','push_devices','push_events','notification_notices','notification_send_ledger'])seeded[t]=(await db.prepare(`SELECT count(*) n FROM ${t}`).first()).n;
   assert.ok(Object.values(seeded).every(n=>n>=1)&&seeded.workspace_layout_receipts===50,JSON.stringify(seeded));
  }
  const reference=async(database,runtime)=>{
