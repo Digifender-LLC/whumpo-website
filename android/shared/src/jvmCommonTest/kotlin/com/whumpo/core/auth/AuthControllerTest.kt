@@ -331,12 +331,17 @@ class AuthControllerTest {
     }
 
     @Test
-    fun aReturnWithTheWrongStateIsRefusedWithoutAnExchange() = test {
+    fun aReturnWithTheWrongStateIsIgnoredAndTheHandoffKeepsWaiting() = test {
         auth.signInWithBrowser()
         await(AuthState.WaitingForBrowser())
         auth.onReturn("https://whumpo.com/app/return?code=$code&state=${"x".repeat(43)}")
-        await(AuthState.SignedOut(AuthProblem.HandoffFailed))
+        settle()
+        assertEquals(AuthState.WaitingForBrowser(), auth.state.value)
         assertFalse(paths().contains("/session/handoff/exchange"))
+        // The real return still completes afterwards: the stray link did not burn the pending hand-off.
+        auth.onReturn(returnLink())
+        await(AuthState.Ready)
+        assertTrue(paths().contains("/session/handoff/exchange"))
     }
 
     @Test

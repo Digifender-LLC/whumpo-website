@@ -536,6 +536,20 @@ class MobileApiClientTest {
     }
 
     @Test
+    fun overloadNeverRejectsTheSession() = runTest {
+        // An anonymous call refused as identity_changed has no session to reject; a retryable 503 on a signed-in call keeps it too.
+        val changed = FakeSessions(token)
+        val anonymous = MobileApiClient(MockEngine { reply(identityChanged.num("status"), identityChanged["body"].toString()) }, base, current, changed, TestTimeSource())
+        assertFailsWith<MobileApiException.IdentityChanged> { anonymous.loginOptions() }
+        assertEquals(0, changed.rejected)
+        val busy = errorCases.getValue("unavailable").jsonObject
+        val sessions = FakeSessions(token)
+        val signedIn = MobileApiClient(MockEngine { reply(busy.num("status"), busy["body"].toString()) }, base, current, sessions, TestTimeSource())
+        assertFailsWith<MobileApiException.Unavailable> { signedIn.reauthOptions() }
+        assertEquals(0, sessions.rejected)
+    }
+
+    @Test
     fun onlyOneRetryEverHappens() = runTest {
         val sessions = FakeSessions(token)
         val race = Race(failures = 5)
