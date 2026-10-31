@@ -8,7 +8,12 @@ import com.whumpo.android.auth.CustomTabsBrowser
 import com.whumpo.android.ui.chat.ReauthHook
 import com.whumpo.android.ui.common.AppLinks
 import com.whumpo.android.ui.photos.AndroidPhotoPreparer
+import com.whumpo.android.ui.photos.AndroidPhotoPreviewer
+import com.whumpo.android.ui.share.PhotoPreviewer
 import com.whumpo.android.ui.photos.PhotoPreparer
+import com.whumpo.android.ui.photos.UploadStore
+import com.whumpo.core.data.StoredUploadStore
+import com.whumpo.android.ui.share.ShareInbox
 import com.whumpo.android.ui.shell.DeepLink
 import com.whumpo.android.ui.theme.ThemeStore
 import com.whumpo.core.account.AccountStateStore
@@ -31,6 +36,7 @@ import com.whumpo.core.push.PushMessaging
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -77,8 +83,15 @@ class AppContainer(
 
     /** A verified App Link waiting for the owner to be signed in. In memory only: it is gone if the process dies. */
     val deepLinks = DeepLinkInbox()
+    val shares = ShareInbox()
+
     /** Credential Manager, unless an emulator test installs a software authenticator through [SwitchablePasskeys.override]. */
     val passkeys = SwitchablePasskeys(CredentialManagerPasskeys(app, activities))
+    init {
+        // A pending share belongs to the account it arrived for: sign-out or another account drops it (see ShareInbox).
+        scope.launch { shares.clearWhenAccountChanges(accountState.activeAccount) }
+    }
+
     val auth = AuthController(
         api = mobileApi,
         sessions = sessions,
@@ -100,5 +113,7 @@ class AppContainer(
 
     val themes: ThemeStore = PrefsThemeStore(app)
     val photoPreparer: PhotoPreparer = AndroidPhotoPreparer(app.contentResolver)
+    val previewer: PhotoPreviewer = AndroidPhotoPreviewer(app.contentResolver)
+    val uploads: UploadStore = StoredUploadStore(accountState, io)
     val links = AppLinks(environment.origin)
 }

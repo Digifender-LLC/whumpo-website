@@ -10,6 +10,9 @@ enum class StateKind(val fileTag: String) {
 
     /** The original payload, revision and request id of a submitted operation. */
     PENDING_OPERATION("pending"),
+
+    /** A prepared photo (exact bytes, name, project and upload ID) kept so an interrupted upload retries the same request. */
+    UPLOAD("upload"),
 }
 
 /** One named record of a [StateKind], e.g. `StateSlot(DRAFT, "chat")`. */
@@ -22,6 +25,8 @@ data class StateSlot(val kind: StateKind, val name: String) {
 
     companion object {
         private val NAME_PATTERN = Regex("[a-z0-9][a-z0-9-]{0,63}")
+
+        fun isValidName(name: String): Boolean = NAME_PATTERN.matches(name)
 
         val CHAT_DRAFT = StateSlot(StateKind.DRAFT, "chat")
     }
