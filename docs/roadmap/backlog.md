@@ -1159,7 +1159,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 ## WH-115 — Implement recovery-kit download and restricted replacement enrollment
 
-Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: L.
+Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **blocked**. Kind: implementation. Size: L.
 
 Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
@@ -1196,7 +1196,7 @@ Users can save or print an account recovery kit and replace lost passkeys withou
 
 Planning dependencies: WH-114. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+- Orca (V3, 'manually verify keyboard and screen-reader operation'): no real screen reader on the agent host. Real printers and a saved PDF on a device belong to WH-005 A7. The engine is delivered and has run in deployed tests, so dependents treat it as met (D54)
 
 ### References
 
@@ -1231,6 +1231,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/69. Planning owner: Unassigned
 - 2026-10-02: #72 current-only test cutover completed with release 40e45c39-037a-42da-802c-5eacc75bde77 (6c73ac5). New empty D1 has exact 156-table/702-object schema; four Workers, all 39 served assets and binding/secret inventories pass independent readback. Live signed synthetic two-key login, welcome/first-project, logout and revocation pass with fixture cleanup and zero inference. Mobile entry screenshot inspected. Old test account/database and PASSWORD_PEPPER retired, remaining script/bindings unchanged; fresh owner invite saved privately. Physical-device enrollment, human Turnstile/live recovery and native/parent beta gates remain open. CSAM, Daybreak and CMS testing remain deferred. See docs/identity-web.md final release evidence.
 - 2026-10-31 UTC, NOT closed (PR #529; main be4e6bf (origin/main at 2026-10-31), Node 24.21.0, pnpm 11.19.0, disposable local SQLite/local D1, no network, credential, secret or provider call). Re-run today and passing: identity-authority (74 checks), identity-ceremonies (67), identity-kits (47), identity-recovery (64), identity-http (46), workspace-admission (22), identity-browser --d1 and workspace-identity-browser --d1 in Chromium with virtual authenticators. Acceptance lines 2 to 6 map to those suites. Line 1 is NOT met by the evidence: tests/identity-browser.mjs replaces the print iframe's window.print with a stub and compares the print document's text with the kit, so Print / Save as PDF is not shown to produce a printable page or a saved PDF, and no desktop or mobile print layout or saved PDF was inspected (the verification list asks for it); no screen-reader pass over the kit and recovery flow is recorded either (keyboard operation is covered by the browser journey). Missing to close: render the print view to a PDF in Chromium and check its text and layout at desktop and mobile widths, and one recorded screen-reader pass. Physical-device enrollment, human Turnstile and live recovery stay in WH-005.
 - 2026-10-31 UTC, NOT closed. Line 1 print half now has evidence: tests/identity-browser.mjs --d1 (headless Chromium, Node 24.21.0) takes the exact print iframe document the page builds (the window.print stub still stands in for the OS dialog), renders it with page.pdf() to A4 and Letter, and reads the PDFs back with poppler: one page, PDF Title 'Whumpo recovery kit' (the default Save as PDF name) with the secret in neither it nor the page title, extracted text equals the kit text exactly, the 64-hex recovery key is unbroken, and every word box lies inside the page with an 18pt margin (no clipping). The download name stays whumpo-recovery-kit.txt. The PDF is of the print document in a fresh page, not the OS print dialog or a physical printer. Still open: the one recorded screen-reader pass needs Orca, which is not installed and needs sudo (not attempted); desktop/mobile print on real printers and devices.
+- 2026-10-31 UTC, moved to blocked on D54 (docs only for this entry; local reruns this session, origin/main f22085f: tests/identity-recovery.mjs, identity-kits.mjs and identity-authority.mjs, each SQLite and --d1, all exit 0). Acceptance lines 2 to 5 (restricted authority, lost-all-keys recovery, replay and race, emergency revocation and no secrets in logs) are evidenced by those suites and the earlier entries above; line 1 (accessible download, copy, print and save-PDF paths) and the V3 manual keyboard and screen-reader check are not: print is stubbed in the browser test and no screen reader has run. It is not closed because two earlier reviews held it open for exactly this line, and closing it would claim a check nobody ran. Readiness is blocked, not planned, so that nothing is picked up as buildable. Dependents WH-200, WH-083 and WH-054 treat the delivered engine as met and are not held by this line.
 
 ## WH-133 — Qualified review and activation of restricted case and preservation procedure
 
@@ -3341,117 +3342,6 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 - 2026-10-27 UTC, still open and needs a person: the WH-112 device and Orca checks remain open (checklist docs/wh-112-device-acceptance.md, added by PR #396, merged 2026-10-27T07:03:05Z), and a signed-in session with the owner account remains open and needs re-enrollment via a fresh invitation. Nothing in today's agent-run evidence (WH-181, WH-003, WH-153, WH-212) is device, screen-reader or human acceptance. Readiness unchanged.
 - 2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): readiness set to blocked. Blocker: Physical-device and Orca screen-reader checks (docs/wh-112-device-acceptance.md) need a person and real devices, and the owner account needs re-enrollment through a fresh invitation; agent-run evidence cannot stand in for them.
 
-## WH-200 — Source email-change state machine and confirmation-token handling over the current identity engine
-
-Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
-
-Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-The identity engine can hold, confirm, cancel and undo a verified address change whose only proof of the new mailbox is a hash-stored single-use token, without making any address a factor.
-
-### Scope
-
-- Domain operations in src/workspace-identity/ for request, confirm, cancel, undo and read, using the shared principal, fresh-passkey predicate, committing epoch guards and effect receipts (gaps G-E1, G-E6)
-- Hash-only token minting inside the claimed delivery attempt, expiry, supersession, epoch binding, uniqueness recheck at commit, previous-address reservation for the undo window and generic responses for addresses another account uses
-- Rate limits for requests, per-address messages and confirmation failures; a mailer interface with a synthetic transport only; isolated canonical schema inputs exercised on disposable SQLite/local D1, not yet assembled into the complete current schema
-
-### Acceptance criteria
-
-- [ ] Actual handlers refuse restricted grants, stale sessions, unknown versions, retired password fields, expired, superseded, stale, foreign and replayed tokens, and never store token plaintext
-- [ ] Same request ID replays read the saved result; a lost confirmation reply is recovered by readback without a second effect; concurrent confirm/cancel/compromise commits produce exactly one outcome
-- [ ] Recovery lookup, sign-in and sessions are unchanged by verification state; no real address or credential is used
-
-### Verification
-
-- pnpm check
-- Focused SQLite/local D1 suites mirroring tests/email-change-contract.mjs against the actual handlers
-- node tests/identity-recovery.mjs, identity-kits.mjs and identity-authority.mjs
-
-### Dependencies and blockers
-
-Planning dependencies: WH-199, WH-115. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/email-change-and-compromise.md](../../docs/email-change-and-compromise.md)
-- [src/email-change/change.ts](../../src/email-change/change.ts)
-- [src/email-change/token.ts](../../src/email-change/token.ts)
-- [tests/email-change-contract.mjs](../../tests/email-change-contract.mjs)
-- [src/workspace-identity/authority.ts](../../src/workspace-identity/authority.ts)
-- [src/workspace-identity/recovery.ts](../../src/workspace-identity/recovery.ts)
-- [src/workspace-identity/canonical-inputs.sql](../../src/workspace-identity/canonical-inputs.sql)
-
-### Execution coordination
-
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-- 2026-10-09 UTC: pure source module only, local branch claude/wh-200-email-change-state-machine from origin/main 89fa009 (not merged; issue not created or claimed from this session). Added src/email-change/policy.ts (contract version 1, emailChangeBounds with the recommended 60-minute link, 7-day undo and 10-minute fresh-passkey values, closed input, the WH-036 address rule, authorizeOwner), change.ts (request, confirm, cancel, undo and read over plain records with a transition table and revision guard), token.ts (256-bit token minted only inside a claimed delivery attempt, SHA-256 verifier via hashToken, PlatformMailer interface, a synthetic mailer that rejects every non-.test recipient) and compromise.ts (only the WH-200 parts of a compromise review: the pending-change snapshot entry and closing the change in the commit). The module lives in src/email-change rather than src/workspace-identity and is not imported by any Worker: an esbuild import graph of src/index.ts, src/site-host.ts, src/app-host.ts and src/runtime/worker.ts never reaches it, and planting a side-effect import in site-host made that check fail. tools/prototypes/email-change.mjs became tools/prototypes/compromise-review.mjs: it keeps the synthetic identity engine and the WH-203 compromise and revocation reference, which has no source yet, and now delegates every email-change decision to the source. node tests/email-change-contract.mjs passed 26 checks (one new: concurrent confirm, cancel and review transitions from one read commit exactly one outcome) and 7 agreement/static checks, and caught 33 of 33 mutants, each by its intended check (19 in src/email-change, 14 in the reference; the 32 originals plus a stale-session fence), in 1.8 to 2.2 s wall at load average 7.7, so it stays in the fast profile. Gaps G-E1 and G-E6 are resolved in source only. Open for WH-200: the isolated canonical schema inputs and focused SQLite/local D1 handler suites named in its scope and verification, so the acceptance (actual handlers, D1 atomicity of concurrent commits) is not met and the task stays open. No table, column, route, binding, Chat registration, provider, sender, real address or credential change; synthetic example.test addresses and SYNTHETIC-* values only.
-- 2026-10-22 UTC (WH-001 static reconciliation at 7bf3cd2; git history and file existence only, no test, GitHub or Cloudflare call; supersedes the not-merged/not-pushed wording above): email-change state machine and confirmation tokens merged to main in PR #262 (77a9aae): src/email-change/change.ts, policy.ts, token.ts, compromise.ts. Pure module, not wired; no route, schema or live mail.
-- 2026-10-23 UTC (WH-001 verification at 3a12d53, local node tests and file/import checks only; no GitHub, Cloudflare or provider call; adds to the 2026-10-22 history-only entry): 77a9aae is an ancestor of main; src/email-change/change.ts, policy.ts, token.ts and compromise.ts and tests/email-change-contract.mjs exist, and no other src file imports src/email-change (unwired). node tests/email-change-contract.mjs passes. The scope's SQLite/local D1 handler suites do not exist, so the acceptance against actual handlers is not met. Pure state machine verified delivered; the task stays planned and open.
-- 2026-10-31 UTC, NOT closed by the batch 4 closure sweep (origin/main 69451b6; docs only for this entry): dependency WH-115 is open (its own 2026-10-31 entries say NOT closed), and the scope's handler-level suites were not mapped line by line here. Delivery stays in WH-202 and WH-205.
-
-## WH-201 — Email change and security-review schema, lifecycle registration and current-schema cutover
-
-Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
-
-Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-The verification state, pending changes, limits and security-review records exist in the complete current schema with lifecycle classes, maintenance and export rules, installed through one reviewed empty-database cutover.
-
-### Scope
-
-- Add the canonical schema inputs to tools/current-schema.mjs and register the planned classes in docs/data-lifecycle.json with retention, export allowlists and protection profiles
-- Mount the trusted HTTP adapter and Settings controls with Origin, body and rate-limit boundaries; while platform delivery is inactive a change request returns delivery_unavailable and stores nothing
-- Bounded maintenance for expired changes, limits and reviews; account-closure and restore inventory; the empty-D1 cutover only with the owner's explicit authorization at that time
-
-### Acceptance criteria
-
-- [ ] The complete current schema, lifecycle validator, maintenance and closure inventories include every new table; no table is unclassified
-- [ ] Restore and forward repair cannot revive a superseded change, a used token or an earlier verification state
-- [ ] No migration replay, legacy reader or password field; the cutover is recorded with its readback
-
-### Verification
-
-- pnpm check
-- node tests/lifecycle-catalog.mjs and the focused handler suites on local D1
-- node tools/verify.mjs fast and protection
-
-### Dependencies and blockers
-
-Planning dependencies: WH-200. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/email-change-and-compromise.md](../../docs/email-change-and-compromise.md)
-- [tools/current-schema.mjs](../../tools/current-schema.mjs)
-- [docs/data-lifecycle.json](../../docs/data-lifecycle.json)
-- [docs/data-protection.md](../../docs/data-protection.md)
-- [docs/releases.md](../../docs/releases.md)
-
-### Execution coordination
-
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-- 2026-10-28 UTC: source and local verification only; not merged, not deployed. Shipped with WH-170 as one schema change. Adds users.email_verified_at/_via, owner_email_changes, owner_email_change_limits and owner_security_reviews with every contract predicate repeated as a trigger or constraint (src/email-change/store.ts, http.ts, maintenance.ts), the trusted adapter at /api/account/email (Origin, 4 KiB body, rate limit; delivery_unavailable and nothing stored while delivery is inactive), the Account email Settings controls, the daily email_changes maintenance job, closure and restore coverage, and the lifecycle classes. Also folds in WH-182's reviews telemetry job (maintenance_health CHECK) and the WH-004 B5 challenge cap (client_hash, D-11). Evidence: node tests/email-change-store.mjs and --d1 (14 cases: supersede, token reuse, restore cannot revive old state), tests/email-change-contract.mjs, tests/restore-inventory-freshness.mjs, tests/maintenance-inventory.mjs, tests/maintenance-scheduled.mjs, tests/account-email-ui.mjs. The owner-run empty-D1 cutover is not done.
-- 2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): schema merged in #424 and cut over in #425 (both 2026-10-29), handlers on the new tables in #427. Notice delivery needs the WH-202 sender, so acceptance is not met. Readiness unchanged.
-- 2026-10-31 UTC, NOT closed by the batch 4 closure sweep (origin/main 69451b6; docs only for this entry): depends on WH-200, which is open; not mapped line by line here. Delivery stays in WH-202.
-
 ## WH-202 — Wire account email notices to platform delivery after the WH-036 live sender
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **blocked**. Kind: implementation. Size: M.
@@ -3505,71 +3395,9 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 - 2026-10-30 UTC (branch wh-202-account-delivery from origin/main 47ae720, after #503 shipped and #506 cut over; code and docs only: no schema change, deploy, secret, dependency or live send; simulated provider only): account and support notices now go through the shared outbox. src/email-change/notices.ts queues the address-change notices as account-email rows (event_ref the change id, or the review id for the security review; a notice for another address stores only the address hash in recipient_ref) and registers accountDeliveryLane (account_delivery), which also queues security events from the identity engine's own receipts (passkey added from the ceremony receipts; passkey removed, recovery started, recovery secured and kit rotated from the effect receipts) for accounts with a verified address only, last hour only so activation never backfills. src/support-delivery.ts gains supportDelivery(env) (inactive unless SUPPORT_NOTIFICATION_PROVIDER and SUPPORT_NOTIFICATION_REVIEW are set and the email binding exists) and supportDeliveryLane (support_delivery); implementedNotificationProviders now lists cloudflare-email. Both lanes are registered on the every-minute trigger beside contact_delivery. src/notification-outbox.ts: the attempt now resolves an account notice's address at send time from the change row (decision 4: only the new-address confirmation may go to an unverified address; a notice to the previous address needs previous_verified_at; the undo also reaches the new address if its receipt was verified; every other account notice needs email_verified_at), and for the confirmation it mints the token only after the checks, commits only the SHA-256 verifier with the revision guard in the same batch that moves the notice to dispatching (a lost revision race or the database claim trigger sends nothing), passes the token in memory to the one provider call, clears the verifier on a not-taken refusal (the retry mints a NEW token) and closes the change as undeliverable on a permanent refusal; a lost reply keeps the verifier and is never resent. Email-change requests no longer return delivery_unavailable when the provider variables and binding exist (emailChangeDelivery(env) is non-null); they still do when either is absent. The 10 an hour and 50 a day caps, the shared $5 ceiling, suppression and the unknown-outcome hold are the outbox's and ledger's for account and support notices as for contact notices. Evidence: tests/email-change-delivery.mjs (new, 11 cases, SQLite and --d1, simulated send_email binding with fetch closed: inactive provider variants, confirm and undo sends, an unverified old address gets nothing and a verified one gets requested/completed/undone, tokens in no table and only the verifier on the change, deferral mints a new token and the first is dead, permanent refusal ends the change, lost reply and throw not resent, superseded/cancelled changes never sent a code, record isolation between accounts, security events verified-only and rechecked at send time, caps/ceiling/suppression across contact and account notices, support lane gating, lane registration); tests/email-change-contract.mjs (27+9 checks, 41/41 mutants; wiring file list and the G-E5 gate pattern updated), tests/notification-outbox.mjs (confirm now cancelled as record-removed without a change), tests/email-change-store.mjs, tests/email-change-review.mjs, tests/notifications-contract.mjs, tests/contact-notifications.mjs, tests/support-access.mjs, tests/account-closure-contract.mjs, tests/tenant-sql-surface.mjs and tests/boundary-audit.mjs. Not done and still open: the live canary and activation (the variables and binding are not set in production; owner step); the queueing of an address-change notice is a separate statement after the step commits, not the same batch (a crash between them loses the notice, and an unsent confirmation just expires and can be requested again); a bounce event for a notice to a non-account address cannot suppress that address (the notice holds only its hash), though a synchronous provider suppression does; provider delivered/bounce events still have no intake route. Acceptance as written is met in source, but WH-202 stays blocked because the live canary and the dependencies WH-036, WH-156 and WH-201 are not closed.
 - 2026-10-30 UTC (WH-001 reconciliation against origin/main 475a3a9, read from git log and gh pr view; docs only, nothing re-run unless stated, no GitHub issue, Cloudflare or provider mutation): merged PR #493 (8fcfc0a, account email notices through the platform sender) and #507 (752d880, account and support notices through the shared outbox). Stays blocked on live acceptance only, as recorded above.
 
-## WH-203 — Coordinated compromise review across passkeys, sessions, recovery kit, pending changes and provider connections
-
-Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
-
-Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-An owner who suspects compromise reviews one current snapshot and secures the account in one guarded commit that fences all old authority and starts provider revocation without erasing reconciliation authority.
-
-### Scope
-
-- Review/commit operations bound to epoch, credential revision, kit generation and connection set: emergency revocation below two keys, epoch advance revoking every session/grant/challenge, kit rotation with save-before-rotation and pending email change cancellation (gaps G-E7, G-E8)
-- Provider connections: immediate local disable, retained encrypted credentials and queued revocation through the existing GitHub/Cloudflare adapters; erasure only after an exact receipt; unknown outcomes held for bounded read-only reconciliation; coordinate with WH-117 custody and the WH-140 connector contract for future providers
-- Direct controls only, reachable while inference is unavailable; restricted recovery grants cannot reach connection or email operations; no password, support or Chat path and no content-recovery claim
-
-### Acceptance criteria
-
-- [ ] In-flight sign-ins, sessions and grants admitted before the commit fail afterward; retained passkeys sign in to the new epoch only
-- [ ] Lost commit replies read the saved receipt; stale or expired reviews are refused; competing commits produce one effect
-- [ ] A credential is never erased before a definitive provider receipt; unknown outcomes keep the hold and block account closure
-
-### Verification
-
-- pnpm check
-- Focused SQLite/local D1 suites with synthetic providers
-- node tests/github-grant-revocation.mjs and tests/cloudflare-connection.mjs
-
-### Dependencies and blockers
-
-Planning dependencies: WH-200. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/email-change-and-compromise.md](../../docs/email-change-and-compromise.md)
-- [src/email-change/compromise.ts](../../src/email-change/compromise.ts)
-- [src/email-change/revocation.ts](../../src/email-change/revocation.ts)
-- [tests/email-change-contract.mjs](../../tests/email-change-contract.mjs)
-- [docs/identity-recovery.md](../../docs/identity-recovery.md)
-- [docs/connection-key-lifecycle.md](../../docs/connection-key-lifecycle.md)
-- [docs/integrations/cloudflare-connection.md](../../docs/integrations/cloudflare-connection.md)
-- [docs/incident-runbooks.md](../../docs/incident-runbooks.md)
-
-### Execution coordination
-
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-- 2026-10-09 UTC: pure source module only, local branch claude/wh-203-compromise-review stacked on the unmerged WH-200 branch claude/wh-200-email-change-state-machine (PR #262, 79bdca6); not merged, issue not created or claimed from this session. Extended src/email-change/compromise.ts (compromiseBounds, revokedAuthority, closed parsers, prepareCompromiseReview snapshot bound to epoch, credential revision, kit generation and connection set; prepareReviewKit/saveReviewKit with save-before-rotation; commitCompromiseReview: fresh passkey, saved-receipt replay, STALE_REVIEW, emergency removal down to zero keys, epoch advance with revokeAuthorityBefore for sessions, grants, challenges and kit offers, kit activation, pending-change closure, connection disable with the credential held, content-free receipt and security-review notice; admitSignIn and admitRecovery fences) and added src/email-change/revocation.ts (ProviderRevoker interface, claim-before-call dispatch, unknown and interrupted outcomes held as uncertain and never redispatched, authenticated read-only reconciliation bounded at 3 reads or 72 hours, erasure only with a receipt, closureHolds, a synthetic revoker). Deleted tools/prototypes/compromise-review.mjs; tests/email-change-contract.mjs now drives the source through a storage-only driver. It passed 27 checks and 9 agreement/static checks (new pins: the identity engine's removePasskey rows and zero-key stage, kit rotation epoch advance, and the GitHub 204 and Cloudflare 200 receipt rules) and caught 41 of 41 mutants, all in the source, each by its named check (the 33 WH-200 mutants, the 14 former prototype mutants now mutating source, and 8 new), in 1.6 to 2.0 s wall at load average 3.3, so it stays in the fast profile. Gaps G-E7 and G-E8 are resolved in source only. Open for WH-203: ProviderRevoker adapters over the existing GitHub and Cloudflare revocation (a GitHub single-token 204 must not report a retained refresh credential as revoked), the mapping of existing connection states and the closure inventory, and the focused SQLite/local D1 suites with synthetic providers plus tests/github-grant-revocation.mjs and tests/cloudflare-connection.mjs named in its verification; the acceptance is therefore not met against actual handlers and the task stays open. No table, column, route, binding, Chat registration, provider call, sender, real address or credential change; synthetic example.test addresses and SYNTHETIC-* values only.
-- 2026-10-09 UTC: provider adapters and connection-state mapping, source only. Originally branch claude/wh-203-provider-revoker-adapters (closed PR #264, stacked on PR #263); 2026-10-10 UTC rebuilt as claude/wh-203-provider-revoker-adapters-train5 directly on origin/main d948f06, which already contains the WH-200 module and the WH-203 compromise review and revocation sources; the cherry-pick applied without conflicts and no source, test or doc content needed adapting. Not merged. Added src/email-change/provider-revokers.ts: createGitHubRevoker and createCloudflareRevoker implement ProviderRevoker over injected transport, open and observe seams and import nothing outside src/email-change. GitHub reports revoked only for an exact non-redirected 204 to DELETE /applications/{client_id}/token with no refresh credential held; with refresh custody the same 204 is access-revoked-refresh-held and stays held; no call is sent after an observed access revocation or during a pending reviewed grant deletion, and the app-wide grant deletion is never sent. Cloudflare reports revoked only for an exact 200 for every known token. Any other reply, throw or timeout is unknown, held as uncertain and never resent; not-revoked means nothing was sent. githubReconcileEvidence accepts only a saved revoked/204 grant receipt for the same owner, client and token and calls no provider. Added src/email-change/connection-holds.ts: current github_token_vault, github_refresh_custody, github_revocation_claims, github_grant_revocations and cloudflare_token_vault states mapped onto revocation holds (unknown states and foreign rows refused), plus connectionClosureBlockers and closureInventoryConnectionHolds over the existing account-closure inventory metrics. New script-only tests/email-change-revokers.mjs (not in a verify profile): 9 checks and 5 agreement/static checks, including the existing cleanupGitHub and cleanupCloudflare run on the current schema in SQLite through their own injected transport with identical requests and agreeing receipt decisions, and the mapping agreeing with accountClosureInventory; 22 of 22 mutants caught by their named checks. tests/email-change-contract.mjs now lists both files in its purity and Worker import-graph check (27 checks, 9 static, 41 of 41 mutants, unchanged). Still open for WH-203: the focused SQLite/local D1 handler suites over stored reviews and holds, which need the WH-201 tables and wiring (open/unseal, persisting access_revoked_at, claim fencing against the existing cleaners, reconciliation scheduling); the acceptance is not met against actual handlers and the task stays open. No table, column, route, binding, Chat registration, provider call, network access, real credential or verify-profile change; SYNTHETIC-* canaries only.
-- 2026-10-22 UTC (WH-001 static reconciliation at 7bf3cd2; git history and file existence only, no test, GitHub or Cloudflare call; supersedes the not-merged/not-pushed wording above): compromise review sources merged in PR #262 (77a9aae) and the ProviderRevoker adapters with connection-state mapping in PR #274 (782e8d2): src/email-change/compromise.ts, revocation.ts, connection-holds.ts, provider-revokers.ts, tests/email-change-revokers.mjs. Pure and unwired; no provider call or live acceptance.
-- 2026-10-23 UTC (WH-001 verification at 3a12d53, local node tests and file/import checks only; no GitHub, Cloudflare or provider call; adds to the 2026-10-22 history-only entry): 77a9aae and 782e8d2 are ancestors of main; src/email-change/compromise.ts, revocation.ts, connection-holds.ts, provider-revokers.ts and tests/email-change-revokers.mjs exist, and nothing outside src/email-change imports them. node tests/email-change-contract.mjs and node tests/email-change-revokers.mjs pass. tests/github-grant-revocation.mjs and tests/cloudflare-connection.mjs, named in the task verification, were not re-run, and no handler-level suites exist. Source modules verified delivered; the task stays planned and open.
-- 2026-10-28 UTC: source and local synthetic verification only; not merged, not deployed, no live platform change. Wires the compromise review to the WH-201 table owner_security_reviews with no schema change: src/email-change/review-store.ts (reads, and one revision-guarded commit batch that repeats the review binding, the epoch advance and the fresh passkey in its statements) and src/email-change/review-http.ts (trusted adapter at /api/account/security/review/{prepare,kit,kit/save,commit}, mounted in handleWorkspace next to the account email route, never in Chat; exact Origin, JSON content type, 4 KiB body, identity route limiter, no-store, closed input, fixed errors). The commit removes the selected passkeys down to zero keys (account enters recovering), advances the epoch in one statement with the stage and the saved kit, deletes every session, grant, challenge and kit offer and cancels open recovery attempts, closes a pending email change, and writes the content-free receipt last; a lost reply is answered from the saved receipt after signing in again, a changed payload is request_conflict, competing commits produce one effect, stale or expired reviews are stale_review, and the reply clears the session cookie. Prepare reuses an open review so a reload does not spend one of the 20 stored reviews. A review kit offer exists once per review, stores only its verifier and needs the saved acknowledgment before it rotates the kit. Provider connections reuse the existing disconnect states (token vault state revoking, active token cleared, oauth states cancelled) with the encrypted credential retained; no provider call, dispatcher, secret or sender was added, the existing GitHub and Cloudflare cleaners dispatch, and the handler suite proves with their synthetic transport that a lost response erases nothing, a GitHub single-token 204 with refresh custody keeps the vault row, the custody and the hold (uncertain), only the exact Cloudflare 200 erases, and the account-closure inventory keeps blocking. Fixed a bug in the WH-203 module: credential selections rejected base64url passkey IDs containing an underscore. Evidence: node tests/email-change-review.mjs and --d1 (new, 16 cases: boundaries, snapshot, commit, replay, stale/expired, competing commits, kit save-before-rotation, zero-key emergency revocation, sign-in around a commit with signed synthetic WebAuthn, pending change cancellation, provider holds, restore cannot revive, closure and bounded maintenance, delivery inactive), tests/email-change-contract.mjs (27 checks, 41/41 mutants, file lists updated), tests/email-change-store.mjs plain and --d1, tests/email-change-revokers.mjs, tests/restore-inventory-freshness.mjs (new open-review revival case), tests/account-closure-inventory.mjs, tests/maintenance-inventory.mjs, tests/lifecycle-catalog.mjs, tests/github-grant-revocation.mjs, tests/cloudflare-connection.mjs. Not done and still open: the Settings controls for the review; scheduled read-only reconciliation of uncertain holds and any compromise-specific dispatcher (both need provider reads or calls); the security-review notice goes nowhere until WH-202 (queued only when a delivery seam exists); tests/github-grant-revocation.mjs and tests/cloudflare-connection.mjs pass unchanged. The task stays planned. Schema risk to review: reviews cannot be deleted for 90 days (owner_security_review_retained) and an account is capped at 20, so 20 abandoned reviews would block a new one until the oldest ages out; prepare reuse mitigates it but only a schema change would remove it.
-- 2026-10-29 UTC: review-cap fix, source and local verification only (disposable SQLite and actual local D1); not deployed, schema cutover pending the orchestrator. Batched with WH-143 in one schema PR (branch schema-batch-oct29, base 0321f57). owner_security_review_new now counts only committed or unexpired rows toward the 20-per-account cap, owner_security_review_retained lets an expired open review be deleted (committed reviews keep 90 days), and maintainEmailChanges deletes expired open reviews (bounded, reported as openReviews). tests/email-change-store.mjs: 20 expired open rows do not block a new insert, 20 live rows still hit security_review_new, expired open rows are deletable, an unexpired row is retained; tests/email-change-review.mjs: maintenance purges expired open reviews within its limit and keeps the live one; the existing committed-row retention assertion (security_review_retained) is unchanged. Both pass plain and --d1. docs/email-change-and-compromise.md section 3.2 marks the gap fixed. Complete-SQL digest sqlSha256 d6a39d55b4227787c9caeb1afd0f79d7e6d90d9321c3378a50b732afcbcb4d8b (228 tables). Not proved: behaviour on the live control database before the cutover.
-- 2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): #427 (review-store and trusted /api/account/security/review adapter), #433 (Settings controls) and the review-cap fix in #435 are merged (2026-10-29). Notice delivery needs the WH-202 sender and the 2026-10-29 cutover is recorded by the orchestrator, so acceptance is not plainly met. Readiness unchanged.
-- 2026-10-31 UTC, NOT closed by the batch 4 closure sweep (origin/main 69451b6; docs only for this entry): depends on WH-200, which is open; not mapped line by line here, and tests/github-grant-revocation.mjs and tests/cloudflare-connection.mjs were not re-run.
-
 ## WH-204 — Connected synthetic acceptance for email change and compromise review
 
-Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: verification. Size: M.
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **blocked**. Kind: verification. Size: M.
 
 Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
@@ -3597,7 +3425,7 @@ The actual Worker, current schema and trusted browser flow prove the email chang
 
 Planning dependencies: WH-201, WH-203. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+- Orca (no real screen reader on the agent host): scope line 2, 'Desktop and mobile browser checks with synthetic addresses and kits; keyboard and screen-reader paths'. The keyboard half is done; the screen-reader pass is listed for a person in docs/wh-112-device-acceptance.md (A17 to A21) and has not been run
 
 ### References
 
@@ -3615,6 +3443,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 - 2026-10-30 UTC: local synthetic acceptance only; PR #519, not merged, not deployed. WH-202 delivery is merged (#507), so the delivery-dependent checks now run: tests/email-change-browser.mjs (new; SQLite and actual local D1; real Worker, current schema, Chromium virtual WebAuthn, real outbox with a recording send_email stand-in, every address under example.test, no network) drives Settings change, outbox delivery, wrong-code refusal, confirm, undo, reconfirm, a pending change cancelled by the security review and emergency zero-key revocation with a replacement kit, keyboard only at 360, 390 and 1280px and at 200% text with no horizontal overflow and 44px phone controls. It found and fixed one UI defect: the review buttons overflowed at 360px with 200% text (frontend/src/security-review.tsx). Handler suites extended: tests/email-change-delivery.mjs gains a competing change during dispatch (the in-flight code is dead on arrival, nothing resent, only the newer change confirms) beside the existing outbox delivery, lost reply never resent, not-taken refusal re-minting a new token and permanent refusal ending undeliverable; tests/email-change-store.mjs gains address_unavailable at commit when another account confirms the same address first; tests/email-change-review.mjs gains restricted recovery authority refused by the route scope guard with nothing stored. Contract refusals checked against the handlers: no behaviour change was needed. Two contract wording differences, not defects: token_expired and identity_incomplete are unreachable through the connected handlers (the schema's database clock refuses an early expiry and expired rows are immutable; restricted grants are stopped by the scope guard before the policy's 403), and a session from before an epoch advance is refused 401 at resolution rather than 409 identity_changed. Both stay covered by tests/email-change-contract.mjs. Not met, so readiness stays planned: Orca screen-reader paths (Orca needs sudo, see WH-208), and the physical-device and approved delivery acceptance that is WH-205.
 - 2026-10-31 UTC: PR #519 is merged (85fa884); the October 30 line saying it was not merged is superseded. Local synthetic acceptance only, not deployed by itself; readiness is unchanged.
 - 2026-10-31 UTC, NOT closed by the batch 4 closure sweep (origin/main 69451b6; docs only for this entry): depends on WH-201 and WH-203, which are open; local synthetic acceptance is recorded in its earlier entries and is unchanged.
+- 2026-10-31 UTC, CLOSED on D43 (origin/main f22085f, Node 24.21.0, pnpm 11.19.0, disposable SQLite and local D1 only, no network, credential, secret, send, Stripe or provider call; local synthetic evidence, not live acceptance). Reruns, every exit 0: tests/email-change-store.mjs, email-change-review.mjs, email-change-delivery.mjs, email-change-revokers.mjs (each SQLite and --d1 where it supports it), tests/email-change-browser.mjs (SQLite and --d1; Chromium virtual authenticator, keyboard only), tests/email-change-contract.mjs, node tools/verify.mjs fast. A1 (every refusal and race in the contract passes against actual handlers; no real address, credential or provider): the handler suites above run the real trusted adapters over the real identity scope, store and schema triggers with the synthetic mailer, a recording send stand-in and synthetic providers; WH-204 contract refusals are named in store ('address_unavailable at commit ... invalid_address and no_change leave the account untouched'), delivery ('a competing change during dispatch: the in-flight code is dead on arrival') and review ('concurrent sign-in around a commit', zero-key recovery, provider unknown outcomes, lost replies). Two accounts: store 'another account's change is never visible or actionable' and delivery 'record isolation between accounts'. Maintainer inference unavailable: these routes and suites configure no model route, so they run with inference absent. The one contract refusal the handler suites cannot reach is token_expired at the database clock (rows are immutable and the clock refuses an early expiry), which tests/email-change-contract.mjs holds at module level. A2 (recorded as local synthetic acceptance only): this entry and docs/email-change-and-compromise.md. V1: browser checks at 360, 390 and 1280 px and 200% text are in tests/email-change-browser.mjs. NOT MET and the reason the task is blocked, not done: scope line 2 names screen-reader paths. No screen reader ran on any of these screens (Orca is not installed on the agent host). The steps are now in docs/wh-112-device-acceptance.md for a person; nothing here implies they passed.
 
 ## WH-205 — Physical-device and approved delivery acceptance for email change and compromise review
 
@@ -3818,7 +3647,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
 
-# F2 — Done (27)
+# F2 — Done (30)
 
 Verified complete with recorded evidence; kept for history and dependency context. Not candidates for new work.
 
@@ -5159,6 +4988,182 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 - 2026-10-09 UTC: contract and offline reference only, local commit on branch claude/wh-063-email-change-contract (not pushed or merged; issue not created or claimed from this session). Added docs/email-change-and-compromise.md (planned), tools/prototypes/email-change.mjs (imports only node:crypto) and tests/email-change-contract.mjs, registered as pnpm test:email-change-contract and in the fast verification profile (1.0 to 1.5 s wall on the 2-vCPU host). The harness passed 25 reference checks and 5 read-only source-agreement checks and caught 32 of 32 deliberate mutants, each by its intended check. Synthetic accounts, addresses, kit keys, mailer and provider only; proves the frozen contract and reference, not D1 storage, delivery, devices or acceptance. NIST SP 800-63B-4 and OWASP cheat-sheet text read October 9, 2026. No table, route, binding, provider, DNS or deployment change.
 - 2026-10-20 UTC, source and docs only, no live read and nothing re-run (WH-001 readiness reconciliation against main 52e885b; see docs/roadmap/readiness-reconciliation-2026-10-20.md): the local commit/not pushed wording above is superseded. docs/email-change-and-compromise.md, src/email-change/compromise.ts and tests/email-change-contract.mjs are on main, and tools/roadmap.mjs carries the WH-199..205 alignment rules. tools/prototypes/email-change.mjs, cited above, is not on main: docs/email-change-and-compromise.md says the harness now runs the src/email-change/ source (WH-200, WH-203). The merging PR was not identified (GitHub was not read). Readiness stays ready because the schema has no completion value. Contract only; WH-063 and WH-200..205 stay open, and nothing is wired, sent or accepted.
 - 2026-10-29 UTC, docs only, nothing re-run: readiness set to done. Merged PR #254 (commit b4453a6; the PR shows as closed, the commit is on main) (zemdregon/whumpo) is the merged change(s) behind the evidence above; acceptance or contract-freeze scope is exactly as the earlier entries record, and anything they list as out of scope stays open.
+
+## WH-200 — Source email-change state machine and confirmation-token handling over the current identity engine
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
+
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+The identity engine can hold, confirm, cancel and undo a verified address change whose only proof of the new mailbox is a hash-stored single-use token, without making any address a factor.
+
+### Scope
+
+- Domain operations in src/workspace-identity/ for request, confirm, cancel, undo and read, using the shared principal, fresh-passkey predicate, committing epoch guards and effect receipts (gaps G-E1, G-E6)
+- Hash-only token minting inside the claimed delivery attempt, expiry, supersession, epoch binding, uniqueness recheck at commit, previous-address reservation for the undo window and generic responses for addresses another account uses
+- Rate limits for requests, per-address messages and confirmation failures; a mailer interface with a synthetic transport only; isolated canonical schema inputs exercised on disposable SQLite/local D1, not yet assembled into the complete current schema
+
+### Acceptance criteria
+
+- [ ] Actual handlers refuse restricted grants, stale sessions, unknown versions, retired password fields, expired, superseded, stale, foreign and replayed tokens, and never store token plaintext
+- [ ] Same request ID replays read the saved result; a lost confirmation reply is recovered by readback without a second effect; concurrent confirm/cancel/compromise commits produce exactly one outcome
+- [ ] Recovery lookup, sign-in and sessions are unchanged by verification state; no real address or credential is used
+
+### Verification
+
+- pnpm check
+- Focused SQLite/local D1 suites mirroring tests/email-change-contract.mjs against the actual handlers
+- node tests/identity-recovery.mjs, identity-kits.mjs and identity-authority.mjs
+
+### Dependencies and blockers
+
+Planning dependencies: WH-199, WH-115. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/email-change-and-compromise.md](../../docs/email-change-and-compromise.md)
+- [src/email-change/change.ts](../../src/email-change/change.ts)
+- [src/email-change/token.ts](../../src/email-change/token.ts)
+- [tests/email-change-contract.mjs](../../tests/email-change-contract.mjs)
+- [src/workspace-identity/authority.ts](../../src/workspace-identity/authority.ts)
+- [src/workspace-identity/recovery.ts](../../src/workspace-identity/recovery.ts)
+- [src/workspace-identity/canonical-inputs.sql](../../src/workspace-identity/canonical-inputs.sql)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-09 UTC: pure source module only, local branch claude/wh-200-email-change-state-machine from origin/main 89fa009 (not merged; issue not created or claimed from this session). Added src/email-change/policy.ts (contract version 1, emailChangeBounds with the recommended 60-minute link, 7-day undo and 10-minute fresh-passkey values, closed input, the WH-036 address rule, authorizeOwner), change.ts (request, confirm, cancel, undo and read over plain records with a transition table and revision guard), token.ts (256-bit token minted only inside a claimed delivery attempt, SHA-256 verifier via hashToken, PlatformMailer interface, a synthetic mailer that rejects every non-.test recipient) and compromise.ts (only the WH-200 parts of a compromise review: the pending-change snapshot entry and closing the change in the commit). The module lives in src/email-change rather than src/workspace-identity and is not imported by any Worker: an esbuild import graph of src/index.ts, src/site-host.ts, src/app-host.ts and src/runtime/worker.ts never reaches it, and planting a side-effect import in site-host made that check fail. tools/prototypes/email-change.mjs became tools/prototypes/compromise-review.mjs: it keeps the synthetic identity engine and the WH-203 compromise and revocation reference, which has no source yet, and now delegates every email-change decision to the source. node tests/email-change-contract.mjs passed 26 checks (one new: concurrent confirm, cancel and review transitions from one read commit exactly one outcome) and 7 agreement/static checks, and caught 33 of 33 mutants, each by its intended check (19 in src/email-change, 14 in the reference; the 32 originals plus a stale-session fence), in 1.8 to 2.2 s wall at load average 7.7, so it stays in the fast profile. Gaps G-E1 and G-E6 are resolved in source only. Open for WH-200: the isolated canonical schema inputs and focused SQLite/local D1 handler suites named in its scope and verification, so the acceptance (actual handlers, D1 atomicity of concurrent commits) is not met and the task stays open. No table, column, route, binding, Chat registration, provider, sender, real address or credential change; synthetic example.test addresses and SYNTHETIC-* values only.
+- 2026-10-22 UTC (WH-001 static reconciliation at 7bf3cd2; git history and file existence only, no test, GitHub or Cloudflare call; supersedes the not-merged/not-pushed wording above): email-change state machine and confirmation tokens merged to main in PR #262 (77a9aae): src/email-change/change.ts, policy.ts, token.ts, compromise.ts. Pure module, not wired; no route, schema or live mail.
+- 2026-10-23 UTC (WH-001 verification at 3a12d53, local node tests and file/import checks only; no GitHub, Cloudflare or provider call; adds to the 2026-10-22 history-only entry): 77a9aae is an ancestor of main; src/email-change/change.ts, policy.ts, token.ts and compromise.ts and tests/email-change-contract.mjs exist, and no other src file imports src/email-change (unwired). node tests/email-change-contract.mjs passes. The scope's SQLite/local D1 handler suites do not exist, so the acceptance against actual handlers is not met. Pure state machine verified delivered; the task stays planned and open.
+- 2026-10-31 UTC, NOT closed by the batch 4 closure sweep (origin/main 69451b6; docs only for this entry): dependency WH-115 is open (its own 2026-10-31 entries say NOT closed), and the scope's handler-level suites were not mapped line by line here. Delivery stays in WH-202 and WH-205.
+- 2026-10-31 UTC, CLOSED on D43 (origin/main f22085f, Node 24.21.0, pnpm 11.19.0, disposable SQLite and local D1 only, no network, credential, secret, send, Stripe or provider call; local synthetic evidence, not live acceptance). Reruns this session, every exit 0: tests/email-change-store.mjs (18 checks, SQLite and --d1), tests/email-change-delivery.mjs (SQLite and --d1), tests/email-change-review.mjs (SQLite and --d1), tests/email-change-contract.mjs, tests/identity-recovery.mjs, tests/identity-kits.mjs and tests/identity-authority.mjs (each SQLite and --d1), node tools/verify.mjs fast. A1 (actual handlers refuse restricted grants, stale sessions, unknown versions, retired password fields, expired, superseded, stale, foreign and replayed tokens; no token plaintext stored): tests/email-change-store.mjs runs the real trusted adapter src/email-change/http.ts over the real identity scope and schema triggers: closed input with unknown versions, retired proof fields, Origin, body size and content type refused before anything is stored; stale passkey 401 proof_required; foreign token invalid_token with the generic response; superseded token stale; expired token closed; replayed and post-undo tokens change_closed; the token exists only in the mailer call (the request check asserts token_verifier is null before a claimed delivery, and only the verifier is ever stored). A restricted recovery grant cannot become a workspace scope and so reaches no account or review route: tests/email-change-review.mjs 'emergency revocation down to zero keys' (the grant is handed to the account and review routes and refused). A2 (same request ID replays read the saved result; a lost confirmation reply is recovered by readback; concurrent confirm, cancel and compromise commits produce exactly one outcome): store 'request, identical response...' (same request ID) and 'confirm ... replays are idempotent' (the replayed confirm returns byte-identical text with no second effect and one completion notice); tests/email-change-delivery.mjs 'a lost reply never double-sends'; tests/email-change-review.mjs 'lost commit reply' (saved receipt, no second effect), 'competing commits of one review produce one effect' and 'a pending email change is cancelled by the commit and its token is refused afterward'; NEW in this change, store check 'WH-200 A2: confirm and cancel racing on one change commit exactly one outcome' (both orders through Promise.all, the stored address follows the winner, the loser never reports the other outcome, at most one completion notice; stable over 3 plain and 1 --d1 reruns). The module-level race (confirm, cancel and compromise from one read) is tests/email-change-contract.mjs. Limit: the race is in-process interleaving of awaits, not two Workers. A3 (recovery lookup, sign-in and sessions unchanged by verification state; no real address or credential): store 'a previous address stays reserved...' and the confirm check (recovery still keys on the current address only); tests/email-change-contract.mjs 'an unverified or pending email never becomes a recovery or authorization factor' (a verified address waives nothing, the kit stays the proof); tests/email-change-review.mjs sign-in around a commit; every address is under .test and globalThis.fetch is closed in the delivery suite. V1 pnpm check and V3 (identity-recovery, identity-kits, identity-authority) are in the reruns above and the PR gate. Its WH-115 dependency is met by the delivered engine (D53, D54); WH-115's own screen-reader line stays open under WH-115.
+
+## WH-201 — Email change and security-review schema, lifecycle registration and current-schema cutover
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
+
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+The verification state, pending changes, limits and security-review records exist in the complete current schema with lifecycle classes, maintenance and export rules, installed through one reviewed empty-database cutover.
+
+### Scope
+
+- Add the canonical schema inputs to tools/current-schema.mjs and register the planned classes in docs/data-lifecycle.json with retention, export allowlists and protection profiles
+- Mount the trusted HTTP adapter and Settings controls with Origin, body and rate-limit boundaries; while platform delivery is inactive a change request returns delivery_unavailable and stores nothing
+- Bounded maintenance for expired changes, limits and reviews; account-closure and restore inventory; the empty-D1 cutover only with the owner's explicit authorization at that time
+
+### Acceptance criteria
+
+- [ ] The complete current schema, lifecycle validator, maintenance and closure inventories include every new table; no table is unclassified
+- [ ] Restore and forward repair cannot revive a superseded change, a used token or an earlier verification state
+- [ ] No migration replay, legacy reader or password field; the cutover is recorded with its readback
+
+### Verification
+
+- pnpm check
+- node tests/lifecycle-catalog.mjs and the focused handler suites on local D1
+- node tools/verify.mjs fast and protection
+
+### Dependencies and blockers
+
+Planning dependencies: WH-200. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/email-change-and-compromise.md](../../docs/email-change-and-compromise.md)
+- [tools/current-schema.mjs](../../tools/current-schema.mjs)
+- [docs/data-lifecycle.json](../../docs/data-lifecycle.json)
+- [docs/data-protection.md](../../docs/data-protection.md)
+- [docs/releases.md](../../docs/releases.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-28 UTC: source and local verification only; not merged, not deployed. Shipped with WH-170 as one schema change. Adds users.email_verified_at/_via, owner_email_changes, owner_email_change_limits and owner_security_reviews with every contract predicate repeated as a trigger or constraint (src/email-change/store.ts, http.ts, maintenance.ts), the trusted adapter at /api/account/email (Origin, 4 KiB body, rate limit; delivery_unavailable and nothing stored while delivery is inactive), the Account email Settings controls, the daily email_changes maintenance job, closure and restore coverage, and the lifecycle classes. Also folds in WH-182's reviews telemetry job (maintenance_health CHECK) and the WH-004 B5 challenge cap (client_hash, D-11). Evidence: node tests/email-change-store.mjs and --d1 (14 cases: supersede, token reuse, restore cannot revive old state), tests/email-change-contract.mjs, tests/restore-inventory-freshness.mjs, tests/maintenance-inventory.mjs, tests/maintenance-scheduled.mjs, tests/account-email-ui.mjs. The owner-run empty-D1 cutover is not done.
+- 2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): schema merged in #424 and cut over in #425 (both 2026-10-29), handlers on the new tables in #427. Notice delivery needs the WH-202 sender, so acceptance is not met. Readiness unchanged.
+- 2026-10-31 UTC, NOT closed by the batch 4 closure sweep (origin/main 69451b6; docs only for this entry): depends on WH-200, which is open; not mapped line by line here. Delivery stays in WH-202.
+- 2026-10-31 UTC, CLOSED on D43 (origin/main f22085f, Node 24.21.0, pnpm 11.19.0, disposable SQLite and local D1 only, no network, credential, secret, send, Stripe or provider call; local synthetic evidence, not live acceptance). A1 (complete current schema, lifecycle validator, maintenance and closure inventories include every new table; none unclassified): node tests/lifecycle-catalog.mjs passed (241 tables, 58 current and 6 planned classes); docs/data-lifecycle.json classes cover owner_email_changes, owner_email_change_limits and owner_security_reviews (3 references); tests/current-schema.mjs passed on SQLite and local D1; tests/maintenance-inventory.mjs passed; tools/account-closure-inventory.mjs counts emailChanges, openEmailChanges and emailChangeLimits and tests/email-change-store.mjs 'account closure removes the changes and limits of the owner and keeps no address' and tests/email-change-review.mjs 'closure' passed; tests/restore-inventory.mjs passed. A2 (restore and forward repair cannot revive a superseded change, a used token or an earlier verification state): tests/email-change-store.mjs 'restore and forward repair cannot revive a superseded change, a used token, an earlier verification state or an earlier address' (SQLite and --d1) and tests/email-change-review.mjs 'restore and forward repair cannot revive a committed review, an earlier epoch or a superseded offer'. A3 (no migration replay, legacy reader or password field; the cutover is recorded with its readback): tests/current-schema.mjs passed (passkey-only account shape, empty initialization, drift refused); the tables ship in the current schema with no migration path, and docs/releases.md records the empty-D1 cutover to whumpo-control-2026-10-31d (dba36bb8-4d6b-4798-baf3-2572809b2919, 241 tables, 1230 objects, inventory sha256 53be90ebb97a500aefc0c89a53abffe49cfcae31dd16c56167422fdd9c64d59d), which created every table above. The owner authorization at that time was the testing-deploy authority of 2026-10-26. V2 and V3 (lifecycle-catalog, focused handler suites on local D1, node tools/verify.mjs fast and protection) are in this session's reruns and the PR gate. Delivery stays inactive: a request returns delivery_unavailable while the sender variables are absent, and no live send is claimed (WH-202, WH-036).
+
+## WH-203 — Coordinated compromise review across passkeys, sessions, recovery kit, pending changes and provider connections
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
+
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+An owner who suspects compromise reviews one current snapshot and secures the account in one guarded commit that fences all old authority and starts provider revocation without erasing reconciliation authority.
+
+### Scope
+
+- Review/commit operations bound to epoch, credential revision, kit generation and connection set: emergency revocation below two keys, epoch advance revoking every session/grant/challenge, kit rotation with save-before-rotation and pending email change cancellation (gaps G-E7, G-E8)
+- Provider connections: immediate local disable, retained encrypted credentials and queued revocation through the existing GitHub/Cloudflare adapters; erasure only after an exact receipt; unknown outcomes held for bounded read-only reconciliation; coordinate with WH-117 custody and the WH-140 connector contract for future providers
+- Direct controls only, reachable while inference is unavailable; restricted recovery grants cannot reach connection or email operations; no password, support or Chat path and no content-recovery claim
+
+### Acceptance criteria
+
+- [ ] In-flight sign-ins, sessions and grants admitted before the commit fail afterward; retained passkeys sign in to the new epoch only
+- [ ] Lost commit replies read the saved receipt; stale or expired reviews are refused; competing commits produce one effect
+- [ ] A credential is never erased before a definitive provider receipt; unknown outcomes keep the hold and block account closure
+
+### Verification
+
+- pnpm check
+- Focused SQLite/local D1 suites with synthetic providers
+- node tests/github-grant-revocation.mjs and tests/cloudflare-connection.mjs
+
+### Dependencies and blockers
+
+Planning dependencies: WH-200. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/email-change-and-compromise.md](../../docs/email-change-and-compromise.md)
+- [src/email-change/compromise.ts](../../src/email-change/compromise.ts)
+- [src/email-change/revocation.ts](../../src/email-change/revocation.ts)
+- [tests/email-change-contract.mjs](../../tests/email-change-contract.mjs)
+- [docs/identity-recovery.md](../../docs/identity-recovery.md)
+- [docs/connection-key-lifecycle.md](../../docs/connection-key-lifecycle.md)
+- [docs/integrations/cloudflare-connection.md](../../docs/integrations/cloudflare-connection.md)
+- [docs/incident-runbooks.md](../../docs/incident-runbooks.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-09 UTC: pure source module only, local branch claude/wh-203-compromise-review stacked on the unmerged WH-200 branch claude/wh-200-email-change-state-machine (PR #262, 79bdca6); not merged, issue not created or claimed from this session. Extended src/email-change/compromise.ts (compromiseBounds, revokedAuthority, closed parsers, prepareCompromiseReview snapshot bound to epoch, credential revision, kit generation and connection set; prepareReviewKit/saveReviewKit with save-before-rotation; commitCompromiseReview: fresh passkey, saved-receipt replay, STALE_REVIEW, emergency removal down to zero keys, epoch advance with revokeAuthorityBefore for sessions, grants, challenges and kit offers, kit activation, pending-change closure, connection disable with the credential held, content-free receipt and security-review notice; admitSignIn and admitRecovery fences) and added src/email-change/revocation.ts (ProviderRevoker interface, claim-before-call dispatch, unknown and interrupted outcomes held as uncertain and never redispatched, authenticated read-only reconciliation bounded at 3 reads or 72 hours, erasure only with a receipt, closureHolds, a synthetic revoker). Deleted tools/prototypes/compromise-review.mjs; tests/email-change-contract.mjs now drives the source through a storage-only driver. It passed 27 checks and 9 agreement/static checks (new pins: the identity engine's removePasskey rows and zero-key stage, kit rotation epoch advance, and the GitHub 204 and Cloudflare 200 receipt rules) and caught 41 of 41 mutants, all in the source, each by its named check (the 33 WH-200 mutants, the 14 former prototype mutants now mutating source, and 8 new), in 1.6 to 2.0 s wall at load average 3.3, so it stays in the fast profile. Gaps G-E7 and G-E8 are resolved in source only. Open for WH-203: ProviderRevoker adapters over the existing GitHub and Cloudflare revocation (a GitHub single-token 204 must not report a retained refresh credential as revoked), the mapping of existing connection states and the closure inventory, and the focused SQLite/local D1 suites with synthetic providers plus tests/github-grant-revocation.mjs and tests/cloudflare-connection.mjs named in its verification; the acceptance is therefore not met against actual handlers and the task stays open. No table, column, route, binding, Chat registration, provider call, sender, real address or credential change; synthetic example.test addresses and SYNTHETIC-* values only.
+- 2026-10-09 UTC: provider adapters and connection-state mapping, source only. Originally branch claude/wh-203-provider-revoker-adapters (closed PR #264, stacked on PR #263); 2026-10-10 UTC rebuilt as claude/wh-203-provider-revoker-adapters-train5 directly on origin/main d948f06, which already contains the WH-200 module and the WH-203 compromise review and revocation sources; the cherry-pick applied without conflicts and no source, test or doc content needed adapting. Not merged. Added src/email-change/provider-revokers.ts: createGitHubRevoker and createCloudflareRevoker implement ProviderRevoker over injected transport, open and observe seams and import nothing outside src/email-change. GitHub reports revoked only for an exact non-redirected 204 to DELETE /applications/{client_id}/token with no refresh credential held; with refresh custody the same 204 is access-revoked-refresh-held and stays held; no call is sent after an observed access revocation or during a pending reviewed grant deletion, and the app-wide grant deletion is never sent. Cloudflare reports revoked only for an exact 200 for every known token. Any other reply, throw or timeout is unknown, held as uncertain and never resent; not-revoked means nothing was sent. githubReconcileEvidence accepts only a saved revoked/204 grant receipt for the same owner, client and token and calls no provider. Added src/email-change/connection-holds.ts: current github_token_vault, github_refresh_custody, github_revocation_claims, github_grant_revocations and cloudflare_token_vault states mapped onto revocation holds (unknown states and foreign rows refused), plus connectionClosureBlockers and closureInventoryConnectionHolds over the existing account-closure inventory metrics. New script-only tests/email-change-revokers.mjs (not in a verify profile): 9 checks and 5 agreement/static checks, including the existing cleanupGitHub and cleanupCloudflare run on the current schema in SQLite through their own injected transport with identical requests and agreeing receipt decisions, and the mapping agreeing with accountClosureInventory; 22 of 22 mutants caught by their named checks. tests/email-change-contract.mjs now lists both files in its purity and Worker import-graph check (27 checks, 9 static, 41 of 41 mutants, unchanged). Still open for WH-203: the focused SQLite/local D1 handler suites over stored reviews and holds, which need the WH-201 tables and wiring (open/unseal, persisting access_revoked_at, claim fencing against the existing cleaners, reconciliation scheduling); the acceptance is not met against actual handlers and the task stays open. No table, column, route, binding, Chat registration, provider call, network access, real credential or verify-profile change; SYNTHETIC-* canaries only.
+- 2026-10-22 UTC (WH-001 static reconciliation at 7bf3cd2; git history and file existence only, no test, GitHub or Cloudflare call; supersedes the not-merged/not-pushed wording above): compromise review sources merged in PR #262 (77a9aae) and the ProviderRevoker adapters with connection-state mapping in PR #274 (782e8d2): src/email-change/compromise.ts, revocation.ts, connection-holds.ts, provider-revokers.ts, tests/email-change-revokers.mjs. Pure and unwired; no provider call or live acceptance.
+- 2026-10-23 UTC (WH-001 verification at 3a12d53, local node tests and file/import checks only; no GitHub, Cloudflare or provider call; adds to the 2026-10-22 history-only entry): 77a9aae and 782e8d2 are ancestors of main; src/email-change/compromise.ts, revocation.ts, connection-holds.ts, provider-revokers.ts and tests/email-change-revokers.mjs exist, and nothing outside src/email-change imports them. node tests/email-change-contract.mjs and node tests/email-change-revokers.mjs pass. tests/github-grant-revocation.mjs and tests/cloudflare-connection.mjs, named in the task verification, were not re-run, and no handler-level suites exist. Source modules verified delivered; the task stays planned and open.
+- 2026-10-28 UTC: source and local synthetic verification only; not merged, not deployed, no live platform change. Wires the compromise review to the WH-201 table owner_security_reviews with no schema change: src/email-change/review-store.ts (reads, and one revision-guarded commit batch that repeats the review binding, the epoch advance and the fresh passkey in its statements) and src/email-change/review-http.ts (trusted adapter at /api/account/security/review/{prepare,kit,kit/save,commit}, mounted in handleWorkspace next to the account email route, never in Chat; exact Origin, JSON content type, 4 KiB body, identity route limiter, no-store, closed input, fixed errors). The commit removes the selected passkeys down to zero keys (account enters recovering), advances the epoch in one statement with the stage and the saved kit, deletes every session, grant, challenge and kit offer and cancels open recovery attempts, closes a pending email change, and writes the content-free receipt last; a lost reply is answered from the saved receipt after signing in again, a changed payload is request_conflict, competing commits produce one effect, stale or expired reviews are stale_review, and the reply clears the session cookie. Prepare reuses an open review so a reload does not spend one of the 20 stored reviews. A review kit offer exists once per review, stores only its verifier and needs the saved acknowledgment before it rotates the kit. Provider connections reuse the existing disconnect states (token vault state revoking, active token cleared, oauth states cancelled) with the encrypted credential retained; no provider call, dispatcher, secret or sender was added, the existing GitHub and Cloudflare cleaners dispatch, and the handler suite proves with their synthetic transport that a lost response erases nothing, a GitHub single-token 204 with refresh custody keeps the vault row, the custody and the hold (uncertain), only the exact Cloudflare 200 erases, and the account-closure inventory keeps blocking. Fixed a bug in the WH-203 module: credential selections rejected base64url passkey IDs containing an underscore. Evidence: node tests/email-change-review.mjs and --d1 (new, 16 cases: boundaries, snapshot, commit, replay, stale/expired, competing commits, kit save-before-rotation, zero-key emergency revocation, sign-in around a commit with signed synthetic WebAuthn, pending change cancellation, provider holds, restore cannot revive, closure and bounded maintenance, delivery inactive), tests/email-change-contract.mjs (27 checks, 41/41 mutants, file lists updated), tests/email-change-store.mjs plain and --d1, tests/email-change-revokers.mjs, tests/restore-inventory-freshness.mjs (new open-review revival case), tests/account-closure-inventory.mjs, tests/maintenance-inventory.mjs, tests/lifecycle-catalog.mjs, tests/github-grant-revocation.mjs, tests/cloudflare-connection.mjs. Not done and still open: the Settings controls for the review; scheduled read-only reconciliation of uncertain holds and any compromise-specific dispatcher (both need provider reads or calls); the security-review notice goes nowhere until WH-202 (queued only when a delivery seam exists); tests/github-grant-revocation.mjs and tests/cloudflare-connection.mjs pass unchanged. The task stays planned. Schema risk to review: reviews cannot be deleted for 90 days (owner_security_review_retained) and an account is capped at 20, so 20 abandoned reviews would block a new one until the oldest ages out; prepare reuse mitigates it but only a schema change would remove it.
+- 2026-10-29 UTC: review-cap fix, source and local verification only (disposable SQLite and actual local D1); not deployed, schema cutover pending the orchestrator. Batched with WH-143 in one schema PR (branch schema-batch-oct29, base 0321f57). owner_security_review_new now counts only committed or unexpired rows toward the 20-per-account cap, owner_security_review_retained lets an expired open review be deleted (committed reviews keep 90 days), and maintainEmailChanges deletes expired open reviews (bounded, reported as openReviews). tests/email-change-store.mjs: 20 expired open rows do not block a new insert, 20 live rows still hit security_review_new, expired open rows are deletable, an unexpired row is retained; tests/email-change-review.mjs: maintenance purges expired open reviews within its limit and keeps the live one; the existing committed-row retention assertion (security_review_retained) is unchanged. Both pass plain and --d1. docs/email-change-and-compromise.md section 3.2 marks the gap fixed. Complete-SQL digest sqlSha256 d6a39d55b4227787c9caeb1afd0f79d7e6d90d9321c3378a50b732afcbcb4d8b (228 tables). Not proved: behaviour on the live control database before the cutover.
+- 2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): #427 (review-store and trusted /api/account/security/review adapter), #433 (Settings controls) and the review-cap fix in #435 are merged (2026-10-29). Notice delivery needs the WH-202 sender and the 2026-10-29 cutover is recorded by the orchestrator, so acceptance is not plainly met. Readiness unchanged.
+- 2026-10-31 UTC, NOT closed by the batch 4 closure sweep (origin/main 69451b6; docs only for this entry): depends on WH-200, which is open; not mapped line by line here, and tests/github-grant-revocation.mjs and tests/cloudflare-connection.mjs were not re-run.
+- 2026-10-31 UTC, CLOSED on D43 (origin/main f22085f, Node 24.21.0, pnpm 11.19.0, disposable SQLite and local D1 only, no network, credential, secret, send, Stripe or provider call; local synthetic evidence, not live acceptance). Reruns, every exit 0: tests/email-change-review.mjs (SQLite and --d1), tests/email-change-revokers.mjs (SQLite and --d1), tests/github-grant-revocation.mjs, tests/cloudflare-connection.mjs (SQLite and --d1), tests/email-change-contract.mjs, node tools/verify.mjs fast. A1 (in-flight sign-ins, sessions and grants admitted before the commit fail afterward; retained passkeys sign in to the new epoch only): review 'commit: removes the selected passkey, advances the epoch, revokes every session, grant, challenge and kit offer' and 'concurrent sign-in around a commit cannot restore authority: old session and removed key fail, the retained key signs in at the new epoch only'. A2 (lost commit replies read the saved receipt; stale or expired reviews refused; competing commits produce one effect): review 'lost commit reply', 'stale, expired, unknown and foreign reviews are refused and change nothing', 'expiry' and 'competing commits of one review produce one effect', plus 'through the Worker fetch handler' (replay after signing in again returns the same receipt). A3 (a credential is never erased before a definitive provider receipt; unknown outcomes keep the hold and block account closure): review 'provider connections: local access is disabled at once, the encrypted credential is retained, and nothing is erased without an exact receipt' (an unknown outcome erases nothing and 'the hold still blocks closure' through accountClosureInventory); tests/email-change-revokers.mjs 'unknown outcomes are held as uncertain and never resent' and 'closure blockers cover holds, live credentials and unresolved exchanges'. V3 tests/github-grant-revocation.mjs and tests/cloudflare-connection.mjs pass. The Settings controls exist (frontend/src/security-review.tsx; tests/email-change-browser.mjs drives them). Not built and not claimed: the scheduled reconciliation of held unknown outcomes (the hold is read-only and bounded, and the next owner action or the existing cleaners retry it) and a compromise-specific dispatcher; the future-provider coordination with WH-117 custody and WH-140 stays with those tasks.
 
 ## WH-206 — Freeze the daily-workspace audit and contract and decompose WH-111
 
@@ -10867,6 +10872,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 - 2026-10-29 platform ADR (docs only, no app code, build, Play action or deployment): the Android-only shell is to be restructured into a KMP build (:shared commonMain/androidMain/jvmMain plus :androidApp) by WP1 of docs/android/app-ux.md before screens are added; Keystore store, backup rules, environment guard and their tests move with it. The current light theme (white on a non-token blue) is replaced by the generated token theme in WP2. No source changed here.
 - 2026-10-31 emulator pass (emulator only, not a device): headless API 35 google_apis x86_64 AVD (pixel_6, KVM, swiftshader_indirect) from the existing SDK; no licence accepted, no SDK package installed. Observed: assembleLocalDebug/DeployedDebug and both AndroidTest APKs, lintLocalDebug/DeployedDebug, :shared:jvmTest, :shared:testAndroidHostTest (Roborazzi), :shared:compileKotlinJvm and both app unit-test tasks all pass; connectedLocalDebugAndroidTest and connectedDeployedDebugAndroidTest ran 21 tests each with 0 failures and 0 skipped (so the keyboard-inset test ran). By-hand on the local debug build, signed out: welcome screen renders at 1x and 200% font scale, landscape (content scrolls, nothing unreachable), dark theme, no crash in logcat; adb reverse tcp:8787 works and a loopback-only (127.0.0.1) server was used. No defect found. Not observed here: API 28 (image absent), TalkBack speech (package present, headless, no audio), signed-in navigation by hand (needs a passkey; covered only by the fixture-based instrumented tests), invite/Custom Tab round trip, a real server response to the app. Still open: physical-device checks, TalkBack on a device, native identity, provider, push and signed-release acceptance. WH-082 stays planned.
+- 2026-10-31 UTC, line map against origin/main f22085f (docs and CI reads only; the local emulator evidence is the 2026-10-31 entry above, not rerun here; no licence, SDK package, Google sign-in, secret or Play action). STAYS PLANNED. A1 (clean checkout produces the documented debug artifact and tests on the pinned toolchain; Node 24 and pnpm 11 workflows separate): docs/android-build.md documents the pinned toolchain and commands; the Android workflow's build job (assemble both flavors plus test APKs, lint, :shared JVM and Android host tests, app unit tests) succeeded on a fresh GitHub runner in the latest Android workflow run on main I read (run 41179944628, 2026-10-31 07:16 UTC, from gh run view; later Android-path commits were not checked). Met on CI; the Node workflows do not share it. A2 (navigation, large text, TalkBack semantics, keyboard insets and configuration changes in the selected emulator matrix): the selected matrix is API 28 and API 36 on CI; the same run shows 'Instrumented tests (API 36)' and 'Instrumented tests (API 28)' both success (the suite includes the large-text, keyboard-inset and accessibility-checks tests). The local pass used API 35. NOT MET in full: TalkBack speech was never heard (headless, no audio; ATF checks are not a spoken pass), and no physical or signed-in-by-hand navigation was done. A3 (draft, session and pending-operation storage account-scoped and cleared on logout or account change): instrumented AccountStateTest.accountChangeAndSignOutEraseState and signOutFromSettingsClearsDraftsAndReturnsToWelcome, with shared AccountStateStoreTest; both in the 21 passing instrumented tests of the local pass and in the CI instrumented jobs. Backups: instrumented BackupRulesTest.backupIsDisabled and dataExtractionRulesExcludeEveryDomain. Credentials in logs and fixtures were not independently re-audited here. A4 (loopback only): adb reverse tcp:8787 with a 127.0.0.1-bound server was used locally. A5: this entry and docs/android-build.md state the shell and emulator pass are not native identity, provider, signed-release or physical-device acceptance. V3: CI permissions and free-tier limits are recorded in docs/android-build.md (public repository runners are free; private repositories consume included minutes and entitlement is unverified). Why it stays open: A2's TalkBack and by-hand parts, and the physical-device and native-identity acceptance it excludes, need a device (WH-087, WH-005). No instrumented test is missing for A3, so nothing new is queued in lane A for it.
 
 ## WH-083 — Implement native identity, versioned API access and browser returns
 

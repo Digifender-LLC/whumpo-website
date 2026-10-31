@@ -35,6 +35,11 @@ Linux setup: Orca on (Super+Alt+S, or `orca` from a terminal), Firefox or Chromi
 | A14 | Open Account help during welcome | "Account help", "Manage your passkeys", heading; closing returns to its button |  |
 | A15 | Dashboard, Site & app safety link | "Site & app safety", heading; after confirming a withdrawal, "Withdrawal applied" |  |
 | A16 | After a Chat reply arrives (use an existing saved turn; do not request new work) | "New reply from Whumpo in Chat", without focus moving |  |
+| A17 | WH-204: Settings, Account email. Tab to "New email address", type an address you control, Tab to "Send confirmation", Enter | The field is announced by its label; the result is announced as a status without focus moving; the status says the address is "Not verified yet" until confirmed. No token or code is spoken. No recorded Orca expectation exists yet: write down what you hear |  |
+| A18 | WH-204: enter the code in "Confirmation code from the email" and confirm | The label is announced; the outcome is announced as a status; an invalid or expired code is announced as an alert, not silently |  |
+| A19 | WH-204: after a change, Tab to "Undo email change" | The control is reachable by keyboard and named; activating it announces the restored address |  |
+| A20 | WH-204: open the security review ("Secure my account"), step through the choices ("Choose what to keep") with Tab and arrows | Each choice and warning is announced; the heading takes focus when a step opens; errors are announced as alerts |  |
+| A21 | WH-204: complete the review with a passkey prompt, then the "Replace your recovery kit" step | The kit step announces that the kit must be saved before the old one stops working; no kit text is spoken beyond what the page shows |  |
 
 **Gaps the agent audit could not cover (listen for these specifically; no expected phrase exists):** Help sheet and desktop sidebar group, Saved work list and "Read this review here" panel, and the Support page. For each, record whether the heading is announced on arrival, tab order is logical, and the result of every action is spoken.
 
