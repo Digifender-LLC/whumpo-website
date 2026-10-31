@@ -1,0 +1,134 @@
+/* Signup, account setup and welcome as one journey. Loaded with the workspace chunk, never by the landing page.
+   Only transform and opacity move. No overshoot anywhere: the brand book rules out bounce on security screens. */
+.journey{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto 1fr;grid-template-areas:'bar' 'world' 'main';min-height:100dvh;background:var(--surface);color:var(--ink)}
+.journey-bar{grid-area:bar;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:max(12px,env(safe-area-inset-top)) 16px 12px}
+.journey-world{grid-area:world;position:relative;overflow:hidden;background:var(--hero-sky);border-block:1px solid var(--line)}
+.journey-scene{position:relative;display:flex;align-items:center;justify-content:center;gap:12px;min-height:128px;padding:6px 16px}
+.journey-main{grid-area:main;min-width:0;width:100%;max-width:30rem;margin-inline:auto;padding:20px 16px max(24px,env(safe-area-inset-bottom))}
+.journey-main>*+*{margin-top:20px}
+.journey-step{view-transition-name:journey-step;min-width:0}
+.journey-step>*+*{margin-top:16px}
+
+/* World */
+.journey-mascot{position:relative;flex:none;width:132px;view-transition-name:journey-mascot}
+.journey-mascot img{display:block;width:100%;height:auto}
+.journey-star{position:absolute;width:13%;aspect-ratio:1;fill:var(--sunshine);opacity:0;transform:scale(.4);transition:opacity var(--duration-slow) var(--ease-enter),transform var(--duration-slow) var(--ease-enter)}
+.journey-star:nth-of-type(1){left:-2%;top:30%}
+.journey-star:nth-of-type(2){left:14%;top:-2%;width:10%}
+.journey-star:nth-of-type(3){left:30%;top:6%;width:8%}
+.journey-star-on{opacity:1;transform:none}
+.journey-caption{position:relative;view-transition-name:journey-caption;min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px;font-family:var(--font-display-family);font-weight:700;font-size:1.125rem;line-height:1.3;overflow-wrap:anywhere;text-align:center}
+.journey-caption small{font-family:var(--font-ui-family);font-weight:400;font-size:.875rem;color:var(--ink-muted)}
+.journey-caption img{width:44px;height:44px;border-radius:50%;object-fit:cover;background:var(--surface-raised)}
+
+/* Sketch: colours and faces match renderPageShell in src/components.ts. tests/onboarding-journey-browser.mjs pins the palette. */
+.journey-sketch,.first-draft-card,.journey-feel-swatch{--sketch-ink:#123f4e;--sketch-tint:#d9eef0;--sketch-paper:#f3f9f9}
+[data-feel=clay]{--sketch-ink:#6c3928;--sketch-tint:#f0d2bf;--sketch-paper:#fcf5ed}
+[data-feel=forest]{--sketch-ink:#254b38;--sketch-tint:#dbe8c9;--sketch-paper:#f6f8ef}
+.journey-sketch{position:relative;flex:1;min-width:0;height:116px;margin:0;overflow:hidden;border-radius:var(--radius-md);background:var(--sketch-paper);color:var(--sketch-ink);box-shadow:var(--shadow-md);font:13px/1.45 Arial,sans-serif;view-transition-name:journey-project}
+.journey-sketch i{display:block;height:9px;border-radius:5px;background:var(--sketch-tint)}
+.journey-sketch i+i{width:80%;margin-top:6px}
+.journey-sketch-brand i{width:64px}
+.journey-sketch-title:has(i),.journey-sketch-intro:has(i){display:block}
+.journey-sketch-title i{width:60%;height:.8em;margin-block:.15em}
+.journey-sketch-top{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 12px;border-bottom:1px solid var(--sketch-tint)}
+.journey-sketch-brand{min-width:0;font-weight:700;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.journey-sketch-tag{flex:none;border-radius:var(--radius-full);background:var(--sketch-tint);padding:1px 8px;font-size:10px;font-weight:700}
+.journey-sketch-body{padding:8px 12px}
+.journey-sketch-eyebrow{display:none;margin:0;text-transform:uppercase;letter-spacing:.18em;font-size:10px}
+.journey-sketch-title{margin:0;font:400 21px/1.15 Georgia,serif;letter-spacing:-.03em;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;overflow:hidden}
+.journey-sketch-rule{display:none;width:40px;height:2px;margin:10px 0;background:var(--sketch-ink)}
+.journey-sketch-intro{margin:4px 0 0;font-size:12px;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.journey-sketch-for{margin:2px 0 0;font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.journey-sketch-intro:has(+.journey-sketch-for){-webkit-line-clamp:1}
+.journey-scene[data-scene=sketch]{justify-content:flex-start;padding-right:84px}
+.journey-scene[data-scene=sketch] .journey-mascot{position:absolute;right:6px;bottom:8px;width:88px}
+
+/* Progress rail */
+.journey-rail{view-transition-name:journey-rail}
+.journey-rail-bar{position:relative;margin:10px -10px 0;padding-inline:10px;overflow-x:clip}
+.journey-rail-track{height:6px;overflow:hidden;border-radius:var(--radius-full);background:var(--surface-sunken);mask:repeating-linear-gradient(90deg,#000 0 calc(100%/6 - 4px),#0000 0 calc(100%/6))}
+.journey-rail-fill{height:100%;background:var(--action);transform-origin:left}
+.journey-rail-spark{position:absolute;inset:-6px 10px auto;pointer-events:none}
+.journey-rail-spark svg{display:block;width:18px;height:18px;margin-left:-9px;fill:var(--sunshine);stroke:var(--spark-ink);stroke-width:1}
+
+/* Passkeys and the recovery kit: real state, one row each */
+.journey-keyring{display:grid;gap:8px}
+.journey-keyring li{display:flex;align-items:center;gap:12px;min-height:60px;padding:8px 12px;border:1px solid var(--line);border-radius:var(--radius-md);background:var(--surface-raised)}
+.journey-keyring li[data-state=empty]{border-style:dashed;background:none}
+.journey-key-badge{flex:none;display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:var(--surface-sunken);color:var(--ink-muted)}
+li[data-state=saved] .journey-key-badge{background:var(--ready-soft);color:var(--ready-ink)}
+/* Once the passkeys are done they step back, so the recovery kit fits on the first screen. */
+.journey-keyring[data-compact] li{min-height:48px;padding-block:5px}
+.journey-keyring[data-compact] .text-xs{display:none}
+.journey-keyring[data-compact] .journey-key-badge{width:30px;height:30px}
+/* Headings land at the top of the screen. 36px allows for the 20px entrance offset still applied when they scroll. On h1 the large margin means the page top, keeping the rail in view. */
+.journey [data-identity-step]{scroll-margin-top:36px}
+.journey h1[data-identity-step]{scroll-margin-top:100dvh}
+
+/* Welcome */
+.journey-question{border-radius:var(--radius-md);border-top-left-radius:4px;background:var(--action-soft);padding:16px}
+.auth-screen .journey-question h1{font-size:1.625rem;line-height:1.25}
+.journey label:has(>[type=radio]) input:focus-visible{outline:none}
+.journey-feel-swatch{flex:none;display:grid;grid-template-columns:1fr 1fr 1fr;width:48px;height:32px;overflow:hidden;border-radius:var(--radius-sm);border:1px solid var(--line-strong)}
+.journey-feel-swatch b:nth-child(1){background:var(--sketch-ink)}
+.journey-feel-swatch b:nth-child(2){background:var(--sketch-tint)}
+.journey-feel-swatch b:nth-child(3){background:var(--sketch-paper)}
+.journey-actions{display:flex;align-items:center;gap:12px;margin-top:20px;view-transition-name:journey-actions}
+.first-draft-card{view-transition-name:journey-project}
+.first-draft-card{border-top:3px solid var(--sketch-ink)}
+.dark .first-draft-card{border-top-color:var(--sketch-tint)}
+
+/* Height in em: enlarged text or browser zoom shrinks this below 40em, and a pinned bar would then cover too much of the page. */
+@media(max-width:760px) and (min-height:40em){
+ .journey{scroll-padding-bottom:96px}
+ /* The next action stays on screen, above the keyboard too: the viewport meta resizes content for it. */
+ .journey-actions,.journey-submit{position:sticky;bottom:0;z-index:1;margin-inline:-16px;padding:12px 16px max(12px,env(safe-area-inset-bottom));border-top:1px solid var(--line);background:var(--surface)}
+}
+@media(min-width:1024px){
+ .journey{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto 1fr;grid-template-areas:'bar world' 'main world'}
+ .journey-bar{padding:32px 40px 0}
+ .journey-main{padding:40px 40px 64px}
+ .journey-world{position:sticky;top:0;height:100dvh;border-block:0;border-inline-start:1px solid var(--line)}
+ .journey-scene{flex-direction:column;gap:24px;height:100%;padding:48px}
+ .journey-mascot{width:min(100%,440px)}
+ .journey-caption{font-size:var(--type-display-size);line-height:var(--type-display-line);letter-spacing:var(--type-display-tracking)}
+ .journey-caption small{font-size:1rem;letter-spacing:0}
+ .journey-caption img{width:64px;height:64px}
+ .journey-sketch{flex:none;width:min(100%,460px);height:auto;min-height:340px;border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);font-size:16px}
+ .journey-sketch i{height:12px}
+ .journey-sketch-top{padding:14px 24px}
+ .journey-sketch-brand{font-size:14px}
+ .journey-sketch-tag{padding:3px 10px;font-size:11px}
+ .journey-sketch-body{padding:32px 24px 56px}
+ .journey-sketch-eyebrow,.journey-sketch-rule{display:block}
+ .journey-sketch-title{margin-top:12px;font-size:44px;-webkit-line-clamp:3}
+ .journey-sketch-intro{margin-top:0;font-size:16px;line-height:1.6;-webkit-line-clamp:4}
+ .journey-sketch-intro:has(+.journey-sketch-for){-webkit-line-clamp:3}
+ .journey-sketch-for{margin-top:12px;font-size:13px}
+ .journey-scene[data-scene=sketch]{justify-content:center;padding:48px}
+ .journey-scene[data-scene=sketch] .journey-mascot{right:calc(50% - 300px);bottom:calc(50% - 280px);width:190px}
+}
+
+/* View Transitions. The old step leaves on the compositor; the new one is shown at once and enters through useStepEntrance. */
+@keyframes journey-leave{to{opacity:0;transform:translateY(-14px)}}
+@keyframes journey-leave-back{to{opacity:0;transform:translateY(14px)}}
+@keyframes journey-fade{to{opacity:0}}
+@keyframes journey-born{from{opacity:0;transform:translateY(12px) scale(.94)}}
+::view-transition-old(root),::view-transition-new(root){animation-duration:var(--duration-base)}
+/* Within the journey everything that changes has its own name, so the page stays live and is never captured. */
+html[data-journey-move]:not([data-journey-move=arrive]){view-transition-name:none}
+/* animation-name, not animation: old and new images inherit their duration and fill from the group. */
+::view-transition-group(journey-step),::view-transition-group(journey-rail),::view-transition-group(journey-actions),::view-transition-group(journey-caption){animation-name:none}
+::view-transition-new(journey-step){animation:none;mix-blend-mode:normal}
+::view-transition-old(journey-step){animation:journey-leave var(--duration-fast) var(--ease-exit) both;mix-blend-mode:normal}
+html[data-journey-move=back]::view-transition-old(journey-step){animation-name:journey-leave-back}
+html[data-journey-move=update]::view-transition-old(journey-step){animation:journey-fade var(--duration-fast) linear both}
+html[data-journey-move=morph]::view-transition-old(journey-step){display:none}
+::view-transition-old(journey-rail){display:none}
+::view-transition-new(journey-rail){animation:none;mix-blend-mode:normal}
+::view-transition-group(journey-mascot),::view-transition-group(journey-project){animation-duration:var(--duration-slow);animation-timing-function:var(--ease-standard)}
+/* journeyMove scales these two; the signup link leaves the mascot to the browser's own morph. */
+html[data-journey-move]::view-transition-group(journey-mascot),html[data-journey-move]::view-transition-group(journey-project){animation-name:none;transform-origin:0 0}
+html[data-journey-move]::view-transition-old(journey-project),html[data-journey-move]::view-transition-new(journey-project){height:100%}
+::view-transition-new(journey-project):only-child{animation:journey-born var(--duration-slow) var(--ease-enter) both}

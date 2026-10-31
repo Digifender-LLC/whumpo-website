@@ -43,6 +43,8 @@ import {DeferredArea} from './deferred-area';
 import {QueryRecovery} from './query-recovery';
 import {updatedReplies} from './lib/chat-announcements';
 import {useWorkspaceTheme} from './lib/workspace-theme';
+import {JourneyPending} from './journey/stage';
+import {isWelcoming} from './journey/motion';
 const DashboardPage=lazy(()=>import('./workspace-pages').then(module=>({default:module.DashboardPage})));
 const SettingsPage=lazy(()=>import('./workspace-pages').then(module=>({default:module.SettingsPage})));
 const ProfilePage=lazy(()=>import('./workspace-pages').then(module=>({default:module.ProfilePage})));
@@ -63,6 +65,7 @@ function WorkspaceProfile(){
   return next;
  }});
  useEffect(()=>{if(profile.data&&!profile.data.onboardingComplete)document.title="Welcome — Whumpo";},[profile.data?.onboardingComplete]);
+ if(profile.isPending&&isWelcoming())return <JourneyPending label="Getting your welcome ready…" action={<AccountHelp/>}/>;
  if(profile.isPending)return <main className="min-h-dvh grid place-content-center justify-items-center gap-5"><LoaderCircle className="animate-spin size-6" aria-label="Opening your workspace"/><AccountHelp/></main>;
  if(profile.error)return <main className="page-pad space-y-4"><h1 className="text-2xl font-bold">Couldn’t open your workspace</h1><p role="alert">{message(profile.error)}</p><div className="flex flex-wrap gap-3"><Button onClick={()=>profile.refetch()}>Try again</Button><AccountHelp/></div></main>;
  if(!profile.data)return null;

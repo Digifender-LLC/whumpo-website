@@ -133,3 +133,20 @@ Resolved by the orchestrator on 2026-10-29.
 
 - **D7 (draft plan prices): decided, show them**, labelled "Planned launch pricing — not available yet". Reason: honest proof, and it is not a commitment.
 - **D11 (landing page theme): decided, the landing page follows the device theme.** Reason: consistency with the signup dark flow.
+
+## Onboarding journey, 2026-10-31
+
+The owner asked for registration and onboarding to be an animated, captivating experience that stays dead simple. Before this work the flow had two layouts and a hard swap between them: a split signup and setup page, then a centered welcome column, then Chat. Setup kept the same heading across four states, and on a phone the recovery kit began below the fold.
+
+Decisions, each with its reason:
+
+- **D13. One frame from signup to the first question.** `JourneyFrame` (`frontend/src/journey/stage.tsx`) holds the header, the sky and the form column, so moving between identity and welcome changes content, not the page. Sign-in and recovery use it too.
+- **D14. The sketch is the real first draft, not an illustration.** It uses the palette and typefaces of `renderPageShell` in `src/components.ts` at miniature size and shows only what the person typed. It says "Sketch from your answers" at every size. A test pins the palette, so a later template change fails until the sketch follows. No build or loading is implied.
+- **D15. View Transitions and Web Animations, no GSAP.** This keeps D12. View Transitions handle exits and shared elements through snapshots, so nothing clones the DOM, which matters here because a clone would duplicate the recovery key and the Turnstile iframe. Entrances are Web Animations on the live page, so they run where View Transitions do not exist. Every duration comes from the motion tokens.
+- **D16. Direction means something.** Forward rises, back falls. Changes inside one setup step (`update`) do not travel: only the new section enters, because re-animating an unchanged heading read as a flicker. The palette choice (`morph`) leaves the step alone and crossfades only the sketch.
+- **D17. Data first, motion second.** A transition starts only after the server's reply is in hand and it decorates that commit. Nothing waits on an animation, no timer advances a step, and a skipped, interrupted or unsupported transition leaves the same screen. This is also why no step can be left half finished.
+- **D18. Reduced motion is the same journey without travel.** No View Transitions; each step fades in over 150ms. Everything else is identical.
+- **D19. Progress is earned and comes from saved state.** One rail of six chapters replaces the two separate step lists. The spark at its tip moves only when a real step finishes, and the three stars by the mascot are the two passkeys and the saved kit. This follows the brand book's "progress rings that fill as real steps complete" and "never celebrates before the system confirms completion". Nothing bounces: it is a security screen.
+- **D20. Less on each step.** On phones the next action stays on screen. "Your answers so far" is gone, because Back and the review page already edit every answer and the sketch shows them. The two optional privacy choices sit behind one disclosure and stay off by default, with their full text intact. Once two passkeys are saved, the passkey list compacts and adding another moves into a disclosure, so the recovery kit fits the first screen. The feel swatches show the real palettes, not brand accents.
+
+Rejected: slow parallax clouds behind the sky. They were invisible in the recordings and cost a full-column layer on every step.
