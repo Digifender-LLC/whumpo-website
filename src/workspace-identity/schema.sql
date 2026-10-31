@@ -161,10 +161,8 @@ CREATE TABLE identity_handoffs (
  CHECK(native_session_id IS NULL OR account_id IS NOT NULL)
 ) STRICT;
 CREATE INDEX identity_handoffs_expiry ON identity_handoffs(expires_at);
--- Unbound (anonymous) starts get a 1,500-row share of the 2,000-row table, so a flood of anonymous starts cannot take the whole table; bound rows (an account is attached) may use the rest.
 CREATE TRIGGER identity_handoff_limit BEFORE INSERT ON identity_handoffs
 WHEN (SELECT count(*) FROM identity_handoffs)>=2000
- OR (NEW.account_id IS NULL AND (SELECT count(*) FROM identity_handoffs WHERE account_id IS NULL)>=1500)
 BEGIN SELECT RAISE(ABORT,'identity_handoff_limit'); END;
 -- Exactly two moves, each once: unbound -> code issued, then issued -> consumed. Nothing else may change.
 CREATE TRIGGER identity_handoff_transition BEFORE UPDATE ON identity_handoffs

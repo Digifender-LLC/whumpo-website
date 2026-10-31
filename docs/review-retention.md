@@ -120,7 +120,7 @@ Class, lane and turnover values:
 | `identity_credentials` | `identity_credential_limit` | account 10 | inventory | R6 | owner-removable | app+cascade | owner-identity-progress |
 | `identity_effect_receipts` | `identity_effect_receipt_limit` | platform 50000 | receipt | R2 | expiring | app | owner-identity-receipts |
 | `identity_grants` | `identity_grant_limit` | account 20 · platform 20000 | inventory | R6 | expiring | app+cascade | owner-identity-admission |
-| `identity_handoffs` | `identity_handoff_limit` | platform 1500 · platform 2000 | inventory | R6 | expiring | app+cascade | owner-identity-admission |
+| `identity_handoffs` | `identity_handoff_limit` | platform 2000 | inventory | R6 | expiring | app+cascade | owner-identity-admission |
 | `lookup_consents` | `lookup_consent_new` | other 20 (filtered) | inventory | R6 | expiring | app+cascade | connector-receipts |
 | `module_access_role_reviews` | `module_access_role_review_admit` | project 25 (filtered) · owner 25 (filtered) · owner 100 (filtered) · platform 2500 (filtered) · platform 5000 (filtered) | review | R1 | active-only | cascade | project-roles |
 | `module_activation_reviews` | `module_activation_review_admit` | project 25 (filtered) · owner 25 (filtered) · owner 100 (filtered) · platform 2500 (filtered) · platform 5000 (filtered) | review | R1 | active-only | cascade | module-registry |
