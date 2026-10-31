@@ -1,5 +1,6 @@
 import {execFileSync} from 'node:child_process';
 import {appendFileSync} from 'node:fs';
+import {posix} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
 // Same rules as docs/agent-review.md. Fails safe: every path is full tier unless it is on this short allowlist.
@@ -8,17 +9,41 @@ const gateTests=/^tests\/(secret-custody|deploy-ci|boundary-|tenant-|verificatio
 export const isSafePath=p=>p==='README.md'||(/^docs\/.*\.md$/.test(p)&&!policyDocs.test(p))||(/^tests\/[^/]+\.mjs$/.test(p)&&!gateTests.test(p));
 export const tiers={trivial:{maxLines:10,reviewers:2},lite:{maxLines:100,reviewers:4},full:{maxLines:Infinity,reviewers:7}};
 
-/** files: [{path, lines}] where lines is additions plus deletions. Renames must arrive as a delete plus an add (`--no-renames`). */
-export function reviewTier(files){
+// Deploy-gate suites are derived, not listed: everything in every tools/verify.mjs profile (the deploy gate and the site, app and security sweeps) plus whatever they import (transitively).
+export const gateProfiles=['fast','protection','security','site','app'];
+export function gateSuites(verifyText){
+ return gateProfiles.flatMap(name=>{
+  const m=verifyText.match(new RegExp(`\\b${name}:\\[([^\\]]*)\\]`));
+  if(!m)throw Error(`verify.mjs has no ${name} profile; the gate list cannot be derived.`);
+  return [...m[1].matchAll(/'([^']+)'/g)].map(x=>x[1]);
+ });
+}
+/** read(path) returns the file text at the base commit, or null. Returns the set of gate suites and their relative imports. */
+export function gateFiles(read){
+ const verify=read('tools/verify.mjs');
+ if(verify==null)throw Error('tools/verify.mjs not readable.');
+ const seen=new Set(),queue=gateSuites(verify);
+ while(queue.length){
+  const file=queue.pop();
+  if(seen.has(file))continue;
+  seen.add(file);
+  for(const m of (read(file)??'').matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*)['"](\.{1,2}\/[^'"]+)['"]/g))queue.push(posix.join(posix.dirname(file),m[1]));
+ }
+ return seen;
+}
+
+/** files: [{path, lines, binary?}] where lines is additions plus deletions. Renames must arrive as a delete plus an add (`--no-renames`).
+ * gate: set of paths that are deploy-gate suites or their imports (see gateFiles). A binary file is never safe, whatever its name. */
+export function reviewTier(files,gate=new Set()){
  const lines=files.reduce((n,f)=>n+f.lines,0);
- const unsafe=files.filter(f=>!isSafePath(f.path)).map(f=>f.path);
+ const unsafe=files.filter(f=>f.binary||gate.has(f.path)||!isSafePath(f.path)).map(f=>f.path);
  const tier=unsafe.length||lines>tiers.lite.maxLines?'full':lines>tiers.trivial.maxLines?'lite':'trivial';
  return {tier,reviewers:tiers[tier].reviewers,lines,unsafe};
 }
 
-/** Parses `git diff --numstat --no-renames`. A binary file (`-`) counts as 0 lines, but is never on the allowlist. */
+/** Parses `git diff --numstat --no-renames`. A binary row (`-`) has no line count, so it is flagged `binary`. */
 export function parseNumstat(text){
- return text.split('\n').filter(Boolean).map(row=>{const [a,d,...p]=row.split('\t');return {path:p.join('\t'),lines:(Number(a)||0)+(Number(d)||0)};});
+ return text.split('\n').filter(Boolean).map(row=>{const [a,d,...p]=row.split('\t');return {path:p.join('\t'),lines:(Number(a)||0)+(Number(d)||0),...(a==='-'||d==='-'?{binary:true}:{})};});
 }
 
 /** statuses: GitHub commit statuses for the head SHA, newest first. Approval is the newest `review:clean` being `success`. */
@@ -35,7 +60,8 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  }else{
   const base=process.argv[2];
   if(!/^[0-9a-f]{7,40}$/.test(base||''))throw Error('Usage: node tools/review-tier.mjs <base-sha> | --status');
-  const result=reviewTier(parseNumstat(execFileSync('git',['diff','--numstat','--no-renames',base,'HEAD'],{encoding:'utf8',maxBuffer:64e6})));
+  const read=file=>{try{return execFileSync('git',['show',`${base}:${file}`],{encoding:'utf8',maxBuffer:64e6,stdio:['ignore','pipe','ignore']});}catch{return null;}};
+  const result=reviewTier(parseNumstat(execFileSync('git',['diff','--numstat','--no-renames',base,'HEAD'],{encoding:'utf8',maxBuffer:64e6})),gateFiles(read));
   const summary=`## Review tier: ${result.tier}\n\n${result.lines} changed lines, ${result.reviewers}+ reviewers. See docs/agent-review.md.\n${result.unsafe.length?'\nNot on the safe-path allowlist:\n'+result.unsafe.map(p=>'- `'+p+'`').join('\n')+'\n':''}`;
   console.log(summary);
   if(process.env.GITHUB_STEP_SUMMARY)appendFileSync(process.env.GITHUB_STEP_SUMMARY,summary);
