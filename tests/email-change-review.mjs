@@ -216,6 +216,12 @@ try{
   assert.deepEqual([grant.kind,grant.principal.purpose,grant.principal.stage],['grant','recovery','recovering']);
   assert.throws(()=>m.admitWorkspace(db,grant.principal));
   await assert.rejects(m.resolveIdentity(db,{version:1,client:'web',kind:'session',token:grant.token}),e=>e.name==='IdentityError');
+  // WH-204: handed straight to the account and review routes, restricted recovery authority is refused by the scope guard (an IdentityError the Worker answers, before the policy's own 403 identity_incomplete) and stores nothing.
+  const reviews=await count('owner_security_reviews'),changes=await count('owner_email_changes');
+  for(const [route,url,body] of [[m.securityReviewRoute,'security/review/prepare',{version:1}],[m.accountEmailRoute,'email/change',{version:1,requestId:id(),newAddress:'grant-attempt@example.test'}]]){
+   await assert.rejects(route(new Request(`${origin}/api/account/${url}`,{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify(body)}),env,db,grant.principal,{delivery:null}),e=>e.name==='IdentityError',url);
+  }
+  assert.equal(await count('owner_security_reviews'),reviews);assert.equal(await count('owner_email_changes'),changes);
  });
  await check('concurrent sign-in around a commit cannot restore authority: old session and removed key fail, the retained key signs in at the new epoch only',async()=>{
   const o=await owner({keys:2}),retained=o.passkeys[0],removed=o.passkeys[1],r=(await prepare(o.session)).data;
