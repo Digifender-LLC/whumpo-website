@@ -49,6 +49,17 @@ async function rewrite(statement,...params){
  try{await run(statement,...params);}finally{await run(trigger.sql);}
 }
 const sha=value=>createHash('sha256').update(value).digest('hex');
+/** Cap fixtures: lift one admission trigger for a single bulk statement on this disposable database, then restore the
+ * identical trigger. Seeded rows are bounded by the cap under test and removed again by their SEEDED marker. */
+async function bypass(name,statement,...params){
+ const trigger=await row("SELECT sql FROM sqlite_master WHERE type='trigger' AND name=?",name);
+ await run('DROP TRIGGER '+name);
+ try{await run(statement,...params);}finally{await run(trigger.sql);}
+}
+const series='WITH RECURSIVE s(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM s WHERE n<?) ';
+const seedFeedback=(link,count)=>count<=0?null:bypass('guest_preview_feedback_admit',series+"INSERT INTO guest_preview_feedback(id,link_id,request_id,request_hash,display_name,body,created_at) SELECT lower(hex(randomblob(18))),?,lower(hex(randomblob(18))),lower(hex(randomblob(32))),'','SEEDED',unixepoch()-7200 FROM s",count,link);
+const seedLinks=(user,project,count)=>count<=0?null:bypass('guest_preview_links_admit',series+"INSERT INTO guest_preview_links(id,owner_user_id,project_id,version_id,version_digest,token_hash,request_hash,label,feedback_enabled,created_at,expires_at) SELECT lower(hex(randomblob(18))),?,?,NULL,'seeded',lower(hex(randomblob(32))),lower(hex(randomblob(32))),'SEEDED',0,unixepoch()-864000,unixepoch()-860400 FROM s",count,user,project);
+const total=async table=>(await row('SELECT count(*) n FROM '+table)).n;
 
 try{
  const a=await owner(),foreign=await owner(),starter=await owner('starter');
@@ -272,6 +283,105 @@ try{
   assert.equal((await view(live.token)).status,200,'Lifting restores the same link');
  });
 
+ await check('comment caps: 200 per link, 2,000 per owner, 100,000 platform',async()=>{
+  const o=await owner(),first=await issue(o,o.project,o.version),second=await issue(o,o.project,o.version);
+  const count=(q,...p)=>row(q,...p).then(r=>r.n);
+  // 199 stored comments older than the burst window: the 200th is accepted, the 201st is refused.
+  await seedFeedback(first.link.id,199);
+  assert.equal((await comment(first.token)).status,200);
+  const capped=await comment(first.token);assert.equal(capped.status,429);assert.match((await capped.json()).error,/Too many comments/);
+  assert.equal(await count('SELECT count(*) n FROM guest_preview_feedback WHERE link_id=?',first.link.id),200);
+  // Owner total: 1,999 across the owner's links; the 2,000th is accepted on another link, the next is refused.
+  await seedFeedback(first.link.id,1799);
+  assert.equal((await comment(second.token)).status,200);
+  const owned=await comment(second.token);assert.equal(owned.status,429);assert.match((await owned.json()).error,/not accepting more comments/);
+  assert.equal(await count('SELECT count(*) n FROM guest_preview_feedback f JOIN guest_preview_links l ON l.id=f.link_id WHERE l.owner_user_id=?',o.user),2000);
+  // Platform total: fill to exactly 100,000 under one owner; a different owner with no comments is refused, and room reopens.
+  const other=await owner(),theirs=await issue(other,other.project,other.version);
+  await seedFeedback(first.link.id,100000-await total('guest_preview_feedback'));
+  assert.equal(await total('guest_preview_feedback'),100000);
+  const full=await comment(theirs.token);assert.equal(full.status,429);assert.match((await full.json()).error,/not accepting more comments/);
+  assert.equal(await count('SELECT count(*) n FROM guest_preview_feedback WHERE link_id=?',theirs.link.id),0);
+  await run("DELETE FROM guest_preview_feedback WHERE body='SEEDED'");
+  assert.equal((await comment(theirs.token)).status,200);
+ });
+
+ await check('retained link caps: 200 per project, 20,000 platform',async()=>{
+  const o=await owner(),count=async()=>(await row('SELECT count(*) n FROM guest_preview_links WHERE project_id=?',o.project)).n;
+  await seedLinks(o.user,o.project,199);
+  await issue(o,o.project,o.version);assert.equal(await count(),200);
+  const refused=await issuePost(o,o.project,{id:id(),versionId:o.version,expiresInHours:24,feedback:true});
+  assert.equal(refused.status,409);assert.match((await refused.json()).error,/guest link limit/);assert.equal(await count(),200);
+  await run("DELETE FROM guest_preview_links WHERE label='SEEDED'");
+  const p=await owner(),q=await owner();
+  await seedLinks(q.user,q.project,20000-await total('guest_preview_links'));
+  assert.equal(await total('guest_preview_links'),20000);
+  const full=await issuePost(p,p.project,{id:id(),versionId:p.version,expiresInHours:24,feedback:true});
+  assert.equal(full.status,409);assert.equal((await row('SELECT count(*) n FROM guest_preview_links WHERE project_id=?',p.project)).n,0);
+  await run("DELETE FROM guest_preview_links WHERE label='SEEDED'");
+  await issue(p,p.project,p.version);
+ });
+
+ // Each way a link stops being current, applied while a view or a comment is in flight and for a comment replay.
+ const operatorStop=async o=>{
+  const stop={action:'stop-serving',id:id(),project:o.project,expiresAt:new Date(Date.now()+3600000).toISOString(),operator:'human:operator',reason:'Synthetic serving stop'};
+  await runContainment(db,stop,(await runContainment(db,stop)).applyDigest);
+ };
+ const endings={
+  revoked:{change:(o,l)=>run('UPDATE guest_preview_links SET revoked_at=unixepoch() WHERE id=?',l.link.id)},
+  expired:{change:(o,l)=>rewrite('UPDATE guest_preview_links SET created_at=unixepoch()-7200,expires_at=unixepoch()-1 WHERE id=?',l.link.id)},
+  removed:{newer:true,change:async o=>{const removal=await command(o,m.versionRemovalCommand,'/delete-version '+o.version);await command(o,m.versionRemovalCommand,'/confirm-version-delete '+removal,{type:'confirm',kind:'version',reviewId:removal});assert.equal((await row('SELECT count(*) n FROM site_versions WHERE id=?',o.version)).n,0);}},
+  held:{change:async o=>run("INSERT INTO content_screening_decisions(user_id,kind,digest,policy_version,first_required,required,first_reason,first_percent,first_risk_score) VALUES(?,'generated_artifact',?,'synthetic-hold',1,1,'risk_or_missing_history',100,90)",o.user,(await row('SELECT digest FROM site_versions WHERE id=?',o.version)).digest)},
+  'lost inclusion':{grant:true,change:o=>run('UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE user_id=?',o.user)},
+  'operator stop':{change:operatorStop},
+ };
+ const armed=async ending=>{
+  const o=await owner(ending.grant?null:'personal');
+  if(ending.grant)await run("INSERT INTO feature_preview_grants VALUES(?,1,?,?,'creator.guest-feedback','dispatch','private-test-acceptance','synthetic WH-092 fixture',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",id(),o.user,o.project);
+  if(ending.newer)await changeFixtureWebsite(o.scope,o.user,o.project,[{type:'design.setTheme',theme:'forest'}]);// the head cannot be removed
+  return {o,l:await issue(o,o.project,o.version)};
+ };
+ await check('in-flight view: every ending between admission and response wins over the read',async()=>{
+  for(const [name,ending] of Object.entries(endings)){
+   const {o,l}=await armed(ending);
+   // The hook fires on the final currentness check, after the page is rendered and before it is returned.
+   hostDB=interceptDatabase(db,/SELECT 1 FROM guest_preview_links l WHERE/,()=>ending.change(o,l));
+   let raced;try{raced=await view(l.token);}finally{hostDB=db;}
+   assert.equal(raced.status,404,name);assert.doesNotMatch(await raced.text(),/Garden studio/,name);
+   assert.equal((await view(l.token)).status,404,name+' stays ended');
+  }
+ });
+ await check('in-flight comment: no comment is stored once the link has ended',async()=>{
+  for(const [name,ending] of Object.entries(endings)){
+   const {o,l}=await armed(ending);
+   hostDB=interceptDatabase(db,/INSERT INTO guest_preview_feedback/,()=>ending.change(o,l));
+   let raced;try{raced=await comment(l.token);}finally{hostDB=db;}
+   assert.equal(raced.status,404,name);
+   assert.equal((await row('SELECT count(*) n FROM guest_preview_feedback WHERE link_id=?',l.link.id)).n,0,name);
+  }
+ });
+ await check('comment replay stops after revocation, expiry, removal, a hold, lost inclusion or a serving stop',async()=>{
+  for(const [name,ending] of Object.entries(endings)){
+   const {o,l}=await armed(ending),requestId=id();
+   const sent=await ok(await comment(l.token,{requestId}));assert.equal((await ok(await comment(l.token,{requestId}))).id,sent.id,name+' replay while current');
+   await ending.change(o,l);
+   assert.equal((await comment(l.token,{requestId})).status,404,name);
+  }
+ });
+
+ await check('raw tokens are absent from owner listings, the closure inventory and every stored table',async()=>{
+  const o=await owner(),made=await issue(o,o.project,o.version);await ok(await comment(made.token));
+  const list=await ok(await api(o,`/projects/${o.project}/guest-previews`)),feedback=await ok(await api(o,`/guest-previews/${made.link.id}/feedback`));
+  const inventory=await accountClosureInventory(db,o.user);
+  for(const [name,value] of [['listing',list],['feedback',feedback],['closure inventory',inventory]]){
+   const text=JSON.stringify(value);assert.ok(!text.includes(made.token),name);assert.ok(!text.includes(sha(made.token)),name);
+  }
+  for(const table of (await rows("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'")).map(t=>t.name)){
+   const text=JSON.stringify(await rows('SELECT * FROM "'+table+'"'));
+   assert.ok(!text.includes(made.token),'raw token stored in '+table);
+  }
+ });
+
  await check('no token or guest content in logs',async()=>{
   assert.ok(tokens.length>10);
   const text=logs.join('\n');
@@ -280,6 +390,6 @@ try{
  });
  assert.equal(network,0);
  assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
- say(`Guest previews passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — tier/grant/identity admission, hashed one-time tokens, exact-version isolated delivery, forged/replayed/foreign tokens, inert bounded feedback, rate limits, immediate and in-flight revocation, expiry, version removal, safety and preservation holds, retention, closure inventory and cascades. No network, model or Chat use; no token or guest text logged.`);
+ say(`Guest previews passed: ${cases} groups on ${process.argv.includes('--d1')?'local D1':'SQLite'} — tier/grant/identity admission, hashed one-time tokens, exact-version isolated delivery, forged/replayed/foreign tokens, inert bounded feedback, rate limits, immediate revocation, in-flight views and comments for every ending, comment replay, 200/2,000/100,000 comment and 200/20,000 link caps, expiry, version removal, safety and preservation holds, retention, closure inventory and cascades. No network, model or Chat use; no token or guest text logged.`);
 }catch(error){originals.error(String(error.stack||error).replace(/data:text\/javascript;base64,[A-Za-z0-9+/=]+/g,'<bundled module>'));process.exitCode=1;}
 finally{for(const k of consoleMethods)console[k]=originals[k];globalThis.fetch=originalFetch;await fixture.close();}

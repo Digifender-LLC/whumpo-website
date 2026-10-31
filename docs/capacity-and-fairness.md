@@ -1,6 +1,6 @@
 # Capacity, abuse and tenant-fairness measurement (WH-050)
 
-**First slice, recorded October 4, 2026 UTC against main `ae96716` plus the uncommitted harness.** The [WH-075 first-slice fairness fixes](#wh-075-first-slice-fairness-fixes--october-4-2026-utc) were re-measured with the same harness the same day; the "before" tables below are the original WH-050 record. Roadmap task [WH-050](roadmap/backlog.md) (P0). This slice delivers a reproducible **local** synthetic-client harness and its measured results. It does **not** complete WH-050: no live experiment was run, no alerting exists, and the cohort limits below are proposals awaiting an owner decision.
+**First slice, recorded October 4, 2026 UTC against main `ae96716` plus the uncommitted harness.** The [WH-075 first-slice fairness fixes](#wh-075-first-slice-fairness-fixes--october-4-2026-utc) were re-measured with the same harness the same day; the "before" tables below are the original WH-050 record. Roadmap task [WH-050](roadmap/backlog.md) (P0). This slice delivers a reproducible **local** synthetic-client harness and its measured results. Later slices and the [D28 decision of October 31, 2026](#account-level-alerts-and-cohort-limits-decided-d28-2026-10-31) close WH-050 on this **local envelope** only: no live experiment was run, no alert is delivered (alerts are pull-based), and the cohort limits are a manual-invitation procedure, not tested thresholds.
 
 > **Local-only evidence.** Every number here came from a disposable local D1/R2 fixture, the real QuickJS runtime Worker under Miniflare/workerd, and the real platform, site and visitor handlers called in one Node process behind a loopback HTTP server. Nothing touched Cloudflare, a provider, a deployed URL or the network beyond `127.0.0.1`. These figures describe one 4-vCPU machine and these fixtures. They are **not** Cloudflare production limits or capacity, and absolute latencies must not be read as a service-level expectation. See [What this does not prove](#what-this-does-not-prove).
 
@@ -148,12 +148,14 @@ The noisy tenant consumed exactly its per-project public-backend and visitor all
 
 ## Acceptance assessment (local envelope only)
 
-| WH-050 acceptance criterion | Result |
-| --- | --- |
-| One tenant cannot consume the entire allowed public execution budget in the tested envelope | **Met for one tenant, not for two.** The noisy tenant was held to its 100/project and 500/account ceilings (it reached 100 attempts on one project). Two filler accounts with five projects each consumed the rest of the 1,000/day platform budget and denied a victim still under its own project cap (D); two accounts at the 500 account cap would reach it alone. The 500/account cap itself was not driven to its limit here; it is covered by existing quota suites. |
-| Traffic serving and recovery remain available after saturation | **Mostly met locally.** Site, contact, visitor and noisy-tenant paths kept serving and the runtime recovered immediately. Public backend stays refused until the day rolls, and photo serving fails platform-wide once the monthly R2 read ceiling is spent (E). |
-| Per-IP limits are not claimed as financial caps | **Met.** P shows distributed clients bypass them and three public paths have none. Do not describe `API_LIMITER` or `AUTH_LIMITER` as spend controls ([runbook C4/G2](incident-runbooks.md)). |
-| Any live load/cost experiment requires an exact bounded plan | **Honored.** No live load was run. Run nothing against `*.whumpo.site`, `whumpo.com` or any deployed Worker without a reviewed plan stating target, request count, duration, concurrency, expected cost and stop condition. |
+The October 4 table below the heading was written before the WH-075 fixes. It is kept as the first reading, then re-read against the WH-075 fair-share result (the "After" table in the [WH-075 section](#wh-075-first-slice-fairness-fixes--october-4-2026-utc), unchanged on the October 30 Node 24 re-record).
+
+| WH-050 acceptance criterion | October 4 reading (before WH-075) | Re-read, 2026-10-31 (after WH-075 fair share) |
+| --- | --- | --- |
+| One tenant cannot consume the entire allowed public execution budget in the tested envelope | **Met for one tenant, not for two.** Two filler accounts with five projects each drained the 1,000/day platform budget and denied a victim under its own project cap (D). | **Met in the tested envelope.** Scenario D after the fix: the two filler accounts stopped at 100 each (200 ok, 799 x 429; 789 x 429 and 11 x 503 busy on the 2026-10-31 re-run), platform 606/1,000 (603 on the re-run), the victim probes were 5/5 ok and a brand-new account 10/10 ok. A single IP stops at 20 backend calls, 10 contact submissions and 400 photo reads per project per day (L). **Limits:** the guarantee holds only while light accounts fit the 50% reserve (about five accounts at their full share); distributed callers can still spend one project's allowance (5 sources for backend, 2 for contact's hourly cap); the tested shape is two heavy accounts, not many. |
+| Traffic serving and recovery remain available after saturation | **Mostly met locally.** Public backend stayed refused until the UTC rollover; photos failed platform-wide at the R2 read ceiling (E). | **Met in the tested envelope, with one stated limit.** Victim public backend in the recovery phase went from 0/3 to 3/3 (C). A project at its 10,000/month photo budget gets 503 while other tenants keep serving 5/5 (E). Many tenants together can still reach the unchanged 100,000/month platform read ceiling, after which photos fail platform-wide; site HTML, contact, visitor and recovery paths keep serving. |
+| Per-IP limits are not claimed as financial caps | **Met.** P shows distributed clients bypass them and three public paths have none. | **Met, unchanged.** Do not describe `API_LIMITER`, `AUTH_LIMITER` or the per-client allowances as spend controls ([runbook C4/G2](incident-runbooks.md)). Site HTML still has no per-IP limit (F2, now tracked under WH-075). |
+| Any live load/cost experiment requires an exact bounded plan | **Honored.** | **Honored.** No live load was run for any part of this task. Run nothing against `*.whumpo.site`, `whumpo.com` or any deployed Worker without a reviewed plan stating target, request count, duration, concurrency, expected cost and stop condition. |
 
 ## WH-075 first-slice fairness fixes — October 4, 2026 UTC
 
@@ -253,7 +255,7 @@ Containment controls recorded as **missing** on October 4, and their status afte
 | Operator containment rows | 10,000 | retained |
 | Operator session revocation receipts / cleanup receipts | 10,000 / 10,000 (cleanup receipts counted after each cleanup's own deletions) | retained 90 days, then reviewed cleanup |
 
-**Alert delivery stays owner-gated.** Nothing pushes, pages or emails: the report is read on a cadence the owner sets (runbook G1). Installing any delivery (Cloudflare notifications, a paging or email provider, a scheduled Worker that sends messages) is a separate owner decision with its own price and entitlement review.
+**No alert provider (D28).** Nothing pushes, pages or emails: the report is read on the [stated cadence](#account-level-alerts-and-cohort-limits-decided-d28-2026-10-31) (runbook G1). Installing any delivery (Cloudflare notifications, a paging or email provider, a scheduled Worker that sends messages) is a separate owner decision with its own price and entitlement review.
 
 ### G11 slice: synthetic health probe (implemented locally)
 
@@ -374,18 +376,17 @@ Outcomes, run 1 / run 2: A had 2 / 0 server errors (all backend `busy` 503, refu
 
 **L (client allowance):** unchanged: one IP 20 ok / 20 x 429 on backend, 10 / 5 on contact, 400 / 50 on photo; other IPs 10/10, 3/3, 10/10 ok.
 
-### Still owner-gated (not changed by this record)
+### Decided (D28, 2026-10-31)
 
-- **Cohort limits.** The proposed 10 active accounts and the 50%/80% platform-counter warn/act thresholds (see [Proposed account-level alerts and cohort limits](#proposed-account-level-alerts-and-cohort-limits-proposal-owner-decision-required)) are a proposal; none is enforced and these numbers do not approve them.
-- **Alert provider.** No alert is delivered anywhere; counters are read by hand or by `node tools/report-maintenance.mjs --counters`. Choosing a provider and a recipient is an owner decision.
-- **F2 rate-limit binding.** The `whumpo-sites` Worker still has no rate-limit binding, so site HTML is unlimited per IP (the P row above). Adding one is a Cloudflare configuration change that needs owner approval.
+The three items that this record listed as owner-gated were decided by the orchestrator under delegated authority, because none costs money and all are reversible. See [Account-level alerts and cohort limits](#account-level-alerts-and-cohort-limits-decided-d28-2026-10-31).
 
-WH-050 is not complete: this is a local re-record on the supported Node version, with no live experiment.
+- **Cohort limits.** At most 10 active accounts, about 5 while the R2 read ceiling is shared. Invitations are manual, so no enforcement code exists or is needed.
+- **Alert provider.** None. Alerts are pull-based (`node tools/report-maintenance.mjs --counters`) on the cadence stated below.
+- **F2 rate-limit binding.** Moved to WH-075. Binding availability and price were not verified here, because the Cloudflare docs connector needs re-authentication; check the price before any change, since it costs money only if that check says so.
 
-## Findings: fairness and abuse gaps (WH-050 record; status after WH-075 and the F7/F8 slice above)
+WH-050 closes on the local envelope with the limits in [What this does not prove](#what-this-does-not-prove). No live experiment was run.
 
-| ID | Finding | Evidence | Severity |
-| --- | --- | --- | --- |
+--- | --- | --- | --- |
 | F1 | **Platform-wide daily budgets are first-come across tenants.** Public backend (1,000/day), visitor transitions (1,000/day), contact receipts (1,000 retained) and R2 reads (100,000/month) are shared; the per-account sub-cap (500) lets two accounts drain the platform and a tenant under its own project cap is refused. | D, E; schema triggers in [`schema/platform.sql`](../schema/platform.sql) (contact and visitor platform caps read from schema, not driven by traffic here) | High |
 | F2 | **No admission control on the public site host.** Site HTML, photos and the public backend route have no per-IP, per-tenant or per-project request limiter; only quotas apply to backend and photo reads. One IP sent 150/150 accepted. | P; [`src/site-host.ts`](../src/site-host.ts) | High |
 | F3 | **One client can exhaust every tenant's photos.** Photo GETs are `no-store` and each charges the shared monthly R2 read counter, with no per-tenant or per-IP bound. | E | High |
@@ -393,13 +394,15 @@ WH-050 is not complete: this is a local re-record on the supported Node version,
 | F5 | **Allowances are keyed by the target, not the caller.** Anonymous callers can spend a tenant's 100 backend calls/day, fill its 20-per-hour contact cap (and, over time, its 100 retained receipts) or its visitor-page allowance, locking out legitimate users. Per-IP limits do not help against distributed callers. | B noisy table, P | Medium |
 | F6 | **Per-IP limiter coverage and semantics are narrow and local-only.** Limits cover contact, visitor routes and platform `/api`; the real binding is per Cloudflare location and eventually consistent, which this harness does not model. | P; [Workers rate limiting](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/) | Medium |
 | F7 | **Recovery from exhaustion is time-based only.** No operator can raise, reset or freeze one tenant's allowance or isolate one abusive tenant (runbook gaps G1 and G3). Rollover not tested. **Implemented locally (F7 slice):** operator freeze or temporary allowance per account/project, enforced in the admission triggers. **October 8 (local):** separate project serving stop and account session revocation, with 90-day retention of resolved records; individual visitor session revocation remains missing. Not configured or accepted. | C; [incident runbooks](incident-runbooks.md#3-gap-register-controls-this-runbook-needs-that-do-not-exist) | Medium |
-| F8 | **No alert exists for any of the shared counters.** No notification fires at 50% or 80% of any platform budget (G1). **Implemented locally (pull-based):** `report-maintenance.mjs --counters` flags 50%/80%; alert delivery remains owner-gated and not installed. | none installed | Medium |
+| F8 | **No alert exists for any of the shared counters.** No notification fires at 50% or 80% of any platform budget (G1). **Implemented locally (pull-based):** `report-maintenance.mjs --counters` flags 50%/80%; no alert provider is installed (D28: pull-based on a stated cadence). | none installed | Medium |
 
 Candidate remedies (each needs its own reviewed task; none implemented here): per-account sub-caps sized to the enrolled cohort, per-tenant photo read accounting before the platform counter is charged, an edge rate rule or cache policy for the public site host (a [WAF rate limiting](https://developers.cloudflare.com/waf/rate-limiting-rules/) rule is paid-plan dependent and **requires entitlement and price verification**), a per-project fairness token or queue ahead of the runtime gate, and an operator per-tenant freeze (WH-015/016; the public-allowance part is now implemented locally, see the F7 slice).
 
-## Proposed account-level alerts and cohort limits (proposal, owner decision required)
+## Account-level alerts and cohort limits (decided D28, 2026-10-31)
 
-Nothing below is enforced and no alert is delivered (G1). The platform counter rows are now **pull-based checks** in `node tools/report-maintenance.mjs --counters` (50%/80% flags, local implementation only); the account-share and 429/503 rows are still manual. Read them on a stated cadence while a cohort is active.
+**Decision (orchestrator, delegated authority, no money involved, reversible):** the proposal that stood here is adopted as written, with the alert cadence below. Nothing is enforced in code and no alert is delivered anywhere (G1). The platform counter rows are **pull-based checks** in `node tools/report-maintenance.mjs --counters` (50%/80% flags, local implementation only); the account-share and 429/503 rows are read by hand.
+
+**Cadence (stated, as D28 requires):** run `node tools/report-maintenance.mjs --counters` once per UTC day while any cohort account is active, and before every new invitation. Exit 2 means attention: act on `act`, `exhausted` or `unavailable` before inviting anyone. The cadence is a procedure for the operator, not a scheduled job.
 
 | Signal (source) | Warn at | Act at | Intended response |
 | --- | --- | --- | --- |
@@ -410,7 +413,9 @@ Nothing below is enforced and no alert is delivered (G1). The platform counter r
 | One account share of any platform daily budget | 50% | 70% | Review that tenant for abuse |
 | 429 or 503 spike from the limiters/quotas | any sustained burst | repeated | Triage per the runbook |
 
-Conservative cohort admission, derived only from the ceilings above and the F1 result: while the 1,000/day platform ceilings and 500/account sub-cap are unchanged, **admit no more than 10 active accounts**, so a fair share is about 100 backend calls/day and 100 visitor transitions/day each, and treat the 500/account cap as an abuse ceiling, not a guarantee. Fewer (about 5) while the R2 read ceiling is shared and photo reads have no per-tenant cap. Raise only after live cost and capacity are measured under an approved plan. These counts are proposals, not tested thresholds.
+**Cohort admission:** while the 1,000/day platform ceilings and the 500/account sub-cap are unchanged, **admit no more than 10 active accounts**, so a fair share is about 100 backend calls/day and 100 visitor transitions/day each; treat the 500/account cap as an abuse ceiling, not a guarantee. Admit about 5 while the R2 read ceiling is shared and photo reads have no per-tenant cap beyond the 10,000/month project budget. Invitations are issued by hand, so the limit is a procedure, not code. Raise it only after live cost and capacity are measured under an approved plan.
+
+**What this decision does not claim:** the counts are derived from the ceilings and the F1/WH-075 result, not from a tested threshold or live traffic. No alert reaches a person unless the operator runs the report.
 
 ## What this does not prove
 
