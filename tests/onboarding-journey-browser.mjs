@@ -24,7 +24,7 @@ assert.match(csp,/style-src 'self';/,'style-src stays self');
 
 // Runs before any page script. Records what the page cannot be trusted to report about itself.
 function instrument(){
- const log=window.__journey={moves:[],violations:[],gestures:[],frames:[],long:[],shift:0,entrances:[]};
+ const log=window.__journey={moves:[],violations:[],gestures:[],frames:[],long:[],shift:0,entrances:[],morphs:[]};
  window.turnstile={render:()=>'synthetic',remove:()=>{},reset:()=>{},getResponse:()=>'synthetic-turnstile'};
  document.addEventListener('securitypolicyviolation',event=>log.violations.push(event.violatedDirective+' '+event.blockedURI));
  const start=document.startViewTransition?.bind(document);
@@ -36,7 +36,11 @@ function instrument(){
   transition.finished.finally(()=>{move.end=performance.now();});return transition;
  };
  const animate=Element.prototype.animate;
- Element.prototype.animate=function(keyframes,options){if(this.parentElement?.matches('.journey-step'))log.entrances.push({keyframes:JSON.stringify(keyframes),duration:options?.duration,easing:options?.easing});return animate.call(this,keyframes,options);};
+ Element.prototype.animate=function(keyframes,options){
+  if(this.parentElement?.matches('.journey-step'))log.entrances.push({keyframes:JSON.stringify(keyframes),duration:options?.duration,easing:options?.easing});
+  if(options?.pseudoElement?.startsWith('::view-transition-group'))log.morphs.push({duration:options.duration,easing:options.easing});
+  return animate.call(this,keyframes,options);
+ };
  // Sees every commit, including one no frame ever paints. Armed only around the kit, because reading the page text is not free.
  new MutationObserver(()=>{
   if(!log.watch)return;const text=document.body?.textContent??'';
@@ -61,7 +65,7 @@ const invite=async(db,hashToken)=>{const code=crypto.randomUUID();await db.prepa
 const settled=page=>page.waitForFunction(()=>!document.documentElement.dataset.journeyMove&&!document.getAnimations().some(animation=>animation.playState==='running'&&!animation.effect?.target?.matches?.('.skeleton,.skeleton::after')),undefined,{polling:100});
 
 /** One full journey. checks turns on the one-off failure, interruption and timing cases. */
-async function walk(page,cdp,{db,hashToken,width,height=844,label,reduced=false,large=false,checks=false,axe=false,landing=false,keyboard=false,hold=false,pages,kitSaves}){
+async function walk(page,cdp,{db,hashToken,width,height=844,label,reduced=false,large=false,checks=false,landing=false,keyboard=false,hold=false,pages,kitSaves}){
  const {activate,enter}=keyboardJourney(page,true),code=await invite(db,hashToken),email=`journey-${label}@example.test`;
  const authenticator=async()=>(await cdp.send('WebAuthn.addVirtualAuthenticator',{options:{protocol:'ctap2',transport:'internal',hasResidentKey:true,hasUserVerification:true,isUserVerified:true,automaticPresenceSimulation:true}})).authenticatorId;
  const button=name=>page.getByRole('button',{name,exact:true});
@@ -224,10 +228,10 @@ async function walk(page,cdp,{db,hashToken,width,height=844,label,reduced=false,
  if(reduced)assert.equal(log.moves.length,0,'Reduced motion commits without a transition');else assert(log.moves.length>=12,`moves: ${log.moves.length}`);
  if(!reduced)assert(log.moves.some(move=>move.name==='arrive'),'Chat is reached by the arrival move');
  // Web Animations cannot read the motion tokens, so motion.ts copies them. These hold the copies to the tokens.
- const [fast,slow,ease]=await page.evaluate(()=>{const style=getComputedStyle(document.documentElement),ms=value=>value.endsWith('ms')?parseFloat(value):parseFloat(value)*1000;return [ms(style.getPropertyValue('--duration-fast').trim()),ms(style.getPropertyValue('--duration-slow').trim()),style.getPropertyValue('--ease-enter').trim()];}); // The CSS minifier writes 400ms as .4s.
+ const [fast,slow,ease,standard]=await page.evaluate(()=>{const style=getComputedStyle(document.documentElement),ms=value=>value.endsWith('ms')?parseFloat(value):parseFloat(value)*1000;return [ms(style.getPropertyValue('--duration-fast').trim()),ms(style.getPropertyValue('--duration-slow').trim()),style.getPropertyValue('--ease-enter').trim(),style.getPropertyValue('--ease-standard').trim()];}); // The CSS minifier writes 400ms as .4s.
  assert(log.entrances.length>=8,`entrances: ${log.entrances.length}`);
  if(reduced)assert(log.entrances.every(item=>item.keyframes==='{"opacity":[0,1]}'&&item.duration===fast),'Reduced motion fades each step in and moves nothing');
- else assert(log.entrances.every(item=>item.duration===slow&&item.easing===ease),'Entrances use the motion tokens');
+ else{assert(log.entrances.every(item=>item.duration===slow&&item.easing===ease),'Entrances use the motion tokens');assert(log.morphs.length>=3&&log.morphs.every(item=>item.duration===slow&&item.easing===standard),`Morphs use the motion tokens: ${log.morphs.length}`);}
  if(height<=640)assert(pinned>=3,`The short viewport must really scroll past the pinned action: ${pinned}`);
  if(!process.env.WHUMPO_JOURNEY_THROTTLE&&!capture)assert(log.shift<.1,`Layout shift ${log.shift} ${JSON.stringify(log.shifts)}`); // Throttling and capture pauses push commits past the browser's recent-input window.
  return log;
