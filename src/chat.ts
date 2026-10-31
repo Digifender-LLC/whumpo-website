@@ -46,6 +46,7 @@ import {photoRemovalCommand} from './photo-removal';
 import {applyServiceClientsCommand,serviceClientChatLinks} from './project-specification/service-clients/store';
 import {prepareAccessModuleCommand} from './shared-modules/access-setup';
 import {prepareFilesModuleCommand} from './shared-modules/files-setup';
+import {prepareAppointmentFormCommand} from './shared-modules/records-setup';
 import {prepareGalleryPageCommand} from './shared-modules/files-gallery';
 import {BackendError} from './backend-error';
 import {prepareModuleActivationCommand,applyModuleActivationCommand,moduleActivationChatLinks,moduleActivationFailure} from './shared-modules/activation';
@@ -227,6 +228,8 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     if(control?.action.type==='accessModuleReview')accessSetup=await prepareAccessModuleCommand(db,userId,input.id,command);
     // WH-128 owner photo collection setup: the same slot, the existing exact specification review (saved by specificationApply).
     if(control?.action.type==='filesModuleReview')accessSetup=await prepareFilesModuleCommand(db,userId,input.id,command);
+    // WH-070 owner appointment form setup: the same slot, the existing exact specification review (saved by specificationApply).
+    if(control?.action.type==='appointmentFormReview')accessSetup=await prepareAppointmentFormCommand(db,userId,input.id,command);
     // WH-128 published gallery: the same slot, the existing exact specification review (saved by specificationApply).
     if(control?.action.type==='galleryPageReview')accessSetup=await prepareGalleryPageCommand(db,userId,input.id,command);
   }catch(e){if(e instanceof ModuleError||e instanceof BackendError)return {status:e.status,error:e.message};throw e;}

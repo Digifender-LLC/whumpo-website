@@ -8835,7 +8835,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-31 UTC (standard appointment form slice, schema batch 6; source and local verification only; NOT deployed and NOT live-tested): a button-driven owner setup (typed appointmentFormReview control, one trigger project_spec_appointment_setup_admit, the existing exact specification, publication and activation reviews unchanged), a hosted GET /forms/appointment page on the application host (server-rendered from the registered records instance; closed with no submit unless the form is bound and the deployed Worker holds TURNSTILE_SECRET, which whumpo-apps does not yet), and a 'Request an appointment' link on the published site while the form is bound. The records panel's false 'Ask Whumpo in Chat to add a form' copy is replaced by the real action. Acceptance lines of WH-070 are NOT claimed: this is one standard backend and its hosted page, not the three extension levels. Evidence: tests/records-setup.mjs (SQLite and --d1) and tests/appointment-form-browser.mjs (Chromium 360/390/1280px, light and dark, 200% text, axe, keyboard). Anonymous public intake stays not live-accepted until the owner sets TURNSTILE_SECRET on whumpo-apps and confirms the widget hostname list covers app-*.whumpo.site. docs/shared-modules.md#owner-appointment-form-setup-wh-070--october-31-2026-utc.
 
 ## WH-072 — Design project data provisioning, migrations and recovery boundaries
 

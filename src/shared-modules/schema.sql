@@ -654,6 +654,29 @@ WHEN EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id AND t.user_id=NEW.user_
  );
 END;
 
+-- WH-070 owner appointment form setup. A proposal prepared by the typed appointmentFormReview control is exactly the current
+-- head plus one appended standard records instance (id appointments, module-records, no dependencies, 90 days retention, one
+-- schema appointment with five owner-read fields, one public form appointment and no view; the whole instance apart from its
+-- two catalog pins is compared with the canonical text) in a project whose head and registry have no instance using the id
+-- appointments and no records instance with a form named appointment; nothing else in the specification may change. It adds
+-- no authority: saving stays specificationApply and activation stays the exact moduleActivationReview/Apply pair.
+CREATE TRIGGER project_spec_appointment_setup_admit BEFORE INSERT ON project_spec_proposals
+WHEN EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id AND t.user_id=NEW.user_id AND json_extract(t.action_json,'$.type')='appointmentFormReview') BEGIN
+ SELECT RAISE(ABORT,'specification_changed') WHERE NOT EXISTS(
+  SELECT 1 FROM project_spec_heads h JOIN project_spec_versions v ON v.version_id=h.version_id AND v.project_id=h.project_id
+  WHERE h.project_id=NEW.project_id AND h.version_id IS NEW.base_version_id AND v.spec_digest IS NEW.base_digest
+  AND json_array_length(NEW.spec_json,'$.instances')=json_array_length(v.spec_json,'$.instances')+1
+  AND json(json_remove(NEW.spec_json,'$.instances[#-1]'))=json(v.spec_json)
+  AND NOT EXISTS(SELECT 1 FROM json_each(v.spec_json,'$.instances') e WHERE json_extract(e.value,'$.id')='appointments'
+   OR json_extract(e.value,'$.kind')='records' AND EXISTS(SELECT 1 FROM json_each(e.value,'$.config.forms') f WHERE json_extract(f.value,'$.id')='appointment'))
+  AND NOT EXISTS(SELECT 1 FROM module_instances i WHERE i.project_id=NEW.project_id AND (i.local_id='appointments'
+   OR i.kind='records' AND EXISTS(SELECT 1 FROM json_each(i.config_json,'$.forms') f WHERE json_extract(f.value,'$.id')='appointment')))
+  AND (SELECT count(*) FROM json_each(NEW.spec_json,'$.instances[#-1]'))=6
+  AND json_extract(NEW.spec_json,'$.instances[#-1].module.name')='module-records' AND json_extract(NEW.spec_json,'$.instances[#-1].schema.name')='records-data'
+  AND json(json_remove(json_extract(NEW.spec_json,'$.instances[#-1]'),'$.module','$.schema'))=json('{"config":{"forms":[{"id":"appointment","recordId":"appointment","submit":"public","uploadCollectionId":null}],"retentionDays":90,"schemas":[{"fields":[{"key":"name","label":"Your name","optional":false,"read":"owner","type":"text"},{"key":"contact","label":"Email or phone","optional":false,"read":"owner","type":"text"},{"key":"service","label":"What do you need?","optional":false,"options":[{"label":"First visit","value":"first-visit"},{"label":"Follow-up","value":"follow-up"},{"label":"Something else","value":"other"}],"read":"owner","type":"choice"},{"key":"day","label":"Preferred day","optional":false,"options":[{"label":"A weekday","value":"weekday"},{"label":"A weekend day","value":"weekend"},{"label":"Any day","value":"any"}],"read":"owner","type":"choice"},{"key":"note","label":"Anything we should know?","optional":true,"read":"owner","type":"text"}],"fieldsRevision":1,"id":"appointment","staffWrite":[]}],"views":[]},"dependencies":[],"id":"appointments","kind":"records"}')
+ );
+END;
+
 -- WH-128 published gallery. A proposal prepared by the typed galleryPageReview control is exactly the current head with
 -- only the named page's photos (and its photo component) replaced by one to four photos that the owner filed into the
 -- named collection of this project's registered files instance and that currently have an exact-digest approval.

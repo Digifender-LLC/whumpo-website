@@ -11,6 +11,7 @@ import {hashToken} from './security';
 import {publicDirectory} from './directory';
 import {directoryPage} from './directory-page';
 import {publishedHTML} from './published-html';
+import {withAppointmentLink} from './appointment-link';
 import {requireSpecificationAvailable} from './specification-safety';
 import { previewHeaders } from './components';
 import {reservePublicPhotoRead,StorageLimitError} from './storage-budget';
@@ -57,15 +58,15 @@ const serving = {
     return new Response(request.method==='HEAD'?null:bytes,{headers:{...headers,'content-type':'image/jpeg','content-length':String(photo.size),'content-disposition':'inline; filename="photo.jpg"','cross-origin-resource-policy':'cross-origin'}});
    }
    const match=url.pathname.match(/^\/s\/([0-9a-f-]{36})\/?$/);if(!match)return new Response('Site not found',{status:404,headers});
-   const site=await env.DB.prepare('SELECT v.id,v.html,v.component_id,EXISTS(SELECT 1 FROM contact_settings c WHERE c.project_id=s.project_id AND c.enabled=1 AND c.publication_revision=s.revision AND NOT EXISTS(SELECT 1 FROM service_client_blocked_contacts WHERE project_id=c.project_id)) AS contact_enabled FROM publications s JOIN site_versions v ON v.id=s.version_id AND v.project_id=s.project_id WHERE s.project_id=?').bind(match[1]).first<{id:string;html:string;component_id:string;contact_enabled:number}>();
+   const site=await env.DB.prepare(`SELECT v.id,v.html,v.component_id,EXISTS(SELECT 1 FROM contact_settings c WHERE c.project_id=s.project_id AND c.enabled=1 AND c.publication_revision=s.revision AND NOT EXISTS(SELECT 1 FROM service_client_blocked_contacts WHERE project_id=c.project_id)) AS contact_enabled,EXISTS(SELECT 1 FROM module_instances i JOIN module_activations a ON a.instance_id=i.id AND a.state='active' AND a.publication_revision=s.revision WHERE i.project_id=s.project_id AND i.kind='records' AND EXISTS(SELECT 1 FROM json_each(i.config_json,'$.forms') f WHERE json_extract(f.value,'$.id')='appointment' AND json_extract(f.value,'$.submit')='public')) AS appointment_enabled FROM publications s JOIN site_versions v ON v.id=s.version_id AND v.project_id=s.project_id WHERE s.project_id=?`).bind(match[1]).first<{id:string;html:string;component_id:string;contact_enabled:number;appointment_enabled:number}>();
    if(!site)return new Response('Site not found',{status:404,headers});
    await requireSpecificationAvailable(env.DB,site.id);
    if(site.component_id==='photo-page@1'&&!url.pathname.endsWith('/'))return new Response(null,{status:308,headers:{...headers,location:new URL(request.url).pathname+'/'}});
    const contact=site.contact_enabled===1;
    const form=await activeBackendForm(env.DB,match[1]);
-   const html=publishedHTML(site.html,contact,match[1],form);
+   const html=withAppointmentLink(publishedHTML(site.html,contact,match[1],form),match[1],site.appointment_enabled===1);
    const formPolicy=form?"; script-src "+await backendFormScriptPolicy()+"; connect-src "+projectOrigin(match[1])+"":'';
-   const sandbox='sandbox'+(form?' allow-scripts allow-forms':'')+(contact?' allow-popups allow-popups-to-escape-sandbox':'')+';';
+   const sandbox='sandbox'+(form?' allow-scripts allow-forms':'')+(contact||site.appointment_enabled===1?' allow-popups allow-popups-to-escape-sandbox':'')+';';
    return new Response(request.method==='HEAD'?null:html,{headers:{...headers,'content-security-policy':headers['content-security-policy'].replace('sandbox;',sandbox)+"; img-src 'self'"+formPolicy}});
   }catch(cause){if(cause instanceof PublicClientLimitError)return new Response('Too many photo requests from this connection today',{status:429,headers});return new Response(cause instanceof StorageLimitError?'Photo allowance temporarily exhausted':'Site temporarily unavailable',{status:503,headers});}
  }

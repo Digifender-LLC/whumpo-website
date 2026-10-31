@@ -142,6 +142,8 @@
     "tables": [
      "backend_live_forms",
      "contact_settings",
+     "module_activations",
+     "module_instances",
      "operator_serving_stopped",
      "project_spec_held",
      "project_spec_versions",
@@ -206,6 +208,8 @@
     "tables": [
      "backend_live_forms",
      "contact_settings",
+     "module_activations",
+     "module_instances",
      "operator_serving_stopped",
      "project_spec_held",
      "project_spec_versions",
@@ -756,6 +760,8 @@
     "tables": [
      "backend_live_forms",
      "contact_settings",
+     "module_activations",
+     "module_instances",
      "operator_serving_stopped",
      "project_spec_held",
      "project_spec_versions",
@@ -972,6 +978,8 @@
     "waitUntil": 0,
     "tables": [
      "contact_settings",
+     "module_activations",
+     "module_instances",
      "operator_serving_stopped",
      "publications",
      "service_client_blocked_contacts",
@@ -1080,6 +1088,8 @@
      "backend_live_forms",
      "contact_settings",
      "domain_connections",
+     "module_activations",
+     "module_instances",
      "operator_serving_stopped",
      "project_spec_held",
      "project_spec_versions",
@@ -1392,6 +1402,124 @@
    "label": "Visitor app script",
    "method": "GET",
    "url": "https://app-<project>.whumpo.site/visitor.js",
+   "entry": {
+    "worker": "whumpo-sites",
+    "route": "*.whumpo.site/*",
+    "config": "wrangler.sites.jsonc"
+   },
+   "workerExecution": {
+    "runs": true,
+    "reason": "no assets configured; every routed request invokes the Worker",
+    "billing": "Worker request (inbound invocation); not a direct static-asset request",
+    "serviceBindingTargets": [
+     {
+      "binding": "APP_HOST",
+      "worker": "whumpo-apps",
+      "runs": true,
+      "reason": "assets.run_worker_first = true; every request invokes the Worker before any asset"
+     }
+    ]
+   },
+   "assetsStub": "Static Assets were fetched through the ASSETS binding stub; the asset body and its headers are synthetic, while the wrapping Worker headers are real.",
+   "status": 200,
+   "cacheControl": "private, no-store",
+   "validators": [],
+   "firstRequest": {
+    "workers": [
+     "whumpo-sites",
+     "whumpo-apps"
+    ],
+    "d1": {
+     "calls": 0,
+     "batches": 0,
+     "statements": 0,
+     "reads": 0,
+     "writes": 0
+    },
+    "r2": {},
+    "serviceBindings": {
+     "APP_HOST": 1
+    },
+    "assetsBinding": 1,
+    "rateLimiter": {},
+    "subrequests": [],
+    "waitUntil": 0,
+    "tables": []
+   },
+   "repeatRequest": {
+    "sameWork": true,
+    "status": 200,
+    "bodyIdentical": true
+   },
+   "revocationInputs": []
+  },
+  {
+   "key": "app.appointment.get",
+   "label": "Hosted appointment page (no form: the closed page)",
+   "method": "GET",
+   "url": "https://app-<project>.whumpo.site/forms/appointment",
+   "entry": {
+    "worker": "whumpo-sites",
+    "route": "*.whumpo.site/*",
+    "config": "wrangler.sites.jsonc"
+   },
+   "workerExecution": {
+    "runs": true,
+    "reason": "no assets configured; every routed request invokes the Worker",
+    "billing": "Worker request (inbound invocation); not a direct static-asset request",
+    "serviceBindingTargets": [
+     {
+      "binding": "APP_HOST",
+      "worker": "whumpo-apps",
+      "runs": true,
+      "reason": "assets.run_worker_first = true; every request invokes the Worker before any asset"
+     }
+    ]
+   },
+   "status": 200,
+   "cacheControl": "private, no-store",
+   "validators": [],
+   "firstRequest": {
+    "workers": [
+     "whumpo-sites",
+     "whumpo-apps"
+    ],
+    "d1": {
+     "calls": 3,
+     "batches": 0,
+     "statements": 3,
+     "reads": 3,
+     "writes": 0
+    },
+    "r2": {},
+    "serviceBindings": {
+     "APP_HOST": 1
+    },
+    "assetsBinding": 0,
+    "rateLimiter": {
+     "apps.API_LIMITER": 1
+    },
+    "subrequests": [],
+    "waitUntil": 0,
+    "tables": [
+     "module_activations",
+     "module_instances",
+     "operator_serving_stopped",
+     "projects"
+    ]
+   },
+   "repeatRequest": {
+    "sameWork": true,
+    "status": 200,
+    "bodyIdentical": true
+   },
+   "revocationInputs": []
+  },
+  {
+   "key": "app.appointment.script",
+   "label": "Hosted appointment script",
+   "method": "GET",
+   "url": "https://app-<project>.whumpo.site/appointment.js",
    "entry": {
     "worker": "whumpo-sites",
     "route": "*.whumpo.site/*",

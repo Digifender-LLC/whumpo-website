@@ -6,7 +6,7 @@
  "evidence": "docs/workspace-collaboration-evidence.md",
  "baseline": {
   "sourceCommit": "4dea09c",
-  "reviewedSchemaSha256": "00dda74874bdd87ba84cb2d3f61da0099fa3007ecf88a2a306482633915eae1c",
+  "reviewedSchemaSha256": "b74bd1ed52e83f14a27cf911d2d4d5adf0fa377b3fc47afea2aea4b0ecc7e424",
   "tables": 240,
   "usersForeignKeyColumns": 123
  },

@@ -8135,6 +8135,10 @@
      "recentAuth": false
     },
     {
+     "id": "appointmentFormReview",
+     "recentAuth": false
+    },
+    {
      "id": "filesModuleReview",
      "recentAuth": false
     },
@@ -11643,7 +11647,7 @@
   },
   {
    "id": "visitor-app-shell",
-   "title": "whumpo-apps entry: host check, visitor.js/css and the live page shell",
+   "title": "whumpo-apps entry: host check, visitor and appointment assets, the live page shell and the hosted appointment form page",
    "surface": "visitor",
    "privileged": [],
    "authorityClass": "anonymous static shell for a live application page",
@@ -11691,8 +11695,32 @@
     },
     {
      "file": "src/app-host.ts",
+     "kind": "exact",
+     "match": "/appointment.js",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/app-host.ts",
+     "kind": "exact",
+     "match": "/appointment.css",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/app-host.ts",
      "kind": "regex",
      "match": "/^\\/apps\\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\\/$/",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/app-host.ts",
+     "kind": "regex",
+     "match": "/^\\/apps\\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\\/forms\\/appointment$/",
      "methods": [
       "GET"
      ]
@@ -11701,7 +11729,7 @@
    "cells": {
     "authority": {
      "state": "n/a",
-     "detail": "Static assets and the shell of a live page; no credential is read."
+     "detail": "Static assets and the shell of a live page; no credential is read. WH-070: the hosted appointment page reads one registered records instance and the project name, renders a fixed template and answers one identical closed page (no form, no submit) unless the form is bound to the live publication and the Worker holds the Turnstile secret. It writes nothing: submissions are the existing POST /modules with its unchanged Turnstile admission and commit triggers. Only the open page carries the relaxed policy (challenges.cloudflare.com in script-src and frame-src)."
     },
     "origin": {
      "state": "evidenced",
@@ -11722,11 +11750,15 @@
     },
     "admission": {
      "state": "evidenced",
-     "detail": "Per-IP API_LIMITER on the page shell; tests/boundary-visitor-shell-admission.mjs asserts the 429 (keyed page:<cf-connecting-ip>, before the live-page lookup and the shell asset) and that an admitted request still gets the shell (run: passes; fails 200 !== 429 with the limiter removed).",
+     "detail": "Per-IP API_LIMITER on the page shell; tests/boundary-visitor-shell-admission.mjs asserts the 429 (keyed page:<cf-connecting-ip>, before the live-page lookup and the shell asset) and that an admitted request still gets the shell (run: passes; fails 200 !== 429 with the limiter removed). The appointment page uses the same per-IP limiter key before the instance lookup.",
      "enforcedAt": [
       {
        "file": "src/app-host.ts",
        "contains": "if(!(await env.API_LIMITER.limit({key:'page:'+(request.headers.get('cf-connecting-ip')??'unknown')})).success)"
+      },
+      {
+       "file": "src/app-host.ts",
+       "contains": "return secure(shown.response,shown.open?appointmentPolicy:policy);"
       }
      ],
      "tests": [
@@ -11751,6 +11783,16 @@
        "file": "tests/customer-app-journey.mjs",
        "contains": "assert.equal((await visit(origin+'/')).status,404,'Historical approval cannot republish');",
        "asserts": "a withdrawn page is not served (app profile)"
+      },
+      {
+       "file": "tests/records-setup.mjs",
+       "contains": "for(const path of ['/','/visitor.js','/design-tokens.css','/appointment.css','/appointment.js'])",
+       "asserts": "the other visitor routes and assets keep the strict policy while only the open appointment page gets the Turnstile hosts"
+      },
+      {
+       "file": "tests/records-setup.mjs",
+       "contains": "for(const response of [await hostedPage(a,{secret:undefined}),await hostedPage(a,{secret:''}),await hostedPage(b,{secret:'s'})",
+       "asserts": "without the Turnstile secret, for another project and for an unknown project the page is the same closed page with no form or submit"
       }
      ]
     }
