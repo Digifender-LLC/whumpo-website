@@ -135,10 +135,8 @@ export async function readNotificationSetup(db:Pick<D1Database,'prepare'>,user:s
  if(!uuid.test(project)||!await db.prepare('SELECT 1 FROM projects WHERE id=? AND owner_user_id=?').bind(project,user).first())throw new ModuleError('not_found','Project not found.');
  const rows=(await db.prepare('SELECT c.instance_id,i.local_id,c.form_id,c.owner_notice,c.staff_notice,c.receipt,c.business_name,c.revision FROM notification_configurations c JOIN module_instances i ON i.id=c.instance_id WHERE c.project_id=? ORDER BY i.local_id,c.form_id LIMIT 32').bind(project).all<{instance_id:string;local_id:string;form_id:string;owner_notice:number;staff_notice:number;receipt:number;business_name:string;revision:number}>()).results;
  const counts=(await db.prepare("SELECT r.instance_id,r.form_id,n.state,count(*) n FROM notification_notices n JOIN module_records r ON r.id=substr(n.event_ref,6,36) AND r.project_id=n.project_id WHERE n.project_id=? AND n.template IN ('appointment.staff-notice@1','appointment.request-receipt@1') GROUP BY r.instance_id,r.form_id,n.state").bind(project).all<{instance_id:string;form_id:string;state:string;n:number}>()).results;
- const reach=async(sql:string)=>!!await db.prepare(sql).bind(project).first();
- // Who could be reached right now: the verified owner address, an opted-in staff member with a verified address, a project visitor with a verified address.
- const ownerOk=await reach("SELECT 1 FROM notification_recipients WHERE project_id=? AND scope='owner'"),staffOk=await reach("SELECT 1 FROM notification_recipients WHERE project_id=? AND scope='staff'"),
-  visitorOk=await reach('SELECT 1 FROM visitor_notification_addresses a JOIN app_visitors v ON v.id=a.visitor_id WHERE v.project_id=? AND a.verified_at IS NOT NULL');
+ const ownerOk=!!await db.prepare("SELECT 1 FROM notification_recipients WHERE project_id=? AND scope='owner'").bind(project).first(),staffOk=!!await db.prepare("SELECT 1 FROM notification_recipients WHERE project_id=? AND scope='staff'").bind(project).first(),
+  visitorOk=!!await db.prepare('SELECT 1 FROM visitor_notification_addresses a JOIN app_visitors v ON v.id=a.visitor_id WHERE v.project_id=? AND a.verified_at IS NOT NULL').bind(project).first(); // who could be reached right now
  const included=await includedNow(db,user,project);
  return {delivery,forms:rows.map(r=>{
   const mine=counts.filter(c=>c.instance_id===r.instance_id&&c.form_id===r.form_id),sum=(states:string[])=>mine.filter(c=>states.includes(c.state)).reduce((a,c)=>a+c.n,0);
