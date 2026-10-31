@@ -8457,65 +8457,6 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Configure and compose maintained modules first; generate only missing custom behavior; preserve isolated customer data and execution with workload-appropriate infrastructure. Whumpo AI maintains projects and chats with owners only.
 
-## WH-075 — Bound shared capacity and separate interactive from batch failures
-
-Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
-
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-Pooling reduces idle work without allowing one project or job class to exhaust another project service.
-
-### Scope
-
-- Carry server-verified project/actor/purpose scope into jobs, cached results and provider adapters
-- Enforce per-project and platform concurrency, queue length, database work, upload/transform bytes, custom CPU/memory and spend bounds
-- Reserve interactive capacity separately from scans/imports/builds; plan bounded failure groups as observed load grows
-- Support reviewed selective dedicated isolation only when performance/containment evidence warrants it
-- Consume WH-090 current operation eligibility and WH-116 data/cache protection requirements before pooling. Capacity admission cannot bypass actor revocation or convert standard owner assistance into customer-credit usage.
-
-### Acceptance criteria
-
-- [ ] Forged tenant arguments/headers and copied job IDs cannot cross records, files, caches or outputs
-- [ ] Permission-sensitive cache entries key/invalidate by tenant and required actor/authorization revision
-- [ ] Load tests demonstrate bounded noisy-neighbor impact and recoverable backpressure, with no silent data loss
-- [ ] Quotas do not silently meter standard owner AI or automatically upgrade a plan
-- [ ] Unknown cost and pooled fixed overhead remain visible in internal accounting
-
-### Verification
-
-- Cross-tenant job/cache/file/result access fixtures
-- Interactive-versus-batch saturation and recovery tests using bounded local workloads
-- Re-run the WH-050 envelope for newly introduced bottlenecks
-
-### Dependencies and blockers
-
-Planning dependencies: WH-065, WH-050, WH-052, WH-113, WH-122, WH-116. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
-- [docs/security-risk-actions.md](../../docs/security-risk-actions.md)
-- [docs/background-jobs.md](../../docs/background-jobs.md)
-- [docs/resource-pool-economics.md](../../docs/resource-pool-economics.md)
-- [docs/app-data.md](../../docs/app-data.md)
-- [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
-- [docs/workload-placement.md](../../docs/workload-placement.md)
-
-### Execution coordination
-
-Issue: https://github.com/zemdregon/whumpo/issues/128. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-- 2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.
-- 2026-10-31 UTC (PR #529, decision D28): WH-050 F2, the missing rate-limit binding on whumpo-sites (site HTML has no per-IP limit; one IP sent 150/150 in the P probe), moves here from WH-050. Check the Cloudflare Workers rate limiting binding's availability and price first (the Cloudflare docs connector needed re-authentication and it was not verified); it costs money only if that check says so. See docs/capacity-and-fairness.md.
-
 ## WH-078 — Measure composition reuse and full lifecycle cost per outcome
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: verification. Size: M.
@@ -9662,7 +9603,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
 
-# F5 — Done (18)
+# F5 — Done (19)
 
 Verified complete with recorded evidence; kept for history and dependency context. Not candidates for new work.
 
@@ -10048,6 +9989,66 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 - 2026-10-27 UTC, local synthetic evidence only, not Cloudflare billing, CPU or latency, not deployed: PR #360 (merged 2026-10-26T14:50:05Z, merge commit 1246e5a) regenerates docs/request-path-inventory.json and the docs/workload-placement.md table. node tests/request-path-inventory.mjs had failed only in its last group (committed inventory differs from the measurement). 14 of 21 route classes each gained one D1 call/statement/read and operator_serving_stopped in the tables read, attributed to 4dea09c (WH-050 operator serving check wired into src/site-host.ts, src/contact-page.ts and src/app-gateway.ts); no cache-control, status, Worker-run, R2, service-hop, subrequest or revocation-probe change. The PR reports node tests/request-path-inventory.mjs pass (6 groups, SQLite, 21 routes, 4 revocation probes), --d1 pass (6 groups, local D1), node tools/verify.mjs site exit 0 and pnpm check exit 0. Stated limits: the row-to-commit mapping rests on the shared table name and file history, not a per-route bisect, and whether one extra D1 read on every public request (including 404s) is acceptable cost is left to the WH-073 owner. WH-073 stays open. Read from gh pr view and the PR body; nothing re-run here. Readiness unchanged.
 - 2026-10-29 UTC, local synthetic evidence only, not Cloudflare billing, CPU or latency, not deployed, not live-accepted: successful request paths slice (WH-073 stays open). tools/request-path-inventory.mjs now seeds a second published synthetic site through the real owner paths (tests/helpers/success-paths.mjs: Chat directory add and publish, tested backend with publication and a confirmed website form, a CMS instance deployed against a stub bridge service with one published post, application activation with a live page, and a passkey visitor) and measures eight success route classes beside the existing 404/400 forms: site.directory.json.live, site.directory.html.live, site.cms.index.live, site.cms.article.get, site.root.backend-form, site.backend.post, app.page.live and app.module.access.me (signed-in visitor, access.me). All return 200, are no-store (the directory also carries its snapshot digest as an ETag), make no subrequest, do identical repeat work, and the 21 earlier route classes and the 4 revocation probes are byte-identical. Cost shape from the regenerated table (SQLite statements, reads/writes): directory JSON 2 (2/0), directory page 3 (2/1), CMS index 3 (2/1), CMS article 3 (2/1), root with live form 6 (5/1, the same as the root without one: the form lookup is already read on every root request), backend form submission 3 (1/2) plus one BACKEND_RUNTIME hop, app page 1 (1/0) plus the APP_HOST hop, app module access.me 7 (7/0) plus the APP_HOST hop. tests/request-path-inventory.mjs gained a group for these routes (SQLite and --d1 pass, 7 groups, 29 routes). tests/standard-service-no-maintainer.mjs now also requests them (31 requests per variant) with the maintainer absent and failing and the owners' funding exhausted: 200s, zero network calls, zero inference, spend or Chat-turn rows, funding rows unchanged, and the backend runtime (the customer's own program, a service binding rather than a provider) called exactly once for the one form submission (SQLite and --d1 pass). The CMS site is seeded once because the platform admits only five CMS projects. A real, unrelated break on main was found and fixed on this branch: tests/safety-case-operations.mjs (run by verify site) failed because the B11 layout receipt cap (#465) added two DELETE sites on workspace_layout_receipts that tools/safety-hold-inventory.mjs did not classify; they are now classified as excluded (dashboard layout history, no project, visitor or customer content), which a reviewer should confirm. No schema, product or Worker change. Not decided here, left to the owner: live cold/warm cost on Cloudflare, and whether the extra D1 read on every public request (including 404s, from the WH-050 serving check) is acceptable. Readiness unchanged.
 - 2026-10-31 UTC, CLOSED by PR #529 on the D29 decision (main be4e6bf (origin/main at 2026-10-31), Node 24.21.0, pnpm 11.19.0, disposable local SQLite/local D1, no network, credential, secret or provider call). No delivery change is planned, so the live cold/warm measurement is not required. Acceptance lines: (1) zero maintainer dispatch: tests/standard-service-no-maintainer.mjs passes 9 groups on SQLite and --d1 (import graphs of the site, app, gateway, runtime and contact entry points reach no inference module, with the platform entry as the positive control; 31 requests per variant across published site, directory, CMS, backend form, visitor app and signed-in module call, guest-preview, unpublish and safety-hold routes plus all three cron schedules: zero network calls, inference_calls, gateway spend attempts, standard-AI requests and Chat turns). (2) Outage or exhausted balance: the same requests run with no AI configuration, with the provider answering 503, and with the owners' allowance and premium buckets spent; all still succeed and no funding row moves. (3) Nothing made cacheable: no delivery change was made; tests/request-path-inventory.mjs passes 7 groups on SQLite and --d1 (29 route classes, every response no-store, identical repeat work, and 4 revocation probes for unpublish, safety hold, photo approval and custom-domain mapping stop serving on the next request). (4) Routing Worker counted as execution: the same inventory shows all 29 route classes invoke Worker code and none is a direct static-asset request (whumpo-sites has no assets; whumpo-platform and whumpo-apps are run_worker_first), and docs/workload-placement.md records that Worker-first handling is billable code. (5) Model-required customer extensions: none exists (WH-079 is deferred), and every visitor and service route above makes zero inference calls, so nothing can fall back to Whumpo AI; this line is satisfied by absence, not by an extension test, and WH-079's own acceptance carries the forward constraint. Also tests/standard-service-runtime-execution.mjs (2026-10-09) is not re-run here. Not decided and not needed to close: whether the extra D1 read per public request (operator_serving_stopped) is acceptable, a latency bound, run_worker_first narrowing, photo counter writes and Workers Caching; these matter only if a delivery change is proposed. Not measured: Cloudflare billing, CPU, latency, cold start.
+
+## WH-075 — Bound shared capacity and separate interactive from batch failures
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
+
+Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Pooling reduces idle work without allowing one project or job class to exhaust another project service.
+
+### Scope
+
+- Carry server-verified project/actor/purpose scope into jobs, cached results and provider adapters
+- Enforce per-project and platform concurrency, queue length, database work, upload/transform bytes, custom CPU/memory and spend bounds
+- Reserve interactive capacity separately from scans/imports/builds; plan bounded failure groups as observed load grows
+- Support reviewed selective dedicated isolation only when performance/containment evidence warrants it
+- Consume WH-090 current operation eligibility and WH-116 data/cache protection requirements before pooling. Capacity admission cannot bypass actor revocation or convert standard owner assistance into customer-credit usage.
+
+### Acceptance criteria
+
+- [ ] Forged tenant arguments/headers and copied job IDs cannot cross records, files, caches or outputs
+- [ ] Permission-sensitive cache entries key/invalidate by tenant and required actor/authorization revision
+- [ ] Load tests demonstrate bounded noisy-neighbor impact and recoverable backpressure, with no silent data loss
+- [ ] Quotas do not silently meter standard owner AI or automatically upgrade a plan
+- [ ] Unknown cost and pooled fixed overhead remain visible in internal accounting
+
+### Verification
+
+- Cross-tenant job/cache/file/result access fixtures
+- Interactive-versus-batch saturation and recovery tests using bounded local workloads
+- Re-run the WH-050 envelope for newly introduced bottlenecks
+
+### Dependencies and blockers
+
+Planning dependencies: WH-065, WH-050, WH-052, WH-113, WH-122, WH-116. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
+- [docs/security-risk-actions.md](../../docs/security-risk-actions.md)
+- [docs/background-jobs.md](../../docs/background-jobs.md)
+- [docs/resource-pool-economics.md](../../docs/resource-pool-economics.md)
+- [docs/app-data.md](../../docs/app-data.md)
+- [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [docs/workload-placement.md](../../docs/workload-placement.md)
+
+### Execution coordination
+
+Issue: https://github.com/zemdregon/whumpo/issues/128. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.
+- 2026-10-31 UTC (PR #529, decision D28): WH-050 F2, the missing rate-limit binding on whumpo-sites (site HTML has no per-IP limit; one IP sent 150/150 in the P probe), moves here from WH-050. Check the Cloudflare Workers rate limiting binding's availability and price first (the Cloudflare docs connector needed re-authentication and it was not verified); it costs money only if that check says so. See docs/capacity-and-fairness.md.
+- 2026-10-31 UTC, CLOSED on local evidence with limits stated (D40, D43). Source and local only; nothing deployed for this change. F2: SITE_LIMITER (wrangler.sites.jsonc, namespace 1001005, 300 requests per 60 s per client source, optional in the env type) is checked in src/site-host.ts right after the visitor-host forward, skipped on local hosts, and answers 429 with retry-after 60 before any D1 read; tests/public-fairness.mjs proves no D1 call before the 429, IPv6 grouped by /64, local skip and that a missing binding still serves. No charge is listed for the namespace (D38), not confirmed free; deleting the block is a config-only reversal. Batch limit (D41): projectRuntime(service,project,'batch') adds x-whumpo-class: batch for builds (src/application-build.ts) and migration checks (src/app-migration-checks.ts); the runtime lets batch work hold at most one of two slots. tests/backend-runtime.mjs (actual workerd, deterministic held-open batch call) proves a second batch call is busy while an interactive call on another lane runs, and that a failed batch call frees the slot; tests/build-jobs.mjs proves a busy build holds no capacity, is finished failed, reads as try again and the next build runs; tests/app-migration-checks.mjs proves migration checks dispatch as batch. Acceptance lines: (1) forged tenant arguments and copied job IDs: tests/build-jobs.mjs, job-journal.mjs, boundary-site-isolation.mjs, boundary-visitor-gateway-isolation.mjs, no unmapped path found; (2) permission-sensitive caches: main has no shared cache, new tests/shared-cache-guard.mjs fails if a Cache API, cf cache key, KV or durable binding appears, and tests/request-path-inventory.mjs asserts no cacheable route; (3) noisy neighbour and backpressure: capacity phases A, B, S, L, P and the new phase I (a batch flood of 348 runtime calls, 173 ok and 175 busy with no wrong value, against 30 interactive public backend calls: 30 ok and 0 busy, where the same flood without the class left 24 of 30 busy; refused calls uncharged, counters equal executed calls; runtime recovered); (4) no silent AI metering or plan upgrade: tests/standard-ai-chat.mjs (zero customer credit charge, no customer ledger) and tests/workspace-dashboard.mjs (automaticPlanChanges and overageChargingEnabled false); (5) unknown cost and pooled overhead visible: tests/cost-events-acceptance.mjs W8 to W10 from WH-172 (standing storage reads kept apart from the task, an unpriced call stays unknown and is not counted as zero, an unknown invoice liability line stays unknown, an invoiced liability with no event is a visible residual) and tests/cost-reconcile.mjs. Limit on line 5: no producer emits liability events (license, minimum, renewal), so pooled fixed overhead is visible as standing events and as an invoice residual, not as producer-emitted liability rows; WH-172 stays planned for that. Full local capacity re-run on Node 24.21.0 (pnpm capacity, seed 50, scale 1, 4 tenants, 176.7 s, exit 0, host load rose during the run): victim A p50 207 and p95 476 ms, B p50 490 and p95 1646 ms; site probe by <project>.whumpo.site from one IP 300 ok and 50 x 429 of 350, distinct IPs 150 of 150; D1 statements per request unchanged; recorded in docs/capacity-and-fairness.md. Gate on this commit: pnpm check, verify fast, protection and site, pnpm build, tests/current-schema.mjs, boundary-audit (registration updated for the new gate line, not the check), request-path-inventory on SQLite and --d1, public-fairness and app-migration-checks on SQLite and --d1 (build-jobs has no D1 mode), roadmap validate. NOT verified: the live probe of up to 600 GETs to a random <uuid>.whumpo.site, which needs this deployed (the limiter is per location and approximate, so its count is not asserted); behaviour across Cloudflare isolates; real traffic. Limits (D40): no queue (busy is the explicit, refunded backpressure), no dedicated isolation, failure groups stay a written plan, WH-090 consumption stays through WH-122, the limiter does not cap spend and a shared address can hit 300 per minute for a one-minute 429.
 
 ## WH-123 — Freeze the shared module contract and decompose WH-067
 

@@ -169,6 +169,7 @@ Local simulation that exists: `node tests/standard-ai-recovery.mjs` (lost settle
 | Per-account monthly inference budget | admission in `src/ai-chat.ts`, `src/model-costs.ts` | One account | Rejects with the "testing capacity" 503. The Muse figures are **shadow estimates**, not an invoice. Do not raise during an incident. |
 | 4,096 output tokens, one lookup and one follow-up per call | reservation before dispatch | One call | Bounds single-call growth. |
 | `AUTH_LIMITER` 10/60 s and `API_LIMITER` 120/60 s per key | `wrangler.jsonc` | Burst brakes | Not spend caps. |
+| `SITE_LIMITER` 300/60 s per client source (sites Worker, WH-075 D38/D39) | `wrangler.sites.jsonc` | Burst brake before any D1 read; 429 with `retry-after: 60` | Not a spend cap; per location, approximate. No charge is listed for the namespace. Deleting the block removes the limit and the code keeps serving. |
 | R2 100,000 reads and 10,000 writes per UTC month; per-project photo reads 10,000/month | `src/storage-budget.ts` | Platform and project | 503 when reached. |
 | Shared counters (public backend 1,000/day, visitor transitions 1,000/day, contact receipts, R2, visitor rows, `cost_events` 9,000 rows) | `node tools/report-maintenance.mjs --counters` | Platform | `warn` 50%, `act` 80%. |
 | Per-project or account freeze and temporary allowance | `node tools/operator-containment.mjs` | One tenant's public traffic | Source and local tests exist; confirm it is in the live schema before relying on it (R5 exercise note). |

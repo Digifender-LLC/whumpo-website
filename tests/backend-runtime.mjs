@@ -66,14 +66,20 @@ try{
  }
  assert.ok(noisyBusy>0,'same-lane overlap was refused at least once');
  // WH-075 D41: batch work holds at most one slot even from different lanes; interactive calls keep the other.
- let batchBusy=0;
- for(let round=0;round<10;round++){
-  const r=await Promise.all([request(slow,null,lane(),'batch'),request(slow,null,lane(),'batch'),request(slow,null,lane())]);
-  assert.deepEqual(r[2],{status:200,data:{ok:true,value:780}},'interactive call keeps a slot against batch work: '+JSON.stringify(r));
-  r.slice(0,2).forEach(x=>{if(x.status!==200)assert.deepEqual(x,{status:503,data:{ok:false,error:'busy'}});});
-  batchBusy+=r.slice(0,2).filter(x=>x.status===503).length;
+ // A batch call whose body is still arriving already holds its slot, so the overlap is deterministic, not timing luck.
+ {
+  let release;const gate=new Promise(r=>{release=r;}),enc=new TextEncoder();
+  const body=new ReadableStream({async start(c){c.enqueue(enc.encode('{"version":1,"source":"export default ()=>7",'));await gate;c.enqueue(enc.encode('"input":null}'));c.close();}});
+  const held=mf.dispatchFetch('http://runtime/execute',{method:'POST',duplex:'half',headers:{'x-whumpo-lane':lane(),'x-whumpo-class':'batch'},body}).then(async r=>({status:r.status,data:await r.json()}));
+  let second;for(let i=0;i<100;i++){second=await request(slow,null,lane(),'batch');if(second.status===503)break;await new Promise(r=>setTimeout(r,20));}
+  assert.deepEqual(second,{status:503,data:{ok:false,error:'busy'}},'a second batch call on another lane is refused while one holds the batch slot');
+  assert.deepEqual(await request(slow,null,lane()),{status:200,data:{ok:true,value:780}},'an interactive call on another lane keeps the second slot');
+  assert.deepEqual(await request(slow,null,lane(),'interactive'),{status:200,data:{ok:true,value:780}},'Only the batch class is limited');
+  release();assert.deepEqual(await held,{status:200,data:{ok:true,value:7}},'The held batch call finishes normally');
+  assert.deepEqual(await request(slow,null,lane(),'batch'),{status:200,data:{ok:true,value:780}},'The batch slot is free again after it finishes');
+  // A failed batch call must not leak the slot either.
+  assert.equal((await request('',null,lane(),'batch')).status,422);assert.equal((await request(slow,null,lane(),'batch')).status,200,'A failed batch call releases the slot');
  }
- assert.ok(batchBusy>0,'a second batch call was refused as busy at least once');
  await works('export default ()=>2',null,2);
  console.log((remote?'Cloudflare remote preview: ':'Actual workerd: ')+'JSON functions/async modules, fresh tenant instances, no host capabilities, bounded invalid/exhaustion paths, required per-project fairness lane and post-failure recovery passed.');
 }finally{await mf.dispose();await rm(dir,{recursive:true,force:true});}
