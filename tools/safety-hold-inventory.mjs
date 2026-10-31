@@ -146,6 +146,8 @@ export const deletionSites={
  'src/project-specification/service-clients/store.ts::service_client_proposals':excluded(proposals),
  'src/site-health.ts::site_health_budget':excluded('Platform monitoring budget; no customer content.'),
  'src/site-health.ts::site_health_checks':excluded('Platform availability checks of public pages; no customer content beyond the public URL status.'),
+ 'src/domain-purchase/schema.sql::domain_registrant_contacts':excluded('WH-194 registrant contact entered for one purchase, erased by trigger when its order fails, is cancelled or expires or its registration is transferred out or lapses (data minimization); not published or customer content to preserve.'),
+ 'src/domain-purchase/schema.sql::domain_registrations':excluded('WH-194 trigger replaces a transferred-out or lapsed registration row when the same name is bought again; the previous order and its events remain.'),
  'src/domain-purchase/store.ts::domain_quotes':excluded('WH-194 draft quotes (with their reviews and the owner\'s registrant contact, by cascade) that never became an order, removed a day after they expired. A price quote and a contact entered for one purchase are not published or customer content to preserve; orders, attempts, events and registrations are never deleted here and an unresolved order or active registration cannot be deleted at all.'),
 };
 /** Overwrite/clear paths and storage outside D1 DELETE statements. */
