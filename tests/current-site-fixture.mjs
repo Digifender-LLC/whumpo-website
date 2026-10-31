@@ -130,7 +130,7 @@ export {cleanPhoto} from './src/photo-format';
   export {readAgentKnowledge,knowledgeTopics} from './src/agent-knowledge';
   export {exportChatTranscript} from './src/chat-transcript';
   export {checkHealth,listHealth,maintainHealth} from './src/site-health';
-  export {readTraffic,recordTraffic,cleanupTraffic,measureTraffic,trafficClass,pendingMeasurementGaps,MAX_IN_FLIGHT} from './src/site-traffic';
+  export {readTraffic,recordTraffic,cleanupTraffic,measureTraffic,trafficClass,pendingMeasurementGaps,trafficNotice,trafficDescription,MAX_IN_FLIGHT} from './src/site-traffic';
   export * as siteDiagnostics from './src/site-diagnostics';
   export {getBilling} from './src/billing';
   export {prepareLayoutChange,mutateLayout,readLayoutReceipt,readLayoutHistory} from './src/workspace-layout';
