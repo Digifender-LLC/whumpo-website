@@ -268,7 +268,7 @@ try{
   if(how==='cancelled')await J.cancelBuildJob(scope(ruth),ruth,d.t);
   await J.reconcileBuildJobs(db);age(d.t,{dispatched_at:'-31 seconds'});await J.reconcileBuildJobs(db);
   const row=await job(d.t);assert.equal(row.state,how);assert.equal(row.cleanup,'released');
-  if(how==='succeeded'){assert.equal((await prepareApplication(scope(ruth),ruth,p,id(),'enable',d.t,d.t)).status,'pending');assert.equal((await job(d.t)).state,'published');return;}
+  if(how==='succeeded'){assert.equal((await prepareApplication(scope(ruth),ruth,p,id(),'enable',d.t,d.t)).status,'pending');assert.equal((await job(d.t)).state,'published');assert.equal((await prepareApplication(scope(ruth),ruth,p,id(),'enable',d.t,d.t)).status,'pending');return;}
   await prepareApplication(scope(ruth),ruth,p,id(),'enable',d.t,d.t).catch(()=>{}); // creates the project's app space
   const revision=sql.prepare('SELECT revision FROM app_spaces WHERE project_id=?').get(p).revision;
   return ()=>sql.prepare('INSERT INTO app_activation_reviews(id,project_id,user_id,version_id,run_id,enabled,base_revision) VALUES(?,?,?,?,?,1,?)').run(id(),p,ruth,d.t,d.t,revision);
