@@ -5,6 +5,9 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -14,6 +17,7 @@ import com.whumpo.android.ui.activity.ActivityScreen
 import com.whumpo.android.ui.activity.ActivityViewModel
 import com.whumpo.android.ui.chat.ChatViewModel
 import com.whumpo.android.ui.share.ShareDialog
+import com.whumpo.android.ui.share.ShareFlow
 import com.whumpo.android.ui.share.SharedItem
 import com.whumpo.android.ui.shell.DeepLink
 import com.whumpo.android.ui.chat.ChatScreen
@@ -38,20 +42,36 @@ fun WhumpoApp(container: AppContainer) {
         val chat = viewModel<ChatViewModel>(factory = chatViewModelFactory(container))
         shared?.let { item ->
             val list by projects.list.collectAsStateWithLifecycle()
+            // Keyed by the item, so a new share starts with no project chosen.
+            val flow = remember(item) {
+                ShareFlow(
+                    item,
+                    onAddPhoto = { id ->
+                        container.shares.clear()
+                        projects.select(id)
+                        (item as? SharedItem.Photo)?.let { projects.addPhoto(it.source) }
+                        container.deepLinks.offer(DeepLink.Project(id))
+                    },
+                    onAddToDraft = { text ->
+                        container.shares.clear()
+                        chat.prefill(text)
+                        container.deepLinks.offer(DeepLink.Chat)
+                    },
+                )
+            }
+            val preview by container.shares.preview.collectAsStateWithLifecycle()
+            // Read on this phone only, in memory, off the main thread and under a time limit; see AndroidPhotoPreviewer.
+            LaunchedEffect(item) { container.shares.loadPreview(container.previewer, PREVIEW_SIDE_PX) }
             ShareDialog(
-                item, list,
-                onAddPhoto = { id ->
-                    container.shares.clear()
-                    projects.select(id)
-                    (item as? SharedItem.Photo)?.let { projects.addPhoto(it.source) }
-                    container.deepLinks.offer(DeepLink.Project(id))
-                },
-                onAddToDraft = { text ->
-                    container.shares.clear()
-                    chat.prefill(text)
-                    container.deepLinks.offer(DeepLink.Chat)
-                },
+                flow, list, preview,
+                onLoadMore = projects::loadMore,
+                onRetryProjects = projects::refresh,
                 onDismiss = container.shares::clear,
+                // Refuse taps while another window covers the dialog (tap-jacking); minSdk 28 supports this.
+                protect = {
+                    val view = LocalView.current
+                    SideEffect { view.filterTouchesWhenObscured = true }
+                },
             )
         }
         WhumpoShell(requested = link?.destination) { destination, width ->
@@ -91,3 +111,6 @@ fun WhumpoApp(container: AppContainer) {
         }
     }
 }
+
+/** Longest side of the share thumbnail: about 160dp at xxhdpi. */
+private const val PREVIEW_SIDE_PX = 480

@@ -6,7 +6,9 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
 import android.provider.MediaStore
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
@@ -31,8 +33,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * WH-085 on the emulator: the system share sheet's intents (ACTION_SEND) reach the app, and nothing is prepared, uploaded or
- * sent until the owner confirms. The server is [FakeWorker] on device loopback; this is synthetic emulator evidence, not
+ * WH-085 on the emulator: the system share sheet's intents (ACTION_SEND) reach the app, and nothing is uploaded or sent
+ * until the owner confirms (the photo is read on the phone for the preview, in memory only). The server is [FakeWorker] on device loopback; this is synthetic emulator evidence, not
  * a physical device and not a safety-scan or provider result.
  */
 @RunWith(AndroidJUnit4::class)
@@ -42,7 +44,7 @@ class ShareIntentTest {
 
     private lateinit var worker: FakeWorker
     private var scenario: ActivityScenario<MainActivity>? = null
-    private var photoUri: Uri? = null
+    private val photoUris = mutableListOf<Uri>()
 
     @Before
     fun signedInWithAFakeWorker() {
@@ -59,7 +61,7 @@ class ShareIntentTest {
     fun cleanUp() {
         scenario?.close()
         if (!::worker.isInitialized) return
-        photoUri?.let { InstrumentationRegistry.getInstrumentation().targetContext.contentResolver.delete(it, null, null) }
+        photoUris.forEach { InstrumentationRegistry.getInstrumentation().targetContext.contentResolver.delete(it, null, null) }
         if (::worker.isInitialized) worker.close()
         Fixtures.reset()
     }
@@ -71,8 +73,17 @@ class ShareIntentTest {
 
     private fun sharedText(text: String) = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
 
-    private fun sharedPhoto(): Intent {
-        val bitmap = Bitmap.createBitmap(64, 48, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.rgb(20, 120, 200)) }
+    /** A synthetic picture (two colour bands), so a rendered preview is visibly the photo and not a placeholder. */
+    private fun syntheticJpeg(): ByteArray {
+        val bitmap = Bitmap.createBitmap(320, 240, Bitmap.Config.ARGB_8888)
+        android.graphics.Canvas(bitmap).apply {
+            drawColor(Color.rgb(20, 120, 200))
+            drawRect(0f, 120f, 320f, 240f, android.graphics.Paint().apply { color = Color.rgb(240, 180, 40) })
+        }
+        return java.io.ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }.toByteArray()
+    }
+
+    private fun sharedPhoto(bytes: ByteArray = syntheticJpeg()): Intent {
         val values = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, "synthetic-share.jpg")
             put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
@@ -80,8 +91,8 @@ class ShareIntentTest {
         }
         val resolver = InstrumentationRegistry.getInstrumentation().targetContext.contentResolver
         val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)!!
-        resolver.openOutputStream(uri)!!.use { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }
-        photoUri = uri
+        resolver.openOutputStream(uri)!!.use { it.write(bytes) }
+        photoUris += uri
         return Intent(Intent.ACTION_SEND).setType("image/jpeg").putExtra(Intent.EXTRA_STREAM, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
 
@@ -146,7 +157,8 @@ class ShareIntentTest {
         compose.onNodeWithTag("share-confirm").performClick()
         waitFor { worker.uploads().isNotEmpty() }
         val put = worker.uploads().single()
-        assertEquals("synthetic-share.jpg", put.headers["x-photo-name"])
+        // MediaStore may suffix a repeated display name ("synthetic-share 1"); the upload name is that, made safe, plus .jpg.
+        assertTrue(put.headers["x-photo-name"]!!.startsWith("synthetic-share"))
         // A prepared baseline JPEG with no EXIF/APPn segment.
         assertEquals(0xFF.toByte(), put.body[0])
         assertEquals(0xD8.toByte(), put.body[1])
@@ -180,7 +192,7 @@ class ShareIntentTest {
 
         // And a fresh interrupted upload does not survive sign-out.
         runBlocking {
-            Fixtures.container.uploads.save(com.whumpo.android.ui.photos.PendingUpload("00000000-0000-4000-8000-0000000000aa", FakeWorker.PROJECT_ID, "x.jpg", first.body))
+            Fixtures.container.uploads.save(com.whumpo.android.ui.photos.PendingUpload("00000000-0000-4000-8000-0000000000aa", FakeWorker.PROJECT_ID, "x.jpg", first.body), Fixtures.ownerA)
         }
         Fixtures.container.accountState.signOut()
         assertTrue(runBlocking { Fixtures.container.uploads.load() }.isEmpty())
@@ -201,5 +213,123 @@ class ShareIntentTest {
         Thread.sleep(500)
         assertTrue(compose.onAllNodesWithTag("share-dialog").fetchSemanticsNodes().isEmpty())
         assertTrue(worker.requests.none { it.method != "GET" })
+    }
+
+    // ---- the photo preview: read on this phone, in memory, nothing leaves before Add ----
+
+    private fun appFiles(): Map<String, Pair<Long, Long>> {
+        val ctx = Fixtures.app
+        val roots = listOf(ctx.filesDir, ctx.cacheDir, ctx.noBackupFilesDir, ctx.codeCacheDir)
+        return roots.flatMap { r -> r.walkTopDown().filter { it.isFile }.map { it.path to (it.length() to it.lastModified()) }.toList() }.toMap()
+    }
+
+    @Test
+    fun thePreviewShowsThePhotoAndWritesNothingAndSendsNothingBeforeAdd() {
+        val intent = sharedPhoto()
+        val before = appFiles()
+        launch(intent)
+        waitFor { compose.onAllNodesWithTag("share-preview-image").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("share-preview-image").assertIsDisplayed()
+        compose.onNodeWithTag("share-preview-image").assert(androidx.compose.ui.test.hasContentDescription("Preview of the photo you're sharing."))
+        Shots.take("share-preview")
+        Thread.sleep(500)
+        assertEquals("the preview wrote no file, cache or log", before, appFiles())
+        assertTrue("nothing but reads went to the server", worker.requests.none { it.method != "GET" })
+        assertTrue(worker.uploads().isEmpty())
+        assertTrue("nothing was kept for recovery", runBlocking { Fixtures.container.uploads.load() }.isEmpty())
+    }
+
+    @Test
+    fun aCorruptFileGivesAPlainFallbackAndTheDialogStillWorks() {
+        launch(sharedPhoto(ByteArray(2_000) { (it * 31).toByte() }))
+        waitFor { compose.onAllNodesWithTag("share-preview-unavailable").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Preview unavailable. You can still add the photo.").assertIsDisplayed()
+        Shots.take("share-preview-unavailable")
+        waitFor { compose.onAllNodesWithTag("share-project-${FakeWorker.PROJECT_ID}").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("share-project-${FakeWorker.PROJECT_ID}").performClick()
+        compose.onNodeWithTag("share-confirm").assertIsEnabled()
+        assertTrue(worker.uploads().isEmpty())
+    }
+
+    @Test
+    fun theThumbnailIsDroppedOnDismissAndOnAccountChange() {
+        launch(sharedPhoto())
+        waitFor { Fixtures.container.shares.preview.value is com.whumpo.android.ui.share.PreviewState.Ready }
+        compose.onNodeWithTag("share-cancel").performClick()
+        waitFor { compose.onAllNodesWithTag("share-dialog").fetchSemanticsNodes().isEmpty() }
+        assertEquals(com.whumpo.android.ui.share.PreviewState.Idle, Fixtures.container.shares.preview.value)
+        assertEquals(null, Fixtures.container.shares.pending.value)
+
+        scenario!!.onActivity { it.handleShare(sharedPhoto().also { i -> i.setPackage(null) }) }
+        waitFor { Fixtures.container.shares.preview.value is com.whumpo.android.ui.share.PreviewState.Ready }
+        Fixtures.container.accountState.activate(Fixtures.ownerB)
+        waitFor { Fixtures.container.shares.pending.value == null }
+        assertEquals(com.whumpo.android.ui.share.PreviewState.Idle, Fixtures.container.shares.preview.value)
+
+        scenario!!.onActivity { it.handleShare(sharedText("another")) }
+        Fixtures.container.accountState.signOut()
+        waitFor { Fixtures.container.shares.pending.value == null }
+        assertEquals(com.whumpo.android.ui.share.PreviewState.Idle, Fixtures.container.shares.preview.value)
+    }
+
+    // ---- recreation: a share is answered once ----
+
+    @Test
+    fun rotationDoesNotReplayAShareAndAddDoesNotUploadTwice() {
+        launch(sharedPhoto())
+        waitFor { compose.onAllNodesWithTag("share-project-${FakeWorker.PROJECT_ID}").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("share-project-${FakeWorker.PROJECT_ID}").performClick()
+        compose.onNodeWithTag("share-confirm").performClick()
+        waitFor { worker.uploads().isNotEmpty() }
+        waitFor { compose.onAllNodesWithTag("share-dialog").fetchSemanticsNodes().isEmpty() }
+
+        scenario!!.recreate()
+        Thread.sleep(1_500)
+        assertTrue("the dialog does not come back", compose.onAllNodesWithTag("share-dialog").fetchSemanticsNodes().isEmpty())
+        assertEquals("one upload, not two", 1, worker.uploads().map { it.path }.distinct().size)
+    }
+
+    @Test
+    fun cancelSurvivesRotationAndTheShareIsNotUndone() {
+        launch(sharedText("Please do not come back"))
+        compose.onNodeWithTag("share-cancel").performClick()
+        waitFor { compose.onAllNodesWithTag("share-dialog").fetchSemanticsNodes().isEmpty() }
+        scenario!!.recreate()
+        Thread.sleep(1_500)
+        assertTrue(compose.onAllNodesWithTag("share-dialog").fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun aShareStillOpenSurvivesRotationWithoutReplayingItsAnswer() {
+        launch(sharedText("Keep me open"))
+        scenario!!.recreate()
+        Thread.sleep(1_000)
+        // The dialog was never answered, so it is still the one pending item (not a second copy).
+        assertEquals(com.whumpo.android.ui.share.SharedItem.Text("Keep me open"), Fixtures.container.shares.pending.value)
+    }
+
+    @Test
+    fun aFreshLauncherIntentDoesNotReplayAnOldShareFromHistory() {
+        scenario = ActivityScenario.launch(
+            sharedText("From Recents").addFlags(Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY)
+                .setClassName(Fixtures.app.packageName, MainActivity::class.java.name),
+        )
+        Thread.sleep(1_500)
+        assertEquals(null, Fixtures.container.shares.pending.value)
+        assertTrue(compose.onAllNodesWithTag("share-dialog").fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun aHostileExtraNeverCrashesTheApp() {
+        scenario = ActivityScenario.launch(
+            Intent(Intent.ACTION_SEND).setType("image/jpeg").putExtra(Intent.EXTRA_STREAM, "not a uri")
+                .setClassName(Fixtures.app.packageName, MainActivity::class.java.name),
+        )
+        Thread.sleep(1_000)
+        assertEquals(null, Fixtures.container.shares.pending.value)
+        scenario!!.onActivity {
+            it.handleShare(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, android.text.SpannableString("Styled text")))
+        }
+        assertEquals(com.whumpo.android.ui.share.SharedItem.Text("Styled text"), Fixtures.container.shares.pending.value)
     }
 }

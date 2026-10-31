@@ -32,7 +32,10 @@ class FakeWorker(private val port: Int = 8787) : AutoCloseable {
         thread(isDaemon = true, name = "fake-worker") {
             while (open) {
                 val socket = try { server.accept() } catch (_: Exception) { return@thread }
-                thread(isDaemon = true) { serve(socket) }
+                thread(isDaemon = true) {
+                    // A client that gave up (the app was torn down mid-request) must not take the test process down with it.
+                    try { serve(socket) } catch (_: java.io.IOException) { }
+                }
             }
         }
     }

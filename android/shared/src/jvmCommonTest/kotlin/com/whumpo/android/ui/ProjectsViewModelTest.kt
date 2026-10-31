@@ -189,7 +189,7 @@ class ProjectsViewModelTest {
 
         // The status read finds the committed upload (fixture reply), so the row clears without a second PUT.
         vm.photos.first { it.uploads.isEmpty() && api.requests.any { r -> r.method == HttpMethod.Put } }
-        assertEquals(1, api.requests.count { it.method == HttpMethod.Put })
+        assertEquals(1, putCount())
     }
 
     @Test
@@ -236,10 +236,20 @@ class ProjectsViewModelTest {
 
     private val OTHER = "11111111-2222-4333-8444-555555555555"
 
+    // The mock engine answers on another thread: read its request log under its own lock.
+    private fun putCount() = synchronized(api.requests) { api.requests.count { it.method == HttpMethod.Put } }
+
+    private fun listFetchCount() = synchronized(api.requests) { api.requests.count { it.url.encodedPath.endsWith("/projects") } }
+
     private class MemoryStore : UploadStore {
         val saved = linkedMapOf<String, PendingUpload>()
         override val account = MutableStateFlow<Any?>("a")
-        override suspend fun save(upload: PendingUpload): Boolean { saved[upload.id] = upload; return true }
+        var failSave = false
+        override suspend fun save(upload: PendingUpload, owner: Any?): Boolean {
+            if (failSave) throw java.security.GeneralSecurityException("Keystore unavailable")
+            saved[upload.id] = upload
+            return true
+        }
         override suspend fun load() = saved.values.toList()
         override suspend fun remove(id: String) { saved.remove(id) }
     }
@@ -315,9 +325,9 @@ class ProjectsViewModelTest {
         store.saved.clear() // what AccountStateStore.signOut does to the files
         store.account.value = null
         assertTrue(vm.photos.value.uploads.isEmpty())
-        val puts = api.requests.count { it.method == HttpMethod.Put }
+        val puts = putCount()
         vm.retryUpload(id)
-        assertEquals(puts, api.requests.count { it.method == HttpMethod.Put })
+        assertEquals(puts, putCount())
     }
 
     @Test
@@ -333,6 +343,105 @@ class ProjectsViewModelTest {
         assertFalse(row.canRetry)
         assertTrue(store.saved.isEmpty())
         vm.retryUpload(row.id)
-        assertEquals(1, api.requests.count { it.method == HttpMethod.Put })
+        assertEquals(1, putCount())
+    }
+
+    // ---- WH-085 review fixes: accounts never mix ----
+
+    @Test
+    fun anAccountChangeClearsTheListSelectionAndPhotosThenRefetchesForTheNewAccount() = runTest {
+        val store = MemoryStore()
+        val vm = ProjectsViewModel(api.client, preparer, store) { ApiFixtures.NOW }
+        vm.loaded()
+        vm.select(PROJECT)
+        vm.photos.first { it.photos is UiState.Content }
+        val fetches = listFetchCount()
+
+        // While B's list is loading, A's rows must not be on screen: hold the reply back.
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        api.override = { if (it.method == HttpMethod.Get && it.url.encodedPath.endsWith("/projects")) { gate.await(); null } else null }
+        store.account.value = "b"
+        assertEquals(UiState.Loading, vm.list.value)
+        assertEquals(null, vm.selected.value)
+        assertEquals(UiState.Loading, vm.detail.value)
+        assertTrue(vm.photos.value.uploads.isEmpty())
+        gate.complete(Unit)
+        vm.loaded()
+        assertEquals(fetches + 1, listFetchCount())
+    }
+
+    @Test
+    fun aPhotoStillBeingPreparedWhenTheAccountChangesIsDroppedNotStoredNorSent() = runTest {
+        val store = MemoryStore()
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val slow = FakePreparer { PreparedPhoto("a-photo.jpg", photoBytes) }
+        val vm = ProjectsViewModel(api.client, object : PhotoPreparer {
+            override suspend fun prepare(source: String): PreparedPhoto { gate.await(); return slow.prepare(source) }
+        }, store) { ApiFixtures.NOW }
+        vm.select(PROJECT)
+        vm.addPhoto("content://evil/slow")
+        store.account.value = "b"
+        val puts = putCount()
+        gate.complete(Unit)
+        kotlinx.coroutines.yield()
+        assertTrue("A's bytes are not in B's store", store.saved.isEmpty())
+        assertEquals("A's bytes are not sent with B's bearer", puts, putCount())
+        assertTrue(vm.photos.value.uploads.isEmpty())
+    }
+
+    @Test
+    fun theBytesHeldForOneAccountAreGoneForTheNextEvenWhenTheStoreStillListsThem() = runTest {
+        val store = MemoryStore()
+        api.override = lostPut()
+        val vm = ProjectsViewModel(api.client, preparer, store) { ApiFixtures.NOW }
+        vm.select(PROJECT)
+        vm.addPhoto("content://media/picker/1")
+        val id = vm.photos.first { it.uploads.any { u -> u.phase == UploadPhase.Failed } }.uploads.single().id
+        store.saved.clear()
+        store.account.value = "b"
+        vm.select(PROJECT)
+        assertTrue(vm.photos.value.uploads.isEmpty())
+        val puts = putCount()
+        vm.retryUpload(id)
+        assertEquals(puts, putCount())
+    }
+
+    // ---- WH-085 review fixes: hostile input and failing storage never crash ----
+
+    @Test
+    fun aPreparerThatThrowsAnythingIsARefusedPhotoNotACrash() = runTest {
+        val hostile = FakePreparer { throw SecurityException("grant revoked") }
+        val vm = ProjectsViewModel(api.client, hostile, MemoryStore()) { ApiFixtures.NOW }
+        vm.select(PROJECT)
+        vm.addPhoto("content://evil/throws")
+        val row = vm.photos.first { it.uploads.any { u -> u.phase == UploadPhase.Failed } }.uploads.single()
+        assertFalse(row.canRetry)
+        assertTrue(api.requests.none { it.method == HttpMethod.Put })
+    }
+
+    @Test
+    fun aStoreThatFailsStillLetsTheUploadGoAhead() = runTest {
+        val store = MemoryStore().apply { failSave = true }
+        val vm = ProjectsViewModel(api.client, preparer, store) { ApiFixtures.NOW }
+        vm.select(PROJECT)
+        vm.addPhoto("content://media/picker/1")
+        vm.photos.first { it.uploads.isEmpty() && api.requests.any { r -> r.method == HttpMethod.Put } }
+        assertEquals(1, putCount())
+    }
+
+    @Test
+    fun anUploadForAProjectThatNoLongerExistsIsDroppedAndItsSlotFreed() = runTest {
+        val store = MemoryStore()
+        store.saved["00000000-0000-4000-8000-0000000000aa"] = PendingUpload("00000000-0000-4000-8000-0000000000aa", OTHER, "a.jpg", photoBytes)
+        api.override = {
+            if (it.method == HttpMethod.Get && it.url.encodedPath.endsWith("/projects/$OTHER"))
+                reply(404, """{"version":1,"error":{"code":"not_found","message":"This item is unavailable."}}""")
+            else null
+        }
+        val vm = ProjectsViewModel(api.client, preparer, store) { ApiFixtures.NOW }
+        vm.loaded()
+        vm.select(OTHER)
+        assertTrue(vm.photos.value.uploads.isEmpty())
+        assertTrue(store.saved.isEmpty())
     }
 }
