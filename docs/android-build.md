@@ -90,6 +90,8 @@ Debug APKs are written to `android/androidApp/build/outputs/apk/{local,deployed}
 
 Standard GitHub-hosted runners are free for public repositories. Private repositories consume the account's included Actions minutes; entitlement must be verified, and no paid plan is enabled. Each emulator job is bounded at 45 minutes. Not covered: TalkBack spoken output, physical Pixel/Samsung devices, signed upgrades, Play-enabled push, and passkeys.
 
+**Local emulator pass (2026-10-31).** One headless API 35 `google_apis` x86_64 AVD (the only image on the dev host; API 28 and 36 are CI only), `-no-window -gpu swiftshader_indirect`, KVM. `connectedLocalDebugAndroidTest connectedDeployedDebugAndroidTest`: 21 tests per flavor, 0 failed, 0 skipped. The AVD data partition needs a disk with more than 7.4 GB free (not a small tmpfs). Emulator only: not a physical device, TalkBack speech, identity, provider or signed-release acceptance.
+
 ## Verification record
 
 - **October 4, 2026 (original shell):** Gradle wrapper hashes matched; `:core:test` passed 19/19 locally; the Android modules were CI-only.
