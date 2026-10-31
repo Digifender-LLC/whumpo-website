@@ -46,6 +46,7 @@ export const dispatchers=[
  {id:'mobile',file:'src/mobile/router.ts',fn:'handleMobileRequest',prefix:'/api/mobile/v1/',pathVars:['action']},
  {id:'identity',file:'src/workspace-identity/http.ts',fn:'handleIdentityRequest',prefix:'/api/auth/identity/v1/',pathVars:['action'],methods:['POST']},
  {id:'operator',file:'src/safety-case-http.ts',prefix:'/api/operator/safety-cases/v1/',tableKeys:'actions',methods:['POST']},
+ {id:'account-lifecycle',file:'src/account-lifecycle/http.ts',fn:'handleAccountLifecycleRequest',prefix:'/api/account/v1/',tableKeys:'actions',methods:['POST']},
  {id:'interactions',file:'src/chat-interactions/http.ts',fn:'handleInteractionRequest',prefix:'/api/chat/interactions/v1/',pathVars:['action'],methods:['POST']},
  {id:'support',file:'src/support.ts',fn:'supportRoute',prefix:'/api/support/v1',pathVars:['rest']},
  // Body-dispatched: one mounted route (POST /api/projects/:id/modules) selects an operation from this table.
@@ -207,7 +208,7 @@ function platformGates(file){
  let origin;walk(handle,n=>{if(!origin&&isKind(n,'IfStatement')&&calls(n.expression,'sameOrigin'))origin=n;});
  if(!origin)throw Error('The exact-Origin gate was not found in handle().');
  const order={'exact-origin-gate':origin.getStart()};
- walk(handle,n=>{if(isKind(n,'CallExpression')&&isKind(n.expression,'Identifier')&&['handleMobileRequest','handleIdentityRequest','handleSafetyCaseRequest','workspaceIdentity','handleWorkspace'].includes(n.expression.text))order[n.expression.text]??=n.getStart();});
+ walk(handle,n=>{if(isKind(n,'CallExpression')&&isKind(n.expression,'Identifier')&&['handleMobileRequest','handleIdentityRequest','handleSafetyCaseRequest','handleAccountLifecycleRequest','workspaceIdentity','handleWorkspace'].includes(n.expression.text))order[n.expression.text]??=n.getStart();});
  return {origin:origin.getStart(),originLine:lineOf(file,origin),order};
 }
 function beforeOrigin(node,gates){

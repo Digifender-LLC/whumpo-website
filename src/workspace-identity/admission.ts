@@ -1,12 +1,16 @@
 import {connectionWriteKey} from '../connection-write-policy';
 import {IdentityError,assertCurrentIdentity,identityPredicate,type IdentityPrincipal,type IdentityPolicy} from './authority';
 
-type Scope={db:D1Database;principal:IdentityPrincipal;policy:IdentityPolicy};
+type Scope={db:D1Database;principal:IdentityPrincipal;policy:IdentityPolicy;closure:ClosureAdmission};
+/** `refuse` (every ordinary workspace route): a closing account's batches abort atomically. `permit` is only for the
+ * WH-018 account lifecycle surface (closure status/resume and export), which must keep working while the account closes. */
+export type ClosureAdmission='refuse'|'permit';
 const scopes=new WeakMap<object,Scope>();
 /** Internal maintenance entry points must never accept customer workspace authority. */
 export function assertMaintenanceDatabase(db:D1Database){if(scopes.has(db))throw new Error('Platform maintenance authority is required.');}
 const unavailable=()=>new IdentityError(401,'proof_required','Sign in with your current passkey to continue.');
 const changed=()=>new IdentityError(409,'identity_changed','Your account access changed. Sign in again and review the current state before continuing.');
+const accountClosing=()=>new IdentityError(409,'account_closing','This account is closing. Only closure status and your account export remain available.');
 function scope(db:object,userId?:string){
  const value=scopes.get(db);
  if(!value||(userId!==undefined&&value.principal.accountId!==userId))throw unavailable();
@@ -17,8 +21,9 @@ function scope(db:object,userId?:string){
  * Every domain statement runs in the SAME transaction as a current-identity assertion.
  * Domain SQL still owns resource, feature, revision and exact-review authorization.
  * Background maintenance deliberately receives its own raw DB, not this user scope. */
-export function admitWorkspace(db:D1Database,principal:IdentityPrincipal):D1Database{
- const context:Scope={db,principal,policy:{purpose:'workspace',freshPasskey:false,bindIdentityRevision:false}};
+export function admitWorkspace(db:D1Database,principal:IdentityPrincipal,closure:ClosureAdmission='refuse'):D1Database{
+ if(closure!=='refuse'&&closure!=='permit')throw unavailable();
+ const context:Scope={db,principal,policy:{purpose:'workspace',freshPasskey:false,bindIdentityRevision:false},closure};
  identityPredicate(db,principal,context.policy); // Refuse cloned, restricted or foreign-DB capabilities.
  const statements=new WeakMap<D1PreparedStatement,D1PreparedStatement>();
  async function batch<T=unknown>(input:D1PreparedStatement[]):Promise<D1Result<T>[]> {
@@ -26,9 +31,12 @@ export function admitWorkspace(db:D1Database,principal:IdentityPrincipal):D1Data
   const gate=identityPredicate(db,principal,context.policy);
   // This inserts zero rows on success. The always-empty table's abort trigger
   // rejects the whole batch on failure; no check/write race or durable guard rows.
-  const check=db.prepare(`INSERT INTO identity_admission_checks(denied) SELECT 1 WHERE NOT (${gate.sql})`).bind(...gate.params);
+  // WH-018 stop-new-work rides the same statement (denied=2 aborts as account_closing), so a closure committed between
+  // two statements still stops the batch atomically, including delayed OAuth callbacks and every later write path.
+  const closing=context.closure==='refuse'?" OR EXISTS(SELECT 1 FROM account_closures WHERE account_id=? AND state IN ('confirmed','quiescing','failed'))":'';
+  const check=db.prepare(`INSERT INTO identity_admission_checks(denied) SELECT CASE WHEN NOT (${gate.sql}) THEN 1 ELSE 2 END WHERE NOT (${gate.sql})${closing}`).bind(...gate.params,...gate.params,...(closing?[principal.accountId]:[]));
   try{return (await db.batch<T>([check,...underlying])).slice(1);}
-  catch(error){if(String(error).includes('identity_admission_denied'))throw changed();throw error;}
+  catch(error){if(String(error).includes('identity_admission_denied'))throw changed();if(String(error).includes('account_closing'))throw accountClosing();throw error;}
  }
  function statement(original:D1PreparedStatement):D1PreparedStatement{
   const wrapped:D1PreparedStatement={

@@ -143,12 +143,12 @@ After the owner session was revoked, the site unpublished and one visitor erased
 
 Restore admission refused the candidate, which is correct. On `main` it can only **refuse**: nothing removes those rows or replays a tombstone, so the candidate can never become servable. Reconciliation, tombstone replay and erasure scope belong to WH-019.
 
-**Main versus pending PR #170.** These results are for `main` at `ca17c6a`. Here, suppressions come only from the operator inventory comparing registered records against a **reachable current source**. Two consequences follow:
+**Main versus the open PRs #554 and #563.** These results are for `main` at `ca17c6a`. Here, suppressions come only from the operator inventory comparing registered records against a **reachable current source**. Two consequences follow:
 
 1. Any later change to an existing row holds an older point, because the comparison uses complete rows.
 2. When the control database itself is lost, no independent authority remains and every candidate holds `independent-evidence`.
 
-Open PR #170 (WH-018/019, not merged and not evaluated here) proposes an append-only restore-suppression ledger and a gated whole-database replay. Whether that ledger survives loss of the control database is a WH-019 question.
+Open PR #563 (WH-019, stacked on #554 for WH-018; neither merged nor evaluated here) proposes an append-only restore-suppression ledger and a gated whole-database replay. Whether that ledger survives loss of the control database is a WH-019 question.
 
 ## Provider comparison and untested assumptions
 

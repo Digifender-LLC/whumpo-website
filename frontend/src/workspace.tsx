@@ -1,6 +1,7 @@
 import {SiteSafetyPage} from './site-safety';
 import {SupportPage} from './support';
 import {OperatorSafetyPage} from './operator-safety';
+import {AccountLifecyclePage,AccountClosingNotice} from './account-lifecycle';
 import {SavedChatTurn} from './saved-chat-turn';
 import {SavedWorkPage} from './saved-work';
 import {savedTurnFallback} from './lib/saved-work';
@@ -54,7 +55,7 @@ export const navLink='flex gap-3 items-center rounded-md px-3 py-3 text-body-sm 
 export function Workspace(){
  useMobileViewport();useWorkspaceTheme();
  const location=useRouterState({select:s=>s.location});noteLocation(location.pathname);
- return <IdentityGate signup={['1','true'].includes(new URLSearchParams(location.searchStr).get('signup')??'')}><AccountHelpProvider>{location.pathname==='/workspace/security'?<AccountSecurityPage/>:location.pathname==='/workspace/safety'?<SiteSafetyPage/>:location.pathname==='/workspace/saved-work'?<SavedWorkPage/>:location.pathname==='/workspace/support'?<SupportPage/>:location.pathname==='/workspace/operator-safety'?<OperatorSafetyPage/>:<WorkspaceProfile/>}</AccountHelpProvider></IdentityGate>;
+ return <IdentityGate signup={['1','true'].includes(new URLSearchParams(location.searchStr).get('signup')??'')}><AccountHelpProvider><AccountClosingNotice/>{location.pathname==='/workspace/security'?<AccountSecurityPage/>:location.pathname==='/workspace/safety'?<SiteSafetyPage/>:location.pathname==='/workspace/saved-work'?<SavedWorkPage/>:location.pathname==='/workspace/support'?<SupportPage/>:location.pathname==='/workspace/operator-safety'?<OperatorSafetyPage/>:location.pathname==='/workspace/account'?<AccountLifecyclePage/>:<WorkspaceProfile/>}</AccountHelpProvider></IdentityGate>;
 }
 function WorkspaceProfile(){
  const profile=useQuery({queryKey:['session'],queryFn:async()=>{
