@@ -8,7 +8,7 @@ const {startSubscription,refreshSubscriptions,subscriptionStatus,stripeBillingWe
 const fixture=await databaseFixture({d1:true}),db=fixture.db,scopes=new Map(),scope=user=>scopes.get(user);
 const prices={},priceMap=new Map();for(const p of publicPlans.filter(p=>p.monthlyCents))for(const interval of ['month','year']){const id='price_'+p.id.replaceAll('-','')+interval;prices[p.id+':'+interval]=id;priceMap.set(id,{id,livemode:false,currency:'usd',unit_amount:interval==='month'?p.monthlyCents:p.annualCents,recurring:{interval,interval_count:1}});}
 const env={STRIPE_TEST_KEY:'sk_test_synthetic',STRIPE_WEBHOOK_SECRET:'whsec_synthetic',STRIPE_SANDBOX_CATALOG:JSON.stringify({version:1,prices}),STRIPE_TEST_PUBLISHABLE_KEY:'pk_test_'+'a'.repeat(40),STRIPE_CHECKOUT_OPEN:'true'},app='whumpo-sandbox-v1';
-const sessions=new Map(),customers=new Map(),subs=new Map(),invoices=new Map(),keys=new Map(),methods=new Map(),setups=new Map();let writes=0,payFails=false,hideSecret=false,leftoverHosted=false;
+const sessions=new Map(),customers=new Map(),subs=new Map(),invoices=new Map(),keys=new Map(),methods=new Map(),setups=new Map();let writes=0,payFails=false,payAction=false,hideSecret=false,createHosted=false,expireFails=false,payCalls=0,failSubReads=false;
 const transport=async(url,init)=>{
  assert.equal(init.redirect,'manual');assert.equal(init.headers.authorization,'Bearer '+env.STRIPE_TEST_KEY);assert.equal(init.headers['Stripe-Version'],'2026-10-28.endive');
  const path=new URL(url).pathname.replace('/v1/',''),q=new URL(url).searchParams,f=init.body;let value;
@@ -18,22 +18,23 @@ const transport=async(url,init)=>{
    value=customers.get(path.split('/').at(-1));assert(value,'Missing customer fixture');
    if(f.has('email')){assert(/^[^\s@]+@[^\s@]+$/.test(f.get('email')),'Checkout must send the account email');value.email=f.get('email');}
    if(f.has('invoice_settings[default_payment_method]'))value.invoice_settings={default_payment_method:f.get('invoice_settings[default_payment_method]')};
+   if(f.has('metadata[whumpo_pm_applied]'))value.metadata={...value.metadata,whumpo_pm_applied:f.get('metadata[whumpo_pm_applied]')};
   }
   else if(path==='customers'){value={id:'cus_'+crypto.randomUUID().replaceAll('-',''),livemode:false,metadata:{app,owner:f.get('metadata[owner]')}};customers.set(value.id,value);}
   else if(path==='checkout/sessions'&&f.get('mode')==='setup'){
    assert.equal(f.get('ui_mode'),'elements');assert(!f.has('success_url')&&!f.has('cancel_url'));assert.match(f.get('return_url'),/^https:\/\/whumpo\.com\/workspace\/\?payment_method=returned&session_id=\{CHECKOUT_SESSION_ID\}$/);
-   const id='cs_test_'+crypto.randomUUID().replaceAll('-','');value={id,livemode:false,customer:f.get('customer'),mode:'setup',ui_mode:'elements',status:'open',client_secret:id+'_secret_fixture',metadata:{app,owner:f.get('metadata[owner]'),purpose:f.get('metadata[purpose]')},setup_intent:null};sessions.set(id,value);
+   const id='cs_test_'+crypto.randomUUID().replaceAll('-','');value={id,created:Math.floor(Date.now()/1000),livemode:false,customer:f.get('customer'),mode:'setup',ui_mode:'elements',status:'open',client_secret:id+'_secret_fixture',metadata:{app,owner:f.get('metadata[owner]'),purpose:f.get('metadata[purpose]')},setup_intent:null};sessions.set(id,value);
   }
   else if(path==='checkout/sessions'){
    assert.equal(f.get('mode'),'subscription');assert.equal(f.get('ui_mode'),'elements');assert.equal(f.get('line_items[0][quantity]'),'1');assert(!f.has('success_url')&&!f.has('cancel_url'),'hosted return URLs are gone');assert.match(f.get('return_url'),/^https:\/\/whumpo\.com\/workspace\/\?checkout=returned&session_id=\{CHECKOUT_SESSION_ID\}$/);assert(!f.has('trial_period_days'));
-   const price=priceMap.get(f.get('line_items[0][price]')),id='cs_test_'+crypto.randomUUID().replaceAll('-','');value={id,livemode:false,customer:f.get('customer'),mode:'subscription',ui_mode:'elements',status:'open',subscription:null,client_reference_id:f.get('client_reference_id'),client_secret:id+'_secret_fixture',metadata:{app,order:f.get('metadata[order]')},currency:'usd',amount_total:price.unit_amount,line_items:{has_more:false,data:[{quantity:1,price}]}};sessions.set(value.id,value);
-  }else if(/^checkout\/sessions\/[^/]+\/expire$/.test(path)){value=sessions.get(path.split('/')[2]);assert(value);if(value.status==='complete')return new Response('{}',{status:400});value.status='expired';}
+   const price=priceMap.get(f.get('line_items[0][price]')),id='cs_test_'+crypto.randomUUID().replaceAll('-','');value={id,created:Math.floor(Date.now()/1000),livemode:false,customer:f.get('customer'),mode:'subscription',ui_mode:createHosted?'hosted':'elements',status:'open',subscription:null,client_reference_id:f.get('client_reference_id'),client_secret:id+'_secret_fixture',metadata:{app,order:f.get('metadata[order]')},currency:'usd',amount_total:price.unit_amount,line_items:{has_more:false,data:[{quantity:1,price}]}};sessions.set(value.id,value);
+  }else if(/^checkout\/sessions\/[^/]+\/expire$/.test(path)){value=sessions.get(path.split('/')[2]);assert(value);if(value.status==='complete'||expireFails)return new Response('{}',{status:400});value.status='expired';}
   else if(/^subscriptions\/[^/]+$/.test(path)){
    value=subs.get(path.split('/')[1]);assert(value,'Missing subscription fixture');
    if(f.has('cancel_at_period_end'))value.cancel_at_period_end=f.get('cancel_at_period_end')==='true';
    if(f.has('default_payment_method'))value.default_payment_method=f.get('default_payment_method');
   }else if(/^invoices\/[^/]+\/pay$/.test(path)){
-   value=invoices.get(path.split('/')[1]);assert(value);if(payFails)return new Response('{"error":{"code":"card_declined"}}',{status:402});
+   value=invoices.get(path.split('/')[1]);assert(value);payCalls++;if(payFails)return new Response('{"error":{"code":"card_declined"}}',{status:402});if(payAction)return new Response('{"error":{"code":"invoice_payment_intent_requires_action"}}',{status:402});
    value.status='paid';value.amount_paid=value.total;subs.get(invoiceSub(value)).status='active';
   }
   else throw Error('Unexpected mutation '+path);keys.set(key,value);
@@ -41,7 +42,7 @@ const transport=async(url,init)=>{
  else if(path.startsWith('checkout/sessions/')){value=structuredClone(sessions.get(path.split('/').at(-1)));if(value){if(hideSecret)delete value.client_secret;if(value.setup_intent===null&&setups.has(value.id))value.setup_intent=setups.get(value.id);}}
  else if(path.startsWith('payment_methods/'))value=methods.get(path.split('/').at(-1));
  else if(path.startsWith('customers/')){value=structuredClone(customers.get(path.split('/').at(-1)));if(value?.invoice_settings?.default_payment_method&&q.getAll('expand[]').includes('invoice_settings.default_payment_method'))value.invoice_settings.default_payment_method=methods.get(value.invoice_settings.default_payment_method);}
- else if(path.startsWith('subscriptions/')){value=structuredClone(subs.get(path.split('/').at(-1)));if(value&&q.getAll('expand[]').includes('default_payment_method')&&value.default_payment_method)value.default_payment_method=methods.get(value.default_payment_method);}
+ else if(path.startsWith('subscriptions/')){if(failSubReads)return new Response('{}',{status:500});value=structuredClone(subs.get(path.split('/').at(-1)));if(value&&q.getAll('expand[]').includes('default_payment_method')&&value.default_payment_method)value.default_payment_method=methods.get(value.default_payment_method);}
  else if(path.startsWith('invoices/'))value=invoices.get(path.split('/').at(-1));
  else throw Error('Unexpected read '+path);
  assert(value,'Missing fixture '+path);return Response.json(value);
@@ -100,6 +101,9 @@ try{
  // Cancel at period end, then resume; paid coverage is unchanged by either.
  assert.equal((await setCancelAtPeriodEnd(scope(owner),env,owner,true,transport)).subscription.cancel_at_period_end,1);assert.equal(sub.cancel_at_period_end,true);
  assert.equal((await setCancelAtPeriodEnd(scope(owner),env,owner,false,transport)).subscription.cancel_at_period_end,0);assert.equal(sub.cancel_at_period_end,false);assert.equal((await getBilling(scope(owner),owner)).plan.id,'personal');
+ // Cancel, resume, cancel inside one minute: each change reaches Stripe (a minute-bucketed key would replay the first reply and leave the renewal on).
+ assert.equal((await setCancelAtPeriodEnd(scope(owner),env,owner,true,transport)).subscription.cancel_at_period_end,1);assert.equal(sub.cancel_at_period_end,true,'the second cancel reached Stripe');
+ assert.equal((await setCancelAtPeriodEnd(scope(owner),env,owner,false,transport)).subscription.cancel_at_period_end,0);assert.equal(sub.cancel_at_period_end,false);
  // Update the payment method: a setup session, verified against the owner before it becomes the default.
  await assert.rejects(completePaymentMethodUpdate(scope(owner),env,owner,{session:'cs_live_x'},transport),{status:400});
  const setup=await startPaymentMethodUpdate(scope(owner),env,owner,transport),setupSession=sessions.get(setup.clientSecret.split('_secret_')[0]);assert.equal(setupSession.customer,sub.customer);
@@ -112,6 +116,22 @@ try{
  assert.deepEqual((await completePaymentMethodUpdate(scope(owner),env,owner,{session:setupSession.id},transport)).card,{brand:'mastercard',last4:'4444',expMonth:1,expYear:2031});
  assert.equal(customers.get(sub.customer).invoice_settings.default_payment_method,'pm_new');assert.equal(sub.default_payment_method,'pm_new');
  await completePaymentMethodUpdate(scope(owner),env,owner,{session:setupSession.id},transport);
+ // Replay: an older setup session, or one older than the last applied, never puts an earlier card back; the same one is harmless.
+ methods.set('pm_old',{id:'pm_old',livemode:false,customer:sub.customer,type:'card',card:{brand:'visa',last4:'0002',exp_month:2,exp_year:2030}});
+ const oldSetup=await startPaymentMethodUpdate(scope(owner),env,owner,transport),oldSession=sessions.get(oldSetup.clientSecret.split('_secret_')[0]);
+ oldSession.status='complete';setups.set(oldSession.id,{status:'succeeded',customer:sub.customer,payment_method:'pm_old'});oldSession.created=setupSession.created-10;
+ await assert.rejects(completePaymentMethodUpdate(scope(owner),env,owner,{session:oldSession.id},transport),{status:409});
+ oldSession.created=Math.floor(Date.now()/1000)-7200;await assert.rejects(completePaymentMethodUpdate(scope(owner),env,owner,{session:oldSession.id},transport),{status:409});
+ assert.equal(customers.get(sub.customer).invoice_settings.default_payment_method,'pm_new','an old session did not replace the newer card');assert.equal(sub.default_payment_method,'pm_new');
+ // Lost return: the signed webhook applies a finished setup session for its owner, and only its owner.
+ methods.set('pm_hook',{id:'pm_hook',livemode:false,customer:sub.customer,type:'card',card:{brand:'amex',last4:'0005',exp_month:3,exp_year:2032}});
+ const hookSetup=await startPaymentMethodUpdate(scope(owner),env,owner,transport),hookSession=sessions.get(hookSetup.clientSecret.split('_secret_')[0]);
+ hookSession.status='complete';setups.set(hookSession.id,{status:'succeeded',customer:sub.customer,payment_method:'pm_hook'});
+ hookSession.metadata.owner=other;const w1=writes;await stripeBillingWebhook(await event('checkout.session.completed',hookSession.id),db,env,transport);assert.equal(writes,w1,'a setup session naming another owner changes nothing');hookSession.metadata.owner=owner;
+ await stripeBillingWebhook(await event('checkout.session.expired',hookSession.id),db,env,transport);assert.equal(customers.get(sub.customer).invoice_settings.default_payment_method,'pm_new','only a completed session is applied');
+ await stripeBillingWebhook(await event('checkout.session.completed',hookSession.id),db,env,transport);
+ assert.equal(customers.get(sub.customer).invoice_settings.default_payment_method,'pm_hook');assert.equal(sub.default_payment_method,'pm_hook');
+ await stripeBillingWebhook(await event('checkout.session.completed',hookSession.id),db,env,transport);
  sub.cancel_at_period_end=true;await refreshSubscriptions(scope(owner),env,owner,transport);assert.equal((await subscriptionStatus(scope(owner),env,owner)).subscription.cancel_at_period_end,1);assert.equal((await getBilling(scope(owner),owner)).plan.id,'personal');
  const future=new Date((invoice.lines.data[0].period.end+1)*1000);assert.equal((await getBilling(scope(owner),owner,future)).plan.id,'explore');
  await assert.rejects(db.prepare('UPDATE stripe_paid_invoices SET ends_at=ends_at+1 WHERE id=?').bind(invoice.id).run(),/immutable/);
@@ -121,7 +141,12 @@ try{
 
  // Retry a failed invoice after a new payment method: foreign invoice refused, decline reported, success recorded once.
  renewal.customer='cus_foreign';await assert.rejects(retryLatestInvoice(scope(owner),env,owner,transport),{status:409});renewal.customer=sub.customer;
- payFails=true;await assert.rejects(retryLatestInvoice(scope(owner),env,owner,transport),{status:402});payFails=false;assert.equal((await getBilling(scope(owner),owner,future)).plan.id,'explore');
+ const pays=payCalls;renewal.total=1;await assert.rejects(retryLatestInvoice(scope(owner),env,owner,transport),{status:409});renewal.total=renewal.lines.data[0].amount;assert.equal(payCalls,pays,'a mismatched amount is never paid');
+ payAction=true;const needs=await retryLatestInvoice(scope(owner),env,owner,transport);payAction=false;assert.equal(new URL(needs.actionRequired.invoiceUrl).hostname,'invoice.stripe.com','a 3D Secure renewal sends the customer to the hosted invoice');
+ payFails=true;await assert.rejects(retryLatestInvoice(scope(owner),env,owner,transport),{status:402});payFails=false;
+ // Paid but the coverage record fails: the failure is reported, never swallowed.
+ failSubReads=true;await assert.rejects(retryLatestInvoice(scope(owner),env,owner,transport),{status:502});failSubReads=false;renewal.status='open';renewal.amount_paid=0;subs.get(sub.id).status='past_due';
+assert.equal((await getBilling(scope(owner),owner,future)).plan.id,'explore');
  assert.equal((await retryLatestInvoice(scope(owner),env,owner,transport)).subscription.payment_status,'paid');assert.equal((await getBilling(scope(owner),owner,future)).plan.id,'personal');
  renewal.status='paid';renewal.amount_paid=renewal.total;sub.status='active';await stripeBillingWebhook(await event('invoice.paid',renewal.id),db,env,transport);assert.equal((await getBilling(scope(owner),owner,future)).plan.id,'personal');
  await stripeBillingWebhook(await event('invoice.paid',invoice.id),db,env,transport);assert.equal((await db.prepare('SELECT COUNT(*) n FROM stripe_paid_invoices').first()).n,2);
@@ -138,6 +163,13 @@ try{
   await assert.rejects(startSubscription(scope(who),env,who,{id:oid,plan:'starter',interval:'month'},transport),{status:409});hideSecret=false;
   assert.equal(open.status,'expired');assert.equal((await db.prepare('SELECT state FROM stripe_subscription_orders WHERE id=?').bind(oid).first()).state,'expired');
   assert.match((await startSubscription(scope(who),env,who,{id:crypto.randomUUID(),plan:'starter',interval:'month'},transport)).clientSecret,/_secret_/);
+ }
+ // A hosted session created for a fresh order is expired by re-reading that order (not 'checkout/sessions/null'); a refused expire is a 409, never a 502.
+ {
+  const who=await account(),oid=crypto.randomUUID();createHosted=true;await assert.rejects(startSubscription(scope(who),env,who,{id:oid,plan:'starter',interval:'month'},transport),{status:409});createHosted=false;
+  assert.equal([...sessions.values()].at(-1).status,'expired');assert.equal((await db.prepare('SELECT state FROM stripe_subscription_orders WHERE id=?').bind(oid).first()).state,'expired');
+  const w2=await account(),oid2=crypto.randomUUID();await startSubscription(scope(w2),env,w2,{id:oid2,plan:'starter',interval:'month'},transport);const open2=[...sessions.values()].at(-1);open2.ui_mode='hosted';expireFails=true;
+  await assert.rejects(startSubscription(scope(w2),env,w2,{id:oid2,plan:'starter',interval:'month'},transport),{status:409});expireFails=false;assert.equal(open2.status,'open');assert.equal((await db.prepare('SELECT state FROM stripe_subscription_orders WHERE id=?').bind(oid2).first()).state,'pending');
  }
  // Unknown stale attempts are held, not recreated after the idempotency horizon.
  const stale=await account();await db.prepare('INSERT INTO stripe_customers(user_id,created_at) VALUES(?,?)').bind(stale,Math.floor(Date.now()/1000)-86400).run();const before=writes;await assert.rejects(startSubscription(scope(stale),env,stale,{id:crypto.randomUUID(),plan:'starter',interval:'month'},transport),{status:409});assert.equal(writes,before);

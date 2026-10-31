@@ -27,7 +27,8 @@ try{
  // Abort unless the API says sandbox and returns a client secret for a sandbox session. There is no hosted URL any more.
  assert.equal(started.testMode,true,'ABORT: API did not report testMode');
  assert.equal(started.url,undefined,'the hosted Checkout URL is retired');
- assert.match(started.clientSecret,/^cs_test_[A-Za-z0-9]+_secret_[A-Za-z0-9]+$/,'ABORT: not a sandbox (cs_test_) client secret');
+ // assert.ok with a message, never assert.match: a failure must not print the client secret.
+ assert.ok(/^cs_test_[A-Za-z0-9]+_secret_[A-Za-z0-9]+$/.test(String(started.clientSecret)),'ABORT: not a sandbox (cs_test_) client secret');
  sandbox=true;
  // Read the session and its customer from the Stripe sandbox API. No card is entered anywhere; the session is left to expire.
  const api=await stripeClient('.secrets'),session=await api('checkout/sessions/'+started.clientSecret.split('_secret_')[0]);

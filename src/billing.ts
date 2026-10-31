@@ -1,7 +1,7 @@
 import { plans } from './plans';
 
 export class BillingError extends Error {
-  constructor(public status: number, message: string) { super(message); }
+  constructor(public status: number, message: string, public code?: string) { super(message); }
 }
 
 /** Current paid invoice coverage only. No coverage means Explore; invalid coverage is an error. */

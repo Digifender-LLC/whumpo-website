@@ -38,7 +38,7 @@ import {Textarea} from './components/ui/textarea';
 import {Brand} from './components/brand';
 import {ChatMessage,TypingDots} from './components/whumpo/chat-message';
 import {IdentityGate} from './identity/flow';
-import {providerReturn,chatLocationTarget,workspaceView,noteLocation,pageNavigationLabel,pageAccessibleName} from './lib/workspace-navigation';
+import {providerReturn,rememberBillingReturn,chatLocationTarget,workspaceView,noteLocation,pageNavigationLabel,pageAccessibleName} from './lib/workspace-navigation';
 import {DeferredArea} from './deferred-area';
 import {QueryRecovery} from './query-recovery';
 import {updatedReplies} from './lib/chat-announcements';
@@ -137,7 +137,7 @@ function WorkspaceSession({account}:{account:Profile}){
   return submitMessage(control.label,true,control.action);
  }
 
- useEffect(()=>{const result=providerReturn(location.searchStr);if(result){setNotice(result.notice);void queryClient.invalidateQueries({queryKey:['connections']});void queryClient.invalidateQueries({queryKey:['connection-handoff']});void queryClient.invalidateQueries({queryKey:['dashboard']});if(result.view==='chat')void navigate({to:'/workspace',search:{signup:false,interaction:result.interactionId},replace:true});else void navigate({to:'/workspace/$view',params:{view:result.view},search:{},replace:true});}},[location.searchStr,navigate]);
+ useEffect(()=>{const result=providerReturn(location.searchStr);if(result){if(result.view==='billing')rememberBillingReturn(location.searchStr);setNotice(result.notice);void queryClient.invalidateQueries({queryKey:['connections']});void queryClient.invalidateQueries({queryKey:['connection-handoff']});void queryClient.invalidateQueries({queryKey:['dashboard']});if(result.view==='chat')void navigate({to:'/workspace',search:{signup:false,interaction:result.interactionId},replace:true});else void navigate({to:'/workspace/$view',params:{view:result.view},search:{},replace:true});}},[location.searchStr,navigate]);
  useEffect(()=>{
   if(view!=='chat'){focusedReturn.current=null;return;}
   const id=openedTurn??openedInteraction;if(!id||!openedTurn&&!chat.data)return;

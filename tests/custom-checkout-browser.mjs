@@ -27,12 +27,13 @@ window.Stripe=function(key){window.__stripe.key=key;return {_registerWrapper(){}
  }}),window.__stripe.loadMs));},
  createPaymentElement(){return {mount(node){node.innerHTML='<div data-fake-payment-element style="display:grid;gap:12px;padding:4px"><label style="display:grid;gap:4px;font:500 14px system-ui">Card number<input autocomplete="off" inputmode="numeric" style="min-height:44px;padding:0 12px;border:1px solid #738aaa;border-radius:12px;font-size:16px;width:100%;box-sizing:border-box"></label><div style="display:flex;gap:12px"><label style="flex:1;font:500 14px system-ui">Expiry<input style="min-height:44px;width:100%;box-sizing:border-box;padding:0 12px;border:1px solid #738aaa;border-radius:12px;font-size:16px"></label><label style="flex:1;font:500 14px system-ui">CVC<input style="min-height:44px;width:100%;box-sizing:border-box;padding:0 12px;border:1px solid #738aaa;border-radius:12px;font-size:16px"></label></div></div>';},on(){},update(){},destroy(){}};}
  };}};};`;
-const state={status:null,cancel:0,invoice:null,card:{brand:'visa',last4:'4242',expMonth:12,expYear:2030},ids:[],calls:[],pastDue:false,hasCustomer:false,closed:false};
-const status=()=>({enabled:!state.closed,publishableKey:state.closed?null:publishable,testMode:true,hasCustomer:state.hasCustomer,pending:null,invoices:[],subscription:state.status?{id:'sub_fixture',status:state.pastDue?'past_due':'active',cancel_at_period_end:state.cancel,period_end:Math.floor(Date.UTC(2026,10,30)/1000),payment_status:state.pastDue?'open':'paid',plan_id:'personal',interval:'month',amount_cents:3000}:null});
+const state={status:null,cancel:0,invoice:null,card:{brand:'visa',last4:'4242',expMonth:12,expYear:2030},ids:[],calls:[],pastDue:false,hasCustomer:false,closed:false,paymentStatus:null,failRefresh:false,failCancel:false,bank:false,invoices:[],completedSession:null};
+const status=()=>({enabled:!state.closed,publishableKey:publishable,testMode:true,hasCustomer:state.hasCustomer,pending:null,invoices:state.invoices,subscription:state.status?{id:'sub_fixture',status:state.pastDue?'past_due':'active',cancel_at_period_end:state.cancel,period_end:Math.floor(Date.UTC(2026,10,30)/1000),payment_status:state.paymentStatus??(state.pastDue?'open':'paid'),plan_id:'personal',interval:'month',amount_cents:3000}:null});
 let server,browser,origin;const errors=[];
 try{
  await writeFile(html,`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Checkout acceptance</title></head><body><div id="root"></div><script type="module" src="/${name}.tsx"></script></body></html>`);
- await writeFile(entry,`import React from 'react';import {createRoot} from 'react-dom/client';import {QueryClientProvider} from '@tanstack/react-query';import {queryClient} from './src/lib/api';import {SubscriptionPanel} from './src/subscription-panel';import './src/styles.css';
+ await writeFile(entry,`import React from 'react';import {createRoot} from 'react-dom/client';import {QueryClientProvider} from '@tanstack/react-query';import {queryClient} from './src/lib/api';import {rememberBillingReturn} from './src/lib/workspace-navigation';import {SubscriptionPanel} from './src/subscription-panel';import './src/styles.css';
+rememberBillingReturn(location.search);history.replaceState(null,'',location.pathname);
 document.documentElement.classList.toggle('dark',matchMedia('(prefers-color-scheme: dark)').matches);
 createRoot(document.getElementById('root')!).render(<QueryClientProvider client={queryClient}><main className="mx-auto max-w-[780px] p-4"><SubscriptionPanel/></main></QueryClientProvider>);`);
  await viteBuild({build:{outDir:dir+'/web',rollupOptions:{input:resolve(html)}},logLevel:'error'});
@@ -43,14 +44,14 @@ createRoot(document.getElementById('root')!).render(<QueryClientProvider client=
    const chunks=[];for await(const c of req)chunks.push(c);const input=chunks.length?JSON.parse(Buffer.concat(chunks)):null,path=url.pathname.slice(4),send=(body,code=200)=>res.writeHead(code,{'content-type':'application/json'}).end(JSON.stringify(body));
    state.calls.push(req.method+' '+path);
    if(path==='/billing/subscription')return send(status());
-   if(path==='/billing/subscription/refresh')return send(status());
+   if(path==='/billing/subscription/refresh')return state.failRefresh?send({error:'Billing is busy.'},502):send(status());
    if(path==='/billing/subscription/checkout'){state.ids.push(input.id);state.pending=input;return send({clientSecret:'cs_test_fixture_secret_fixture',testMode:true});}
    if(path==='/billing/payment-method')return send({card:state.card,testMode:true});
    if(path==='/billing/payment-method/setup')return send({clientSecret:'cs_test_setupfixture_secret_fixture',testMode:true});
-   if(path==='/billing/payment-method/complete'){state.card={brand:'mastercard',last4:'4444',expMonth:1,expYear:2031};return send({card:state.card});}
-   if(path==='/billing/subscription/cancel'){state.cancel=1;return send(status());}
+   if(path==='/billing/payment-method/complete'){state.card={brand:'mastercard',last4:'4444',expMonth:1,expYear:2031};state.completedSession=input.session;return send({card:state.card});}
+   if(path==='/billing/subscription/cancel'){if(state.failCancel)return send({error:'Stripe could not be reached. Try again.'},502);state.cancel=1;return send(status());}
    if(path==='/billing/subscription/resume'){state.cancel=0;return send(status());}
-   if(path==='/billing/subscription/retry'){state.pastDue=false;return send(status());}
+   if(path==='/billing/subscription/retry'){if(state.bank)return send({...status(),actionRequired:{invoiceUrl:'https://invoice.stripe.com/i/fixture'}});state.pastDue=false;return send(status());}
    return send({error:'Unexpected '+path},404);
   }
   const file=url.pathname==='/'?name+'.html':decodeURIComponent(url.pathname).slice(1),path=resolve(root,file);if(!path.startsWith(root+sep)){res.writeHead(404).end();return;}
@@ -61,7 +62,7 @@ createRoot(document.getElementById('root')!).render(<QueryClientProvider client=
  browser=await chromium.launch({headless:true,...(process.env.WHUMPO_CHROMIUM?{executablePath:process.env.WHUMPO_CHROMIUM}:{})});
 
  async function open({width,scheme='light',stripe={}}){
-  Object.assign(state,{closed:false,status:null,cancel:0,pastDue:false,hasCustomer:false,ids:[],calls:[],card:{brand:'visa',last4:'4242',expMonth:12,expYear:2030}});
+  Object.assign(state,{closed:false,status:null,cancel:0,pastDue:false,hasCustomer:false,paymentStatus:null,failRefresh:false,failCancel:false,bank:false,invoices:[],completedSession:null,ids:[],calls:[],card:{brand:'visa',last4:'4242',expMonth:12,expYear:2030}});
   const context=await browser.newContext({viewport:{width,height:844},colorScheme:scheme,isMobile:width<500,hasTouch:width<500}),page=await context.newPage(),foreign=[];page.setDefaultTimeout(15000);
   page.on('pageerror',e=>{errors.push(e.message);console.error('PAGEERROR',e.message);});page.on('console',m=>{if(m.type()==='error')console.error('CONSOLE',m.text());});
   // Nothing may leave this machine. The only allowed "remote" is the stand-in Stripe.js, which never reaches Stripe.
@@ -182,6 +183,37 @@ createRoot(document.getElementById('root')!).render(<QueryClientProvider client=
   assert.deepEqual(foreign,[]);assert.deepEqual(state.calls.filter(c=>c!=='GET /billing/subscription'),[]);assert.equal(await noOverflow(page),true);
   state.closed=false;await context.close();
  }
+ // Closed checkout still shows what the customer already has: the last subscription and its invoices, read only.
+ {
+  Object.assign(state,{closed:true,status:true,hasCustomer:true,calls:[],invoices:[{id:'in_fixture',plan_id:'personal',amount_cents:3000,interval:'month',starts_at:1790000000,ends_at:1792600000,hosted_url:'https://invoice.stripe.com/i/fixture',created_at:1790000000}]});
+  const context=await browser.newContext({viewport:{width:390,height:844}}),page=await context.newPage();await page.route(/^(?!http:\/\/localhost)/,route=>route.abort());
+  await page.goto(origin+'/');await page.getByText("Checkout isn't open yet").waitFor();await page.getByText('Your last subscription').waitFor();
+  assert.equal(await page.getByRole('link',{name:/View invoice/}).getAttribute('href'),'https://invoice.stripe.com/i/fixture');
+  assert.equal(await page.getByRole('button').count(),0,'no buttons while closed, even with history');assert.equal(await noOverflow(page),true);
+  Object.assign(state,{closed:false,status:null,hasCustomer:false,invoices:[]});await context.close();
+ }
+ // The payment went through but refreshing Billing failed: say so, never "payment failed", and never show the form again.
+ {
+  const {context,page,stripe}=await open({width:390});
+  await page.getByText('Choose a sandbox plan').waitFor();
+  const cont=page.getByRole('button',{name:/Continue to payment/});await tabTo(page,cont);await page.keyboard.press('Enter');
+  await page.getByRole('heading',{name:'Order summary'}).waitFor();state.failRefresh=true;
+  const submit=page.getByRole('button',{name:/Subscribe/});await tabTo(page,submit);await page.keyboard.press('Enter');
+  await page.getByRole('status').filter({hasText:'Your payment went through'}).waitFor();
+  assert.equal(await page.getByRole('alert').filter({hasText:/could not be completed|declined/}).count(),0,'no failure message after a successful charge');
+  assert.equal(await page.getByRole('button',{name:/Subscribe/}).count(),0,'the form is not offered again');assert.equal((await stripe()).confirmCalls,1);
+  state.failRefresh=false;const back=page.getByRole('button',{name:'Back to billing'});await tabTo(page,back);await page.keyboard.press('Enter');await page.getByRole('heading',{name:'Your subscription'}).waitFor();
+  await context.close();
+ }
+ // Return handling works on Billing: the parameters were cleared from the URL (as the workspace does) before the panel mounted.
+ {
+  Object.assign(state,{status:true,hasCustomer:true,calls:[],completedSession:null});
+  const context=await browser.newContext({viewport:{width:390,height:844}}),page=await context.newPage();await page.route(/^(?!http:\/\/localhost)/,route=>route.abort());
+  await page.goto(origin+'/?payment_method=returned&session_id=cs_test_abc123');
+  await page.getByText('Your new card is saved').waitFor();assert.equal(state.completedSession,'cs_test_abc123');assert.equal(new URL(page.url()).search,'');
+  assert.ok(state.calls.includes('POST /billing/subscription/refresh'));
+  await context.close();
+ }
  // Stripe.js unavailable (blocked or offline): a clear error, a retry and a way back; nothing is charged.
  {
   const context=await browser.newContext({viewport:{width:390,height:844}}),page=await context.newPage();
@@ -205,6 +237,13 @@ createRoot(document.getElementById('root')!).render(<QueryClientProvider client=
   const save=page.getByRole('button',{name:'Save card'});await tabTo(page,save);await page.keyboard.press('Enter');
   await page.getByText('Your new card is saved').waitFor();await page.getByText('Mastercard ending 4444').waitFor();
   assert.ok(state.calls.includes('POST /billing/payment-method/complete'));
+  // A draft invoice (a renewal being prepared) is not an alarm.
+  state.paymentStatus='draft';await page.getByRole('button',{name:'Refresh billing'}).evaluate(el=>el.focus());await page.keyboard.press('Enter');
+  await page.getByText('Current period ends').waitFor();assert.equal(await page.getByText('latest payment did not go through').count(),0);assert.equal(await page.getByRole('button',{name:'Retry payment'}).count(),0);state.paymentStatus=null;
+  // Cancel failure shows inside the open dialog, not behind it.
+  state.failCancel=true;{const trigger=page.getByRole('button',{name:'Cancel subscription'});await tabTo(page,trigger);await page.keyboard.press('Enter');const d=page.getByRole('dialog');await d.waitFor();
+   const go=d.getByRole('button',{name:'Cancel at end of period'});await tabTo(page,go);await page.keyboard.press('Enter');await d.getByRole('alert').filter({hasText:'Stripe could not be reached'}).waitFor();
+   await page.keyboard.press('Escape');await d.waitFor({state:'hidden'});}state.failCancel=false;
   // Cancel: confirmation names the date; Escape leaves nothing changed and returns focus.
   const cancel=page.getByRole('button',{name:'Cancel subscription'});await tabTo(page,cancel);await page.keyboard.press('Enter');
   const dialog=page.getByRole('dialog');await dialog.waitFor();
@@ -220,7 +259,9 @@ createRoot(document.getElementById('root')!).render(<QueryClientProvider client=
   state.pastDue=true;await page.getByRole('button',{name:'Refresh billing'}).evaluate(el=>el.focus());await page.keyboard.press('Enter');
   const due=page.getByRole('alert').filter({hasText:'latest payment did not go through'});await due.waitFor();
   assert.equal(await noOverflow(page),true);
-  const retry=page.getByRole('button',{name:'Retry payment'});await tabTo(page,retry);await page.keyboard.press('Enter');
+  state.bank=true;const retry=page.getByRole('button',{name:'Retry payment'});await tabTo(page,retry);await page.keyboard.press('Enter');
+  const bank=page.getByRole('alert').filter({hasText:'Your bank needs you to confirm'});await bank.waitFor();assert.equal(await bank.getByRole('link',{name:/Open the invoice/}).getAttribute('href'),'https://invoice.stripe.com/i/fixture');
+  state.bank=false;await tabTo(page,retry);await page.keyboard.press('Enter');
   await due.waitFor({state:'hidden'});
   assert.deepEqual(await smallTargets(page),[]);
   if(shots)await page.screenshot({path:`${shots}/billing-manage-390.png`,fullPage:true});

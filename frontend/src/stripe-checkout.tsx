@@ -42,9 +42,11 @@ function stripeFor(key:string){
 }
 
 function Form({summary,amount,onDone,onBack}:{summary:CheckoutSummary;amount:string;onDone:()=>void|Promise<void>;onBack:()=>void}){
-  const state=useCheckoutElements(),[busy,setBusy]=useState(false),[error,setError]=useState(''),locked=useRef(false),alert=useRef<HTMLParagraphElement>(null);
+  const state=useCheckoutElements(),[busy,setBusy]=useState(false),[error,setError]=useState(''),[caughtUp,setCaughtUp]=useState(false),locked=useRef(false),alert=useRef<HTMLParagraphElement>(null);
   // Errors sit beside the form; focus moves to them so keyboard and screen-reader users land on the cause.
   useEffect(()=>{if(error)alert.current?.focus();},[error]);
+  // The payment already went through but the follow-up (refreshing Billing) failed: never show the form again or a failure message.
+  if(caughtUp)return <div className="space-y-3"><p ref={alert} tabIndex={-1} role="status" className="rounded-md border border-ready-ink/40 bg-ready-soft p-3 text-body-sm font-medium text-ready-ink">{summary.kind==='subscription'?'Your payment went through. Billing is catching up, so your plan may take a moment to show. Go back to Billing and use Refresh billing.':'Your card was saved with Stripe. Applying it to your subscription is catching up. Go back to Billing and use Refresh billing in a moment.'}</p><Button type="button" className="min-h-11" onClick={onBack}><ArrowLeft className="size-4" aria-hidden="true"/>Back to billing</Button></div>;
   if(state.type==='loading')return <div role="status" className="space-y-3"><span className="sr-only">Loading the secure payment form…</span><Skeleton className="h-12 rounded-md"/><Skeleton className="h-12 rounded-md"/><Skeleton className="h-12 rounded-md"/></div>;
   if(state.type==='error')return <div className="space-y-3"><p ref={alert} tabIndex={-1} role="alert" className="rounded-md border border-attention-ink/40 bg-attention-soft p-3 text-body-sm font-medium text-attention-ink">{state.error.message||'The payment form could not start.'} Nothing was charged.</p><Button type="button" variant="secondary" className="min-h-11" onClick={onBack}><ArrowLeft className="size-4" aria-hidden="true"/>Back</Button></div>;
   const {checkout}=state,subscribe=summary.kind==='subscription';
@@ -52,13 +54,16 @@ function Form({summary,amount,onDone,onBack}:{summary:CheckoutSummary;amount:str
     event.preventDefault();
     if(locked.current)return; // double-submit guard: the ref flips before React re-renders the disabled state
     locked.current=true;setBusy(true);setError('');
+    let confirmed=false;
     try{
       // 'if_required' keeps cards on this page; Stripe opens its own 3D Secure challenge and only redirects for redirect-based methods.
       const result=await checkout.confirm({redirect:'if_required'});
       if(result.type==='error')setError(result.error.message||'The payment could not be completed.');
-      else await onDone();
+      else confirmed=true;
     }catch{setError('The payment could not be completed. Check your connection and try again.');}
-    finally{locked.current=false;setBusy(false);}
+    // Separate from the confirmation: a failure here is not a failed payment.
+    if(confirmed){try{await onDone();}catch{setCaughtUp(true);}}
+    locked.current=false;setBusy(false);
   }
   return <form onSubmit={e=>void submit(e)} className="space-y-4" aria-busy={busy}>
     <PaymentElement options={{layout:'accordion'}}/>

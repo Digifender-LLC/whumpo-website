@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 const b=await build({entryPoints:['frontend/src/lib/workspace-navigation.ts'],bundle:true,format:'esm',platform:'node',write:false});
-const {providerReturn,chatLocationTarget}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
+const {providerReturn,chatLocationTarget,rememberBillingReturn,takeBillingReturn}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
 for(const provider of ['cloudflare','github']){
  const result=providerReturn('?connection='+provider+'&connection_error=authorization');
  assert.equal(result.view,'connections');assert.match(result.notice,/needs a status check/);
@@ -13,6 +13,11 @@ assert.match(providerReturn('?checkout=returned').notice,/Checking/);
 assert.deepEqual(providerReturn('?checkout=returned&session_id=cs_test_SECRET_VALUE'),{view:'billing',notice:'Checking your latest balance…'});
 assert.deepEqual(providerReturn('?payment_method=returned&session_id=cs_test_SECRET_VALUE'),{view:'billing',notice:'Checking your payment method…'});
 assert.equal(providerReturn('?project=example'),undefined);
+// The workspace clears the URL before Billing mounts, so the return is kept in memory and taken exactly once; query text never reaches it unchecked.
+assert.equal(takeBillingReturn(),null);
+rememberBillingReturn('?payment_method=returned&session_id=cs_test_abc123');assert.deepEqual(takeBillingReturn(),{kind:'payment-method',session:'cs_test_abc123'});assert.equal(takeBillingReturn(),null);
+rememberBillingReturn('?checkout=returned&session_id=cs_live_nope');assert.deepEqual(takeBillingReturn(),{kind:'checkout',session:null});
+rememberBillingReturn('?connection=github');assert.equal(takeBillingReturn(),null);
 const handoff=crypto.randomUUID();
 assert.deepEqual(providerReturn('?connection=github&interaction='+handoff),{view:'chat',interactionId:handoff,notice:'Checking the latest connection status…'});
 for(const bad of ['https://evil.invalid','undefined','../settings'])assert.equal(providerReturn('?connection=github&interaction='+bad).view,'connections');

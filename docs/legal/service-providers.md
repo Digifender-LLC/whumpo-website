@@ -24,7 +24,7 @@ A customer-authorized Cloudflare connection permits supported account, domain or
 
 The homepage loads no Stripe content. In Billing, Whumpo's own checkout page uses Stripe.js and Stripe's embedded payment form. Stripe receives technical request information, and the payment form collects the information entered into it. We may receive sandbox customer and transaction records through our Stripe account. Use test information and documented test payment methods only. Stripe describes its own processing in its [Privacy Policy](https://stripe.com/privacy) and [Cookies Policy](https://stripe.com/legal/cookies-policy).
 
-Live Whumpo subscriptions and trial entitlements remain unavailable. A test subscription, test trial or checkout confirmation does not activate Whumpo access. Sandbox configuration is not evidence of completed live billing, a final provider contract schedule or compliance with every consent requirement for an embedded widget. See the [Cookie Notice](cookies.md) for the remaining provider-storage assessment.
+Live Whumpo subscriptions and trials are not available. Where sandbox checkout is enabled, a test subscription can give the matching plan's access inside Whumpo for testing only; it is not live billing. Sandbox configuration is not evidence of completed live billing, a final provider contract schedule or compliance with every consent requirement for an embedded widget. See the [Cookie Notice](cookies.md) for the remaining provider-storage assessment.
 
 ## Planned or unconnected services
 

@@ -42,6 +42,7 @@ const stub=async(input,init)=>{
  if(path.startsWith('invoices/'))return Response.json(objects.invoice);
  if(path.startsWith('checkout/sessions/'))return Response.json(objects.setup);
  if(path.startsWith('payment_methods/'))return Response.json(objects.pm);
+ if(path.startsWith('customers/'))return Response.json({id:path.split('/')[1],livemode:false,metadata:{}});
  throw Error('Unexpected Stripe call '+init.method+' '+path);
 };
 const originalFetch=globalThis.fetch;globalThis.fetch=stub;
@@ -89,7 +90,7 @@ try{
 
  // 4. Foreign setup session: owner metadata, customer and payment method must all be the caller's.
  const sessionId='cs_test_'+hex(),pm='pm_'+hex();
- const setupFor=(customer,ownerId)=>({id:sessionId,livemode:false,mode:'setup',customer,status:'complete',metadata:{app:'whumpo-sandbox-v1',owner:ownerId,purpose:'payment-method'},setup_intent:{status:'succeeded',customer,payment_method:pm}});
+ const setupFor=(customer,ownerId)=>({id:sessionId,created:Math.floor(Date.now()/1000),livemode:false,mode:'setup',customer,status:'complete',metadata:{app:'whumpo-sandbox-v1',owner:ownerId,purpose:'payment-method'},setup_intent:{status:'succeeded',customer,payment_method:pm}});
  objects.pm={id:pm,livemode:false,customer:otherCustomer,type:'card',card:{brand:'visa',last4:'4242',exp_month:1,exp_year:2031}};
  objects.setup=setupFor(otherCustomer,other.account);
  assert.equal((await call(owner.token,'POST','payment-method/complete',{session:sessionId})).status,409,'another owner\'s setup session');
