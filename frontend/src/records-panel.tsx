@@ -121,10 +121,36 @@ export function RecordsPanel(){
    {options.length>0&&<label className="flex flex-col gap-2 text-body-sm font-medium">Records<select value={current} onChange={e=>setSelected(e.target.value)} className="h-11 px-3 border border-line rounded-md bg-surface-raised">{options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select></label>}
    {summary.data?.items.filter(i=>i.resourceId===current.split('/')[0]).map(i=><PublicFormNote key={i.resourceId} state={i.publicForm}/>)}
    {summary.data?.items.flatMap(i=>i.forms.filter(f=>i.resourceId+'/'+f.recordId===current).map(f=><NoticeSetup key={project+i.localId+f.formId+(summary.data!.notifications.forms.find(x=>x.instanceId===i.localId&&x.formId===f.formId)?.revision??0)} project={project} instance={i.localId} form={f.formId} submit={f.submit} setup={summary.data!.notifications}/>))}
+   {current&&<Conversions key={'c'+project+current} project={project} resourceId={current.split('/')[0]} recordId={current.split('/')[1]}/>}
    {current&&<RecordList key={project+current} project={project} resourceId={current.split('/')[0]} recordId={current.split('/')[1]} onChanged={()=>void summary.refetch()}/>}
   </>}
   <p className="text-caption text-ink-muted">Records, and the stages, notes and dates you add to them, are private to you. They expire with the record after the module's retention period and are not shown in Chat or sent to AI.</p>
  </div>;
+}
+
+export type Conversion={eligible:false;windowDays:number;keptDays:number;since:string}|{eligible:true;windowDays:number;keptDays:number;since:string;submitted:number;stages:Record<Stage,number>;partial:boolean};
+/** WH-095 owner-only read of the lead stages as they are now. Failure reads "unavailable", never zero. */
+function Conversions({project,resourceId,recordId}:{project:string;resourceId:string;recordId:string}){
+ const q=useQuery({queryKey:['module-conversions',project,resourceId,recordId],queryFn:()=>api<Conversion>(`/projects/${project}/module-records/${resourceId}/${recordId}/conversions`),gcTime:0});
+ return <ConversionSummary data={q.data} pending={q.isPending} failed={!!q.error}/>;
+}
+/** WH-095 conversion summary: of the records submitted in the last 30 days that are still kept, how many are in each stage now. Plain text figures
+ * (no chart, no colour meaning). It counts current rows and keeps no history, so a figure can fall when a lead moves back or a record expires or is deleted,
+ * and the panel says so. Not unique visitors and not a trend. Owner-private: not shown in Chat or sent to AI. */
+export function ConversionSummary({data,pending=false,failed=false}:{data?:Conversion;pending?:boolean;failed?:boolean}){
+ const note=<p className="text-caption text-ink-muted">These figures count leads as they are now. Whumpo does not keep past stages, so a figure can fall when a lead is moved back, or when a record is deleted or expires after its retention period. They are not a trend, and not a count of visitors.</p>;
+ return <Section title="Conversions, last 30 days">
+  {pending?<p role="status" className="text-body-sm">Loading the summary.</p>
+   :failed||!data?<p role="alert" className="text-body-sm">The summary is unavailable right now. Your records and leads are not affected. Try again later.</p>
+   :!data.eligible?<p className="rounded-md border border-line bg-surface-raised p-3 text-body-sm">The conversion summary needs the Business plan. Your records and leads stay available.</p>
+   :<div className="space-y-3 text-body-sm">
+    <p className="font-medium" aria-live="polite">{data.submitted===0?'No records were submitted in the last 30 days.':`${data.stages.won.toLocaleString('en-US')} of ${data.submitted.toLocaleString('en-US')} record${data.submitted===1?'':'s'} submitted in the last 30 days ${data.stages.won===1?'is':'are'} now Won (${Math.round(data.stages.won/data.submitted*100)}%).`}</p>
+    <dl className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-5">{stages.map(x=><div key={x} className="flex justify-between gap-2 border-b border-line py-1 sm:block sm:border-b-0"><dt className="text-ink-muted">{stageLabel[x]}</dt><dd className="font-medium">{data.stages[x].toLocaleString('en-US')}</dd></div>)}</dl>
+    <p className="text-ink-muted">Counted: every record submitted in the last {data.windowDays} days that is still kept ({data.keptDays} days). A record with no stage counts as New.</p>
+    {data.partial&&<p role="note" className="rounded-md border border-line bg-surface-raised p-3">Partial period: this form has only been collecting since {data.since.slice(0,10)}, so fewer than {data.windowDays} days are covered.</p>}
+    {note}
+   </div>}
+ </Section>;
 }
 
 function RecordList({project,resourceId,recordId,onChanged}:{project:string;resourceId:string;recordId:string;onChanged:()=>void}){
