@@ -1,8 +1,8 @@
 {
  "version": 1,
  "task": "WH-004",
- "auditedCommit": "ca17c6ad3f009b961916be6f4c2053a8eaa531e4",
- "auditedOn": "2026-10-08",
+ "auditedCommit": "be4e6bf321b71c20e208b13a6628ff973826eec0",
+ "auditedOn": "2026-10-31",
  "scope": "Slice 1: the mounted platform Worker request surface (src/index.ts and its sub-dispatchers) and the typed Chat controls. Slice 2: the whumpo-sites, whumpo-apps and whumpo-runtime Worker dispatchers, Worker reachability from wrangler*.jsonc, the platform public contact form and scheduled jobs, and operator tools under tools/ that can reach remote state. Not provider behaviour, live configuration or deployment state. Slice 3 adds focused local regressions for evidence gaps (foreign applies and reads, expiry, stale revisions, immutability and cookie separation) without changing the surface.",
  "cellStates": {
   "evidenced": "Enforcing code located and an existing test line asserts the property (negative case for authority, replay and stale state).",
@@ -2438,9 +2438,25 @@
      "detail": "A plain message carries no fresh-passkey control; those are confirmed through reviews/confirm."
     },
     "target": {
-     "state": "gap",
-     "gapKind": "test",
-     "detail": "No request field names an account (the owner is the bearer's principal and every statement repeats the current-identity predicate), but no test sends as owner B and asserts owner A's transcript is untouched."
+     "state": "evidenced",
+     "detail": "POST /api/mobile/v1/chat/messages names no account: the owner is the bearer principal. tests/boundary-mobile-paths.mjs sends as owner B (and under owner A's own request id) and asserts owner A's transcript rows and workspace revision are unchanged and A's turn keeps its owner. Closes the October 2026 target gap.",
+     "enforcedAt": [
+      {
+       "file": "src/mobile/router.ts",
+       "contains": "const principal=await mobilePrincipal(env.DB,token);"
+      },
+      {
+       "file": "src/mobile/workspace.ts",
+       "contains": "workspaceBindings(env,admitWorkspace(env.DB,principal),principal.accountId)"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/boundary-mobile-paths.mjs",
+       "contains": "assert.equal(await snapshot(a),before,'B reusing A\\'s request id leaves A\\'s transcript and revision untouched');",
+       "asserts": "owner B sending, including under owner A's request id, leaves owner A's transcript and revision unchanged"
+      }
+     ]
     },
     "replay": {
      "state": "evidenced",
@@ -11022,19 +11038,31 @@
      ]
     },
     "admission": {
-     "state": "unverified",
-     "detail": "Media reads use the per-client/per-project photo budget; articles and the listing have no per-client limit. CMS functional testing is owner-deferred, so the cited CMS suites were not run in this slice.",
-     "needs": "Run the owner-deferred CMS suites when CMS testing resumes."
+     "state": "gap",
+     "gapKind": "test",
+     "detail": "Media reads use the per-client/per-project photo budget; articles and the listing have no per-client limit. CMS suites ran October 31, 2026 (they pass) but none asserts an article or listing admission limit. Named gap: CMS functional acceptance is owner-deferred, so no test is added."
     },
     "tenant": {
-     "state": "unverified",
-     "detail": "Queries are scoped to the project id from the path; a project host cannot address another project (site-host-dispatch). Source-reviewed only.",
-     "needs": "CMS functional testing (owner-deferred)."
+     "state": "gap",
+     "gapKind": "test",
+     "detail": "Queries are scoped to the project id from the path and a project host cannot address another project (site-host-dispatch). The CMS suites that ran October 31, 2026 cover owner isolation on the owner API and custom hosts never routing CMS media, but none requests another project's article on a project host. Named gap: CMS functional acceptance is owner-deferred."
     },
     "stale": {
-     "state": "unverified",
-     "detail": "Live articles are digest-checked at serve time and withdrawn articles/blocked media are refused (source; tests/cms-media-safety.mjs and tests/cms-deploy.mjs assert this but were not run).",
-     "needs": "CMS functional testing (owner-deferred)."
+     "state": "evidenced",
+     "detail": "Run October 31, 2026 UTC: tests/cms-media-safety.mjs (15 checks) and tests/cms-deploy.mjs pass on local SQLite/D1. A live article is served only when its stored digest matches (503 otherwise), and blocked media withdraws referencing articles so the public route answers 404. Serving-time digest mismatch itself has no dedicated assertion.",
+     "enforcedAt": [
+      {
+       "file": "src/site-host.ts",
+       "contains": "if(await hashToken(row.public_html)!==row.digest)return new Response('Article unavailable',{status:503,headers});"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/cms-media-safety.mjs",
+       "contains": "assert.equal((await host('/cms/posts/01ARZ3NDEKTSV4RRFFQ69G5FB1')).status,404);",
+       "asserts": "a referencing article withdrawn by blocked media is not served (404)"
+      }
+     ]
     }
    }
   },
@@ -13341,9 +13369,9 @@
      ]
     },
     "stale": {
-     "state": "unverified",
-     "detail": "The drain writes no maintenance_health row and a failure escapes scheduled() raw (characterized by tests/boundary-contact-delivery-health.mjs, outside profiles); a stuck queue is visible only through the outbox backlog in report-maintenance.",
-     "needs": "Owner decision whether delivery should report through maintenance health (R8)."
+     "state": "gap",
+     "gapKind": "test",
+     "detail": "Observation R8, open: the every-minute dispatchJobs call writes no maintenance_health row and a failure escapes scheduled() raw (characterized by tests/boundary-contact-delivery-health.mjs, outside profiles). A distinct health row needs a new name in the maintenance_health job CHECK (schema change); reusing the daily jobs row would let a healthy minute run mask a stuck prune. Named gap, rides schema batch 6; backlog stays visible through the journal and report-maintenance."
     }
    }
   },

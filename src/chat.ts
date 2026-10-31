@@ -163,6 +163,8 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
   const matches=(row:{user_text:string;action_json:string|null;revision:number}|null)=>row!==null&&row.user_text===storedText&&row.action_json===actionJSON&&row.revision===Number(input.revision)+1;
   const previous = await db.prepare('SELECT user_text,action_json,revision FROM chat_turns WHERE id = ? AND user_id = ?').bind(input.id, userId).first<{ user_text: string;action_json:string|null;revision:number }>();
   if (previous) return matches(previous) ? { status: 200 } : { status: 409, error: 'This request ID was already used for another message.' };
+  // The turn id is global: an id another account already used is a conflict, not a storage failure (it reveals nothing a 122-bit random id does not).
+  if (await db.prepare('SELECT 1 FROM chat_turns WHERE id = ?').bind(input.id).first()) return { status: 409, error: 'This request ID was already used for another message.' };
   const state = await chatState(db, userId);
   await reconcileChat(db, userId);
   if (await db.prepare("SELECT id FROM chat_turns WHERE user_id = ? AND status = 'pending' LIMIT 1").bind(userId).first()) return { status: 409, error: 'Your previous AI reply is still being prepared. Please wait a moment.' };
