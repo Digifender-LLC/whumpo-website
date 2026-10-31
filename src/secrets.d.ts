@@ -14,6 +14,10 @@ interface Env {
   AI_API_KEY?: string;
   STRIPE_SANDBOX_CATALOG?: string;
   STRIPE_TEST_KEY?: string;
+  // Public test publishable key (pk_test_ only; the server refuses anything else). A Worker var, not a secret.
+  STRIPE_TEST_PUBLISHABLE_KEY?: string;
+  // Checkout gate: Stripe flows are closed unless this is exactly 'true'. Unset by default (owner decision Q-007).
+  STRIPE_CHECKOUT_OPEN?: string;
   // Live account key held unread while checkout is blocked (Q-007); no code reads it.
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;

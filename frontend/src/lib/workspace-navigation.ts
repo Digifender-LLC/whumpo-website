@@ -7,6 +7,15 @@ export function chatLocationTarget(search:string):ChatLocation|null{
  const kind=kinds[0],values=params.getAll(kind);
  return values.length===1&&chatLocationId(values[0])?{kind,id:values[0]}:null;
 }
+/** The Billing return parameters, kept in memory only. The workspace clears the URL when it opens Billing, so the panel
+ * would never see them; it takes them here once instead. */
+let billingReturn:{kind:'checkout'|'payment-method';session:string|null}|null=null;
+export function rememberBillingReturn(search:string){
+ const params=new URLSearchParams(search),session=params.get('session_id');
+ const kind=params.has('payment_method')?'payment-method':params.has('checkout')?'checkout':null;
+ if(kind)billingReturn={kind,session:session&&/^cs_test_[A-Za-z0-9_]+$/.test(session)?session:null};
+}
+export function takeBillingReturn(){const value=billingReturn;billingReturn=null;return value;}
 /** Callback query text never supplies a destination or a success assertion. */
 export function providerReturn(search:string):{view:'chat'|'connections'|'billing';notice:string;interactionId?:string}|undefined{
  const params=new URLSearchParams(search);
@@ -15,6 +24,7 @@ export function providerReturn(search:string):{view:'chat'|'connections'|'billin
   const interactionId=known&&id?id:undefined;
   return {view:interactionId?'chat':'connections',...(interactionId?{interactionId}:{}),notice:params.has('connection_error')||params.has('error')?'Authorization needs a status check. Your saved connection may be unchanged or its outcome unconfirmed.':'Checking the latest connection status…'};
  }
+ if(params.has('payment_method'))return {view:'billing',notice:'Checking your payment method…'};
  if(params.has('checkout'))return {view:'billing',notice:params.get('checkout')==='canceled'?'Checkout was canceled. Check your latest balance here.':'Checking your latest balance…'};
 }
 /** One strict project locator, accepted only when the current owned-project

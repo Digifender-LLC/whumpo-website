@@ -42,8 +42,11 @@ for(const id of ['starter','personal','business','business-pro']){
  const html=renderDetails(id);assert.ok(html.includes(byId(id).name+': planned features'));assert.ok(html.includes('sandbox subscription does not enable them'));assert.ok(html.includes('Standard assistance uses no customer credits'));
  for(const feature of byId(id).launchFeatures.featureIds){const label=features.find(f=>f.id===feature).name;assert.ok(html.includes(label),label);}
 }
-// The landing page no longer hard-codes plan cards: plans, prices and inclusions come from the live API/Stripe tables. The static shell must render no plan or price claim.
+// The landing page renders Whumpo's own plan cards from the catalogue (the Stripe pricing table is gone): names and prices match the catalogue, nothing claims a trial, and no Stripe script or table element is present.
 const landing=renderPricing();assert.ok(landing.includes('The invite-only preview is free'));assert.ok(landing.includes('paid plans are not available yet'));assert.ok(landing.includes('Plan changes and future spending require your approval'));
-assert.ok(landing.includes('aria-label="Plans for"')&&landing.includes('aria-label="Billing"'));assert.ok(landing.includes('Loading plans'));
-assert.doesNotMatch(landing,/<h3[^>]*>(Creator|Personal|Starter|Business|Business Pro)<\/h3>/);assert.doesNotMatch(landing,/\$\d/);
+assert.ok(landing.includes('aria-label="Plans for"')&&landing.includes('aria-label="Billing"'));
+for(const id of ['starter','personal'])assert.ok(landing.includes('>'+byId(id).name+'</h3>'),id+' card');
+assert.ok(landing.includes('$'+byId('starter').monthlyCents/100)&&landing.includes('$'+byId('personal').monthlyCents/100));
+assert.ok(landing.includes('Explore with an invite')&&landing.includes('href="/workspace?signup=true"'));
+assert.doesNotMatch(landing,/free trial|Payment method required|Enterprise|stripe-pricing-table|js\.stripe\.com|Loading plans/i);
 console.log('Plan catalogue passed: real public API, cumulative four-tier features, seven gated connections, common protections, stable personal ID/prices, no implicit activation, Chat text and rendered pricing/preferences.');

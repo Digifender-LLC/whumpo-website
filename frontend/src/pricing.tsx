@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {StripePricingTable} from './stripe-pricing-table';
+import {PlanCards} from './plan-features';
 
 type Audience = 'personal' | 'business';
 type BillingInterval = 'monthly' | 'annual';
@@ -17,7 +17,7 @@ export function Pricing() {
       <Switch label="Plans for" value={audience} options={[{value:'personal',label:'Personal'},{value:'business',label:'Business'}]} onChange={setAudience}/>
       <Switch label="Billing" value={billingInterval} options={[{value:'monthly',label:'Monthly'},{value:'annual',label:'Annual'}]} onChange={setBillingInterval}/>
     </div>
-    <div className={'mt-9 '+(audience==='personal'?'mx-auto max-w-4xl':'')}><StripePricingTable audience={audience} billingInterval={billingInterval}/></div>
+    <div className={'mt-9 '+(audience==='personal'?'mx-auto max-w-4xl':'')}><PlanCards audience={audience} billingInterval={billingInterval}/></div>
     <p className="mx-auto mt-7 max-w-3xl text-center text-xs text-ink-muted">{billingInterval==='annual'?'Annual plans save two months and propose eligible standard domains up to $20/year wholesale each. Premium domains are excluded; redemption is not available yet. ':''}Plan changes and future spending require your approval.</p>
   </section>;
 }

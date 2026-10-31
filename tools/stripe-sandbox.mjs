@@ -3,8 +3,8 @@ import {resolve,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 
-export const version='2025-02-24.acacia',app='whumpo-sandbox-v1';
-// R14: the one Whumpo sandbox account (docs/stripe-pricing-tables.md). A sandbox key for any other account is refused.
+export const version='2026-10-28.endive',app='whumpo-sandbox-v1';
+// R14: the one Whumpo sandbox account (docs/stripe-sandbox.md). A sandbox key for any other account is refused.
 export const expectedAccount='acct_1ULu0ZEz67CfHgqS';
 export async function stripeClient(directory){
  const key=(await readFile(join(directory,'stripe-test.key'),'utf8')).trim();
@@ -63,10 +63,7 @@ export async function configure(directory,apply=false){
    journal.prices[p.id+':'+interval]=price.id;await save();
   }
  }
- if(!journal.portal){
-  const portal=await mutate('billing_portal/configurations',{'business_profile[headline]':'Whumpo sandbox — no real charges','features[invoice_history][enabled]':'true','features[payment_method_update][enabled]':'true','features[subscription_cancel][enabled]':'true','features[subscription_cancel][mode]':'at_period_end','features[subscription_update][enabled]':'false','features[customer_update][enabled]':'false','default_return_url':'https://whumpo.com/workspace/?checkout=returned','metadata[app]':app},'portal');
-  if(portal.livemode!==false)throw Error('Portal is not in sandbox mode.');journal.portal=portal.id;await save();
- }
+ // The hosted billing portal is retired (D15): no configuration is created. An existing portal configuration in Stripe is left alone.
  if(!journal.webhook){
   const existing=await api('webhook_endpoints?limit=100');
   if(existing.data.some(w=>w.url==='https://whumpo.com/api/stripe/webhook'))throw Error('A webhook already exists. Reconcile its saved signing secret before creating another.');
@@ -76,11 +73,12 @@ export async function configure(directory,apply=false){
   if(webhook.livemode!==false||!/^whsec_[A-Za-z0-9]+$/.test(webhook.secret??''))throw Error('Invalid sandbox webhook.');
   await writeFile(join(directory,'stripe-webhook.key'),webhook.secret+'\n',{mode:0o600});journal.webhook=webhook.id;await save();
  }
- const webhook=await api('webhook_endpoints/'+journal.webhook),portal=await api('billing_portal/configurations/'+journal.portal);
- if(webhook.livemode!==false||webhook.url!=='https://whumpo.com/api/stripe/webhook'||webhook.api_version!==version||webhook.status!=='enabled'||portal.livemode!==false||portal.features.subscription_update.enabled||portal.features.subscription_cancel.mode!=='at_period_end')throw Error('Saved setup changed; inspect before deployment.');
- const config={version:1,prices:journal.prices,portal:journal.portal};
+ const webhook=await api('webhook_endpoints/'+journal.webhook);
+ if(webhook.livemode!==false||webhook.url!=='https://whumpo.com/api/stripe/webhook'||webhook.status!=='enabled')throw Error('Saved setup changed; inspect before deployment.');
+ // A webhook endpoint's api_version is immutable and only identifiers are read from events (state is re-fetched at the pinned version), so an older endpoint stays valid.
+ const config={version:1,prices:journal.prices};
  await writeFile(join(directory,'stripe-catalog.json'),JSON.stringify(config),{mode:0o600});
- console.log('Verified four sandbox products, eight recurring prices, restricted billing portal and signed webhook. Configuration saved privately.');
+ console.log('Verified four sandbox products, eight recurring prices and signed webhook. Configuration saved privately.');
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  const [directory,mode]=process.argv.slice(2);

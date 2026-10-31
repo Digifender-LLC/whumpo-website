@@ -20,11 +20,11 @@ Whumpo uses Cloudflare hosting and Turnstile protection on relevant forms. Cloud
 
 See the [Turnstile Privacy Addendum](https://www.cloudflare.com/turnstile-privacy-policy/) and [Cloudflare cookie documentation](https://developers.cloudflare.com/fundamentals/reference/policies-compliances/cloudflare-cookies/). Customer-connected websites or CMS installations may add their own technologies, which their operators must disclose.
 
-## Stripe sandbox pricing and checkout
+## Stripe sandbox checkout
 
-Where the homepage displays configured Stripe pricing tables, it loads Stripe's script and embedded content; selecting a plan can open Stripe's test checkout. Those requests reach Stripe even though no live Whumpo subscription or trial entitlement is available. Stripe may use cookies and similar technologies for provider functionality, security and fraud prevention. We have not verified a complete browser-by-browser inventory or lifetime for every item set by the embedded provider, and do not claim that sandbox mode makes those technologies exempt from privacy requirements.
+The homepage and sign-in pages load no Stripe script. When you choose to test a subscription or update a test card inside Billing, Whumpo loads Stripe.js and Stripe's embedded payment form when that part of Billing opens; once loaded, Stripe.js can remain active in the workspace until the page is reloaded. Those requests reach Stripe even though no live Whumpo subscription is available. Stripe may use cookies and similar technologies for provider functionality, security and fraud prevention. We have not verified a complete browser-by-browser inventory or lifetime for every item set by the embedded provider, and do not claim that sandbox mode makes those technologies exempt from privacy requirements.
 
-See [Stripe's Cookies Policy](https://stripe.com/legal/cookies-policy) and [Privacy Policy](https://stripe.com/privacy). Browser controls can block or clear provider storage, but blocking it may prevent an embedded table or checkout from working. Any consent or opt-out controls required for the actual provider configuration and applicable law must be in place before the relevant processing is offered.
+See [Stripe's Cookies Policy](https://stripe.com/legal/cookies-policy) and [Privacy Policy](https://stripe.com/privacy). Browser controls can block or clear provider storage, but blocking it may prevent the payment form from working. Any consent or opt-out controls required for the actual provider configuration and applicable law must be in place before the relevant processing is offered.
 
 ## Analytics, advertising and choices
 

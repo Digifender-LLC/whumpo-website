@@ -5273,7 +5273,7 @@
   },
   {
    "id": "billing-owner",
-   "title": "Owner billing: status, subscription checkout, refresh and portal",
+   "title": "Owner billing: status, subscription checkout, refresh, cancel/resume, payment method and invoice retry",
    "privileged": [
     "billing"
    ],
@@ -5306,7 +5306,47 @@
     {
      "file": "src/index.ts",
      "kind": "exact",
-     "match": "/api/billing/portal",
+     "match": "/api/billing/payment-method",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/billing/payment-method/setup",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/billing/payment-method/complete",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/billing/subscription/cancel",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/billing/subscription/resume",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "exact",
+     "match": "/api/billing/subscription/retry",
      "methods": [
       "POST"
      ]
@@ -5323,7 +5363,7 @@
    "cells": {
     "authority": {
      "state": "evidenced",
-     "detail": "Checkout, refresh and portal key on the owner's order and stripe_customers row. The portal for an owner without a customer (code returns 409) is covered by tests/boundary-billing-portal-customer.mjs (slice 16, 2026-10-25: passed on local SQLite and local D1, exit 0; the earlier limiter-mutation claim was not observed and is unrun).",
+     "detail": "Checkout, refresh, cancel, resume, retry and payment-method routes key on the owner's order, stripe_customers row and stripe_subscriptions row; no customer, subscription or invoice id comes from the client, and the one client-supplied setup session id is verified against the caller's customer and owner metadata before any write. An owner without a customer id gets 409 with no Stripe call, and a foreign customer, subscription, invoice or setup session is refused before any write: tests/boundary-billing-management.mjs (replaces the retired hosted-portal test; passes on local SQLite and local D1).",
      "enforcedAt": [
       {
        "file": "src/stripe-billing.ts",
@@ -5331,7 +5371,11 @@
       },
       {
        "file": "src/stripe-billing.ts",
-       "contains": "customer=await db.prepare('SELECT customer_id FROM stripe_customers WHERE user_id=?').bind(user).first<Customer>()"
+       "contains": "const row=await db.prepare('SELECT customer_id FROM stripe_customers WHERE user_id=? AND customer_id IS NOT NULL').bind(user).first<Customer>();"
+      },
+      {
+       "file": "src/stripe-billing.ts",
+       "contains": "requireMatch(sub.id===row.id&&sub.livemode===false&&sub.customer===row.customer_id&&sub.metadata?.app===stripeApp&&sub.metadata.order===row.order_id);"
       }
      ],
      "tests": [
@@ -5344,6 +5388,21 @@
        "file": "tests/subscriptions.mjs",
        "contains": "assert.equal((await getBilling(scope(other),other)).plan.id,'explore');",
        "asserts": "an entitlement does not leak to another owner"
+      },
+      {
+       "file": "tests/boundary-billing-management.mjs",
+       "contains": "assert.equal(calls.length,0,'no Stripe call is made for an owner without a customer');",
+       "asserts": "an owner without a customer id is refused by every management route with no Stripe call"
+      },
+      {
+       "file": "tests/boundary-billing-management.mjs",
+       "contains": "assert.equal((await call(owner.token,'POST','subscription/retry')).status,409,'foreign invoice');",
+       "asserts": "a foreign invoice is never paid"
+      },
+      {
+       "file": "tests/boundary-billing-management.mjs",
+       "contains": "assert.equal((await call(owner.token,'POST','payment-method/complete',{session:sessionId})).status,409,'another owner\\'s setup session');",
+       "asserts": "another owner's setup session never becomes the caller's default payment method"
       }
      ]
     },
@@ -5370,13 +5429,13 @@
       {
        "file": "tests/subscriptions.mjs",
        "contains": "assert.equal((await worker.fetch(new Request('https://whumpo.com'+path,{method:'POST'}),local)).status,403);",
-       "asserts": "checkout, portal and refresh without Origin get 403"
+       "asserts": "every billing POST (checkout, refresh, cancel, resume, retry, payment-method setup and complete) without Origin gets 403"
       }
      ]
     },
     "freshness": {
      "state": "n/a",
-     "detail": "Not required by the payments contract for the sandbox; checkout and portal accept any current session. Recorded as a policy question (R4) before real-money activation."
+     "detail": "Not required by the payments contract for the sandbox; checkout, cancel, resume, retry and payment-method update accept any current session. Recorded as a policy question (R4) before real-money activation."
     },
     "target": {
      "state": "evidenced",
