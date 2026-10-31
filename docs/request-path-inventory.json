@@ -1777,7 +1777,8 @@
     },
     "assetsBinding": 0,
     "rateLimiter": {
-     "apps.API_LIMITER": 1
+     "apps.API_LIMITER": 1,
+     "apps.AUTH_LIMITER": 1
     },
     "subrequests": [],
     "waitUntil": 0,
