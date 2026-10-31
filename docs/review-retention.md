@@ -136,11 +136,11 @@ Class, lane and turnover values:
 | `owner_email_change_limits` | `owner_email_change_limit_rate` | account 3 (filtered) · account 5 (filtered) · other 3 (filtered) | rate | R6 | expiring | app+cascade | owner-email-change-limits |
 | `owner_security_reviews` | `owner_security_review_new` | account 20 (filtered) | inventory | R6 | expiring | app+cascade | owner-security-reviews |
 | `photo_scan_tickets` | `photo_scan_ticket_quota` | owner 100 · platform 5000 | evidence | R5 | lifetime | cascade | safety-checks |
-| `project_files` | `project_file_quota` | project 20 · owner 50 · platform 500 | inventory | R6 | owner-removable | trigger+cascade | project-media |
+| `project_files` | `project_file_quota` | project 20 · owner 50 · platform 500 | inventory | R6 | owner-removable | app+trigger+cascade | project-media |
 | `project_files+file_cleanup` | `project_file_cleanup_capacity` | platform 500 | inventory | R6 | owner-removable | app+trigger+cascade | project-media |
 | `project_spec_applies` | `project_spec_apply_admit` | project 500 · platform 20000 | receipt | R2 | lifetime | cascade | configuration-authority |
 | `project_spec_proposals` | `project_spec_proposal_admit` | project 50 · platform 4000 | review | R1 | expiring | app+trigger+cascade | project-configurations |
-| `projects` | `project_quota` | owner 20 | inventory | R6 | owner-removable | cascade | projects |
+| `projects` | `project_quota` | owner 20 | inventory | R6 | owner-removable | app+cascade | projects |
 | `push_devices` | `push_device_limit` | account 20 | inventory | R6 | expiring | app+cascade | contact-notifications |
 | `push_events` | `push_event_limit` | account 20 (window) · account 100 (window) | receipt | R2 | expiring | app+cascade | contact-notifications |
 | `rule_approvals` | `rule_approval_new` | other 200 | inventory | R6 | owner-removable | cascade | connector-receipts |

@@ -202,6 +202,21 @@ export async function restoreDiscrepancies(candidateDb,sourceDb){
  return {...fenced,sourceAvailable:true,candidateRecords:candidate.length,sourceRecords:source.length,counts,tables};
 }
 
+/** WH-019: reconcile an isolated restored candidate with the CURRENT suppression ledger before anything is admitted or served.
+ * `suppression` is the bundled src/restore-suppression.ts module (capture, replay, check), injected so this operator tool stays plain
+ * JavaScript. The ledger is captured from the operator-selected current source; replay is one atomic batch on the candidate and is
+ * idempotent; the gate must then report clear. Counts and codes only. Without a current source there is no ledger to replay, so
+ * reconciliation is unavailable and the candidate stays held. */
+export async function reconcileRestoreSuppressions(candidateDb,sourceDb,suppression){
+ hold(suppression&&['captureRestoreSuppressions','replayRestoreSuppressions','checkRestoreSuppressions'].every(n=>typeof suppression[n]==='function'),'suppression-module');
+ let ledger;try{ledger=await suppression.captureRestoreSuppressions(sourceDb);}catch{return {...fenced,status:'unavailable',reconciliation:'unavailable-without-current-source'};}
+ const before=await suppression.checkRestoreSuppressions(candidateDb,ledger);
+ let replay;try{replay=await suppression.replayRestoreSuppressions(candidateDb,ledger);}catch{throw new DrillHold('suppression-replay-refused');}
+ const after=await suppression.checkRestoreSuppressions(candidateDb,ledger);
+ hold(after.clear,'suppression-not-clear');
+ return {...fenced,status:'reconciled',entries:ledger.entries.length,ledgerSha256:ledger.sha256,pendingBefore:before.pending,applied:replay.applied};
+}
+
 // WH-008 refresh (2026-10-29): coverage, key-version and interrupted-cutover inventories.
 // Capture is the whole logical control database, so every table is captured and restored unless it is
 // named here with a rationale. Today nothing is excluded: restored rows stay fenced and are reconciled
