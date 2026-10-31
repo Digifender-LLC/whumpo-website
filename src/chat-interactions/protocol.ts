@@ -48,6 +48,8 @@ export const bindings:Readonly<Record<string,{mode:string;feature:'core.editing'
   // WH-127 records counts. Identity and ownership only (viewComponents feature null): owner reads of collected data stay
   // reachable after plan loss. Counts, ids and states only; visitor-submitted values stay in the owner records panel.
   'records.summary@1': {mode:'read',feature:'core.editing',source:'src/workspace-view-bindings.ts',handler:'readViewBinding',scope:'project',displays:['workspace']},
+  // WH-194: the exact server-rendered domain purchase review. Read-only; consent is a separate owner-only step and nothing issues this card until a registrar adapter exists.
+  'domain.purchase-review@1': {mode:'read',feature:'core.editing',source:'src/domain-purchase/store.ts',handler:'readDomainReview',scope:'review',displays:['consent']},
   'site.comparison@1': {mode:'read',feature:'core.editing',source:'src/project-specification/store.ts',handler:'specificationReviewDetails',scope:'review',displays:['comparison']},
   'site.preview@1': {mode:'read',feature:'core.editing',source:'src/project-specification/store.ts',handler:'specificationPreview',scope:'review',displays:['preview']},
 });

@@ -146,6 +146,7 @@ export const deletionSites={
  'src/project-specification/service-clients/store.ts::service_client_proposals':excluded(proposals),
  'src/site-health.ts::site_health_budget':excluded('Platform monitoring budget; no customer content.'),
  'src/site-health.ts::site_health_checks':excluded('Platform availability checks of public pages; no customer content beyond the public URL status.'),
+ 'src/domain-purchase/store.ts::domain_quotes':excluded('WH-194 draft quotes (with their reviews and the owner\'s registrant contact, by cascade) that never became an order, removed a day after they expired. A price quote and a contact entered for one purchase are not published or customer content to preserve; orders, attempts, events and registrations are never deleted here and an unresolved order or active registration cannot be deleted at all.'),
 };
 /** Overwrite/clear paths and storage outside D1 DELETE statements. */
 export const otherPaths={

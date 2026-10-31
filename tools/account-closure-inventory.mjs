@@ -112,6 +112,18 @@ const metrics={
  jobJournal:['job_journal','owner_user_id'],
  openJobJournal:['job_journal','owner_user_id',"state NOT IN ('complete','cancelled','expired')"],
  unresolvedJobs:['job_journal','owner_user_id',"state IN ('awaiting','uncertain') OR (state='operator' AND attempt_id IS NOT NULL)"],
+ // WH-194 domain purchases (schema group C2). Unresolved orders hold funds or may have bought the name, and an active registration is never cancelled
+ // or lapsed by closure: both block closure until settled or transferred out (the schema also refuses to purge them).
+ domainQuotes:['domain_quotes','project_id IN (SELECT id FROM owned_projects)'],
+ domainReviews:['domain_reviews','project_id IN (SELECT id FROM owned_projects)'],
+ domainRegistrantContacts:['domain_registrant_contacts','review_id IN (SELECT review_id FROM domain_reviews WHERE project_id IN (SELECT id FROM owned_projects))'],
+ domainOrders:['domain_orders','project_id IN (SELECT id FROM owned_projects)'],
+ unresolvedDomainOrders:['domain_orders','project_id IN (SELECT id FROM owned_projects)',"state IN ('reserved','dispatching','unknown-outcome','unresolved')"],
+ domainOrderAttempts:['domain_order_attempts','order_id IN (SELECT order_id FROM domain_orders WHERE project_id IN (SELECT id FROM owned_projects))'],
+ domainRegistrarEvents:['domain_registrar_events','order_id IN (SELECT order_id FROM domain_orders WHERE project_id IN (SELECT id FROM owned_projects))'],
+ domainFundingHolds:['domain_funding_holds','order_id IN (SELECT order_id FROM domain_orders WHERE project_id IN (SELECT id FROM owned_projects))'],
+ domainRegistrations:['domain_registrations','project_id IN (SELECT id FROM owned_projects)'],
+ activeDomainRegistrations:['domain_registrations','project_id IN (SELECT id FROM owned_projects)',"state='active'"],
 };
 const inventorySQL=entries=>`WITH scope AS (SELECT id FROM users WHERE (?1 IS NULL OR id=?1)),
  owned_projects AS (SELECT id FROM projects WHERE owner_user_id IN (SELECT id FROM scope))

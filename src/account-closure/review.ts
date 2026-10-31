@@ -129,10 +129,20 @@ const c:Record<string,[string,string,Disposition]>={
  jobJournal:['job_journal','job-journal','delete'],
  openJobJournal:['job_journal','job-journal','cancel'],
  unresolvedJobs:['job_journal','job-journal','cancel'],
+ domainQuotes:['domain_quotes','domain-registrations','delete'],
+ domainReviews:['domain_reviews','domain-registrations','delete'],
+ domainRegistrantContacts:['domain_registrant_contacts','domain-registrations','delete'],
+ domainOrders:['domain_orders','domain-registrations','delete'],
+ unresolvedDomainOrders:['domain_orders','domain-registrations','cancel'],
+ domainOrderAttempts:['domain_order_attempts','domain-registrations','delete'],
+ domainRegistrarEvents:['domain_registrar_events','domain-registrations','delete'],
+ domainFundingHolds:['domain_funding_holds','billing','delete'],
+ domainRegistrations:['domain_registrations','domain-registrations','retain'],
+ activeDomainRegistrations:['domain_registrations','domain-registrations','retain'],
 };
 export const closureCategories:Readonly<Record<string,readonly [string,string,Disposition]>>=Object.freeze(c);
 /** Open provider work: closure refuses until each settles (cancelling a local row never settles a provider effect). */
-export const settleFirstKeys:readonly string[]=Object.freeze(['unresolvedStandardAI','unresolvedConnectionExchanges','githubGrantUncertain','githubPendingRevocations','cloudflarePendingRevocations','unresolvedDomainRecords','unresolvedChatInteractionContinuations','unresolvedJobs','openConnectorReceipts']);
+export const settleFirstKeys:readonly string[]=Object.freeze(['unresolvedStandardAI','unresolvedConnectionExchanges','githubGrantUncertain','githubPendingRevocations','cloudflarePendingRevocations','unresolvedDomainRecords','unresolvedChatInteractionContinuations','unresolvedJobs','unresolvedDomainOrders','activeDomainRegistrations','openConnectorReceipts']);
 
 export const isCount=(v:unknown):v is number=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0;
 /** Every category present as a non-negative integer, nothing unknown. */

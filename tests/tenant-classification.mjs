@@ -39,7 +39,7 @@ assert.equal(report.byRetarget['hand-written']+report.byRetarget.keep+report.byR
 assert.ok(!registry.columns.some(c=>c.retarget==='mechanical'),'no entry claims a mechanical rename');
 // Indirect tenants: 78 reach a tenant (38 through a project_id foreign key), 32 do not (29 at ca17c6a plus the two WH-050
 // operator receipt tables added on main and the WH-018 account_closures record), with the method recorded.
-assert.deepEqual([report.derived.reachesTenant,report.derived.direct,report.derived.chained,report.derived.noTenantPath,report.derived.textualProjectIdWithoutForeignKey],[85,41,44,32,6]);
+assert.deepEqual([report.derived.reachesTenant,report.derived.direct,report.derived.chained,report.derived.noTenantPath,report.derived.textualProjectIdWithoutForeignKey],[93,45,48,32,6]);
 assert.match(report.derived.method,/Breadth-first search over foreign keys/);
 assert.ok(registry.textualIdentity.some(t=>t.column==='file_cleanup.owner_user_id')&&registry.textualIdentity.some(t=>t.column==='cms_deployments.account_id'));
 // Account, custody, payer and actor stay separate roles on separate intended columns.
