@@ -4141,63 +4141,6 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 - 2026-10-28 UTC, docs only, reconciled against origin/main f73dd35: merged PRs #374 (touch-target rule for the support journey) and #386 (axe checks for the four recovery pages) cover the automated part. Acceptance also requires Orca announced-result and focus-return checkpoints; the recorded evidence says Orca is not installed on the host and was not run, so the assistive-technology part is unmet. Readiness unchanged.
 - 2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): readiness set to blocked. Blocker: Orca is not installed on the agent host and installing it needs sudo, so the announced-result and focus-return screen-reader checkpoints cannot run until a person installs it; the automated axe and touch-target parts are done (#374, #386).
 
-## WH-212 — Confirm saved reviews when the conversation read is unavailable
-
-Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **ready**. Kind: implementation. Size: M.
-
-Reviewed: 2026-10-30. Source baseline: `475a3a9658575a1defd820f2494e06eadfd956ba`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-An owner can act on an eligible saved review from a fixed page when the Chat conversation or model is unavailable, through the same exact handler and receipt.
-
-### Scope
-
-- Implement D-5 by reusing the existing exact review readers and confirmation handlers, with their identity, revision, expiry and recent-authentication checks
-- Show the control only after a fresh read; hide it on a stale, failed or foreign read; no new authority store
-
-### Acceptance criteria
-
-- [ ] A lost reply replays the receipt and never redispatches; a changed revision, expired or foreign review is refused
-- [ ] No second approval path exists for any review kind and the model is never called
-- [ ] An HTTP outage suite proves each eligible kind with a negative control
-
-### Verification
-
-- pnpm check
-- node tests/chat-inference-outage.mjs; node tests/chat-saved-turn.mjs --d1; node tests/publications.mjs
-- node tests/workspace-identity-browser.mjs --saved-work
-
-### Dependencies and blockers
-
-Planning dependencies: WH-206. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/chat-daily-workspace.md](../../docs/chat-daily-workspace.md)
-- [frontend/src/saved-chat-turn.tsx](../../frontend/src/saved-chat-turn.tsx)
-- [frontend/src/workspace.tsx](../../frontend/src/workspace.tsx)
-- [src/chat.ts](../../src/chat.ts)
-- [src/chat-controls.ts](../../src/chat-controls.ts)
-- [tests/chat-inference-outage.mjs](../../tests/chat-inference-outage.mjs)
-
-### Execution coordination
-
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-- 2026-10-27 UTC, docs only, nothing re-run: D-5 answered as an agent decision in docs/roadmap/owner-decisions-2026-10-26.md (section "Agent decisions", 2026-10-27, delegated by owner) and the answered rows in docs/chat-daily-workspace.md: every saved review kind whose existing exact confirmation handler runs without the model may be confirmed from Saved work after a fresh exact read of that saved turn; no model-free prepare control in the beta. Readiness moves from blocked to planned and the blocker is removed; nothing implemented.
-- 2026-10-27 UTC, source and tests only, merged to main, not deployed here and not device-accepted: digest and confirm gap work PRs #405 (confirm refuses a review whose stored reply no longer matches its digest, merged 2026-10-27T07:35:15Z), #407 (service-client activation no longer refused by the confirm digest check), #408 (digest write-path gap closed for the remaining review kinds), #410 (confirm refuses when the stored reply no longer matches the saved review, no-digest kinds), #414 (fixes three CMS suites failing on main), #415 and #416 (typed commands and typed CMS confirms check the reviewed reply) and #418 (fixes the boundary-provider-reviews test on main). Mapped to this task by subject (confirm from Saved work); the PR titles are the only source for scope. Readiness unchanged.
-- 2026-10-28 UTC, tests only, source unchanged, not deployed: tests/saved-review-confirm-outage.mjs now proves the Saved-work confirm path (typed prepare, fresh GET /api/chat/turns/:id, POST /api/chat/actions with the turn's own revision, same-request-ID replay with no second effect, inference_calls unchanged) for 12 of the 18 confirmationControls kinds, each with one negative control. Covered: site (stale, foreign), application (stale, digest mismatch), version (foreign), photo (stale), contact (expired), contactNotification (digest mismatch), domainProof (expired), directory (digest mismatch), backendForm (stale), backendPublication (digest mismatch), backendState (digest mismatch), cmsSetup (foreign). Untested, because the review cannot be prepared locally without faking a provider or needing a model: appPage (prepared only by /design-app-page, which needs a model), backup (prepare reads the GitHub API), cmsImport (live WordPress), cmsPublish, cmsUnpublish and cmsDiscard (live EmDash/WordPress CMS instance). Out of scope: dashboard /confirm-dns and /confirm-hosting, appMaintenance controls, browser journeys. Added package.json script test:saved-review-confirm-outage (SQLite and --d1). Ran on Node 24.21.0, pnpm 11.19.0: the suite passes with 197 checks on SQLite and on local D1. No product defect found. Closes the gap recorded by the WH-213 audit for the HTTP outage suite; the browser panel remains site-only. Readiness unchanged.
-- 2026-10-28 UTC, docs only, reconciled against origin/main f73dd35: merged PRs #389, #397, #405-#418 and #429 (outage suite proving 12 of 18 confirmation kinds with negative controls) cover much of the work. Acceptance requires the outage suite to prove each eligible kind; the untested kinds are appPage (needs a model), backup (GitHub API) and cmsImport, cmsPublish, cmsUnpublish, cmsDiscard (live CMS). Whether the GitHub and CMS kinds count as eligible is not recorded, so the outcome is unclear. Readiness unchanged.
-- 2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): #429 merged 2026-10-29 as the last change. Its own body still lists appPage, backup, cmsImport, cmsPublish, cmsUnpublish and cmsDiscard as untested, so acceptance is not plainly met. Readiness unchanged.
-- 2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): readiness planned to ready. Every dependency (WH-206) is accepted in its own evidence, so this is an open planning candidate; its acceptance is unchanged and not claimed.
-
 ## WH-213 — WH-111 original-scope connected acceptance audit
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: verification. Size: S.
@@ -4295,7 +4238,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
 
-# F2 — Done (18)
+# F2 — Done (19)
 
 Verified complete with recorded evidence; kept for history and dependency context. Not candidates for new work.
 
@@ -5461,6 +5404,64 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 - 2026-10-27 UTC, source and local browser only, not deployed, no device: delivered by PR #373 (merged 2026-10-27T05:19:37Z, merge commit 0a74208) under D-4; no product code changed. Unsent Chat text is the per-tab sessionStorage draft (key whumpo.chat-recovery, account-scoped, 24-hour life enforced on read, no localStorage or server copy). New assertions: tests/chat-recovery.mjs (draft survives at 24h minus 1 ms, gone at 24h, a fresh tab reads null); --cross-tab (a third tab starts with an empty composer, no tab's storage holds another tab's text); --navigation (after sign-out neither browser store holds the draft). Reload, Back from each essential page and provider/checkout return were already covered by the existing navigation journey. docs/chat-workspace-continuity.md gains a dated per-tab-limit section. The PR reports node tests/chat-recovery.mjs pass, workspace-identity-browser --cross-tab pass, --navigation pass (after EADDRINUSE retries), pnpm run check exit 0, git diff --check clean, no defects found. Not verified: installed-PWA sessionStorage across OS suspension (no device); expiry is asserted at unit level only, with no browser clock test. Read from gh pr view and the PR body; nothing re-run here. Readiness unchanged.
 - 2026-10-28 UTC, docs only, reconciled against origin/main f73dd35: merged PR #373 (D-4 device-only draft continuity) covers the 24-hour expiry, tab isolation and sign-out clearing. Acceptance also requires that two tabs and a lost reply create no duplicate turn and that stale drafts cannot silently overwrite newer text; no recorded check covers those. Not plainly met. Readiness unchanged.
 - 2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): readiness planned to ready. Every dependency (WH-206, WH-116) is accepted in its own evidence, so this is an open planning candidate; its acceptance is unchanged and not claimed.
+
+## WH-212 — Confirm saved reviews when the conversation read is unavailable
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
+
+Reviewed: 2026-10-30. Source baseline: `475a3a9658575a1defd820f2494e06eadfd956ba`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+An owner can act on an eligible saved review from a fixed page when the Chat conversation or model is unavailable, through the same exact handler and receipt.
+
+### Scope
+
+- Implement D-5 by reusing the existing exact review readers and confirmation handlers, with their identity, revision, expiry and recent-authentication checks
+- Show the control only after a fresh read; hide it on a stale, failed or foreign read; no new authority store
+
+### Acceptance criteria
+
+- [ ] A lost reply replays the receipt and never redispatches; a changed revision, expired or foreign review is refused
+- [ ] No second approval path exists for any review kind and the model is never called
+- [ ] An HTTP outage suite proves each eligible kind with a negative control
+
+### Verification
+
+- pnpm check
+- node tests/chat-inference-outage.mjs; node tests/chat-saved-turn.mjs --d1; node tests/publications.mjs
+- node tests/workspace-identity-browser.mjs --saved-work
+
+### Dependencies and blockers
+
+Planning dependencies: WH-206. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/chat-daily-workspace.md](../../docs/chat-daily-workspace.md)
+- [frontend/src/saved-chat-turn.tsx](../../frontend/src/saved-chat-turn.tsx)
+- [frontend/src/workspace.tsx](../../frontend/src/workspace.tsx)
+- [src/chat.ts](../../src/chat.ts)
+- [src/chat-controls.ts](../../src/chat-controls.ts)
+- [tests/chat-inference-outage.mjs](../../tests/chat-inference-outage.mjs)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-27 UTC, docs only, nothing re-run: D-5 answered as an agent decision in docs/roadmap/owner-decisions-2026-10-26.md (section "Agent decisions", 2026-10-27, delegated by owner) and the answered rows in docs/chat-daily-workspace.md: every saved review kind whose existing exact confirmation handler runs without the model may be confirmed from Saved work after a fresh exact read of that saved turn; no model-free prepare control in the beta. Readiness moves from blocked to planned and the blocker is removed; nothing implemented.
+- 2026-10-27 UTC, source and tests only, merged to main, not deployed here and not device-accepted: digest and confirm gap work PRs #405 (confirm refuses a review whose stored reply no longer matches its digest, merged 2026-10-27T07:35:15Z), #407 (service-client activation no longer refused by the confirm digest check), #408 (digest write-path gap closed for the remaining review kinds), #410 (confirm refuses when the stored reply no longer matches the saved review, no-digest kinds), #414 (fixes three CMS suites failing on main), #415 and #416 (typed commands and typed CMS confirms check the reviewed reply) and #418 (fixes the boundary-provider-reviews test on main). Mapped to this task by subject (confirm from Saved work); the PR titles are the only source for scope. Readiness unchanged.
+- 2026-10-28 UTC, tests only, source unchanged, not deployed: tests/saved-review-confirm-outage.mjs now proves the Saved-work confirm path (typed prepare, fresh GET /api/chat/turns/:id, POST /api/chat/actions with the turn's own revision, same-request-ID replay with no second effect, inference_calls unchanged) for 12 of the 18 confirmationControls kinds, each with one negative control. Covered: site (stale, foreign), application (stale, digest mismatch), version (foreign), photo (stale), contact (expired), contactNotification (digest mismatch), domainProof (expired), directory (digest mismatch), backendForm (stale), backendPublication (digest mismatch), backendState (digest mismatch), cmsSetup (foreign). Untested, because the review cannot be prepared locally without faking a provider or needing a model: appPage (prepared only by /design-app-page, which needs a model), backup (prepare reads the GitHub API), cmsImport (live WordPress), cmsPublish, cmsUnpublish and cmsDiscard (live EmDash/WordPress CMS instance). Out of scope: dashboard /confirm-dns and /confirm-hosting, appMaintenance controls, browser journeys. Added package.json script test:saved-review-confirm-outage (SQLite and --d1). Ran on Node 24.21.0, pnpm 11.19.0: the suite passes with 197 checks on SQLite and on local D1. No product defect found. Closes the gap recorded by the WH-213 audit for the HTTP outage suite; the browser panel remains site-only. Readiness unchanged.
+- 2026-10-28 UTC, docs only, reconciled against origin/main f73dd35: merged PRs #389, #397, #405-#418 and #429 (outage suite proving 12 of 18 confirmation kinds with negative controls) cover much of the work. Acceptance requires the outage suite to prove each eligible kind; the untested kinds are appPage (needs a model), backup (GitHub API) and cmsImport, cmsPublish, cmsUnpublish, cmsDiscard (live CMS). Whether the GitHub and CMS kinds count as eligible is not recorded, so the outcome is unclear. Readiness unchanged.
+- 2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): #429 merged 2026-10-29 as the last change. Its own body still lists appPage, backup, cmsImport, cmsPublish, cmsUnpublish and cmsDiscard as untested, so acceptance is not plainly met. Readiness unchanged.
+- 2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): readiness planned to ready. Every dependency (WH-206) is accepted in its own evidence, so this is an open planning candidate; its acceptance is unchanged and not claimed.
+- 2026-10-30 UTC, tests only, source unchanged, not deployed: tests/saved-review-confirm-outage.mjs now also proves appPage (prepared through the scripted-model /design-app-page harness; confirm, replay and refusals are model-free) and backup (provider boundary stubbed via global fetch, prepared by typed /review-backup) through the Worker HTTP surface: fresh GET /api/chat/turns/:id offers the control, a stale revision is refused with 409 and applies or writes nothing, a foreign account cannot read the turn and its confirm applies nothing, confirm from the fresh read applies once (backup: exactly one remote write), the same-request-ID replay returns the saved result with no second effect or turn, and inference_calls is unchanged by the confirm. 226 checks pass on SQLite and local D1. Per D6 the CMS kinds (cmsImport, cmsPublish, cmsUnpublish, cmsDiscard) are not eligible while CMS testing is owner-deferred, so all 14 eligible kinds (12 earlier plus appPage and backup) are proven with a negative control. No product defect found, no schema change. Also green on this commit: pnpm check; node tests/chat-inference-outage.mjs; node tests/chat-saved-turn.mjs --d1; node tests/publications.mjs; node tests/workspace-identity-browser.mjs --saved-work; node tools/verify.mjs fast; node tools/verify.mjs protection; pnpm build.
 
 # F3 — Commercial MVP
 
