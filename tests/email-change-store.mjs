@@ -182,6 +182,18 @@ try{
   const refused=await call(fresh,'confirm',{version:1,token:t});assert.equal(refused.status,409);assert.equal(refused.data.code,'stale_change');
   assert.equal((await one('SELECT state FROM owner_email_changes WHERE change_id=?',changeId)).state,'stale');assert.equal((await one('SELECT email FROM users WHERE id=?',b.account)).email,b.email);
  });
+ await check('WH-204 contract refusals: address_unavailable at commit (token_expired cannot be reached here: the database clock refuses an early expiry and rows are immutable, so the module contract suite holds it), invalid_address and no_change leave the account untouched',async()=>{
+  // Two accounts hold a pending change to one address; whoever confirms first takes it, and the other learns only "cannot be used".
+  const b=await owner(),c=await owner(),y=addr('contested');
+  const first=(await change(b,y)).data.changeId,second=(await change(c,y)).data.changeId;await deliver('confirm-new-address',y);await deliver('confirm-new-address',y);
+  const [tokenB,tokenC]=mailer.calls.filter(k=>k.to===y&&k.token).map(k=>k.token);
+  assert.equal((await call(b,'confirm',{version:1,token:tokenB})).data.status,'confirmed');
+  const lost=await call(c,'confirm',{version:1,token:tokenC});assert.equal(lost.status,409);assert.equal(lost.data.code,'address_unavailable');
+  assert.equal((await one('SELECT email FROM users WHERE id=?',c.account)).email,c.email);assert.notEqual((await one('SELECT state FROM owner_email_changes WHERE change_id=?',second)).state,'confirmed');void first;
+  const e=await owner();assert.equal((await call(e,'change',{version:1,requestId:id(),newAddress:'not an address'})).data.code,'invalid_address');
+  assert.equal((await call(e,'change',{version:1,requestId:id(),newAddress:e.email.toUpperCase()})).data.code,'no_change');
+ });
+
  await check('rate limits: 3 requests per account per day, 3 messages per destination per day, 5 failed confirmations per hour',async()=>{
   const a=await owner();
   for(let n=0;n<3;n++)assert.equal((await change(a,addr('r'+n))).status,200);
