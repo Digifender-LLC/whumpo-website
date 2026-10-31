@@ -812,8 +812,8 @@
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
-       "contains": "assert.notEqual((await call(o.method,o.path,{token:probe.token,body})).status,401,o.method+' '+o.path+' admits a current native session');",
-       "asserts": "this path admits a current native session"
+       "contains": "assert.ok(admitted!==401&&admitted<500,o.method+' '+o.path+' admits a current native session without a server error (got '+admitted+')');",
+       "asserts": "this path admits a current native session without a server error (not 401, not 5xx)"
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
@@ -978,8 +978,8 @@
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
-       "contains": "assert.notEqual((await call(o.method,o.path,{token:probe.token,body})).status,401,o.method+' '+o.path+' admits a current native session');",
-       "asserts": "this path admits a current native session"
+       "contains": "assert.ok(admitted!==401&&admitted<500,o.method+' '+o.path+' admits a current native session without a server error (got '+admitted+')');",
+       "asserts": "this path admits a current native session without a server error (not 401, not 5xx)"
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
@@ -1186,8 +1186,8 @@
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
-       "contains": "assert.notEqual((await call(o.method,o.path,{token:probe.token,body})).status,401,o.method+' '+o.path+' admits a current native session');",
-       "asserts": "this path admits a current native session"
+       "contains": "assert.ok(admitted!==401&&admitted<500,o.method+' '+o.path+' admits a current native session without a server error (got '+admitted+')');",
+       "asserts": "this path admits a current native session without a server error (not 401, not 5xx)"
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
@@ -1345,8 +1345,8 @@
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
-       "contains": "assert.notEqual((await call(o.method,o.path,{token:probe.token,body})).status,401,o.method+' '+o.path+' admits a current native session');",
-       "asserts": "this path admits a current native session"
+       "contains": "assert.ok(admitted!==401&&admitted<500,o.method+' '+o.path+' admits a current native session without a server error (got '+admitted+')');",
+       "asserts": "this path admits a current native session without a server error (not 401, not 5xx)"
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
@@ -1927,8 +1927,8 @@
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
-       "contains": "assert.notEqual((await call(o.method,o.path,{token:probe.token,body})).status,401,o.method+' '+o.path+' admits a current native session');",
-       "asserts": "this path admits a current native session"
+       "contains": "assert.ok(admitted!==401&&admitted<500,o.method+' '+o.path+' admits a current native session without a server error (got '+admitted+')');",
+       "asserts": "this path admits a current native session without a server error (not 401, not 5xx)"
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
@@ -2055,8 +2055,8 @@
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
-       "contains": "assert.notEqual((await call(o.method,o.path,{token:probe.token,body})).status,401,o.method+' '+o.path+' admits a current native session');",
-       "asserts": "this path admits a current native session"
+       "contains": "assert.ok(admitted!==401&&admitted<500,o.method+' '+o.path+' admits a current native session without a server error (got '+admitted+')');",
+       "asserts": "this path admits a current native session without a server error (not 401, not 5xx)"
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
@@ -2192,8 +2192,8 @@
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
-       "contains": "assert.notEqual((await call(o.method,o.path,{token:probe.token,body})).status,401,o.method+' '+o.path+' admits a current native session');",
-       "asserts": "this path admits a current native session"
+       "contains": "assert.ok(admitted!==401&&admitted<500,o.method+' '+o.path+' admits a current native session without a server error (got '+admitted+')');",
+       "asserts": "this path admits a current native session without a server error (not 401, not 5xx)"
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
@@ -2352,8 +2352,8 @@
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
-       "contains": "assert.notEqual((await call(o.method,o.path,{token:probe.token,body})).status,401,o.method+' '+o.path+' admits a current native session');",
-       "asserts": "this path admits a current native session"
+       "contains": "assert.ok(admitted!==401&&admitted<500,o.method+' '+o.path+' admits a current native session without a server error (got '+admitted+')');",
+       "asserts": "this path admits a current native session without a server error (not 401, not 5xx)"
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
@@ -2524,8 +2524,8 @@
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
-       "contains": "assert.notEqual((await call(o.method,o.path,{token:probe.token,body})).status,401,o.method+' '+o.path+' admits a current native session');",
-       "asserts": "this path admits a current native session"
+       "contains": "assert.ok(admitted!==401&&admitted<500,o.method+' '+o.path+' admits a current native session without a server error (got '+admitted+')');",
+       "asserts": "this path admits a current native session without a server error (not 401, not 5xx)"
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
@@ -2679,8 +2679,8 @@
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
-       "contains": "assert.notEqual((await call(o.method,o.path,{token:probe.token,body})).status,401,o.method+' '+o.path+' admits a current native session');",
-       "asserts": "this path admits a current native session"
+       "contains": "assert.ok(admitted!==401&&admitted<500,o.method+' '+o.path+' admits a current native session without a server error (got '+admitted+')');",
+       "asserts": "this path admits a current native session without a server error (not 401, not 5xx)"
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
@@ -2911,8 +2911,8 @@
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
-       "contains": "assert.notEqual((await call(o.method,o.path,{token:probe.token,body})).status,401,o.method+' '+o.path+' admits a current native session');",
-       "asserts": "this path admits a current native session"
+       "contains": "assert.ok(admitted!==401&&admitted<500,o.method+' '+o.path+' admits a current native session without a server error (got '+admitted+')');",
+       "asserts": "this path admits a current native session without a server error (not 401, not 5xx)"
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
@@ -3137,8 +3137,8 @@
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
-       "contains": "assert.notEqual((await call(o.method,o.path,{token:probe.token,body})).status,401,o.method+' '+o.path+' admits a current native session');",
-       "asserts": "this path admits a current native session"
+       "contains": "assert.ok(admitted!==401&&admitted<500,o.method+' '+o.path+' admits a current native session without a server error (got '+admitted+')');",
+       "asserts": "this path admits a current native session without a server error (not 401, not 5xx)"
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
@@ -3300,8 +3300,8 @@
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
-       "contains": "assert.notEqual((await call(o.method,o.path,{token:probe.token,body})).status,401,o.method+' '+o.path+' admits a current native session');",
-       "asserts": "this path admits a current native session"
+       "contains": "assert.ok(admitted!==401&&admitted<500,o.method+' '+o.path+' admits a current native session without a server error (got '+admitted+')');",
+       "asserts": "this path admits a current native session without a server error (not 401, not 5xx)"
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
@@ -3477,8 +3477,8 @@
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
-       "contains": "assert.notEqual((await call(o.method,o.path,{token:probe.token,body})).status,401,o.method+' '+o.path+' admits a current native session');",
-       "asserts": "this path admits a current native session"
+       "contains": "assert.ok(admitted!==401&&admitted<500,o.method+' '+o.path+' admits a current native session without a server error (got '+admitted+')');",
+       "asserts": "this path admits a current native session without a server error (not 401, not 5xx)"
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
@@ -3630,8 +3630,8 @@
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
-       "contains": "assert.notEqual((await call(o.method,o.path,{token:probe.token,body})).status,401,o.method+' '+o.path+' admits a current native session');",
-       "asserts": "this path admits a current native session"
+       "contains": "assert.ok(admitted!==401&&admitted<500,o.method+' '+o.path+' admits a current native session without a server error (got '+admitted+')');",
+       "asserts": "this path admits a current native session without a server error (not 401, not 5xx)"
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
@@ -3871,8 +3871,8 @@
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
-       "contains": "assert.notEqual((await call(o.method,o.path,{token:probe.token,body})).status,401,o.method+' '+o.path+' admits a current native session');",
-       "asserts": "this path admits a current native session"
+       "contains": "assert.ok(admitted!==401&&admitted<500,o.method+' '+o.path+' admits a current native session without a server error (got '+admitted+')');",
+       "asserts": "this path admits a current native session without a server error (not 401, not 5xx)"
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
@@ -4054,8 +4054,8 @@
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
-       "contains": "assert.notEqual((await call(o.method,o.path,{token:probe.token,body})).status,401,o.method+' '+o.path+' admits a current native session');",
-       "asserts": "this path admits a current native session"
+       "contains": "assert.ok(admitted!==401&&admitted<500,o.method+' '+o.path+' admits a current native session without a server error (got '+admitted+')');",
+       "asserts": "this path admits a current native session without a server error (not 401, not 5xx)"
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
@@ -4241,8 +4241,8 @@
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
-       "contains": "assert.notEqual((await call(o.method,o.path,{token:probe.token,body})).status,401,o.method+' '+o.path+' admits a current native session');",
-       "asserts": "this path admits a current native session"
+       "contains": "assert.ok(admitted!==401&&admitted<500,o.method+' '+o.path+' admits a current native session without a server error (got '+admitted+')');",
+       "asserts": "this path admits a current native session without a server error (not 401, not 5xx)"
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
@@ -4386,8 +4386,8 @@
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",
-       "contains": "assert.notEqual((await call(o.method,o.path,{token:probe.token,body})).status,401,o.method+' '+o.path+' admits a current native session');",
-       "asserts": "this path admits a current native session"
+       "contains": "assert.ok(admitted!==401&&admitted<500,o.method+' '+o.path+' admits a current native session without a server error (got '+admitted+')');",
+       "asserts": "this path admits a current native session without a server error (not 401, not 5xx)"
       },
       {
        "file": "tests/boundary-mobile-paths.mjs",

@@ -91,7 +91,8 @@ try{
    }
    // A throwaway session per operation (logout would end a shared one) and removed after, because the account session cap evicts the oldest.
    const probe=await a.session('android');
-   assert.notEqual((await call(o.method,o.path,{token:probe.token,body})).status,401,o.method+' '+o.path+' admits a current native session');
+   const admitted=(await call(o.method,o.path,{token:probe.token,body})).status;
+   assert.ok(admitted!==401&&admitted<500,o.method+' '+o.path+' admits a current native session without a server error (got '+admitted+')');
    await run('DELETE FROM identity_sessions WHERE id=?',probe.sid);
   }
  });

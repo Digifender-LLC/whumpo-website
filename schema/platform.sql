@@ -2532,7 +2532,7 @@ BEGIN SELECT RAISE(ABORT,'photo_removal_immutable'); END;
 CREATE TRIGGER photo_removal_guard BEFORE UPDATE ON photo_removals
 BEGIN
  SELECT RAISE(ABORT,'photo_removal_expired') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now');
- SELECT RAISE(ABORT,'photo_removal_changed') WHERE NOT EXISTS(SELECT 1 FROM project_files f JOIN projects p ON p.id=f.project_id JOIN chat_turns t ON t.id=NEW.confirmed_by WHERE f.id=NEW.file_id AND f.project_id=NEW.project_id AND p.owner_user_id=NEW.user_id AND t.user_id=NEW.user_id AND mode='guided' AND json_extract(t.action_json,'$.type')='confirm' AND json_extract(t.action_json,'$.kind')='photo' AND json_extract(t.action_json,'$.reviewId')=NEW.id);
+ SELECT RAISE(ABORT,'photo_removal_changed') WHERE NOT EXISTS(SELECT 1 FROM project_files f JOIN projects p ON p.id=f.project_id JOIN chat_turns t ON t.id=NEW.confirmed_by WHERE f.id=NEW.file_id AND f.project_id=NEW.project_id AND p.owner_user_id=NEW.user_id AND t.user_id=NEW.user_id AND t.mode='guided' AND json_extract(t.action_json,'$.type')='confirm' AND json_extract(t.action_json,'$.kind')='photo' AND json_extract(t.action_json,'$.reviewId')=NEW.id);
 END;
 
 CREATE TRIGGER photo_removal_apply AFTER UPDATE ON photo_removals
@@ -2580,7 +2580,7 @@ BEGIN SELECT RAISE(ABORT,'version_removal_immutable'); END;
 CREATE TRIGGER version_removal_guard BEFORE UPDATE ON version_removals
 BEGIN
  SELECT RAISE(ABORT,'version_removal_expired') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now');
- SELECT RAISE(ABORT,'version_removal_changed') WHERE NOT EXISTS(SELECT 1 FROM site_versions v JOIN projects p ON p.id=v.project_id JOIN chat_turns t ON t.id=NEW.confirmed_by WHERE v.id=NEW.version_id AND v.project_id=NEW.project_id AND v.digest=NEW.digest AND v.component_id=NEW.component_id AND v.created_at=NEW.version_created_at AND p.owner_user_id=NEW.user_id AND t.user_id=NEW.user_id AND mode='guided' AND json_extract(t.action_json,'$.type')='confirm' AND json_extract(t.action_json,'$.kind')='version' AND json_extract(t.action_json,'$.reviewId')=NEW.id);
+ SELECT RAISE(ABORT,'version_removal_changed') WHERE NOT EXISTS(SELECT 1 FROM site_versions v JOIN projects p ON p.id=v.project_id JOIN chat_turns t ON t.id=NEW.confirmed_by WHERE v.id=NEW.version_id AND v.project_id=NEW.project_id AND v.digest=NEW.digest AND v.component_id=NEW.component_id AND v.created_at=NEW.version_created_at AND p.owner_user_id=NEW.user_id AND t.user_id=NEW.user_id AND t.mode='guided' AND json_extract(t.action_json,'$.type')='confirm' AND json_extract(t.action_json,'$.kind')='version' AND json_extract(t.action_json,'$.reviewId')=NEW.id);
 END;
 
 CREATE TRIGGER version_removal_apply AFTER UPDATE ON version_removals
