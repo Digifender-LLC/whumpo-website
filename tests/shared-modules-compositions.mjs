@@ -8,6 +8,7 @@ import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
 import {staffPortal} from './fixtures/module-compositions/staff-portal.mjs';
 import {visitorIntake} from './fixtures/module-compositions/visitor-intake.mjs';
+import {fields,moduleInstances} from './fixtures/module-compositions/instances.mjs';
 Error.stackTraceLimit=0;
 // WH-130 connected acceptance. Two synthetic frontend compositions (a staff portal and a visitor intake/gallery page,
 // tests/fixtures/module-compositions/) drive the same access, records, files and content instances through the actual
@@ -46,20 +47,8 @@ const pins=kind=>{const e=m.moduleCatalog.find(x=>x.kind===kind);return {module:
 const markers=[],value=n=>{const v=`VISITOR-VALUE-${n}-${id().slice(0,8)}`;markers.push(v);return v;};
 const hex=async bytes=>Buffer.from(await crypto.subtle.digest('SHA-256',bytes)).toString('hex');
 
-// One shared composition of four instances per project: access (staff role), records (visitor, staff and public forms,
-// a staff desk and a visitor own view), files (staff-only intake, visitor own gallery) and the directory collection.
-const fields=[{key:'name',label:'Name',type:'text',optional:false,read:'owner'},
- {key:'topic',label:'Topic',type:'choice',options:[{value:'repair',label:'Repair'},{value:'visit',label:'Visit'}],optional:false,read:'submitter'},
- {key:'note',label:'Note',type:'text',optional:true,read:'staff'},{key:'urgent',label:'Urgent',type:'boolean',optional:false,read:'submitter'},
- {key:'count',label:'Count',type:'number',optional:false,read:'staff'}];
-const accessInstance={id:'members',kind:'access',...pins('access'),dependencies:[],config:{roles:['staff'],enrollment:'invitation'}};
-const recordsInstance=(schemaFields=fields,fieldsRevision=1)=>({id:'requests',kind:'records',...pins('records'),dependencies:['members'],config:{retentionDays:90,
- schemas:[{id:'request',fieldsRevision,fields:schemaFields,staffWrite:['note','count']}],
- forms:[{id:'request-form',recordId:'request',submit:'visitor',uploadCollectionId:null},{id:'staff-form',recordId:'request',submit:'staff',uploadCollectionId:null},{id:'public-form',recordId:'request',submit:'public',uploadCollectionId:null}],
- views:[{id:'mine',recordId:'request',audience:'visitor',scope:'own',fields:['topic','urgent'],limit:10},{id:'desk',recordId:'request',audience:'staff',scope:'all',fields:['topic','note','count'],limit:50}]}});
-const collection=(cid,read,upload,gallery)=>({id:cid,read,upload,maxBytes:1048576,mediaTypes:['image/jpeg'],gallery});
-const filesInstance={id:'media',kind:'files',...pins('files'),dependencies:['members'],config:{collections:[collection('intake','staff',['staff'],{audience:'staff'}),collection('mine','submitter',['visitor'],{audience:'visitor'})]}};
-const contentInstance={id:'listings',kind:'content',...pins('content'),dependencies:[],config:{collections:[{id:'directory',type:'directory-listing@1'}]}};
+// One shared composition of four instances per project, defined once in the fixture the live check also uses.
+const {accessInstance,recordsInstance,filesInstance,contentInstance}=moduleInstances(pins);
 
 const revision=async o=>(await m.readChat(o.scope,o.user)).state.revision;
 async function control(o,action){const turn=id();return {id:turn,...await m.sendChatControl(o.scope,o.user,{id:turn,revision:await revision(o),action})};}
