@@ -249,7 +249,7 @@ async function suite(m){
   await rt.reconcile(orderId);assert.equal(reg.calls.lookup,bounds.reconcileReads);
   ({rt,reg}=setup());({orderId}=await reserved(rt));reg.next('timeout-before');await rt.dispatch(orderId);
   rt.advance(bounds.reconcileWindowMs);await rt.reconcile(orderId);
-  assert.equal(rt.order(orderId).state,'unresolved');assert.equal(reg.calls.lookup,0);assert.equal(rt.hold(orderId).state,'held');
+  assert.equal(rt.order(orderId).state,'unresolved');assert.equal(reg.calls.lookup,1,'one read first, then the window ends it');assert.equal(rt.hold(orderId).state,'held');
   ({rt,reg}=setup());({orderId}=await reserved(rt));reg.next('timeout-after');await rt.dispatch(orderId);await rt.reconcile(orderId);
   assert.equal(rt.order(orderId).state,'registered');assert.equal(rt.hold(orderId).state,'captured');assert.equal(reg.calls.register,1);
   ({rt,reg}=setup());({orderId}=await reserved(rt));reg.next('pending');await rt.dispatch(orderId);await rt.reconcile(orderId);
@@ -407,7 +407,7 @@ const mutants=[
  ['reconciliation re-sends the purchase',O,"const found=await registrar.lookup(order.hostname);","const found=(await registrar.register({hostname:order.hostname,orderRef:order.orderId,acknowledgePremium:false,autoRenew:false,privacy:'redaction'}),await registrar.lookup(order.hostname));"],
  ['not found treated as proof of failure',O,"if(!ours&&plain(found)&&found.status==='registered'&&typeof found.orderRef==='string'&&found.orderRef.length>0&&found.orderRef!==order.orderId)return step(moved(read,'failed','registered-elsewhere'),'release');","return step(moved(read,'failed','not-found'),'release');"],
  ['a missing reference treated as someone else\'s registration',O,"if(!ours&&plain(found)&&found.status==='registered'&&typeof found.orderRef==='string'&&found.orderRef.length>0&&found.orderRef!==order.orderId)","if(plain(found)&&found.status==='registered')"],
- ['reconciliation read bound not applied',O,"if(read.reconcileReads>=domainPurchaseBounds.reconcileReads)return step(moved(read,'unresolved','reconcile-bound'));",''],
+ ['reconciliation read bound not applied',O,"if(read.reconcileReads>=domainPurchaseBounds.reconcileReads||now-since>=domainPurchaseBounds.reconcileWindowMs)return step(moved(read,'unresolved','reconcile-bound'));",''],
  ['reconciliation window not applied',O,"||now-since>=domainPurchaseBounds.reconcileWindowMs",''],
  ['unauthenticated events applied',O,"check(plain(event)&&event.authenticated===true,'EVENT_NOT_AUTHENTICATED','event');",''],
  ['duplicate events re-applied',O,"if(seen)return {outcome:{applied:false,duplicate:true},step:null};",''],
