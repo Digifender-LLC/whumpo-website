@@ -65,7 +65,7 @@ export async function renderServiceClients(input:unknown,targetInput:unknown,web
    .replace('</form>','</fieldset></form>');
  }
  if(specification.contact)inert+='<section aria-label="Contact" style="margin:40px 0"><h2>Get in touch</h2><p>Contact us ↗</p><p>Contact intake requires its separate approval.</p></section>';
- const preview=html.replace('</main>',inert+'</main>');
+ const preview=html.replace('</main>',()=>inert+'</main>');
  const artifacts=[];
  for(const [kind,value] of [['private-preview',preview],['release-candidate',candidate]] as const){
   const bytes=new TextEncoder().encode(value).length;check(bytes<=49152,'OUTPUT_TOO_LARGE','artifacts');

@@ -112,6 +112,11 @@ const metrics={
  jobJournal:['job_journal','owner_user_id'],
  openJobJournal:['job_journal','owner_user_id',"state NOT IN ('complete','cancelled','expired')"],
  unresolvedJobs:['job_journal','owner_user_id',"state IN ('awaiting','uncertain') OR (state='operator' AND attempt_id IS NOT NULL)"],
+ // WH-091: the owner's brand kits and saved sections (design tokens, names and section text) and their immutable versions, deleted with the account unless a hold applies.
+ brandKits:['brand_kits','owner_user_id'],
+ brandKitVersions:['brand_kit_versions','kit_id IN (SELECT id FROM brand_kits WHERE owner_user_id IN (SELECT id FROM scope))'],
+ savedSections:['saved_sections','owner_user_id'],
+ savedSectionVersions:['saved_section_versions','section_id IN (SELECT id FROM saved_sections WHERE owner_user_id IN (SELECT id FROM scope))'],
 };
 const inventorySQL=entries=>`WITH scope AS (SELECT id FROM users WHERE (?1 IS NULL OR id=?1)),
  owned_projects AS (SELECT id FROM projects WHERE owner_user_id IN (SELECT id FROM scope))

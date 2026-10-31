@@ -1,10 +1,10 @@
 {
   "formatVersion": 1,
-  "compiler": "project-service-clients@4",
+  "compiler": "project-service-clients@5",
   "schemaVersion": 1,
   "esbuildVersion": "0.28.2",
   "target": "es2022",
-  "renderer": "0eeea2510b1882f46d52165b1dac0df077d48203ccd90327bdec3a6b3174f3de",
+  "renderer": "de2fa812b78e54bca1a1240ec53a49980e8781e2da2840c7a8ced77e03e15a60",
   "sources": [
     {
       "path": "src/backend-error.ts",
@@ -27,16 +27,20 @@
       "digest": "6e765689f7a7caedd041936ade4275dff931ddbcec37e83f5da672c04d6f99ab"
     },
     {
+      "path": "src/brand-tokens.ts",
+      "digest": "ab72184501c91b13983289cc0483d4b86c9322c2b5b1435f30c084215aba50b9"
+    },
+    {
       "path": "src/components.ts",
-      "digest": "c0dd3e64533cea88b7486a08dac8fd93ba0bceb3d932eb9d41fee74487fe8318"
+      "digest": "c77ae5241a02fe3578da31b435e96db141496745e9a8b99724f45a993fffe803"
     },
     {
       "path": "src/project-specification/service-clients/compiler.ts",
-      "digest": "d2fee581e7553e353b627ad70af5171ca8e6c574b5ba10d4b5e42d99ec5df466"
+      "digest": "ec101027f5869f89df220bc2281a6eebffb81fa601a00fd4514ef9aeec297986"
     },
     {
-      "path": "src/project-specification/service-clients/v4/core.ts",
-      "digest": "f2453222098e09d867590554fe365206103b7d9e4deecf9e32b45d273e28d93d"
+      "path": "src/project-specification/service-clients/v5/core.ts",
+      "digest": "35c57a415daa7337f0e8e7d1f77c0dd6cad73fb0d9d20f690101090ce40400fb"
     },
     {
       "path": "src/project-specification/v2/json.ts",
@@ -44,12 +48,12 @@
     },
     {
       "path": "src/published-html.ts",
-      "digest": "50f9bc0ca3e799267698d4ccfd562a2e3ea01cda2b07cb7f46795a055a09835f"
+      "digest": "060432e22b10b6ee0df74f06ce7e4abe661150da0bf25b100822f858c2c2983a"
     },
     {
       "path": "src/security.ts",
       "digest": "d25c3ba0a195fe9b85dd42589dced1ffb921604667ea4eed34ce7964f26a9ace"
     }
   ],
-  "compilerDigest": "3ed065118629f5b0dbbd98f6c3b43f14e7c5746e22c341ef3b48623784c13bea"
+  "compilerDigest": "6831aa2203a05b396faf8f04f34fa40a5d0f289aa4778d277731ce4965cebfa8"
 }

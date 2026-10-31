@@ -133,3 +133,6 @@
 .skeleton{position:relative;overflow:hidden;background:var(--surface-sunken)}
 .skeleton::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,var(--line),transparent);transform:translateX(-100%);animation:skeleton-sweep 1.4s var(--ease-standard) infinite}
 @keyframes skeleton-sweep{to{transform:translateX(100%)}}
+
+/* WH-091 brand kit editor: the preview stays in view only where there is room for it and the controls. */
+@media (min-width:1024px) and (min-height:800px){.brand-sticky{position:sticky;top:0;z-index:10;max-height:38dvh;overflow:auto;background:var(--surface-raised)}.brand-sticky .brand-preview-box{max-height:calc(38dvh - 5.5rem)}.brand-form :is(input,button,select,textarea){scroll-margin-top:42dvh}}

@@ -35,8 +35,8 @@ export async function checkHealth(db:D1Database,user:string,project:string,trans
    const text=r.ok&&r.body?await pageBody(r):(await r.body?.cancel(),'');let listings:unknown;try{listings=JSON.parse(text).listings;}catch{}
    if(r.status!==200||r.headers.get('etag')!=='"'+expected+'"'||!Array.isArray(listings)||await hashToken(JSON.stringify(listings))!==expected)throw Error('The served directory did not match the approved snapshot.');
   }
-  const {results:photos}=await db.prepare("SELECT v.file_id AS id,f.size,f.status FROM version_photos v LEFT JOIN project_files f ON f.id=v.file_id AND f.project_id=? WHERE v.version_id=? LIMIT 5").bind(project,s.version_id).all<{id:string;size:number|null;status:string|null}>();
-  if(photos.length>4)throw Error('The website has more photo dependencies than this check supports.');
+  const {results:photos}=await db.prepare("SELECT v.file_id AS id,f.size,f.status FROM version_photos v LEFT JOIN project_files f ON f.id=v.file_id AND f.project_id=? WHERE v.version_id=? LIMIT 6").bind(project,s.version_id).all<{id:string;size:number|null;status:string|null}>();
+  if(photos.length>5)throw Error('The website has more photo dependencies than this check supports.');
   if(photos.some(p=>p.status!=='ready'||p.size===null))throw Error('A published photo did not return the expected image response.');
   const photoResults=await Promise.allSettled(photos.map(async photo=>{const response=await transport(url+'assets/'+photo.id+'.jpg',{method:'HEAD',headers:{accept:'image/jpeg','cache-control':'no-cache','user-agent':platformCheckAgent},redirect:'manual',signal:AbortSignal.timeout(10000)});await response.body?.cancel();if(response.status!==200||response.headers.get('content-type')!=='image/jpeg'||response.headers.get('content-length')!==String(photo.size))throw Error('A published photo did not return the expected image response.');}));
   if(photoResults.some(r=>r.status==='rejected'))throw Error('A published photo did not return the expected image response.');

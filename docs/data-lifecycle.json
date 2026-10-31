@@ -2111,45 +2111,51 @@
     },
     {
       "id": "brand-kits",
-      "tables": [],
-      "scope": "project",
-      "purpose": "Versioned brand assets, shared styles and reusable sections.",
-      "currentRetention": "Not admitted: no runtime storage or cleanup is implemented by this reservation.",
-      "proposedRetention": "Extend the existing class lifecycle and LC-01–09 decisions in the implementing packet; retain unresolved effects and independent suppressions where required.",
-      "deletionAuthority": "Future exact domain authority with current identity and preservation checks; this metadata permits no deletion.",
-      "exportPolicy": "Future class-specific allowlist; no credentials, restricted evidence or cross-tenant data.",
-      "references": [
-        "docs/data-protection.md",
-        "docs/roadmap/backlog.json",
-        "docs/inference-privacy.md"
+      "tables": [
+        "brand_kits",
+        "brand_kit_versions",
+        "saved_sections",
+        "saved_section_versions"
       ],
-      "storageStatus": "planned",
+      "scope": "owner",
+      "purpose": "WH-091 the owner's own versioned brand kits (light and optional dark colors, one of five type styles, corner and spacing options, a logo description) and saved reusable page sections (heading, text, style). Plain validated tokens and bounded text only: no file bytes, no credentials, no visitor data. A project never reads these tables; applying one copies a version into the project's specification through the exact website review.",
+      "currentRetention": "Kept until the owner deletes the kit or section, which removes all its versions, or the account is deleted. Versions are immutable and append-only (50 per kit or section); limits are 20 kits and 60 sections per owner. Deleting a kit or section never changes a saved, reviewed or published website, which holds its own copy. There is no age-based expiry: the content is the owner's own design material.",
+      "proposedRetention": "Owner-retained while used. Account closure deletes kits and sections with the account unless a preservation hold applies to the account.",
+      "deletionAuthority": "Current owner (identity and ownership; no paid-feature gate) deletes a kit or section; account deletion cascades. Deletion and rename of both are refused while an active account safety preservation hold applies (safety_hold_brand_kit_retained, safety_hold_saved_section_retained, safety_hold_brand_kit_name, safety_hold_saved_section_name); new versions still append. Models, Chat and jobs cannot create, change or delete them.",
+      "exportPolicy": "Owner JSON reads (list and exact version) are the only export surface today: name, version, tokens or section text and digest. The portable account export does not include kits or saved sections yet (to be added with PR #554); the copied tokens in a project travel with that project's specification export. Never carries another owner's data, a credential, or an approved photo's bytes.",
+      "references": [
+        "src/brand-kits/schema.sql",
+        "src/brand-kits/owner.ts",
+        "src/brand-kits/policy.ts",
+        "src/brand-kits/apply.ts",
+        "src/brand-tokens.ts",
+        "docs/brand-kits.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
       "protection": {
-        "profile": "planned-adapter",
+        "profile": "managed-readable",
         "storage": [
-          "not-admitted"
+          "control-d1"
         ],
         "readers": [
-          "Owner current brand-kit controls; scoped approved reuse only."
+          "Current owner through the owner API and the typed apply controls; the compiler and serving Workers never read these tables"
         ],
         "processors": [
-          "Selected owner maintenance and deterministic composition; public output only after separate review."
+          "Deterministic owner handlers only; no model, Chat history, notification, job or third-party processor reads kits or saved sections"
         ],
         "remainingExposure": [
-          "Planned controls are not implemented; the adapter must register actual storage, copies, keys and provider access before admission."
+          "Rows are readable to privileged operators. Kit names, logo descriptions and section text are owner-written and may be evidence, so a safety hold keeps them; section text becomes public only after a reviewed apply, website review and publication review."
         ],
-        "decision": "planned-adapter",
-        "rationale": "Reserve classification in the existing lifecycle inventory so future features cannot create unclassified personal data or duplicate authority.",
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; the content is the owner's own design material and blanket encryption would not remove authorized owner access. Verify minimization and recovery before broader admission.",
         "requirements": [
           "DP-02",
           "DP-03",
           "DP-04",
           "DP-05"
         ]
-      },
-      "implementationPackets": [
-        "WH-091"
-      ]
+      }
     },
     {
       "id": "guest-feedback",

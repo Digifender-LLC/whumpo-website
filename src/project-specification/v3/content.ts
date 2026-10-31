@@ -7,7 +7,7 @@ import type {ProjectSpecification} from './types';
 export async function renderContentSpecification(input:unknown){
  const spec=validateSpecification(input);
  requireSpec(spec.pages.every(page=>page.audience==='public'),'UNSUPPORTED_DELIVERY','pages.audience');
- // project-content@6: pinned instances are saved configuration only. They add no compiled artifact, and serving needs
+ // project-content@7: pinned instances are saved configuration only. They add no compiled artifact, and serving needs
  // the separate WH-125 activation review. Notification/automation modules (so integrations and rules) stay unavailable.
  requireSpec(spec.modules.length===1&&spec.modules[0].id==='content','UNAVAILABLE_CAPABILITY','modules');
  const artifacts=[];
@@ -26,9 +26,9 @@ export function createContentSpecification(input:unknown):ProjectSpecification {
  const content=[{id:'headline',text:config.headline},{id:'description',text:config.description},{id:'about-title',text:config.aboutTitle},{id:'about-text',text:config.aboutText}];
  const sections=config.sections.map((section,index)=>{
   const heading=`section-${index+1}-heading`,text=`section-${index+1}-text`;
-  content.push({id:heading,text:section.heading},{id:text,text:section.text});return {heading,text};
+  content.push({id:heading,text:section.heading},{id:text,text:section.text});return {heading,text,variant:section.variant};
  });
- return validateSpecification({schemaVersion:3,name:config.name,design:{theme:config.theme},modules:[{id:'content',version:2}],content,
+ return validateSpecification({schemaVersion:3,name:config.name,design:{theme:config.theme,brand:config.brand??null},modules:[{id:'content',version:2}],content,
   pages:[{id:'home',path:'/',component:config.photos.length?'photo-page@1':'site-page@1',audience:'public',photos:config.photos,headline:'headline',description:'description',aboutTitle:'about-title',aboutText:'about-text',sections}],
   instances:[],integrations:[],rules:[]});
 }

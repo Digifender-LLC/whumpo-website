@@ -6,9 +6,9 @@
  "evidence": "docs/workspace-collaboration-evidence.md",
  "baseline": {
   "sourceCommit": "4dea09c",
-  "reviewedSchemaSha256": "53be90ebb97a500aefc0c89a53abffe49cfcae31dd16c56167422fdd9c64d59d",
-  "tables": 241,
-  "usersForeignKeyColumns": 123
+  "reviewedSchemaSha256": "022c6d3c78f6f488a24e563f9853746be4cd521ff357f989ab439c0a4683f3f7",
+  "tables": 245,
+  "usersForeignKeyColumns": 125
  },
  "vocabulary": {
   "classes": {
@@ -124,6 +124,8 @@
   {"column":"github_refresh_custody.user_id","sourceFile":"schema/platform.sql","onDelete":"RESTRICT","class":"workspace+custody","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id","custody":"authorizing_actor_ref"},"status":"proposed","evidenceLevel":"review-spike","basis":"Provider consent is personal (invariant 8); the sealing context whumpo:{provider}:{purpose}:{user}:{id} must be rebuilt on the workspace and the authorizing actor (see the custody section)","evidence":["docs/workspace-collaboration.md#invariants"]},
   {"column":"github_token_vault.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace+custody","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id","custody":"authorizing_actor_ref"},"status":"proposed","evidenceLevel":"review-spike","basis":"Provider consent is personal (invariant 8); the sealing context whumpo:{provider}:{purpose}:{user}:{id} must be rebuilt on the workspace and the authorizing actor (see the custody section)","evidence":["docs/workspace-collaboration.md#invariants"]},
   {"column":"guest_preview_links.owner_user_id","sourceFile":"src/guest-previews/schema.sql","onDelete":"CASCADE","class":"workspace+actor","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id","actor":"actor_ref"},"status":"proposed","evidenceLevel":"review-spike","basis":"Guest links issued by a removed member are kept and flagged issuer-removed, so the issuing actor is needed","evidence":["docs/workspace-collaboration.md#invalidation-matrix"]},
+ {"column":"brand_kits.owner_user_id","sourceFile":"src/brand-kits/schema.sql","onDelete":"CASCADE","class":"workspace","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id"},"status":"proposed","evidenceLevel":"source-reading","basis":"A brand kit or saved section (WH-091) is the creator's own reusable design material, owner-only and copied into a project only through the exact website review; it follows the workspace and account closure deletes it","evidence":["docs/brand-kits.md"]},
+ {"column":"saved_sections.owner_user_id","sourceFile":"src/brand-kits/schema.sql","onDelete":"CASCADE","class":"workspace","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id"},"status":"proposed","evidenceLevel":"source-reading","basis":"A brand kit or saved section (WH-091) is the creator's own reusable design material, owner-only and copied into a project only through the exact website review; it follows the workspace and account closure deletes it","evidence":["docs/brand-kits.md"]},
   {"column":"identity_accounts.account_id","sourceFile":"src/workspace-identity/schema.sql","onDelete":"CASCADE","class":"account","subject":"account","retarget":"keep","roles":{"account":"account_id"},"status":"proposed","evidenceLevel":"review-spike","basis":"Identity root (workspace-identity.md); personal credentials, sessions, kit chain FK through identity_accounts","evidence":["docs/workspace-collaboration.md#terms-and-who-is-not-a-member"]},
   {"column":"inference_budgets.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id"},"status":"undecided","evidenceLevel":"review-spike","basis":"Budget is a workspace envelope; composite FK target of inference_calls(user_id,period)","evidence":["docs/workspace-collaboration.md#engineering-decision-c2-a-dedicated-workspaces-tenant-proposed-engineering-not-an-owner-question"],"questions":["funded-workspace-bound"]},
   {"column":"inference_calls.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace+actor","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id","actor":"actor_ref"},"status":"undecided","evidenceLevel":"review-spike","basis":"Composite FK (user_id,period)->inference_budgets; tenant half follows budgets, actor needed for attribution","evidence":["docs/workspace-collaboration.md#actor-references-chat-identity-and-receipt-principals"],"questions":["funded-workspace-bound"]},
@@ -225,6 +227,7 @@
    "backend_component_instances",
    "backend_extension_uses",
    "backend_state_links",
+   "brand_kit_versions",
    "build_job_cleanups",
    "chat_comparisons",
    "chat_exports",
@@ -255,6 +258,7 @@
    "module_activations",
    "project_spec_chat_links",
    "publication_chat_links",
+   "saved_section_versions",
    "service_client_activation_links",
    "service_client_chat_links",
    "staff_notification_optins",

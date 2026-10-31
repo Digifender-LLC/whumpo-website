@@ -1,6 +1,6 @@
 import {boundAppointment} from './shared-modules/records-setup';
 /** WH-070: the "Request an appointment" link on a published site root. Kept out of `published-html.ts` because that file is
- * a pinned input of the project-service-clients@4 compiler, whose identity must not change. Applied on top of
+ * a pinned input of the project-service-clients@5 compiler, whose identity must not change. Applied on top of
  * `publishedHTML` by the serving path and by the site health check. Both queries repeat the SQL predicate below as a literal (the
  * tenant SQL surface gate refuses concatenated SQL); tests/records-setup.mjs asserts that each contains it byte for byte. The link only says where the hosted form is; whether it is open is decided by that page. */
 /** Reference copy; true while the project's standard appointment form is active and bound to publication `s` (alias of `publications`). */

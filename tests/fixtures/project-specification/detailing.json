@@ -2,7 +2,8 @@
   "schemaVersion": 3,
   "name": "Example Detailing",
   "design": {
-    "theme": "ocean"
+    "theme": "ocean",
+    "brand": null
   },
   "modules": [
     {
@@ -66,11 +67,13 @@
       "sections": [
         {
           "heading": "hours-title",
-          "text": "hours"
+          "text": "hours",
+          "variant": "plain"
         },
         {
           "heading": "services-title",
-          "text": "services"
+          "text": "services",
+          "variant": "plain"
         }
       ]
     }

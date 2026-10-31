@@ -62,6 +62,7 @@ The Security role here reviews one PR. It is not the scheduled no-network audit,
 
 - `node tests/workspace-identity-browser.mjs --site-safety`
 - `node tests/workspace-identity-browser.mjs --recovery-axe`
+- `node tests/brand-kits-browser.mjs`: the brand kit and saved section editors (WH-091) at 360, 390 and 1280px, 1024x800, 200% text, light and dark, keyboard focus order, axe, under the workspace Content-Security-Policy. Run it for any change to `frontend/src/brand-kit-panel.tsx`, `frontend/src/styles.css` or `src/brand-tokens.ts`.
 
 They use disposable local D1, no secret, no network and no provider. They are not in CI because the Ampere ARM64 runner has no browser provisioned and each run takes minutes; adding them means installing Chromium on that runner (or `CI_RUNNER=github`) and a path-filtered job. A seed fixture must confirm a site review through `sendChatControl` with a `confirm` action (a guided turn), never a `/confirm` command in an `ai` turn.
 

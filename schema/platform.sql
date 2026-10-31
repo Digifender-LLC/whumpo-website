@@ -42,7 +42,7 @@ CREATE TABLE site_versions (
  id TEXT PRIMARY KEY,
  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
  component_id TEXT NOT NULL,
- config_json TEXT NOT NULL CHECK(length(CAST(config_json AS BLOB)) <= 8192),
+ config_json TEXT NOT NULL CHECK(length(CAST(config_json AS BLOB)) <= 9216),
  html TEXT NOT NULL CHECK(length(CAST(html AS BLOB)) <= 32768),
  digest TEXT NOT NULL,
  created_at TEXT NOT NULL
@@ -100,7 +100,7 @@ CREATE TABLE file_cleanup (object_key TEXT PRIMARY KEY,created_at TEXT NOT NULL,
 CREATE TABLE version_photos (
  version_id TEXT NOT NULL REFERENCES site_versions(id) ON DELETE CASCADE,
  file_id TEXT NOT NULL REFERENCES project_files(id) ON DELETE CASCADE,
- position INTEGER NOT NULL CHECK(position BETWEEN 0 AND 3),
+ position INTEGER NOT NULL CHECK(position BETWEEN 0 AND 4),
  alt TEXT NOT NULL CHECK(length(alt) BETWEEN 1 AND 200),
  PRIMARY KEY(version_id,file_id),
  UNIQUE(version_id,position)
@@ -1826,7 +1826,7 @@ CREATE TABLE project_spec_proposals (
  spec_json TEXT NOT NULL CHECK(json_valid(spec_json) AND length(CAST(spec_json AS BLOB))<=32768),
  lock_json TEXT NOT NULL CHECK(json_valid(lock_json) AND length(CAST(lock_json AS BLOB))<=4096),
  manifest_json TEXT NOT NULL CHECK(json_valid(manifest_json) AND length(CAST(manifest_json AS BLOB))<=16384),
- config_json TEXT NOT NULL CHECK(json_valid(config_json) AND length(CAST(config_json AS BLOB))<=8192),
+ config_json TEXT NOT NULL CHECK(json_valid(config_json) AND length(CAST(config_json AS BLOB))<=9216),
  html TEXT NOT NULL CHECK(length(CAST(html AS BLOB))<=32768), html_digest TEXT NOT NULL CHECK(length(html_digest)=64),
  diff_json TEXT NOT NULL CHECK(json_valid(diff_json) AND length(CAST(diff_json AS BLOB))<=65536),
  envelope_json TEXT NOT NULL CHECK(json_valid(envelope_json) AND length(CAST(envelope_json AS BLOB))<=16384)
@@ -4271,7 +4271,9 @@ CREATE TRIGGER project_spec_proposal_admit BEFORE INSERT ON project_spec_proposa
    -- WH-070 owner appointment form setup: the typed appointmentFormReview control of this project prepares a change.
    OR (t.mode='guided' AND t.status='completed' AND NEW.operation='change' AND json_extract(t.action_json,'$.type')='appointmentFormReview' AND json_extract(t.action_json,'$.projectId')=NEW.project_id)
    -- WH-128 published gallery: the typed galleryPageReview control of this project prepares a change.
-   OR (t.mode='guided' AND t.status='completed' AND NEW.operation='change' AND json_extract(t.action_json,'$.type')='galleryPageReview' AND json_extract(t.action_json,'$.projectId')=NEW.project_id))
+   OR (t.mode='guided' AND t.status='completed' AND NEW.operation='change' AND json_extract(t.action_json,'$.type')='galleryPageReview' AND json_extract(t.action_json,'$.projectId')=NEW.project_id)
+   -- WH-091 brand kits and saved sections: the typed brandKitReview, brandRemoveReview and savedSectionReview controls of this project prepare a change.
+   OR (t.mode='guided' AND t.status='completed' AND NEW.operation='change' AND json_extract(t.action_json,'$.type') IN('brandKitReview','brandRemoveReview','savedSectionReview') AND json_extract(t.action_json,'$.projectId')=NEW.project_id))
   LEFT JOIN project_spec_heads h ON h.project_id=p.id LEFT JOIN project_spec_versions v ON v.version_id=h.version_id
   WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.user_id AND p.site_draft_revision=NEW.draft_revision
   AND coalesce(h.revision,0)=NEW.expected_revision AND h.version_id IS NEW.base_version_id AND v.spec_digest IS NEW.base_digest
@@ -4579,12 +4581,12 @@ WHEN EXISTS(SELECT 1 FROM projects WHERE id=OLD.project_id) AND EXISTS(SELECT 1 
 BEGIN SELECT RAISE(ABORT,'specification_receipt_retained'); END;
 
 CREATE TRIGGER project_spec_current_proposal BEFORE INSERT ON project_spec_proposals BEGIN
- SELECT RAISE(ABORT,'specification_current_required') WHERE NEW.operation NOT IN('change','restore') OR json_extract(NEW.spec_json,'$.schemaVersion') IS NOT 3 OR json_extract(NEW.lock_json,'$.compiler.version') IS NOT 6;
+ SELECT RAISE(ABORT,'specification_current_required') WHERE NEW.operation NOT IN('change','restore') OR json_extract(NEW.spec_json,'$.schemaVersion') IS NOT 3 OR json_extract(NEW.lock_json,'$.compiler.version') IS NOT 7;
  SELECT RAISE(ABORT,'specification_changed') WHERE NOT EXISTS(SELECT 1 FROM project_spec_heads h JOIN project_spec_versions v ON v.version_id=h.version_id WHERE h.project_id=NEW.project_id AND json_extract(v.spec_json,'$.schemaVersion')=3 AND h.draft_revision=NEW.draft_revision);
 END;
 
 CREATE TRIGGER project_spec_version_admit BEFORE INSERT ON project_spec_versions BEGIN
- SELECT RAISE(ABORT,'specification_current_required') WHERE json_extract(NEW.spec_json,'$.schemaVersion') IS NOT 3 OR json_extract(NEW.lock_json,'$.compiler.version') IS NOT 6;
+ SELECT RAISE(ABORT,'specification_current_required') WHERE json_extract(NEW.spec_json,'$.schemaVersion') IS NOT 3 OR json_extract(NEW.lock_json,'$.compiler.version') IS NOT 7;
  SELECT RAISE(ABORT,'specification_changed') WHERE NOT EXISTS(
   SELECT 1 FROM project_spec_proposals q JOIN site_versions v ON v.id=NEW.version_id AND v.project_id=q.project_id
   JOIN projects p ON p.id=q.project_id AND p.owner_user_id=q.user_id
@@ -4612,7 +4614,7 @@ CREATE TRIGGER project_spec_creation_admit BEFORE INSERT ON project_spec_creatio
   WHERE p.id=NEW.project_id AND p.owner_user_id=NEW.user_id AND p.site_draft_revision=1
   AND NEW.id=NEW.version_id AND v.version_id=NEW.version_id AND s.source='ai'
   AND NOT EXISTS(SELECT 1 FROM project_spec_heads WHERE project_id=p.id)
-  AND json_extract(v.spec_json,'$.schemaVersion')=3 AND json_extract(v.lock_json,'$.compiler.version')=6
+  AND json_extract(v.spec_json,'$.schemaVersion')=3 AND json_extract(v.lock_json,'$.compiler.version')=7
  );
  SELECT RAISE(ABORT,'specification_held') WHERE EXISTS(SELECT 1 FROM project_spec_held WHERE version_id=NEW.version_id);
 END;

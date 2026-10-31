@@ -1,4 +1,5 @@
 import {photoConfig} from '../../components';
+import {sectionVariants,validateBrand} from '../../brand-tokens';
 import {SpecificationError,canonicalJSON,copyJSON,plain,requireSpec as check,shape as exactShape} from '../v2/json';
 import {classifyModuleChange,staffRole,validateInstances,type ModuleInstance} from './modules';
 import type {ProjectSpecification,SpecificationOperation,SpecificationReview,SpecificationPage,SpecificationMigration} from './types';
@@ -18,7 +19,8 @@ export function validateSpecification(input:unknown):ProjectSpecification {
   check(plain(spec),'INVALID_SHAPE','request');check(spec.schemaVersion===3,'UNSUPPORTED_VERSION','schemaVersion');
   shape(spec,['schemaVersion','name','design','modules','content','pages','instances','integrations','rules']);
   text(spec.name,100,'name');
-  shape(spec.design,['theme'],[],'design');check(['ocean','clay','forest'].includes(spec.design.theme),'INCOMPATIBLE','design.theme');
+  shape(spec.design,['theme','brand'],[],'design');check(['ocean','clay','forest'].includes(spec.design.theme),'INCOMPATIBLE','design.theme');
+  if(spec.design.brand!==null)validateBrand(spec.design.brand,fail);
   list(spec.modules,3,'modules');unique(spec.modules,'id','modules');
   const modules=new Set<string>();
   for(const m of spec.modules){shape(m,['id','version'],[],'modules');identity(m.id,'modules.id');check(Object.hasOwn(moduleVersions,m.id),'UNKNOWN_MODULE','modules.id');check(m.version===moduleVersions[m.id],'UNSUPPORTED_VERSION','modules.version');modules.add(m.id);}
@@ -39,8 +41,8 @@ export function validateSpecification(input:unknown):ProjectSpecification {
    check(['site-page@1','photo-page@1'].includes(p.component),'UNSUPPORTED_VERSION','pages.component');check(['public','staff'].includes(p.audience),'INCOMPATIBLE','pages.audience');
    check(p.audience!=='staff'||staff,'INCOMPATIBLE','pages.access');
    list(p.photos,4,'pages.photos');check(p.component===(p.photos.length?'photo-page@1':'site-page@1'),'INCOMPATIBLE','pages.component');
-   list(p.sections,6,'pages.sections');for(const s of p.sections)shape(s,['heading','text'],[],'pages.sections');
-   try{photoConfig({photos:p.photos,name:spec.name,theme:spec.design.theme,headline:value(p.headline),description:value(p.description),aboutTitle:value(p.aboutTitle),aboutText:value(p.aboutText),sections:p.sections.map(s=>({heading:value(s.heading),text:value(s.text)}))});}catch(e){if(e instanceof SpecificationError)throw e;fail('INCOMPATIBLE','pages.componentConfiguration');}
+   list(p.sections,6,'pages.sections');for(const s of p.sections){shape(s,['heading','text','variant'],[],'pages.sections');check((sectionVariants as readonly string[]).includes(s.variant),'INCOMPATIBLE','pages.sections.variant');}
+   try{photoConfig({photos:p.photos,name:spec.name,theme:spec.design.theme,...(spec.design.brand?{brand:spec.design.brand}:{}),headline:value(p.headline),description:value(p.description),aboutTitle:value(p.aboutTitle),aboutText:value(p.aboutText),sections:p.sections.map(s=>({heading:value(s.heading),text:value(s.text),variant:s.variant}))});}catch(e){if(e instanceof SpecificationError)throw e;fail(/too large/.test(String((e as Error)?.message))?'CONFIG_TOO_LARGE':'INCOMPATIBLE','pages.componentConfiguration');}
   }
   list(spec.integrations,2,'integrations');unique(spec.integrations,'id','integrations');requireModule('notifications',spec.integrations);
   for(const i of spec.integrations){shape(i,['id','capability'],[],'integrations');identity(i.id,'integrations.id');check(i.capability==='email.staff','INCOMPATIBLE','integrations.capability');}
@@ -74,10 +76,12 @@ export function changeSpecification(before:unknown,input:unknown,removable:reado
      next.content=next.content.filter(c=>!unused.has(c.id));
      const ids=new Set(next.content.map(c=>c.id));let counter=1;
      const add=(value:string)=>{let id;do{id=`section-copy-${counter++}`;}while(ids.has(id));ids.add(id);next.content.push({id,text:value});return id;};
-     page.sections=op.sections.map(section=>{shape(section,['heading','text']);text(section.heading,100,'operations.sections.heading');text(section.text,800,'operations.sections.text');return {heading:add(section.heading),text:add(section.text)};});break;
+     page.sections=op.sections.map(section=>{check(plain(section)&&Object.keys(section).every(k=>['heading','text','variant'].includes(k))&&Object.hasOwn(section,'heading')&&Object.hasOwn(section,'text'),'INVALID_SHAPE','operations.sections');text(section.heading,100,'operations.sections.heading');text(section.text,800,'operations.sections.text');const variant=section.variant??'plain';check((sectionVariants as readonly string[]).includes(variant),'INCOMPATIBLE','operations.sections.variant');return {heading:add(section.heading),text:add(section.text),variant};});break;
     }
     case 'pages.setPhotos':{shape(op,['type','pageId','photos']);list(op.photos,4,'operations.photos');const page=found(next.pages,op.pageId,'pageId');page.photos=copy(op.photos);page.component=page.photos.length?'photo-page@1':'site-page@1';break;}
     case 'design.setTheme':shape(op,['type','theme']);next.design.theme=op.theme;break;
+    // Brand tokens are copied in whole and validated again by validateSpecification (contrast, closed shape, no free text).
+    case 'design.setBrand':shape(op,['type','brand']);next.design.brand=op.brand===null?null:copy(op.brand);break;
     case 'modules.put':{
      shape(op,['type','instance']);check(plain(op.instance),'INVALID_SHAPE','instance');identity(op.instance.id,'instance.id');
      const at=next.instances.findIndex(i=>i.id===op.instance.id);if(at<0)next.instances.push(copy(op.instance));else next.instances[at]=copy(op.instance);break;
@@ -129,7 +133,7 @@ export function transitionReviews(before:unknown,after:unknown,removable:readonl
 
 function pageConfiguration(spec:ProjectSpecification,page:SpecificationPage){
  const value=(id:string)=>spec.content.find(c=>c.id===id)!.text;
- return photoConfig({photos:page.photos,name:spec.name,theme:spec.design.theme,headline:value(page.headline),description:value(page.description),aboutTitle:value(page.aboutTitle),aboutText:value(page.aboutText),sections:page.sections.map(s=>({heading:value(s.heading),text:value(s.text)}))});
+ return photoConfig({photos:page.photos,name:spec.name,theme:spec.design.theme,...(spec.design.brand?{brand:spec.design.brand}:{}),headline:value(page.headline),description:value(page.description),aboutTitle:value(page.aboutTitle),aboutText:value(page.aboutText),sections:page.sections.map(s=>({heading:value(s.heading),text:value(s.text),variant:s.variant}))});
 }
 export function projectPage(input:unknown,pageId:string){
  const spec=validateSpecification(input),page=spec.pages.find(p=>p.id===pageId);
