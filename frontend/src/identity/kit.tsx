@@ -4,7 +4,7 @@ import {Button} from '../components/ui/button';
 import {arrival,calm} from '../journey/motion';
 import type {PreparedIdentityKit,IdentityOffer} from '../lib/identity';
 /** Setup's real state as one list. The newest saved passkey lands here after the server confirms it, never before. */
-export function Keyring({keys,kit}:{keys:{id:string;name:string}[];kit:'none'|'unsaved'|'saved'}){
+export function Keyring({keys,kit}:{keys:{id:string;name:string}[];kit:'none'|'unsaved'|'lost'|'saved'}){
  const list=useRef<HTMLUListElement>(null),kitSaved=kit==='saved';
  useLayoutEffect(()=>{
   const badge=list.current?.querySelector(`li:nth-child(${kitSaved?keys.length+1:keys.length}) .journey-key-badge`);
@@ -15,7 +15,7 @@ export function Keyring({keys,kit}:{keys:{id:string;name:string}[];kit:'none'|'u
  return <ul ref={list} className="journey-keyring" data-compact={keys.length>=2||undefined}>
   {keys.map(key=><li key={key.id} data-state="saved"><span className="journey-key-badge"><Check className="size-5"/></span><span className="min-w-0"><span className="block font-medium break-words">{key.name}</span><span className="block text-xs text-ink-muted">Saved for this setup</span></span></li>)}
   {Array.from({length:Math.max(0,2-keys.length)},(_,index)=><li key={index} data-state="empty"><span className="journey-key-badge"><KeyRound className="size-5"/></span><span className="min-w-0"><span className="block font-medium">{keys.length+index?'Second passkey':'First passkey'}</span><span className="block text-xs text-ink-muted">Use a different device or provider</span></span></li>)}
-  <li data-state={kitSaved?'saved':'empty'}><span className="journey-key-badge">{kitSaved?<Check className="size-5"/>:<LifeBuoy className="size-5"/>}</span><span className="min-w-0"><span className="block font-medium">Recovery kit</span><span className="block text-xs text-ink-muted">{kitSaved?'Marked as saved':kit==='unsaved'?'Ready for you to save':'Comes after your passkeys'}</span></span></li>
+  <li data-state={kitSaved?'saved':'empty'}><span className="journey-key-badge">{kitSaved?<Check className="size-5"/>:<LifeBuoy className="size-5"/>}</span><span className="min-w-0"><span className="block font-medium">Recovery kit</span><span className="block text-xs text-ink-muted">{kitSaved?'Marked as saved':kit==='unsaved'?'Ready for you to save':kit==='lost'?'Prepare a new kit':'Comes after your passkeys'}</span></span></li>
  </ul>;
 }
 export function IdentityKit({prepared,offer,busy,onSaved,onReplace}:{prepared:PreparedIdentityKit|null;offer:IdentityOffer;busy:boolean;onSaved:()=>void;onReplace:()=>void}){

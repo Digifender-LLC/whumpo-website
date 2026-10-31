@@ -37,7 +37,7 @@ Signup, enrollment and the first-project welcome render in one frame (`frontend/
 
 `reload` takes an optional callback that lands in the same commit as the new identity. Preparing a kit uses it, so the kit text appears together with its offer and no frame reads "This unsaved kit can't be shown again". Saving uses it, so the text is discarded in the commit that shows the saved state. The saved-kit copy and the single acknowledgment are unchanged, and no timer or animation advances past them.
 
-`node tests/onboarding-journey-browser.mjs` drives the whole journey by keyboard at 360, 390 and 1280px in light and dark, with reduced motion and 200% text, under the deployed CSP. It also covers a cancelled ceremony, a failed and a slow save, input during a transition, and an interrupted transition.
+`node tests/onboarding-journey-browser.mjs` drives the whole journey by keyboard at 360, 390 and 1280px in light and dark, with reduced motion and 200% text, under the deployed CSP. It also covers a cancelled ceremony, a reload on the kit step, a failed and a slow save, input during a held transition, and an interrupted transition.
 
 ## Kit delivery and privacy
 

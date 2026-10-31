@@ -30,6 +30,8 @@ function instrument(){
  const start=document.startViewTransition?.bind(document);
  if(start)document.startViewTransition=update=>{
   const move={name:document.documentElement.dataset.journeyMove??'navigation',start:performance.now()},transition=start(update);log.moves.push(move);
+  // A test sets log.hold to keep a transition open, so input during one is checked without racing its length.
+  if(log.hold)transition.ready.then(()=>document.documentElement.animate({opacity:[1,1]},{duration:log.hold,pseudoElement:'::view-transition'})).catch(()=>{});
   transition.finished.finally(()=>{move.end=performance.now();});return transition;
  };
  for(const name of ['create','get']){const original=navigator.credentials[name].bind(navigator.credentials);navigator.credentials[name]=(...args)=>{log.gestures.push(navigator.userActivation.isActive);return original(...args);};}
@@ -37,35 +39,39 @@ function instrument(){
  try{new PerformanceObserver(list=>{for(const entry of list.getEntries())log.long.push({start:entry.startTime,duration:entry.duration});}).observe({type:'longtask',buffered:true});
   new PerformanceObserver(list=>{for(const entry of list.getEntries())if(!entry.hadRecentInput){log.shift+=entry.value;(log.shifts??=[]).push([Math.round(entry.startTime),Math.round(entry.value*1000)/1000,...entry.sources.map(source=>String(source.node?.className??source.node?.nodeName).slice(0,40)+' '+Math.round(source.previousRect.y)+'>'+Math.round(source.currentRect.y))]);}}).observe({type:'layout-shift',buffered:true});}catch{}
 }
+function rootStyle([property,value]){const set=()=>{if(document.documentElement)document.documentElement.style[property]=value;};set();document.addEventListener('readystatechange',set);}
 async function writeVideo(frames,path){
  const folder=await mkdtemp(dir+'/frames-');let list='';
  for(const [index,{data,time}] of frames.entries()){const name=`${folder}/${String(index).padStart(6,'0')}.jpg`;await writeFile(name,data,'base64');list+=`file '${name}'\nduration ${Math.max(.001,(frames[index+1]?.time??time+1)-time).toFixed(4)}\n`;}
  await writeFile(folder+'/list.txt',list);
- execFileSync('ffmpeg',['-y','-v','error','-f','concat','-safe','0','-i',folder+'/list.txt','-vf','fps=50,scale=trunc(iw/2)*2:trunc(ih/2)*2','-c:v','libx264','-pix_fmt','yuv420p','-crf','20','-movflags','+faststart',path]);
+ execFileSync('ffmpeg',['-y','-v','error','-f','concat','-safe','0','-i',folder+'/list.txt','-vf','fps=50,scale=trunc(iw/2)*2:trunc(ih/2)*2','-c:v','libx264','-preset','slow','-tune','animation','-pix_fmt','yuv420p','-crf','14','-movflags','+faststart',path]);
 }
 const invite=async(db,hashToken)=>{const code=crypto.randomUUID();await db.prepare("INSERT INTO invitations VALUES(?,strftime('%Y-%m-%dT%H:%M:%fZ','now'),strftime('%Y-%m-%dT%H:%M:%fZ','now','+1 hour'),NULL,NULL)").bind(await hashToken(code)).run();return code;};
 // Polled, not per frame: a wait that runs every frame would itself show up in the frame timings.
 const settled=page=>page.waitForFunction(()=>!document.documentElement.dataset.journeyMove&&!document.getAnimations().some(animation=>animation.playState==='running'&&!animation.effect?.target?.matches?.('.skeleton,.skeleton::after')),undefined,{polling:100});
 
 /** One full journey. checks turns on the one-off failure, interruption and timing cases. */
-async function walk(page,cdp,{db,hashToken,width,label,reduced=false,large=false,checks=false,axe=false,landing=false}){
+async function walk(page,cdp,{db,hashToken,width,height=844,label,reduced=false,large=false,checks=false,axe=false,landing=false,keyboard=false,zoom=1,pages,kitSaves}){
  const {activate,enter}=keyboardJourney(page,true),code=await invite(db,hashToken),email=`journey-${label}@example.test`;
  const authenticator=async()=>(await cdp.send('WebAuthn.addVirtualAuthenticator',{options:{protocol:'ctap2',transport:'internal',hasResidentKey:true,hasUserVerification:true,isUserVerified:true,automaticPresenceSimulation:true}})).authenticatorId;
  const button=name=>page.getByRole('button',{name,exact:true});
  let shots=0;
  async function fit(step){
   phase=`${label}: ${step}`;await settled(page);
-  if(large)await page.evaluate(()=>{document.documentElement.style.fontSize='200%';});
   await page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'horizontal scroll');
   assert.deepEqual(await page.evaluate(()=>[...document.querySelectorAll('.journey-step>*')].filter(element=>getComputedStyle(element).opacity!=='1').length),0,'a step element was left hidden');
+  assert.equal(await page.locator('.journey-rail [role=status],.journey-rail [aria-live]').count(),0,'The focused heading announces the step, so the rail must not repeat it');
   if(width<=760){const short=await page.evaluate(()=>[...document.querySelectorAll('main button,main summary,main input:not([type=checkbox]):not([type=radio])')].filter(element=>{const height=element.getBoundingClientRect().height;return height&&height<43.5&&!element.matches('.sr-only');}).map(element=>element.textContent.trim()||element.name));assert.deepEqual(short,[],'controls under 44px');}
   if(axe)await a11y.check(page,`journey ${label} ${step}`);
   if(capture)await page.screenshot({path:`${capture}/${label}-${String(++shots).padStart(2,'0')}-${step}.png`});
-  if(large)await page.evaluate(()=>{document.documentElement.style.fontSize='';});
  }
  const focused=text=>page.waitForFunction(value=>document.activeElement?.textContent===value,text,{polling:50});
- const rail=text=>page.locator('.journey-rail [role=status]').filter({hasText:text}).waitFor();
+ const rail=text=>page.locator('.journey-rail p').filter({hasText:text}).waitFor();
+ const lastMove=()=>page.evaluate(()=>{const move=window.__journey.moves.at(-1);return {name:move?.name,running:!!move&&move.end===undefined,count:window.__journey.moves.length};});
+ const line=slot=>page.locator(`.journey-sketch [data-slot=${slot}]`);
+ // The promise stays visible wherever it applies: every question up to the review.
+ const promised=async()=>assert.match(await page.locator('.journey-note').innerText(),/^No AI usage · answers save when you continue$/);
  const pause=()=>capture?page.waitForTimeout(650):undefined;
  const answer=async(field,value)=>{if(!capture)return enter(field,value);await field.focus();await page.keyboard.press('Control+A');await page.keyboard.press('Delete');for(const character of value){await page.keyboard.type(character);await page.waitForTimeout(28);}};
 
@@ -90,66 +96,108 @@ async function walk(page,cdp,{db,hashToken,width,label,reduced=false,large=false
  await focused('Your private backup');await page.getByText('Backup provider',{exact:true}).waitFor();await rail('Step 3 of 6: Recovery kit');await page.getByText('this recovery kit is how you get back in').waitFor();await fit('second-passkey');await pause();
  await activate(button('Prepare recovery kit'));await focused('Save your recovery kit');
  await settled(page);assert(await page.evaluate(()=>{const top=document.getElementById('kit-heading').getBoundingClientRect().top,saved=[...document.querySelectorAll('button')].find(element=>element.textContent==='Download').getBoundingClientRect();return top>=0&&saved.bottom<=innerHeight;}),'The kit heading and its first action are on screen '+await page.evaluate(()=>JSON.stringify([scrollY,document.getElementById('kit-heading').getBoundingClientRect().top,[...document.querySelectorAll('button')].find(element=>element.textContent==='Download').getBoundingClientRect().bottom,innerHeight])));
- await page.getByText('Keep it private and separate from your passkeys.').waitFor();await fit('recovery-kit');
+ await page.getByText('Keep it private and separate from your passkeys.').waitFor();await page.getByText('Ready for you to save').waitFor();await fit('recovery-kit');
  if(checks){
-  // Nothing hurries a person past the kit: no timer, no auto-advance, and the one confirmation stays theirs.
-  await page.waitForTimeout(2500);await focused('Save your recovery kit');assert.equal(await page.getByRole('heading',{name:'Your kit is saved'}).count(),0);assert.equal(await page.getByRole('button',{name:'Copy',exact:true}).isEnabled(),true);
+  // A reload discards the text: the checklist must not keep promising a kit the page can no longer show.
+  await page.reload();await page.getByText('Prepare a new kit',{exact:true}).waitFor();await page.getByText('This unsaved kit can’t be shown again').waitFor();
+  await activate(button('Prepare a different kit'));await page.getByText('Ready for you to save').waitFor();await button('Download').waitFor();await settled(page);
  }
  const downloaded=page.waitForEvent('download');await activate(button('Download'));const kit=await readFile(await (await downloaded).path(),'utf8'),key=kit.match(/Recovery key:\n([a-f0-9]{64})/)[1];await pause();
- await activate(button('I’ve saved my recovery kit'));await focused('Your kit is saved');await fit('recovery-kit-saved');
+ // Nothing hurries a person past the kit: only their own confirmation saves it, whatever else they do first.
+ assert.equal(kitSaves.count,0,'The kit was marked saved without the person confirming it');assert.equal(await button('I’ve saved my recovery kit').isEnabled(),true);
+ await activate(button('I’ve saved my recovery kit'));await focused('Your kit is saved');assert.equal(kitSaves.count,1);await page.getByText('Marked as saved',{exact:true}).waitFor();await fit('recovery-kit-saved');
  assert(!(await page.locator('body').innerText()).includes(key),'The key leaves the page once saved');await pause();
  await activate(button('Verify a passkey and finish setup'));
- await focused('Hi, I’m Whumpo. What should I call you?');await rail('Step 4 of 6: About you');await fit('name');await pause();
- await answer(page.getByLabel('Your name',{exact:true}),'Maya');assert.equal(await page.locator('.journey-caption').innerText(),'Hi, Maya.');await pause();
- await activate(button('Continue'));await focused('Nice to meet you, Maya. Pick a face for your space.');await fit('picture');await pause();
- await activate(button('Use this picture'));await focused('Anything you’d like me to know about you?');await fit('bio');await pause();
- await activate(page.locator('summary').filter({hasText:'Optional privacy choices'}));assert.equal(await page.getByRole('checkbox',{name:/personalize/}).isChecked(),false);assert.equal(await page.getByRole('checkbox',{name:/content-free/}).isChecked(),false);
- await activate(button('Skip for now'));await focused('What would you like us to make first?');await rail('Step 5 of 6: Your first idea');
- const sketch=page.locator('.journey-sketch');assert.match(await sketch.innerText(),/Sketch from your answers/);await fit('idea');await pause();
+ await focused('Hi, I’m Whumpo. What should I call you?');await rail('Step 4 of 6: About you');await promised();
+ assert.equal(await page.getByText('Hi there.',{exact:true}).count(),0);
+ assert.equal(await page.locator('.journey-sketch [data-slot]').count(),await page.locator('.journey-sketch [data-slot][dir=auto]').count(),'Sketch text follows the direction of what was typed');
+ await fit('name');
+ if(!large){const top=await page.locator('.journey-question').evaluate(element=>element.getBoundingClientRect().top);assert(top<=(width<=760?250:180)*zoom,`The question starts near the top: ${top}`);}
+ await pause();
+ await answer(page.getByLabel('Your name',{exact:true}),'Maya');assert.equal(await line('greeting').innerText(),'Hi, I’m Maya.','The first answer builds the sketch');await pause();
+ await activate(button('Continue'));await focused('Nice to meet you, Maya. Pick a face for your space.');await promised();await fit('picture');await pause();
+ await activate(page.getByRole('button',{name:'Choose Sunshine'}));await page.waitForFunction(()=>document.querySelector('.journey-sketch-greeting img')?.src.endsWith('sun.svg'));await pause();
+ await activate(button('Use this picture'));await focused('Anything you’d like me to know about you?');await promised();
+ // The privacy position is readable with the choices closed.
+ const privacy=page.locator('summary').filter({hasText:'Name and bio kept out of AI context'});await privacy.waitFor();await fit('bio');await pause();
+ await activate(privacy);assert.equal(await page.getByRole('checkbox',{name:/personalize/}).isChecked(),false);assert.equal(await page.getByRole('checkbox',{name:/content-free/}).isChecked(),false);
+ await activate(button('Skip for now'));await focused('What would you like us to make first?');await rail('Step 5 of 6: Your first idea');await promised();
+ const sketch=page.locator('.journey-sketch');assert.match(await sketch.innerText(),/Sketch from your answers/);await fit('idea');
+ if(width<=760&&!large){
+  const chips=await page.locator('.journey-chips').evaluate(element=>{const box=element.getBoundingClientRect();return {bottom:box.bottom,bar:document.querySelector('.journey-actions').getBoundingClientRect().top,height:box.height,row:getComputedStyle(element).overflowX};});
+  assert(chips.height<70*zoom&&chips.row==='auto'&&chips.bottom<=chips.bar,`Suggestions form one scrolling row clear of the pinned bar: ${JSON.stringify(chips)}`);
+ }
+ await pause();
  const idea='A website for my neighborhood bakery where people can see the menu.';
- await answer(page.getByLabel('Your first idea',{exact:true}),idea.slice(0,9));assert.match(await sketch.innerText(),/A website/,'The sketch follows each keystroke');await answer(page.getByLabel('Your first idea',{exact:true}),idea);await pause();
+ await answer(page.getByLabel('Your first idea',{exact:true}),idea.slice(0,9));assert.equal(await line('headline').innerText(),'A website','The sketch follows each keystroke');
+ if(keyboard){
+  // A phone keyboard: the visual viewport shrinks while a field is focused. The sketch folds to the line being written.
+  phase=`${label}: keyboard`;
+  await page.getByLabel('Your first idea',{exact:true}).focus();await page.setViewportSize({width,height:height-340});await page.waitForFunction(()=>document.documentElement.classList.contains('phone-keyboard'));
+  const open=await page.evaluate(()=>({sketch:document.querySelector('.journey-sketch').getBoundingClientRect().height,button:document.querySelector('.journey-actions button[type=submit]').getBoundingClientRect().bottom,field:document.getElementById('welcome-idea').getBoundingClientRect().bottom,bar:document.querySelector('.journey-actions').getBoundingClientRect().top,height:innerHeight,line:document.querySelector('[data-slot=headline]').getClientRects().length}));
+  assert(open.sketch<=44&&open.line>0&&open.button<=open.height&&open.field<=open.bar,`Keyboard layout ${JSON.stringify(open)}`);if(capture)await page.screenshot({path:`${capture}/${label}-keyboard.png`});
+  await page.setViewportSize({width,height});await page.waitForFunction(()=>!document.documentElement.classList.contains('phone-keyboard'));
+ }
+ await answer(page.getByLabel('Your first idea',{exact:true}),idea);assert.equal(await line('headline').innerText(),idea);await pause();
  if(checks){
   phase=`${label}: failed and slow saves`;
   await page.route('**/api/onboarding',route=>route.request().method()==='PUT'?route.fulfill({status:503,contentType:'application/json',body:'{"error":"Synthetic interruption"}'}):route.fallback(),{times:1});
   await activate(button('Continue'));await page.getByRole('alert').filter({hasText:'Your answer is still here.'}).waitFor();await settled(page);
   assert.equal(await page.getByRole('heading',{name:'What would you like us to make first?'}).count(),1);assert.equal(await page.getByLabel('Your first idea',{exact:true}).inputValue(),idea);
-  let release;await page.route('**/api/onboarding',async route=>{if(route.request().method()==='PUT')await new Promise(done=>{release=done;});await route.fallback();},{times:1});
-  await page.getByRole('button',{name:'Continue',exact:true}).focus();await page.keyboard.press('Enter');await page.getByRole('button',{name:'Saving…'}).waitFor();
-  assert.equal(await page.evaluate(()=>document.documentElement.dataset.journeyMove),undefined,'Nothing animates ahead of the saved reply');assert.equal(await page.getByRole('heading',{name:'What would you like us to make first?'}).count(),1);
+  let release,arrived;const reached=new Promise(done=>{arrived=done;});
+  await page.route('**/api/onboarding',async route=>{if(route.request().method()==='PUT'){const held=new Promise(done=>{release=done;});arrived();await held;}await route.fallback();},{times:1});
+  const movesBefore=(await lastMove()).count;
+  await button('Continue').focus();await page.keyboard.press('Enter');await reached;await page.getByRole('button',{name:'Saving…'}).waitFor();
+  assert.equal((await lastMove()).count,movesBefore,'Nothing animates ahead of the saved reply');assert.equal(await page.getByRole('heading',{name:'What would you like us to make first?'}).count(),1);
   release();
  }else await activate(button('Continue'));
- await focused('What shall we call your project?');await fit('project-name');await pause();
+ await focused('What shall we call your project?');await promised();await fit('project-name');await pause();
  if(checks&&!reduced){
   phase=`${label}: input during a transition`;
-  await activate(page.getByRole('button',{name:'Previous welcome question'}));await focused('What would you like us to make first?');
-  const move=await page.evaluate(()=>document.documentElement.dataset.journeyMove);assert.equal(move,'back','Going back reads as back');await settled(page);
-  await activate(button('Continue'));await focused('What shall we call your project?');
-  assert.equal(await page.evaluate(()=>document.documentElement.dataset.journeyMove),'forward','This check must land during the transition');
-  await page.getByLabel('Working name',{exact:true}).click();await page.keyboard.insertText('Copper Oven');assert.equal(await page.getByLabel('Working name',{exact:true}).inputValue(),'Copper Oven','Typing mid-transition is not lost');await settled(page);
+  await activate(page.getByRole('button',{name:'Previous welcome question'}));await focused('What would you like us to make first?');assert.equal((await lastMove()).name,'back','Going back reads as back');await settled(page);
+  await page.evaluate(()=>{window.__journey.hold=1500;});
+  await activate(button('Continue'));await focused('What shall we call your project?');await page.evaluate(()=>{window.__journey.hold=0;});
+  const spot=await page.evaluate(()=>{const box=document.getElementById('welcome-project').getBoundingClientRect(),action=document.querySelector('.journey-actions button[type=submit]').getBoundingClientRect();return {x:box.x+24,y:box.y+box.height/2,hit:document.elementFromPoint(box.x+24,box.y+box.height/2)?.id,action:!!document.elementFromPoint(action.x+action.width/2,action.y+action.height/2)?.closest('button[type=submit]')};});
+  assert.deepEqual(await lastMove().then(({name,running})=>[name,running]),['forward',true],'This check must land during the transition');assert.equal(spot.hit,'welcome-project','The field takes pointer input during a transition');assert.equal(spot.action,true,'So does the next action');
+  await page.mouse.click(spot.x,spot.y);await page.keyboard.insertText('Copper Oven');assert.equal(await page.getByLabel('Working name',{exact:true}).inputValue(),'Copper Oven','A click and typing during a transition reach the page');await settled(page);
  }else await answer(page.getByLabel('Working name',{exact:true}),'Copper Oven');
- assert.match(await sketch.locator('.journey-sketch-title').innerText(),/Copper Oven/);await pause();
- await activate(button('Continue'));await focused('Who are you making this for?');await fit('audience');await pause();
- await answer(page.getByLabel(/Who it/),'Neighbors who love fresh bread');assert.match(await sketch.innerText(),/Made for Neighbors who love fresh bread/);await pause();
- await activate(button('Continue'));await focused('What should it feel like?');
+ assert.equal(await line('brand').innerText(),'Copper Oven');await pause();
+ await activate(button('Continue'));await focused('Who are you making this for?');await promised();await fit('audience');await pause();
+ await answer(page.getByLabel(/Who it/),'Neighbors who love fresh bread');assert.equal(await line('tagline').innerText(),'Made for Neighbors who love fresh bread');await pause();
+ if(checks&&!reduced)await page.evaluate(()=>{window.__journey.hold=1500;});
+ await activate(button('Continue'));await focused('What should it feel like?');await promised();
  if(checks&&!reduced){
   phase=`${label}: interrupted transition`;
+  await page.evaluate(()=>{window.__journey.hold=0;});assert.equal((await lastMove()).running,true,'This check must land during the transition');
   await page.evaluate(()=>document.querySelector('[aria-label="Previous welcome question"]').click());await focused('Who are you making this for?');await settled(page);await activate(button('Continue'));await focused('What should it feel like?');
  }
  await fit('style');await pause();
  await activate(page.getByRole('radio',{name:'Warm & cozy'}));await page.waitForFunction(()=>document.querySelector('.journey-sketch')?.dataset.feel==='clay');assert.equal(await page.getByRole('radio',{name:'Warm & cozy'}).isChecked(),true);
  assert.equal(await sketch.evaluate(element=>getComputedStyle(element).backgroundColor),'rgb(252, 245, 237)','The sketch shows the real clay paper');await fit('style-chosen');await pause();
  await activate(button('Use this starting feel'));await focused('Shall we start your first project?');await rail('Step 6 of 6: Ready to begin');await fit('review');
- assert.match(await page.locator('body').innerText(),/Checkout isn.t open yet/);await pause();
+ // The moment: the sketch, one action, and details only on request.
+ assert.equal(await page.locator('.journey-note').innerText(),'Private to start. Nothing is bought or published.');
+ assert.equal(await page.locator('.journey-step button:visible').count(),0,'Start is the only thing to press until details are opened');assert.equal(await page.getByRole('button',{name:/Edit /}).count(),0);
+ if(!large)assert(await button('Start my project').evaluate(element=>element.getBoundingClientRect().bottom<=innerHeight),'Start is on screen');
+ assert(!pages.has('/api/billing/subscription'),'Billing is out of the flow');await pause();
+ await activate(page.locator('summary').filter({hasText:'Check details'}));await page.getByText('No domain, paid service, or publication is created. You start on Explore, with no card, and billing is in Settings.').waitFor();await page.getByText('Name and bio kept out of AI context').waitFor();await fit('review-details');
+ if(checks){
+  phase=`${label}: edit from review`;
+  await activate(page.getByRole('button',{name:'Edit project name'}));await focused('What shall we call your project?');await enter(page.getByLabel('Working name',{exact:true}),'Copper Oven Bakery');await activate(button('Save and review'));
+  await focused('Shall we start your first project?');await page.getByRole('button',{name:'Edit project name'}).waitFor();assert.equal(await line('brand').innerText(),'Copper Oven Bakery');
+  await activate(page.getByRole('button',{name:'Edit project name'}));await focused('What shall we call your project?');await enter(page.getByLabel('Working name',{exact:true}),'Copper Oven');await activate(button('Save and review'));await focused('Shall we start your first project?');
+ }
+ await pause();
  await activate(button('Start my project'));
  phase=`${label}: arrival`;await page.getByRole('textbox',{name:'Message Whumpo'}).waitFor();await focused('Copper Oven');
  const card=page.getByRole('region',{name:'Start your first draft'});await card.waitFor();assert.equal(await card.getAttribute('data-feel'),'clay');await settled(page);
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);if(capture)await page.screenshot({path:`${capture}/${label}-${String(++shots).padStart(2,'0')}-chat.png`});await pause();
  const log=await page.evaluate(()=>{const {frames,...rest}=window.__journey;return {...rest,frames:rest.moves.map(move=>{const moved=frames.filter(time=>time>=move.start&&time<=(move.end??move.start)+450),gaps=moved.slice(1).map((time,index)=>time-moved[index]);return {...move,count:moved.length,worst:Math.round(Math.max(0,...gaps)),over34:gaps.filter(gap=>gap>34).length,fps:gaps.length?Math.round(1000*gaps.length/(moved.at(-1)-moved[0])):0,long:rest.long.filter(task=>task.start>=move.start&&task.start<=(move.end??move.start)+450).reduce((sum,task)=>sum+task.duration,0)};})};});
  assert.deepEqual(log.violations,[],'CSP refused something');
- assert.equal(log.gestures.length,log.gestures.filter(Boolean).length,'Every passkey prompt came from a user gesture');assert(log.gestures.length>=3);
+ assert.equal(log.gestures.length,log.gestures.filter(Boolean).length,'Every passkey prompt came from a user gesture');assert(log.gestures.length>=(checks?1:3)); // A checks pass reloads mid-setup, which restarts this log.
  if(reduced)assert.equal(log.moves.length,0,'Reduced motion commits without a transition');else assert(log.moves.length>=12,`moves: ${log.moves.length}`);
  if(!reduced)assert(log.moves.some(move=>move.name==='arrive'),'Chat is reached by the arrival move');
- if(!large&&!process.env.WHUMPO_JOURNEY_THROTTLE)assert(log.shift<.1,`Layout shift ${log.shift} ${JSON.stringify(log.shifts)}`); // The large-text pass resizes the root itself, and throttling pushes commits past the input window.
+ if(!process.env.WHUMPO_JOURNEY_THROTTLE)assert(log.shift<.1,`Layout shift ${log.shift} ${JSON.stringify(log.shifts)}`); // Throttling pushes commits past the browser's recent-input window.
  return log;
 }
 
@@ -170,9 +218,10 @@ try{
  crypto.subtle.timingSafeEqual=(a,b)=>timingSafeEqual(Buffer.from(a),Buffer.from(b));
  globalThis.fetch=async url=>{if(String(url)==='https://challenges.cloudflare.com/turnstile/v0/siteverify')return Response.json({success:true,hostname:'localhost',action:'register'});throw Error('Unexpected external request');};
  const env={DB:db,ENVIRONMENT:'local',TURNSTILE_SITE_KEY:'synthetic-public',TURNSTILE_SECRET:'synthetic-secret',AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})}};
- const background=[],root=resolve(dir+'/web');
+ const background=[],root=resolve(dir+'/web'),pages=new Set(),kitSaves={count:0};
  server=createServer(async(req,res)=>{try{
   const url=new URL(req.url,origin);
+  pages.add(url.pathname);if(url.pathname.endsWith('/kit/save'))kitSaves.count++;
   if(url.pathname.startsWith('/api/')){
    const chunks=[];for await(const chunk of req)chunks.push(chunk);
    const response=await worker.fetch(new Request(url,{method:req.method,headers:req.headers,...(['GET','HEAD'].includes(req.method)?{}:{body:Buffer.concat(chunks)})}),env,{waitUntil:p=>background.push(p)});
@@ -184,8 +233,9 @@ try{
  }catch{res.writeHead(404).end();}});
  await new Promise((done,reject)=>{server.once('error',reject);server.listen(8787,'127.0.0.1',done)});
  browser=await chromium.launch({headless:true,...(process.env.WHUMPO_CHROMIUM?{executablePath:process.env.WHUMPO_CHROMIUM}:{})});
- const scenarios=capture?[{label:'phone',width:390,landing:true},{label:'desktop',width:1280,height:800,landing:true},{label:'phone-dark',width:390,dark:true},{label:'phone-reduced',width:390,reduced:true},{label:'phone-large-text',width:390,large:true}]
- :[{label:'390-light',width:390,checks:true,axe:true,landing:true},{label:'390-dark',width:390,dark:true,axe:true},{label:'360-light',width:360},{label:'360-dark',width:360,dark:true},{label:'1280-light',width:1280,height:800,checks:true,axe:true,landing:true},{label:'1280-dark',width:1280,height:800,dark:true,axe:true},{label:'390-reduced',width:390,reduced:true,checks:true},{label:'390-large-text',width:390,large:true}];
+ // Screencasts come at CSS pixels, so the sharp phone passes lay out at 390px through root zoom. 636px stays under every phone breakpoint.
+ const sharp={width:636,height:1376,zoom:636/390},scenarios=capture?[{label:'phone',...sharp,landing:true},{label:'desktop',width:1280,height:800,landing:true},{label:'phone-dark',...sharp,dark:true},{label:'phone-reduced',...sharp,reduced:true},{label:'phone-large-text',width:390,large:true},{label:'phone-keyboard',width:390,keyboard:true}]
+ :[{label:'390-light',width:390,checks:true,axe:true,landing:true,keyboard:true},{label:'390-dark',width:390,dark:true,axe:true},{label:'360-light',width:360},{label:'360-dark',width:360,dark:true},{label:'1280-light',width:1280,height:800,checks:true,axe:true,landing:true},{label:'1280-dark',width:1280,height:800,dark:true,axe:true},{label:'390-reduced',width:390,reduced:true,checks:true},{label:'390-large-text',width:390,large:true}];
  const report={};
  // Returning people share the frame: sign-in and recovery entry fit, move by keyboard and stay inside the CSP too.
  phase='sign-in and recovery entry';
@@ -198,14 +248,16 @@ try{
   if(capture)await page.screenshot({path:capture+'/sign-in.png'});
   assert.deepEqual(await page.evaluate(()=>window.__journey.violations),[]);await entry.close();}
  for(const scenario of scenarios.filter(item=>!process.env.WHUMPO_JOURNEY_ONLY||item.label===process.env.WHUMPO_JOURNEY_ONLY)){
-  const {label,width,height=844,dark=false,reduced=false}=scenario,phone=width<=760;phase=label;
-  const context=await browser.newContext({viewport:{width,height},deviceScaleFactor:capture?2:1,isMobile:phone,hasTouch:phone,serviceWorkers:'block',acceptDownloads:true,colorScheme:dark?'dark':'light',reducedMotion:reduced?'reduce':'no-preference',});
+  const {label,width,height=844,dark=false,reduced=false,large=false,zoom}=scenario,phone=width<=760;phase=label;kitSaves.count=0;pages.clear();
+  const context=await browser.newContext({viewport:{width,height},deviceScaleFactor:capture&&!zoom?2:1,isMobile:phone&&!zoom,hasTouch:phone&&!zoom,serviceWorkers:'block',acceptDownloads:true,colorScheme:dark?'dark':'light',reducedMotion:reduced?'reduce':'no-preference',});
   await context.addInitScript(instrument);
+  if(large)await context.addInitScript(rootStyle,['fontSize','200%']);
+  if(zoom)await context.addInitScript(rootStyle,['zoom',String(zoom)]);
   const page=await context.newPage();page.setDefaultTimeout(15000);const errors=[];page.on('pageerror',error=>errors.push(error.message));page.on('console',message=>{if(/Content Security Policy|Refused to/.test(message.text()))errors.push(message.text());});
   const cdp=await context.newCDPSession(page),frames=[];await cdp.send('WebAuthn.enable');
   if(capture){cdp.on('Page.screencastFrame',({data,metadata,sessionId})=>{frames.push({data,time:metadata.timestamp});void cdp.send('Page.screencastFrameAck',{sessionId}).catch(()=>{});});await cdp.send('Page.startScreencast',{format:'jpeg',quality:92,everyNthFrame:1,maxWidth:width*2,maxHeight:height*2});}
   if(process.env.WHUMPO_JOURNEY_THROTTLE)await cdp.send('Emulation.setCPUThrottlingRate',{rate:Number(process.env.WHUMPO_JOURNEY_THROTTLE)});
-  const log=await walk(page,cdp,{db,hashToken,...scenario});report[label]=log.frames.map(({name,start,end,fps,worst,over34,long})=>({name,ms:Math.round(end-start),fps,worst,over34,long:Math.round(long)}));report[label+':shift']=log.shift;
+  const log=await walk(page,cdp,{db,hashToken,pages,kitSaves,height,...scenario});report[label]=log.frames.map(({name,start,end,fps,worst,over34,long})=>({name,ms:Math.round(end-start),fps,worst,over34,long:Math.round(long)}));report[label+':shift']=log.shift;
   assert.deepEqual(errors,[]);
   await context.close();if(capture)await writeVideo(frames,`${capture}/${label}.mp4`);
   console.log(`Journey passed: ${label}`);

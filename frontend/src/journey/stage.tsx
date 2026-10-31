@@ -16,12 +16,19 @@ export function JourneyFrame({world,action,children}:{world:ReactNode;action?:Re
  </div>;
 }
 
-/** The sky beside the form. Decorative: everything here repeats something the person typed or the step already says. */
-export function JourneyWorld({stars=0,caption,sketch}:{stars?:number;caption?:ReactNode;sketch?:ReactNode}){
- return <div className="journey-scene" data-scene={sketch?'sketch':'mascot'}>
+/** The sky beside the form. Decorative: everything here repeats something the person typed or the step already says. beat is what the mascot reacts to. */
+export function JourneyWorld({stars=0,caption,sketch,scene='mascot',beat}:{stars?:number;caption?:ReactNode;sketch?:ReactNode;scene?:'mascot'|'sketch'|'review';beat?:string}){
+ const mascot=useRef<HTMLImageElement>(null),seen=useRef(beat);
+ useLayoutEffect(()=>{
+  if(seen.current===beat)return;
+  seen.current=beat;if(calm())return;
+  const nod=mascot.current?.animate({transform:['none','translateY(-5%) rotate(-5deg)','none']},{duration:arrival.duration,easing:'ease-in-out'});
+  return()=>nod?.cancel();
+ },[beat]);
+ return <div className="journey-scene" data-scene={scene}>
   {sketch}
   <div className="journey-mascot">
-   <img src="/brand/whumpo-mascot-640.webp" width={640} height={533} alt="" decoding="async"/>
+   <img ref={mascot} src="/brand/whumpo-mascot-640.webp" width={640} height={533} alt="" decoding="async"/>
    {[0,1,2].map(index=><Spark key={index} className={index<stars?'journey-star journey-star-on':'journey-star'}/>)}
   </div>
   {caption&&<div className="journey-caption">{caption}</div>}
@@ -41,7 +48,7 @@ export function JourneyRail({chapter,done=0}:{chapter:number;done?:number}){
   return()=>running.forEach(animation=>animation?.cancel());
  },[value]);
  return <div className="journey-rail">
-  <p role="status" className="text-caption text-ink-muted">Step {chapter+1} of {journeyChapters.length}: <span className="font-semibold text-ink">{journeyChapters[chapter]}</span></p>
+  <p className="text-caption text-ink-muted">Step {chapter+1} of {journeyChapters.length}: <span className="font-semibold text-ink">{journeyChapters[chapter]}</span></p>
   <div className="journey-rail-bar">
    <div className="journey-rail-track"><div ref={fill} className="journey-rail-fill" style={{transform:`scaleX(${value})`}}/></div>
    <div ref={spark} className="journey-rail-spark" style={{transform:`translateX(${value*100}%)`}}><Spark/></div>
@@ -50,16 +57,19 @@ export function JourneyRail({chapter,done=0}:{chapter:number;done?:number}){
  </div>;
 }
 
-/** The first draft's real template and palette (src/components.ts) at miniature size, filled only with typed text. */
-export function ProjectSketch({name,idea,audience,feel}:{name:string;idea:string;audience:string;feel:string}){
- return <figure className="journey-sketch" data-feel={feel}>
-  <div className="journey-sketch-top"><span className="journey-sketch-brand">{name.trim()||<i/>}</span><span className="journey-sketch-tag">Sketch from your answers</span></div>
+type SketchLine='brand'|'greeting'|'headline'|'tagline';
+/** One line of the sketch: placeholder until there is text, and redrawn once when the first text lands. */
+function Line({slot,text,bars=1}:{slot:SketchLine;text:string;bars?:number}){
+ return <span key={text?'text':'bar'} data-slot={slot} dir="auto" className={text?'journey-draw':undefined}>{text||Array.from({length:bars},(_,index)=><i key={index}/>)}</span>;
+}
+/** The first draft's palette and proportions (src/components.ts) at miniature size: typed answers inside fixed template labels, built one line at a time. */
+export function ProjectSketch({person,photo,name,idea,audience,feel,active}:{person:string;photo:string;name:string;idea:string;audience:string;feel:string;active?:SketchLine}){
+ return <figure className="journey-sketch" data-feel={feel} data-active={active}>
+  <div className="journey-sketch-top"><Line slot="brand" text={name.trim()}/><span className="journey-sketch-tag">Sketch from your answers</span></div>
   <div className="journey-sketch-body">
-   <p className="journey-sketch-eyebrow">Welcome to</p>
-   <p className="journey-sketch-title">{name.trim()||<i/>}</p>
-   <span className="journey-sketch-rule"/>
-   <p className="journey-sketch-intro">{idea.trim()||<><i/><i/></>}</p>
-   {audience.trim()&&<p className="journey-sketch-for">Made for {audience.trim()}</p>}
+   <div className="journey-sketch-greeting"><img src={photo} alt=""/><Line slot="greeting" text={person.trim()&&`Hi, I’m ${person.trim()}.`}/></div>
+   <Line slot="headline" text={idea.trim()} bars={2}/>
+   <Line slot="tagline" text={audience.trim()&&`Made for ${audience.trim()}`}/>
   </div>
  </figure>;
 }
