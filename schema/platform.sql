@@ -6357,7 +6357,8 @@ CREATE TABLE notification_notices (
  reason TEXT CHECK(reason IS NULL OR reason IN ('rejected','unavailable','exhausted','suppressed','expired','contained','uncertain','ceiling','recipient-revoked','record-removed','template-withdrawn','unreconciled','ceiling-unset','configuration-changed')),
  lookups INTEGER NOT NULL DEFAULT 0 CHECK(lookups BETWEEN 0 AND 3),
  reconcile_until INTEGER CHECK(reconcile_until IS NULL OR reconcile_until>0),
- -- The exact address the last attempt was sent to (set when the attempt is claimed); a bounce, complaint or unsubscribe suppresses only this, and nothing when it is NULL.
+ -- PERSONAL DATA: the exact address the last attempt was sent to (set when the attempt is claimed). A bounce, complaint or unsubscribe suppresses only this, and nothing when it is NULL.
+ -- It stays with the notice (30 days after the outcome, 90 for unresolved evidence, longer under a safety hold) and is cleared at once when a visitor's address is removed or changed or the visitor is deleted (triggers in src/shared-modules/schema.sql).
  sent_to TEXT CHECK(sent_to IS NULL OR length(sent_to) BETWEEN 3 AND 254),
  UNIQUE(template,event_ref,recipient_key),
  CHECK((scope='owner-destination' AND project_id IS NOT NULL AND destination_id IS NOT NULL AND recipient_ref IS NULL)

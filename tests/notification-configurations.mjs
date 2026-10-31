@@ -336,7 +336,18 @@ try{
   await conf(['staff']);assert.equal(await state('active'),'no-recipient','Staff notice on, nobody opted in');
   await conf(['receipt']);assert.equal(await state('active'),'no-recipient','Receipt on, no visitor can be reached');
   await verifyVisitor(cv,'visitor-state@example.com');assert.equal(await state('active'),'active','A verified visitor address makes receipts reachable');
-  await conf([]);assert.equal(await state('active'),'off');
+  const sup=await visitor(c);await verifyVisitor(sup,'visitor-suppressed@example.com');
+  await run("INSERT INTO contact_notification_suppressions(user_id,address,reason,created_at) VALUES(?,'visitor-suppressed@example.com','bounce','2026-10-30')",c.user);assert.equal(await state('active'),'active','The first visitor can still be reached');
+  await run('UPDATE app_visitors SET revoked=1 WHERE id=?',cv.visitorId);assert.equal(await state('active'),'no-recipient','A revoked visitor and a suppressed one cannot be reached');
+  const vv=await visitor(c);await verifyVisitor(vv,'visitor-ok@example.com');assert.equal(await state('active'),'active','A new verified visitor makes receipts reachable again');
+  await run("INSERT INTO operator_containments(id,scope,subject_kind,subject_id,allowance,operator_ref,reason,request_digest,expires_at) VALUES(?,'contact','project',?,NULL,'human:test','reason',?,?)",id(),c.project,'e'.repeat(64),new Date(Date.now()+3600000).toISOString());
+  assert.equal(await state('active'),'contained','A contained project is not sending');
+  const kept=await row('SELECT config_json FROM module_instances WHERE id=?',cr.id);
+  await run("UPDATE module_instances SET config_json=json_set(config_json,'$.forms','[]') WHERE id=?",cr.id);
+  assert.equal((await C.readNotificationSetup(db,c.user,c.project,'active')).forms.length,0,'A form removed from the configuration shows no stale status');
+  await run('UPDATE module_instances SET config_json=? WHERE id=?',kept.config_json,cr.id);
+  await conf([]);assert.equal(await state('active'),'off','Off is named before the pause');
+  await run("DELETE FROM operator_containments WHERE subject_id=?",c.project).catch(()=>{});
   await conf(['owner']);for(const g of (await rows("SELECT id FROM feature_preview_grants WHERE user_id=? AND feature_id='core.forms'",c.user)))await run('UPDATE feature_preview_grants SET revoked_at=unixepoch() WHERE id=?',g.id);
   assert.equal(await state('active'),'plan');
  });
@@ -352,20 +363,27 @@ try{
   const ownerLogin=(await row('SELECT lower(email) e FROM users WHERE id=?',a.user)).e;
   const suppressed=async()=>(await rows('SELECT address FROM contact_notification_suppressions WHERE user_id=?',a.user)).map(x=>x.address);
   const staffNotice=await pick('project-staff',e),receiptNotice=await pick('submitter',e),secondReceipt=await pick('submitter',e2);assert.ok(staffNotice&&receiptNotice&&secondReceipt,JSON.stringify((await notices(a.project)).map(n=>[n.scope,n.state,n.reason])));
-  // Proof 1: the visitor removed their address after the send; the receipt bounce still suppresses that exact address, not the owner's.
+  const ownerNotice=await pick('owner-destination',e);assert.ok(ownerNotice);
+  assert.deepEqual([ownerNotice.sent_to,staffNotice.sent_to,receiptNotice.sent_to],['owner-a@example.com','staff@example.com','receipt-one@example.com'],'Each attempt recorded the exact address it went to');
+  // The address still belongs to the recipient: a bounce suppresses exactly it, and nothing else (never the owner login email).
+  await m.notificationOutbox.applyNoticeEvent(db,{noticeId:ownerNotice.id,type:'bounce',authenticated:true});
+  assert.deepEqual((await suppressed()).filter(x=>x==='owner-a@example.com'||x===ownerLogin),['owner-a@example.com']);
+  // Erasure: removing the visitor's address, changing it, or deleting the visitor clears the recorded address of that visitor's notices, so nothing personal outlives it.
   await run('DELETE FROM visitor_notification_addresses WHERE visitor_id=?',v1.visitorId);
-  await m.notificationOutbox.applyNoticeEvent(db,{noticeId:receiptNotice.id,type:'complaint',authenticated:true});
-  assert.ok((await suppressed()).includes('receipt-one@example.com')&&!(await suppressed()).includes(ownerLogin)&&!(await suppressed()).includes('owner-a@example.com'),JSON.stringify(await suppressed()));
-  // Proof 2: the staff member changed their address after the send; the bounce suppresses the one the notice went to, not the new one.
+  assert.equal((await row('SELECT sent_to FROM notification_notices WHERE id=?',receiptNotice.id)).sent_to,null,'Address removal clears the receipt notice');
+  assert.equal((await row('SELECT sent_to FROM notification_notices WHERE id=?',secondReceipt.id)).sent_to,null);
   await run("UPDATE visitor_notification_addresses SET address='staff-new@example.com',code_hash=NULL,code_expires_at=NULL,code_failures=0,verified_at=NULL WHERE visitor_id=?",staff.visitorId);
-  await m.notificationOutbox.applyNoticeEvent(db,{noticeId:staffNotice.id,type:'bounce',authenticated:true});
-  assert.ok((await suppressed()).includes('staff@example.com')&&!(await suppressed()).includes('staff-new@example.com')&&!(await suppressed()).includes(ownerLogin));
-  // An address that cannot be known: nothing is suppressed, and the owner's login email is never a fallback.
+  assert.equal((await row('SELECT sent_to FROM notification_notices WHERE id=?',staffNotice.id)).sent_to,null,'An address change clears the staff notice');
+  const vd=await visitor(a);await verifyVisitor(vd,'receipt-erased@example.com');await submit(a,records,vd,{consent:true});await pass(provider(),500);
+  const erased=await row("SELECT id,sent_to FROM notification_notices WHERE recipient_ref=? AND state='accepted'",vd.visitorId);assert.equal(erased.sent_to,'receipt-erased@example.com');
+  await run('DELETE FROM app_visitors WHERE id=?',vd.visitorId);
+  assert.equal((await row('SELECT sent_to FROM notification_notices WHERE id=?',erased.id)).sent_to,null,'Deleting the visitor clears it through the cascade');
+  assert.equal((await row("SELECT count(*) n FROM notification_notices WHERE sent_to LIKE 'receipt-erased%'")).n,0);
+  // An address that is no longer known: a bounce or complaint suppresses nothing, and the owner's login email is never a fallback.
   const before=(await suppressed()).length;
-  await run('UPDATE notification_notices SET sent_to=NULL WHERE id=?',secondReceipt.id);
-  await m.notificationOutbox.applyNoticeEvent(db,{noticeId:secondReceipt.id,type:'complaint',authenticated:true});
-  assert.equal((await suppressed()).length,before,'No recorded address, no suppression');assert.ok(!(await suppressed()).includes(ownerLogin));
-  assert.equal((await row("SELECT state FROM contact_notification_destinations WHERE project_id=?",a.project)).state,'verified','The owner destination is untouched');
+  for(const n of [receiptNotice,staffNotice,erased])await m.notificationOutbox.applyNoticeEvent(db,{noticeId:n.id,type:'complaint',authenticated:true});
+  assert.equal((await suppressed()).length,before,'No recorded address, no suppression');assert.ok(!(await suppressed()).includes(ownerLogin)&&!(await suppressed()).includes('receipt-one@example.com')&&!(await suppressed()).includes('staff@example.com'));
+  assert.equal((await row("SELECT state FROM contact_notification_destinations WHERE project_id=?",a.project)).state,'suppressed','Only the owner destination whose own address bounced is suppressed');
  });
 
  await check('D8-D10: appointment volume cannot use the contact caps, an over-cap request is still admitted, receipts are capped per visitor, the customer limit keeps a reserve',async()=>{
@@ -407,8 +425,17 @@ try{
   assert.equal((await row('SELECT count(*) n FROM notification_notices WHERE recipient_ref=?',cv3.visitorId)).n,0);
  });
 
+ await check('a suppressed visitor who ticks the receipt box still submits: the record is admitted and no receipt is queued',async()=>{
+  await clear(a);
+  const vs=await visitor(a);await verifyVisitor(vs,'receipt-suppressed@example.com');
+  await run("INSERT INTO contact_notification_suppressions(user_id,address,reason,created_at) VALUES(?,'receipt-suppressed@example.com','complaint','2026-10-30')",a.user);
+  const e=await submit(a,records,vs,{consent:true}); // submit asserts HTTP 200
+  assert.ok(await row('SELECT 1 FROM module_records WHERE id=?',e),'The record was admitted');
+  const list=await forEvent(a,e);assert.equal(list.filter(n=>n.scope==='submitter').length,0,'No receipt is queued for a suppressed address');
+ });
+
  await check('business names: one rule on every path; scripts with combining marks pass, look-alike dots, invisible and control characters and template syntax are refused',async()=>{
-  const ok=['Peluquería Ñandú','सुंदर सैलून','ร้านเสริมสวย','சென்னை சலூன்',"Joe's Hair & Co., Ltd.",'Salon 21'],bad=['live．com','live。com','live​.com','live\u0085x','{{businessName}}','evil.xyz','a‍b','x y','Dr Smith','www.example','user@host','10.0.0.1','<b>x</b>'];
+  const ok=['Joe’s Hair','Peluquería Ñandú','सुंदर सैलून','ร้านเสริมสวย','சென்னை சலூன்',"Joe's Hair & Co., Ltd.",'Salon 21'],bad=['live．com','live。com','live​.com','live\u0085x','{{businessName}}','evil.xyz','a‍b','x y','Dr Smith','www.example','user@host','10.0.0.1','<b>x</b>','ㅤ','Gardenㅤ Salon','aﾠb','a\u034fb','a\ufe0fb','a\u{E0100}b','a\u180bb','a\u17b4b','example\u0660com','exampleꓸcom','exampleꞏcom','example .com','١٢٧.٠.٠.١','１２７.０.０.１'];
   for(const name of ok){
    assert.ok(m.chatControl({type:'notificationSetupReview',projectId:a.project,instanceId:'requests',formId:'appointment',notices:['owner'],businessName:name}),'control accepts '+name);
    assert.equal((await reviewControl(a,['owner'],name)).status,200,'build accepts '+name);

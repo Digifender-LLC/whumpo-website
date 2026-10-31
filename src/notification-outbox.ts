@@ -48,11 +48,6 @@ async function admitAttempt(db:Db,envelope:Record<string,any>,noticeId:string,gu
   SELECT ?1,?2,'platform-email',?3,?4,?5,?6,1,?7,?7,'enqueued',?5 WHERE EXISTS(SELECT 1 FROM notification_notices WHERE id=?8 AND ${guard})`).bind(e.jobId,e.ownerAccountId,json,digest,createdAt,expiresAt,notBefore,noticeId);
 }
 /**
- * Queue one notice and the envelope of its first attempt in one batch. The insert is a guarded INSERT ... SELECT, so a duplicate (same template, event
- * and recipient) or a recipient over its caps queues nothing and returns `queued:false`; the caller can tell the two apart by `duplicate`.
- * The template is checked against the source catalog here, not by a CHECK list in the schema.
- */
-/**
  * The statements that queue one notice and its first attempt's envelope, for a caller that commits them inside a bigger batch (the form admission, WH-158).
  * `safe` adds the checks of the scope trigger to the guarded insert, so a recipient or project that is not valid inserts zero rows instead of aborting
  * the caller's batch; the rate guard is already at or below the trigger's caps. Nothing here can raise, so a notice can never fail the batch it rides in.

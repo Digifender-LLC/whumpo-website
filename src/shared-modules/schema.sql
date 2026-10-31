@@ -720,10 +720,15 @@ CREATE TRIGGER staff_notification_optin_immutable BEFORE UPDATE ON staff_notific
 CREATE TRIGGER staff_notification_optin_revoked AFTER UPDATE OF state ON module_access_roles WHEN NEW.state='revoked' AND OLD.state='granted' BEGIN
  DELETE FROM staff_notification_optins WHERE instance_id=NEW.instance_id AND visitor_id=NEW.visitor_id;
 END;
--- A consenting receipt is refused for a suppressed address; the consent itself is only meaningful with a verified address (view below).
-CREATE TRIGGER module_record_consent_admit BEFORE INSERT ON module_records WHEN NEW.receipt_consent=1 BEGIN
- SELECT RAISE(ABORT,'notification_address_suppressed') WHERE EXISTS(SELECT 1 FROM visitor_notification_addresses a JOIN projects p ON p.id=NEW.project_id
-  JOIN contact_notification_suppressions s ON s.user_id=p.owner_user_id AND s.address=a.address WHERE a.visitor_id=NEW.visitor_id);
+-- A consent is only meaningful with a verified, unsuppressed address, and that is decided by the view below and by the form admission, never by refusing the record:
+-- a suppressed visitor who ticks "email me a receipt" still submits, and no receipt is queued (WH-158).
+-- WH-158: a notice remembers the exact address of its last attempt (`notification_notices.sent_to`) so a bounce can suppress exactly that address. It is the
+-- visitor's address, so it leaves with it: removing or changing the address, or deleting the visitor (the cascade deletes the address row), clears it on that visitor's notices.
+CREATE TRIGGER visitor_notification_address_erased AFTER DELETE ON visitor_notification_addresses BEGIN
+ UPDATE notification_notices SET sent_to=NULL WHERE recipient_ref=OLD.visitor_id AND scope IN ('project-staff','submitter') AND sent_to IS NOT NULL;
+END;
+CREATE TRIGGER visitor_notification_address_replaced AFTER UPDATE OF address ON visitor_notification_addresses WHEN NEW.address IS NOT OLD.address BEGIN
+ UPDATE notification_notices SET sent_to=NULL WHERE recipient_ref=OLD.visitor_id AND scope IN ('project-staff','submitter') AND sent_to IS NOT NULL;
 END;
 -- The single place recipients are derived (read at enqueue and again before every provider call): `ref` is the destination id (owner),
 -- the visitor id (staff) or the record id (submitter). Suppression is the project owner's, across all three scopes.

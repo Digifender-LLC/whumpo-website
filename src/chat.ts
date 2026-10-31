@@ -382,7 +382,7 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     if(String(cause).includes('comparison_changed'))return {status:409,error:'A compared version changed or was removed. Request the comparison again.'};
     if(String(cause).includes('contact_review_changed'))return {status:409,error:'The contact form review changed or expired. Request a fresh review.'};
     if(String(cause).includes('contact_destination_review_changed'))return {status:409,error:'The contact notification review changed or expired. Request a fresh review.'};
-    if(/notification_configuration_(changed|stale|capacity|platform_template)/.test(String(cause)))return {status:409,error:'The appointment notice review changed or expired. Request a fresh review.'};
+    if(/notification_configuration_(changed|stale|platform_template)/.test(String(cause)))return {status:409,error:'The appointment notice review changed or expired. Request a fresh review.'};
     if(String(cause).includes('contact_destination_suppressed'))return {status:409,error:'That address cannot receive notices from Whumpo.'};
     if(String(cause).includes('safety_preservation_hold')&&command.startsWith('/confirm-contact-notify '))return {status:423,error:'This notification address cannot be changed right now. Contact Whumpo support if you need help.'};
     if(String(cause).includes('domain_proof_removal_retained'))return {status:409,error:'This proof is now retained for hosting or DNS recovery and cannot be removed.'};

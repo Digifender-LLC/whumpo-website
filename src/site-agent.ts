@@ -185,7 +185,7 @@ export async function prepareSiteAction(db:D1Database,userId:string,turnId:strin
   const names=['owner','staff','receipt'],local=(v:unknown)=>typeof v==='string'&&/^[a-z][a-z0-9-]{0,39}$/.test(v);
   if(Object.keys(action).some(k=>!['kind','projectId','instanceId','formId','notices','businessName'].includes(k))||typeof action.projectId!=='string'||!/^[0-9a-f-]{36}$/.test(action.projectId)||!local(action.instanceId)||!local(action.formId)
    ||!Array.isArray(action.notices)||action.notices.length>3||new Set(action.notices).size!==action.notices.length||action.notices.some((n:unknown)=>!names.includes(n as string))||typeof action.businessName!=='string')throw new ProposalError();
-  try{return (await notificationSetupCommand(db,userId,turnId,`/review-notification-setup ${action.projectId} ${action.instanceId} ${action.formId} ${[...action.notices].sort().join(',')||'none'} ${action.businessName.trim()}`))!;}
+  try{return (await notificationSetupCommand(db,userId,turnId,`/review-notification-setup ${action.projectId} ${action.instanceId} ${action.formId} ${[...action.notices].sort().join(',')||'none'} ${action.businessName.trim().normalize('NFC')}`))!;}
   catch(cause){if(cause instanceof ModuleError)return {reply:cause.message,statements:[] as D1PreparedStatement[]};throw cause;}
  }
  if(action.kind==='photoRemovalReview'){

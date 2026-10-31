@@ -12,8 +12,8 @@ import {businessNameProblem} from './business-name';
  * control or by the model) that only a separate typed `confirm` control applies (`/confirm-notification-setup`; the trigger refuses any other confirmer):
  * a notice to the owner's verified address, a notice to opted-in staff, and a receipt to a verified signed-in visitor who consented on that submission.
  * The review binds the template digests, the platform sender, the scopes, the limits, the provider price and the business name, so a changed catalog,
- * price or form makes it stale. Configuring provisions nothing. The resolver below is the one `approved-configuration` resolver for `form.accepted`
- * (WH-069 reuses it); it writes outbox rows through `enqueueNotice` only and never reaches the model or maintainer credentials.
+ * price or form makes it stale. Configuring provisions nothing. `admissionNotices` is the one `approved-configuration` queueing path for `form.accepted`
+ * (WH-069 reuses it); it adds guarded outbox inserts to the form's own admission batch through `noticeStatements` and never reaches the model or maintainer credentials.
  */
 type Db=Pick<D1Database,'prepare'|'batch'>;
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
@@ -125,7 +125,7 @@ type ReviewRow={id:string;project_id:string;instance_id:string;form_id:string;ow
 export type DeliveryState='inactive'|'spending-limit-unset'|'active';
 /** What the dashboard says about sending: inactive (no provider binding), active-but-no-spending-limit (nothing is queued or sent) or active. */
 export const deliveryState=(delivery:{settings:{customerCeilingCents?:number}}|null):DeliveryState=>!delivery?'inactive':delivery.settings.customerCeilingCents?'active':'spending-limit-unset';
-export type FormSending=DeliveryState|'off'|'plan'|'no-recipient';
+export type FormSending=DeliveryState|'off'|'plan'|'no-recipient'|'contained';
 /**
  * Owner dashboard read: per form of each owned records module its saved notice settings, whether THIS form would send (its own notices on, `core.forms`
  * included, and an owner address verified when the owner notice is the only one on) and counts of the notices of THIS form. Counts and flags only, never an
@@ -133,16 +133,17 @@ export type FormSending=DeliveryState|'off'|'plan'|'no-recipient';
  */
 export async function readNotificationSetup(db:Pick<D1Database,'prepare'>,user:string,project:string,delivery:DeliveryState){
  if(!uuid.test(project)||!await db.prepare('SELECT 1 FROM projects WHERE id=? AND owner_user_id=?').bind(project,user).first())throw new ModuleError('not_found','Project not found.');
- const rows=(await db.prepare('SELECT c.instance_id,i.local_id,c.form_id,c.owner_notice,c.staff_notice,c.receipt,c.business_name,c.revision FROM notification_configurations c JOIN module_instances i ON i.id=c.instance_id WHERE c.project_id=? ORDER BY i.local_id,c.form_id LIMIT 32').bind(project).all<{instance_id:string;local_id:string;form_id:string;owner_notice:number;staff_notice:number;receipt:number;business_name:string;revision:number}>()).results;
+ const rows=(await db.prepare('SELECT c.instance_id,i.local_id,c.form_id,c.owner_notice,c.staff_notice,c.receipt,c.business_name,c.revision FROM notification_configurations c JOIN module_instances i ON i.id=c.instance_id WHERE c.project_id=? AND EXISTS(SELECT 1 FROM json_each(i.config_json,\'$.forms\') f WHERE json_extract(f.value,\'$.id\')=c.form_id) ORDER BY i.local_id,c.form_id LIMIT 32').bind(project).all<{instance_id:string;local_id:string;form_id:string;owner_notice:number;staff_notice:number;receipt:number;business_name:string;revision:number}>()).results;
  const counts=(await db.prepare("SELECT r.instance_id,r.form_id,n.state,count(*) n FROM notification_notices n JOIN module_records r ON r.id=substr(n.event_ref,6,36) AND r.project_id=n.project_id WHERE n.project_id=? AND n.template IN ('appointment.staff-notice@1','appointment.request-receipt@1') GROUP BY r.instance_id,r.form_id,n.state").bind(project).all<{instance_id:string;form_id:string;state:string;n:number}>()).results;
  const ownerOk=!!await db.prepare("SELECT 1 FROM notification_recipients WHERE project_id=? AND scope='owner'").bind(project).first(),staffOk=!!await db.prepare("SELECT 1 FROM notification_recipients WHERE project_id=? AND scope='staff'").bind(project).first(),
-  visitorOk=!!await db.prepare('SELECT 1 FROM visitor_notification_addresses a JOIN app_visitors v ON v.id=a.visitor_id WHERE v.project_id=? AND a.verified_at IS NOT NULL').bind(project).first(); // who could be reached right now
+  visitorOk=!!await db.prepare('SELECT 1 FROM visitor_notification_addresses a JOIN app_visitors v ON v.id=a.visitor_id AND v.revoked=0 JOIN projects p ON p.id=v.project_id WHERE v.project_id=? AND a.verified_at IS NOT NULL AND NOT EXISTS(SELECT 1 FROM contact_notification_suppressions s WHERE s.user_id=p.owner_user_id AND s.address=a.address)').bind(project).first(),
+  paused=!!await db.prepare("SELECT 1 FROM operator_contained_projects WHERE project_id=? AND scope='contact'").bind(project).first(); // who could be reached right now
  const included=await includedNow(db,user,project);
  return {delivery,forms:rows.map(r=>{
   const mine=counts.filter(c=>c.instance_id===r.instance_id&&c.form_id===r.form_id),sum=(states:string[])=>mine.filter(c=>states.includes(c.state)).reduce((a,c)=>a+c.n,0);
   const any=r.owner_notice||r.staff_notice||r.receipt;
   const reachable=(r.owner_notice&&ownerOk)||(r.staff_notice&&staffOk)||(r.receipt&&visitorOk);
-  const sending:FormSending=!any?'off':!included?'plan':delivery!=='active'?delivery:reachable?'active':'no-recipient';
+  const sending:FormSending=!any?'off':!included?'plan':paused?'contained':delivery!=='active'?delivery:reachable?'active':'no-recipient';
   return {instanceId:r.local_id,formId:r.form_id,notices:{owner:!!r.owner_notice,staff:!!r.staff_notice,receipt:!!r.receipt},businessName:r.business_name,revision:r.revision,sending,
    counts:{sent:sum(['accepted','delivered']),waiting:sum(['queued','dispatching','deferred','unknown-outcome']),notSent:sum(['cancelled','failed','bounced','complained','unresolved'])}};
  })};
@@ -164,13 +165,13 @@ export async function admissionNotices(db:Pick<D1Database,'prepare'|'batch'>,not
   const c=await db.prepare('SELECT c.revision,c.owner_notice,c.staff_notice,c.receipt,p.owner_user_id AS user_id FROM notification_configurations c JOIN projects p ON p.id=c.project_id WHERE c.instance_id=? AND c.form_id=? AND c.project_id=? AND c.owner_notice+c.staff_notice+c.receipt>0')
    .bind(at.instanceId,at.formId,at.projectId).first<{revision:number;owner_notice:number;staff_notice:number;receipt:number;user_id:string}>();
   if(!c||!await includedNow(db,c.user_id,at.projectId))return [];
-  const refs=async(scope:'owner'|'staff')=>(await db.prepare('SELECT ref FROM notification_recipients WHERE project_id=?1 AND scope=?2 LIMIT 20').bind(at.projectId,scope).all<{ref:string}>()).results.map(x=>x.ref);
+  const refs=async(scope:'owner'|'staff')=>(await db.prepare('SELECT ref FROM notification_recipients WHERE project_id=?1 AND scope=?2 ORDER BY ref LIMIT 20').bind(at.projectId,scope).all<{ref:string}>()).results.map(x=>x.ref);
   const base={userId:c.user_id,projectId:at.projectId,eventRef:`form:${at.entryId}:r${c.revision}`,now:at.now,safe:true};
   const specs:Parameters<typeof noticeStatements>[1][]=[];
   if(c.owner_notice)for(const ref of await refs('owner'))specs.push({...base,scope:'owner-destination',destinationId:ref,template:'appointment.staff-notice@1',caps:{hour:10,day:50}});
   if(c.staff_notice)for(const ref of await refs('staff'))specs.push({...base,scope:'project-staff',recipientRef:ref,template:'appointment.staff-notice@1',caps:{hour:10,day:50}});
   // A receipt's recipient key is the visitor, so the promised 3 an hour and 10 a day hold per visitor across submissions.
-  if(c.receipt&&at.consent&&at.visitorId&&await db.prepare('SELECT 1 FROM visitor_notification_addresses WHERE visitor_id=? AND verified_at IS NOT NULL').bind(at.visitorId).first())
+  if(c.receipt&&at.consent&&at.visitorId&&await db.prepare('SELECT 1 FROM visitor_notification_addresses a JOIN app_visitors v ON v.id=a.visitor_id AND v.revoked=0 WHERE a.visitor_id=? AND a.verified_at IS NOT NULL AND NOT EXISTS(SELECT 1 FROM contact_notification_suppressions s WHERE s.user_id=? AND s.address=a.address)').bind(at.visitorId,c.user_id).first())
    specs.push({...base,scope:'submitter',recipientRef:at.visitorId,template:'appointment.request-receipt@1',caps:{hour:3,day:10}});
   return (await Promise.all(specs.map(spec=>noticeStatements(db,spec)))).flatMap(x=>x.statements);
  }catch{return [];}
