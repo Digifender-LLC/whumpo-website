@@ -59,11 +59,11 @@ Families: 80 (51 privileged; platform-api 54, visitor 19, service 1, scheduled 3
 | authority | 65 | 1 | 14 | 0 |
 | origin | 69 | 0 | 5 | 0 |
 | freshness | 14 | 6 | 21 | 0 |
-| target | 53 | 1 | 5 | 0 |
+| target | 54 | 0 | 5 | 0 |
 | replay | 45 | 0 | 9 | 0 |
-| stale | 58 | 0 | 9 | 2 |
-| admission | 37 | 0 | 6 | 1 |
-| tenant | 23 | 0 | 1 | 1 |
+| stale | 59 | 1 | 9 | 0 |
+| admission | 37 | 1 | 6 | 0 |
+| tenant | 23 | 1 | 1 | 0 |
 
 Cells not recorded (not required for that family's surface and privilege): 194.
 
@@ -82,7 +82,7 @@ Cells not recorded (not required for that family's surface and privilege): 194.
 | mobile-bootstrap | platform-api | no | 1 / 0 | evidenced | evidenced | — | — | — | evidenced | evidenced | — |
 | mobile-chat-read | platform-api | no | 1 / 0 | evidenced | evidenced | — | — | — | evidenced | evidenced | — |
 | mobile-chat-turn | platform-api | no | 1 / 0 | evidenced | evidenced | — | evidenced | — | evidenced | evidenced | — |
-| mobile-chat-send | platform-api | data-change | 1 / 0 | evidenced | evidenced | n/a | gap (test) | evidenced | evidenced | evidenced | — |
+| mobile-chat-send | platform-api | data-change | 1 / 0 | evidenced | evidenced | n/a | evidenced | evidenced | evidenced | evidenced | — |
 | mobile-reviews-list | platform-api | no | 1 / 0 | evidenced | evidenced | — | — | — | evidenced | evidenced | — |
 | mobile-review-confirm | platform-api | publish, activation, data-change | 1 / 0 | evidenced | evidenced | evidenced | evidenced | evidenced | evidenced | evidenced | — |
 | mobile-interactions | platform-api | data-change | 1 / 0 | evidenced | evidenced | evidenced | evidenced | evidenced | evidenced | evidenced | — |
@@ -129,7 +129,7 @@ Cells not recorded (not required for that family's surface and privilege): 194.
 | site-root | visitor | no | 1 / 0 | n/a | evidenced | — | — | — | evidenced | n/a | evidenced |
 | site-assets | visitor | no | 1 / 0 | n/a | evidenced | — | — | — | evidenced | evidenced | evidenced |
 | site-directory | visitor | no | 1 / 0 | n/a | evidenced | — | — | — | evidenced | n/a | evidenced |
-| site-cms | visitor | no | 3 / 0 | n/a | evidenced | — | — | — | unverified | unverified | unverified |
+| site-cms | visitor | no | 3 / 0 | n/a | evidenced | — | — | — | evidenced | gap (test) | gap (test) |
 | site-backend | visitor | execution | 1 / 0 | n/a | evidenced | — | evidenced | n/a | evidenced | evidenced | evidenced |
 | site-custom-domain | visitor | no | 2 / 0 | n/a | evidenced | — | — | — | evidenced | n/a | evidenced |
 | site-traffic | visitor | no | 4 / 0 | n/a | n/a | — | — | — | — | n/a | evidenced |
@@ -145,7 +145,7 @@ Cells not recorded (not required for that family's surface and privilege): 194.
 | runtime-execute | service | execution | 1 / 0 | evidenced | evidenced | — | evidenced | n/a | n/a | evidenced | evidenced |
 | scheduled-maintenance | scheduled | deletion | 18 / 0 | evidenced | — | — | n/a | n/a | evidenced | — | evidenced |
 | scheduled-provider-cleanup | scheduled | connection, dns-hosting | 3 / 0 | evidenced | — | — | evidenced | evidenced | evidenced | — | evidenced |
-| scheduled-contact-delivery | scheduled | notification | 1 / 0 | evidenced | — | — | evidenced | evidenced | unverified | — | evidenced |
+| scheduled-contact-delivery | scheduled | notification | 1 / 0 | evidenced | — | — | evidenced | evidenced | gap (test) | — | evidenced |
 | operator-release | operator-tool | release | 9 / 0 | evidenced | — | — | evidenced | evidenced | evidenced | — | evidenced |
 | operator-mutation | operator-tool | operator | 11 / 0 | gap (control B4) | — | — | evidenced | evidenced | evidenced | — | evidenced |
 | operator-read | operator-tool | no | 12 / 0 | evidenced | — | — | — | — | — | — | — |
@@ -270,6 +270,8 @@ Slice 2 (source and configuration reading; none executed unless stated):
 
 - **R7 Most cited visitor/runtime/scheduled/operator evidence was ungated (resolved: `security` profile).** Of the tests cited for slice-2 families, only `tests/customer-site-journey.mjs` (`site`), `tests/customer-app-journey.mjs` (`app`), the release/secret-custody suites and the registry check (`protection`) run in a verify profile; `backend-runtime`, `contacts`, `public-fairness`, `guest-previews`, `app-auth`, `app-data`, `maintenance*`, `contact-notifications`, `operator-containment`, `shared-modules-*` and others are manual. A regression in those boundaries would not fail a deploy check. **Decided October 30, 2026 (D2):** the boundary regressions that no profile ran (`boundary-apps-host-forwarding`, `boundary-contact-notice-intake`, `boundary-custom-domain-photo-route`, `boundary-hosting-maintenance-stale`, `boundary-photo-route-admission`, `boundary-visitor-shell-admission`, plus the new `boundary-operator-environment` and `boundary-mobile-paths`) are the new `security` verify profile (`node tools/verify.mjs security`). The other boundary suites were already in `site`, and `tests/verification-profiles.mjs` now fails if any `tests/boundary-*.mjs` is in no profile. The deploy gate (`fast`, `protection`) is unchanged; the profile is for releases that touch a boundary. The non-boundary suites cited above (`contacts`, `maintenance*`, `shared-modules-*`, ...) were added to `site` earlier.
 - **R8 Contact-notice drain outside maintenance health; stale comments.** The `* * * * *` drain is not a `runMaintenance` job: no `maintenance_health` row is written and a failure escapes `scheduled()` with its raw error (characterized, exit 0: `node tests/boundary-contact-delivery-health.mjs`). A stuck queue is still visible through the outbox backlog in `report-maintenance`. The comments in `src/index.ts` ("No cron trigger for it is configured") and `src/contact-email.ts` ("none is configured in this repository") are stale: `wrangler.jsonc` has the cron, the binding and both variables. Whether delivery is live was not verified.
+
+  **October 31, 2026: named gap, needs a schema change (batch 6); see the closure note.**
 
   **Checked October 30, 2026 against the WH-052 dispatcher (#446), left open.** `dispatchJobs` ([`src/job-dispatcher.ts`](../src/job-dispatcher.ts)) gives the lanes per-type, per-owner and deadline caps, isolates types from each other and, for journal lanes, leases, recovers and prunes jobs. It does not write a `maintenance_health` row and, after every type has settled, it rethrows the first failure raw, so both R8 claims still hold (`node tests/boundary-contact-delivery-health.mjs` still passes unchanged). The backlog stays visible only through the journal and `report-maintenance`. Only the stale comment was fixed (`src/contact-email.ts` no longer says nothing is configured: `wrangler.jsonc` declares the binding and both variables; live delivery remains a deployment fact, not asserted).
 - **R9 Platform-wide visitor ceilings (same class as B1, owner-driven).** `app_visitors` and `app_invitations` (100 per project, 1,000 platform), `app_sessions` (5,000) and `app_runs` (10,000, removed only on erasure) can be filled by one owner across their own projects. Partly documented in [app-data.md](app-data.md); not executed.
@@ -420,8 +422,7 @@ node tests/boundary-audit.mjs                          # passed
 
 - Policy items settled October 30, 2026 (D2): B7 (preview by default), R2 (SQL hardening, schema batch 5; live at the next cutover), R4 (current split is the rule), R7 (`security` profile), R14 (test-platform and Stripe account pins). R8 stays open with the reason above.
 - Per-path evidence now covers every native `/api/mobile/v1` operation (24 matchers, each its own family) and the notification-outbox lanes behind the every-minute trigger. `tests/boundary-mobile-paths.mjs` executes the shared transport, authority, admission and cross-account rules for each of the 34 concrete operations.
-- Still to do under D2: the `/cso` scan reconciliation, a read-only live routing check, and owner decisions on B1/B5/B6 follow-ups already recorded above.
-- Close the remaining evidence gaps (for example `mobile-chat-send` target) with focused regressions.
+- Closed October 31, 2026 UTC (D2 conditions; see the "Closure note" at the end of this file): the `/cso` scan was run and reconciled (static, partial, no supported findings), the read-only live routing check was run, the `mobile-chat-send` target gap has a regression, and the four `unverified` cells are evidenced or named gaps. R8 stays open as a named gap that needs a schema change (schema batch 6).
 
 ## Slice 9 evidence note (October 21, 2026 UTC, base `c20ba59`)
 
@@ -527,3 +528,13 @@ node tests/cost-reconcile.mjs && node tests/cost-reconcile.mjs --d1   # B8 regre
 node tests/contact-notifications.mjs && node tests/contacts.mjs && node tests/job-registry.mjs && node tests/job-registry.mjs --d1
 node tests/boundary-audit.mjs && node tests/tenant-sql-surface.mjs
 ```
+
+## Closure note (October 31, 2026 UTC, base `be4e6bf`)
+
+Closes the D2 conditions for WH-004. Source, local fixtures and one read-only live probe set; **not an exhaustive security claim, and no live, device or customer acceptance.** `auditedCommit` is now `be4e6bf`.
+
+- **`/cso` scan (static daily run, offline, 600 s budget): partial, no supported findings.** The helper snapshot covered the repository. None of the six scanners ran (Gitleaks, OSV, Semgrep, zizmor, Trivy, Schemathesis): the local Docker daemon is unusable, so each reported `ISOLATION_FAILED` and not assessed. Historical secrets were not scanned by the helper; the repository's own gitleaks working-tree scan (`.gitleaks.toml`) is part of the gate instead. Reviewed by hand because they are new since the October 29 pass: the native handoff and bearer authority (`src/workspace-identity/handoff.ts`, `src/mobile/auth.ts`), push device registration (`src/mobile/push.ts`), the Stripe gate (`src/stripe-billing.ts`: `STRIPE_CHECKOUT_OPEN` is checked in `catalog()`, which every Stripe call reaches; test keys only) and `.github/workflows/ci.yml` (pull_request only, read permissions, pinned actions, no secrets). Not reviewed in depth: the rest of the #500-#526 diff, the Android client, WebAuthn internals. No attacker-controlled path crossing a boundary was found, so there is nothing to submit and no finding was created. Handoff consent relies on the browser consent page showing the handoff purpose (a design property, not a defect found).
+- **Read-only live routing check:** `RUN_LIVE_BOUNDARY_ROUTING=1 node tests/boundary-live-routing.mjs`, six GET or refused requests with no session. Observed October 31, 2026: `whumpo.com/api/me` 401; `/api/mobile/v1/bootstrap` with a client header and no bearer 401; a random `app-<uuid>.whumpo.site` GET 404 and a foreign-Origin POST 403; `preview.whumpo.site/` 200 (the static, token-less shell with `no-store` and `frame-ancestors 'none'`; it carries no data and the token travels in the URL fragment); `POST whumpo.com/modules` 405. All as expected, no defect found. It does not probe authenticated routes or custom domains.
+- **`mobile-chat-send` target:** `tests/boundary-mobile-paths.mjs` now sends as owner B, including under owner A's own request id, and asserts A's transcript and revision are unchanged. The cell is `evidenced`.
+- **The four `unverified` cells** (the plan's count of eleven was from an older state; the registry held four): `site-cms` `stale` is `evidenced` after `tests/cms-media-safety.mjs` and `tests/cms-deploy.mjs` passed locally; `site-cms` `admission` and `tenant` and `scheduled-contact-delivery` `stale` are named test gaps with their reasons (CMS acceptance is owner-deferred; R8).
+- **R8 stays open as a named gap.** The remedy is a health row for the every-minute dispatch under its own name, which needs a new value in the `maintenance_health.job` CHECK (schema change). Reusing the existing `jobs` row (daily journal prune) would let a healthy minute run hide a stuck prune, so it was not done. It rides schema batch 6; until then the backlog is visible through the job journal and `report-maintenance`.

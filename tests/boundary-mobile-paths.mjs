@@ -137,6 +137,20 @@ try{
   assert.deepEqual((await call('GET','/projects',{token:sb.token})).data.items.map(p=>p.id),[b.project],'a list shows only the caller\'s own projects');
  });
 
+ await check('chat send target: owner B sending, even under owner A\'s request id, writes only B\'s transcript and never touches A\'s',async()=>{
+  const revision=async x=>(await db.prepare('SELECT revision FROM workspace_state WHERE user_id=?').bind(x.account).first())?.revision??0;
+  const snapshot=async x=>JSON.stringify([(await db.prepare('SELECT id,user_text,assistant_text,revision FROM chat_turns WHERE user_id=? ORDER BY id').bind(x.account).all()).results,await revision(x)]);
+  const send=(token,requestId,expectedRevision)=>call('POST','/chat/messages',{token,body:{version:1,requestId,expectedRevision,content:'export my chat'}});
+  const own=id(),first=await send(sa.token,own,await revision(a));assert.equal(first.status,200,first.text);
+  const before=await snapshot(a);
+  const fresh=await send(sb.token,id(),await revision(b));assert.equal(fresh.status,200,fresh.text);
+  assert.equal(await snapshot(a),before,'B\'s send leaves A\'s transcript and revision untouched');
+  const reused=await send(sb.token,own,await revision(b));
+  assert.ok(reused.status!==200||reused.data?.requestId!==own,'B reusing A\'s id must not be answered as A\'s accepted turn: '+reused.text);
+  assert.equal(await snapshot(a),before,'B reusing A\'s request id leaves A\'s transcript and revision untouched');
+  assert.equal((await db.prepare('SELECT user_id FROM chat_turns WHERE id=?').bind(own).first()).user_id,a.account,'the turn keeps its owner');
+ });
+
  await check('logout ends only the bearer\'s own session: a sibling session and another account keep working, and a repeated logout is proof_required',async()=>{
   const one=await b.session('android'),two=await b.session('android');
   assert.equal((await call('POST','/session/logout',{token:one.token,body:json})).status,200);
