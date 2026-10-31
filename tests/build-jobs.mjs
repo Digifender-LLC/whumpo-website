@@ -236,7 +236,8 @@ try{
  assert.match(await build(zed,mP,mT,note,noteIn('m'),noteOut('m'),spy),/Application review/);
  assert.ok(seen.length>0);
  for(const init of seen){
-  assert.deepEqual(Object.keys(init.headers).sort(),['content-type','x-whumpo-class','x-whumpo-lane'],'The runtime request carries no credential header');
+  assert.deepEqual(init.headers,{'content-type':'application/json','x-whumpo-class':'batch','x-whumpo-lane':sha('runtime-lane|'+mP)},'The runtime request carries exactly these header values, with the project only as a hash');
+  assert.deepEqual(Object.keys(init).sort(),['body','headers','method','signal']);
   assert.deepEqual(JSON.parse(init.body),{version:1,source:note,input:noteIn('m')});
   const wire=JSON.stringify(init);for(const secret of [zed,mP,mT])assert.ok(!wire.includes(secret),'No owner, project or job identity reaches the runtime');
  }
@@ -254,7 +255,8 @@ try{
  assert.deepEqual(claims,['allowed',409,409,409,409,409]);
  assert.deepEqual((await db.prepare('SELECT user_id,project_id FROM app_activation_reviews WHERE run_id=?').bind(oT).all()).results.map(r=>({...r})),[{user_id:zed,project_id:oP}],'Only the job’s own owner and project hold a review of its output');
  // The review insert itself (build_job_publish): a job that is not succeeded cannot back a review even when it has a
- // complete, passing receipt, its cleanup is released and the owner is right. Succeeded is the positive control.
+ // complete, passing receipt, its cleanup is released and the owner is right. A succeeded job publishes through the real
+ // prepareApplication path (positive control), which moves it to published.
  const ruth=await account(undefined,4);
  async function ended(how){
   const p=await project(ruth),d=await draft(ruth,p),lease=await d.admit();
@@ -266,12 +268,14 @@ try{
   if(how==='cancelled')await J.cancelBuildJob(scope(ruth),ruth,d.t);
   await J.reconcileBuildJobs(db);age(d.t,{dispatched_at:'-31 seconds'});await J.reconcileBuildJobs(db);
   const row=await job(d.t);assert.equal(row.state,how);assert.equal(row.cleanup,'released');
+  if(how==='succeeded'){assert.equal((await prepareApplication(scope(ruth),ruth,p,id(),'enable',d.t,d.t)).status,'pending');assert.equal((await job(d.t)).state,'published');return;}
   await prepareApplication(scope(ruth),ruth,p,id(),'enable',d.t,d.t).catch(()=>{}); // creates the project's app space
   const revision=sql.prepare('SELECT revision FROM app_spaces WHERE project_id=?').get(p).revision;
   return ()=>sql.prepare('INSERT INTO app_activation_reviews(id,project_id,user_id,version_id,run_id,enabled,base_revision) VALUES(?,?,?,?,?,1,?)').run(id(),p,ruth,d.t,d.t,revision);
  }
  for(const how of ['expired','failed','cancelled'])assert.throws(await ended(how),/build_job_output/,how+' job cannot back a review');
- assert.doesNotThrow(await ended('succeeded'),'A succeeded job with released cleanup can back its own review');
+ await ended('succeeded');
+ await assert.rejects(J.assertBuildOutput(scope(alice),alice,aP,aT),e=>e.status===409,'J.assertBuildOutput refuses a published job (the trigger allows it by design)');
  // A5: the recorded hold time is real, measured from admission.
  const aged=await draft(ruth);await aged.admit();age(aged.t,{created_at:'-5 seconds'});await J.cancelBuildJob(scope(ruth),ruth,aged.t);
  const [heldMs]=await cleanups(aged.t);assert.equal(heldMs.reason,'not-dispatched');assert.ok(heldMs.held_ms>=5000&&heldMs.held_ms<30000,"held_ms is measured from admission: "+heldMs.held_ms);
