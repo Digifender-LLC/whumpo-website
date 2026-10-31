@@ -23,7 +23,7 @@ import {revokeGitHubCustody,githubConfig} from '../github-connection';
 import {revokeCloudflareCustody,cloudflareConfig} from '../cloudflare-connection';
 import {closureCategories,settleFirstKeys,buildReview,ClosureError} from '../account-closure/review';
 import {requestClosure,transition,checkClosable} from '../account-closure/machine';
-import {closureCounts,closureQuietSQL,type ClosureCounts} from '../account-closure/inventory';
+import {closureCounts,closureQuietSQL,closureCountsMatchSQL,type ClosureCounts} from '../account-closure/inventory';
 import {reconcileStandardChat} from '../standard-ai-recovery';
 import {confirmBackup} from '../github-backups';
 
@@ -58,7 +58,14 @@ const ownerActions={
 /** Conditions only Whumpo support can clear (retained history with no owner control, an unresolved provider outcome or an
  * unfinished key rotation, or a paid invoice: invoice records follow a finance retention schedule nobody has approved, so closure never deletes one silently). Known at review time, so confirmation is refused before anything is taken away. One generic sentence
  * is shown for all of them and for a preservation hold alike: the review never says which, so it never discloses a hold. */
+/** WINDOWS: `metrics.json` ends the wait for three kinds of work so one lost reply cannot stop a closure forever: an uncertain standard AI answer and an
+ * unanswered form continuation after 24 hours, an unconfirmed GitHub backup after 24 hours, a scan ticket at its expiry, and a job-journal job after 72 hours
+ * (`last_at`). That is right only for work whose lost outcome has no effect that must still be settled: every job type today is a content-free email notice.
+ * A FUTURE JOB TYPE WITH A REAL SIDE EFFECT (money moved, a resource created) MUST NOT inherit the 72 hour window: exclude its purpose from the window in
+ * metrics.json or add it to needsSupportKeys before it ships. */
 const needsSupportKeys=['cmsInstances','visitorApplications','backendPublicationReviews','backendFormReviews','backendFormSettings','appActivationReviews','gatewaySpendBuckets','gatewaySpendAttempts','githubGrantUncertain','unresolvedConnectionExchanges','connectionRotationGuards','paidInvoices','activePreservationHolds'] as const;
+/** The one support-only reason shown by name, because it is not sensitive and the owner needs to know that support cannot act yet either. */
+const paidInvoiceNotice='You have paid invoices. Whumpo keeps paid invoice records until a finance retention schedule is approved, so this account cannot be closed yet, by you or by support. Nothing has been changed. You can still download your data.';
 const supportMessage='Some records on this account need Whumpo support before it can be closed automatically. Nothing has been changed and your site stays online. Contact support from this page.';
 const credentials=['githubCredentials','cloudflareCredentials','githubRefreshCustody'] as const;
 /** Identity rows change with every reauthentication ceremony and funnel rows with hourly derivation; both are removed
@@ -82,7 +89,7 @@ const id=(value:unknown)=>{if(typeof value!=='string'||!uuid.test(value))throw n
 const digest=(value:unknown)=>{if(typeof value!=='string'||!/^[a-f0-9]{64}$/.test(value))throw new AccountLifecycleError(400,'invalid_request','Use the current account request.');return value;};
 
 async function closureBinding(db:D1Database,user:string){
- const counts=await closureCounts(db,user),needsSupport=needsSupportKeys.some(k=>k!=='activePreservationHolds'&&counts[k]>0);
+ const counts=await closureCounts(db,user),needsSupport=needsSupportKeys.some(k=>counts[k]>0);
  const required=Object.entries(ownerActions).filter(([k])=>counts[k]>0).map(([k,action])=>({id:k,count:counts[k],action}));
  const repositories=(await db.prepare("SELECT DISTINCT repo_owner||'/'||repo_name AS name FROM github_backups WHERE user_id=? AND state='complete' ORDER BY 1 LIMIT 50").bind(user).all<{name:string}>()).results.map(r=>r.name);
  return {counts,required,needsSupport,repositories,binding:{version:1,kind:'closure',accountId:user,counts:bound(counts),required:required.map(r=>r.id)}};
@@ -92,6 +99,7 @@ async function closureBinding(db:D1Database,user:string){
 function presentClosure(id:string,reviewDigest:string,expiresAt:number,b:Awaited<ReturnType<typeof closureBinding>>){
  const c=b.counts;
  return {id,digest:reviewDigest,expiresAt,canConfirm:b.required.length===0&&!b.needsSupport,requiredBeforeClosure:b.required,needsSupport:b.needsSupport,supportMessage:b.needsSupport?supportMessage:null,
+  paidInvoiceNotice:c.paidInvoices>0?paidInvoiceNotice:null,
   removes:{projects:c.projects,liveWebsites:c.liveProjects,savedWebsiteVersions:c.specificationSnapshots,photos:c.projectFileRecords,chatTurns:c.chatTurns,moduleRecords:c.moduleRecords,moduleFiles:c.moduleFiles,guestPreviewLinks:c.guestPreviewLinks,connectedProviders:Number(c.githubCredentials>0)+Number(c.cloudflareCredentials>0)},
   effects:[
    'Closing starts immediately after you confirm. Chat, publishing, uploads, new connections and every other workspace action stop at once and are not restored automatically. There is no cancellation window in this test release.',
@@ -161,8 +169,7 @@ export async function confirmClosure(env:Pick<Env,'DB'>&Partial<Env>,user:string
  const b=await closureBinding(db,user);
  if(JSON.stringify(b.binding)!==review.binding_json)throw new AccountLifecycleError(409,'stale_review','Your account changed since this review. Prepare a new review.');
  if(b.required.length)throw new AccountLifecycleError(409,'action_required','Complete the listed actions before closing your account.');
- // A hold is refused here with the same generic sentence, never in the review: the review does not depend on restricted safety state.
- if(b.needsSupport||b.counts.activePreservationHolds>0)throw new AccountLifecycleError(409,'action_required',supportMessage);
+ if(b.needsSupport)throw new AccountLifecycleError(409,'action_required',supportMessage);
  const at=Date.now(),principal=workspacePrincipal(db,user);
  let sealed:string;
  try{
@@ -175,9 +182,11 @@ export async function confirmClosure(env:Pick<Env,'DB'>&Partial<Env>,user:string
   throw error;
  }
  const advance=(from:string,to:string,revision:number,set='',...bind:unknown[])=>db.prepare(`UPDATE account_closures SET state='${to}',revision=${revision+1},updated_at=?${set},history=json_insert(history,'$[#]','${to}') WHERE closure_id=? AND account_id=? AND revision=? AND state='${from}'`).bind(at,...bind,reviewId,user,revision);
+ // What the owner saw (projects, versions, photos, Chat, records, uploads, guest links) must still be what exists when the closure is created.
+ const same=closureCountsMatchSQL(b.counts,['projects','liveProjects','specificationSnapshots','projectFileRecords','chatTurns','moduleRecords','moduleFiles','guestPreviewLinks']);
  const statements=[
-  db.prepare("INSERT INTO account_closures(closure_id,account_id,state,revision,requested_at,updated_at,history) SELECT ?,?,'requested',1,?,?,'[\"requested\"]' WHERE EXISTS(SELECT 1 FROM account_lifecycle_reviews WHERE id=? AND user_id=? AND kind='closure' AND review_digest=? AND expires_at>?)")
-   .bind(reviewId,user,at,at,reviewId,user,reviewDigest,now()),
+  db.prepare(`INSERT INTO account_closures(closure_id,account_id,state,revision,requested_at,updated_at,history) SELECT ?,?,'requested',1,?,?,'["requested"]' WHERE EXISTS(SELECT 1 FROM account_lifecycle_reviews WHERE id=? AND user_id=? AND kind='closure' AND review_digest=? AND expires_at>?) AND ${same.sql}`)
+   .bind(reviewId,user,at,at,reviewId,user,reviewDigest,now(),user,...same.numbers),
   advance('requested','reviewed',1,',review_digest=?',sealed),
   advance('reviewed','confirmed',2),
   advance('confirmed','quiescing',3,',quiesced_at=?',at),
@@ -205,7 +214,7 @@ const presentStep=(s:StepRow)=>({step:s.step,state:s.state,attempts:s.attempts,u
 /** closing: steps are running; waiting: an unresolved operation or provider revocation; blocked: a hold or retained record needs an operator. */
 function presentStatus(closure:ClosureRow,steps:StepRow[]){
  const state=closure.state==='closed'?'complete' as const:steps.some(s=>s.state==='blocked')?'blocked' as const:steps.some(s=>s.state==='waiting')?'waiting' as const:'closing' as const;
- return {version:1 as const,closure:{id:closure.closure_id,state,revision:closure.revision,createdAt:closure.requested_at,updatedAt:Math.max(closure.updated_at,...steps.map(s=>s.updated_at)),completedAt:closure.closed_at,
+ return {version:1 as const,closure:{id:closure.closure_id,state,overdue:state!=='complete'&&closure.quiesced_at!==null&&Date.now()-closure.quiesced_at>overdueMs,revision:closure.revision,createdAt:closure.requested_at,updatedAt:Math.max(closure.updated_at,...steps.map(s=>s.updated_at)),completedAt:closure.closed_at,
   steps:steps.map(presentStep)}};
 }
 export async function closureStatus(db:D1Database,user:string,input:unknown){
@@ -218,6 +227,8 @@ export async function resumeClosure(env:Pick<Env,'DB'>&Partial<Env>,user:string,
  record(input,[]);return runClosure(env,user,transport);
 }
 
+/** A closure still not finished this long after it began is shown as overdue to the owner and listed for the operator (tools/maintenance-inventory.mjs): 72 hour job window plus a day. */
+export const overdueMs=96*3600000;
 const owned='SELECT id FROM projects WHERE owner_user_id=?';
 async function withdraw(db:D1Database,user:string):Promise<StepResult>{
  const at=now(),results=await db.batch([
@@ -255,6 +266,9 @@ async function operations(env:Pick<Env,'DB'>&Partial<Env>,user:string,transport:
  for(const turn of turns){try{await reconcileStandardChat(db,user,turn);turnsChecked++;}catch(error){if(error instanceof IdentityError)throw error;}}
  const backups=(await db.prepare("SELECT id FROM github_backups WHERE user_id=? AND state IN ('dispatching','uncertain') ORDER BY created_at LIMIT 5").bind(user).all<{id:string}>()).results;
  for(const backup of backups){try{await confirmBackup(db,env.FILES,user,backup.id,githubConfig(env as Env),transport);backupsChecked++;}catch(error){if(error instanceof IdentityError)throw error;}}
+ // A form-continued AI turn that has been pending or unknown for over 24 hours can no longer be applied (the fenced Chat route is its only resolver), so it is closed as
+ // unavailable through the table's own legal transition; the inventory window ends the wait and this lets the database delete the row with the account.
+ await db.prepare("UPDATE chat_interaction_continuations SET state='failed',reason='unavailable',finished_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE state IN ('pending','unknown') AND started_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 day') AND id IN (SELECT id FROM chat_interaction_submissions WHERE user_id=?)").bind(user).run();
  const counts=await closureCounts(db,user),open=sum(counts,settleFirstKeys);
  return open?{state:'waiting',detail:{unresolvedOperations:open,chatTurnsChecked:turnsChecked,backupsChecked}}:{state:'done',detail:{unresolvedOperations:0,chatTurnsChecked:turnsChecked,backupsChecked}};
 }
@@ -310,12 +324,13 @@ async function runClosure(env:Pick<Env,'DB'>&Partial<Env>,user:string,transport:
     // unresolved continuation guard or any non-cascading reference aborts the whole batch and the journal stays unfinished.
     // The closed state depends on THIS batch having won the journal swap (the purge step is done at exactly the next attempt count) and on
     // the settle-first work still being absent, so a lost swap or work that appeared since the read closes and deletes nothing.
-    const won=`EXISTS(SELECT 1 FROM account_closure_steps WHERE closure_id=? AND step='purge' AND state='done' AND attempts=?) AND ${closureQuietSQL(settleFirstKeys)}`; // the journal write carries the same quiet check, so the two cannot disagree
+    const quiet=[...settleFirstKeys,'activeSubscriptions','paidInvoices'];
+    const won=`EXISTS(SELECT 1 FROM account_closure_steps WHERE closure_id=? AND step='purge' AND state='done' AND attempts=?) AND ${closureQuietSQL(quiet)}`; // the journal write carries the same quiet check, so the two cannot disagree
     const results=await journalBatch(db,closure,next,result,origin,[
      db.prepare(`UPDATE account_closures SET state='closed',revision=revision+1,updated_at=?,closed_at=?,history=json_insert(history,'$[#]','closed') WHERE closure_id=? AND account_id=? AND revision=? AND state='quiescing' AND ${won}`).bind(at,at,closure.closure_id,user,closure.revision,closure.closure_id,next.attempts+1,user),
      db.prepare(`DELETE FROM identity_challenges WHERE account_id=? AND ${fence}`).bind(user,closure.closure_id,user),
      db.prepare(`DELETE FROM users WHERE id=? AND ${fence}`).bind(user,closure.closure_id,user),
-    ],{sql:closureQuietSQL(settleFirstKeys),binds:[user]});
+    ],{sql:closureQuietSQL(quiet),binds:[user]});
     if(results[0].meta.changes!==1||results[1].meta.changes!==1)continue;
    }catch(error){
     if(error instanceof IdentityError)throw error;

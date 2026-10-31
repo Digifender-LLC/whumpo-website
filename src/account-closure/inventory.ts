@@ -32,3 +32,11 @@ export function closureQuietSQL(keys:readonly string[]){
   return `(SELECT COUNT(*) FROM ${table} WHERE ${owner.includes(' IN ')?owner:`${owner} IN (SELECT id FROM scope)`}${condition?` AND (${condition})`:''})`;});
  return `0=(WITH scope AS (SELECT id FROM users WHERE id=?), owned_projects AS (SELECT id FROM projects WHERE owner_user_id IN (SELECT id FROM scope)) SELECT ${parts.join('+')})`;
 }
+
+/** A condition that is true only while the named metrics still equal what the owner reviewed (bound as numbers after the account id). Confirmation
+ * puts it in the statement that creates the closure, so a project, photo or record created between the last read and the batch cannot be deleted unseen. */
+export function closureCountsMatchSQL(counts:ClosureCounts,keys:readonly string[]){
+ const parts=keys.map(key=>{const m=metrics.find(x=>x[0]===key);if(!m)throw Error('Unknown closure metric');const [,table,owner,condition]=m;
+  return `(SELECT COUNT(*) FROM ${table} WHERE ${owner.includes(' IN ')?owner:`${owner} IN (SELECT id FROM scope)`}${condition?` AND (${condition})`:''})=?`;});
+ return {sql:`(WITH scope AS (SELECT id FROM users WHERE id=?), owned_projects AS (SELECT id FROM projects WHERE owner_user_id IN (SELECT id FROM scope)) SELECT ${parts.join(' AND ')})`,numbers:keys.map(k=>counts[k])};
+}

@@ -119,7 +119,16 @@ export async function restoreControlD1(target,directory,expectedDigest){
  for(const table of snapshot.tables){if(table.name==='sqlite_sequence')statements.push('DELETE FROM sqlite_sequence');for(const row of table.rows)statements.push(`INSERT INTO ${ident(table.name)} (${table.columns.map(ident).join(',')}) VALUES (${row.join(',')})`);}
  for(const s of snapshot.schema.filter(s=>s.type!=='table'))statements.push(s.sql);
  hold(statements.length<=limits.statements&&statements.reduce((n,s)=>n+Buffer.byteLength(s),0)<=limits.sqlBytes,'restore-bound');
- let result;try{result=await target.batch(statements.map(sql=>target.prepare(sql)));}catch{throw new DrillHold('restore-batch-failed');}
+ // Each prepare() on a proxied local D1 binding costs about 2 ms of synchronous CPU, so preparing ~1,400 statements in one go blocked the
+ // event loop for 3 to 6 s. The proxy's keep-alive socket (idle since the last call, 5 s server timeout) then expired while the loop was
+ // blocked, and the batch was written to the dead socket: 'fetch failed' / UND_ERR_SOCKET, about one run in two. Yielding between slices
+ // lets the client see the socket close and open a fresh one. The restore is still ONE atomic batch with the same statements.
+ let result;
+ try{
+  const prepared=[];
+  for(let i=0;i<statements.length;i++){prepared.push(target.prepare(statements[i]));if(i%50===49)await new Promise(resolve=>setImmediate(resolve));}
+  result=await target.batch(prepared);
+ }catch{throw new DrillHold('restore-batch-failed');}
  hold(result.length===statements.length&&result.every(r=>r.success!==false),'restore-batch-failed');
  hold((await target.prepare('PRAGMA foreign_key_check').all()).results.length===0,'restore-integrity');
  // PRAGMA quick_check exhausts local D1 memory (SQLITE_NOMEM) on the complete
