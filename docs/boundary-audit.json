@@ -129,7 +129,7 @@
     },
     {
      "file": "wrangler.jsonc",
-     "contains": "\"database_id\": \"c349c820-c6f8-436b-b6e0-48abd4be027a\""
+     "contains": "\"database_id\": \"11c3a64e-fae4-4e53-98b6-532a2be64bd6\""
     },
     {
      "file": "tests/boundary-operator-target.mjs",
