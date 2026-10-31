@@ -47,8 +47,8 @@ const seeded=await all("SELECT name,sql FROM sqlite_master WHERE name IN ('app_v
 for(const t of seeded)await run('DROP TRIGGER '+t.name);
 try{
  await check('the objects exist; consent is a 0/1 column defaulting to 0',async()=>{
-  const names=(await all("SELECT type,name FROM sqlite_master WHERE name IN ('visitor_notification_addresses','staff_notification_optins','notification_recipients','module_record_consent_admit','staff_notification_optin_revoked') ORDER BY name")).map(r=>r.type+':'+r.name);
-  assert.deepEqual(names.sort(),['table:staff_notification_optins','table:visitor_notification_addresses','trigger:module_record_consent_admit','trigger:staff_notification_optin_revoked','view:notification_recipients']);
+  const names=(await all("SELECT type,name FROM sqlite_master WHERE name IN ('visitor_notification_addresses','staff_notification_optins','notification_recipients','staff_notification_optin_revoked') ORDER BY name")).map(r=>r.type+':'+r.name);
+  assert.deepEqual(names.sort(),['table:staff_notification_optins','table:visitor_notification_addresses','trigger:staff_notification_optin_revoked','view:notification_recipients']);
   const column=(await all("SELECT name,\"notnull\",dflt_value FROM pragma_table_info('module_records') WHERE name='receipt_consent'"))[0];
   assert.deepEqual([column.notnull,column.dflt_value],[1,'0']);
   const fks=await all("SELECT \"from\",\"table\",on_delete FROM pragma_foreign_key_list('visitor_notification_addresses')");
@@ -152,7 +152,8 @@ try{
   await assert.rejects(run("UPDATE visitor_notification_addresses SET address=? WHERE visitor_id=?",shared,fresh),/notification_address_suppressed/);
   const again=await o.visitor();await o.staff(again);await o.address(again,'again@example.test');
   await suppress(o,'again@example.test','complaint');await fails(R.optInStaff(db,o.p,o.access,again),409);
-  await assert.rejects(o.record(submitter),/notification_address_suppressed/);
+  // WH-158: a suppressed address no longer refuses the record; the view excludes it, so no receipt can be derived.
+  const kept=await o.record(submitter);assert.ok(typeof kept==='string','The consenting submission of a suppressed address is admitted');assert.ok(!(await recipients(o)).some(r=>r[0]==='submitter'),'and derives no receipt recipient');
   // The suppression is final: it cannot be changed or deleted by the owner.
   await assert.rejects(run('DELETE FROM contact_notification_suppressions WHERE user_id=?',o.user),/contact_suppression_final/);
  });

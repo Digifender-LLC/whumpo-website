@@ -24,7 +24,7 @@ try{
  await check('the two tables exist, are STRICT and carry the declared keys; the three old tables are gone with their triggers and indexes',async()=>{
   assert.deepEqual((await all("SELECT name,strict FROM pragma_table_list WHERE name IN ('notification_notices','notification_send_ledger') ORDER BY name")).map(r=>[r.name,r.strict]),[['notification_notices',1],['notification_send_ledger',1]]);
   assert.deepEqual((await all("SELECT name,pk FROM pragma_table_info('notification_notices') ORDER BY cid")).map(r=>r.name),
-   ['id','user_id','scope','project_id','destination_id','recipient_ref','recipient_key','template','event_ref','provider','state','attempts','job_id','created_at','expires_at','dispatched_at','outcome_at','provider_ref','reason','lookups','reconcile_until']);
+   ['id','user_id','scope','project_id','destination_id','recipient_ref','recipient_key','template','event_ref','provider','state','attempts','job_id','created_at','expires_at','dispatched_at','outcome_at','provider_ref','reason','lookups','reconcile_until','sent_to']);
   assert.deepEqual((await all("SELECT name,pk FROM pragma_table_info('notification_send_ledger') ORDER BY cid")).map(r=>[r.name,r.pk]),[['provider',1],['day',2],['sends',0],['ceiling',0]]);
   assert.deepEqual((await all("SELECT \"from\",\"table\",on_delete FROM pragma_foreign_key_list('notification_notices') ORDER BY \"from\"")).map(r=>[r.from,r.table,r.on_delete]),
    [['destination_id','contact_notification_destinations','CASCADE'],['job_id','job_journal','SET NULL'],['project_id','projects','CASCADE'],['user_id','users','CASCADE']]);
@@ -35,7 +35,7 @@ try{
    ['contact_destination_reviews','contact_notification_destinations','contact_notification_suppression_resets','contact_notification_suppressions','job_journal']);
  });
  await check('every trigger is present and each one is on the table it names',async()=>{
-  const triggers=(await all("SELECT name,tbl_name FROM sqlite_master WHERE type='trigger' AND (name LIKE 'notification\\_%' ESCAPE '\\' OR name LIKE 'safety\\_hold\\_notification%' ESCAPE '\\') ORDER BY name")).map(r=>r.name+'@'+r.tbl_name);
+  const triggers=(await all("SELECT name,tbl_name FROM sqlite_master WHERE type='trigger' AND (name LIKE 'notification\\_%' ESCAPE '\\' AND name NOT LIKE 'notification\\_configuration%' ESCAPE '\\' OR name LIKE 'safety\\_hold\\_notification%' ESCAPE '\\') ORDER BY name")).map(r=>r.name+'@'+r.tbl_name);
   assert.deepEqual(triggers,[
    'notification_notices_counted@notification_notices','notification_notices_destination_removed@contact_notification_destinations','notification_notices_job_cancelled@notification_notices',
    'notification_notices_new@notification_notices','notification_notices_project_removed@projects','notification_notices_retained@notification_notices','notification_notices_suppressed@contact_notification_suppressions',

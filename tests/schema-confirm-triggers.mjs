@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {currentSiteFixtureHandlers,createFixtureProject,changeFixtureWebsite} from './current-site-fixture.mjs';
+import {currentSiteFixtureHandlers,createFixtureProject,changeFixtureWebsite,configureFixtureModules} from './current-site-fixture.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
 
@@ -23,6 +23,7 @@ const control=(kind,reviewId)=>JSON.stringify({type:'confirm',kind,reviewId});
 const kinds=[
  {kind:'site',table:'publication_actions'},{kind:'version',table:'version_removals'},{kind:'photo',table:'photo_removals'},
  {kind:'contact',table:'contact_reviews'},{kind:'contactNotification',table:'contact_destination_reviews'},
+ {kind:'notificationConfiguration',table:'notification_configuration_reviews'}, // WH-158 (schema batch 5)
 ];
 const status=(table,review)=>one(`SELECT status,confirmed_by FROM ${table} WHERE id=?`,review);
 async function exercise({kind,table},review,confirmCommand){
@@ -75,5 +76,15 @@ try{
  await run("UPDATE publication_actions SET status='applied',confirmed_by=id WHERE id=?",withdraw);
  assert.equal((await one('SELECT version_id FROM publications WHERE project_id=?',project)).version_id,null,'an unpublish review can be confirmed by its own turn');
  cases++;
- console.log(`Confirm triggers (R2): ${cases} groups; each of the five refuses 6 forged confirming turns and applies only the guided typed control, on ${process.argv.includes('--d1')?'local D1':'SQLite'}.`);
+ // WH-158 appointment notice configuration: the same guarantee for its review (a records module with a form, then the review through the real Chat command).
+ const pins=kind=>{const e=m.moduleCatalog.find(x=>x.kind===kind);return {module:{...e.module},schema:{...e.schema}};};
+ for(const feature of ['core.editing','core.forms'])for(const operation of ['prepare','confirm','dispatch'])await run("INSERT INTO feature_preview_grants VALUES(?,1,?,?,?,?,'private-test-acceptance','synthetic WH-158 confirm fixture',unixepoch()-1,unixepoch()+3600,unixepoch(),NULL)",crypto.randomUUID(),user,project,feature,operation);
+ await configureFixtureModules(scope,user,project,[{id:'members',kind:'access',...pins('access'),dependencies:[],config:{roles:['staff'],enrollment:'invitation'}},
+  {id:'requests',kind:'records',...pins('records'),dependencies:['members'],config:{retentionDays:30,schemas:[{id:'request',fieldsRevision:1,fields:[{key:'name',label:'Name',type:'text',optional:false,read:'owner'}],staffWrite:[]}],forms:[{id:'appointment',recordId:'request',submit:'visitor',uploadCollectionId:null}],views:[]}}]);
+ for(const instanceId of ['members','requests']){
+  const turn=crypto.randomUUID(),r=await m.sendChatControl(scope,user,{id:turn,revision:(await m.readChat(scope,user)).state.revision,action:{type:'moduleActivationReview',projectId:project,instanceId,action:'activate'}});assert.equal(r.status,200,r.error);
+  const saved=await one('SELECT * FROM module_activation_reviews WHERE id=?',turn),apply=crypto.randomUUID(),a=await m.sendChatControl(scope,user,{id:apply,revision:(await m.readChat(scope,user)).state.revision,action:{type:'moduleActivationApply',reviewId:saved.id,reviewDigest:saved.review_digest,expectedRevision:saved.expected_activation_revision}});assert.equal(a.status,200,a.error);
+ }
+ await exercise(kinds[5],await chat(`/review-notification-setup ${project} requests appointment owner Garden Salon`),'/confirm-notification-setup');
+ console.log(`Confirm triggers (R2): ${cases} groups; each of the six refuses 6 forged confirming turns and applies only the guided typed control, on ${process.argv.includes('--d1')?'local D1':'SQLite'}.`);
 }finally{await store.close?.();}

@@ -32,5 +32,7 @@ interface Env {
   // WH-036 owner activation of contact notices (docs/contact-forms.md). All three unset means inactive.
   CONTACT_NOTIFICATION_PROVIDER?: string;
   CONTACT_NOTIFICATION_REVIEW?: string;
+  // WH-158 owner's monthly spending limit for customer-configured notices, whole cents. Unset means every configured notice is cancelled at send time (ceiling-unset).
+  NOTIFICATION_CUSTOMER_CEILING_CENTS?: string;
   CONTACT_EMAIL?: SendEmail;
 }

@@ -1788,7 +1788,7 @@ CREATE TABLE cloudflare_revocation_health (
 CREATE TABLE chat_review_receipts (
  turn_id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
  user_id TEXT NOT NULL REFERENCES users(id),
- kind TEXT NOT NULL CHECK(kind IN ('githubGrant','application','appPage','appRestore','backendPublication','backendForm','directory','contactNotification','backendState','cmsImport','cmsDiscard','cmsUnpublish','cmsPublish','cmsSetup','backup','dns','hosting','backendNomination')),
+ kind TEXT NOT NULL CHECK(kind IN ('githubGrant','application','appPage','appRestore','backendPublication','backendForm','directory','contactNotification','backendState','cmsImport','cmsDiscard','cmsUnpublish','cmsPublish','cmsSetup','backup','dns','hosting','backendNomination','notificationConfiguration')),
  review_id TEXT NOT NULL,
  reply_digest TEXT NOT NULL CHECK(length(reply_digest)=64)
 );
@@ -4213,7 +4213,8 @@ CREATE TRIGGER chat_review_receipt_admit BEFORE INSERT ON chat_review_receipts B
   (NEW.kind='backup' AND EXISTS(SELECT 1 FROM github_backups WHERE id=NEW.review_id AND user_id=NEW.user_id)) OR
   (NEW.kind='dns' AND EXISTS(SELECT 1 FROM cloudflare_dns_actions WHERE id=NEW.review_id AND user_id=NEW.user_id)) OR
   (NEW.kind='hosting' AND EXISTS(SELECT 1 FROM domain_connections WHERE id=NEW.review_id AND user_id=NEW.user_id)) OR
-  (NEW.kind='backendNomination' AND EXISTS(SELECT 1 FROM backend_nominations WHERE id=NEW.review_id AND user_id=NEW.user_id))
+  (NEW.kind='backendNomination' AND EXISTS(SELECT 1 FROM backend_nominations WHERE id=NEW.review_id AND user_id=NEW.user_id)) OR
+  (NEW.kind='notificationConfiguration' AND EXISTS(SELECT 1 FROM notification_configuration_reviews WHERE id=NEW.review_id AND user_id=NEW.user_id))
  );
 END;
 
@@ -6353,9 +6354,12 @@ CREATE TABLE notification_notices (
  dispatched_at INTEGER CHECK(dispatched_at IS NULL OR dispatched_at>=created_at),
  outcome_at INTEGER CHECK(outcome_at IS NULL OR outcome_at>0),
  provider_ref TEXT CHECK(provider_ref IS NULL OR length(provider_ref) BETWEEN 1 AND 100),
- reason TEXT CHECK(reason IS NULL OR reason IN ('rejected','unavailable','exhausted','suppressed','expired','contained','uncertain','ceiling','recipient-revoked','record-removed','template-withdrawn','unreconciled')),
+ reason TEXT CHECK(reason IS NULL OR reason IN ('rejected','unavailable','exhausted','suppressed','expired','contained','uncertain','ceiling','recipient-revoked','record-removed','template-withdrawn','unreconciled','ceiling-unset','configuration-changed')),
  lookups INTEGER NOT NULL DEFAULT 0 CHECK(lookups BETWEEN 0 AND 3),
  reconcile_until INTEGER CHECK(reconcile_until IS NULL OR reconcile_until>0),
+ -- PERSONAL DATA: the exact address the last attempt was sent to (set when the attempt is claimed). A bounce, complaint or unsubscribe suppresses only this, and nothing when it is NULL.
+ -- It stays with the notice (30 days after the outcome, 90 for unresolved evidence, longer under a safety hold) and is cleared at once when a visitor's address is removed or changed or the visitor is deleted (triggers in src/shared-modules/schema.sql).
+ sent_to TEXT CHECK(sent_to IS NULL OR length(sent_to) BETWEEN 3 AND 254),
  UNIQUE(template,event_ref,recipient_key),
  CHECK((scope='owner-destination' AND project_id IS NOT NULL AND destination_id IS NOT NULL AND recipient_ref IS NULL)
   OR (scope='account-email' AND project_id IS NULL AND destination_id IS NULL)
@@ -6402,8 +6406,9 @@ CREATE TRIGGER notification_notices_new BEFORE INSERT ON notification_notices BE
  SELECT RAISE(ABORT,'notification_notice_scope') WHERE
   (NEW.scope='owner-destination' AND NOT EXISTS(SELECT 1 FROM contact_notification_destinations d WHERE d.id=NEW.destination_id AND d.user_id=NEW.user_id AND d.project_id=NEW.project_id AND d.state IN ('unverified','verified')))
   OR (NEW.scope IN ('project-staff','submitter') AND NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id AND owner_user_id=NEW.user_id));
- SELECT RAISE(ABORT,'notification_notice_rate') WHERE (SELECT count(*) FROM notification_notices WHERE recipient_key=NEW.recipient_key AND created_at>NEW.created_at-3600000)>=10
-  OR (SELECT count(*) FROM notification_notices WHERE recipient_key=NEW.recipient_key AND created_at>NEW.created_at-86400000)>=50;
+ -- Customer-configured appointment notices (WH-158) count in their own bucket per recipient, so a form burst cannot use up the contact notice caps.
+ SELECT RAISE(ABORT,'notification_notice_rate') WHERE (SELECT count(*) FROM notification_notices WHERE recipient_key=NEW.recipient_key AND (template GLOB 'appointment.*')=(NEW.template GLOB 'appointment.*') AND created_at>NEW.created_at-3600000)>=10
+  OR (SELECT count(*) FROM notification_notices WHERE recipient_key=NEW.recipient_key AND (template GLOB 'appointment.*')=(NEW.template GLOB 'appointment.*') AND created_at>NEW.created_at-86400000)>=50;
 END;
 
 -- The frozen state table (docs/notifications.md). Nothing leaves unknown-outcome for queued, deferred or dispatching; it goes to an evidence state,

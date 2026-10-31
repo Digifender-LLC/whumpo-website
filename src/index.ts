@@ -85,6 +85,7 @@ import {contactDelivery} from './contact-email';
 import {dispatchJobs} from './job-dispatcher';
 import {handleModuleRequest,cleanupModuleRequestReceipts} from './shared-modules/api';
 import {ModuleError} from './shared-modules/policy';
+import {readNotificationSetup,deliveryState} from './notification-configurations';
 import {readOwnerRecords,readRecordsSummary,cleanupModuleRecords} from './shared-modules/records';
 import {readOwnerFileCollections,removeOwnerFileFromCollection} from './shared-modules/files-gallery';
 import {listDNSActions,reviewTXT,reviewCNAME,confirmDNS} from './cloudflare-dns';
@@ -430,7 +431,8 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
   if(method==='POST'&&collectionRemoval)return json(await removeOwnerFileFromCollection(env.DB,user.id,collectionRemoval[1],await body(request)));
   // WH-127 owner records panel: counts per records instance (the records.summary@1 facts), then the list below.
   const recordsSummary=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/module-records$/);
-  if(method==='GET'&&recordsSummary)return json(await readRecordsSummary(env.DB,user.id,recordsSummary[1]));
+  // WH-158: the appointment notice settings and sending state ride on the same owner read; counts and switches only.
+  if(method==='GET'&&recordsSummary)return json({...await readRecordsSummary(env.DB,user.id,recordsSummary[1]),notifications:await readNotificationSetup(env.DB,user.id,recordsSummary[1],deliveryState(contactDelivery(env)))});
   // WH-127 owner records list (dashboard only; never Chat or model input).
   const ownerRecords=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/module-records\/([0-9a-f-]{36})\/([a-z][a-z0-9-]{0,39})$/);
   if(method==='GET'&&ownerRecords){

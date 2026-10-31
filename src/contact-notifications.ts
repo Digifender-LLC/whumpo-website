@@ -2,6 +2,7 @@ import {ContactError} from './contacts';
 import {receiptStatement,reviewedReply,reviewChangedMessage} from './chat-review-receipts';
 import {notificationCatalog} from './notification-catalog';
 import {enqueueNotice,maxNoticeAttempts,noticeSendsInWindow,notificationLane,runNotificationDelivery,applyNoticeEvent,type DeliveryDeps} from './notification-outbox';
+import {customerCeilingFromEnv} from './notification-configurations';
 import type {JobType} from './job-dispatcher';
 /**
  * WH-036 contact notifications. The private inbox (`contact_submissions`) is the source of truth; a notice is only a
@@ -14,8 +15,10 @@ import type {JobType} from './job-dispatcher';
  * (https://developers.cloudflare.com/email-routing/).
  */
 /** `sendCeiling` is the most provider calls allowed in any 32 consecutive UTC days (the owner's monthly spending ceiling). */
-export type ContactNotificationSettings={provider:string;review:string;sendCeiling:number};
-export type ContactNotificationEnv={CONTACT_NOTIFICATION_PROVIDER?:string;CONTACT_NOTIFICATION_REVIEW?:string};
+export type ContactNotificationSettings={provider:string;review:string;sendCeiling:number;
+ /** WH-158 monthly spending limit for customer-configured notices, in whole cents; set only by the owner (NOTIFICATION_CUSTOMER_CEILING_CENTS). Unset or 0: configured notices are cancelled at send time. */
+ customerCeilingCents?:number};
+export type ContactNotificationEnv={CONTACT_NOTIFICATION_PROVIDER?:string;CONTACT_NOTIFICATION_REVIEW?:string;NOTIFICATION_CUSTOMER_CEILING_CENTS?:string};
 /**
  * Owner spending ceiling (issue #146, October 4, 2026): up to $5 per month. Cloudflare Email Service lists Email Sending at
  * $0.35 per 1,000 emails after 3,000 included per month on Workers Paid (https://developers.cloudflare.com/email-service/platform/pricing/,
@@ -31,7 +34,7 @@ export const contactMonthlyCeilingCents=500;
 const catalogCeiling=notificationCatalog.providers['cloudflare-email'].ceiling?.callsPer32Days??0;
 export const implementedContactNotificationProviders:Readonly<Record<string,{sendCeiling:number}>>=Object.freeze({'cloudflare-email':Object.freeze({sendCeiling:Math.min(catalogCeiling,Math.floor(contactMonthlyCeilingCents*1000/35))})});
 /** Never carries the visitor's name, email or message. `verificationCode` exists only for kind 'verification' (the owner proves the address); `confirmationToken` only for the account email-change confirmation, in memory for the one provider call. */
-export type ContactNotice={outboxId:string;idempotencyKey:string;kind:'verification'|'new_message'|'account';template:string;projectId:string|null;recipient:string;verificationCode?:string;confirmationToken?:string};
+export type ContactNotice={outboxId:string;idempotencyKey:string;kind:'verification'|'new_message'|'account'|'configured';template:string;projectId:string|null;recipient:string;configured?:{variables:Record<string,string>;fields:Record<string,{options:string[]}>};verificationCode?:string;confirmationToken?:string};
 /**
  * `retryable` only when the provider certainly did not take the message. `uncertain` (and any throw or timeout) means it may
  * have been taken: the notice is final and never resent, because the selected provider has no idempotency key.
@@ -49,7 +52,8 @@ export const verificationValidityMs=3600000;
 const cleaned=(value:unknown,max:number)=>typeof value==='string'&&value.trim()&&value.trim().length<=max&&!/[\u0000-\u001f\u007f]/.test(value)?value.trim():null;
 export function contactNotificationConfig(env:ContactNotificationEnv,implemented:Readonly<Record<string,{sendCeiling:number}>>=implementedContactNotificationProviders){
  const provider=cleaned(env.CONTACT_NOTIFICATION_PROVIDER,60),review=cleaned(env.CONTACT_NOTIFICATION_REVIEW,200);
- const settings:ContactNotificationSettings|null=provider&&review&&Object.hasOwn(implemented,provider)?{provider,review,sendCeiling:implemented[provider].sendCeiling}:null;
+ const cents=customerCeilingFromEnv(env);
+ const settings:ContactNotificationSettings|null=provider&&review&&Object.hasOwn(implemented,provider)?{provider,review,sendCeiling:implemented[provider].sendCeiling,...(cents?{customerCeilingCents:cents}:{})}:null;
  return {settings};
 }
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;

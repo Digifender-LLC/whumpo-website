@@ -1,3 +1,4 @@
+import type {AdmissionNotice} from '../notification-configurations';
 import {canonicalJSON,jsonDigest} from '../project-specification/v2/json';
 import {workspacePredicate} from '../workspace-identity/admission';
 import {ModuleError,decideModule,moduleOperations,moduleRequest,type ModuleDecision,type ModuleOperation,type ModulePrincipal,type ModuleRequest} from './policy';
@@ -14,7 +15,9 @@ import {collectionsHandlers} from './collections';
  * context, credentials or funding is reachable from here (checked statically by tests/shared-modules-registry.mjs). */
 /** `host` carries what only the receiving Worker can supply: its private R2 binding and, on the visitor upload route,
  * the request's bounded upload bytes (WH-128). Handlers never receive a bucket name, prefix or object key from callers. */
-export type ModuleHost={files:R2Bucket|null;upload:Uint8Array|null};
+export type ModuleHost={files:R2Bucket|null;upload:Uint8Array|null;
+ /** WH-158: the receiving Worker's view of the owner's monthly spending limit for configured appointment notices; unset or absent queues no notice at admission. */
+ notices?:AdmissionNotice};
 export type ModuleContext={request:ModuleRequest;resource:ResolvedResource;principal:ModulePrincipal;decision:Extract<ModuleDecision,{decision:'allow'}>;host:ModuleHost};
 export type ModuleReadHandler=(db:D1Database,context:ModuleContext)=>Promise<Record<string,unknown>>;
 /** Writes return statements to commit atomically and a bounded result that must not echo submitted values. */
@@ -39,7 +42,7 @@ function principalPredicate(db:D1Database,p:ModulePrincipal){
 type Receipt={request_hash:string;result_json:string;created_at:number;config_revision:number};
 const response=(r:ModuleRequest,result:Record<string,unknown>,receipt:{createdAt:number;replayed:boolean}|null)=>({api:'whumpo-modules' as const,version:1 as const,operation:r.operation,resourceId:r.resourceId,configRevision:r.configRevision,requestId:r.requestId,receipt,result});
 
-async function authorize(db:D1Database,principal:ModulePrincipal,request:ModuleRequest,host:ModuleHost={files:null,upload:null}){
+async function authorize(db:D1Database,principal:ModulePrincipal,request:ModuleRequest,host:ModuleHost={files:null,upload:null,notices:null}){
  const resource=await resolveResource(db,principal,request.resourceId,request.configRevision);
  if(moduleOperations[request.operation].kind!==resource.kind)throw new ModuleError('not_found');
  const decision=decideModule(principal,resource.instance,request.operation,request.target);
@@ -49,10 +52,10 @@ async function authorize(db:D1Database,principal:ModulePrincipal,request:ModuleR
 /** Anonymous (public) writes additionally pass the public intake admission of the receiving host (WH-127: the contact
  * form's Turnstile Siteverify and per-connection allowance, applied by the visitor gateway). Without it a public write is
  * `unavailable`; it runs after authorization and after an exact replay has been read back, before the handler. */
-export type ModuleRequestOptions={publicAdmission?:(context:ModuleContext)=>Promise<void>;files?:R2Bucket;upload?:Uint8Array};
+export type ModuleRequestOptions={publicAdmission?:(context:ModuleContext)=>Promise<void>;files?:R2Bucket;upload?:Uint8Array;notices?:AdmissionNotice};
 export async function handleModuleRequest(db:D1Database,principal:ModulePrincipal,input:unknown,handlers:ModuleHandlers=moduleHandlers,options:ModuleRequestOptions={}){
  const request=moduleRequest(input),op=moduleOperations[request.operation];
- const context=await authorize(db,principal,request,{files:options.files??null,upload:options.upload??null});
+ const context=await authorize(db,principal,request,{files:options.files??null,upload:options.upload??null,notices:options.notices??null});
  const handler=handlers[request.operation];
  if(!op.write){
   if(!handler)throw new ModuleError('unavailable','This module operation is not delivered yet.');

@@ -720,10 +720,15 @@ CREATE TRIGGER staff_notification_optin_immutable BEFORE UPDATE ON staff_notific
 CREATE TRIGGER staff_notification_optin_revoked AFTER UPDATE OF state ON module_access_roles WHEN NEW.state='revoked' AND OLD.state='granted' BEGIN
  DELETE FROM staff_notification_optins WHERE instance_id=NEW.instance_id AND visitor_id=NEW.visitor_id;
 END;
--- A consenting receipt is refused for a suppressed address; the consent itself is only meaningful with a verified address (view below).
-CREATE TRIGGER module_record_consent_admit BEFORE INSERT ON module_records WHEN NEW.receipt_consent=1 BEGIN
- SELECT RAISE(ABORT,'notification_address_suppressed') WHERE EXISTS(SELECT 1 FROM visitor_notification_addresses a JOIN projects p ON p.id=NEW.project_id
-  JOIN contact_notification_suppressions s ON s.user_id=p.owner_user_id AND s.address=a.address WHERE a.visitor_id=NEW.visitor_id);
+-- A consent is only meaningful with a verified, unsuppressed address, and that is decided by the view below and by the form admission, never by refusing the record:
+-- a suppressed visitor who ticks "email me a receipt" still submits, and no receipt is queued (WH-158).
+-- WH-158: a notice remembers the exact address of its last attempt (`notification_notices.sent_to`) so a bounce can suppress exactly that address. It is the
+-- visitor's address, so it leaves with it: removing or changing the address, or deleting the visitor (the cascade deletes the address row), clears it on that visitor's notices.
+CREATE TRIGGER visitor_notification_address_erased AFTER DELETE ON visitor_notification_addresses BEGIN
+ UPDATE notification_notices SET sent_to=NULL WHERE recipient_key IN ('project-staff:'||OLD.visitor_id,'submitter:'||OLD.visitor_id) AND sent_to IS NOT NULL;
+END;
+CREATE TRIGGER visitor_notification_address_replaced AFTER UPDATE OF address ON visitor_notification_addresses WHEN NEW.address IS NOT OLD.address BEGIN
+ UPDATE notification_notices SET sent_to=NULL WHERE recipient_key IN ('project-staff:'||OLD.visitor_id,'submitter:'||OLD.visitor_id) AND sent_to IS NOT NULL;
 END;
 -- The single place recipients are derived (read at enqueue and again before every provider call): `ref` is the destination id (owner),
 -- the visitor id (staff) or the record id (submitter). Suppression is the project owner's, across all three scopes.
@@ -744,3 +749,87 @@ CREATE VIEW notification_recipients(project_id,scope,ref,address) AS
   JOIN projects p ON p.id=r.project_id
   WHERE r.receipt_consent=1 AND r.submitter_kind!='public' AND r.expires_at>unixepoch()
    AND NOT EXISTS(SELECT 1 FROM contact_notification_suppressions s WHERE s.user_id=p.owner_user_id AND s.address=a.address);
+
+-- WH-158 customer notification configuration (docs/notifications.md; schema batch 5). One row per records instance form: which of the
+-- three standard appointment presets are on (owner notice, staff notice, submitter receipt), the owner's business name, the validated
+-- configuration objects (template pins, scopes, limits, sender; never an address), the provider price they were reviewed at, a revision and a
+-- digest. It is written only by notification_configuration_review_apply, i.e. by an exact owner review confirmed with a typed control. Configuring
+-- provisions nothing: the sender, provider and ceiling are platform facts; whether anything is sent is decided at send time.
+CREATE TABLE notification_configurations (
+ instance_id TEXT NOT NULL REFERENCES module_instances(id) ON DELETE CASCADE,
+ form_id TEXT NOT NULL CHECK(length(form_id) BETWEEN 1 AND 40 AND form_id NOT GLOB '*[^a-z0-9-]*'),
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ owner_notice INTEGER NOT NULL CHECK(owner_notice IN (0,1)),
+ staff_notice INTEGER NOT NULL CHECK(staff_notice IN (0,1)),
+ receipt INTEGER NOT NULL CHECK(receipt IN (0,1)),
+ business_name TEXT NOT NULL CHECK(length(business_name) BETWEEN 1 AND 80),
+ config_json TEXT NOT NULL CHECK(json_valid(config_json) AND json_type(config_json)='array' AND length(CAST(config_json AS BLOB))<=8192),
+ price_micros INTEGER NOT NULL CHECK(price_micros>=0),
+ price_checked_at TEXT NOT NULL CHECK(length(price_checked_at)=10),
+ revision INTEGER NOT NULL CHECK(revision>=1),
+ digest TEXT NOT NULL CHECK(length(digest)=64 AND digest NOT GLOB '*[^0-9a-f]*'),
+ review_id TEXT NOT NULL UNIQUE CHECK(length(review_id)=36),
+ created_at INTEGER NOT NULL CHECK(created_at>0),
+ PRIMARY KEY(instance_id,form_id)
+) STRICT;
+CREATE INDEX notification_configurations_project ON notification_configurations(project_id);
+-- The exact owner review. The id is the preparing chat turn; the confirming control is a later typed `confirm` turn for this review.
+CREATE TABLE notification_configuration_reviews (
+ id TEXT PRIMARY KEY CHECK(length(id)=36),
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ instance_id TEXT NOT NULL REFERENCES module_instances(id) ON DELETE CASCADE,
+ form_id TEXT NOT NULL CHECK(length(form_id) BETWEEN 1 AND 40 AND form_id NOT GLOB '*[^a-z0-9-]*'),
+ owner_notice INTEGER NOT NULL CHECK(owner_notice IN (0,1)),
+ staff_notice INTEGER NOT NULL CHECK(staff_notice IN (0,1)),
+ receipt INTEGER NOT NULL CHECK(receipt IN (0,1)),
+ business_name TEXT NOT NULL CHECK(length(business_name) BETWEEN 1 AND 80),
+ config_json TEXT NOT NULL CHECK(json_valid(config_json) AND json_type(config_json)='array' AND length(CAST(config_json AS BLOB))<=8192),
+ price_micros INTEGER NOT NULL CHECK(price_micros>=0),
+ price_checked_at TEXT NOT NULL CHECK(length(price_checked_at)=10),
+ base_revision INTEGER NOT NULL CHECK(base_revision>=0),
+ digest TEXT NOT NULL CHECK(length(digest)=64 AND digest NOT GLOB '*[^0-9a-f]*'),
+ expires_at TEXT NOT NULL,
+ status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','applied')),
+ confirmed_by TEXT UNIQUE
+) STRICT;
+CREATE INDEX notification_configuration_reviews_project ON notification_configuration_reviews(project_id,user_id);
+CREATE TRIGGER notification_configuration_review_insert BEFORE INSERT ON notification_configuration_reviews BEGIN
+ SELECT RAISE(ABORT,'notification_configuration_changed') WHERE NEW.status!='pending' OR NEW.confirmed_by IS NOT NULL
+  OR NOT EXISTS(SELECT 1 FROM module_instances i JOIN projects p ON p.id=i.project_id WHERE i.id=NEW.instance_id AND i.project_id=NEW.project_id AND i.kind='records' AND p.owner_user_id=NEW.user_id)
+  OR NOT EXISTS(SELECT 1 FROM chat_turns WHERE id=NEW.id AND user_id=NEW.user_id);
+END;
+CREATE TRIGGER notification_configuration_review_identity BEFORE UPDATE ON notification_configuration_reviews
+WHEN NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.project_id!=OLD.project_id OR NEW.instance_id!=OLD.instance_id OR NEW.form_id!=OLD.form_id OR NEW.owner_notice!=OLD.owner_notice OR NEW.staff_notice!=OLD.staff_notice
+ OR NEW.receipt!=OLD.receipt OR NEW.business_name!=OLD.business_name OR NEW.config_json!=OLD.config_json OR NEW.price_micros!=OLD.price_micros OR NEW.price_checked_at!=OLD.price_checked_at OR NEW.base_revision!=OLD.base_revision
+ OR NEW.digest!=OLD.digest OR NEW.expires_at!=OLD.expires_at OR OLD.status!='pending' OR NEW.status!='applied' OR NEW.confirmed_by IS NULL
+BEGIN SELECT RAISE(ABORT,'notification_configuration_changed'); END;
+-- Confirmation: unexpired, still the owner's, confirmed by a typed `confirm` control for exactly this review (a model proposal can never be one), and still
+-- on the revision it was prepared against (a configuration changed in between makes the review stale).
+CREATE TRIGGER notification_configuration_review_confirm BEFORE UPDATE ON notification_configuration_reviews BEGIN
+ SELECT RAISE(ABORT,'notification_configuration_changed') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now')
+  OR NOT EXISTS(SELECT 1 FROM module_instances i JOIN projects p ON p.id=i.project_id WHERE i.id=NEW.instance_id AND i.project_id=NEW.project_id AND p.owner_user_id=NEW.user_id)
+  OR NOT EXISTS(SELECT 1 FROM chat_turns WHERE id=NEW.confirmed_by AND user_id=NEW.user_id AND mode='guided' AND json_extract(action_json,'$.type')='confirm' AND json_extract(action_json,'$.kind')='notificationConfiguration' AND json_extract(action_json,'$.reviewId')=NEW.id);
+ SELECT RAISE(ABORT,'notification_configuration_stale') WHERE coalesce((SELECT revision FROM notification_configurations WHERE instance_id=NEW.instance_id AND form_id=NEW.form_id),0)!=NEW.base_revision;
+END;
+CREATE TRIGGER notification_configuration_review_apply AFTER UPDATE ON notification_configuration_reviews BEGIN
+ INSERT INTO notification_configurations(instance_id,form_id,project_id,owner_notice,staff_notice,receipt,business_name,config_json,price_micros,price_checked_at,revision,digest,review_id,created_at)
+  VALUES(NEW.instance_id,NEW.form_id,NEW.project_id,NEW.owner_notice,NEW.staff_notice,NEW.receipt,NEW.business_name,NEW.config_json,NEW.price_micros,NEW.price_checked_at,NEW.base_revision+1,NEW.digest,NEW.id,unixepoch())
+  ON CONFLICT(instance_id,form_id) DO UPDATE SET owner_notice=excluded.owner_notice,staff_notice=excluded.staff_notice,receipt=excluded.receipt,business_name=excluded.business_name,config_json=excluded.config_json,
+   price_micros=excluded.price_micros,price_checked_at=excluded.price_checked_at,revision=excluded.revision,digest=excluded.digest,review_id=excluded.review_id,created_at=excluded.created_at;
+ INSERT INTO activity_events(id,user_id,project_id,action,summary,created_at) VALUES('notification-config:'||NEW.id,NEW.user_id,NEW.project_id,'notifications.configuration','Set the reviewed appointment email notices (nothing is sent until delivery is active)',strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+END;
+-- Admission of a configuration row: only the maintained approved-configuration appointment templates (never a platform template), only the
+-- platform sender, one revision at a time. Template digests are pinned in code against the catalog (validateNotificationConfiguration).
+CREATE TRIGGER notification_configuration_admit BEFORE INSERT ON notification_configurations BEGIN
+ SELECT RAISE(ABORT,'notification_configuration_platform_template') WHERE EXISTS(SELECT 1 FROM json_each(NEW.config_json) j
+  WHERE json_extract(j.value,'$.template.id') IS NOT NULL AND json_extract(j.value,'$.template.id') NOT IN ('appointment.staff-notice','appointment.request-receipt'))
+  OR EXISTS(SELECT 1 FROM json_each(NEW.config_json) j WHERE json_extract(j.value,'$.template.id') IS NULL OR json_extract(j.value,'$.sender')!='whumpo-notify');
+ -- An upsert of an existing row fires this too; its revision is then held by notification_configuration_revise.
+ SELECT RAISE(ABORT,'notification_configuration_stale') WHERE NEW.revision!=1 AND NOT EXISTS(SELECT 1 FROM notification_configurations WHERE instance_id=NEW.instance_id AND form_id=NEW.form_id);
+END;
+CREATE TRIGGER notification_configuration_revise BEFORE UPDATE ON notification_configurations BEGIN
+ SELECT RAISE(ABORT,'notification_configuration_platform_template') WHERE EXISTS(SELECT 1 FROM json_each(NEW.config_json) j
+  WHERE json_extract(j.value,'$.template.id') IS NULL OR json_extract(j.value,'$.template.id') NOT IN ('appointment.staff-notice','appointment.request-receipt') OR json_extract(j.value,'$.sender')!='whumpo-notify');
+ SELECT RAISE(ABORT,'notification_configuration_stale') WHERE NEW.revision!=OLD.revision+1 OR NEW.instance_id!=OLD.instance_id OR NEW.form_id!=OLD.form_id OR NEW.project_id!=OLD.project_id;
+END;

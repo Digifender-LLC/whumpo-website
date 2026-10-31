@@ -4,6 +4,7 @@ import {ModuleError,type ModulePrincipal} from './policy';
 import {instanceOf,registeredInstances,type RegistryRow} from './registry';
 import type {RecordsSummaryFacts} from './shape';
 import type {ModuleContext,ModuleHandlers,ModuleReadHandler,ModuleWriteHandler} from './api';
+import {admissionNotices} from '../notification-configurations';
 
 /** WH-127 records and forms module (docs/shared-modules.md#records-and-forms-module-wh-127--october-4-2026-utc).
  * Deterministic handlers over `module_records` in the shared control D1: no inference, provider, network, model context
@@ -109,6 +110,8 @@ const submit:ModuleWriteHandler=async(db,context)=>{
   db.prepare('INSERT INTO module_records(id,instance_id,project_id,schema_id,form_id,fields_revision,submitter_kind,visitor_id,values_json,revision,created_request_id,last_request_id,created_at,updated_at,expires_at,receipt_consent) VALUES(?,?,?,?,?,?,?,?,?,1,?,?,?,?,?,?)')
    .bind(entryId,context.resource.resourceId,context.resource.projectId,schema.id,form.id,schema.fieldsRevision,submitter,visitor?.visitorId??null,canonicalJSON(values,8192),context.request.requestId,context.request.requestId,now,now,now+retention,receiptConsent),
   event(db,context,entryId,'form.accepted',1,now),
+  // WH-158 (D12): the configured appointment notices for this record, in this same batch; guarded inserts that cannot raise, and none at all unless the owner's limit is set.
+  ...await admissionNotices(db,context.host.notices,{instanceId:context.resource.resourceId,projectId:context.resource.projectId,formId:form.id,entryId,visitorId:visitor?.visitorId??null,consent:receiptConsent===1,now:Date.now()}),
   ...attachments.map(fileId=>db.prepare('INSERT INTO module_record_files(entry_id,file_id,instance_id,project_id,request_id) VALUES(?,?,?,?,?)')
    .bind(entryId,fileId,context.resource.resourceId,context.resource.projectId,context.request.requestId))
  ],result:{accepted:true,formId:form.id,entryId}};

@@ -50,7 +50,7 @@ try{
     if(errors.length)fails.push('console errors: '+errors.join(' | '));
     if(bad.length)fails.push('blocked writes: '+bad.join(', '));
     if(name==='Support'){if(!m.text.includes('We reply on business days.'))fails.push('missing "We reply on business days."');if(m.text.includes('No response time is promised'))fails.push('contains "No response time is promised"');}
-    if(name==='Billing'&&!/sandbox|test mode|test-mode/i.test(m.text))fails.push('no sandbox/test-mode label');
+    if(name==='Billing'&&!/sandbox|test mode|test-mode|checkout isn.t open yet/i.test(m.text))fails.push('no sandbox, test-mode or closed-checkout label');
     const small=await page.evaluate(smallControls,width===390?44:24);
     if(small.length)fails.push('controls under '+(width===390?44:24)+'px: '+small.map(c=>c.t+' "'+c.n+'" '+c.w+'x'+c.h).join('; '));
    }catch(e){fails.push('error: '+e.message);}

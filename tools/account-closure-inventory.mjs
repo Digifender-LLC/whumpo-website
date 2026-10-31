@@ -86,6 +86,9 @@ const metrics={
  // an attempt in flight is already counted through unresolvedJobs (its platform-email envelope).
  notificationNotices:['notification_notices','user_id'],
  // WH-086 push (schema batch 4): content-free device registrations (sealed token) and opaque event ids, deleted with the account; no settle-first step, nothing sends.
+ // WH-158 customer notification configuration (schema batch 5): switches, business name and review rows (no address, no submitted value), deleted with the project and account.
+ notificationConfigurations:['notification_configurations','project_id IN (SELECT id FROM owned_projects)'],
+ notificationConfigurationReviews:['notification_configuration_reviews','user_id'],
  pushDevices:['push_devices','account_id'],
  pushEvents:['push_events','account_id'],
  // WH-170: shadow cost events deleted with the account and its projects (no tombstones). WH-201: the account's address changes

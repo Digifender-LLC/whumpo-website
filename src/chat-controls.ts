@@ -1,3 +1,4 @@
+import {businessNameProblem} from './business-name';
 /** Explicit UI intents. These are never accepted as agent proposals or parsed from chat text.
  * Command strings below are private adapters for the existing receipt handlers. */
 export const confirmationControls = {
@@ -17,6 +18,7 @@ export const confirmationControls = {
  directory:{verb:'confirm-directory',label:'Confirm the reviewed directory change'},
  contact:{verb:'confirm-contact',label:'Confirm the reviewed contact form change'},
  contactNotification:{verb:'confirm-contact-notify',label:'Confirm the reviewed contact notification address'},
+ notificationConfiguration:{verb:'confirm-notification-setup',label:'Confirm the reviewed appointment email notices'},
  version:{verb:'confirm-version-delete',label:'Delete the reviewed saved version'},
  photo:{verb:'confirm-photo-delete',label:'Delete the reviewed photo'},
 } as const;
@@ -26,6 +28,7 @@ export type ChatControl =
  | {type:'confirm';kind:keyof typeof confirmationControls;reviewId:string}
  | {type:'serviceClientApply';reviewId:string;proposalDigest:string;expectedRevision:number}
  | {type:'specificationApply';reviewId:string;proposalDigest:string;expectedRevision:number}
+ | {type:'notificationSetupReview';projectId:string;instanceId:string;formId:string;notices:('owner'|'staff'|'receipt')[];businessName:string}
  | {type:'moduleActivationReview';projectId:string;instanceId:string;action:'activate'|'disable'}
  | {type:'accessModuleReview';projectId:string}
  | {type:'filesModuleReview';projectId:string}
@@ -58,6 +61,12 @@ export function chatControl(value:unknown):{action:ChatControl;command:string;la
  if(a.type==='specificationApply'&&exact(a,['type','reviewId','proposalDigest','expectedRevision'])&&id(a.reviewId)&&typeof a.proposalDigest==='string'&&/^[0-9a-f]{64}$/.test(a.proposalDigest)&&Number.isSafeInteger(a.expectedRevision)&&Number(a.expectedRevision)>=0){
   const action={type:'specificationApply' as const,reviewId:a.reviewId,proposalDigest:a.proposalDigest,expectedRevision:Number(a.expectedRevision)};
   return {action,command:`/confirm-specification ${action.reviewId} ${action.proposalDigest} ${action.expectedRevision}`,label:'Save the exact reviewed private website version.',recentAuth:true};
+ }
+ // WH-158: ids, the fixed notice choices and the owner's plain business name only. The server derives every template, recipient, sender and price.
+ if(a.type==='notificationSetupReview'&&exact(a,['type','projectId','instanceId','formId','notices','businessName'])&&Object.keys(a).length===6&&id(a.projectId)&&[a.instanceId,a.formId].every(v=>typeof v==='string'&&/^[a-z][a-z0-9-]{0,39}$/.test(v))
+  &&Array.isArray(a.notices)&&a.notices.length<=3&&new Set(a.notices).size===a.notices.length&&a.notices.every(n=>n==='owner'||n==='staff'||n==='receipt')&&typeof a.businessName==='string'&&!businessNameProblem(a.businessName)&&a.businessName===a.businessName.trim().normalize('NFC')){
+  const action={type:'notificationSetupReview' as const,projectId:a.projectId,instanceId:a.instanceId as string,formId:a.formId as string,notices:[...a.notices].sort() as ('owner'|'staff'|'receipt')[],businessName:a.businessName};
+  return {action,command:`/review-notification-setup ${action.projectId} ${action.instanceId} ${action.formId} ${action.notices.join(',')||'none'} ${action.businessName}`,label:'Review appointment email notices for the “'+action.formId+'” form.',recentAuth:false};
  }
  // WH-125: ids, local instance id and revision only; configuration and visitor values never enter a control.
  if(a.type==='moduleActivationReview'&&exact(a,['type','projectId','instanceId','action'])&&Object.keys(a).length===4&&id(a.projectId)&&typeof a.instanceId==='string'&&/^[a-z][a-z0-9-]{0,39}$/.test(a.instanceId)&&(a.action==='activate'||a.action==='disable')){
