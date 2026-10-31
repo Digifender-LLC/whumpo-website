@@ -55,7 +55,7 @@ try{
  assert.equal(subscriptionsEnabled({}),false);assert.equal(subscriptionsEnabled({...env,STRIPE_TEST_KEY:'sk_live_synthetic'}),false);
  const owner=await account(),other=await account(),id=crypto.randomUUID();
  // D20 lock 1: with STRIPE_CHECKOUT_OPEN unset (or anything but 'true') every Stripe route, start, manage and webhook included, is closed with no Stripe call and no row written.
- for(const open of [undefined,'false','TRUE','1','']){
+ for(const open of [undefined,'false','TRUE','1','','true ','yes']){
   const closed={...env,STRIPE_CHECKOUT_OPEN:open},w0=writes,gated=await account();assert.equal(subscriptionsEnabled(closed),false);
   assert.equal((await subscriptionStatus(scope(gated),closed,gated)).enabled,false);
   for(const call of [()=>startSubscription(scope(gated),closed,gated,{id:crypto.randomUUID(),plan:'starter',interval:'month'},transport),()=>refreshSubscriptions(scope(gated),closed,gated,transport),()=>setCancelAtPeriodEnd(scope(gated),closed,gated,true,transport),()=>setCancelAtPeriodEnd(scope(gated),closed,gated,false,transport),()=>startPaymentMethodUpdate(scope(gated),closed,gated,transport),()=>completePaymentMethodUpdate(scope(gated),closed,gated,{session:'cs_test_x'},transport),()=>retryLatestInvoice(scope(gated),closed,gated,transport),()=>paymentMethodCard(scope(gated),closed,gated,transport),async()=>stripeBillingWebhook(await event('invoice.paid','in_x'),db,closed,transport)])await assert.rejects(call(),{status:503});

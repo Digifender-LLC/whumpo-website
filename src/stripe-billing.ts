@@ -26,15 +26,15 @@ const now=()=>Math.floor(Date.now()/1000);
 const objectId=(id:unknown,prefix:string):id is string=>typeof id==='string'&&new RegExp('^'+prefix+'_[A-Za-z0-9]+$').test(id);
 function requireMatch(value:unknown){if(!value)throw new BillingError(409,'Stripe sandbox details do not match the saved billing record.');}
 function catalog(env:Config):Catalog{
+ // Owner decision Q-007 (D20 lock 1): checkout stays closed unless exactly 'true'. One choke point for every Stripe path. Lock 2 is the sk_test_-only key check and the livemode===false reads.
+ if(env.STRIPE_CHECKOUT_OPEN!=='true')throw new BillingError(503,"Checkout isn't open yet. Explore is still available.");
  try{
-  // D20 lock 1: closed unless the owner sets STRIPE_CHECKOUT_OPEN to exactly 'true'. Lock 2 is the sk_test_-only key check and the livemode===false reads.
-  if(env.STRIPE_CHECKOUT_OPEN!=='true')throw Error();
   if(!stripeTestConfigured(env))throw Error();
   const c=JSON.parse(env.STRIPE_SANDBOX_CATALOG??'') as Catalog;
   if(c.version!==1)throw Error();
   for(const p of plans.filter(p=>p.monthlyCents))for(const interval of ['month','year'])if(!objectId(c.prices?.[p.id+':'+interval],'price'))throw Error();
   return c;
- }catch{throw new BillingError(503,'Checkout is not open yet. Explore is still available without a card.');}
+ }catch{throw new BillingError(503,'Sandbox subscriptions are not configured. Explore is still available.');}
 }
 export function subscriptionsEnabled(env:Config){try{catalog(env);return true;}catch{return false;}}
 // Public Worker var, never a secret. Anything but a test publishable key is refused, so real-money mode stays impossible.

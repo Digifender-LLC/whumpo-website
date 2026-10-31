@@ -7,7 +7,7 @@ import {copyTree,fileInventory} from '../tools/release-manifest.mjs';
 import {archivedConfig,prepareRelease} from '../tools/prepare-release.mjs';
 import {deployPlatform} from '../tools/deploy-platform.mjs';
 
-const report=await validateSecretCustody();assert.equal(report.secrets.length,10);assert.equal(report.backupCustodyVerified,false);assert.equal(report.retirementAllowed,false);
+const report=await validateSecretCustody();assert.equal(report.secrets.length,11);assert.equal(report.backupCustodyVerified,false);assert.equal(report.retirementAllowed,false);
 const canary='PRIVATE_CUSTODY_VALUE_CANARY';let refused=0;
 function reject(fn){assert.throws(fn,e=>!e.message.includes(canary));refused++;}
 for(const secret of secretCustody){
@@ -56,4 +56,4 @@ try{
  await assert.rejects(()=>prepareRelease(root,{configs:{runtime:config},observe:()=>{touched++;throw Error();}},{}),/Private material/);assert.equal(touched,0);
  await assert.rejects(()=>deployPlatform({verify:async()=>{touched++;throw Error();},config,api:()=>{touched++;throw Error();}}),/Private material/);assert.equal(touched,0);
 }finally{await rm(root,{recursive:true,force:true});}
-console.log(`Secret/artifact custody passed: nine declared secrets, current reader/class references, undeclared env readers refused, binding-name projection, ${refused} refusals, private file/config rejection before archive/deploy. No real keys, backup recovery or retirement approval.`);
+console.log(`Secret/artifact custody passed: eleven declared secrets, current reader/class references, undeclared env readers refused, binding-name projection, ${refused} refusals, private file/config rejection before archive/deploy. No real keys, backup recovery or retirement approval.`);

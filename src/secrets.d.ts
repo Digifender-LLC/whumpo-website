@@ -18,6 +18,8 @@ interface Env {
   STRIPE_TEST_PUBLISHABLE_KEY?: string;
   // Checkout gate: Stripe flows are closed unless this is exactly 'true'. Unset by default (owner decision Q-007).
   STRIPE_CHECKOUT_OPEN?: string;
+  // Live account key held unread while checkout is blocked (Q-007); no code reads it.
+  STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
   // WH-086 FCM sender service-account JSON (send-only role); read by the push adapter once it lands.
   FCM_SERVICE_ACCOUNT_JSON?: string;
