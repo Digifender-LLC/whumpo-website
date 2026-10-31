@@ -122,8 +122,12 @@ const metrics={
  domainOrderAttempts:['domain_order_attempts','order_id IN (SELECT order_id FROM domain_orders WHERE project_id IN (SELECT id FROM owned_projects))'],
  domainRegistrarEvents:['domain_registrar_events','order_id IN (SELECT order_id FROM domain_orders WHERE project_id IN (SELECT id FROM owned_projects))'],
  domainFundingHolds:['domain_funding_holds','order_id IN (SELECT order_id FROM domain_orders WHERE project_id IN (SELECT id FROM owned_projects))'],
+ domainRenewalReviews:['domain_renewal_reviews','hostname IN (SELECT hostname FROM domain_registrations WHERE project_id IN (SELECT id FROM owned_projects))'],
+ domainRenewalApprovals:['domain_renewal_approvals','hostname IN (SELECT hostname FROM domain_registrations WHERE project_id IN (SELECT id FROM owned_projects))'],
+ domainTransferRequests:['domain_transfer_requests','hostname IN (SELECT hostname FROM domain_registrations WHERE project_id IN (SELECT id FROM owned_projects))'],
+ openDomainTransfers:['domain_transfer_requests','hostname IN (SELECT hostname FROM domain_registrations WHERE project_id IN (SELECT id FROM owned_projects))',"state IN ('requested','unlocked','unknown-outcome')"],
  domainRegistrations:['domain_registrations','project_id IN (SELECT id FROM owned_projects)'],
- activeDomainRegistrations:['domain_registrations','project_id IN (SELECT id FROM owned_projects)',"state='active'"],
+ activeDomainRegistrations:['domain_registrations','project_id IN (SELECT id FROM owned_projects)',"state IN ('active','transfer-out')"],
 };
 const inventorySQL=entries=>`WITH scope AS (SELECT id FROM users WHERE (?1 IS NULL OR id=?1)),
  owned_projects AS (SELECT id FROM projects WHERE owner_user_id IN (SELECT id FROM scope))

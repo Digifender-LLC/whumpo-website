@@ -50,7 +50,7 @@ try{
  assert.deepEqual([all,a,b].map(r=>[r.counts.jobJournal,r.counts.openJobJournal,r.counts.unresolvedJobs]),[[2,2,1],[0,0,0],[2,2,1]]);assert.equal(all.counts.compositionPlans,1);assert.equal(b.counts.compositionPlans,1);assert.equal(a.counts.compositionPlans,0);
  for(const key of ['costEvents','emailChanges','openEmailChanges','emailChangeLimits','securityReviews','lookupConsents','openLookupConsents','connectorReceipts','openConnectorReceipts','ruleApprovals','activeRuleApprovals'])assert.deepEqual([all,a,b].map(r=>r.counts[key]),[1,0,1],key);
  for(const key of ['domainQuotes','domainReviews','domainRegistrantContacts','domainOrders','unresolvedDomainOrders','domainFundingHolds'])assert.deepEqual([all,a,b].map(r=>r.counts[key]),[1,0,1],key);
- assert.deepEqual([all,a,b].map(r=>[r.counts.domainRegistrations,r.counts.activeDomainRegistrations,r.counts.domainOrderAttempts,r.counts.domainRegistrarEvents]),[[0,0,0,0],[0,0,0,0],[0,0,0,0]]);
+ assert.deepEqual([all,a,b].map(r=>[r.counts.domainRegistrations,r.counts.activeDomainRegistrations,r.counts.domainOrderAttempts,r.counts.domainRegistrarEvents,r.counts.domainRenewalReviews,r.counts.domainRenewalApprovals,r.counts.domainTransferRequests]),[[0,0,0,0,0,0,0],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0]]);
  for(const r of [all,a,b]){assert.equal(r.readyForDeletion,false);assert.doesNotMatch(JSON.stringify(r),/PRIVATE|owner-[ab]|example.invalid|token-b|change-b1|review-b1|consent-b1|receipt-b1|credential-b|approval-b1|0b0b0b0b/);}
  await assert.rejects(()=>accountClosureInventory(db,"' OR 1=1 --"));
  await assert.rejects(()=>accountClosureInventory(db,''));
