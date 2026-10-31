@@ -4,7 +4,7 @@ How a pull request is reviewed before it may merge. The owner adopted this on Oc
 
 ## Approval is a commit status
 
-Approval is a commit status named `review:clean` with state `success` on the PR's **head commit**. It is posted only after every reviewer for the tier passes that exact commit and CI is green. A new push changes the head commit, so approval clears itself; nothing needs to remove it. The gate reads statuses with read-only permissions. The status is posted after the gate job has run, so re-run the "Review gate" job after posting it (the merge tooling reads the status directly and does not depend on that re-run). A label is not approval.
+Approval is a commit status named `review:clean` with state `success` on the PR's **head commit**. It is posted only after every reviewer for the tier passes that exact commit and CI is green. A new push changes the head commit, so approval clears itself; nothing needs to remove it. The gate reads statuses with read-only permissions. The status is posted after the gate job has run, so the "Review gate" check stays red until it is re-run: **the coordinator re-runs the job after posting the status** (`gh run rerun`). A `status` event trigger is not used: those workflows run from the default branch and report on its commit, not on the PR's head, so they cannot turn the PR's check green, and a fork could not be trusted to trigger them. The merge tooling reads the status directly and does not depend on the re-run. A label is not approval.
 
 ## Rules for every reviewer
 
