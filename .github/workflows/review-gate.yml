@@ -1,0 +1,52 @@
+name: Review gate
+
+# Separate from ci.yml on purpose: ci.yml cancels in-flight pull_request runs when a new event arrives.
+# Pull requests only, so pushes to main are never blocked. No secrets, no paid model, no new dependency.
+# Read-only: approval is a commit status named review:clean on the head SHA, posted by the merge tooling.
+# A new push changes the head SHA, so approval clears itself. This file is full tier (.github/).
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  statuses: read
+
+concurrency:
+  group: review-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: Review gate
+    runs-on: ${{ vars.CI_RUNNER == 'github' && 'ubuntu-latest' || fromJSON('["self-hosted","linux","arm64","ampere"]') }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the base commit must be present for the diff
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      # Run the tier tool as it is on the base branch, so a PR cannot weaken the tool that grades it.
+      # Bootstrap only: when the base has no such file yet, the PR's copy is used.
+      - name: Fetch the base copy of the tier tool
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if git cat-file -e "$BASE_SHA:tools/review-tier.mjs" 2>/dev/null; then
+            git show "$BASE_SHA:tools/review-tier.mjs" > "$RUNNER_TEMP/review-tier.mjs"
+          else
+            echo "::warning::Base has no tools/review-tier.mjs yet; using the PR copy."
+            cp tools/review-tier.mjs "$RUNNER_TEMP/review-tier.mjs"
+          fi
+      - name: Compute tier from the changed files and line count
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node "$RUNNER_TEMP/review-tier.mjs" "$BASE_SHA"
+      - name: Require a review:clean commit status on this exact commit
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node "$RUNNER_TEMP/review-tier.mjs" --status
