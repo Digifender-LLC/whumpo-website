@@ -45,6 +45,7 @@ export async function currentSiteFixtureHandlers(){
   export * as modulePolicy from './src/shared-modules/policy';
   export {moduleCatalog} from './src/project-specification/catalog';
   export {moduleCompositions} from './src/module-compositions';
+  export {continueAccountClosures,closureContinuation} from './src/account-lifecycle/closure';
   export {validateSpecification} from './src/project-specification/v3/schema';
   export {jsonDigest} from './src/project-specification/v2/json';
   export {readViewBinding,readSavedViewComponent} from './src/workspace-view-bindings';

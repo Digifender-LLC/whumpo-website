@@ -129,10 +129,22 @@ const c:Record<string,[string,string,Disposition]>={
  jobJournal:['job_journal','job-journal','delete'],
  openJobJournal:['job_journal','job-journal','cancel'],
  unresolvedJobs:['job_journal','job-journal','cancel'],
+ // Non-cascading references and settle-first work found by the WH-018 runtime. Owner-action rows are removed through their own
+ // reviewed controls first; retained rows need an operator before the purge (src/account-lifecycle/closure.ts).
+ visitorApplications:['app_spaces','visitor-app-data','cancel'],
+ backendPublicationReviews:['backend_publication_reviews','backend-artifacts','retain'],
+ backendFormReviews:['backend_form_reviews','backend-artifacts','retain'],
+ backendFormSettings:['backend_form_settings','backend-artifacts','retain'],
+ appActivationReviews:['app_activation_reviews','visitor-app-data','retain'],
+ gatewaySpendBuckets:['gateway_spend_buckets','premium-gateway','retain'],
+ gatewaySpendAttempts:['gateway_spend_attempts','premium-gateway','retain'],
+ connectionRotationGuards:['connection_rotation_guards','connections','cancel'],
+ uncertainGitHubBackups:['github_backups','github-backups','cancel'],
+ githubBackupRepositories:['github_backups','github-backups','retain'],
 };
 export const closureCategories:Readonly<Record<string,readonly [string,string,Disposition]>>=Object.freeze(c);
 /** Open provider work: closure refuses until each settles (cancelling a local row never settles a provider effect). */
-export const settleFirstKeys:readonly string[]=Object.freeze(['unresolvedStandardAI','unresolvedConnectionExchanges','githubGrantUncertain','githubPendingRevocations','cloudflarePendingRevocations','unresolvedDomainRecords','unresolvedChatInteractionContinuations','unresolvedJobs','openConnectorReceipts']);
+export const settleFirstKeys:readonly string[]=Object.freeze(['unresolvedStandardAI','unresolvedConnectionExchanges','githubGrantUncertain','githubPendingRevocations','cloudflarePendingRevocations','unresolvedDomainRecords','unresolvedChatInteractionContinuations','unresolvedJobs','pendingScanTickets','connectionRotationGuards','uncertainGitHubBackups','openConnectorReceipts']);
 
 export const isCount=(v:unknown):v is number=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0;
 /** Every category present as a non-negative integer, nothing unknown. */

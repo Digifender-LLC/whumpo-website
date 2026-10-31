@@ -157,7 +157,8 @@
    {"fingerprint":"eefea01f5cc44f6b","file":"src/workspace-identity/http.ts","symbol":"logout","kind":"table-interpolation","expression":"`DELETE FROM ${table} WHERE token_hash=?`","reason":"Table chosen between the two constants identity_sessions and identity_grants by the proof kind."},
    {"fingerprint":"f766eb8c164f43c3","file":"src/workspace-identity/recovery.ts","symbol":"secureRecovery","kind":"table-interpolation","expression":"`DELETE FROM ${table} WHERE account_id=? AND ${receiptGate}`","reason":"Table iterated from a literal array of identity table names in the same statement."},
    {"fingerprint":"0a9d392117330fbc","file":"src/workspace-identity/recovery.ts","symbol":"recoveryCompletionVerify","kind":"table-interpolation","expression":"`DELETE FROM ${table} WHERE account_id=? AND ${receiptGate}`","reason":"Table iterated from a literal array of identity table names in the same statement."},
-   {"fingerprint":"229ab2dbb54984f7","file":"src/workspace-identity/recovery.ts","symbol":"removePasskey","kind":"table-interpolation","expression":"`DELETE FROM ${table} WHERE account_id=? AND ${receiptGate}`","reason":"Table iterated from a literal array of identity table names in the same statement."}
+   {"fingerprint":"229ab2dbb54984f7","file":"src/workspace-identity/recovery.ts","symbol":"removePasskey","kind":"table-interpolation","expression":"`DELETE FROM ${table} WHERE account_id=? AND ${receiptGate}`","reason":"Table iterated from a literal array of identity table names in the same statement."},
+   {"fingerprint":"12c9ee121b017e8a","file":"src/account-closure/inventory.ts","symbol":"closureCounts","kind":"non-literal","expression":"sql","reason":"Statements built once at module load from the static metric list in metrics.json (table, owner column and condition fragments written by the repository, as the operator CLI builds them); the account id is the only bound value and no request data enters the SQL text."}
   ]
  }
 }
