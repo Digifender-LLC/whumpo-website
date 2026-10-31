@@ -388,7 +388,7 @@ WH-050 closes on the local envelope with the limits in [What this does not prove
 
 --- | --- | --- | --- |
 | F1 | **Platform-wide daily budgets are first-come across tenants.** Public backend (1,000/day), visitor transitions (1,000/day), contact receipts (1,000 retained) and R2 reads (100,000/month) are shared; the per-account sub-cap (500) lets two accounts drain the platform and a tenant under its own project cap is refused. | D, E; schema triggers in [`schema/platform.sql`](../schema/platform.sql) (contact and visitor platform caps read from schema, not driven by traffic here) | High |
-| F2 | **No admission control on the public site host.** Site HTML, photos and the public backend route have no per-IP, per-tenant or per-project request limiter; only quotas apply to backend and photo reads. One IP sent 150/150 accepted. **Resolved locally by WH-075 (October 31): `SITE_LIMITER` 300/60 s per source before any D1 read; see the section below.** | P; [`src/site-host.ts`](../src/site-host.ts) | High |
+| F2 | **No admission control on the public site host.** Site HTML, photos and the public backend route have no per-IP, per-tenant or per-project request limiter; only quotas apply to backend and photo reads. One IP sent 150/150 accepted. **Not resolved. WH-075 (October 31) added `SITE_LIMITER` 300/60 s per source before any D1 read and it passes locally, but live probes never saw a 429; see [Live probe](#live-probe-site_limiter-and-api_limiter-did-not-refuse--october-31-2026-utc).** | P; [`src/site-host.ts`](../src/site-host.ts) | High |
 | F3 | **One client can exhaust every tenant's photos.** Photo GETs are `no-store` and each charges the shared monthly R2 read counter, with no per-tenant or per-IP bound. | E | High |
 | F4 | **The runtime concurrency gate is global and not tenant-aware.** At 4+ simultaneous calls 25% or more are refused regardless of caller; in B victims saw 3.3% `busy` and a failed visitor transition. Refused and failed attempts still spend the project allowance; the gateway neither queues nor retries. Behavior of the real service binding across multiple Cloudflare isolates is unmeasured. | concurrency table, S, B | Medium |
 | F5 | **Allowances are keyed by the target, not the caller.** Anonymous callers can spend a tenant's 100 backend calls/day, fill its 20-per-hour contact cap (and, over time, its 100 retained receipts) or its visitor-page allowance, locking out legitimate users. Per-IP limits do not help against distributed callers. | B noisy table, P | Medium |
@@ -399,6 +399,8 @@ WH-050 closes on the local envelope with the limits in [What this does not prove
 Candidate remedies (each needs its own reviewed task; none implemented here): per-account sub-caps sized to the enrolled cohort, per-tenant photo read accounting before the platform counter is charged, an edge rate rule or cache policy for the public site host (a [WAF rate limiting](https://developers.cloudflare.com/waf/rate-limiting-rules/) rule is paid-plan dependent and **requires entitlement and price verification**), a per-project fairness token or queue ahead of the runtime gate, and an operator per-tenant freeze (WH-015/016; the public-allowance part is now implemented locally, see the F7 slice).
 
 ## WH-075 site limiter, batch slot and saturation phase I — October 31, 2026 UTC
+
+> **Local only. Reopened (D51).** `SITE_LIMITER` is deployed with the check in the bundle, but no live probe ever saw a 429 ([below](#live-probe-site_limiter-and-api_limiter-did-not-refuse--october-31-2026-utc)). F2 is not resolved and this section's 300 ok / 50 x 429 is the in-memory stand-in, not Cloudflare.
 
 **Local harness numbers, not Cloudflare numbers.** Same harness (`pnpm capacity`, seed 50, scale 1, 4 tenants) at main `a332b1e` plus this change, Node 24.21.0, pnpm 11.19.0, loopback only, 8 CPUs. Exit 0. Wall time 176.7 s against 126 to 128 s on October 30: the run added phase I and the larger P probe, and the host load average rose from 0.45 before to 6.26 after, so other work on this host overlapped the run. Treat latencies as indicative; the outcome counts below do not depend on timing.
 
@@ -445,7 +447,29 @@ Before, the flood took both slots and 24 of 30 victim calls were refused `busy`.
 - It does not cap spend: a refused request still invokes the Worker.
 - The runtime gate is per isolate; behaviour across isolates stays unmeasured. No queue: `busy` is the explicit, refunded backpressure.
 - No dedicated isolation (no evidence warrants it), and failure groups stay a written plan.
-- The live probe (up to 600 GETs to a random `<uuid>.whumpo.site`) waits for the deploy and was not run.
+- The live probe has since run and **failed to show the limiter working**: see the next section. Everything above is local-harness evidence only.
+
+## Live probe: SITE_LIMITER and API_LIMITER did not refuse — October 31, 2026 UTC
+
+Run after PR #539 deployed at `5850a4f`. `whumpo-sites` has the `SITE_LIMITER` binding (namespace 1001005, 300 requests per 60 s) and the deployed bundle contains the check. All probes came from one IP on this host, GET only, to a random `<uuid>.whumpo.site` (no real project) and to two read-only platform routes.
+
+| Probe | Limit | Sent | Result |
+| --- | --- | ---: | --- |
+| `SITE_LIMITER`, random `<uuid>.whumpo.site`, burst | 300 / 60 s | 600 GETs in 8.5 s | all 404, **0 x 429** |
+| `SITE_LIMITER`, sustained | 300 / 60 s | 576 in 72 s (8 per second) | all 404, **0 x 429** |
+| `SITE_LIMITER`, sustained | 300 / 60 s | 528 in 66 s | all 404, **0 x 429** |
+| `API_LIMITER`, `/api/plans` | 120 / 60 s | 180 in 30 s | all passed, **0 x 429** |
+| `API_LIMITER`, `/api/profile` | 120 / 60 s | 304 in 38 s | all passed, **0 x 429** |
+| `AUTH_LIMITER` | 10 / 60 s | **not measured** | unknown |
+
+**What this means.**
+
+- The existing, long-deployed `API_LIMITER` also refused nothing at roughly 1.5 to 2.5 times its limit, so this is not a fault of the new binding or its code. Neither limiter can be said to enforce live.
+- Cloudflare documents the binding as approximate, local to a location, with counts cached and updated in the background. That does not explain a sustained overrun of this size with no refusal. **The cause is unknown.**
+- Both limiters fail open and serving is unaffected. The controls that are strict on public paths are the D1 per-source counters in public admission (20 backend, 10 contact and 400 photo requests per project per day per source, plus the shared platform counters). Those hold in the local harness; they are the only per-source limits with any evidence.
+- Strict site limiting would need Durable Objects (Cloudflare's own recommendation for exact counts). That is a cost decision for the owner; nothing has been built or bought.
+
+**Status.** F2 is open. WH-075 is reopened (not done), and WH-074 and everything that depends on WH-075 stay behind it. Do not cite `SITE_LIMITER`, `API_LIMITER` or `AUTH_LIMITER` as live protection; the incident runbook C4 says the same. The `AUTH_LIMITER` measurement is a follow-up; it must not be run against real sign-in without a test account.
 
 ## Account-level alerts and cohort limits (decided D28, 2026-10-31)
 
@@ -468,7 +492,7 @@ Before, the flood took both slots and 24 of 30 victim calls were refused `busy`.
 
 ## What this does not prove
 
-- **No Cloudflare production figures.** Real Worker CPU/memory limits, isolate placement and concurrency, D1 query latency/throughput and single-database overload behavior, R2 operation latency and rate, rate-limit binding behavior and Cloudflare's own DDoS and edge caching are not represented. Verify against the current official pages before relying on any limit: [Workers limits](https://developers.cloudflare.com/workers/platform/limits/), [D1 limits](https://developers.cloudflare.com/d1/platform/limits/), [R2 limits](https://developers.cloudflare.com/r2/platform/limits/), [Workers rate limiting](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/). Pricing pages: [Workers](https://developers.cloudflare.com/workers/platform/pricing/), [D1](https://developers.cloudflare.com/d1/platform/pricing/), [R2](https://developers.cloudflare.com/r2/pricing/). These pages were **not re-read for this slice** (no network was used); account allowances, plan entitlements and prices in the account **require verification** against the dated notes in [protection-candidate.md](protection-candidate.md) (D1 and Workers allowances read October 2, 2026).
+- **No Cloudflare production figures.** Real Worker CPU/memory limits, isolate placement and concurrency, D1 query latency/throughput and single-database overload behavior, R2 operation latency and rate, rate-limit binding behavior (live probes on October 31 saw no 429 from `SITE_LIMITER` or `API_LIMITER`, and `AUTH_LIMITER` was not measured; see above) and Cloudflare's own DDoS and edge caching are not represented. Verify against the current official pages before relying on any limit: [Workers limits](https://developers.cloudflare.com/workers/platform/limits/), [D1 limits](https://developers.cloudflare.com/d1/platform/limits/), [R2 limits](https://developers.cloudflare.com/r2/platform/limits/), [Workers rate limiting](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/). Pricing pages: [Workers](https://developers.cloudflare.com/workers/platform/pricing/), [D1](https://developers.cloudflare.com/d1/platform/pricing/), [R2](https://developers.cloudflare.com/r2/pricing/). These pages were **not re-read for this slice** (no network was used); account allowances, plan entitlements and prices in the account **require verification** against the dated notes in [protection-candidate.md](protection-candidate.md) (D1 and Workers allowances read October 2, 2026).
 - **No cost.** Statement counts are not billable rows; no Worker CPU-ms, request, R2 operation or D1 row cost is measured. Per-IP and per-project limits are abuse brakes, not a financial cap (no account-wide spend cap exists, runbook G2).
 - **Fixture effects.** The local D1 binding serializes statements; the harness and all handlers share one Node event loop (delay reported above); the runtime is one Miniflare isolate; Turnstile, WebAuthn sign-in, email, AI inference, DNS and Cloudflare edge/CDN behavior are absent. Latencies are therefore only comparable within a run.
 - **Untested scale.** Real tenant counts, account-cap exhaustion by a single account, contact and visitor platform-cap exhaustion by traffic, quota rollover, month-scale R2 counts (the counter was pre-set), long-duration soak, memory growth, scheduled-job interference, large photos, multi-region distribution and any traffic above roughly 1,000 requests per phase.

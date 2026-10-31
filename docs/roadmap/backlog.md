@@ -2,7 +2,7 @@
 
 > Generated from `backlog.json` by `node tools/roadmap.mjs render`. Edit the JSON source, then render again.
 
-Reviewed 2026-10-31 against source `be4e6bf321b71c20e208b13a6628ff973826eec0`. 191 planned tasks.
+Reviewed 2026-10-31 against source `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. 191 planned tasks.
 
 Planning readiness and dependencies describe the plan. Current execution, claims, blockers, and completion evidence live in GitHub Issues. A ready task is only a candidate: verify live dependency completion and authorization before work.
 
@@ -16,7 +16,7 @@ A current evidence baseline and repeatable release, verification and operational
 
 Phase: **Reliable delivery foundation** (F0). Priority: **P0**. Planning readiness: **ready**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -79,6 +79,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/3. Planning owner: Unassigned.
 - 2026-10-24 UTC (WH-001 stale status text, branch wh-001-stale-status-docs from 5a0e21e; docs only, no live read): corrected status text that still said unmerged or local-only: docs/notifications.md (WH-155 source now on main via #333), docs/workspace-collaboration.md WH-054 step 1a (on main via #276, fb8fac2) and docs/docs-code-sync.md (enhanced owner recovery source on main via #102; deployment per the file's own header). WH-155 gained a superseding entry; WH-054 already had one. Lines about open PRs (#170, the cutover plan) were left as accurate. No readiness changed. WH-001 stays open for live issue state, a fresh live read and the open WH-004 evidence gaps.
 - 2026-10-30 UTC (WH-001 reconciliation against origin/main 475a3a9, read from git log and gh pr view; docs only, nothing re-run unless stated, no GitHub issue, Cloudflare or provider mutation): this reconciliation. Merged PRs #483-#513 are cited on their tasks above; #490, #496, #499, #506 and #513 are DB-binding cutovers (no task) and #504 (fe5ff3f) fixed drifted profile and closure test contracts and gates them in verify fast. #514 is open, not merged. After closing WH-113, WH-089, WH-105 and WH-116, `roadmap.mjs next` lists WH-117 and WH-150 (both still need WH-004, which is open). WH-143 is not listed because its readiness is planned although all four dependencies (WH-141, WH-009, WH-105, WH-116) are now done; it is a candidate to promote to ready. WH-158 is not listed because WH-156, WH-157 and WH-127 are still planned (live, device or remaining-gap acceptance open). WH-001 itself stays ready: the full capability matrix is not rebuilt here.
 - 2026-10-31 UTC (WH-001 catch-up against origin/main be4e6bf, read from git log and the commit bodies; docs only for the catch-up, no GitHub issue, Cloudflare or provider mutation): merged since the last reconciliation: #514 (489a531, WH-086), #515 (8272eb7, the previous catch-up), #516 (52582b1, WH-004), #517 (d77d8f2, WH-158), #519 (85fa884, WH-204), #520 (34793c5, WH-212), #521 (993345e), #522 (b278f27) and #523 (151e5a6) (Stripe, WH-042 and the Q-007 lock) and #525 (fcfaeef, WH-067 close-out, WH-125 to WH-130). #518, #524 and #526 are DB-binding cutovers (no task); the binding is whumpo-control-2026-10-31c. Each task above cites its PR. WH-004 is now done (see its entry), which unblocks the tasks that waited on it. docs/shared-modules.md no longer implies the module schema is undeployed. Correction to the October 30 entry: #514 is merged, not open. Live, device and customer acceptance is unchanged; no live read other than the six read-only routing probes recorded under WH-004.
+- 2026-10-31 UTC (WH-001 final reconciliation against origin/main b1bb814; docs only, no code, secret, variable, Stripe or provider call; the only live facts are the read-only rate-limit probes recorded under WH-075): PRs #529 to #541 mapped to tasks. #529 WH-050/073/150/151/152 and the WH-114 close-out; #530 (every-minute dispatch health row, recorded under WH-004's boundary entry); #531 WH-093 and #532 WH-070 (schema batch 6); #533 binding cutover to whumpo-control-2026-10-31d (no task); #534 WH-153/WH-092 closed, WH-115 print check, WH-093/WH-070 status; #535 WH-172 (stays planned); #536 WH-159 and WH-156/157/158 closed; #537 WH-095 (stays planned, evidence added now); #538 WH-015/025/035/037 closed on D43 and WH-004 scanner results; #539 WH-075 (REOPENED, see its entry); #540 WH-082 emulator pass (stays open); #541 WH-214 (done now). Corrections made here: WH-075 reopened (D51); WH-214 done with the limit that a real inbox is unproven; WH-117 and WH-111 moved from ready to blocked with the real blocker named (D45); WH-160 stays blocked. After this, the only ready task is WH-001, the standing reconciliation. Everything still open needs a decision, money, counsel, a device, Orca or a real customer, or is an unsold feature (D48); docs/owner-review.md is the list. Live, device and customer acceptance is otherwise unchanged.
 
 # F0 — Done (6)
 
@@ -88,7 +89,7 @@ Verified complete with recorded evidence; kept for history and dependency contex
 
 Phase: **Reliable delivery foundation** (F0). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -151,7 +152,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/39. Planning owner: Unassigned
 
 Phase: **Reliable delivery foundation** (F0). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -213,7 +214,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/4. Planning owner: Unassigned.
 
 Phase: **Reliable delivery foundation** (F0). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: verification. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -285,7 +286,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/5. Planning owner: Unassigned.
 
 Phase: **Reliable delivery foundation** (F0). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -342,7 +343,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/6. Planning owner: Unassigned.
 
 Phase: **Reliable delivery foundation** (F0). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -418,7 +419,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/53. Planning owner: Unassigned
 
 Phase: **Reliable delivery foundation** (F0). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: decision. Size: S.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -492,7 +493,7 @@ Operated safety, privacy, identity, recovery and lifecycle for explicitly suppor
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **blocked**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -550,7 +551,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **planned**. Kind: verification. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -608,7 +609,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **deferred**. Kind: decision. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -662,7 +663,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/21. Planning owner: Unassigned
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -715,7 +716,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -770,7 +771,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -822,7 +823,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **planned**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -875,7 +876,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -933,7 +934,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -986,7 +987,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **blocked**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1047,7 +1048,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/9. Planning owner: Unassigned.
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **planned**. Kind: release. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1108,7 +1109,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **planned**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1160,7 +1161,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1235,7 +1236,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/69. Planning owner: Unassigned
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **blocked**. Kind: decision. Size: S.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1281,9 +1282,9 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ## WH-117 — Implement transparent encryption and complementary protection controls
 
-Phase: **Safe customer beta** (F1). Priority: **P1**. Planning readiness: **ready**. Kind: implementation. Size: L.
+Phase: **Safe customer beta** (F1). Priority: **P1**. Planning readiness: **blocked**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1319,7 +1320,7 @@ Admitted data paths have the justified WH-116 protections, verified current-key/
 
 Planning dependencies: WH-116, WH-004. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+- Owner action (Q-010): copy the encrypted key capsule and its recovery file (.secrets/protection-key-custody.json) to one place off this computer and say where in general terms; off-device or independently operated custody is the open WH-117D condition, and recovery stays unproven until then
 
 ### References
 
@@ -1395,6 +1396,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/82. Planning owner: Unassigned
 - 2026-10-02 UTC: child #85 operator inventory now captures archive record identities/digests and compares them to the current source on each evidence request. Missed session revocations and changed rows derive a complete atomic bounded constraint batch; missing/failed/obsolete sources, unresolved current effects, source/journal/withdrawal races and permanent-suppression identity reuse hold verification. Current operator-file schema version 2 replaces version 1 without migration or fallback. The source deadline and cancellation cannot wedge subsequent inventory status reads. Real read-only copied SQLite, persisted key-backup and metadata-canary fixtures cover this on-demand path; all serving/dispatch/retirement flags remain false. Continuous/disaster-time suppression operation, independent physical/offsite/anti-rollback custody, full provider reconciliation and child D acceptance remain required. No live data, key, provider state or deployment changed.
 - 2026-10-02 UTC: explicit DP-02/03/04 acceptance audit at 964fa38 maps every original child C criterion to actual handlers and synthetic/isolated verification, completing the bounded source/local scope. Parent and child D remain open for combined candidate, configured custody, measures and coordinated release; continuous suppression/whole-platform recovery retain their original WH-008/018/019/059 ownership. Fresh live metadata/count inventory found zero test users/projects/credential/provider/billing records, 156 tables and the obsolete single-key binding; the candidate has 165 tables and needs an explicit current-only reset/binding transition. The operator D1 adapter now supplies immutable statements and one batch request for the existing key initializer, with twelve synthetic refusal cases and real read-only batch verification. No remote mutation, key creation, deployment, CMS/scanner test or offsite-custody acceptance occurred.
 - 2026-10-02 UTC: WH-117D current test release 7c4f9344-bd6c-4fc7-a3ab-964e631ad8f3 (runtime source df90276) deployed all four Workers onto the exact 165-table/760-object schema. Actual current-key initialization and stored-capsule readback passed; deployed PKCE ciphertext decrypts with recovered material and matches its challenge. Thirty-nine assets and signed project-first/profile/Chat/session-refusal HTTP checks pass, with fixture cleanup and no provider authorization/model/CMS/scanner calls. Old key binding and unreferenced empty DB retired after all 13 Worker references and old table counts were checked; other databases preserved and fresh private invitation issued. Twenty bounded encryption writes plus sampled deployed CPU and account storage inventory are recorded in docs/protection-candidate.md. Status observation now follows the active platform database, with focused synthetic and live after-retirement verification. Off-device/independently operated custody and final D/parent acceptance remain open; no provider/device/confidential-inference or whole-platform recovery claim.
+- 2026-10-31 UTC (WH-001 final reconciliation, D45, docs only): moved from ready to blocked. An agent cannot do the remaining step: custody has to be a place other than this computer, chosen by the owner. The 2026-10-02 entry above already says off-device or independently operated custody and final D/parent acceptance remain open. Unblocking it also unblocks WH-144, WH-008, WH-018, WH-019, WH-059, WH-072 and the portable-export chain. See docs/owner-review.md.
 
 # F1 — Done (13)
 
@@ -1404,7 +1406,7 @@ Verified complete with recorded evidence; kept for history and dependency contex
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: verification. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1466,7 +1468,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/105. Planning owner: Unassigne
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: decision. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1535,7 +1537,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/7. Planning owner: Unassigned.
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: decision. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1604,7 +1606,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/8. Planning owner: Unassigned.
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1659,7 +1661,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/137. Planning owner: Unassigne
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1713,7 +1715,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/109. Planning owner: Unassigne
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: verification. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1771,12 +1773,13 @@ Issue: https://github.com/zemdregon/whumpo/issues/111. Planning owner: Unassigne
 - 2026-10-30 UTC (WH-001 reconciliation against origin/main 475a3a9, read from git log and gh pr view; docs only, nothing re-run unless stated, no GitHub issue, Cloudflare or provider mutation): merged PR #484 (6da8009, Node 24 re-record with the serving-stop check), #487 (fdaf731, D1 statement accounting and trimming on public request paths) and #497 (560649f, repeat request-path work on custom-domain photos). Readiness unchanged: local synthetic harness only; no live capacity or distributed-abuse acceptance.
 - 2026-10-31 UTC: promoted planned to ready. Every dependency is done now that WH-004 is closed (see its entry). Nothing is built or accepted by this change; the close-out sweep still has to map each acceptance line to evidence before this task can be marked done.
 - 2026-10-31 UTC, CLOSED by PR #529 on decision D28, on the local envelope only (main be4e6bf (origin/main at 2026-10-31), Node 24.21.0, pnpm 11.19.0, disposable local SQLite/local D1, no network, credential, secret or provider call). Line 1 was re-read against the WH-075 fair-share result, not the October 4 table: scenario D after the fix has the two filler accounts stopped at 100 each (200 ok, 799 x 429), platform 606/1,000, victim probes 5/5 ok and a new account 10/10 ok; a single IP stops at 20 backend, 10 contact and 400 photo requests per project per day (L); the October 30 Node 24 re-record left D, C, E, L unchanged. It holds only while light accounts fit the 50% reserve (about five accounts at full share) and does not hold against distributed callers spending one project's allowance. Line 2: recovery went 0/3 to 3/3 (C); one project at its photo budget gets 503 while others serve 5/5 (E); many tenants together can still reach the unchanged 100,000/month R2 read ceiling and photos then fail platform-wide. Line 3: per-IP limits are not described as spend caps. Line 4: no live load was run. D28 is applied in docs/capacity-and-fairness.md: at most 10 active accounts, about 5 while the R2 read ceiling is shared, by manual invitation (no code); 50%/80% thresholds as proposed; pull-based node tools/report-maintenance.mjs --counters once per UTC day while any cohort account is active and before each invitation, no provider; F2 moves to WH-075. These are reversible and listed for the end-of-roadmap review. Re-run today: pnpm capacity exited 0 in 143 s on this host and gave, for the criteria above: D fillers 200 ok, 789 x 429, 11 x 503 busy (refunded), platform 603/1,000, victim probes 5/5 ok, new account 10/10 ok; C victim backend after the fillers 3/3 and site, photo, contact, visitor paths all ok; E noisy project 10 ok then 10 x 503, victims 5/5, platform ceiling 5 ok then 5 x 503; L one IP 20/20 backend, 10/5 contact, 400/50 photo with other IPs unaffected; P site page one IP 150/150 with no limiter (F2). Timing is host dependent. Limits that stay: local harness, not Cloudflare limits or cost; the Cloudflare rate-limit binding price was not verified.
+- 2026-10-31 UTC (WH-001 final reconciliation, docs only): F2 (no per-IP limit on site HTML) is not resolved. It moved to WH-075, which is reopened after live probes saw no 429 from SITE_LIMITER or API_LIMITER (docs/capacity-and-fairness.md, 'Live probe'). The closure here rests on the local envelope and is unchanged in that respect.
 
 ## WH-113 — Freeze current workspace identity, recovery, cutover and usability contracts
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: decision. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1838,7 +1841,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/42. Planning owner: Unassigned
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1929,7 +1932,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/68. Planning owner: Unassigned
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: decision. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -1987,7 +1990,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/80. Planning owner: Unassigned
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2043,7 +2046,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2097,7 +2100,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/132. Planning owner: Unassigne
 
 Phase: **Safe customer beta** (F1). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: verification. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2191,7 +2194,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/10. Planning owner: Unassigned
 
 Phase: **Safe customer beta** (F1). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: decision. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2264,7 +2267,7 @@ Better customer outcomes, evaluated generation, usable app interfaces and accept
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2323,7 +2326,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2377,7 +2380,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2435,7 +2438,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2490,7 +2493,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2545,7 +2548,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **blocked**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2602,7 +2605,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **blocked**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2658,7 +2661,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2712,7 +2715,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **blocked**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2765,7 +2768,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/146. Planning owner: Unassigne
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **blocked**. Kind: verification. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2818,7 +2821,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **blocked**. Kind: verification. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2870,7 +2873,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2922,7 +2925,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -2979,7 +2982,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3032,7 +3035,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3088,7 +3091,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3148,7 +3151,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3199,13 +3202,13 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-31 UTC (PR #537, 1761b29; source and local verification only, disposable SQLite and local D1, no network, credential, secret, Stripe or provider call; not deployed-tested; docs only for this entry). D44 delivered: GET /api/projects/P/module-records/R/S/conversions (owner only, workspace origin) counts records submitted in the last 30 days and still kept, by current lead stage (no lead row is new), with no events table, no schema change and no Chat or model surface; business.conversions is private-test. tests/module-record-conversions.mjs (add --d1): no figure and no zero without the feature (line 1), known counts with duplicates adding nothing, a stage reversal lowering the count and a removed or expired record leaving it (line 3), a partial period for a form younger than the window and 'unavailable' rather than zero (line 4), another owner and a visitor seeing nothing of this project (line 1 and 4), and nothing in the Chat summary; tests/record-leads-browser.mjs covers the panel at 360, 390 and 1280, 200% text and dark. NOT met or not mapped: line 2 (request counts are not shown on this panel, so nothing is labeled unique visitors but nothing reports requests either) and line 5 (telemetry failure not blocking intake) have no test of their own here. It also depends on WH-093, which is not done: the deployed leads.update path is not exercised live. Stays planned. D44 narrows the scope's aggregate events and Chat adapters, as planned.
 
 ## WH-111 — Make Chat the daily workspace with durable continuity and direct recovery
 
-Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **ready**. Kind: implementation. Size: M.
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **blocked**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3240,7 +3243,7 @@ The workspace opens on the current conversation and needs little navigation, whi
 
 Planning dependencies: WH-109, WH-110, WH-024, WH-206, WH-207, WH-208, WH-209, WH-210, WH-211, WH-212, WH-213. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+- Orca is not installed on the agent host and installing it needs sudo (owner action: sudo pacman -S orca); the screen-reader checkpoints of WH-208 and WH-213 must run before WH-111 can be called closed under D-8 (axe and simulated viewports are already evidenced)
 
 ### References
 
@@ -3272,12 +3275,13 @@ Issue: https://github.com/zemdregon/whumpo/issues/100. Planning owner: Unassigne
 - 2026-10-27 UTC, docs only, nothing re-run: every open decision in docs/chat-daily-workspace.md (D-1 to D-6, D-8, D-9; D-7 was answered 2026-10-26) is answered as an agent decision in docs/roadmap/owner-decisions-2026-10-26.md (section "Agent decisions", 2026-10-27, delegated by owner) and the answered rows in docs/chat-daily-workspace.md. WH-209, WH-211 and WH-212 move from blocked to planned. Readiness and acceptance unchanged; nothing implemented.
 - 2026-10-27 UTC, source and local browser only, not deployed: owner decision D7 (support address hello@whumpo.com, replies on business days, owner as sole operator; docs/roadmap/owner-decisions-2026-10-26.md) applied to every user-visible response-time line by PRs #368 (merged 2026-10-27T05:12:51Z, merge commit d4018c3), #370 (merged 2026-10-27T05:16:08Z, merge commit e42b808), #371 (merged 2026-10-27T05:16:54Z, merge commit 64e147c) and #372 (merged 2026-10-27T05:18:26Z, merge commit a99564b). #368 changes the Support page header and contact text, usage_limit.next in src/support-shape.ts and the support journey assertion, and adds a D7 note to docs/usage-review-requests.md. #370 changes account-help.tsx, chat-interaction.tsx, src/chat-interactions/maintained.ts and src/usage-review-requests.ts. #371 changes the sign-in lockout help in frontend/src/identity/flow.tsx. #372 changes the support form confirmation and is reported as the last contradictory line in src, frontend and tests. Order Chat, then form, then email is kept and no hours or other response time is added. Reported results: #368 pnpm run test:usage-review-requests pass, node tests/support-access.mjs pass (9 cases), pnpm run check pass, and workspace-identity-browser --support FAIL at the known 44px baseline after the copy-assertion phase passed (addressed separately by WH-208 PR #374); #370 pnpm run check, test:usage-review-requests and test:chat-interactions pass and workspace-identity-browser pass on retry (EADDRINUSE on the first run); #371 and #372 pnpm run check passes with no test pinning the old wording. Not verified: other docs that may still describe lockout-only email (the PR names docs/incident-runbooks.md and identity-recovery docs), and no live or device check. WH-111 stays open for the rest of its acceptance. Read from gh pr view and the PR body; nothing re-run here. Readiness unchanged.
 - 2026-10-27 UTC, audit only, nothing deployed: WH-213 audit (docs/chat-daily-workspace.md, section "WH-213 acceptance audit") re-judged the original acceptance against baseline 78055ea after WH-207 to WH-212 merged. A5 (onboarding failure and essential controls) met; A1 (routine journeys), A2 (reload, multi-tab, lost responses), A3 (logout and stale authority), A4 (inference outage, #389 Saved-work confirm) and A6 (keyboard, zoom, reduced motion, simulated viewport, axe) met with gaps; none not met. Reran on Node 24.21.0, pnpm 11.19.0, baseline 78055ea: workspace-identity-browser --support (pass after an EADDRINUSE wait), --saved-work, --site-safety, --account-help, --navigation, --cross-tab all pass; pnpm test:recovery-axe pass (16 page states, 0 findings, 388 passing checks, 0 incomplete); identity-browser pass; chat-inference-outage pass (24 checks, SQLite); chat-recovery pass; saved-review-confirm-outage pass (23 checks, SQLite); pnpm test:saved-work-browser pass (after EADDRINUSE waits); roadmap validate (190 tasks), alignment and render --check pass. workspace-identity-browser --accessibility FAILED as invoked (ENOENT .secrets/usability-landing-observations.json in a fresh worktree; not fixed) and passed on a supplemental run with a gitignored .secrets dir and WHUMPO_AXE pointing at the repo node_modules/@axe-core/playwright (9 axe page states, owner usability journey pass). Orca is not installed on this host (needs sudo) and was NOT run: no screen-reader evidence. Under D-8 the closure bar is agent-run Orca plus axe plus simulated viewports: axe and simulated viewports are evidenced, Orca is not, so the Orca checkpoints must run on a host with Orca before WH-111 is called closed under D-8. Physical devices, the installed PWA, human listening, customer acceptance and the untested review kinds and digest-mismatch for the Saved-work review confirm panel stay with WH-112. Readiness unchanged; completion is a decision recorded from this evidence, not a readiness value.
+- 2026-10-31 UTC (WH-001 final reconciliation, D45, docs only): moved from ready to blocked. Its dependencies WH-208 (blocked on Orca) and WH-213 (planned, same Orca gap) are not done, and the 2026-10-27 audit already states Orca evidence is the missing closure bar. Physical devices stay with WH-112. See docs/owner-review.md.
 
 ## WH-112 — Accept Chat as the primary customer experience
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **blocked**. Kind: verification. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3341,7 +3345,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3398,7 +3402,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3452,7 +3456,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **blocked**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3505,7 +3509,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3567,7 +3571,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3616,7 +3620,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **blocked**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3663,7 +3667,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **blocked**. Kind: verification. Size: S.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3721,7 +3725,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: verification. Size: S.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3771,7 +3775,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P2**. Planning readiness: **deferred**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3822,7 +3826,7 @@ Verified complete with recorded evidence; kept for history and dependency contex
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3882,7 +3886,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/113. Planning owner: Unassigne
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3940,7 +3944,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/135. Planning owner: Unassigne
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -3998,7 +4002,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/139. Planning owner: Unassigne
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4061,7 +4065,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/121. Planning owner: Unassigne
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: decision. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4131,7 +4135,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/51. Planning owner: Unassigned
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4223,7 +4227,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/87. Planning owner: Codex /roo
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4315,7 +4319,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/90. Planning owner: Unassigned
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4407,7 +4411,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/93. Planning owner: Unassigned
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4475,7 +4479,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/94. Planning owner: Unassigned
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4556,7 +4560,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/95. Planning owner: Unassigned
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4618,7 +4622,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/49. Planning owner: Unassigned
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4674,7 +4678,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4728,7 +4732,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/130. Planning owner: Unassigne
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: verification. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4777,7 +4781,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/141. Planning owner: Unassigne
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: release. Size: S.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4830,7 +4834,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: decision. Size: S.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4886,7 +4890,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4945,7 +4949,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -4997,7 +5001,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5052,7 +5056,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: verification. Size: S.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5102,7 +5106,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: decision. Size: S.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5160,7 +5164,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: decision. Size: S.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5217,7 +5221,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: S.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5271,7 +5275,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5329,7 +5333,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: S.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5382,7 +5386,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5436,7 +5440,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5499,7 +5503,7 @@ Verified provider economics, funded cumulative plans and every selected Creator/
 
 Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5557,7 +5561,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5618,7 +5622,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **planned**. Kind: verification. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5674,7 +5678,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **blocked**. Kind: decision. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5728,7 +5732,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5791,7 +5795,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/30. Planning owner: Unassigned
 
 Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5847,7 +5851,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5902,7 +5906,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **planned**. Kind: release. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -5960,7 +5964,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **planned**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6016,7 +6020,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6068,7 +6072,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6119,7 +6123,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6172,7 +6176,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6228,7 +6232,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6295,7 +6299,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6365,7 +6369,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/115. Planning owner: Unassigne
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6433,7 +6437,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/62. Planning owner: Unassigned
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6496,7 +6500,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6558,7 +6562,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6620,7 +6624,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6682,7 +6686,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6744,7 +6748,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6801,7 +6805,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6856,7 +6860,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6907,13 +6911,13 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-31 UTC (WH-001 final reconciliation, docs only): WH-075 is reopened (not done) because its site limiter was never seen to refuse live (D51, see WH-075). This task depends on WH-075 and is NOT unblocked by it; its own readiness is unchanged.
 
 ## WH-104 — Accept the complete cumulative tier set before the first paid launch
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: verification. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -6976,7 +6980,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -7034,7 +7038,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -7086,7 +7090,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -7141,7 +7145,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -7192,7 +7196,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -7243,7 +7247,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **blocked**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -7290,7 +7294,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -7339,7 +7343,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **planned**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -7388,7 +7392,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **blocked**. Kind: release. Size: S.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -7438,7 +7442,7 @@ Verified complete with recorded evidence; kept for history and dependency contex
 
 Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: decision. Size: S.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -7499,7 +7503,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -7561,7 +7565,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -7618,7 +7622,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Commercial MVP** (F3). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -7672,7 +7676,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -7736,7 +7740,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/44. Planning owner: Unassigned
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: verification. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -7793,7 +7797,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/65. Planning owner: Unassigned
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: decision. Size: S.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -7848,7 +7852,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -7910,7 +7914,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -7969,7 +7973,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: decision. Size: S.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -8026,7 +8030,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Commercial MVP** (F3). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -8086,7 +8090,7 @@ Demand-led scale, search and advanced hosting beyond the accepted launch set; re
 
 Phase: **Measured expansion** (F4). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -8139,7 +8143,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Measured expansion** (F4). Priority: **P2**. Planning readiness: **deferred**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -8191,7 +8195,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Measured expansion** (F4). Priority: **P2**. Planning readiness: **deferred**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -8246,7 +8250,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Measured expansion** (F4). Priority: **P2**. Planning readiness: **deferred**. Kind: decision. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -8300,7 +8304,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Measured expansion** (F4). Priority: **P2**. Planning readiness: **deferred**. Kind: decision. Size: S.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -8350,7 +8354,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Measured expansion** (F4). Priority: **P2**. Planning readiness: **deferred**. Kind: decision. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -8408,7 +8412,7 @@ Verified complete with recorded evidence; kept for history and dependency contex
 
 Phase: **Measured expansion** (F4). Priority: **P2**. Planning readiness: **done** (complete; see Evidence). Kind: decision. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -8468,11 +8472,72 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Configure and compose maintained modules first; generate only missing custom behavior; preserve isolated customer data and execution with workload-appropriate infrastructure. Whumpo AI maintains projects and chats with owners only.
 
+## WH-075 — Bound shared capacity and separate interactive from batch failures
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: M.
+
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Pooling reduces idle work without allowing one project or job class to exhaust another project service.
+
+### Scope
+
+- Carry server-verified project/actor/purpose scope into jobs, cached results and provider adapters
+- Enforce per-project and platform concurrency, queue length, database work, upload/transform bytes, custom CPU/memory and spend bounds
+- Reserve interactive capacity separately from scans/imports/builds; plan bounded failure groups as observed load grows
+- Support reviewed selective dedicated isolation only when performance/containment evidence warrants it
+- Consume WH-090 current operation eligibility and WH-116 data/cache protection requirements before pooling. Capacity admission cannot bypass actor revocation or convert standard owner assistance into customer-credit usage.
+
+### Acceptance criteria
+
+- [ ] Forged tenant arguments/headers and copied job IDs cannot cross records, files, caches or outputs
+- [ ] Permission-sensitive cache entries key/invalidate by tenant and required actor/authorization revision
+- [ ] Load tests demonstrate bounded noisy-neighbor impact and recoverable backpressure, with no silent data loss
+- [ ] Quotas do not silently meter standard owner AI or automatically upgrade a plan
+- [ ] Unknown cost and pooled fixed overhead remain visible in internal accounting
+
+### Verification
+
+- Cross-tenant job/cache/file/result access fixtures
+- Interactive-versus-batch saturation and recovery tests using bounded local workloads
+- Re-run the WH-050 envelope for newly introduced bottlenecks
+
+### Dependencies and blockers
+
+Planning dependencies: WH-065, WH-050, WH-052, WH-113, WH-122, WH-116. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
+- [docs/security-risk-actions.md](../../docs/security-risk-actions.md)
+- [docs/background-jobs.md](../../docs/background-jobs.md)
+- [docs/resource-pool-economics.md](../../docs/resource-pool-economics.md)
+- [docs/app-data.md](../../docs/app-data.md)
+- [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [docs/workload-placement.md](../../docs/workload-placement.md)
+
+### Execution coordination
+
+Issue: https://github.com/zemdregon/whumpo/issues/128. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.
+- 2026-10-31 UTC (PR #529, decision D28): WH-050 F2, the missing rate-limit binding on whumpo-sites (site HTML has no per-IP limit; one IP sent 150/150 in the P probe), moves here from WH-050. Check the Cloudflare Workers rate limiting binding's availability and price first (the Cloudflare docs connector needed re-authentication and it was not verified); it costs money only if that check says so. See docs/capacity-and-fairness.md.
+- 2026-10-31 UTC, closed on local evidence with limits stated (D40, D43); REOPENED by the live probe in the next entry (D51). Source and local only; nothing deployed for this change. F2: SITE_LIMITER (wrangler.sites.jsonc, namespace 1001005, 300 requests per 60 s per client source, optional in the env type) is checked in src/site-host.ts right after the visitor-host forward, skipped on local hosts, and answers 429 with retry-after 60 before any D1 read; tests/public-fairness.mjs proves no D1 call before the 429, IPv6 grouped by /64, local skip and that a missing binding still serves. No charge is listed for the namespace (D38), not confirmed free; deleting the block is a config-only reversal. Batch limit (D41): projectRuntime(service,project,'batch') adds x-whumpo-class: batch for builds (src/application-build.ts) and migration checks (src/app-migration-checks.ts); the runtime lets batch work hold at most one of two slots. tests/backend-runtime.mjs (actual workerd, deterministic held-open batch call) proves a second batch call is busy while an interactive call on another lane runs, and that a failed batch call frees the slot; tests/build-jobs.mjs proves a busy build holds no capacity, is finished failed, reads as try again and the next build runs; tests/app-migration-checks.mjs proves migration checks dispatch as batch. Acceptance lines: (1) forged tenant arguments and copied job IDs: tests/build-jobs.mjs, job-journal.mjs, boundary-site-isolation.mjs, boundary-visitor-gateway-isolation.mjs, no unmapped path found; (2) permission-sensitive caches: main has no shared cache, new tests/shared-cache-guard.mjs fails if a Cache API, cf cache key, KV or durable binding appears, and tests/request-path-inventory.mjs asserts no cacheable route; (3) noisy neighbour and backpressure: capacity phases A, B, S, L, P and the new phase I (a batch flood of 348 runtime calls, 173 ok and 175 busy with no wrong value, against 30 interactive public backend calls: 30 ok and 0 busy, where the same flood without the class left 24 of 30 busy; refused calls uncharged, counters equal executed calls; runtime recovered); (4) no silent AI metering or plan upgrade: tests/standard-ai-chat.mjs (zero customer credit charge, no customer ledger) and tests/workspace-dashboard.mjs (automaticPlanChanges and overageChargingEnabled false); (5) unknown cost and pooled overhead visible: tests/cost-events-acceptance.mjs W8 to W10 from WH-172 (standing storage reads kept apart from the task, an unpriced call stays unknown and is not counted as zero, an unknown invoice liability line stays unknown, an invoiced liability with no event is a visible residual) and tests/cost-reconcile.mjs. Limit on line 5: no producer emits liability events (license, minimum, renewal), so pooled fixed overhead is visible as standing events and as an invoice residual, not as producer-emitted liability rows; WH-172 stays planned for that. Full local capacity re-run on Node 24.21.0 (pnpm capacity, seed 50, scale 1, 4 tenants, 176.7 s, exit 0, host load rose during the run): victim A p50 207 and p95 476 ms, B p50 490 and p95 1646 ms; site probe by <project>.whumpo.site from one IP 300 ok and 50 x 429 of 350, distinct IPs 150 of 150; D1 statements per request unchanged; recorded in docs/capacity-and-fairness.md. Gate on this commit: pnpm check, verify fast, protection and site, pnpm build, tests/current-schema.mjs, boundary-audit (registration updated for the new gate line, not the check), request-path-inventory on SQLite and --d1, public-fairness and app-migration-checks on SQLite and --d1 (build-jobs has no D1 mode), roadmap validate. NOT verified: the live probe of up to 600 GETs to a random <uuid>.whumpo.site, which needs this deployed (the limiter is per location and approximate, so its count is not asserted); behaviour across Cloudflare isolates; real traffic. Limits (D40): no queue (busy is the explicit, refunded backpressure), no dedicated isolation, failure groups stay a written plan, WH-090 consumption stays through WH-122, the limiter does not cap spend and a shared address can hit 300 per minute for a one-minute 429.
+- 2026-10-31 UTC, REOPENED (D51; docs only; live read-only GET probes from one IP on this host after PR #539 deployed at 5850a4f; no secret, write, Stripe or provider call). SITE_LIMITER is deployed on whumpo-sites (namespace 1001005, 300 per 60 s) and the check is in the deployed bundle, but live probes never saw a 429. Random <uuid>.whumpo.site: 600 GETs in 8.5 s, 576 in 72 s (8 per second), 528 in 66 s, all 404, zero 429. The existing API_LIMITER (120 per 60 s, src/index.ts:166) did not refuse either: /api/plans 180 in 30 s and /api/profile 304 in 38 s, all passed, zero 429. Cloudflare documents the binding as approximate, local to a location, with counts cached and updated in the background; that does not explain a sustained overrun of this size with no refusal, and the cause is unknown. AUTH_LIMITER (10 per 60 s) was not measured. Both limiters fail open and serving is unaffected; the strict controls on public paths are the D1 per-source counters in public admission. What stands: the other four acceptance lines (tenant and job-ID isolation, no shared cache, the batch slot and phase I backpressure, no silent AI metering, cost visibility) are evidenced locally as recorded above, and the 300 ok / 50 x 429 figure is the in-memory harness stand-in, not Cloudflare. What does not: line 3's bounded noisy-neighbour impact for site HTML rests on a limiter that has not been seen to enforce live, so F2 is NOT resolved and the task is not done. Next step is either finding the cause (for example probes from other locations) or the owner's cost decision on Durable Objects for strict counts (docs/owner-review.md). Numbers are recorded in docs/capacity-and-fairness.md; docs/incident-runbooks.md C4 no longer implies enforcement. WH-074 and the other dependents (WH-069, WH-079, WH-080, WH-086, WH-103) must not be read as unblocked by WH-075.
+
 ## WH-078 — Measure composition reuse and full lifecycle cost per outcome
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -8527,7 +8592,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **planned**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -8578,13 +8643,13 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-31 UTC (WH-001 final reconciliation, docs only): WH-075 is reopened (not done) because its site limiter was never seen to refuse live (D51, see WH-075). This task depends on WH-075 and is NOT unblocked by it; its own readiness is unchanged.
 
 ## WH-068 — Implement shared notification templates and delivery configuration
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -8638,7 +8703,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -8688,13 +8753,13 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-31 UTC (WH-001 final reconciliation, docs only): WH-075 is reopened (not done) because its site limiter was never seen to refuse live (D51, see WH-075). This task depends on WH-075 and is NOT unblocked by it; its own readiness is unchanged.
 
 ## WH-070 — Separate visual customization from maintained backend behavior
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -8753,7 +8818,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -8812,7 +8877,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -8865,12 +8930,13 @@ Issue: https://github.com/zemdregon/whumpo/issues/148. Planning owner: Unassigne
 
 - 2026-10-04 UTC: owner decision on issue #148 implemented in source with local verification only; not deployed, not accepted. Changes the composed schema (schema/platform.sql: operator_containments scope 'build', freeze-only CHECK; build_job_admit refuses an active build freeze with the generic build_job_capacity error; new operator_containment_build_cancel trigger), so it needs the owner-run empty-D1 schema cutover held on PR #160 and cannot ship through deploy ci. tools/operator-containment-input.mjs accepts scopes {build:'freeze'} for a project or account (no allowance; limits stay as built) and reports active build jobs in status. A freeze refuses new jobs and cancels running and succeeded-but-unpublished jobs in scope exactly like owner cancellation (no dispatch/finish/spend/publish; an already-sent test is not recalled; cleanup recorded by reconcileBuildJobs); published jobs and other projects/tenants are untouched; lift restores admission. The owner-facing 429 text in src/application-build.ts is now generic so a freeze is not disclosed. Local checks: node tests/build-jobs.mjs (new section 11, SQLite with the actual QuickJS runtime; a mutation removing the cancel trigger made it fail), node tests/operator-containment.mjs and --d1 (local D1), node tests/application-build.mjs, tests/maintenance-inventory.mjs, tests/lifecycle-catalog.mjs, tests/contact-notifications.mjs, pnpm check, node tools/verify.mjs fast and protection, and pnpm build passed. Not rehearsed against any deployed database.
 - 2026-10-31 UTC, NOT closed by the batch 4 closure sweep (origin/main 69451b6; docs only for this entry): depends on WH-075, which a separate agent is changing; the sweep did not touch WH-075 and did not map the two-tenant, cancelled-job, output-ownership or session-resume fixtures. Re-sweep after WH-075 lands.
+- 2026-10-31 UTC (WH-001 final reconciliation, docs only): WH-075 is reopened (not done) because its site limiter was never seen to refuse live (D51, see WH-075). This task depends on WH-075 and is NOT unblocked by it; its own readiness is unchanged.
 
 ## WH-076 — Govern maintained module versions and controlled upgrades
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -8926,7 +8992,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -8988,7 +9054,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -9049,7 +9115,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -9109,7 +9175,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **blocked**. Kind: verification. Size: S.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -9149,13 +9215,13 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-31 UTC (WH-001 final reconciliation, docs only): WH-214 is done (PR #541, local synthetic evidence; a real inbox is unproven), so that dependency is met. WH-160 stays blocked: it still needs the owner's notification decisions and the WH-036 sender and approved-address canary. Nothing was sent.
 
 ## WH-187 — Build the portable bundle and permission filter in source
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -9207,7 +9273,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -9255,7 +9321,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -9303,7 +9369,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **blocked**. Kind: verification. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -9347,68 +9413,11 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
 
-## WH-214 — Visitor-origin routes for notification address entry, verification and staff opt-in
-
-Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
-
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-A signed-in project visitor can enter and verify a notification address and a staff member can opt in and out on the visitor origin, so staff notices and submitter receipts have reachable recipients.
-
-### Scope
-
-- Visitor-origin routes over the existing src/notification-recipients.ts functions: set and remove the visitor address, start and complete verification, staff opt-in and opt-out, each with Origin, rate-limit, tenant and session checks and boundary-audit entries
-- Verification delivery goes through the shared outbox and sender; while no sender is active the routes keep answering delivery_unavailable and store no code
-- No new table or column unless the routes prove one is needed; if so, stop and record the gap
-- Export of the new rows, as recorded as not done in WH-157
-
-### Acceptance criteria
-
-- [ ] A visitor can set, verify, change and remove only their own address, and a staff member can opt in and out only for their own role
-- [ ] Two-tenant isolation: no route reads, writes or reveals another project's or another visitor's address
-- [ ] Cross-origin isolation: a session presented at another project's origin, or the owner origin, is refused on every route and nothing is stored or queued
-- [ ] No route response, log or error carries an address that the caller did not just submit; no real message is sent in testing
-
-### Verification
-
-- New route suite on SQLite and local D1 with a simulated provider, covering two-tenant and cross-origin cases
-- node tests/notification-recipients.mjs
-- node tests/notifications-connected.mjs
-- node tests/boundary-audit.mjs
-- pnpm check
-
-### Dependencies and blockers
-
-Planning dependencies: WH-157, WH-159. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/notifications.md](../../docs/notifications.md)
-- [docs/shared-modules.md](../../docs/shared-modules.md)
-- [docs/data-protection.md](../../docs/data-protection.md)
-- [src/notification-recipients.ts](../../src/notification-recipients.ts)
-
-### Execution coordination
-
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-- 2026-10-31 UTC: created from WH-157 and WH-159. The functions and tables exist and are tested directly; no route reaches them, so WH-157's cross-origin acceptance line holds only because no route exists. Planned, not started.
-- 2026-10-31 UTC (branch wh-214-visitor-notification-routes from origin/main 69451b6; source and local verification on disposable SQLite and local D1, simulated provider, no network, credential, secret, send or provider call, no schema change; PR open, not merged, so readiness stays planned): routes built on the visitor gateway: GET account/notifications and POST account/notifications/{address, address/remove, verify/start, verify/complete, staff/opt-in, staff/opt-out}, a closed step set with exact one-field bodies, behind the gateway Origin gate and per-IP limiter plus the sign-in limiter on the two verification steps, registered in the boundary audit (family visitor-notifications) and the request-path inventory (app.notifications.get and app.notifications.post). Verification goes through the shared outbox: with NOTIFICATION_CUSTOMER_CEILING_CENTS unset (the state today) verify/start answers delivery_unavailable, stores no code and queues nothing; with it set only inside the test environment one visitor.address-verification@1 notice is queued, the contact_delivery lane re-checks and mints the code at the claim and stores only its hash, and the simulated provider receives it once. Evidence: tests/visitor-notification-routes.mjs on SQLite and --d1 (16 groups: own address only, two tenants, foreign Origin and cookie and owner origin refused with nothing stored or queued, closed step set, replay, stale, lockout, rate limits, staff opt-in and revocation, serving stop, export, no address in any response) and tests/visitor-notifications-browser.mjs (Chromium at 360, 390 and 1280, light and dark, 200% text, axe clean). Not proven and left open: a real send and inbox, the sender being active, owner decisions on the spending limit. The catalog gained one platform-obligation template for submitter-scope verification, in the source catalog and the reference harness.
-- 2026-10-31 UTC, review follow-up on the same branch (same local synthetic envelope; PR still open, not merged): per-owner (50 a day) and per-target-address (3 a day across owners, a hash kept in the notice event_ref so it survives erasure of sent_to) caps added beside the per-visitor caps; the code entry form now appears as soon as a code is requested; a notice whose claim loses to an address removal, change or verification is cancelled instead of left queued; the owner's own mailboxes are refused at address; address and both verification steps use the sign-in limiter; during a serving stop the page hides Save, Send and the code form and a queued notice is cancelled; the visitor's export lists sent_to for their own notices. Mutation check of tests/visitor-notification-routes.mjs: 20 of 21 source mutations killed; the survivor (address=?4 on the code update) is equivalent because the claim already requires the same address. OPEN OWNER DECISION: a visitor removing or changing their address clears sent_to on their notices even inside a held project (consent withdrawal is never blocked by a hold); tools/safety-hold-inventory.mjs no longer calls these notices content-free.
-
 ## WH-079 — Design optional customer-configured runtime AI as a separate capability
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P2**. Planning readiness: **deferred**. Kind: decision. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -9459,7 +9468,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-10-31 UTC (WH-001 final reconciliation, docs only): WH-075 is reopened (not done) because its site limiter was never seen to refuse live (D51, see WH-075). This task depends on WH-075 and is NOT unblocked by it; its own readiness is unchanged.
 
 # F5 — Done (23)
 
@@ -9469,7 +9478,7 @@ Verified complete with recorded evidence; kept for history and dependency contex
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: decision. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -9530,7 +9539,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/12. Planning owner: Unassigned
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -9591,7 +9600,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/13. Planning owner: Unassigned
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -9652,7 +9661,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/14. Planning owner: Unassigned
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -9723,7 +9732,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/107. Planning owner: Unassigne
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: decision. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -9788,7 +9797,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/47. Planning owner: Unassigned
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -9848,71 +9857,11 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 - 2026-10-29 UTC, local synthetic evidence only, not Cloudflare billing, CPU or latency, not deployed, not live-accepted: successful request paths slice (WH-073 stays open). tools/request-path-inventory.mjs now seeds a second published synthetic site through the real owner paths (tests/helpers/success-paths.mjs: Chat directory add and publish, tested backend with publication and a confirmed website form, a CMS instance deployed against a stub bridge service with one published post, application activation with a live page, and a passkey visitor) and measures eight success route classes beside the existing 404/400 forms: site.directory.json.live, site.directory.html.live, site.cms.index.live, site.cms.article.get, site.root.backend-form, site.backend.post, app.page.live and app.module.access.me (signed-in visitor, access.me). All return 200, are no-store (the directory also carries its snapshot digest as an ETag), make no subrequest, do identical repeat work, and the 21 earlier route classes and the 4 revocation probes are byte-identical. Cost shape from the regenerated table (SQLite statements, reads/writes): directory JSON 2 (2/0), directory page 3 (2/1), CMS index 3 (2/1), CMS article 3 (2/1), root with live form 6 (5/1, the same as the root without one: the form lookup is already read on every root request), backend form submission 3 (1/2) plus one BACKEND_RUNTIME hop, app page 1 (1/0) plus the APP_HOST hop, app module access.me 7 (7/0) plus the APP_HOST hop. tests/request-path-inventory.mjs gained a group for these routes (SQLite and --d1 pass, 7 groups, 29 routes). tests/standard-service-no-maintainer.mjs now also requests them (31 requests per variant) with the maintainer absent and failing and the owners' funding exhausted: 200s, zero network calls, zero inference, spend or Chat-turn rows, funding rows unchanged, and the backend runtime (the customer's own program, a service binding rather than a provider) called exactly once for the one form submission (SQLite and --d1 pass). The CMS site is seeded once because the platform admits only five CMS projects. A real, unrelated break on main was found and fixed on this branch: tests/safety-case-operations.mjs (run by verify site) failed because the B11 layout receipt cap (#465) added two DELETE sites on workspace_layout_receipts that tools/safety-hold-inventory.mjs did not classify; they are now classified as excluded (dashboard layout history, no project, visitor or customer content), which a reviewer should confirm. No schema, product or Worker change. Not decided here, left to the owner: live cold/warm cost on Cloudflare, and whether the extra D1 read on every public request (including 404s, from the WH-050 serving check) is acceptable. Readiness unchanged.
 - 2026-10-31 UTC, CLOSED by PR #529 on the D29 decision (main be4e6bf (origin/main at 2026-10-31), Node 24.21.0, pnpm 11.19.0, disposable local SQLite/local D1, no network, credential, secret or provider call). No delivery change is planned, so the live cold/warm measurement is not required. Acceptance lines: (1) zero maintainer dispatch: tests/standard-service-no-maintainer.mjs passes 9 groups on SQLite and --d1 (import graphs of the site, app, gateway, runtime and contact entry points reach no inference module, with the platform entry as the positive control; 31 requests per variant across published site, directory, CMS, backend form, visitor app and signed-in module call, guest-preview, unpublish and safety-hold routes plus all three cron schedules: zero network calls, inference_calls, gateway spend attempts, standard-AI requests and Chat turns). (2) Outage or exhausted balance: the same requests run with no AI configuration, with the provider answering 503, and with the owners' allowance and premium buckets spent; all still succeed and no funding row moves. (3) Nothing made cacheable: no delivery change was made; tests/request-path-inventory.mjs passes 7 groups on SQLite and --d1 (29 route classes, every response no-store, identical repeat work, and 4 revocation probes for unpublish, safety hold, photo approval and custom-domain mapping stop serving on the next request). (4) Routing Worker counted as execution: the same inventory shows all 29 route classes invoke Worker code and none is a direct static-asset request (whumpo-sites has no assets; whumpo-platform and whumpo-apps are run_worker_first), and docs/workload-placement.md records that Worker-first handling is billable code. (5) Model-required customer extensions: none exists (WH-079 is deferred), and every visitor and service route above makes zero inference calls, so nothing can fall back to Whumpo AI; this line is satisfied by absence, not by an extension test, and WH-079's own acceptance carries the forward constraint. Also tests/standard-service-runtime-execution.mjs (2026-10-09) is not re-run here. Not decided and not needed to close: whether the extra D1 read per public request (operator_serving_stopped) is acceptable, a latency bound, run_worker_first narrowing, photo counter writes and Workers Caching; these matter only if a delivery change is proposed. Not measured: Cloudflare billing, CPU, latency, cold start.
 
-## WH-075 — Bound shared capacity and separate interactive from batch failures
-
-Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
-
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-Pooling reduces idle work without allowing one project or job class to exhaust another project service.
-
-### Scope
-
-- Carry server-verified project/actor/purpose scope into jobs, cached results and provider adapters
-- Enforce per-project and platform concurrency, queue length, database work, upload/transform bytes, custom CPU/memory and spend bounds
-- Reserve interactive capacity separately from scans/imports/builds; plan bounded failure groups as observed load grows
-- Support reviewed selective dedicated isolation only when performance/containment evidence warrants it
-- Consume WH-090 current operation eligibility and WH-116 data/cache protection requirements before pooling. Capacity admission cannot bypass actor revocation or convert standard owner assistance into customer-credit usage.
-
-### Acceptance criteria
-
-- [ ] Forged tenant arguments/headers and copied job IDs cannot cross records, files, caches or outputs
-- [ ] Permission-sensitive cache entries key/invalidate by tenant and required actor/authorization revision
-- [ ] Load tests demonstrate bounded noisy-neighbor impact and recoverable backpressure, with no silent data loss
-- [ ] Quotas do not silently meter standard owner AI or automatically upgrade a plan
-- [ ] Unknown cost and pooled fixed overhead remain visible in internal accounting
-
-### Verification
-
-- Cross-tenant job/cache/file/result access fixtures
-- Interactive-versus-batch saturation and recovery tests using bounded local workloads
-- Re-run the WH-050 envelope for newly introduced bottlenecks
-
-### Dependencies and blockers
-
-Planning dependencies: WH-065, WH-050, WH-052, WH-113, WH-122, WH-116. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
-- [docs/security-risk-actions.md](../../docs/security-risk-actions.md)
-- [docs/background-jobs.md](../../docs/background-jobs.md)
-- [docs/resource-pool-economics.md](../../docs/resource-pool-economics.md)
-- [docs/app-data.md](../../docs/app-data.md)
-- [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
-- [docs/workload-placement.md](../../docs/workload-placement.md)
-
-### Execution coordination
-
-Issue: https://github.com/zemdregon/whumpo/issues/128. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-- 2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.
-- 2026-10-31 UTC (PR #529, decision D28): WH-050 F2, the missing rate-limit binding on whumpo-sites (site HTML has no per-IP limit; one IP sent 150/150 in the P probe), moves here from WH-050. Check the Cloudflare Workers rate limiting binding's availability and price first (the Cloudflare docs connector needed re-authentication and it was not verified); it costs money only if that check says so. See docs/capacity-and-fairness.md.
-- 2026-10-31 UTC, CLOSED on local evidence with limits stated (D40, D43). Source and local only; nothing deployed for this change. F2: SITE_LIMITER (wrangler.sites.jsonc, namespace 1001005, 300 requests per 60 s per client source, optional in the env type) is checked in src/site-host.ts right after the visitor-host forward, skipped on local hosts, and answers 429 with retry-after 60 before any D1 read; tests/public-fairness.mjs proves no D1 call before the 429, IPv6 grouped by /64, local skip and that a missing binding still serves. No charge is listed for the namespace (D38), not confirmed free; deleting the block is a config-only reversal. Batch limit (D41): projectRuntime(service,project,'batch') adds x-whumpo-class: batch for builds (src/application-build.ts) and migration checks (src/app-migration-checks.ts); the runtime lets batch work hold at most one of two slots. tests/backend-runtime.mjs (actual workerd, deterministic held-open batch call) proves a second batch call is busy while an interactive call on another lane runs, and that a failed batch call frees the slot; tests/build-jobs.mjs proves a busy build holds no capacity, is finished failed, reads as try again and the next build runs; tests/app-migration-checks.mjs proves migration checks dispatch as batch. Acceptance lines: (1) forged tenant arguments and copied job IDs: tests/build-jobs.mjs, job-journal.mjs, boundary-site-isolation.mjs, boundary-visitor-gateway-isolation.mjs, no unmapped path found; (2) permission-sensitive caches: main has no shared cache, new tests/shared-cache-guard.mjs fails if a Cache API, cf cache key, KV or durable binding appears, and tests/request-path-inventory.mjs asserts no cacheable route; (3) noisy neighbour and backpressure: capacity phases A, B, S, L, P and the new phase I (a batch flood of 348 runtime calls, 173 ok and 175 busy with no wrong value, against 30 interactive public backend calls: 30 ok and 0 busy, where the same flood without the class left 24 of 30 busy; refused calls uncharged, counters equal executed calls; runtime recovered); (4) no silent AI metering or plan upgrade: tests/standard-ai-chat.mjs (zero customer credit charge, no customer ledger) and tests/workspace-dashboard.mjs (automaticPlanChanges and overageChargingEnabled false); (5) unknown cost and pooled overhead visible: tests/cost-events-acceptance.mjs W8 to W10 from WH-172 (standing storage reads kept apart from the task, an unpriced call stays unknown and is not counted as zero, an unknown invoice liability line stays unknown, an invoiced liability with no event is a visible residual) and tests/cost-reconcile.mjs. Limit on line 5: no producer emits liability events (license, minimum, renewal), so pooled fixed overhead is visible as standing events and as an invoice residual, not as producer-emitted liability rows; WH-172 stays planned for that. Full local capacity re-run on Node 24.21.0 (pnpm capacity, seed 50, scale 1, 4 tenants, 176.7 s, exit 0, host load rose during the run): victim A p50 207 and p95 476 ms, B p50 490 and p95 1646 ms; site probe by <project>.whumpo.site from one IP 300 ok and 50 x 429 of 350, distinct IPs 150 of 150; D1 statements per request unchanged; recorded in docs/capacity-and-fairness.md. Gate on this commit: pnpm check, verify fast, protection and site, pnpm build, tests/current-schema.mjs, boundary-audit (registration updated for the new gate line, not the check), request-path-inventory on SQLite and --d1, public-fairness and app-migration-checks on SQLite and --d1 (build-jobs has no D1 mode), roadmap validate. NOT verified: the live probe of up to 600 GETs to a random <uuid>.whumpo.site, which needs this deployed (the limiter is per location and approximate, so its count is not asserted); behaviour across Cloudflare isolates; real traffic. Limits (D40): no queue (busy is the explicit, refunded backpressure), no dedicated isolation, failure groups stay a written plan, WH-090 consumption stays through WH-122, the limiter does not cap spend and a shared address can hit 300 per minute for a one-minute 429.
-
 ## WH-123 — Freeze the shared module contract and decompose WH-067
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: decision. Size: S.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -9966,7 +9915,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -10022,7 +9971,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/157. Planning owner: Unassigne
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -10081,7 +10030,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -10139,7 +10088,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -10202,7 +10151,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -10264,7 +10213,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P0**. Planning readiness: **done** (complete; see Evidence). Kind: verification. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -10317,7 +10266,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: S.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -10367,7 +10316,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: decision. Size: S.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -10425,7 +10374,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -10481,7 +10430,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -10538,7 +10487,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -10588,12 +10537,13 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 - 2026-10-30 UTC (WH-001 reconciliation against origin/main 475a3a9, read from git log and gh pr view; docs only, nothing re-run unless stated, no GitHub issue, Cloudflare or provider mutation): merged PR #495 (fce4d32, schema batch 3c recipients and cross-scope suppression; cut over by #496). Stays planned: source and local only, no delivery; the customer notification configuration is WH-158.
 - 2026-10-31 UTC, CLOSED by WH-159 on D43, on the local synthetic envelope only (main a332b1e, Node 24.21.0, pnpm 11.19.0, disposable SQLite and local D1, simulated provider, no network, credential, secret, send or provider call; NOTIFICATION_CUSTOMER_CEILING_CENTS is set only inside the test fixture env and the suite asserts it is in no tracked wrangler file). Local evidence is not live acceptance: no real email was sent and no sender, DNS record or provider exists. Line 1 (recipients derive only from current records): tests/notification-recipients.mjs 'recipients for each scope come only from current verified, consented records' and 'a public record cannot consent, and an anonymous submitter is never a recipient'; tests/notifications-connected.mjs group 9 posts a form with extra recipient and to fields and no provider call carries the injected address, and group 1 shows owner, staff and receipt calls go only to addresses read from records at send time. Line 2 (revoked, opted-out, unverified or suppressed cancelled before any call): connected group 4 (staff opt-out and receipt-address suppression both cancelled with recipient-revoked and only the owner is called; a revoked visitor gets no receipt; a removed record cancels its notices) and group 3 (a bounced address gets no further receipt while the record is still accepted); tests/notification-configurations.mjs 'eligibility is read again at send time' and 'the claim serializes with erasure' (an address removed, changed to unverified or deleted between read and claim is never called); recipients test 'staff role revocation removes the opt-in'. Line 3 (two-tenant and cross-origin isolation for staff and visitor addresses): recipients test 'two tenants and the visitor identity'; connected groups 1 and 7 (no address crosses tenants); connected group 9 presents each project's visitor session at the other project's origin on the real visitor gateway, both are refused with nothing queued, and no visitor-origin response carries an address. Verification list re-run on this commit, all exit 0: shared-modules-access, notifications-contract, lifecycle-catalog, notification-recipients on SQLite and --d1, notifications-connected on SQLite and --d1, pnpm check. Limits, stated so this close is not read as more: no visitor-origin route exists to enter an address, verify it or opt a staff member in (the functions exist; startVerification always answers delivery_unavailable; the tests set rows directly), so the cross-origin line holds ONLY because no route exists that reads or writes these addresses; no cross-origin test of an address route was run, because there is no such route to test. WH-214 now owns building those routes and testing two-tenant and cross-origin isolation on them, and WH-160 depends on it. Export of the new rows was recorded as not done on 2026-10-29 and is not an acceptance line. No real email was sent.
 - 2026-10-31 UTC, WH-157 cross-origin line now has route evidence (WH-214, PR open and not merged at this entry; local synthetic envelope only: disposable SQLite and local D1, simulated provider, no network, credential, secret, send or provider call; NOTIFICATION_CUSTOMER_CEILING_CENTS is set only inside the test request environment and is unset in every tracked wrangler file). Line 3 (two-tenant and cross-origin isolation for staff and visitor addresses) on the real routes: tests/visitor-notification-routes.mjs presents each project's visitor session and cookie at the other project's host and a foreign, missing, other-project and owner Origin on every one of the seven account/notifications steps, and every request is refused (401, 403 or 404) with the address, opt-in and notice rows and the notice count byte-identical afterwards; the same address in two projects is two rows and a change in one leaves the other; a sweep over every response body finds no full address. The earlier statement that the line held only because no route existed is superseded for the routes WH-214 adds; the export of the new rows is now part of the visitor's own export (GET export carries their own address, verified flag and staff opt-in, never a code). Not proven: any real send, a real inbox, or an active sender.
+- 2026-10-31 UTC (WH-001 final reconciliation, docs only): the visitor-origin routes that line 3 waited on landed in PR #541 and are evidenced under WH-214; the limit stands that no real message has been sent.
 
 ## WH-158 — Customer notification configuration and standard appointment presets
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -10647,7 +10597,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: verification. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -10696,7 +10646,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: decision. Size: S.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -10754,7 +10704,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: decision. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -10800,6 +10750,64 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 - 2026-10-23 UTC (WH-001 verification at 3a12d53, local node tests and file/import checks only; no GitHub, Cloudflare or provider call; adds to the 2026-10-22 history-only entry): 033e7d9 is an ancestor of main; docs/portable-migration-guides.md and tests/portable-migration-guides.mjs exist, and node tests/portable-migration-guides.mjs passes. The task's verification also names tests/portable-export-contract.mjs migration anchors, which could not be verified here (see WH-077). Guides verified delivered; the task stays planned.
 - 2026-10-29 UTC, docs only, nothing re-run (readiness reconciliation against origin/main b504255, read from gh pr list and PR bodies): readiness planned to ready. Every dependency (WH-186, WH-140) is accepted in its own evidence, so this is an open planning candidate; its acceptance is unchanged and not claimed.
 
+## WH-214 — Visitor-origin routes for notification address entry, verification and staff opt-in
+
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
+
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+A signed-in project visitor can enter and verify a notification address and a staff member can opt in and out on the visitor origin, so staff notices and submitter receipts have reachable recipients.
+
+### Scope
+
+- Visitor-origin routes over the existing src/notification-recipients.ts functions: set and remove the visitor address, start and complete verification, staff opt-in and opt-out, each with Origin, rate-limit, tenant and session checks and boundary-audit entries
+- Verification delivery goes through the shared outbox and sender; while no sender is active the routes keep answering delivery_unavailable and store no code
+- No new table or column unless the routes prove one is needed; if so, stop and record the gap
+- Export of the new rows, as recorded as not done in WH-157
+
+### Acceptance criteria
+
+- [ ] A visitor can set, verify, change and remove only their own address, and a staff member can opt in and out only for their own role
+- [ ] Two-tenant isolation: no route reads, writes or reveals another project's or another visitor's address
+- [ ] Cross-origin isolation: a session presented at another project's origin, or the owner origin, is refused on every route and nothing is stored or queued
+- [ ] No route response, log or error carries an address that the caller did not just submit; no real message is sent in testing
+
+### Verification
+
+- New route suite on SQLite and local D1 with a simulated provider, covering two-tenant and cross-origin cases
+- node tests/notification-recipients.mjs
+- node tests/notifications-connected.mjs
+- node tests/boundary-audit.mjs
+- pnpm check
+
+### Dependencies and blockers
+
+Planning dependencies: WH-157, WH-159. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/notifications.md](../../docs/notifications.md)
+- [docs/shared-modules.md](../../docs/shared-modules.md)
+- [docs/data-protection.md](../../docs/data-protection.md)
+- [src/notification-recipients.ts](../../src/notification-recipients.ts)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-31 UTC: created from WH-157 and WH-159. The functions and tables exist and are tested directly; no route reaches them, so WH-157's cross-origin acceptance line holds only because no route exists. Planned, not started.
+- 2026-10-31 UTC (branch wh-214-visitor-notification-routes from origin/main 69451b6; source and local verification on disposable SQLite and local D1, simulated provider, no network, credential, secret, send or provider call, no schema change; PR open, not merged, so readiness stays planned): routes built on the visitor gateway: GET account/notifications and POST account/notifications/{address, address/remove, verify/start, verify/complete, staff/opt-in, staff/opt-out}, a closed step set with exact one-field bodies, behind the gateway Origin gate and per-IP limiter plus the sign-in limiter on the two verification steps, registered in the boundary audit (family visitor-notifications) and the request-path inventory (app.notifications.get and app.notifications.post). Verification goes through the shared outbox: with NOTIFICATION_CUSTOMER_CEILING_CENTS unset (the state today) verify/start answers delivery_unavailable, stores no code and queues nothing; with it set only inside the test environment one visitor.address-verification@1 notice is queued, the contact_delivery lane re-checks and mints the code at the claim and stores only its hash, and the simulated provider receives it once. Evidence: tests/visitor-notification-routes.mjs on SQLite and --d1 (16 groups: own address only, two tenants, foreign Origin and cookie and owner origin refused with nothing stored or queued, closed step set, replay, stale, lockout, rate limits, staff opt-in and revocation, serving stop, export, no address in any response) and tests/visitor-notifications-browser.mjs (Chromium at 360, 390 and 1280, light and dark, 200% text, axe clean). Not proven and left open: a real send and inbox, the sender being active, owner decisions on the spending limit. The catalog gained one platform-obligation template for submitter-scope verification, in the source catalog and the reference harness.
+- 2026-10-31 UTC, review follow-up on the same branch (same local synthetic envelope; PR still open, not merged): per-owner (50 a day) and per-target-address (3 a day across owners, a hash kept in the notice event_ref so it survives erasure of sent_to) caps added beside the per-visitor caps; the code entry form now appears as soon as a code is requested; a notice whose claim loses to an address removal, change or verification is cancelled instead of left queued; the owner's own mailboxes are refused at address; address and both verification steps use the sign-in limiter; during a serving stop the page hides Save, Send and the code form and a queued notice is cancelled; the visitor's export lists sent_to for their own notices. Mutation check of tests/visitor-notification-routes.mjs: 20 of 21 source mutations killed; the survivor (address=?4 on the code update) is equivalent because the claim already requires the same address. OPEN OWNER DECISION: a visitor removing or changing their address clears sent_to on their notices even inside a held project (consent withdrawal is never blocked by a hold); tools/safety-hold-inventory.mjs no longer calls these notices content-free.
+- 2026-10-31 UTC, CLOSED on D43 after PR #541 merged (b1bb814); every acceptance line maps to evidence on the local synthetic envelope (disposable SQLite and local D1, simulated provider, no network, credential, secret, send or provider call; origin/main b1bb814). Line 1 (own address and own role only): tests/visitor-notification-routes.mjs (23 groups re-run on SQLite at b1bb814, passing; --d1 and browser not re-run in this entry; the PR recorded 16 groups on both) (own address only, closed step set, replay, stale, lockout, rate limits, staff opt-in and revocation) and the per-visitor, per-owner (50 a day) and per-target-address (3 a day) caps. Line 2 (two-tenant isolation): the same suite's two-tenant groups. Line 3 (cross-origin): a session and cookie presented at another project's host and a foreign, missing, other-project and owner Origin are refused on all seven account/notifications steps, with nothing stored or queued. Line 4 (no address in any response, log or error that the caller did not just submit; nothing sent): the suite's no-address-in-any-response group, NOTIFICATION_CUSTOMER_CEILING_CENTS unset in every tracked wrangler file so verify/start answers delivery_unavailable and stores no code. Browser: tests/visitor-notifications-browser.mjs at 360, 390 and 1280, light and dark, 200% text, axe clean. Re-run now at b1bb814 on Node 24.21.0 and passing: tests/notification-recipients.mjs (8 cases), tests/notifications-connected.mjs (9 groups), tests/boundary-audit.mjs (81 families); pnpm check is in this PR gate. Mutation check: 20 of 21 source mutations of the send path killed, the survivor equivalent. LIMITS: a real inbox is unproven. No sender is active, no email was sent or received, no provider adapter, DNS or sender domain exists, and the verification code has never been delivered to a real address. Sending stays off until the owner sets NOTIFICATION_CUSTOMER_CEILING_CENTS and a sender exists (WH-036, WH-160). OPEN OWNER DECISION from #541: a visitor who removes or changes an address clears sent_to on their notices even inside a held project, because consent withdrawal is never blocked by a hold; tools/safety-hold-inventory.mjs no longer calls these notices content-free. It is listed in docs/owner-review.md.
+
 # F6 — Native Android owner experience
 
 A native Kotlin/Compose owner app delivers reliable Chat, project reviews, photos, sharing and push to an invited Android beta. Foundations proceed alongside the web roadmap; customer admission inherits WH-048 and Android device, signing, provider and release acceptance.
@@ -10808,7 +10816,7 @@ A native Kotlin/Compose owner app delivers reliable Chat, project reviews, photo
 
 Phase: **Native Android owner experience** (F6). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -10864,7 +10872,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Native Android owner experience** (F6). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -10934,7 +10942,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Native Android owner experience** (F6). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -10999,7 +11007,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Native Android owner experience** (F6). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -11056,7 +11064,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Native Android owner experience** (F6). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: L.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -11115,12 +11123,13 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 - 2026-10-29 platform ADR (docs only, no app code, build, Play action or deployment): client UX planned (WP7): in-context POST_NOTIFICATIONS on Android 13+, opt-in by default, three channels (Needs your review, Work finished, Something went wrong), private lock-screen copy, taps open Activity and read current state. FCM rechecked as a no-cost Firebase product (firebase.google.com/pricing). The Firebase project and server credential custody are owner tasks; no provider configured.
 - 2026-10-30 UTC (WH-001 reconciliation against origin/main 475a3a9, read from git log and gh pr view; docs only, nothing re-run unless stated, no GitHub issue, Cloudflare or provider mutation): merged PR #489 (e2f5e01, FCM_SERVICE_ACCOUNT_JSON registered in secret-custody), #485 (15cfd84, google-services.json git-ignored) and #511 (3adf879, schema batch 4 push devices and events; cut over by #513). Stays planned and blocked: unwired sender, push sending inactive, no configured FCM or device delivery recorded. PR #514 (FCM bare NOT_FOUND maps to config-error; recovery drill treats push_devices as a credential table) was still open at this check.
 - 2026-10-31 UTC: PR #514 merged (489a531, source and tests only, not deployed by itself): a bare FCM NOT_FOUND is now a config-error (src/push-fcm.ts, tests/push-fcm.mjs) and the recovery drill classifies push_devices as a credential table. Supersedes the October 30 line saying #514 was open. Still planned and blocked: the sender is unwired, push is inactive and no FCM or device delivery is recorded.
+- 2026-10-31 UTC (WH-001 final reconciliation, docs only): WH-075 is reopened (not done) because its site limiter was never seen to refuse live (D51, see WH-075). This task depends on WH-075 and is NOT unblocked by it; its own readiness is unchanged.
 
 ## WH-087 — Accept and distribute a bounded private Android beta
 
 Phase: **Native Android owner experience** (F6). Priority: **P1**. Planning readiness: **blocked**. Kind: release. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -11186,7 +11195,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 Phase: **Native Android owner experience** (F6). Priority: **P2**. Planning readiness: **deferred**. Kind: decision. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
@@ -11244,7 +11253,7 @@ Verified complete with recorded evidence; kept for history and dependency contex
 
 Phase: **Native Android owner experience** (F6). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: decision. Size: M.
 
-Reviewed: 2026-10-31. Source baseline: `be4e6bf321b71c20e208b13a6628ff973826eec0`. This is a planning snapshot, not current execution or deployment status.
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
 Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
 
