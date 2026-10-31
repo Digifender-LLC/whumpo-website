@@ -12322,6 +12322,195 @@
    }
   },
   {
+   "id": "visitor-notifications",
+   "title": "Visitor notification address, verification and staff opt-in",
+   "surface": "visitor",
+   "privileged": [
+    "visitor-data",
+    "notification"
+   ],
+   "authorityClass": "visitor session cookie of this project's visitor origin; the visitor, project and access instance come only from the session",
+   "reach": "Service binding only (via whumpo-sites APP_HOST). Sending a code is queued through the shared outbox and stays off while NOTIFICATION_CUSTOMER_CEILING_CENTS is unset.",
+   "entries": [
+    {
+     "file": "src/app-gateway.ts",
+     "kind": "regex",
+     "match": "/^account\\/notifications(?:\\/(.+))?$/",
+     "methods": [
+      "GET",
+      "POST"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Every step resolves the unrevoked visitor of this project from its session; a body names only the one field its step takes, so no visitor, project, instance, role or consent is ever supplied. Staff opt-in needs the granted staff role and a verified address.",
+     "enforcedAt": [
+      {
+       "file": "src/app-notifications.ts",
+       "contains": "const actor=await visitorIdentity(db,session,project),keys=fields[step];"
+      },
+      {
+       "file": "src/notification-recipients.ts",
+       "contains": "notification_optin_forbidden"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/visitor-notification-routes.mjs",
+       "contains": "const r=await go(a,null,P(step),{body});assert.equal(r.status,401,step);",
+       "asserts": "no session, no step"
+      },
+      {
+       "file": "tests/visitor-notification-routes.mjs",
+       "contains": "assert.equal((await go(a,a1,N+'staff/opt-in',{body:{}})).status,403,'no staff role');",
+       "asserts": "staff opt-in without the role is refused"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Shared gateway gate; the apps path on the owner origin is not an application host.",
+     "enforcedAt": [
+      {
+       "file": "src/app-gateway.ts",
+       "contains": "if(request.headers.get('sec-fetch-site')==='cross-site'||(request.headers.has('origin')&&request.headers.get('origin')!==origin)||method==='POST'&&request.headers.get('origin')!==origin)return json({error:'Origin check failed'},403);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/visitor-notification-routes.mjs",
+       "contains": "assert.equal((await go(a,a1,P(step),{body,origin:'https://foreign.test',overrides:ceiling})).status,403,'foreign '+step);",
+       "asserts": "a foreign Origin is refused on every route and stores nothing"
+      },
+      {
+       "file": "tests/visitor-notification-routes.mjs",
+       "contains": "'owner host '+step);",
+       "asserts": "the owner origin does not reach the routes"
+      }
+     ]
+    },
+    "admission": {
+     "state": "evidenced",
+     "detail": "Per-IP gateway limiter on every step; the sign-in limiter on starting and completing verification; at most 3 verification notices an hour, 10 a day and 5 of this template a day per visitor; five wrong codes lock a code.",
+     "enforcedAt": [
+      {
+       "file": "src/app-gateway.ts",
+       "contains": "if(!(await env.API_LIMITER.limit({key:'app:'+ip})).success)return json({error:'Too many requests. Try again in a minute.'},429);"
+      },
+      {
+       "file": "src/app-gateway.ts",
+       "contains": "if(step.startsWith('verify/')&&!(await env.AUTH_LIMITER.limit({key:'app-notify:'+ip})).success)"
+      },
+      {
+       "file": "src/notification-recipients.ts",
+       "contains": "caps:{hour:3,day:10,templateDay:5}"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/visitor-notification-routes.mjs",
+       "contains": "assert.equal((await go(a,a1,P(step),{body,overrides:{API_LIMITER:no,...ceiling}})).status,429,'API '+step);",
+       "asserts": "the gateway limiter refuses every step"
+      },
+      {
+       "file": "tests/visitor-notification-routes.mjs",
+       "contains": "const capped=await go(a,a4,N+'verify/start',{body:{},overrides:ceiling});assert.equal(capped.status,429);",
+       "asserts": "a fourth code in an hour is refused"
+      }
+     ]
+    },
+    "tenant": {
+     "state": "evidenced",
+     "detail": "A visitor row is read and written only by the id and project of the session. Two projects can hold the same address as two rows; a session or cookie of one project finds no visitor at the other's host. The recipients view keeps its own project scope.",
+     "enforcedAt": [
+      {
+       "file": "src/notification-recipients.ts",
+       "contains": "SELECT 1 FROM app_visitors WHERE id=? AND project_id=? AND revoked=0"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/visitor-notification-routes.mjs",
+       "contains": "assert.equal((await go(b,a1,P(step),{body})).status,401,'A session at B: '+step);",
+       "asserts": "a session of project A gets nothing at project B on any route"
+      },
+      {
+       "file": "tests/visitor-notification-routes.mjs",
+       "contains": "assert.equal((await row(a1.who)).address,ALICE,'removing in B leaves A');",
+       "asserts": "a change in one tenant leaves the other"
+      }
+     ]
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "A closed set of seven steps, each with an exact body shape; unknown paths, wrong methods and extra keys are refused.",
+     "enforcedAt": [
+      {
+       "file": "src/app-notifications.ts",
+       "contains": "if(Object.keys(data).length!==keys.length||!keys.every(k=>Object.hasOwn(data,k)))throw new BackendError(400,'Send only what this step asks for.');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/visitor-notification-routes.mjs",
+       "contains": "assert.equal(r.status,400,step+JSON.stringify(extra));",
+       "asserts": "a body naming another visitor, project, instance or role is refused and changes nothing"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "A used code is gone (the update needs the stored hash and an unverified address); a second start while one notice is open queues nothing; setting the same address again changes nothing.",
+     "enforcedAt": [
+      {
+       "file": "src/notification-recipients.ts",
+       "contains": "WHERE visitor_id=? AND verified_at IS NULL AND code_hash=? AND code_expires_at>? AND code_failures<5"
+      },
+      {
+       "file": "src/notification-recipients.ts",
+       "contains": "state IN ('queued','deferred','dispatching')"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/visitor-notification-routes.mjs",
+       "contains": "'a used code is not reusable'",
+       "asserts": "a used code does not verify again"
+      },
+      {
+       "file": "tests/visitor-notification-routes.mjs",
+       "contains": "'a second request while one is open queues nothing'",
+       "asserts": "a repeated start queues one notice"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "A code past its hour, a code from before an address change, and a code after five tries are refused; a queued notice is re-read at send time and stops for a removed, verified, suppressed or contained address or an unset limit.",
+     "enforcedAt": [
+      {
+       "file": "src/notification-outbox.ts",
+       "contains": "if(!n.v_ok||!n.v_address||n.v_verified!==null)return deny('recipient-revoked');"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/visitor-notification-routes.mjs",
+       "contains": "await run('UPDATE visitor_notification_addresses SET code_expires_at=unixepoch()-1 WHERE visitor_id=?',a3.who);",
+       "asserts": "an expired code is refused"
+      },
+      {
+       "file": "tests/visitor-notification-routes.mjs",
+       "contains": "assert.equal((await notices(a5.who)).at(-1).reason,'recipient-revoked');",
+       "asserts": "a removed address stops its queued notice"
+      }
+     ]
+    }
+   }
+  },
+  {
    "id": "visitor-app-data",
    "title": "Visitor application config, data, receipts and data transitions (runtime execution)",
    "surface": "visitor",

@@ -164,6 +164,8 @@
     "test:records-setup": "node tests/records-setup.mjs && node tests/records-setup.mjs --d1",
     "test:notification-configurations": "node tests/notification-configurations.mjs && node tests/notification-configurations.mjs --d1",
     "test:notification-recipients": "node tests/notification-recipients.mjs && node tests/notification-recipients.mjs --d1",
+    "test:visitor-notification-routes": "node tests/visitor-notification-routes.mjs && node tests/visitor-notification-routes.mjs --d1",
+    "test:visitor-notifications-browser": "node tests/visitor-notifications-browser.mjs",
     "test:form-attachments": "node tests/form-attachments.mjs && node tests/form-attachments.mjs --d1",
     "test:module-record-leads": "node tests/module-record-leads.mjs && node tests/module-record-leads.mjs --d1",
     "test:record-leads-browser": "node tests/record-leads-browser.mjs",

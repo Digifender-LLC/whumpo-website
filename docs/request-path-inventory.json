@@ -1631,6 +1631,124 @@
    "revocationInputs": []
   },
   {
+   "key": "app.notifications.get",
+   "label": "Visitor notification settings (unauthenticated)",
+   "method": "GET",
+   "url": "https://app-<project>.whumpo.site/account/notifications",
+   "entry": {
+    "worker": "whumpo-sites",
+    "route": "*.whumpo.site/*",
+    "config": "wrangler.sites.jsonc"
+   },
+   "workerExecution": {
+    "runs": true,
+    "reason": "no assets configured; every routed request invokes the Worker",
+    "billing": "Worker request (inbound invocation); not a direct static-asset request",
+    "serviceBindingTargets": [
+     {
+      "binding": "APP_HOST",
+      "worker": "whumpo-apps",
+      "runs": true,
+      "reason": "assets.run_worker_first = true; every request invokes the Worker before any asset"
+     }
+    ]
+   },
+   "status": 401,
+   "cacheControl": "private, no-store",
+   "validators": [],
+   "firstRequest": {
+    "workers": [
+     "whumpo-sites",
+     "whumpo-apps"
+    ],
+    "d1": {
+     "calls": 1,
+     "batches": 0,
+     "statements": 1,
+     "reads": 1,
+     "writes": 0
+    },
+    "r2": {},
+    "serviceBindings": {
+     "APP_HOST": 1
+    },
+    "assetsBinding": 0,
+    "rateLimiter": {
+     "apps.API_LIMITER": 1
+    },
+    "subrequests": [],
+    "waitUntil": 0,
+    "tables": [
+     "operator_serving_stopped"
+    ]
+   },
+   "repeatRequest": {
+    "sameWork": true,
+    "status": 401,
+    "bodyIdentical": true
+   },
+   "revocationInputs": []
+  },
+  {
+   "key": "app.notifications.post",
+   "label": "Visitor notification address (unauthenticated)",
+   "method": "POST",
+   "url": "https://app-<project>.whumpo.site/account/notifications/address",
+   "entry": {
+    "worker": "whumpo-sites",
+    "route": "*.whumpo.site/*",
+    "config": "wrangler.sites.jsonc"
+   },
+   "workerExecution": {
+    "runs": true,
+    "reason": "no assets configured; every routed request invokes the Worker",
+    "billing": "Worker request (inbound invocation); not a direct static-asset request",
+    "serviceBindingTargets": [
+     {
+      "binding": "APP_HOST",
+      "worker": "whumpo-apps",
+      "runs": true,
+      "reason": "assets.run_worker_first = true; every request invokes the Worker before any asset"
+     }
+    ]
+   },
+   "status": 401,
+   "cacheControl": "private, no-store",
+   "validators": [],
+   "firstRequest": {
+    "workers": [
+     "whumpo-sites",
+     "whumpo-apps"
+    ],
+    "d1": {
+     "calls": 1,
+     "batches": 0,
+     "statements": 1,
+     "reads": 1,
+     "writes": 0
+    },
+    "r2": {},
+    "serviceBindings": {
+     "APP_HOST": 1
+    },
+    "assetsBinding": 0,
+    "rateLimiter": {
+     "apps.API_LIMITER": 1
+    },
+    "subrequests": [],
+    "waitUntil": 0,
+    "tables": [
+     "operator_serving_stopped"
+    ]
+   },
+   "repeatRequest": {
+    "sameWork": true,
+    "status": 401,
+    "bodyIdentical": true
+   },
+   "revocationInputs": []
+  },
+  {
    "key": "app.module.access.me",
    "label": "Visitor app module call (signed-in visitor, access.me)",
    "method": "POST",

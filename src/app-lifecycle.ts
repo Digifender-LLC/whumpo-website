@@ -63,13 +63,15 @@ export async function exportAppAccount(db:D1Database,token:string,project:string
  const actor=await visitorIdentity(db,token,project);
  const account=await db.prepare('SELECT v.id,v.created_at,d.revision,d.state_json FROM app_visitors v JOIN app_documents d ON d.visitor_id=v.id WHERE v.id=?').bind(actor.visitor_id).first<{id:string;created_at:string;revision:number;state_json:string}>();
  if(!account)throw new BackendError(404,'Application account unavailable');
+ // WH-214: the visitor's own notification address (full, it is their export), whether it is verified, and the staff opt-in. Never a code or its hash.
+ const notices=await db.prepare('SELECT a.address,a.verified_at,(SELECT count(*) FROM staff_notification_optins o WHERE o.visitor_id=a.visitor_id) AS opted FROM visitor_notification_addresses a WHERE a.visitor_id=?').bind(actor.visitor_id).first<{address:string;verified_at:number|null;opted:number}>();
  let cursor='',started=false,hasRows=false,finished=false;
  const encoder=new TextEncoder();
  const stream=new ReadableStream<Uint8Array>({async pull(controller){
   try{
    if(finished)return;
    const current=await visitorIdentity(db,token,project);if(current.visitor_id!==actor.visitor_id)throw new BackendError(401,'Application account changed');
-   if(!started){started=true;controller.enqueue(encoder.encode(JSON.stringify({format:'whumpo-visitor-export-v1',exportedAt:new Date().toISOString(),projectId:project,account:{id:account.id,createdAt:account.created_at},document:{revision:account.revision,value:JSON.parse(account.state_json)},historyNote:'History is read in batches and may include activity completed during export. This is not a restore snapshot.'}).slice(0,-1)+',"operations":['));return;}
+   if(!started){started=true;controller.enqueue(encoder.encode(JSON.stringify({format:'whumpo-visitor-export-v1',exportedAt:new Date().toISOString(),projectId:project,account:{id:account.id,createdAt:account.created_at},document:{revision:account.revision,value:JSON.parse(account.state_json)},notifications:notices?{address:notices.address,verified:notices.verified_at!==null,staffOptIn:notices.opted>0}:null,historyNote:'History is read in batches and may include activity completed during export. This is not a restore snapshot.'}).slice(0,-1)+',"operations":['));return;}
    const {results}=await db.prepare('SELECT id,version_id,base_revision,program_revision,state,result_json,next_json,day FROM app_runs WHERE visitor_id=? AND project_id=? AND id>? ORDER BY id LIMIT 50').bind(actor.visitor_id,project,cursor).all<{id:string;version_id:string;base_revision:number;program_revision:number;state:string;result_json:string|null;next_json:string|null;day:string}>();
    if(!results.length){finished=true;controller.enqueue(encoder.encode(']}'));controller.close();return;}
    const output=results.map(row=>({id:row.id,versionId:row.version_id,baseRevision:row.base_revision,programRevision:row.program_revision,status:row.state,day:row.day,result:row.result_json?JSON.parse(row.result_json):null,savedState:row.next_json?JSON.parse(row.next_json):null}));

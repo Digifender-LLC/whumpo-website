@@ -133,6 +133,10 @@ export const notificationCatalog:NotificationCatalog=deepFreeze({
    variables:{businessName:{source:'config',type:'text-line'},reference:{source:'platform',type:'reference'},service:{source:'record',type:'choice'},day:{source:'record',type:'choice'}},
    subject:[{text:'We received your appointment request ('},{var:'reference'},{text:')'}],
    body:[{text:''},{var:'businessName'},{text:' received your appointment request.\n\nReference: '},{var:'reference'},{text:'\nService: '},{var:'service'},{text:'\nPreferred day: '},{var:'day'},{text:'\n\nThis is a request, not a confirmed booking. The business will contact you to confirm.'},...stopSubmitter]})},
+  'visitor.address-verification@1':{state:'available',readiness:'planned',template:template({id:'visitor.address-verification',version:1,authority:'platform-obligation',trigger:'destination.verification',audiences:['submitter'],
+   variables:{code:{source:'platform',type:'code'}},
+   subject:[{text:'Your Whumpo verification code'}],
+   body:[{text:'Your Whumpo verification code is '},{var:'code'},{text:'\n\nEnter it on the page where you added this address within one hour. If you did not ask for this, ignore this email; nothing will be sent unless the code is entered.'}]})},
   'account.email-confirm@1':{state:'available',readiness:'planned',template:template({id:'account.email-confirm',version:1,authority:'platform-obligation',trigger:'account.notice',audiences:['account-email'],
    variables:{confirmationCode:{source:'platform',type:'token'}},
    subject:[{text:'Confirm your new Whumpo account email'}],
@@ -165,7 +169,7 @@ export function validateNotificationTemplate(t:unknown,path='template'):t is Not
  check(Array.isArray(audiences)&&audiences.length>=1&&audiences.every(a=>(recipientScopes as readonly unknown[]).includes(a))&&new Set(audiences).size===audiences.length,'UNKNOWN_SCOPE',`${path}.audiences`);
  const scopes=audiences as unknown[];
  // Platform obligations notify the owner's own verified destination; customer configurations run only on accepted records.
- if(t.authority==='platform-obligation')check(t.trigger!=='form.accepted'&&scopes.every(a=>a==='owner-destination'||a==='account-email'),'AUTHORITY_MISMATCH',path);
+ if(t.authority==='platform-obligation')check(t.trigger!=='form.accepted'&&scopes.every(a=>a==='owner-destination'||a==='account-email'||(a==='submitter'&&t.trigger==='destination.verification')),'AUTHORITY_MISMATCH',path);
  else check(t.trigger==='form.accepted','AUTHORITY_MISMATCH',path);
  const variables=t.variables;
  check(plain(variables),'INVALID_SHAPE',`${path}.variables`);

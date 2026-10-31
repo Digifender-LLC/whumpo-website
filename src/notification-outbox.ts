@@ -89,14 +89,19 @@ export type DeliveryTally={enabled:boolean;queued:number;accepted:number;retried
 export const newTally=():DeliveryTally=>({enabled:false,queued:0,accepted:0,retried:0,failed:0,cancelled:0,refused:0});
 type Due={id:string;user_id:string;scope:string;project_id:string|null;destination_id:string|null;recipient_ref:string|null;template:string;event_ref:string;state:string;attempts:number;expires_at:number;
  d_state:string|null;d_address:string|null;code:string|null;code_expires_at:string|null;email:string;email_verified_at:number|null;contained:number;submission_exists:number;suppressed:number;support_unread:number;
- c_state:string|null;c_new:string|null;c_prev:string|null;c_prev_verified:number|null;c_receipt:number|null;c_deliverable:number|null;c_expires:number|null;c_revision:number|null};
+ v_address:string|null;v_verified:number|null;v_ok:number|null;v_suppressed:number;c_state:string|null;c_new:string|null;c_prev:string|null;c_prev_verified:number|null;c_receipt:number|null;c_deliverable:number|null;c_expires:number|null;c_revision:number|null};
 // The same values as addressKey (src/email-change/change.ts) and mintConfirmationToken (token.ts), copied because only the main Worker's route table may import
 // that folder (tests/email-change-contract.mjs); tests/email-change-delivery.mjs checks they agree.
 const addressKey=(address:string)=>hashToken(`email-change-address:${address}`);
 const mintConfirmationToken=()=>btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
 /** Notices this adapter can render: contact notices, the email-change confirmation (its token is minted in the claimed attempt) and any template without variables. */
-const sendable=(template:string)=>{const t=notificationCatalog.templates[template]?.template;return !!t&&(template==='owner.destination-verification@1'||template===confirmTemplate||isConfiguredTemplate(template)||Object.keys(t.variables).length===0);};
+const sendable=(template:string)=>{const t=notificationCatalog.templates[template]?.template;return !!t&&(template==='owner.destination-verification@1'||template===confirmTemplate||template===visitorVerifyTemplate||isConfiguredTemplate(template)||Object.keys(t.variables).length===0);};
 const confirmTemplate='account.email-confirm@1';
+/** WH-214: a project visitor's address verification. It is the only notice that goes to an UNVERIFIED visitor address, and its code is minted in the claimed attempt (only the hash is stored). */
+export const visitorVerifyTemplate='visitor.address-verification@1';
+export const visitorCodeMs=3600000;
+const codeAlphabet='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const mintVisitorCode=()=>Array.from(crypto.getRandomValues(new Uint8Array(8)),b=>codeAlphabet[b%codeAlphabet.length]).join('');
 /**
  * The address an account-scope notice goes to, decided from the change row at the moment of sending (docs/email-change-and-compromise.md decision 4).
  * Only the new-address confirmation may go to an unverified address. Notices to the previous address need that address to have been verified; every other
@@ -122,7 +127,7 @@ async function accountRecipient(n:Due,now:number):Promise<{address:string;confir
   default:return own;
  }
 }
-const kindOf=(template:string):ContactNotice['kind']=>template==='owner.destination-verification@1'?'verification':template==='contact.new-message@1'?'new_message':isConfiguredTemplate(template)?'configured':'account';
+const kindOf=(template:string):ContactNotice['kind']=>template==='owner.destination-verification@1'||template===visitorVerifyTemplate?'verification':template==='contact.new-message@1'?'new_message':isConfiguredTemplate(template)?'configured':'account';
 
 /** Provider calls recorded in the 32 UTC days ending `now` (the spending-ceiling window), across every notice kind. */
 export async function noticeSendsInWindow(db:Pick<D1Database,'prepare'>,provider:string,now:number){
@@ -139,8 +144,11 @@ async function attempt(db:Db,deps:DeliveryDeps,job:JobRow,lease:JobLease,ctx:Job
    EXISTS(SELECT 1 FROM contact_submissions s WHERE s.id=substr(n.event_ref,9) AND s.project_id=n.project_id) AS submission_exists,
    EXISTS(SELECT 1 FROM contact_notification_suppressions s WHERE s.user_id=n.user_id AND s.address=coalesce(d.address,lower(u.email))) AS suppressed,
    EXISTS(SELECT 1 FROM usage_review_requests q WHERE q.id=n.event_ref AND q.user_id=n.user_id AND q.state='answered' AND q.customer_read_at IS NULL) AS support_unread
+   ,va.address AS v_address,va.verified_at AS v_verified,av.id AS v_ok,EXISTS(SELECT 1 FROM contact_notification_suppressions s WHERE s.user_id=n.user_id AND s.address=va.address) AS v_suppressed
    ,c.state AS c_state,c.new_address AS c_new,c.previous_address AS c_prev,c.previous_verified_at AS c_prev_verified,c.receipt_verified_at AS c_receipt,c.deliverable AS c_deliverable,c.expires_at AS c_expires,c.revision AS c_revision
-  FROM notification_notices n JOIN users u ON u.id=n.user_id LEFT JOIN contact_notification_destinations d ON d.id=n.destination_id LEFT JOIN owner_email_changes c ON c.change_id=n.event_ref AND c.account_id=n.user_id AND n.scope='account-email' WHERE n.job_id=?`).bind(job.id).first<Due>();
+  FROM notification_notices n JOIN users u ON u.id=n.user_id LEFT JOIN contact_notification_destinations d ON d.id=n.destination_id LEFT JOIN owner_email_changes c ON c.change_id=n.event_ref AND c.account_id=n.user_id AND n.scope='account-email'
+   LEFT JOIN visitor_notification_addresses va ON n.template='visitor.address-verification@1' AND va.visitor_id=n.recipient_ref
+   LEFT JOIN app_visitors av ON av.id=va.visitor_id AND av.project_id=n.project_id AND av.revoked=0 WHERE n.job_id=?`).bind(job.id).first<Due>();
  // A job whose notice is gone, finished or not waiting for this attempt carries no work: stop it, send nothing.
  if(!n||(n.state!=='queued'&&n.state!=='deferred')){await cancelStatement(db,owner,job.id,now).first();return;}
  const deny=async(reason:'rejected'|'expired'|'suppressed'|'contained'|'ceiling'|'recipient-revoked'|'record-removed'|'template-withdrawn'|'ceiling-unset'|'configuration-changed')=>{
@@ -155,6 +163,8 @@ async function attempt(db:Db,deps:DeliveryDeps,job:JobRow,lease:JobLease,ctx:Job
  // is cancelled here before any recipient is read or attempt claimed. `!(x>0)` so NaN cannot pass.
  const spendingLimit=Math.max(0,Math.floor(settings.customerCeilingCents??0));
  let recipient:string,code:string|undefined,confirm=false,configured:ConfiguredSend|undefined;
+ // WH-214: a visitor's verification code costs a send like a configured notice, so it waits for the same owner limit and never queues or sends without it.
+ if(n.template===visitorVerifyTemplate&&!(spendingLimit>0))return deny('ceiling-unset');
  if(isConfiguredTemplate(n.template)){
   if(!(spendingLimit>0))return deny('ceiling-unset');
   const r=await resolveConfiguredNotice(db,n);
@@ -179,11 +189,17 @@ async function attempt(db:Db,deps:DeliveryDeps,job:JobRow,lease:JobLease,ctx:Job
   // A support notice is only for a response the customer has not read yet.
   if(n.template==='support.response-saved@1'&&!n.support_unread)return deny('record-removed');
   recipient=to.address;confirm=to.confirm;
+ }else if(n.template===visitorVerifyTemplate){
+  // Only for a current, non-revoked visitor whose address is still unverified; the claim below repeats this against the stored address.
+  if(!n.v_ok||!n.v_address||n.v_verified!==null)return deny('recipient-revoked');
+  if(n.v_suppressed)return deny('suppressed');
+  if(n.contained)return deny('contained');
+  recipient=n.v_address;
  }else if(configured?.recipient)recipient=configured.recipient; // project-staff and submitter: resolved from current records just now (WH-158)
  else return deny('recipient-revoked');
  const ceiling=Math.max(0,Math.min(100000,Math.floor(settings.sendCeiling)));
  // The owner's limit for configured notices is a dollar figure; the catalog price turns it into calls. The ledger above keeps the platform ceiling, so a low limit never throttles contact notices.
- const limitCalls=configured?Math.min(Math.floor(ceiling*0.8),Math.floor(spendingLimit*10000/notificationCatalog.providers[noticeProvider].price!.microsPerCall)):ceiling; // D10: configured notices never use the last fifth, kept for security and contact notices
+ const limitCalls=configured||n.template===visitorVerifyTemplate?Math.min(Math.floor(ceiling*0.8),Math.floor(spendingLimit*10000/notificationCatalog.providers[noticeProvider].price!.microsPerCall)):ceiling; // D10: configured notices never use the last fifth, kept for security and contact notices
  if(await noticeSendsInWindow(db,noticeProvider,now)>=limitCalls)return deny('ceiling');
  const day=new Date(now).toISOString().slice(0,10);
  // Claim the attempt and count it against the ceiling in one transaction BEFORE the call. The ledger row keeps the lowest ceiling any run applied;
@@ -191,18 +207,23 @@ async function attempt(db:Db,deps:DeliveryDeps,job:JobRow,lease:JobLease,ctx:Job
  // The new-address confirmation token is minted only here, after the checks and before the one provider call. Only its SHA-256 verifier is committed, in the same
  // batch that moves the notice to `dispatching`; the dispatch step requires that verifier to be on the change, so a lost revision race sends nothing.
  const token=confirm?mintConfirmationToken():undefined,verifier=token?await hashToken(token):null;
+ if(n.template===visitorVerifyTemplate)code=mintVisitorCode();
  let begun,dispatched;
  try{
-  const claimed=await db.batch([
+  const claim=[
    db.prepare('INSERT INTO notification_send_ledger(provider,day,sends,ceiling) VALUES(?1,?2,0,?3) ON CONFLICT(provider,day) DO UPDATE SET ceiling=min(ceiling,excluded.ceiling)').bind(noticeProvider,day,ceiling),
    beginStatement(db,lease,now),
    ...(verifier?[db.prepare("UPDATE owner_email_changes SET token_verifier=?1,revision=revision+1 WHERE change_id=?2 AND account_id=?3 AND state='pending' AND revision=?4").bind(verifier,n.event_ref,n.user_id,n.c_revision)]:[]),
    db.prepare(`UPDATE notification_notices SET state='dispatching',attempts=attempts+1,dispatched_at=?1,outcome_at=NULL,reason=NULL,sent_to=?7
     WHERE id=?2 AND state IN ('queued','deferred') AND job_id=?3 AND EXISTS(SELECT 1 FROM job_journal WHERE id=?3 AND state='awaiting' AND fence=?4)
      AND (?5 IS NULL OR EXISTS(SELECT 1 FROM owner_email_changes WHERE change_id=?6 AND token_verifier=?5))
-     AND (notification_notices.scope NOT IN ('project-staff','submitter') OR EXISTS(SELECT 1 FROM visitor_notification_addresses WHERE visitor_id=notification_notices.recipient_ref AND address=?7 AND verified_at IS NOT NULL)) RETURNING attempts`).bind(now,n.id,job.id,lease.fence,verifier,n.event_ref,recipient)]);
+     AND (notification_notices.scope NOT IN ('project-staff','submitter') OR EXISTS(SELECT 1 FROM visitor_notification_addresses WHERE visitor_id=notification_notices.recipient_ref AND address=?7 AND (verified_at IS NOT NULL)=(notification_notices.template!='visitor.address-verification@1'))) RETURNING attempts`).bind(now,n.id,job.id,lease.fence,verifier,n.event_ref,recipient)];
+  const claimAt=claim.length-1;
+  // Only the hash of the code is stored, in the batch that claims the attempt and only if it was claimed; a new code replaces the last and resets its tries.
+  if(n.template===visitorVerifyTemplate)claim.push(db.prepare("UPDATE visitor_notification_addresses SET code_hash=?1,code_expires_at=?2,code_failures=0 WHERE visitor_id=?3 AND address=?4 AND verified_at IS NULL AND EXISTS(SELECT 1 FROM notification_notices WHERE id=?5 AND state='dispatching' AND job_id=?6)").bind(await hashToken(code!),Math.floor((now+visitorCodeMs)/1000),n.recipient_ref,recipient,n.id,job.id));
+  const claimed=await db.batch(claim);
  // The last clause serializes the claim with an erasure: an address removed, changed or deleted after it was read is never written to sent_to, and the attempt takes the not-sent path below.
-  begun=claimed[1];dispatched=claimed[claimed.length-1];
+  begun=claimed[1];dispatched=claimed[claimAt];
  }catch(cause){
   if(String(cause).includes('notification_send_ceiling'))return deny('ceiling');
   if(String(cause).includes('email_change_claim'))return deny('expired');
