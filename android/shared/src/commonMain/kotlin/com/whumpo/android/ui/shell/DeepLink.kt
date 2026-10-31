@@ -8,6 +8,11 @@ sealed interface DeepLink {
         override val destination get() = TopDestination.Projects
     }
 
+    /** Back to Chat, e.g. after text was shared into its draft. Never produced by a URL. */
+    data object Chat : DeepLink {
+        override val destination get() = TopDestination.Chat
+    }
+
     data class ActivityEvent(val eventId: String) : DeepLink {
         override val destination get() = TopDestination.Activity
     }

@@ -2,7 +2,10 @@ package com.whumpo.android.ui
 
 import com.whumpo.android.ui.ApiFixtures.Companion.PROJECT
 import com.whumpo.android.ui.ApiFixtures.Companion.reply
+import com.whumpo.android.ui.photos.PendingUpload
 import com.whumpo.android.ui.photos.PhotoPreparer
+import com.whumpo.android.ui.photos.UploadStore
+import kotlinx.coroutines.flow.MutableStateFlow
 import com.whumpo.android.ui.photos.PhotoRejected
 import com.whumpo.android.ui.photos.PreparedPhoto
 import com.whumpo.android.ui.projects.PhotoRow
@@ -217,5 +220,119 @@ class ProjectsViewModelTest {
 
         vm.dismissUpload(row.id)
         assertTrue(vm.photos.value.uploads.isEmpty())
+    }
+
+    // ---- WH-085: upload recovery ----
+
+    /** The PUT reply is lost and the status read finds nothing, so nothing committed. */
+    private fun lostPut(): suspend io.ktor.client.engine.mock.MockRequestHandleScope.(io.ktor.client.request.HttpRequestData) -> io.ktor.client.request.HttpResponseData? = { req: io.ktor.client.request.HttpRequestData ->
+        when {
+            req.method == HttpMethod.Put -> throw IOException("reply lost")
+            req.method == HttpMethod.Get && req.url.encodedPath.contains("/photos/") ->
+                reply(404, """{"version":1,"error":{"code":"not_found","message":"This item is unavailable."}}""")
+            else -> null
+        }
+    }
+
+    private val OTHER = "11111111-2222-4333-8444-555555555555"
+
+    private class MemoryStore : UploadStore {
+        val saved = linkedMapOf<String, PendingUpload>()
+        override val account = MutableStateFlow<Any?>("a")
+        override suspend fun save(upload: PendingUpload): Boolean { saved[upload.id] = upload; return true }
+        override suspend fun load() = saved.values.toList()
+        override suspend fun remove(id: String) { saved.remove(id) }
+    }
+
+    @Test
+    fun preparedBytesAreStoredBeforeTheFirstRequestAndReleasedOnSuccess() = runTest {
+        val store = MemoryStore()
+        var seenBeforePut: PendingUpload? = null
+        api.override = {
+            if (it.method == HttpMethod.Put) seenBeforePut = store.saved.values.singleOrNull()
+            null
+        }
+        val vm = ProjectsViewModel(api.client, preparer, store) { ApiFixtures.NOW }
+        vm.select(PROJECT)
+        vm.addPhoto("content://media/picker/1")
+        vm.photos.first { it.uploads.isEmpty() && api.requests.any { r -> r.method == HttpMethod.Put } }
+
+        assertArrayEquals(photoBytes, seenBeforePut!!.jpeg)
+        assertEquals("van.jpg", seenBeforePut!!.name)
+        assertTrue(store.saved.isEmpty())
+    }
+
+    @Test
+    fun anInterruptedUploadIsRetriedByANewProcessWithTheSameIdBytesAndName() = runTest {
+        val store = MemoryStore()
+        api.override = lostPut()
+        val first = ProjectsViewModel(api.client, preparer, store) { ApiFixtures.NOW }
+        first.select(PROJECT)
+        first.addPhoto("content://media/picker/1")
+        val id = first.photos.first { it.uploads.any { u -> u.phase == UploadPhase.Failed } }.uploads.single().id
+        val firstBody = api.bodies[api.requests.indexOfLast { it.method == HttpMethod.Put }]
+
+        // A new ViewModel on the same store is a restart. It never calls the preparer again.
+        api.override = { null }
+        val calls = preparer.calls
+        val second = ProjectsViewModel(api.client, preparer, store) { ApiFixtures.NOW }
+        second.select(PROJECT)
+        val restored = second.photos.first { it.uploads.isNotEmpty() }.uploads.single()
+        assertEquals(id, restored.id)
+        assertTrue(restored.canRetry)
+        assertEquals(UploadPhase.Failed, restored.phase)
+
+        second.retryUpload(id)
+        second.photos.first { it.uploads.isEmpty() }
+        val last = api.requests.indexOfLast { it.method == HttpMethod.Put }
+        assertTrue(api.requests[last].url.encodedPath.endsWith("/photos/$id"))
+        assertEquals("van.jpg", api.requests[last].headers["X-Photo-Name"])
+        assertArrayEquals(firstBody, api.bodies[last])
+        assertEquals(calls, preparer.calls)
+        assertTrue(store.saved.isEmpty())
+    }
+
+    @Test
+    fun restoredUploadsShowOnlyOnTheirOwnProject() = runTest {
+        val store = MemoryStore()
+        store.saved["u1"] = PendingUpload("u1", OTHER, "a.jpg", photoBytes)
+        val vm = ProjectsViewModel(api.client, preparer, store) { ApiFixtures.NOW }
+        vm.select(PROJECT)
+        assertTrue(vm.photos.value.uploads.isEmpty())
+        vm.select(OTHER)
+        assertEquals("u1", vm.photos.value.uploads.single().id)
+    }
+
+    @Test
+    fun accountChangeOrSignOutDropsHeldBytesAndNeverRetriesThem() = runTest {
+        val store = MemoryStore()
+        api.override = lostPut()
+        val vm = ProjectsViewModel(api.client, preparer, store) { ApiFixtures.NOW }
+        vm.select(PROJECT)
+        vm.addPhoto("content://media/picker/1")
+        val id = vm.photos.first { it.uploads.any { u -> u.phase == UploadPhase.Failed } }.uploads.single().id
+
+        store.saved.clear() // what AccountStateStore.signOut does to the files
+        store.account.value = null
+        assertTrue(vm.photos.value.uploads.isEmpty())
+        val puts = api.requests.count { it.method == HttpMethod.Put }
+        vm.retryUpload(id)
+        assertEquals(puts, api.requests.count { it.method == HttpMethod.Put })
+    }
+
+    @Test
+    fun anUploadTheServerRefusesIsNotKept() = runTest {
+        val store = MemoryStore()
+        api.override = {
+            if (it.method == HttpMethod.Put) reply(415, """{"version":1,"error":{"code":"unsupported_media_type","message":"No."}}""") else null
+        }
+        val vm = ProjectsViewModel(api.client, preparer, store) { ApiFixtures.NOW }
+        vm.select(PROJECT)
+        vm.addPhoto("content://media/picker/1")
+        val row = vm.photos.first { it.uploads.any { u -> u.phase == UploadPhase.Failed } }.uploads.single()
+        assertFalse(row.canRetry)
+        assertTrue(store.saved.isEmpty())
+        vm.retryUpload(row.id)
+        assertEquals(1, api.requests.count { it.method == HttpMethod.Put })
     }
 }

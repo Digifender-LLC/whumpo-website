@@ -13,6 +13,8 @@ import com.whumpo.android.ui.auth.AuthGate
 import com.whumpo.android.ui.activity.ActivityScreen
 import com.whumpo.android.ui.activity.ActivityViewModel
 import com.whumpo.android.ui.chat.ChatViewModel
+import com.whumpo.android.ui.share.ShareDialog
+import com.whumpo.android.ui.share.SharedItem
 import com.whumpo.android.ui.shell.DeepLink
 import com.whumpo.android.ui.chat.ChatScreen
 import com.whumpo.android.ui.projects.ProjectsScreen
@@ -31,14 +33,34 @@ fun WhumpoApp(container: AppContainer) {
     AuthGate(container.auth) {
         // No connectivity source yet, so the offline banner stays off until the API client reports one.
         val link by container.deepLinks.pending.collectAsStateWithLifecycle()
+        val shared by container.shares.pending.collectAsStateWithLifecycle()
+        val projects = viewModel<ProjectsViewModel>(factory = projectsViewModelFactory(container))
+        val chat = viewModel<ChatViewModel>(factory = chatViewModelFactory(container))
+        shared?.let { item ->
+            val list by projects.list.collectAsStateWithLifecycle()
+            ShareDialog(
+                item, list,
+                onAddPhoto = { id ->
+                    container.shares.clear()
+                    projects.select(id)
+                    (item as? SharedItem.Photo)?.let { projects.addPhoto(it.source) }
+                    container.deepLinks.offer(DeepLink.Project(id))
+                },
+                onAddToDraft = { text ->
+                    container.shares.clear()
+                    chat.prefill(text)
+                    container.deepLinks.offer(DeepLink.Chat)
+                },
+                onDismiss = container.shares::clear,
+            )
+        }
         WhumpoShell(requested = link?.destination) { destination, width ->
             when (destination) {
-                TopDestination.Chat ->
-                    ChatScreen(viewModel(factory = chatViewModelFactory(container)), width, container.environment.origin, container.browser)
+                TopDestination.Chat -> {
+                    LaunchedEffect(link) { (link as? DeepLink.Chat)?.let { container.deepLinks.consume(it) } }
+                    ChatScreen(chat, width, container.environment.origin, container.browser)
+                }
                 TopDestination.Projects -> {
-                    val projects = viewModel<ProjectsViewModel>(factory = projectsViewModelFactory(container))
-                    // The same instance the Chat destination uses: "Ask about this project" fills its draft.
-                    val chat = viewModel<ChatViewModel>(factory = chatViewModelFactory(container))
                     LaunchedEffect(link) {
                         (link as? DeepLink.Project)?.let {
                             projects.select(it.id)

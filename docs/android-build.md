@@ -92,6 +92,22 @@ Standard GitHub-hosted runners are free for public repositories. Private reposit
 
 **Local emulator pass (2026-10-31).** One headless API 35 `google_apis` x86_64 AVD (the only image on the dev host; API 28 and 36 are CI only), `-no-window -gpu swiftshader_indirect`, KVM. `connectedLocalDebugAndroidTest connectedDeployedDebugAndroidTest`: 21 tests per flavor, 0 failed, 0 skipped. The AVD data partition needs a disk with more than 7.4 GB free (not a small tmpfs). Emulator only: not a physical device, TalkBack speech, identity, provider or signed-release acceptance.
 
+## Photo and share intake (WH-085, emulator and JVM evidence only)
+
+What exists: the system photo picker (no storage permission) and, new in this change, `ACTION_SEND` for one JPEG, PNG or WebP `content://` image or `text/plain`. A share is remembered in memory only (`ShareInbox`) and waits behind the sign-in gate. Nothing is read, prepared, uploaded, fetched or sent until the owner confirms in `ShareDialog`: a photo goes to the project they pick, text goes into the Chat draft (unsent), and a link is never opened. `file://` handles, other MIME types and `ACTION_SEND_MULTIPLE` are not accepted. If the process dies before the owner confirms, the share is gone and nothing was sent.
+
+Upload recovery: the prepared bytes, name, project and upload ID are sealed in the account store (`StateKind.UPLOAD`, `StoredUploadStore`, at most five, each at most 1 MiB) before the first request and removed when the upload is confirmed, dismissed or refused for good. A restarted process lists them as retries of the same request ("won't be added twice"). Sign-out and account change erase the files with the rest of the account state, and the ViewModel drops its in-memory copy when the account changes. If the bytes cannot be stored the upload still goes ahead, but cannot outlive the process.
+
+| Acceptance line | Evidence | Where |
+| --- | --- | --- |
+| A1 share never sends, fetches, uploads, invokes AI or publishes before submit | `ShareIntentTest` (real `ACTION_SEND` intents through `ActivityScenario`, a loopback `FakeWorker` counting requests): text reaches the draft only, no non-GET request, no request to the shared link; photo needs a project and a tap | emulator |
+| A2 interrupted uploads retry the same bytes, name and ID; bad inputs fail safely | `ShareIntentTest.aLostReplyKeeps...` (dropped reply, same path, headers and body on retry); `ProjectsViewModelTest` (restart retries the stored request; refused uploads are not kept); unsupported MIME and `file://` ignored; oversized, malformed and orientation cases in `PhotoPipelineTest`; foreign-project and conflicting-ID in `tests/mobile-photos.mjs` | emulator, JVM, node |
+| A3 held or blocked media is not rendered or attached; storage is not safety clearance | unchanged: status chips show "Checking" until the server says approved (`ProjectsViewModelTest.selectingAProject...`); server holds in `tests/mobile-photos.mjs` | JVM, node |
+| A4 quota and retained-version rules; logout and account change purge | server message shown (`aFullPhotoQuotaShowsTheServersMessage`); `StoredUploadStoreTest` and `ShareIntentTest` check the files are gone after sign-out and account change | JVM, emulator |
+| A5 local synthetic acceptance recorded apart from WH-017/048 | this section. The photos are synthetic bitmaps made by the test. No scanner, provider, real customer or physical device is involved | |
+
+Limits, plainly: `FakeWorker` is a stand-in that returns the shared fixture shapes, so these tests prove what the app sends and keeps, not server behavior. Screenshots of the dialog (light and dark, 1080x2400 emulator) were taken with `UiAutomation`. Not covered: a physical device, a real photo picker UI on other images, `adb shell am start` share intents on a signed-in app (the tests deliver the same intents through `ActivityScenario`), TalkBack speech.
+
 ## Verification record
 
 - **October 4, 2026 (original shell):** Gradle wrapper hashes matched; `:core:test` passed 19/19 locally; the Android modules were CI-only.

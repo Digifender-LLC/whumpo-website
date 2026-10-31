@@ -9,6 +9,9 @@ import com.whumpo.android.ui.chat.ReauthHook
 import com.whumpo.android.ui.common.AppLinks
 import com.whumpo.android.ui.photos.AndroidPhotoPreparer
 import com.whumpo.android.ui.photos.PhotoPreparer
+import com.whumpo.android.ui.photos.UploadStore
+import com.whumpo.core.data.StoredUploadStore
+import com.whumpo.android.ui.share.SharedItem
 import com.whumpo.android.ui.shell.DeepLink
 import com.whumpo.android.ui.theme.ThemeStore
 import com.whumpo.core.account.AccountStateStore
@@ -46,6 +49,23 @@ class DeepLinkInbox {
     }
 }
 
+/**
+ * The newest shared item not yet answered. It waits behind the sign-in gate and in memory only: if the process dies
+ * before the owner confirms, it is gone and nothing was sent.
+ */
+class ShareInbox {
+    private val item = MutableStateFlow<SharedItem?>(null)
+    val pending: StateFlow<SharedItem?> = item.asStateFlow()
+
+    fun offer(next: SharedItem) {
+        item.value = next
+    }
+
+    fun clear() {
+        item.value = null
+    }
+}
+
 /** Manual dependency graph for the shell; one instance per process. */
 class AppContainer(
     val environment: WhumpoEnvironment,
@@ -65,6 +85,7 @@ class AppContainer(
 
     /** A verified App Link waiting for the owner to be signed in. In memory only: it is gone if the process dies. */
     val deepLinks = DeepLinkInbox()
+    val shares = ShareInbox()
     val auth = AuthController(
         api = mobileApi,
         sessions = sessions,
@@ -86,5 +107,6 @@ class AppContainer(
 
     val themes: ThemeStore = PrefsThemeStore(app)
     val photoPreparer: PhotoPreparer = AndroidPhotoPreparer(app.contentResolver)
+    val uploads: UploadStore = StoredUploadStore(accountState, io)
     val links = AppLinks(environment.origin)
 }
