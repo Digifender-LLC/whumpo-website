@@ -196,7 +196,12 @@ try{
  const failing={prepare:sql=>target.DRILL_A.prepare(sql),batch:statements=>target.DRILL_A.batch([...statements,target.DRILL_A.prepare('INSERT INTO drill_injected_failure VALUES(1)')])};
  await drillHold(()=>restoreControlD1(failing,pointA,pointDigestA),'restore-batch-failed');
  assert.equal((await target.DRILL_A.prepare("SELECT count(*) n FROM sqlite_schema WHERE name='users'").first()).n,0,'Failed batch left no partial schema');
- const control=await phase('restoreControlD1',()=>restoreControlD1(target.DRILL_A,pointA,pointDigestA));
+ // The local D1 bridge intermittently drops the connection of a very large batch (undici UND_ERR_SOCKET 'other side closed'; seen at 5 to 11 s batches, unrelated to the schema and
+ // not tied to the batch time). The batch is atomic: a target that is still empty afterwards was never touched, so one retry on it is safe; a non-empty target is never retried.
+ const restoreOnce=async(db,point,digest)=>{try{return await restoreControlD1(db,point,digest);}catch(error){
+  if(error?.code!=='restore-batch-failed'||(await db.prepare("SELECT count(*) n FROM sqlite_schema WHERE sql IS NOT NULL AND substr(name,1,4)<>'_cf_'").first()).n!==0)throw error;
+  return restoreControlD1(db,point,digest);}};
+ const control=await phase('restoreControlD1',()=>restoreOnce(target.DRILL_A,pointA,pointDigestA));
  assert.equal(control.digest,capture.controlDigest);
  await drillHold(()=>restoreControlD1(target.DRILL_A,pointA,pointDigestA),'restore-target-not-empty');
  // Interrupted object copy, then idempotent resume.
@@ -348,7 +353,10 @@ try{
  const pointB=join(directory,'points','B'),snapshotB='drill-point-b';
  const captureB=await captureRecoveryPoint({sourceDb:db,objects:{get:async key=>(await files.get(key))??(await target.OBJECTS_A.get(key))},directory:pointB,snapshotId:snapshotB});
  const archivedB=await openArchivedControl(pointB,captureB.pointDigest);let manifestB;try{manifestB=await inventory.registerArchive({archiveDb:archivedB.db,snapshotId:snapshotB,keyBackup});}finally{archivedB.close();}
- await restoreControlD1(target.DRILL_B,pointB,captureB.pointDigest);await restoreObjects(target.OBJECTS_B,pointB,captureB.pointDigest);
+ // Intermittent failure found in WH-018 review: this restore comes minutes after the target's last request, so its HTTP keep-alive socket to the local D1 can be
+ // closed by the server just as the large batch is sent (undici UND_ERR_SOCKET 'other side closed', unrelated to the schema). A cheap read first refreshes the connection.
+ await target.DRILL_B.prepare('SELECT 1 AS ok').first();
+await restoreOnce(target.DRILL_B,pointB,captureB.pointDigest);await restoreObjects(target.OBJECTS_B,pointB,captureB.pointDigest);
  const inspectB=()=>inspectIsolatedRestore({db:target.DRILL_B,manifest:manifestB,keyBackup,evidenceSource:inventory.evidenceSource,expectedStreamId:streamId,objects:isolatedObjects(target.OBJECTS_B)});
  const executed=executions;
  holds.inFlightSource=(await inspectB()).holds;assert.deepEqual(holds.inFlightSource,['independent-evidence'],'Unresolved current effects refuse evidence');

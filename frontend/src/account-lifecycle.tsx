@@ -8,6 +8,7 @@ import {Input} from './components/ui/input';
 import {StatusBadge,type Status} from './components/whumpo/status-badge';
 import {identityCeremony} from './lib/identity';
 import {identityGeneration} from './lib/identity-invalidation';
+import {useLocation} from '@tanstack/react-router';
 import {prepareAccountExport,downloadAccountExport,prepareAccountClosure,confirmAccountClosure,resumeAccountClosure,readAccountClosure,newAccountRequestId,closureStepLabels,closureStateLabels,closureDetail,
  type AccountTransport,type ExportReview,type ClosureReview,type ClosureStatus} from './lib/account-lifecycle';
 
@@ -100,6 +101,7 @@ function ClosureSection({onStarted}:{onStarted:(status:ClosureStatus)=>void}){
    <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-body-sm">{Object.entries(review.removes).map(([k,v])=><div key={k} className="contents"><dt>{removeLabels[k]??k}</dt><dd className="text-right tabular-nums">{v}</dd></div>)}</dl>
    <h3 className="font-semibold">What happens</h3><ol className="list-decimal pl-5 text-body-sm space-y-1">{review.effects.map(e=><li key={e}>{e}</li>)}</ol>
    <h3 className="font-semibold">What remains after closure</h3><ul className="list-disc pl-5 text-body-sm space-y-1">{review.remainsAfterClosure.map(e=><li key={e}>{e}</li>)}</ul>
+   {review.needsSupport&&<div className="rounded-md border border-attention-ink/40 bg-attention-soft p-4 text-body-sm text-attention-ink space-y-3" role="group" aria-labelledby="closure-support"><h3 id="closure-support" className="font-semibold">Support is needed first</h3><p>{review.supportMessage}</p><Button asChild variant="secondary" className={wrap}><Link to="/workspace/$view" params={{view:'support'}} search={{}}>Contact support</Link></Button></div>}
    {review.canConfirm?<>
     <label className="grid gap-2 text-body-sm font-medium">Type CLOSE to confirm<Input value={confirmation} onChange={e=>setConfirmation(e.target.value)} disabled={busy} autoComplete="off" autoCapitalize="characters" spellCheck={false} className="min-h-11"/></label>
     <div className="flex flex-wrap gap-3"><Button variant="destructive" className={wrap} disabled={busy||confirmation!=='CLOSE'} onClick={()=>void confirm()}>{busy?'Closing…':'Check passkey and close account'}</Button><Button variant="quiet" className={wrap} disabled={busy} onClick={()=>{setReview(null);setError('');}}>Cancel</Button></div>
@@ -129,4 +131,16 @@ function ClosureProgress({initial}:{initial:ClosureStatus}){
    {!complete&&<div className="flex flex-wrap gap-3"><Button className={wrap} disabled={busy} onClick={()=>void resume()}>{busy?'Continuing…':'Continue closure'}</Button><Button asChild variant="secondary" className={wrap}><Link to="/workspace/$view" params={{view:'support'}} search={{}}>Get support</Link></Button></div>}
    {error&&<p role="alert" className="rounded-md border border-attention-ink/40 bg-attention-soft p-3 text-body-sm text-attention-ink">{error}</p>}
   </CardContent></Card>;
+}
+
+/** Shown on every workspace page once the server refuses an action because the account is closing (the api client raises the event). It is the way
+ * back to the one page that still works, instead of a raw error. */
+export function AccountClosingNotice(){
+ const [closing,setClosing]=useState(false),location=useLocation();
+ useEffect(()=>{const on=()=>setClosing(true);window.addEventListener('whumpo:account-closing',on);return()=>window.removeEventListener('whumpo:account-closing',on);},[]);
+ if(!closing||location.pathname==='/workspace/account')return null;
+ return <div role="alert" className="fixed inset-x-0 top-0 z-50 flex flex-wrap items-center gap-3 border-b border-attention-ink/40 bg-attention-soft px-5 py-3 text-body-sm text-attention-ink">
+  <p className="min-w-0 flex-1 break-words">Your account is closing, so other workspace actions are paused.</p>
+  <Button asChild variant="secondary" className={wrap}><Link to="/workspace/$view" params={{view:'account'}} search={{}}>Open closure status</Link></Button>
+ </div>;
 }

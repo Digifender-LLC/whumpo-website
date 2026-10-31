@@ -13,9 +13,12 @@ const d1=process.argv.includes('--d1');
 const built=await build({stdin:{contents:`export * as client from './frontend/src/lib/account-lifecycle.ts';export {accountLifecycleActions,accountLifecyclePrefix} from './src/account-lifecycle/http.ts';`,resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
 const {client,accountLifecycleActions,accountLifecyclePrefix}=await import('data:text/javascript;base64,'+Buffer.from(built.outputFiles[0].text).toString('base64'));
 const m=await currentSiteFixtureHandlers(),fixture=await databaseFixture(),{db}=fixture;
-const originalFetch=globalThis.fetch;let network=0;globalThis.fetch=async()=>{network++;throw Error('No network is allowed');};
+const originalFetch=globalThis.fetch;let network=0;
+// The only outside call is GitHub token revocation, answered by this stand-in (503 until the test flips it to 204).
+const provider={github:503};
+globalThis.fetch=async(url,init)=>{if(String(url).startsWith('https://api.github.com/applications/client-closure/')&&init?.method==='DELETE')return new Response(null,{status:provider.github});network++;throw Error('No network is allowed');};
 const FILES={get:async()=>null,head:async()=>null,put:async()=>assert.fail('No upload'),delete:async()=>{},list:async()=>({objects:[],truncated:false})};
-const env={DB:db,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})},FILES};
+const env={DB:db,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})},FILES,GITHUB_CLIENT_ID:'client-closure',GITHUB_CLIENT_SECRET:'synthetic-secret',GITHUB_APP_ID:'123',GITHUB_APP_SLUG:'fixture',CONNECTION_ENCRYPTION_KEYRING:fixtureKeyring()};
 const base='https://whumpo.com',run=(q,...p)=>db.prepare(q).bind(...p).run(),row=(q,...p)=>db.prepare(q).bind(...p).first();
 /** The page's transport: its same-origin fetch routed into the real Worker with the session cookie, and the ordinary
  * reauthentication ceremony stood in by issuing a fresh passkey session for the same credential. */
@@ -70,25 +73,25 @@ try{
  a.state.reauths=0;assert.equal((await client.confirmAccountClosure({id:closure.value.id,digest:'f'.repeat(64)},a.t)).code,'stale_review');assert.equal(a.state.reauths,1);
  // Confirm: the durable closure waits on provider revocation with its step journal.
  let started=await client.confirmAccountClosure(closure.value,a.t);assert.equal(started.state,'ok');assert.equal(a.state.reauths,1);
- assert.equal(started.value.state,'waiting');assert.deepEqual(started.value.steps.map(s=>[s.step,s.state]),[['freeze','done'],['withdraw','done'],['credentials','waiting'],['holds','pending'],['operations','pending'],['purge','pending']]);
- assert.ok(client.closureDetail(started.value.steps[2].detail).some(x=>x==='Provider revocations pending: 1'));checks++;
+ assert.equal(started.value.state,'waiting');assert.deepEqual(started.value.steps.map(s=>[s.step,s.state]),[['freeze','done'],['withdraw','done'],['operations','done'],['credentials','waiting'],['holds','pending'],['purge','pending']]);
+ assert.ok(client.closureDetail(started.value.steps[3].detail).some(x=>x==='Provider revocations pending: 1'));checks++;
  // Status and replay return the same closure; a second review is refused; export stays available while closing.
  status=await client.readAccountClosure(a.t);assert.equal(status.value.id,closure.value.id);assert.equal(status.value.state,'waiting');
  assert.equal((await client.confirmAccountClosure(closure.value,a.t)).value.id,closure.value.id);
  assert.equal((await client.prepareAccountClosure(client.newAccountRequestId(),a.t)).code,'closure_exists');
  const late=await client.prepareAccountExport(client.newAccountRequestId(),false,a.t);assert.equal(late.state,'ok');assert.equal((await client.downloadAccountExport(late.value,a.t)).state,'ok');checks++;
  // Resume while the provider has not confirmed: still waiting, nothing repeated. Then the confirmation lands.
- let resumed=await client.resumeAccountClosure(a.t);assert.equal(resumed.value.state,'waiting');assert.equal(resumed.value.steps[2].state,'waiting');
- await run("DELETE FROM github_token_vault WHERE id='token-client'");
+ let resumed=await client.resumeAccountClosure(a.t);assert.equal(resumed.value.state,'waiting');assert.equal(resumed.value.steps[3].state,'waiting');
+ provider.github=204;
  resumed=await client.resumeAccountClosure(a.t);assert.equal(resumed.state,'ok');assert.equal(resumed.value.state,'complete');assert.ok(resumed.value.steps.every(s=>s.state==='done'));
- assert.equal(await row('SELECT id FROM users WHERE id=?',a.account),null);assert.equal((await row('SELECT state FROM account_closures WHERE closure_id=?',closure.value.id)).state,'closed');checks++;
+ assert.equal(await row('SELECT id FROM users WHERE id=?',a.account),null);assert.equal((await row('SELECT state FROM account_closures WHERE closure_id=?',closure.value.id)).state,'closed');assert.equal(await row("SELECT 1 x FROM github_token_vault WHERE id='token-client'"),null,'The real cleanup removed the revoked token');checks++;
  // The session is gone with the account: later reads are refused rather than reporting "not closing".
  a.t.reauth=async()=>{a.state.reauths++;};status=await client.readAccountClosure(a.t);assert.equal(status.state,'error');checks++;
  // The other owner is untouched, and a required owner action is listed as a blocker that refuses confirmation.
  const bScope=await b.scope(),bProject=await createFixtureProject(bScope,b.account,'Bakery','Bread');
  await run('INSERT INTO backend_form_settings(project_id,revision) VALUES(?,0)',bProject.project);
  const blocked=await client.prepareAccountClosure(client.newAccountRequestId(),b.t);assert.equal(blocked.value.canConfirm,false);
- assert.deepEqual(blocked.value.requiredBeforeClosure.map(r=>[r.id,r.count]),[['backendFormSettings',1]]);assert.ok(blocked.value.requiredBeforeClosure[0].action.length>10);
+ assert.deepEqual(blocked.value.requiredBeforeClosure,[]);assert.equal(blocked.value.needsSupport,true);assert.match(blocked.value.supportMessage,/need Whumpo support/);
  assert.equal((await client.confirmAccountClosure(blocked.value,b.t)).code,'action_required');assert.equal(await row('SELECT 1 x FROM account_closures WHERE account_id=?',b.account),null);
  await run('DELETE FROM backend_form_settings WHERE project_id=?',bProject.project);
  assert.deepEqual(await client.readAccountClosure(b.t),{state:'ok',value:null});assert.ok(await row('SELECT id FROM users WHERE id=?',b.account));checks++;

@@ -110,7 +110,7 @@ Class, lane and turnover values:
 | `directories` | `directory_capacity` | owner ≤62 · owner ≤250 · platform ≤1000 · platform ≤2000 | version | R4 | owner-removable | cascade | directories |
 | `directory_reviews` | `directory_review_insert` | project 25 (filtered) · owner 25 (filtered) · owner 100 (filtered) · platform 2500 (filtered) · platform 5000 (filtered) | review | R1 | active-only | cascade | directories |
 | `domain_claims` | `domain_claim_quota` | project 3 · owner 10 · platform 80 | inventory | R6 | owner-removable | trigger+cascade | domains-dns |
-| `domain_connections` | `domain_connection_capacity`, `domain_connection_owner` | project 25 (filtered) · owner 25 (filtered) · owner 100 (filtered) · platform 80 (filtered) · platform 2500 (filtered) · platform 5000 (filtered) | operation | R3 | active-only | none | domains-dns |
+| `domain_connections` | `domain_connection_capacity`, `domain_connection_owner` | project 25 (filtered) · owner 25 (filtered) · owner 100 (filtered) · platform 80 (filtered) · platform 2500 (filtered) · platform 5000 (filtered) | operation | R3 | active-only | cascade | domains-dns |
 | `feature_preview_grants` | `feature_preview_admit` | owner 1000 · platform 20000 | inventory | R6 | lifetime | cascade | feature-preview-authority |
 | `github_backups` | `github_backup_owner` | project 25 (filtered) · owner 25 (filtered) · owner 100 (filtered) · platform 2500 (filtered) · platform 5000 (filtered) | operation | R3 | active-only | cascade | github-backups |
 | `github_token_vault` | `github_token_quota` | owner 10 | inventory | R6 | owner-removable | app+cascade | connections |

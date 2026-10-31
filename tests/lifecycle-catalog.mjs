@@ -34,7 +34,7 @@ try{
  assert.equal(report.readyForDeletion,false);assert.equal(report.policyStatus,'proposed-not-approved');
 
  assert.deepEqual(report.unlinkedOwnership.map(t=>t.table),['account_closure_steps','account_closures','file_cleanup','identity_challenges','notification_send_ledger','operator_containments','operator_retention_receipts','operator_session_revocations','safety_case_evidence','safety_case_findings','safety_cases','safety_disclosure_items','safety_disclosures','safety_evidence_objects','safety_preservation_holds','safety_preserved_records','safety_retention_decisions']);
- assert.ok(report.directOwnerBlocks.some(t=>t.table==='domain_connections'&&t.onDelete==='RESTRICT'));
+ assert.ok(report.directOwnerBlocks.some(t=>t.table==='github_refresh_custody'&&t.onDelete==='RESTRICT'));assert.ok(!report.directOwnerBlocks.some(t=>t.table==='domain_connections'),'WH-018: a settled hostname record leaves with the account (unsettled ones are refused by trigger)');
  assert.ok(report.directOwnerBlocks.some(t=>t.table==='gateway_spend_attempts'&&t.onDelete==='RESTRICT'));
  assert.ok(report.directOwnerBlocks.some(t=>t.table==='chat_review_receipts'&&t.onDelete==='NO ACTION'));
  for(const name of ['project_spec_proposals','project_spec_versions','service_client_proposals','service_client_versions']){

@@ -1,5 +1,6 @@
 import {keyboardJourney} from './helpers/keyboard-journey.mjs';
 import {unzipSync,strFromU8} from 'fflate';
+import {initializeFixtureKeys,fixtureKeyring,fixtureCiphertext} from './helpers/connection-keyring.mjs';
 // WH-018 local synthetic acceptance only: Settings account lifecycle and the compromise review in a real browser (keyboard only) at 360, 390 and 1280px,
 // plus 200% text. The real Worker over the current schema (SQLite, or actual local D1 with --d1), real signed WebAuthn from Chromium's virtual
 // authenticator, and the real outbox. The ONLY provider is a recording `send_email` stand-in below; every address is under .test. No network, no live send.
@@ -123,6 +124,9 @@ try{
  await page.getByText(/Your export was downloaded/).waitFor();await fit('export-done');
  assert.equal((await one("SELECT downloads FROM account_export_usage WHERE user_id=?",account)).downloads,1);
 
+ // A credential with a provider revocation still pending (no provider is configured here), so closing pauses and the closing state can be seen.
+ await initializeFixtureKeys(db);
+ await db.prepare("INSERT INTO github_token_vault(id,user_id,ciphertext,expires_at,state) VALUES('token-browser',?,?,'2027-01-01','active')").bind(account,await fixtureCiphertext(fixtureKeyring(),`whumpo:github:token:${account}:token-browser`,'gho_SYNTHETIC_BROWSER')).run();
  phase='closure review';
  await activate(page.getByRole('button',{name:'Review account closure'}));
  const closureReview=page.getByRole('region',{name:'Closure review'});await closureReview.waitFor();
@@ -138,9 +142,28 @@ try{
  await enter(page.getByLabel('Type CLOSE to confirm'),'CLOSE');
  phase='closure';
  await activate(closeButton);
+ await page.getByRole('heading',{name:'Your account is closing'}).waitFor();
+ assert.match(await page.getByRole('list',{name:'Closure steps'}).innerText(),/Revoke provider authorizations\s+Waiting/);
+ await fit('closure-waiting');
+ // Another workspace page now refuses; the person is taken to the one page that works instead of seeing a raw error.
+ await page.goto(origin+'/workspace/settings');
+ const notice=page.getByRole('alert').filter({hasText:'other workspace actions are paused'});await notice.waitFor({timeout:8000}).catch(async e=>{console.error('PAGE TEXT: '+(await page.locator('body').innerText()).slice(0,600));throw e;});
+ for(const dark of [false,true])for(const [width,large] of [[360,false],[390,false],[1280,false],[360,true]]){
+  await page.emulateMedia({colorScheme:dark?'dark':'light'});await page.evaluate(dark=>document.documentElement.classList.toggle('dark',dark),dark);
+  await page.setViewportSize({width,height:width>=1280?900:844});await page.evaluate(large=>{document.documentElement.style.fontSize=large?'200%':'';},large);
+  await page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
+  const box=await notice.boundingBox(),link=await notice.getByRole('link',{name:'Open closure status'}).boundingBox(),where=`notice ${width}${large?' large':''}${dark?' dark':''}`;
+  assert.ok(box.x>=0&&box.x+box.width<=width+.5,where+': horizontal overflow');assert.ok(link.height>=43.5&&link.x+link.width<=width+.5,where+': link size or position');
+ }
+ await page.evaluate(()=>{document.documentElement.style.fontSize='';document.documentElement.classList.remove('dark');});await page.emulateMedia({colorScheme:'light'});await page.setViewportSize({width:390,height:844});
+ await activate(notice.getByRole('link',{name:'Open closure status'}));
+ await page.getByRole('heading',{name:'Your account is closing',level:2}).waitFor();
+ // The provider confirms (fixture stand-in: the row leaves); continuing the closure finishes it.
+ await db.prepare("DELETE FROM github_token_vault WHERE id='token-browser'").run();
+ await activate(page.getByRole('button',{name:'Continue closure'}));
  await page.getByRole('heading',{name:'Your account is closed'}).waitFor();
  const steps=await page.getByRole('list',{name:'Closure steps'}).innerText();
- for(const label of ['Stop new work','Take websites offline','Revoke provider authorizations','Retention review','Finish unresolved operations','Delete account data'])assert.match(steps,new RegExp(label));
+ for(const label of ['Stop new work','Take websites offline','Finish unresolved operations','Revoke provider authorizations','Retention review','Delete account data'])assert.match(steps,new RegExp(label));
  await fit('closure-done');
  const receipt=await one('SELECT state,history FROM account_closures WHERE account_id=?',account);
  assert.equal(receipt.state,'closed');assert.equal(receipt.history,'["requested","reviewed","confirmed","quiescing","closed"]');

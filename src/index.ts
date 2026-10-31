@@ -173,7 +173,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   // WH-018 account export and closure: own closure-permitting admission; every other route refuses a closing account.
   const lifecycle=await handleAccountLifecycleRequest(request,env);if(lifecycle)return lifecycle;
   const principal=await workspaceIdentity(request,env);
-  const scoped=workspaceBindings(env,admitWorkspace(env.DB,principal),principal.accountId);
+  const scoped=workspaceBindings(env,admitWorkspace(env.DB,principal,pathname==='/api/support/v1'||pathname.startsWith('/api/support/v1/')?'permit':'refuse'),principal.accountId);
   const user=await scoped.DB.prepare('SELECT id,email FROM users WHERE id=?').bind(principal.accountId).first<User>();
   if(!user)throw new IdentityError(401,'proof_required','Sign in to continue.');
   const response=await handleWorkspace(request,scoped,ctx,user);

@@ -14,6 +14,8 @@ export const profiles={
  app:['tests/customer-app-journey.mjs'],
  // WH-004 R7: the boundary regressions that no other profile runs. Not the deploy gate (fast and protection stay as they are); run before a release that touches a boundary.
  security:['tests/boundary-apps-host-forwarding.mjs','tests/boundary-live-routing.mjs','tests/boundary-contact-notice-intake.mjs','tests/boundary-custom-domain-photo-route.mjs','tests/boundary-hosting-maintenance-stale.mjs','tests/boundary-operator-environment.mjs','tests/boundary-photo-route-admission.mjs','tests/boundary-visitor-shell-admission.mjs','tests/boundary-mobile-paths.mjs'],
+ // WH-054 tenant gates (about two minutes): not part of the deploy gate, but a profile so they cannot drift unnoticed (WH-018 found them red at 125 columns). Run before any schema change merges.
+ tenant:['tests/tenant-classification.mjs','tests/tenant-schema-bodies.mjs','tests/sqlite-authorizer.mjs','tests/tenant-sql-surface.mjs'],
 };
 
 // Deliberately allowlist environment inputs. In particular, no provider keys,
@@ -28,7 +30,7 @@ export function fixtureEnvironment(parent,home){
 }
 
 export function runProfile(name,{run=spawnSync,parent=process.env,cwd=root}={}){
- if(!Object.hasOwn(profiles,name))throw Error('Choose fast, protection, site, app or security.');
+ if(!Object.hasOwn(profiles,name))throw Error('Choose fast, protection, site, app, security or tenant.');
  if(Number(process.versions.node.split('.')[0])!==24)throw Error('Verification requires Node.js 24.');
  // Wrangler can read local secret files even with an empty credential environment.
  if(readdirSync(cwd).some(name=>/^\.(?:dev\.vars|env)(?:\.|$)/.test(name)))throw Error('Local .env/.dev.vars files exist. Use a checkout without them for fixture profiles.');
@@ -44,7 +46,7 @@ export function runProfile(name,{run=spawnSync,parent=process.env,cwd=root}={}){
 
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  try{
-  if(process.argv.length>3)throw Error('Usage: node tools/verify.mjs [fast|protection|site|app|security]');
+  if(process.argv.length>3)throw Error('Usage: node tools/verify.mjs [fast|protection|site|app|security|tenant]');
   runProfile(process.argv[2]??'fast');
  }catch(error){console.error(error.message);process.exitCode=1;}
 }
