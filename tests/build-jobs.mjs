@@ -226,30 +226,64 @@ try{
  assert.equal(await active(),0,'A busy build holds no capacity afterwards');
  const retry=await build(lena,await project(lena),await turn(lena),note,noteIn('l2'),noteOut('l2'),service);assert.match(retry,/Application review/,'The next build runs normally');
 
- // 13. WH-074 sweep (A1, A2, A4): no per-customer always-on capacity in any Worker config, no credential or tenant identity
- // in the runtime request, and only a succeeded job's own owner and project can claim its output.
- for(const file of ['wrangler.jsonc','wrangler.apps.jsonc','wrangler.sites.jsonc','wrangler.runtime.jsonc']){
+ // 13. WH-074 sweep (A1, A2, A4, A5): no per-customer always-on capacity in any tracked Worker config, no credential or
+ // tenant identity in the runtime request, only a succeeded job's own owner and project can publish its output, and
+ // capacity stays held by unreleased cleanup at account and pool level.
+ for(const file of ['wrangler.jsonc','wrangler.apps.jsonc','wrangler.sites.jsonc','wrangler.runtime.jsonc','integrations/emdash/wrangler.jsonc']){
   const config=await readFile(resolve(root,file),'utf8');assert.doesNotMatch(config,/"(containers|durable_objects|migrations|browser|vectorize)"\s*:/,file+' allocates no per-customer container or stateful instance');
  }
- const seen=[],spy={fetch:(url,init)=>{seen.push(init);return service.fetch(url,init);}},zed=await account(undefined,2),mP=await project(zed),mT=await turn(zed);
+ const seen=[],spy={fetch:(url,init)=>{assert.equal(String(url),'https://runtime/execute');seen.push(init);return service.fetch(url,init);}},zed=await account(undefined,3),mP=await project(zed),mT=await turn(zed);
  assert.match(await build(zed,mP,mT,note,noteIn('m'),noteOut('m'),spy),/Application review/);
  assert.ok(seen.length>0);
  for(const init of seen){
   assert.deepEqual(Object.keys(init.headers).sort(),['content-type','x-whumpo-class','x-whumpo-lane'],'The runtime request carries no credential header');
-  assert.deepEqual(Object.keys(JSON.parse(init.body)).sort(),['input','source','version']);
+  assert.deepEqual(JSON.parse(init.body),{version:1,source:note,input:noteIn('m')});
   const wire=JSON.stringify(init);for(const secret of [zed,mP,mT])assert.ok(!wire.includes(secret),'No owner, project or job identity reaches the runtime');
  }
- // Output ownership while the job is succeeded and unpublished (the only state that can publish): the owner and project
- // that ran it can claim it; another tenant, or the same owner's other project, cannot.
- const oP=await project(zed),oT=await turn(zed),oPlan=await fixtureExtensionPlan(scope(zed),zed,oP,oT,'custom.visitor-transition'),otherZ=await project(zed),claims=[];
+ // Output ownership through the real prepareApplication path, from inside the owner's own review insert (the job is then
+ // succeeded and unpublished). Another tenant, and the same owner's other project, each with an owned version and
+ // run=<this job>, are refused and leave no review. (A published job is allowed through the trigger by design.)
+ const oP=await project(zed),oT=await turn(zed),oPlan=await fixtureExtensionPlan(scope(zed),zed,oP,oT,'custom.visitor-transition'),otherZ=await project(zed);
+ const yan=await account(undefined,1),yP=await project(yan),yV=(await draft(yan,yP)).t,zV=(await draft(zed,otherZ)).t,claims=[];
  const claiming=await owners.get(zed).scope(interceptDatabase(db,/^INSERT INTO app_activation_reviews/,async()=>{
-  for(const [u,p] of [[zed,oP],[bob,oP],[bob,bP],[zed,otherZ]])claims.push(await J.assertBuildOutput(db,u,p,oT).then(()=>'allowed',e=>e.status));
+  claims.push(await J.assertBuildOutput(db,zed,oP,oT).then(()=>'allowed',e=>e.status));
+  for(const [u,p,v] of [[yan,yP,yV],[zed,otherZ,zV]])claims.push(await prepareApplication(scope(u),u,p,id(),'enable',v,oT).then(()=>'allowed',e=>e.status));
+  for(const [u,p] of [[bob,oP],[bob,bP],[zed,otherZ]])claims.push(await J.assertBuildOutput(db,u,p,oT).then(()=>'allowed',e=>e.status));
  }));
  assert.match((await rawBackendAction(claiming,zed,oT,{kind:'backend',operation:'buildApplication',projectId:oP,source:note,input:noteIn('o'),expected:noteOut('o'),planId:oPlan},service)).reply,/Application review/);
- assert.deepEqual(claims,['allowed',409,409,409]);
- // No other state can publish: published, cancelled, expired and failed jobs all refuse, even for their own owner.
- for(const [u,p,t] of [[alice,aP,aT],[alice,cP,cT],[carol,two.p,two.t],[dave,fP,fT]])await assert.rejects(J.assertBuildOutput(scope(u),u,p,t),e=>e.status===409);
- await assert.rejects(prepareApplication(scope(carol),carol,two.p,id(),'enable',two.t,two.t),e=>e.status===409,'An expired job never publishes');
+ assert.deepEqual(claims,['allowed',409,409,409,409,409]);
+ assert.deepEqual((await db.prepare('SELECT user_id,project_id FROM app_activation_reviews WHERE run_id=?').bind(oT).all()).results.map(r=>({...r})),[{user_id:zed,project_id:oP}],'Only the job’s own owner and project hold a review of its output');
+ // The review insert itself (build_job_publish): a job that is not succeeded cannot back a review even when it has a
+ // complete, passing receipt, its cleanup is released and the owner is right. Succeeded is the positive control.
+ const ruth=await account(undefined,4);
+ async function ended(how){
+  const p=await project(ruth),d=await draft(ruth,p),lease=await d.admit();
+  assert.equal(await J.dispatchBuildJob(db,lease),true);
+  sql.prepare('INSERT INTO backend_runs(id,user_id,project_id,version_id,request_hash) VALUES(?,?,?,?,?)').run(d.t,ruth,p,d.t,'d'.repeat(64));
+  sql.prepare("UPDATE backend_runs SET state='complete',result_json=? WHERE id=?").run(JSON.stringify({ok:true,value:{state:{},result:'x'},check:{status:'passed'}}),d.t);
+  if(how==='expired')age(d.t,{expires_at:'-1 seconds'});
+  if(how==='failed'||how==='succeeded')assert.equal(await J.finishBuildJob(db,lease,how,[]),true);
+  if(how==='cancelled')await J.cancelBuildJob(scope(ruth),ruth,d.t);
+  await J.reconcileBuildJobs(db);age(d.t,{dispatched_at:'-31 seconds'});await J.reconcileBuildJobs(db);
+  const row=await job(d.t);assert.equal(row.state,how);assert.equal(row.cleanup,'released');
+  await prepareApplication(scope(ruth),ruth,p,id(),'enable',d.t,d.t).catch(()=>{}); // creates the project's app space
+  const revision=sql.prepare('SELECT revision FROM app_spaces WHERE project_id=?').get(p).revision;
+  return ()=>sql.prepare('INSERT INTO app_activation_reviews(id,project_id,user_id,version_id,run_id,enabled,base_revision) VALUES(?,?,?,?,?,1,?)').run(id(),p,ruth,d.t,d.t,revision);
+ }
+ for(const how of ['expired','failed','cancelled'])assert.throws(await ended(how),/build_job_output/,how+' job cannot back a review');
+ assert.doesNotThrow(await ended('succeeded'),'A succeeded job with released cleanup can back its own review');
+ // A5: the recorded hold time is real, measured from admission.
+ const aged=await draft(ruth);await aged.admit();age(aged.t,{created_at:'-5 seconds'});await J.cancelBuildJob(scope(ruth),ruth,aged.t);
+ const [heldMs]=await cleanups(aged.t);assert.equal(heldMs.reason,'not-dispatched');assert.ok(heldMs.held_ms>=5000&&heldMs.held_ms<30000,"held_ms is measured from admission: "+heldMs.held_ms);
+ // Capacity is held by unreleased cleanup, not only by running state, at account and pool level (project level is section 6).
+ // A dispatched job that is cancelled stays unreleased until the runtime bound has passed.
+ async function heldJob(owner,p){const d=await draft(owner,p),lease=await d.admit();assert.equal(await J.dispatchBuildJob(db,lease),true);await J.cancelBuildJob(scope(owner),owner,d.t);assert.equal((await job(d.t)).cleanup,'pending');return d.t;}
+ const gus=await account(),holds=[];for(let i=0;i<3;i++)holds.push(await heldJob(gus));
+ await assert.rejects((await draft(gus)).admit(),/build_job_capacity/,'Three unreleased jobs hold the account’s capacity in other projects');
+ while(await active()<J.buildJobLimits.pool){const u=await account();holds.push(await heldJob(u));}
+ assert.ok(sql.prepare("SELECT count(*) n FROM build_jobs WHERE state='running'").get().n<J.buildJobLimits.pool);
+ await assert.rejects((await draft(await account())).admit(),/build_job_capacity/,'Unreleased jobs hold the platform pool');
+ for(const t of holds)age(t,{dispatched_at:'-31 seconds'});await J.reconcileBuildJobs(db);assert.ok(await active()<J.buildJobLimits.pool);
 
  console.log('Build jobs passed: two-tenant fresh runtime memory, shared toolchain vs private artifact keys, output ownership, cancellation before/during/after execution, lease isolation, single spend, expiry, recorded cleanup failure holding capacity, per-project/account/pool bounds, owner replay/concurrency/lost lease, no visitor/workflow/scheduled wake path, deterministic diagnostics before an optional model repair, and the operator build freeze (refuses new jobs, cancels running and unpublished jobs in scope, generic response, lift restores admission).');
 }finally{await runtime?.dispose();await store.close();await rm(dir,{recursive:true,force:true});}
