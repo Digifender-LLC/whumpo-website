@@ -141,6 +141,9 @@ const c:Record<string,[string,string,Disposition]>={
  connectionRotationGuards:['connection_rotation_guards','connections','cancel'],
  uncertainGitHubBackups:['github_backups','github-backups','cancel'],
  githubBackupRepositories:['github_backups','github-backups','retain'],
+ activeSubscriptions:['stripe_subscriptions','billing','cancel'],
+ paidInvoices:['stripe_paid_invoices','billing','retain'],
+ domainZones:['domain_connections','domains-dns','retain'],
 };
 export const closureCategories:Readonly<Record<string,readonly [string,string,Disposition]>>=Object.freeze(c);
 /** Open provider work: closure refuses until each settles (cancelling a local row never settles a provider effect). */

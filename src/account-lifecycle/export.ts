@@ -53,19 +53,36 @@ async function exportBinding(db:D1Database,user:string,visitorData:boolean){
   projects:rows.map(p=>({id:p.id,specRevision:p.spec_revision,directoryRevision:p.directory_revision,modules:modules.filter(m=>m.project_id===p.id).map(m=>[m.id,m.kind,m.config_revision])}))};
 }
 
+/** A Worker invocation may issue at most 1,000 D1 queries. The archive reads photos one by one (two statements each) and visitor datasets page by
+ * page, so a huge account could burn its one monthly-limited download and fail midway. The same conservative estimate runs when the review
+ * is prepared and again before the download consumes anything, and refuses an export that cannot finish in one pass. */
+export const exportQueryBudget=900;
+export async function assertExportWithinBudget(db:D1Database,user:string,visitorData:boolean,budget=exportQueryBudget){
+ const row=await db.prepare(`SELECT
+  (SELECT count(*) FROM project_files f JOIN projects p ON p.id=f.project_id WHERE p.owner_user_id=?1 AND f.status='ready') photos,
+  (SELECT count(*) FROM module_records r JOIN projects p ON p.id=r.project_id WHERE p.owner_user_id=?1) records,
+  (SELECT count(*) FROM module_files m JOIN projects p ON p.id=m.project_id WHERE p.owner_user_id=?1) uploads,
+  (SELECT count(*) FROM module_instances i JOIN projects p ON p.id=i.project_id WHERE p.owner_user_id=?1) modules,
+  (SELECT count(*) FROM projects WHERE owner_user_id=?1) projects`).bind(user).first<{photos:number;records:number;uploads:number;modules:number;projects:number}>();
+ if(!row)throw new AccountLifecycleError(503,'closure_unavailable','The export could not be sized. Try again later.');
+ const estimate=60+row.projects*14+row.modules*6+row.photos*3+(visitorData?Math.ceil(row.records/200)*4+row.uploads*4:0);
+ if(estimate>budget)throw new AccountLifecycleError(409,'request_conflict','This account is too large to export in one download'+(visitorData?'; try again without visitor datasets':'')+'. Nothing was used from your monthly allowance. Contact support to arrange a split export.');
+}
+
 export async function prepareAccountExport(db:D1Database,user:string,input:unknown){
  const data=record(input,['requestId','visitorData']);
  if(typeof data.requestId!=='string'||!uuid.test(data.requestId)||typeof data.visitorData!=='boolean')throw new AccountLifecycleError(400,'invalid_request','Choose a request ID and whether to include visitor datasets.');
+ await assertExportWithinBudget(db,user,data.visitorData);
  const binding=await exportBinding(db,user,data.visitorData);
  const saved=await saveAccountReview(db,user,'export',data.requestId,await hashToken(JSON.stringify(['account-export@1',user,data.visitorData])),binding);
  if(JSON.stringify(saved.binding)!==JSON.stringify(binding))throw new AccountLifecycleError(409,'stale_review','Your projects changed since this review. Prepare a new export review.');
  const modules=binding.projects.flatMap(p=>p.modules);
  return {version:1 as const,review:{id:data.requestId,digest:saved.reviewDigest,expiresAt:saved.expiresAt,format:'whumpo-account-export-v1',visitorData:data.visitorData,
   projects:binding.projects.length,
-  includes:['Account and profile settings (no sign-in credentials)','Approved profile photo','Plan and standard AI usage history','Connection status and GitHub backup destinations','Saved Chat transcript','Each project: details, current saved website specification and saved version list, published directory snapshot, approved photos, staff role list',
+  includes:['Account and profile settings (no sign-in credentials)','Approved profile photo','Plan and standard AI usage history','Connection status and GitHub backup destinations','Saved Chat transcript','Each project: details, current saved website specification and saved version list, published directory snapshot, lead stages and notes you recorded, approved photos, staff role list',
    ...(data.visitorData?['Visitor datasets you selected: module records and approved module file uploads, including visitor identifiers']:[])],
   excludes:['Passkeys, recovery material, sessions and provider tokens','Safety reviews, preservation records and anything held or not yet approved','Internal review envelopes and other accounts\' data',
-   ...(data.visitorData?[]:[`Visitor datasets (${modules.filter(m=>m[1]==='records'||m[1]==='files').length} module instances); request them separately`]),'Contact inbox messages (kept in your inbox for 30 days)','Visitor application documents (each visitor exports their own)'],
+   ...(data.visitorData?[]:[`Visitor datasets (${modules.filter(m=>m[1]==='records'||m[1]==='files').length} module instances); request them separately`]),'Contact inbox messages (kept in your inbox for 30 days, then deleted)','Visitor application documents (each visitor exports their own)'],
   notice:'The download is a private copy for you. It is not a backup Whumpo can restore, and it is generated from current data when you download it.'}};
 }
 
@@ -91,8 +108,12 @@ async function* sections(env:Env,user:string,binding:Awaited<ReturnType<typeof e
   try{yield ['profile/photo.jpg',new Uint8Array(await (await profilePhoto(db,user)).arrayBuffer())];}catch{omissions.push({section:'profile/photo.jpg',reason:'not-currently-approved'});}
  }else if(profile.photoSafety!=='none')omissions.push({section:'profile/photo.jpg',reason:'not-currently-approved'});
  yield ['usage.json',json(await getBilling(db,user))];
+ const requestCount=(await db.prepare('SELECT count(*) n FROM standard_ai_requests WHERE user_id=?').bind(user).first<{n:number}>())?.n??0;
+ if(requestCount>20)omissions.push({section:'usage.json',reason:'most-recent-20-requests-only',count:requestCount});
  const connected=await db.prepare("SELECT (SELECT count(*) FROM github_token_vault WHERE user_id=? AND state='active') github,(SELECT count(*) FROM cloudflare_token_vault WHERE user_id=? AND state='active') cloudflare").bind(user,user).first<{github:number;cloudflare:number}>();
  const backups=(await db.prepare('SELECT project_id,version_id,repo_owner,repo_name,branch,path,state,commit_sha,created_at FROM github_backups WHERE user_id=? ORDER BY created_at,id LIMIT 500').bind(user).all<Record<string,unknown>>()).results;
+ const backupCount=(await db.prepare('SELECT count(*) n FROM github_backups WHERE user_id=?').bind(user).first<{n:number}>())?.n??0;
+ if(backupCount>500)omissions.push({section:'connections.json',reason:'first-500-github-backups-only',count:backupCount});
  yield ['connections.json',json({github:{connected:(connected?.github??0)>0},cloudflare:{connected:(connected?.cloudflare??0)>0},githubBackups:backups.map(b=>({projectId:b.project_id,versionId:b.version_id,repository:`${b.repo_owner}/${b.repo_name}`,branch:b.branch,path:b.path,state:b.state,commit:b.commit_sha,createdAt:b.created_at}))})];
  const chat=await exportChatTranscript(new Request('https://whumpo.com/api/chat/export'),db,user);
  yield ['chat/transcript.json',new Uint8Array(await chat.arrayBuffer())];
@@ -104,6 +125,12 @@ async function* sections(env:Env,user:string,binding:Awaited<ReturnType<typeof e
    savedVersions:versions.map(v=>({id:v.id,createdAt:v.created_at,sha256:v.digest,live:v.live!==null}))})];
   const head=await db.prepare('SELECT h.revision,h.version_id,v.spec_json,v.spec_digest FROM project_spec_heads h JOIN project_spec_versions v ON v.version_id=h.version_id WHERE h.project_id=?').bind(p.id).first<{revision:number;version_id:string;spec_json:string;spec_digest:string}>();
   if(head)yield [base+'specification.json',json({format:'whumpo-project-specification',revision:head.revision,versionId:head.version_id,specDigest:head.spec_digest,specification:JSON.parse(head.spec_json) as unknown})];
+  // Owner-only lead stages, notes and due dates are the owner's own data: exported without the visitor-dataset choice (they hold no visitor identifier).
+  const leads=(await db.prepare('SELECT l.entry_id,i.local_id,l.stage,l.note,l.due_date,l.created_at,l.updated_at FROM module_record_leads l JOIN module_instances i ON i.id=l.instance_id WHERE l.project_id=? ORDER BY l.created_at,l.entry_id LIMIT 1001').bind(p.id).all<{entry_id:string;local_id:string;stage:string;note:string;due_date:string|null;created_at:number;updated_at:number}>()).results;
+  if(leads.length){
+   if(leads.length>1000)omissions.push({section:base+'leads.json',reason:'first-1000-leads-only'});
+   yield [base+'leads.json',json({format:'whumpo-lead-notes',leads:leads.slice(0,1000).map(l=>({entryId:l.entry_id,module:l.local_id,stage:l.stage,note:l.note,dueDate:l.due_date,createdAt:l.created_at,updatedAt:l.updated_at}))})];
+  }
   const history=await directoryHistory(db,user,p.id);
   if(history.snapshots.length)yield [base+'directory.json',json(await exportDirectory(db,user,p.id,history.snapshots[0].id))];
   // Owner photo library: only ready photos whose exact digest is currently approved, re-hashed after the private read.
@@ -156,6 +183,7 @@ export async function downloadAccountExport(env:Env,user:string,input:unknown){
  const stored=JSON.parse(review.binding_json) as Awaited<ReturnType<typeof exportBinding>>;
  const binding=await exportBinding(db,user,stored.visitorData===true);
  if(JSON.stringify(binding)!==review.binding_json)throw new AccountLifecycleError(409,'stale_review','Your projects changed since this review. Prepare a new export review.');
+ await assertExportWithinBudget(db,user,stored.visitorData===true);
  // Single use: the download consumes its exact review and one monthly download in one transaction.
  let consumed:D1Result[];
  try{

@@ -27,9 +27,10 @@ try{
  assert.ok(profiles.security.length>=8&&profiles.security.every(script=>/^tests\/boundary-/.test(script)&&existsSync(new URL('../'+script,import.meta.url))),'the security profile lists existing boundary suites');
  assert.ok(!profiles.fast.some(x=>profiles.security.includes(x))&&!profiles.protection.some(x=>profiles.security.includes(x)),'the deploy gate does not grow');
  const security=[];runProfile('security',{cwd,run:(_cmd,args)=>{security.push(args[0]);return {status:0};}});assert.deepEqual(security,profiles.security);
- // WH-054 tenant gates are deliberately outside every profile (too slow for the deploy build); keep them reachable as package scripts.
+ // WH-054 tenant gates stay out of the deploy gate and the site sweep (too slow for the deploy build) but have their own `tenant` profile, and stay reachable as package scripts.
  const tenantGates=['tests/tenant-classification.mjs','tests/tenant-schema-bodies.mjs','tests/sqlite-authorizer.mjs','tests/tenant-sql-surface.mjs'];
- assert.ok(Object.values(profiles).flat().every(script=>!tenantGates.includes(script)),'WH-054 tenant gates stay out of the verify profiles');
+ assert.ok(['fast','protection','site','app','security'].every(name=>profiles[name].every(script=>!tenantGates.includes(script))),'WH-054 tenant gates stay out of the deploy gate and the sweeps');
+ assert.deepEqual(profiles.tenant,tenantGates);
  assert.equal(JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8')).scripts['test:tenant-gates'],tenantGates.map(script=>'node '+script).join(' && '));
  // WH-204: browser suites need Playwright and a fixed port, so they stay out of every profile; the email-change one must stay reachable as a package script on SQLite and local D1.
  assert.ok(Object.values(profiles).flat().every(script=>!/-browser\.mjs$/.test(script)),'browser suites stay out of the verify profiles');

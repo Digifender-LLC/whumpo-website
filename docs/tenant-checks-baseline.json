@@ -86,6 +86,8 @@
    {"fingerprint":"012cbb8a38cabc08","object":"welcome_first_draft_claim","kind":"trigger","comparison":"projects.owner_user_id = welcome_onboarding.user_id","types":"workspace/account"},
    {"fingerprint":"a2ae67e77e05f5a2","object":"welcome_first_draft_claim","kind":"trigger","comparison":"welcome_onboarding.user_id = chat_turns.user_id","types":"account/workspace"},
    {"fingerprint":"09793118b2bc32dc","object":"welcome_first_draft_guard","kind":"trigger","comparison":"projects.owner_user_id = welcome_onboarding.user_id","types":"workspace/account"},
+   {"fingerprint":"cfdb7ed99acd8367","object":"domain_connection_account_active","kind":"trigger","comparison":"domain_connections.user_id = users.id","types":"workspace/account"},
+   {"fingerprint":"277124823b1dd913","object":"github_grant_account_unresolved","kind":"trigger","comparison":"github_grant_revocations.user_id = users.id","types":"workspace/account"},
    {"fingerprint":"233a68ec493a5737","object":"welcome_first_draft_guard","kind":"trigger","comparison":"welcome_onboarding.user_id = chat_turns.user_id","types":"account/workspace"}
   ]
  },
