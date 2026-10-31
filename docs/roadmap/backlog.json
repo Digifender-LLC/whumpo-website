@@ -2313,7 +2313,7 @@
       "title": "Connected domain purchase acceptance with a sandbox registrar and sandbox payment",
       "phase": "F3",
       "priority": "P1",
-      "readiness": "planned",
+      "readiness": "blocked",
       "kind": "verification",
       "size": "M",
       "dependsOn": [
@@ -2322,7 +2322,9 @@
         "WH-042",
         "WH-105"
       ],
-      "blockers": [],
+      "blockers": [
+        "Verification line 1 \"Connected local journey with owner-approved sandbox credentials\" and acceptance line 1 (a captured sandbox charge): the owner has approved no sandbox credentials, WH-195 has no registrar adapter or sandbox account, WH-042 has no one-off hold and capture, and no card issues the review. The synthetic slice is done."
+      ],
       "outcome": "An owner journey quotes, reviews, consents, funds with a Stripe sandbox hold and registers a sandbox domain, and every failure path recovers without a second purchase.",
       "scope": [
         "Two tenants on local D1 with the sandbox registrar and a Stripe sandbox payment method; maintainer inference unavailable during dispatch and reconciliation",
@@ -2345,7 +2347,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-31 UTC (Batch 7 slice, schema group C2, branch wh-197-domain-journey on WH-196; SYNTHETIC level only: synthetic registrar, stubbed payment, no Stripe key, SDK, request or sandbox, no sender, secret or var; source and local verification on disposable SQLite with two connections and actual local D1): the connected-journey slice is delivered and the task stays blocked on its own lines. New tests/domain-purchase-journey.mjs runs the whole journey over the actual current schema through the store and lifecycle modules: two tenants buy different names at the same time (one registration and one captured hold each, auto-renew off); duplicate consent from two tabs makes one order and one register call; timeout before the registrar acted (hold kept, reads find nothing, three reads end in unresolved, project delete refused, an authenticated failed event releases the hold and frees the name, one register call); timeout after the registrar acted (reconciliation reads the registration and captures the hold, one register call); an interrupted worker (the claim stands, one sweep moves it to unknown-outcome, redispatch refused); price change (refused at consent, cancelled before dispatch with the hold released); expiry (refused at consent, expired when reserved late); foreign owner (consent and cancel refused); cancellation (works before the call, CANNOT_RECALL after); premium exclusion (never offered, never registered); maintainer inference unavailable (global fetch replaced by a counter that fails the test, zero calls); Chat and Domains read one server review (readDomainReview, the registered domain.purchase-review@1 binding, identical output, foreign owner null). The books balance at the end: one registration per registered order, captured holds only for them, unresolved orders keep theirs, no name registered twice. No browser success page can grant a purchase because no route or page exists; tests/domain-purchase-contract.mjs still asserts no Worker reaches the module. Operator runbook for unresolved orders and charge mismatches: docs/domain-purchase-runbook.md (gap G-D12 consumed from WH-042 stays open: there is no one-off hold or capture kind in the payments path). Acceptance line 1 (\"exactly one sandbox registration and one captured sandbox charge per consented order\") is met at the synthetic level only; line 2 (\"no real-money charge, production registrar call or live domain\") holds because none exists; line 3 (evidence distinguishes synthetic, sandbox and live levels) is met by this entry, the runbook and the test banner. Blocked on, exactly: verification line 1 \"Connected local journey with owner-approved sandbox credentials\" (the owner has approved no sandbox credentials, and a stub is not a Stripe sandbox) and the dependency lines of the task (WH-195 has no registrar adapter or sandbox registrar account; WH-042 has no one-off hold and capture; WH-105's card is registered but no card is issued). No Stripe key was read or used."
+      ]
     },
     {
       "id": "WH-198",
