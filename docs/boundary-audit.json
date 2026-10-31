@@ -9490,7 +9490,7 @@
     },
     "target": {
      "state": "evidenced",
-     "detail": "The apply review is bound to one exact kit id and saved version and copies its tokens; the commit trigger refuses any proposal whose brand differs from that saved version or whose specification differs elsewhere. The model never supplies tokens.",
+     "detail": "The apply review is bound to one exact kit id and saved version and copies its tokens; the commit trigger refuses any proposal whose brand differs from that saved version or whose specification differs elsewhere. The model never supplies tokens. A model can never supply a brand: its create and project configuration and design.setBrand are refused, and the commit aborts any non-brand-control change whose design.brand differs from the saved head.",
      "enforcedAt": [
       {
        "file": "src/brand-kits/schema.sql",
@@ -9499,13 +9499,22 @@
       {
        "file": "src/brand-kits/apply.ts",
        "contains": "const brand:Brand={source:{kitId:kit,version:Number(version)}"
+      },
+      {
+       "file": "src/brand-kits/schema.sql",
+       "contains": "CREATE TRIGGER project_spec_brand_unchanged BEFORE INSERT ON project_spec_proposals"
       }
      ],
      "tests": [
       {
        "file": "tests/brand-kits.mjs",
-       "contains": "for(const [name,json] of [['other color'",
+       "contains": "['foreign kit with identical tokens'",
        "asserts": "forged colors, font, version, kit, source or extra changes are refused in the commit"
+      },
+      {
+       "file": "tests/brand-kits.mjs",
+       "contains": "await check('the model cannot apply a brand",
+       "asserts": "driven model turns for change, create and project drafts are refused for owners with and without the plan feature, and a forged proposal aborts in the commit"
       }
      ]
     },
@@ -9547,7 +9556,7 @@
       },
       {
        "file": "tests/brand-kits.mjs",
-       "contains": "assert.ok(r.status>=400,'the second review was prepared against an older site');",
+       "contains": "e=>e.status===409&&/changed|expired|fresh review/i.test(e.message)",
        "asserts": "a review prepared before another change is refused at apply"
       }
      ]
@@ -14123,7 +14132,7 @@
    "title": "Remote read-only operator reports and inventories (and the shared Cloudflare client)",
    "surface": "operator-tool",
    "privileged": [],
-   "authorityClass": "operator's Wrangler login or explicit CLOUDFLARE_API_TOKEN; read-only by convention (the same remote D1 client could run any SQL)",
+   "authorityClass": "operator's Wrangler login or explicit CLOUDFLARE_API_TOKEN; read-only by convention (the same remote D1 client could run any SQL). tools/review-tier.mjs --status is the exception: the CI job's read-only GITHUB_TOKEN (statuses: read) lists commit statuses of one SHA, nothing else",
    "reach": "Operator workstation only; no HTTP route.",
    "entries": [
     {
@@ -14202,6 +14211,14 @@
      "file": "tools/report-task-costs.mjs",
      "kind": "tool",
      "match": "via-import",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/review-tier.mjs",
+     "kind": "tool",
+     "match": "github-api",
      "methods": [
       "CLI"
      ]
