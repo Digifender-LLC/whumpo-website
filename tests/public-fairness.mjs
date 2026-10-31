@@ -108,5 +108,25 @@ try{
  assert.equal((await db.prepare("SELECT count(*) n FROM public_client_usage WHERE day='2000-01-01'").first()).n,0);
  assert.equal((await db.prepare("SELECT count(*) n FROM storage_project_usage WHERE period='2000-01'").first()).n,0);
  assert.ok((await db.prepare('SELECT count(*) n FROM public_client_usage').first()).n>0);
- console.log('Public fairness checks passed: per-client sub-limits (backend/contact/photo) with hashed keys, busy/unavailable refunds, account fair share past half of each platform pool, per-project photo budget, unchanged platform ceilings, opaque runtime lanes and retention.');
+ // WH-075 F2 (D38/D39): the site limiter answers 429 before any D1 read; a missing binding keeps serving.
+ {
+  const keys=[];let allow=true;const limiter={limit:async o=>{keys.push(o.key);return {success:allow};}};
+  let dbTouched=0;const guardDB=new Proxy({},{get(){dbTouched++;throw Error('D1 must not be read before the site limiter');}});
+  const siteGet=(host,ipv,env)=>m.host.fetch(new Request(`https://${host}/`,{headers:ipv?{'cf-connecting-ip':ipv}:{}}),env);
+  const sid=id()+'.whumpo.site';
+  allow=false;
+  const refusedSite=await siteGet(sid,'203.0.113.5',{DB:guardDB,SITE_LIMITER:limiter});
+  assert.equal(refusedSite.status,429);assert.equal(refusedSite.headers.get('retry-after'),'60');assert.equal(dbTouched,0,'429 happens before any D1 call');
+  assert.equal((await siteGet('custom.example.test','203.0.113.5',{DB:guardDB,SITE_LIMITER:limiter})).status,429);assert.equal(dbTouched,0,'Custom-domain hosts are limited before the mapping read');
+  await siteGet(sid,'2001:db8:1:2:aaaa::1',{DB:guardDB,SITE_LIMITER:limiter});await siteGet(sid,'2001:0db8:0001:0002:ffff:1:2:3',{DB:guardDB,SITE_LIMITER:limiter});
+  assert.deepEqual(keys,['site:203.0.113.5','site:203.0.113.5','site:2001:db8:1:2::/64','site:2001:db8:1:2::/64'],'Key is the normalized source, IPv6 grouped by /64');
+    keys.length=0;allow=true;
+  const local=await m.host.fetch(new Request('http://localhost/s/'+id()+'/'),{DB:db,SITE_LIMITER:limiter});assert.equal(keys.length,0,'Local hosts skip the limiter');assert.equal(local.status,404);
+  assert.equal((await siteGet(sid,'203.0.113.5',{DB:db,SITE_LIMITER:limiter})).status,404);assert.equal(keys.length,1,'Allowed requests continue to the normal path');
+  assert.equal((await siteGet(sid,'203.0.113.5',{DB:db})).status,404,'A removed or absent binding keeps serving');
+  // The shipped config carries exactly one new namespace; deleting the block is a pure config change.
+  const cfg=JSON.parse(await (await import('node:fs/promises')).readFile('wrangler.sites.jsonc','utf8'));
+  assert.deepEqual(cfg.ratelimits,[{name:'SITE_LIMITER',namespace_id:'1001005',simple:{limit:300,period:60}}]);
+ }
+ console.log('Public fairness checks passed: per-client sub-limits (backend/contact/photo) with hashed keys, busy/unavailable refunds, account fair share past half of each platform pool, per-project photo budget, unchanged platform ceilings, opaque runtime lanes, the site limiter (429 before D1, /64 keys, local skip, absent binding keeps serving) and retention.');
 }finally{await store.close();}

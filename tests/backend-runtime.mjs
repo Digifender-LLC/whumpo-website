@@ -10,8 +10,8 @@ const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-runtime-');
 execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','deploy','--config','wrangler.runtime.jsonc','--dry-run','--outdir',dir],{stdio:'pipe'});
 const mf=remote?{dispatchFetch:(url,init)=>fetch(new URL(new URL(url).pathname,remote),init),dispose:async()=>{}}:new Miniflare(convertV4MiniflareOptions({modulesRoot:dir,modules:[{type:'ESModule',path:dir+'/worker.js'},...(await readdir(dir)).filter(p=>p.endsWith('.wasm')).map(p=>({type:'CompiledWasm',path:dir+'/'+p}))],compatibilityDate:'2026-09-29'}));
 const lane=()=>Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,'0')).join('');
-async function request(source,input=null,laneKey=lane()){
- let timer;try{return await Promise.race([mf.dispatchFetch('http://runtime/execute',{method:'POST',headers:{'x-whumpo-lane':laneKey},body:JSON.stringify({version:1,source,input})}).then(async r=>({status:r.status,data:await r.json()})),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Execution did not stop within 5 seconds')),5000)})]);}finally{clearTimeout(timer);}
+async function request(source,input=null,laneKey=lane(),work){
+ let timer;try{return await Promise.race([mf.dispatchFetch('http://runtime/execute',{method:'POST',headers:{'x-whumpo-lane':laneKey,...(work?{'x-whumpo-class':work}:{})},body:JSON.stringify({version:1,source,input})}).then(async r=>({status:r.status,data:await r.json()})),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Execution did not stop within 5 seconds')),5000)})]);}finally{clearTimeout(timer);}
 }
 async function works(source,input,expected){const r=await request(source,input);assert.deepEqual(r,{status:200,data:{ok:true,value:expected}});}
 async function rejects(source,allowed){const r=await request(source);assert.equal(r.status,422,JSON.stringify(r));assert.ok(allowed.includes(r.data.error),JSON.stringify(r));await works('export default () => 42',null,42);}
@@ -65,6 +65,15 @@ try{
   noisyBusy+=r.slice(0,3).filter(x=>x.status===503).length;
  }
  assert.ok(noisyBusy>0,'same-lane overlap was refused at least once');
+ // WH-075 D41: batch work holds at most one slot even from different lanes; interactive calls keep the other.
+ let batchBusy=0;
+ for(let round=0;round<10;round++){
+  const r=await Promise.all([request(slow,null,lane(),'batch'),request(slow,null,lane(),'batch'),request(slow,null,lane())]);
+  assert.deepEqual(r[2],{status:200,data:{ok:true,value:780}},'interactive call keeps a slot against batch work: '+JSON.stringify(r));
+  r.slice(0,2).forEach(x=>{if(x.status!==200)assert.deepEqual(x,{status:503,data:{ok:false,error:'busy'}});});
+  batchBusy+=r.slice(0,2).filter(x=>x.status===503).length;
+ }
+ assert.ok(batchBusy>0,'a second batch call was refused as busy at least once');
  await works('export default ()=>2',null,2);
  console.log((remote?'Cloudflare remote preview: ':'Actual workerd: ')+'JSON functions/async modules, fresh tenant instances, no host capabilities, bounded invalid/exhaustion paths, required per-project fairness lane and post-failure recovery passed.');
 }finally{await mf.dispose();await rm(dir,{recursive:true,force:true});}

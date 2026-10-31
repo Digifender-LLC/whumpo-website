@@ -146,7 +146,7 @@ export async function measure({allowedArguments=[]}={}){
  const runtime={fetch:async()=>{tally.service('BACKEND_RUNTIME');return Response.json({ok:true,value:{}});}};
  const appsEnv={DB:db,FILES:files,ENVIRONMENT:'test',API_LIMITER:limiter('apps.API_LIMITER'),AUTH_LIMITER:limiter('apps.AUTH_LIMITER'),ASSETS:assets,BACKEND_RUNTIME:runtime,TURNSTILE_SECRET:'fixture',TURNSTILE_SITE_KEY:'fixture'};
  const apps={fetch:async request=>{tally.service('APP_HOST');tally.invoke('whumpo-apps');return m.appHost.fetch(request,appsEnv,ctx);}};
- const sitesEnv={DB:db,FILES:files,BACKEND_RUNTIME:runtime,APP_HOST:apps};
+ const sitesEnv={DB:db,FILES:files,BACKEND_RUNTIME:runtime,APP_HOST:apps,SITE_LIMITER:limiter('sites.SITE_LIMITER')};
  const platformEnv={DB:db,FILES:files,ENVIRONMENT:'test',API_LIMITER:limiter('platform.API_LIMITER'),AUTH_LIMITER:limiter('platform.AUTH_LIMITER'),ASSETS:assets,BACKEND_RUNTIME:runtime,TURNSTILE_SECRET:'fixture',TURNSTILE_SITE_KEY:'fixture'};
  const entry={'whumpo-sites':request=>m.host.fetch(request,sitesEnv,ctx),'whumpo-platform':request=>m.worker.fetch(request,platformEnv,ctx)};
  // A route class's entry Worker is derived from configuration; a host no configured route matches is invoked directly on

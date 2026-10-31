@@ -65,15 +65,17 @@ const response=(body:unknown,status=200)=>Response.json(body,{status,headers:{'c
 // Resource counters only, never tenant context. Bound concurrent fresh-Wasm allocations per isolate.
 // The caller's opaque fairness lane (a per-project hash) may hold at most one of the two slots, so one
 // project cannot occupy the whole gate. Busy refusals run no guest code; callers do not charge them.
-let active=0;
+// Batch work (builds, migration checks; x-whumpo-class: batch) may hold at most one slot, so interactive calls keep one.
+let active=0,batch=false;
 const lanes=new Set<string>();
 export default {
  async fetch(request:Request):Promise<Response>{
   if(request.method!=='POST'||new URL(request.url).pathname!=='/execute')return response({ok:false,error:'not_found'},404);
   const lane=request.headers.get('x-whumpo-lane')??'';
   if(!/^[0-9a-f]{64}$/.test(lane))return response({ok:false,error:'invalid_request'},422);
-  if(active>=2||lanes.has(lane))return response({ok:false,error:'busy'},503);
-  active++;lanes.add(lane);
+  const isBatch=request.headers.get('x-whumpo-class')==='batch';
+  if(active>=2||lanes.has(lane)||(isBatch&&batch))return response({ok:false,error:'busy'},503);
+  active++;lanes.add(lane);if(isBatch)batch=true;
   try{
    const body=await boundedBody(request);
    if(!body||typeof body!=='object'||Array.isArray(body))return fail('invalid_request');
@@ -84,6 +86,6 @@ export default {
   }catch(error){
    const category=error instanceof GuestFailure?error.category:'unavailable';
    return response({ok:false,error:category},category==='unavailable'?503:422);
-  }finally{active--;lanes.delete(lane);}
+  }finally{active--;lanes.delete(lane);if(isBatch)batch=false;}
  }
 };
