@@ -3,7 +3,7 @@ import {contactNotificationConfig,type ContactNotice,type ContactNotificationEnv
 /**
  * WH-036 Cloudflare Email Service adapter (owner decision, October 4, 2026). Inactive unless the owner configures all of:
  * `CONTACT_NOTIFICATION_PROVIDER="cloudflare-email"`, a `CONTACT_NOTIFICATION_REVIEW` reference and a `send_email` binding
- * named `CONTACT_EMAIL` (docs/contact-forms.md lists the exact steps; none is configured in this repository).
+ * named `CONTACT_EMAIL` (docs/contact-forms.md lists the exact steps; wrangler.jsonc now declares the binding and both variables; whether delivery is live is a deployment fact, not asserted here).
  *
  * Binding shape checked against https://developers.cloudflare.com/email-service/api/send-emails/workers-api/ (last updated
  * September 16, 2026; read October 4, 2026): `send({from,to,subject,text,headers})` resolves `{messageId}` and failures throw an

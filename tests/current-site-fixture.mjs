@@ -5,6 +5,11 @@ import {build} from 'esbuild';
 // Callers obtain authority exports from this same bundle: admission capabilities
 // are module-private and cannot be passed between separately bundled runtimes.
 let module;
+// WH-004 R2: the SQL confirm triggers accept only a guided turn that carries the typed confirm control for the exact review, which is what the UI
+// sends. Offline suites still type `/confirm <id>`; this wrapper stores the equivalent guided control turn for those six commands (same handler and reply as before, no extra receipt precheck) and leaves everything else alone.
+const confirmKinds={'/confirm':'site','/confirm-contact':'contact','/confirm-contact-notify':'contactNotification','/confirm-photo-delete':'photo','/confirm-version-delete':'version','/confirm-notification-setup':'notificationConfiguration'};
+export const confirmControlFor=content=>{const [verb,review,...rest]=String(content??'').trim().split(/\s+/);return !rest.length&&Object.hasOwn(confirmKinds,verb)&&/^[0-9a-f-]{36}$/.test(review??'')?{type:'confirm',kind:confirmKinds[verb],reviewId:review}:undefined;};
+const withTypedConfirms=m=>({...m,sendChat:(db,user,input,ai,options,conversationOnly,control)=>{const typed=!control&&!conversationOnly?m.chatControl(confirmControlFor(input?.content)):undefined;return typed?m.sendChat(db,user,{...input,content:typed.command},ai,options,false,typed):m.sendChat(db,user,input,ai,options,conversationOnly,control);}});
 export async function currentSiteFixtureHandlers(){
  if(!module){const b=await build({stdin:{contents:`
   export {default as worker} from './src/index';
@@ -136,7 +141,7 @@ export {cleanPhoto} from './src/photo-format';
   export {planChangeQuote,capacityNotice,overageNotice,recommendPlan} from './src/capacity-policy';
   export {plans,publicPlans,quoteDomainBenefit} from './src/plans';
  `,resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});module=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].contents).toString('base64'));}
- return module;
+ return withTypedConfirms(module);
 }
 // `handlers` lets a fixture that bundles its own modules (helpers/current-modules.mjs) pass the same bundle's
 // readChat/sendChatControl/createWebsite/prepareSpecification/readSpecificationProposal/jsonDigest/moduleCatalog, because

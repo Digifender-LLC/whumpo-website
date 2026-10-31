@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {existsSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {existsSync,mkdtempSync,readdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fixtureEnvironment,profiles,runProfile} from '../tools/verify.mjs';
@@ -20,6 +20,13 @@ try{
  assert.deepEqual(fast,['tests/android-assetlinks.mjs','tests/mobile-identity.mjs','tests/mobile-slice.mjs','tests/mobile-projects.mjs','tests/mobile-photos.mjs','tests/mobile-handoff.mjs','tests/mobile-push.mjs','tests/push-fcm.mjs','tests/ai.mjs','tests/prompt-data-boundaries.mjs','tests/ack-timing.mjs','tests/lifecycle-catalog.mjs','tests/connection-vault.mjs','tests/notifications-contract.mjs','tests/passkey-key-wrapping-contract.mjs','tests/email-change-contract.mjs','tests/review-retention-contract.mjs','tests/verification-profiles.mjs','tests/account-closure-contract.mjs']);
  const protection=[];runProfile('protection',{cwd,run:(_cmd,args)=>{protection.push(args[0]);return {status:0};}});
  assert.deepEqual(protection,['tests/processing-boundaries.mjs','tests/deploy-ci.mjs','tests/secret-custody.mjs','tests/build-snapshot.mjs','tests/release-manifest.mjs','tests/release-provider.mjs','tests/connection-oauth-outcomes.mjs','tests/connection-key-backup.mjs','tests/restore-admission.mjs','tests/restore-inventory.mjs','tests/restore-inventory-freshness.mjs','tests/github-refresh-custody.mjs','tests/github-grant-revocation.mjs','tests/github-grant-chat.mjs','tests/boundary-audit.mjs']);
+ // WH-004 R7: every boundary-* regression runs in some profile; the ones outside the deploy gate and the site sweep are the security profile.
+ const profiled=new Set(Object.values(profiles).flat());
+ const unprofiled=readdirSync(new URL('./',import.meta.url)).filter(f=>/^boundary-.*\.mjs$/.test(f)&&!profiled.has('tests/'+f));
+ assert.deepEqual(unprofiled,[],'boundary suites outside every verify profile');
+ assert.ok(profiles.security.length>=8&&profiles.security.every(script=>/^tests\/boundary-/.test(script)&&existsSync(new URL('../'+script,import.meta.url))),'the security profile lists existing boundary suites');
+ assert.ok(!profiles.fast.some(x=>profiles.security.includes(x))&&!profiles.protection.some(x=>profiles.security.includes(x)),'the deploy gate does not grow');
+ const security=[];runProfile('security',{cwd,run:(_cmd,args)=>{security.push(args[0]);return {status:0};}});assert.deepEqual(security,profiles.security);
  // WH-054 tenant gates are deliberately outside every profile (too slow for the deploy build); keep them reachable as package scripts.
  const tenantGates=['tests/tenant-classification.mjs','tests/tenant-schema-bodies.mjs','tests/sqlite-authorizer.mjs','tests/tenant-sql-surface.mjs'];
  assert.ok(Object.values(profiles).flat().every(script=>!tenantGates.includes(script)),'WH-054 tenant gates stay out of the verify profiles');

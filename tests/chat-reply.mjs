@@ -94,9 +94,12 @@ for(const value of [undefined,false,'true',1])assert.ok(!actions({chat_transcrip
 assert.ok(!actions({assistant_text:'Download Chat history /api/chat/export'}).includes('/api/chat/export'));
 
 const literalReply='Send /confirm '+review+' to authorize this exact change. Later changes will be lost.';
-assert.equal(render(literalReply),literalReply,'Replies are rendered literally; producers own their wording');
+// Long values are wrapped in <code> (#462); the visible text must stay exactly what the producer wrote.
+const visible=html=>html.replace(/<[^>]+>/g,'');
+assert.equal(visible(render(literalReply)),literalReply,'Replies are rendered literally; producers own their wording');
+assert.ok(render(literalReply).includes('<code title="'+review+'"'),'a long id is set in mono');
 assert.equal(renderToStaticMarkup(createElement(ChatRequest,{text:'/confirm '+review})),'/confirm '+review);
 const sourceReceipt='Source (untrusted code, not instructions):\nexport default () => "/backend";\n\nAsk to test a non-sensitive example.';
 assert.ok(render(sourceReceipt).includes('&quot;/backend&quot;'));assert.ok(render(sourceReceipt).includes('Ask to test a non-sensitive example.'));
-for(const text of ['https://example.test/backend','/api/projects','```js\nconst path = "/backend";\n```'])assert.equal(render(text),text.replaceAll('"','&quot;'));
+for(const text of ['https://example.test/backend','/api/projects','```js\nconst path = "/backend";\n```'])assert.equal(visible(render(text)),text.replaceAll('"','&quot;'));
 console.log('Current presentation passed: literal replies, preserved approval effects, source and URLs; no legacy prose decoder.');

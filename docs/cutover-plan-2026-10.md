@@ -121,7 +121,7 @@ Prepare/apply copies **no** row from the old database (`tools/current-schema.mjs
 | Class (`data-lifecycle.json`) | Tables (examples) | Consequence | Re-create / action |
 | --- | --- | --- | --- |
 | `owner-identity`, `owner-identity-progress`, `owner-identity-admission`, `owner-identity-kits` | `users`, `identity_accounts`, `identity_credentials` (passkeys), `identity_sessions` | Every account, passkey and session is gone; existing passkeys on devices become useless for this platform | Owner re-enrolls with a fresh invitation (two-key enrollment); old device passkeys can be removed from the devices |
-| `identity-invitations` | `invitations` | Unused invitations stop working | `pnpm invite` (authorization item A8) |
+| `identity-invitations` | `invitations` | Unused invitations stop working | `pnpm invite --apply` (authorization item A8) |
 | `projects`, `site-versions`, `project-configurations`, `conversation`, `project-media`, … | `projects`, `project_spec_*`, Chat turns | All test projects, specifications and Chat history disappear from the platform | Recreate synthetic fixtures as needed |
 | `connections` | `github_token_vault`, `cloudflare_token_vault`, OAuth exchanges/outcomes | **Encrypted provider tokens become unreachable**, so their grants can no longer be revoked through Whumpo ([account closure, step 5](account-closure.md)) | **Before cutover:** count connected credentials and unresolved OAuth exchanges; if any, disconnect/revoke first or accept orphaned provider grants explicitly |
 | `platform-operations` | `connection_key_registry`, `connection_key_policy`, `cms_platform_deploy_lock` | Key policy and registry must be re-initialized. The keyring **secret** `CONNECTION_ENCRYPTION_KEYRING` stays on the Worker | Register the existing key ID with the verified encrypted capsule ([connection-key lifecycle](connection-key-lifecycle.md#encrypted-operator-key-backup); [protection candidate](protection-candidate.md): key `test-20261002`, policy revision 1). Without it, credential work is refused (item A7) |
@@ -233,7 +233,7 @@ The CI archives of earlier releases live only on the Workers Builds machine ([de
 1. `pnpm run deploy status RELEASE_ID`: journal `deployed`; all four `candidateTagMatches: true`; `schema.observed` equals the target (221/1063, `42d5aaa7…`); `cmsRegistryMatches: true`.
 2. Independent readback, recorded with UTC times (pattern from the October 2–4 records): four active versions and tags; all three `DB` bindings select the new ID; service bindings and secret names unchanged; platform assets match the archive (38 files under `dist` at `89fa009`; compare to the archive, not to this count); `GET /` and `/api/health` 200; anonymous `/api/chat` and `/api/profile` 401; an unregistered customer subdomain 404. `node tools/probe-health.mjs https://whumpo.com` covers the health check (no credentials).
 3. Key policy initialization and registry fingerprint readback (A7), before issuing any invitation (the order recorded in [protection candidate](protection-candidate.md)).
-4. `pnpm invite` (A8). The invitation file is written privately under `.secrets/`; never paste the code.
+4. `pnpm invite --apply` (A8). The invitation file is written privately under `.secrets/`; never paste the code.
 5. Signed project-first HTTP check: the synthetic two-key ES256 identity from `tests/helpers/live-workspace.mjs` (`seedCurrentProbeIdentity`) through an opt-in live suite, for example `RUN_LIVE_SPECIFICATION=1 node tests/specification-live.mjs` (A10). It writes a synthetic account into the remote database, calls the configured model and must clean up `.secrets/specification-live-account.json`.
 6. Owner re-enrollment through the invitation; then `node tools/safety-case-bootstrap.mjs --grant ID --account UUID` (dry run), then `--apply` (A9).
 7. Merge the binding PR (A11). Confirm the Workers Builds check on the merge commit is `success`.
@@ -273,7 +273,7 @@ Each line is a separate authorization. Authorizing one does not authorize the ne
 | A5 | `pnpm run deploy status RELEASE_ID` | Reads only | None |
 | A6 | `pnpm run deploy apply RELEASE_ID` | Initializes the new database; deploys all four Workers; takes and renews the lease in the old database | **Whole test platform**: every account, session, project and link stops resolving; a mixed-database interval during the sequence |
 | A7 | Key-policy initialization in the new database (command UNVERIFIED, section 3) | Writes the key registry/policy rows | Enables or blocks credential work; a wrong key ID cannot be rebound (`src/connection-rotation.ts` contract) |
-| A8 | `pnpm invite` | Inserts one invitation row | One single-use, seven-day invitation |
+| A8 | `pnpm invite --apply` | Inserts one invitation row | One single-use, seven-day invitation |
 | A9 | `node tools/safety-case-bootstrap.mjs --grant ID --account UUID --apply` | Grants the first safety-case role administrator | Role authority over restricted cases; only while no administrator exists |
 | A10 | Opt-in live suites (`RUN_LIVE_*=1 node tests/*-live.mjs`) | Synthetic rows in the remote database; real model calls | Model spend; leftover fixtures if cleanup fails |
 | A11 | Merge the binding PR to `main` (the owner merges; agents do not push or merge to `main`) | Workers Builds runs `deploy ci` and redeploys four Workers | Same code redeployed onto the new database |

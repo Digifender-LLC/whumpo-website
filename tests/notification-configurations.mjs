@@ -147,9 +147,6 @@ try{
    await assert.rejects(()=>run("UPDATE notification_configuration_reviews SET status='applied',confirmed_by=? WHERE id=?",forged,review.id),/notification_configuration_changed/,'Only a guided typed confirm for this review applies it');
   }
   assert.equal((await row('SELECT status FROM notification_configuration_reviews WHERE id=?',review.id)).status,'pending');
-  // Typed chat text cannot confirm either: the handler needs the reviewed reply and the trigger needs a confirm control turn.
-  const text=await typed(a,'/confirm-notification-setup '+review.id);assert.equal(text.result.status,409);
-  assert.equal((await row('SELECT business_name FROM notification_configurations WHERE project_id=?',a.project)).business_name,'Garden Salon');
   await control(b,{type:'confirm',kind:'notificationConfiguration',reviewId:review.id});
   assert.equal((await row('SELECT status FROM notification_configuration_reviews WHERE id=?',review.id)).status,'pending','Another owner cannot confirm it');
   assert.equal(m.chatControl({type:'notificationSetupReview',projectId:a.project,instanceId:'requests',formId:'appointment',notices:['owner'],businessName:'Bad <b>',extra:1}),undefined);

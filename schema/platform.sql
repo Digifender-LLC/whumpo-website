@@ -2532,7 +2532,7 @@ BEGIN SELECT RAISE(ABORT,'photo_removal_immutable'); END;
 CREATE TRIGGER photo_removal_guard BEFORE UPDATE ON photo_removals
 BEGIN
  SELECT RAISE(ABORT,'photo_removal_expired') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now');
- SELECT RAISE(ABORT,'photo_removal_changed') WHERE NOT EXISTS(SELECT 1 FROM project_files f JOIN projects p ON p.id=f.project_id JOIN chat_turns t ON t.id=NEW.confirmed_by WHERE f.id=NEW.file_id AND f.project_id=NEW.project_id AND p.owner_user_id=NEW.user_id AND t.user_id=NEW.user_id);
+ SELECT RAISE(ABORT,'photo_removal_changed') WHERE NOT EXISTS(SELECT 1 FROM project_files f JOIN projects p ON p.id=f.project_id JOIN chat_turns t ON t.id=NEW.confirmed_by WHERE f.id=NEW.file_id AND f.project_id=NEW.project_id AND p.owner_user_id=NEW.user_id AND t.user_id=NEW.user_id AND t.mode='guided' AND json_extract(t.action_json,'$.type')='confirm' AND json_extract(t.action_json,'$.kind')='photo' AND json_extract(t.action_json,'$.reviewId')=NEW.id);
 END;
 
 CREATE TRIGGER photo_removal_apply AFTER UPDATE ON photo_removals
@@ -2580,7 +2580,7 @@ BEGIN SELECT RAISE(ABORT,'version_removal_immutable'); END;
 CREATE TRIGGER version_removal_guard BEFORE UPDATE ON version_removals
 BEGIN
  SELECT RAISE(ABORT,'version_removal_expired') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now');
- SELECT RAISE(ABORT,'version_removal_changed') WHERE NOT EXISTS(SELECT 1 FROM site_versions v JOIN projects p ON p.id=v.project_id JOIN chat_turns t ON t.id=NEW.confirmed_by WHERE v.id=NEW.version_id AND v.project_id=NEW.project_id AND v.digest=NEW.digest AND v.component_id=NEW.component_id AND v.created_at=NEW.version_created_at AND p.owner_user_id=NEW.user_id AND t.user_id=NEW.user_id);
+ SELECT RAISE(ABORT,'version_removal_changed') WHERE NOT EXISTS(SELECT 1 FROM site_versions v JOIN projects p ON p.id=v.project_id JOIN chat_turns t ON t.id=NEW.confirmed_by WHERE v.id=NEW.version_id AND v.project_id=NEW.project_id AND v.digest=NEW.digest AND v.component_id=NEW.component_id AND v.created_at=NEW.version_created_at AND p.owner_user_id=NEW.user_id AND t.user_id=NEW.user_id AND t.mode='guided' AND json_extract(t.action_json,'$.type')='confirm' AND json_extract(t.action_json,'$.kind')='version' AND json_extract(t.action_json,'$.reviewId')=NEW.id);
 END;
 
 CREATE TRIGGER version_removal_apply AFTER UPDATE ON version_removals
@@ -2610,7 +2610,7 @@ CREATE TRIGGER contact_review_confirm BEFORE UPDATE ON contact_reviews
 BEGIN
  SELECT RAISE(ABORT,'contact_review_changed') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') OR NOT EXISTS(SELECT 1 FROM contact_settings c JOIN projects p ON p.id=c.project_id WHERE c.project_id=NEW.project_id AND p.owner_user_id=NEW.user_id AND c.revision=NEW.expected_revision);
  SELECT RAISE(ABORT,'contact_review_changed') WHERE NEW.enabled=1 AND NOT EXISTS(SELECT 1 FROM publications WHERE project_id=NEW.project_id AND version_id IS NOT NULL AND revision=NEW.publication_revision);
- SELECT RAISE(ABORT,'contact_review_changed') WHERE NOT EXISTS(SELECT 1 FROM chat_turns WHERE id=NEW.confirmed_by AND user_id=NEW.user_id);
+ SELECT RAISE(ABORT,'contact_review_changed') WHERE NOT EXISTS(SELECT 1 FROM chat_turns WHERE id=NEW.confirmed_by AND user_id=NEW.user_id AND mode='guided' AND json_extract(action_json,'$.type')='confirm' AND json_extract(action_json,'$.kind')='contact' AND json_extract(action_json,'$.reviewId')=NEW.id);
 END;
 
 CREATE TRIGGER contact_review_apply AFTER UPDATE ON contact_reviews
@@ -4042,7 +4042,7 @@ CREATE TRIGGER contact_destination_review_identity BEFORE UPDATE ON contact_dest
 WHEN NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.project_id!=OLD.project_id OR NEW.address!=OLD.address OR NEW.expires_at!=OLD.expires_at OR OLD.status!='pending' OR NEW.status!='applied' OR NEW.confirmed_by IS NULL
 BEGIN SELECT RAISE(ABORT,'contact_destination_review_changed'); END;
 CREATE TRIGGER contact_destination_review_confirm BEFORE UPDATE ON contact_destination_reviews BEGIN
- SELECT RAISE(ABORT,'contact_destination_review_changed') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') OR NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id AND owner_user_id=NEW.user_id) OR NOT EXISTS(SELECT 1 FROM chat_turns WHERE id=NEW.confirmed_by AND user_id=NEW.user_id);
+ SELECT RAISE(ABORT,'contact_destination_review_changed') WHERE NEW.expires_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now') OR NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id AND owner_user_id=NEW.user_id) OR NOT EXISTS(SELECT 1 FROM chat_turns WHERE id=NEW.confirmed_by AND user_id=NEW.user_id AND mode='guided' AND json_extract(action_json,'$.type')='confirm' AND json_extract(action_json,'$.kind')='contactNotification' AND json_extract(action_json,'$.reviewId')=NEW.id);
  SELECT RAISE(ABORT,'contact_destination_suppressed') WHERE EXISTS(SELECT 1 FROM contact_notification_suppressions WHERE user_id=NEW.user_id AND address=NEW.address) OR EXISTS(SELECT 1 FROM contact_notification_destinations WHERE project_id=NEW.project_id AND state='suppressed');
 END;
 -- The same address keeps its current state; a different address replaces the destination (its queued notices cascade) and starts unverified.
@@ -4462,6 +4462,8 @@ CREATE TRIGGER publication_confirm_guard BEFORE UPDATE ON publication_actions
 BEGIN
  SELECT RAISE(ABORT,'publication_expired') WHERE NEW.expires_at <= strftime('%Y-%m-%dT%H:%M:%fZ','now');
  SELECT RAISE(ABORT,'publication_changed') WHERE NOT EXISTS(SELECT 1 FROM publications s JOIN projects p ON p.id=s.project_id WHERE s.project_id=NEW.project_id AND p.owner_user_id=NEW.user_id AND s.revision=NEW.expected_revision);
+ -- WH-004 R2: a Chat confirmation is a guided confirm control for this exact review. The only other confirmation is the withdrawal of a site, bound to its own review turn.
+ SELECT RAISE(ABORT,'publication_changed') WHERE NOT (NEW.confirmed_by=NEW.id AND NEW.kind='unpublish') AND NOT EXISTS(SELECT 1 FROM chat_turns WHERE id=NEW.confirmed_by AND user_id=NEW.user_id AND mode='guided' AND json_extract(action_json,'$.type')='confirm' AND json_extract(action_json,'$.kind')='site' AND json_extract(action_json,'$.reviewId')=NEW.id);
  SELECT RAISE(ABORT,'publication_version') WHERE NEW.kind!='unpublish' AND NOT EXISTS(SELECT 1 FROM site_versions WHERE id=NEW.version_id AND project_id=NEW.project_id);
  SELECT RAISE(ABORT,'published_site_quota') WHERE NEW.kind!='unpublish'
  AND NOT EXISTS(SELECT 1 FROM publications WHERE project_id=NEW.project_id AND version_id IS NOT NULL)

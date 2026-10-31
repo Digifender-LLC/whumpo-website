@@ -161,9 +161,9 @@ export async function measure({allowedArguments=[]}={}){
  }
  const id=()=>crypto.randomUUID();
  async function owner(){const auth=await workspaceFixture(raw,m);await raw.prepare("INSERT INTO workspace_state(user_id,step) VALUES(?,'ready')").bind(auth.account).run();return {user:auth.account,scope:await auth.scope()};}
- async function command(o,prepare){const turn=id(),revision=(await raw.prepare('SELECT revision FROM workspace_state WHERE user_id=?').bind(o.user).first()).revision+1,r=await prepare(turn);await o.scope.batch([o.scope.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status) VALUES(?,?,?,'Synthetic request-path fixture',?,datetime('now'),'ai','pending')").bind(turn,o.user,revision,r.reply),...r.statements,o.scope.prepare("UPDATE chat_turns SET status='completed' WHERE id=?").bind(turn),o.scope.prepare('UPDATE workspace_state SET revision=revision+1 WHERE user_id=?').bind(o.user)]);return turn;}
- const publish=async(o,version)=>{const review=await command(o,t=>m.publicationCommand(o.scope,o.user,t,'/publish '+version));await command(o,t=>m.publicationCommand(o.scope,o.user,t,'/confirm '+review));};
- const unpublish=async o=>{const review=await command(o,t=>m.publicationCommand(o.scope,o.user,t,'/unpublish '+o.project));await command(o,t=>m.publicationCommand(o.scope,o.user,t,'/confirm '+review));};
+ async function command(o,prepare,action){const turn=id(),revision=(await raw.prepare('SELECT revision FROM workspace_state WHERE user_id=?').bind(o.user).first()).revision+1,r=await prepare(turn);await o.scope.batch([o.scope.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,created_at,mode,status,action_json) VALUES(?,?,?,'Synthetic request-path fixture',?,datetime('now'),?,?,?)").bind(turn,o.user,revision,r.reply,action?'guided':'ai',action?'completed':'pending',action?JSON.stringify(action):null),...r.statements,o.scope.prepare("UPDATE chat_turns SET status='completed' WHERE id=?").bind(turn),o.scope.prepare('UPDATE workspace_state SET revision=revision+1 WHERE user_id=?').bind(o.user)]);return turn;}
+ const publish=async(o,version)=>{const review=await command(o,t=>m.publicationCommand(o.scope,o.user,t,'/publish '+version));await command(o,t=>m.publicationCommand(o.scope,o.user,t,'/confirm '+review),{type:'confirm',kind:'site',reviewId:review});};
+ const unpublish=async o=>{const review=await command(o,t=>m.publicationCommand(o.scope,o.user,t,'/unpublish '+o.project));await command(o,t=>m.publicationCommand(o.scope,o.user,t,'/confirm '+review),{type:'confirm',kind:'site',reviewId:review});};
  // A published photo website: real upload, synthetic trusted safety result (no detector is configured), real publication.
  async function site({contact=false,domain=false}={}){
   const o=await owner();Object.assign(o,await createFixtureProject(o.scope,o.user,'Garden','Garden care','ocean'));
@@ -172,7 +172,7 @@ export async function measure({allowedArguments=[]}={}){
   await raw.prepare("UPDATE project_photo_safety SET state='approved',csam_check='clear',sexual_check='clear',scanner_reference='synthetic',expires_at=? WHERE file_id=?").bind(new Date(Date.now()+86400000).toISOString(),o.photo).run();
   o.version=await changeFixtureWebsite(o.scope,o.user,o.project,[{type:'pages.setPhotos',pageId:'home',photos:[{id:o.photo,alt:'Synthetic'}]}]);
   await publish(o,o.version);
-  if(contact){const review=await command(o,t=>m.contacts.contactCommand(o.scope,o.user,t,'/contact-on '+o.project));await command(o,t=>m.contacts.contactCommand(o.scope,o.user,t,'/confirm-contact '+review));}
+  if(contact){const review=await command(o,t=>m.contacts.contactCommand(o.scope,o.user,t,'/contact-on '+o.project));await command(o,t=>m.contacts.contactCommand(o.scope,o.user,t,'/confirm-contact '+review),{type:'confirm',kind:'contact',reviewId:review});}
   if(domain){
    o.host=id().slice(0,8)+'.custom.example';const claim=id(),connection=id(),now=new Date().toISOString(),later=new Date(Date.now()+86400000).toISOString();
    await raw.prepare('INSERT INTO domain_claims(id,project_id,hostname,token,expires_at,verified_at,created_at) VALUES(?,?,?,?,?,?,?)').bind(claim,o.project,o.host,'synthetic',later,now,now).run();

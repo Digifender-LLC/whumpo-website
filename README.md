@@ -59,7 +59,7 @@ The owner authorized Workers Paid ($5/month) resources, with GitHub restricted t
 
 **Deployment:** merging to `main` deploys. Cloudflare Workers Builds runs `pnpm check && node tools/verify.mjs fast && node tools/verify.mjs protection && pnpm build` and then `pnpm run deploy ci`, which prepares and applies the four-Worker release (runtime → apps → sites → platform) for an unchanged current schema. Do not deploy by hand. Schema or control-database changes require an owner cutover with `pnpm run deploy prepare/apply`; see [deployment](docs/deployment.md) and the [release protocol](docs/releases.md). The standalone platform wrapper requires an already current database.
 
-`pnpm invite` creates a one-use invitation in ignored `.secrets/`. Share it privately. Never commit keys, session cookies, recovery codes or provider credentials. The supplied key files and `.secrets/` remain ignored.
+`pnpm invite --apply` (without `--apply` it only previews) creates a one-use invitation in ignored `.secrets/`. Share it privately. Never commit keys, session cookies, recovery codes or provider credentials. The supplied key files and `.secrets/` remain ignored.
 
 ## Feature references
 

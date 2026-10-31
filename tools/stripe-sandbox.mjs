@@ -4,6 +4,8 @@ import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 
 export const version='2025-02-24.acacia',app='whumpo-sandbox-v1';
+// R14: the one Whumpo sandbox account (docs/stripe-pricing-tables.md). A sandbox key for any other account is refused.
+export const expectedAccount='acct_1ULu0ZEz67CfHgqS';
 export async function stripeClient(directory){
  const key=(await readFile(join(directory,'stripe-test.key'),'utf8')).trim();
  if(!/^sk_test_[A-Za-z0-9]+$/.test(key))throw Error('Only a Stripe sk_test_ sandbox key is accepted.');
@@ -37,6 +39,7 @@ export async function sweepFixtureCustomers(api,apply=false){
 export async function configure(directory,apply=false){
  const api=await stripeClient(directory),balance=await api('balance');
  if(balance.livemode!==false)throw Error('Cannot verify sandbox mode.');
+ if((await api('account')).id!==expectedAccount)throw Error('This key belongs to a different Stripe account than the Whumpo sandbox.');
  console.log('Stripe sandbox credentials verified; no live billing.');
  if(!apply)return;
  await mkdir(directory,{recursive:true,mode:0o700});await chmod(join(directory,'stripe-test.key'),0o600);
