@@ -16,6 +16,8 @@ import com.whumpo.core.api.ClientInfo
 import com.whumpo.core.api.MobileApiClient
 import com.whumpo.core.api.okHttpEngine
 import com.whumpo.core.auth.AuthController
+import com.whumpo.core.auth.PasskeyAuthenticator
+import com.whumpo.core.auth.PasskeyResult
 import com.whumpo.core.auth.ReauthResult
 import com.whumpo.core.auth.SessionAccountRepository
 import com.whumpo.core.auth.SessionManager
@@ -46,6 +48,16 @@ class DeepLinkInbox {
     }
 }
 
+/**
+ * Delegates to Credential Manager. The only other implementation is a test double installed in-process by instrumented
+ * tests (WorkerJourneyTest); nothing outside the app process can set it, and the server verifies every assertion as usual.
+ */
+class SwitchablePasskeys(private val real: PasskeyAuthenticator) : PasskeyAuthenticator {
+    @Volatile var override: PasskeyAuthenticator? = null
+
+    override suspend fun getAssertion(requestJson: String): PasskeyResult = (override ?: real).getAssertion(requestJson)
+}
+
 /** Manual dependency graph for the shell; one instance per process. */
 class AppContainer(
     val environment: WhumpoEnvironment,
@@ -65,10 +77,12 @@ class AppContainer(
 
     /** A verified App Link waiting for the owner to be signed in. In memory only: it is gone if the process dies. */
     val deepLinks = DeepLinkInbox()
+    /** Credential Manager, unless an emulator test installs a software authenticator through [SwitchablePasskeys.override]. */
+    val passkeys = SwitchablePasskeys(CredentialManagerPasskeys(app, activities))
     val auth = AuthController(
         api = mobileApi,
         sessions = sessions,
-        passkeys = CredentialManagerPasskeys(app, activities),
+        passkeys = passkeys,
         browser = browser,
         origin = environment.origin,
         scope = scope,
