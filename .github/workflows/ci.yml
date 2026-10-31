@@ -44,6 +44,9 @@ jobs:
       # Outside every verify profile (WH-054), so only this step stops an unreviewed dynamic tenant SQL site; about 1 s.
       - name: Every dynamic SQL site is in the tenant allowlist
         run: node tests/tenant-sql-surface.mjs
+      # Fails when AGENTS.md cites a path, pnpm script or tool version that no longer exists.
+      - name: AGENTS.md is not stale
+        run: node tools/agents-md-check.mjs
       - name: Roadmap backlog is in sync
         run: node tools/roadmap.mjs validate && node tools/roadmap.mjs render --check
 

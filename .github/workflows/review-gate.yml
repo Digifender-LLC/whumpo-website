@@ -1,0 +1,44 @@
+name: Review gate
+
+# Separate from ci.yml on purpose: a label change must re-run only this gate, and ci.yml cancels in-flight
+# pull_request runs when a new event arrives. Pull requests only, so pushes to main are never blocked.
+# No secrets, no paid model, no new dependency.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: review-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tier:
+    name: Review tier
+    runs-on: ${{ vars.CI_RUNNER == 'github' && 'ubuntu-latest' || fromJSON('["self-hosted","linux","arm64","ampere"]') }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the base commit must be present for the diff
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      - name: Compute tier from the changed files and line count
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node tools/review-tier.mjs "$BASE_SHA"
+
+  label:
+    name: review:clean label present
+    runs-on: ${{ vars.CI_RUNNER == 'github' && 'ubuntu-latest' || fromJSON('["self-hosted","linux","arm64","ampere"]') }}
+    timeout-minutes: 2
+    steps:
+      - name: Fail unless the PR carries review:clean
+        env:
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          echo "$LABELS" | grep -qF '"review:clean"' || { echo "::error::Add review:clean after the tier's reviewers pass (docs/agent-review.md)."; exit 1; }
