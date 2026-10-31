@@ -14145,7 +14145,7 @@
    "title": "Remote read-only operator reports and inventories (and the shared Cloudflare client)",
    "surface": "operator-tool",
    "privileged": [],
-   "authorityClass": "operator's Wrangler login or explicit CLOUDFLARE_API_TOKEN; read-only by convention (the same remote D1 client could run any SQL)",
+   "authorityClass": "operator's Wrangler login or explicit CLOUDFLARE_API_TOKEN; read-only by convention (the same remote D1 client could run any SQL). tools/review-tier.mjs --status is the exception: the CI job's read-only GITHUB_TOKEN (statuses: read) lists commit statuses of one SHA, nothing else",
    "reach": "Operator workstation only; no HTTP route.",
    "entries": [
     {
@@ -14224,6 +14224,14 @@
      "file": "tools/report-task-costs.mjs",
      "kind": "tool",
      "match": "via-import",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
+     "file": "tools/review-tier.mjs",
+     "kind": "tool",
+     "match": "github-api",
      "methods": [
       "CLI"
      ]
