@@ -1159,7 +1159,7 @@ No completion evidence recorded. Add verified results and their scope to the exe
 
 ## WH-115 — Implement recovery-kit download and restricted replacement enrollment
 
-Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **planned**. Kind: implementation. Size: L.
+Phase: **Safe customer beta** (F1). Priority: **P0**. Planning readiness: **blocked**. Kind: implementation. Size: L.
 
 Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
@@ -1196,7 +1196,7 @@ Users can save or print an account recovery kit and replace lost passkeys withou
 
 Planning dependencies: WH-114. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+- Verification line 3 (manually verify keyboard and screen-reader operation) needs Orca, which is not installed. Real printers and devices belong to WH-005 A7. The engine is delivered and dependents treat it as met (D54).
 
 ### References
 
@@ -1231,6 +1231,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/69. Planning owner: Unassigned
 - 2026-10-02: #72 current-only test cutover completed with release 40e45c39-037a-42da-802c-5eacc75bde77 (6c73ac5). New empty D1 has exact 156-table/702-object schema; four Workers, all 39 served assets and binding/secret inventories pass independent readback. Live signed synthetic two-key login, welcome/first-project, logout and revocation pass with fixture cleanup and zero inference. Mobile entry screenshot inspected. Old test account/database and PASSWORD_PEPPER retired, remaining script/bindings unchanged; fresh owner invite saved privately. Physical-device enrollment, human Turnstile/live recovery and native/parent beta gates remain open. CSAM, Daybreak and CMS testing remain deferred. See docs/identity-web.md final release evidence.
 - 2026-10-31 UTC, NOT closed (PR #529; main be4e6bf (origin/main at 2026-10-31), Node 24.21.0, pnpm 11.19.0, disposable local SQLite/local D1, no network, credential, secret or provider call). Re-run today and passing: identity-authority (74 checks), identity-ceremonies (67), identity-kits (47), identity-recovery (64), identity-http (46), workspace-admission (22), identity-browser --d1 and workspace-identity-browser --d1 in Chromium with virtual authenticators. Acceptance lines 2 to 6 map to those suites. Line 1 is NOT met by the evidence: tests/identity-browser.mjs replaces the print iframe's window.print with a stub and compares the print document's text with the kit, so Print / Save as PDF is not shown to produce a printable page or a saved PDF, and no desktop or mobile print layout or saved PDF was inspected (the verification list asks for it); no screen-reader pass over the kit and recovery flow is recorded either (keyboard operation is covered by the browser journey). Missing to close: render the print view to a PDF in Chromium and check its text and layout at desktop and mobile widths, and one recorded screen-reader pass. Physical-device enrollment, human Turnstile and live recovery stay in WH-005.
 - 2026-10-31 UTC, NOT closed. Line 1 print half now has evidence: tests/identity-browser.mjs --d1 (headless Chromium, Node 24.21.0) takes the exact print iframe document the page builds (the window.print stub still stands in for the OS dialog), renders it with page.pdf() to A4 and Letter, and reads the PDFs back with poppler: one page, PDF Title 'Whumpo recovery kit' (the default Save as PDF name) with the secret in neither it nor the page title, extracted text equals the kit text exactly, the 64-hex recovery key is unbroken, and every word box lies inside the page with an 18pt margin (no clipping). The download name stays whumpo-recovery-kit.txt. The PDF is of the print document in a fresh page, not the OS print dialog or a physical printer. Still open: the one recorded screen-reader pass needs Orca, which is not installed and needs sudo (not attempted); desktop/mobile print on real printers and devices.
+- 2026-10-31 UTC, docs only, nothing re-run: readiness set to blocked on the Orca screen-reader pass only (D54). Closing was rejected because it would claim a check nobody ran.
 
 ## WH-133 — Qualified review and activation of restricted case and preservation procedure
 
@@ -3087,125 +3088,6 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 - 2026-10-09 UTC: decomposed into WH-199 to WH-205 with the planned contract in docs/email-change-and-compromise.md (WH-199). Planning and offline reference only: no table, route, binding, provider, sender, DNS record or deployment, and no src/ or schema change. Confirmed from source that the account email (users.email) is an unverified signup identifier with no verification state or change path; it stays a lookup identifier and never a recovery or authorization factor. The parent acceptance is unchanged and closes only after every child; no child reaches WH-048, WH-049 or WH-104, only WH-205 waits on WH-005 and only WH-202/WH-205 wait on the WH-036 live sender. Exact source gaps G-E1 to G-E11 are mapped in the contract; owner decisions are listed there, not assumed.
 
-## WH-093 — Extend maintained records into the Business lead pipeline
-
-Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
-
-Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-Business owners track accepted enquiries through stages, notes and due dates while retaining submission identity and private record ownership.
-
-### Scope
-
-- Extend maintained form records with typed lead stages, notes, due dates, bounded filters and revision-checked updates
-- Reuse scoped inbox access and durable submission identities instead of generating another CRM/storage backend
-- Specify lead lifecycle, export/deletion and retention separately from the current 30-day contact inbox
-- Keep Business owner-operated; approved staff notification destinations do not grant Pro workspace membership
-- Expose routine owner operations through WH-105 registered read/action bindings and WH-107/109/110 Chat/view adapters; implement domain handlers once. Feature acceptance uses the shared owner surface, with essential direct recovery/security controls retained.
-
-### Acceptance criteria
-
-- [ ] Direct APIs, Chat and background work enforce shared current feature eligibility; hidden UI and forged identifiers cannot bypass the tier or tenant boundary
-- [ ] Duplicate delivery creates one lead; accepted records survive subsequent notification failure
-- [ ] Cross-owner access, stale note/stage updates and deleted-record resurrection are refused
-- [ ] Current contact expiry is not silently changed to indefinite CRM retention; deletion/export retain required minimal receipts
-- [ ] Private lead/message content is not automatically added to maintainer context
-
-### Verification
-
-- Existing contact/module tests plus duplicate intake and concurrent lead transitions
-- Owner/foreign-tenant filters, export/deletion and due-date/timezone cases
-- Connected inbox-to-stage/note/due-date browser journey
-
-### Dependencies and blockers
-
-Planning dependencies: WH-089, WH-067, WH-009, WH-122. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/pricing-and-model-policy.md](../../docs/pricing-and-model-policy.md)
-- [docs/contact-forms.md](../../docs/contact-forms.md)
-- [src/contacts.ts](../../src/contacts.ts)
-- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
-- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
-- [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
-- [docs/plan-feature-contract.md](../../docs/plan-feature-contract.md)
-
-### Execution coordination
-
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-- 2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.
-- 2026-10-31 UTC (schema batch 6, branch wh-093-record-leads from 123556f; source and local verification on disposable SQLite and actual local D1, one built-editor browser test; no deploy, secret, Stripe call or dependency): D32 delivered. Owner-only `module_record_leads` (one row per record, created at the first owner edit, cascading with the record, so retention is the record's), the owner `leads.update` module operation with revision compare-and-swap in triggers and a held-record freeze matching `safety_hold_module_record_frozen`, `business.leads` inclusion repeated in the receipt, `stage`/`due` filters on the owner records list a `lead` entry in the owner export, closure/lifecycle/restore registration, and the records-panel editor and filters. `business.leads` moves `planned` -> `private-test`. Tests: tests/module-record-leads.mjs (SQLite and --d1) and tests/record-leads-browser.mjs. Not deployed: it needs the schema batch 6 cutover. WH-093 stays `planned` until that cutover and the deployed module check pass; the Business plan is still sold nowhere, so only preview grants reach it.
-- 2026-10-31 UTC, NOT closed. Batch 6 is cut over (PR #533, release 077c051b-adf1-432a-b43d-cd3752c21a37, DB whumpo-control-2026-10-31d): the live schema fingerprint equals source (241 tables, 1230 objects, sha256 53be90eb...d59d), which includes module_record_leads. tests/module-live.mjs passed on it (reported by the orchestrator; it covers records, intake fail-closed and cleanup but has no lead stage/note/due step). The acceptance lines are evidenced locally (tests/module-record-leads.mjs, tests/record-leads-browser.mjs) but the owner leads.update path was not exercised on the deployed platform, so the deployed module check the previous note requires is not complete. Stays planned.
-- 2026-10-31 UTC (branch roadmap-wh095-093-070; source and local verification on disposable SQLite and local D1, one browser test; no deploy, secret, Stripe call or live call), NOT closed. Line map: (1) tests/module-record-leads.mjs forged ids, foreign owner, visitor, staff, anonymous and ungranted-owner refusals, repeated against the deployed route by the lead step of tests/module-live.mjs; (2) duplicate delivery and failing-notification-keeps-the-record in tests/module-record-leads.mjs and tests/notifications-connected.mjs; (3) stale revision, foreign owner and deleted or expired record not resurrected in tests/module-record-leads.mjs; (4) retention follows the record (no lead outlives it), export and closure counts, same file; (5) no lead key in any Chat or model binding, same file. The verification line 'connected inbox-to-stage/note/due-date browser journey' had only a mocked-fetch panel test. New tests/record-leads-journey.mjs (SQLite and --d1) mounts the actual built RecordList in Chromium with every /api call answered by the actual platform Worker: inbox, stage by keyboard, due date, note, save, the stored row equals what the browser sent, reload shows it from the server, the stage filter narrows the inbox, a save made stale elsewhere is refused in place and overwrites nothing, another owner's record never appears. RecordList is now exported for it; no visible UI change. The only open item is running tests/module-live.mjs (RUN_LIVE_MODULES=1) on the deployed test platform after `wrangler login`: its lead step exists (#539) but has not been run, and this environment has no Wrangler login, so it was not run here. Stays planned until that run passes.
-
-## WH-095 — Report Business submission and lead conversion outcomes honestly
-
-Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
-
-Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
-
-Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
-
-### Outcome
-
-Business owners compare accepted submissions and lead-stage outcomes using explicit periods and denominators without fabricated visitor attribution.
-
-### Scope
-
-- Add privacy-safe aggregate submission/lead-transition events with stable identities and project scope
-- Define reporting windows, exclusions, conversion denominators, event-time corrections and missing/delayed-data states
-- Present results alongside health/traffic without raw visitor identifiers or message bodies
-- Apply lifecycle/export/deletion rules to aggregates and minimal reconciliation receipts
-- Expose routine owner operations through WH-105 registered read/action bindings and WH-107/109/110 Chat/view adapters; implement domain handlers once. Feature acceptance uses the shared owner surface, with essential direct recovery/security controls retained.
-
-### Acceptance criteria
-
-- [ ] Direct APIs, Chat and background work enforce shared current feature eligibility; hidden UI and forged identifiers cannot bypass the tier or tenant boundary
-- [ ] Successful HTML GET counts remain request counts, including disclosed repeats/bots/checks; never label them unique visitors
-- [ ] Repeated delivery/stage changes cannot double-count a defined conversion; missing evidence is not zero
-- [ ] Only authorized project data is reported with period, denominator and collection coverage
-- [ ] Telemetry failure does not block visitor serving or accepted lead intake
-
-### Verification
-
-- Known-count fixtures for duplicates, delayed/out-of-order events, stage reversals and partial periods
-- Tenant filters, deletion/retention and unavailable denominator cases
-- Accessible browser charts/tables and honest empty/partial-data states
-
-### Dependencies and blockers
-
-Planning dependencies: WH-093, WH-037, WH-025, WH-009. Verify completion in current issue evidence before execution; ordering is not proof of completion.
-
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
-
-### References
-
-- [docs/pricing-and-model-policy.md](../../docs/pricing-and-model-policy.md)
-- [docs/contact-forms.md](../../docs/contact-forms.md)
-- [docs/unified-workspace-and-capacity.md](../../docs/unified-workspace-and-capacity.md)
-- [src/site-traffic.ts](../../src/site-traffic.ts)
-- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
-- [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
-
-### Execution coordination
-
-Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
-
-### Evidence
-
-- 2026-10-31 UTC (PR #537, 1761b29; source and local verification only, disposable SQLite and local D1, no network, credential, secret, Stripe or provider call; not deployed-tested; docs only for this entry). D44 delivered: GET /api/projects/P/module-records/R/S/conversions (owner only, workspace origin) counts records submitted in the last 30 days and still kept, by current lead stage (no lead row is new), with no events table, no schema change and no Chat or model surface; business.conversions is private-test. tests/module-record-conversions.mjs (add --d1): no figure and no zero without the feature (line 1), known counts with duplicates adding nothing, a stage reversal lowering the count and a removed or expired record leaving it (line 3), a partial period for a form younger than the window and 'unavailable' rather than zero (line 4), another owner and a visitor seeing nothing of this project (line 1 and 4), and nothing in the Chat summary; tests/record-leads-browser.mjs covers the panel at 360, 390 and 1280, 200% text and dark. NOT met or not mapped: line 2 (request counts are not shown on this panel, so nothing is labeled unique visitors but nothing reports requests either) and line 5 (telemetry failure not blocking intake) have no test of their own here. It also depends on WH-093, which is not done: the deployed leads.update path is not exercised live. Stays planned. D44 narrows the scope's aggregate events and Chat adapters, as planned.
-- 2026-10-31 UTC (same branch; source and local verification only; no network, secret, Stripe or provider call), NOT closed because WH-093's deployed check is still open. The two lines D44 left unmapped now have tests in tests/module-record-conversions.mjs (SQLite and --d1). Line 2: the conversion read carries no request, visit or visitor figure (exact key list), the traffic read (WH-037) reports metric successful_html_requests, its notice and description say 'not unique visitors' and that repeats and unrecognized checks may be included, and the records panel mentions unique visitors only to deny it. D44 excluded presenting request counts on the conversion panel, so no request count is shown there; the line is met by labelling and by never reporting a visitor figure, not by a new display. Line 5: telemetry failure never touches intake, because intake writes no telemetry. With every statement on site_traffic* or module_record_leads made to throw, an accepted intake still returns 200 and stores the record, and the conversion read fails visibly with no stages or submitted field rather than reading as zero (public-page serving under counter failure is tests/site-traffic.mjs). Still excluded by D44: events table, Chat adapters, past-stage history.
-
 ## WH-111 — Make Chat the daily workspace with durable continuity and direct recovery
 
 Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **blocked**. Kind: implementation. Size: M.
@@ -3820,7 +3702,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
 
-# F2 — Done (27)
+# F2 — Done (29)
 
 Verified complete with recorded evidence; kept for history and dependency context. Not candidates for new work.
 
@@ -4062,6 +3944,127 @@ Issue: https://github.com/zemdregon/whumpo/issues/121. Planning owner: Unassigne
 - 2026-10-04 UTC: decomposed into WH-150 (link authority, isolated delivery, bounded feedback, owner API and lifecycle; implemented in source with local tests), WH-151 (shared Chat/view adapters), WH-152 (browser acceptance) and WH-153 (release and live acceptance). The parent stays open until all four pass.
 - 2026-10-31 UTC (PR #529): WH-150, WH-151 and WH-152 are closed with line-by-line evidence. The parent stays open only because WH-153 is open: the sandbox CSP on a live /view response and the release-manifest readback were not read live (see WH-153). Parent acceptance lines 1 to 5 map to the closed children (docs/guest-previews.md) apart from that live readback. Not verified: real human guests and physical devices.
 - 2026-10-31 UTC, CLOSED. WH-153 is closed with the live /view header readback (sandbox CSP with frame-ancestors 'self', SAMEORIGIN, no-store, noindex, no cookie), host routing, refusal paths after revoke and verified cleanup on release 077c051b-adf1-432a-b43d-cd3752c21a37, DB whumpo-control-2026-10-31d; WH-150, WH-151, WH-152 and WH-153 are all done and parent acceptance lines 1 to 5 map to them (docs/guest-previews.md). Not verified: real human guests and physical devices.
+
+## WH-093 — Extend maintained records into the Business lead pipeline
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
+
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Business owners track accepted enquiries through stages, notes and due dates while retaining submission identity and private record ownership.
+
+### Scope
+
+- Extend maintained form records with typed lead stages, notes, due dates, bounded filters and revision-checked updates
+- Reuse scoped inbox access and durable submission identities instead of generating another CRM/storage backend
+- Specify lead lifecycle, export/deletion and retention separately from the current 30-day contact inbox
+- Keep Business owner-operated; approved staff notification destinations do not grant Pro workspace membership
+- Expose routine owner operations through WH-105 registered read/action bindings and WH-107/109/110 Chat/view adapters; implement domain handlers once. Feature acceptance uses the shared owner surface, with essential direct recovery/security controls retained.
+
+### Acceptance criteria
+
+- [ ] Direct APIs, Chat and background work enforce shared current feature eligibility; hidden UI and forged identifiers cannot bypass the tier or tenant boundary
+- [ ] Duplicate delivery creates one lead; accepted records survive subsequent notification failure
+- [ ] Cross-owner access, stale note/stage updates and deleted-record resurrection are refused
+- [ ] Current contact expiry is not silently changed to indefinite CRM retention; deletion/export retain required minimal receipts
+- [ ] Private lead/message content is not automatically added to maintainer context
+
+### Verification
+
+- Existing contact/module tests plus duplicate intake and concurrent lead transitions
+- Owner/foreign-tenant filters, export/deletion and due-date/timezone cases
+- Connected inbox-to-stage/note/due-date browser journey
+
+### Dependencies and blockers
+
+Planning dependencies: WH-089, WH-067, WH-009, WH-122. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/pricing-and-model-policy.md](../../docs/pricing-and-model-policy.md)
+- [docs/contact-forms.md](../../docs/contact-forms.md)
+- [src/contacts.ts](../../src/contacts.ts)
+- [docs/roadmap/composition-architecture.md](../../docs/roadmap/composition-architecture.md)
+- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
+- [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+- [docs/plan-feature-contract.md](../../docs/plan-feature-contract.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.
+- 2026-10-31 UTC (schema batch 6, branch wh-093-record-leads from 123556f; source and local verification on disposable SQLite and actual local D1, one built-editor browser test; no deploy, secret, Stripe call or dependency): D32 delivered. Owner-only `module_record_leads` (one row per record, created at the first owner edit, cascading with the record, so retention is the record's), the owner `leads.update` module operation with revision compare-and-swap in triggers and a held-record freeze matching `safety_hold_module_record_frozen`, `business.leads` inclusion repeated in the receipt, `stage`/`due` filters on the owner records list a `lead` entry in the owner export, closure/lifecycle/restore registration, and the records-panel editor and filters. `business.leads` moves `planned` -> `private-test`. Tests: tests/module-record-leads.mjs (SQLite and --d1) and tests/record-leads-browser.mjs. Not deployed: it needs the schema batch 6 cutover. WH-093 stays `planned` until that cutover and the deployed module check pass; the Business plan is still sold nowhere, so only preview grants reach it.
+- 2026-10-31 UTC, NOT closed. Batch 6 is cut over (PR #533, release 077c051b-adf1-432a-b43d-cd3752c21a37, DB whumpo-control-2026-10-31d): the live schema fingerprint equals source (241 tables, 1230 objects, sha256 53be90eb...d59d), which includes module_record_leads. tests/module-live.mjs passed on it (reported by the orchestrator; it covers records, intake fail-closed and cleanup but has no lead stage/note/due step). The acceptance lines are evidenced locally (tests/module-record-leads.mjs, tests/record-leads-browser.mjs) but the owner leads.update path was not exercised on the deployed platform, so the deployed module check the previous note requires is not complete. Stays planned.
+- 2026-10-31 UTC (branch roadmap-wh095-093-070; source and local verification on disposable SQLite and local D1, one browser test; no deploy, secret, Stripe call or live call), NOT closed. Line map: (1) tests/module-record-leads.mjs forged ids, foreign owner, visitor, staff, anonymous and ungranted-owner refusals, repeated against the deployed route by the lead step of tests/module-live.mjs; (2) duplicate delivery and failing-notification-keeps-the-record in tests/module-record-leads.mjs and tests/notifications-connected.mjs; (3) stale revision, foreign owner and deleted or expired record not resurrected in tests/module-record-leads.mjs; (4) retention follows the record (no lead outlives it), export and closure counts, same file; (5) no lead key in any Chat or model binding, same file. The verification line 'connected inbox-to-stage/note/due-date browser journey' had only a mocked-fetch panel test. New tests/record-leads-journey.mjs (SQLite and --d1) mounts the actual built RecordList in Chromium with every /api call answered by the actual platform Worker: inbox, stage by keyboard, due date, note, save, the stored row equals what the browser sent, reload shows it from the server, the stage filter narrows the inbox, a save made stale elsewhere is refused in place and overwrites nothing, another owner's record never appears. RecordList is now exported for it; no visible UI change. The only open item is running tests/module-live.mjs (RUN_LIVE_MODULES=1) on the deployed test platform after `wrangler login`: its lead step exists (#539) but has not been run, and this environment has no Wrangler login, so it was not run here. Stays planned until that run passes.
+- 2026-10-31 UTC, docs only, nothing re-run: readiness set to done. Every acceptance line has local evidence (line map in the earlier entry). The deployed check the earlier entry required has passed: tests/module-live.mjs ran on the deployed platform at 2026-10-31T11:54:15Z with leadsUpdate:true, 93 site requests and verified cleanup.
+
+## WH-095 — Report Business submission and lead conversion outcomes honestly
+
+Phase: **Useful websites and applications** (F2). Priority: **P1**. Planning readiness: **done** (complete; see Evidence). Kind: implementation. Size: M.
+
+Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
+
+Follow the [agent execution contract](../../docs/roadmap/execution.md) and [canonical backlog](../../docs/roadmap/backlog.json). Re-read the current feature contracts before work.
+
+### Outcome
+
+Business owners compare accepted submissions and lead-stage outcomes using explicit periods and denominators without fabricated visitor attribution.
+
+### Scope
+
+- Add privacy-safe aggregate submission/lead-transition events with stable identities and project scope
+- Define reporting windows, exclusions, conversion denominators, event-time corrections and missing/delayed-data states
+- Present results alongside health/traffic without raw visitor identifiers or message bodies
+- Apply lifecycle/export/deletion rules to aggregates and minimal reconciliation receipts
+- Expose routine owner operations through WH-105 registered read/action bindings and WH-107/109/110 Chat/view adapters; implement domain handlers once. Feature acceptance uses the shared owner surface, with essential direct recovery/security controls retained.
+
+### Acceptance criteria
+
+- [ ] Direct APIs, Chat and background work enforce shared current feature eligibility; hidden UI and forged identifiers cannot bypass the tier or tenant boundary
+- [ ] Successful HTML GET counts remain request counts, including disclosed repeats/bots/checks; never label them unique visitors
+- [ ] Repeated delivery/stage changes cannot double-count a defined conversion; missing evidence is not zero
+- [ ] Only authorized project data is reported with period, denominator and collection coverage
+- [ ] Telemetry failure does not block visitor serving or accepted lead intake
+
+### Verification
+
+- Known-count fixtures for duplicates, delayed/out-of-order events, stage reversals and partial periods
+- Tenant filters, deletion/retention and unavailable denominator cases
+- Accessible browser charts/tables and honest empty/partial-data states
+
+### Dependencies and blockers
+
+Planning dependencies: WH-093, WH-037, WH-025, WH-009. Verify completion in current issue evidence before execution; ordering is not proof of completion.
+
+No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+
+### References
+
+- [docs/pricing-and-model-policy.md](../../docs/pricing-and-model-policy.md)
+- [docs/contact-forms.md](../../docs/contact-forms.md)
+- [docs/unified-workspace-and-capacity.md](../../docs/unified-workspace-and-capacity.md)
+- [src/site-traffic.ts](../../src/site-traffic.ts)
+- [docs/data-lifecycle.md](../../docs/data-lifecycle.md)
+- [docs/roadmap/alignment.md](../../docs/roadmap/alignment.md)
+
+### Execution coordination
+
+Issue: Not created. Planning owner: Unassigned. Check the live issue state, assignee, dependencies, and linked pull requests before claiming or starting this task.
+
+### Evidence
+
+- 2026-10-31 UTC (PR #537, 1761b29; source and local verification only, disposable SQLite and local D1, no network, credential, secret, Stripe or provider call; not deployed-tested; docs only for this entry). D44 delivered: GET /api/projects/P/module-records/R/S/conversions (owner only, workspace origin) counts records submitted in the last 30 days and still kept, by current lead stage (no lead row is new), with no events table, no schema change and no Chat or model surface; business.conversions is private-test. tests/module-record-conversions.mjs (add --d1): no figure and no zero without the feature (line 1), known counts with duplicates adding nothing, a stage reversal lowering the count and a removed or expired record leaving it (line 3), a partial period for a form younger than the window and 'unavailable' rather than zero (line 4), another owner and a visitor seeing nothing of this project (line 1 and 4), and nothing in the Chat summary; tests/record-leads-browser.mjs covers the panel at 360, 390 and 1280, 200% text and dark. NOT met or not mapped: line 2 (request counts are not shown on this panel, so nothing is labeled unique visitors but nothing reports requests either) and line 5 (telemetry failure not blocking intake) have no test of their own here. It also depends on WH-093, which is not done: the deployed leads.update path is not exercised live. Stays planned. D44 narrows the scope's aggregate events and Chat adapters, as planned.
+- 2026-10-31 UTC (same branch; source and local verification only; no network, secret, Stripe or provider call), NOT closed because WH-093's deployed check is still open. The two lines D44 left unmapped now have tests in tests/module-record-conversions.mjs (SQLite and --d1). Line 2: the conversion read carries no request, visit or visitor figure (exact key list), the traffic read (WH-037) reports metric successful_html_requests, its notice and description say 'not unique visitors' and that repeats and unrecognized checks may be included, and the records panel mentions unique visitors only to deny it. D44 excluded presenting request counts on the conversion panel, so no request count is shown there; the line is met by labelling and by never reporting a visitor figure, not by a new display. Line 5: telemetry failure never touches intake, because intake writes no telemetry. With every statement on site_traffic* or module_record_leads made to throw, an accepted intake still returns 200 and stores the record, and the conversion read fails visibly with no stages or submitted field rather than reading as zero (public-page serving under counter failure is tests/site-traffic.mjs). Still excluded by D44: events table, Chat adapters, past-stage history.
+- 2026-10-31 UTC, docs only, nothing re-run: readiness set to done. WH-093 was the only remaining blocker; all five acceptance lines are mapped to tests in the earlier entries (lines 2 and 5 by labelling and by intake writing no telemetry), and WH-093 is now done with its deployed check passed (tests/module-live.mjs, 2026-10-31T11:54:15Z). D44 exclusions stand: no events table, no Chat adapters, no past-stage history.
 
 ## WH-105 — Define the primary Chat experience and interactive element contract
 
@@ -8534,6 +8537,7 @@ Issue: https://github.com/zemdregon/whumpo/issues/128. Planning owner: Unassigne
 - 2026-10-31 UTC (PR #529, decision D28): WH-050 F2, the missing rate-limit binding on whumpo-sites (site HTML has no per-IP limit; one IP sent 150/150 in the P probe), moves here from WH-050. Check the Cloudflare Workers rate limiting binding's availability and price first (the Cloudflare docs connector needed re-authentication and it was not verified); it costs money only if that check says so. See docs/capacity-and-fairness.md.
 - 2026-10-31 UTC, closed on local evidence with limits stated (D40, D43); REOPENED by the live probe in the next entry (D51). Source and local only; nothing deployed for this change. F2: SITE_LIMITER (wrangler.sites.jsonc, namespace 1001005, 300 requests per 60 s per client source, optional in the env type) is checked in src/site-host.ts right after the visitor-host forward, skipped on local hosts, and answers 429 with retry-after 60 before any D1 read; tests/public-fairness.mjs proves no D1 call before the 429, IPv6 grouped by /64, local skip and that a missing binding still serves. No charge is listed for the namespace (D38), not confirmed free; deleting the block is a config-only reversal. Batch limit (D41): projectRuntime(service,project,'batch') adds x-whumpo-class: batch for builds (src/application-build.ts) and migration checks (src/app-migration-checks.ts); the runtime lets batch work hold at most one of two slots. tests/backend-runtime.mjs (actual workerd, deterministic held-open batch call) proves a second batch call is busy while an interactive call on another lane runs, and that a failed batch call frees the slot; tests/build-jobs.mjs proves a busy build holds no capacity, is finished failed, reads as try again and the next build runs; tests/app-migration-checks.mjs proves migration checks dispatch as batch. Acceptance lines: (1) forged tenant arguments and copied job IDs: tests/build-jobs.mjs, job-journal.mjs, boundary-site-isolation.mjs, boundary-visitor-gateway-isolation.mjs, no unmapped path found; (2) permission-sensitive caches: main has no shared cache, new tests/shared-cache-guard.mjs fails if a Cache API, cf cache key, KV or durable binding appears, and tests/request-path-inventory.mjs asserts no cacheable route; (3) noisy neighbour and backpressure: capacity phases A, B, S, L, P and the new phase I (a batch flood of 348 runtime calls, 173 ok and 175 busy with no wrong value, against 30 interactive public backend calls: 30 ok and 0 busy, where the same flood without the class left 24 of 30 busy; refused calls uncharged, counters equal executed calls; runtime recovered); (4) no silent AI metering or plan upgrade: tests/standard-ai-chat.mjs (zero customer credit charge, no customer ledger) and tests/workspace-dashboard.mjs (automaticPlanChanges and overageChargingEnabled false); (5) unknown cost and pooled overhead visible: tests/cost-events-acceptance.mjs W8 to W10 from WH-172 (standing storage reads kept apart from the task, an unpriced call stays unknown and is not counted as zero, an unknown invoice liability line stays unknown, an invoiced liability with no event is a visible residual) and tests/cost-reconcile.mjs. Limit on line 5: no producer emits liability events (license, minimum, renewal), so pooled fixed overhead is visible as standing events and as an invoice residual, not as producer-emitted liability rows; WH-172 stays planned for that. Full local capacity re-run on Node 24.21.0 (pnpm capacity, seed 50, scale 1, 4 tenants, 176.7 s, exit 0, host load rose during the run): victim A p50 207 and p95 476 ms, B p50 490 and p95 1646 ms; site probe by <project>.whumpo.site from one IP 300 ok and 50 x 429 of 350, distinct IPs 150 of 150; D1 statements per request unchanged; recorded in docs/capacity-and-fairness.md. Gate on this commit: pnpm check, verify fast, protection and site, pnpm build, tests/current-schema.mjs, boundary-audit (registration updated for the new gate line, not the check), request-path-inventory on SQLite and --d1, public-fairness and app-migration-checks on SQLite and --d1 (build-jobs has no D1 mode), roadmap validate. NOT verified: the live probe of up to 600 GETs to a random <uuid>.whumpo.site, which needs this deployed (the limiter is per location and approximate, so its count is not asserted); behaviour across Cloudflare isolates; real traffic. Limits (D40): no queue (busy is the explicit, refunded backpressure), no dedicated isolation, failure groups stay a written plan, WH-090 consumption stays through WH-122, the limiter does not cap spend and a shared address can hit 300 per minute for a one-minute 429.
 - 2026-10-31 UTC, REOPENED (D51; docs only; live read-only GET probes from one IP on this host after PR #539 deployed at 5850a4f; no secret, write, Stripe or provider call). SITE_LIMITER is deployed on whumpo-sites (namespace 1001005, 300 per 60 s) and the check is in the deployed bundle, but live probes never saw a 429. Random <uuid>.whumpo.site: 600 GETs in 8.5 s, 576 in 72 s (8 per second), 528 in 66 s, all 404, zero 429. The existing API_LIMITER (120 per 60 s, src/index.ts:166) did not refuse either: /api/plans 180 in 30 s and /api/profile 304 in 38 s, all passed, zero 429. Cloudflare documents the binding as approximate, local to a location, with counts cached and updated in the background; that does not explain a sustained overrun of this size with no refusal, and the cause is unknown. AUTH_LIMITER (10 per 60 s) was not measured. Both limiters fail open and serving is unaffected; the strict controls on public paths are the D1 per-source counters in public admission. What stands: the other four acceptance lines (tenant and job-ID isolation, no shared cache, the batch slot and phase I backpressure, no silent AI metering, cost visibility) are evidenced locally as recorded above, and the 300 ok / 50 x 429 figure is the in-memory harness stand-in, not Cloudflare. What does not: line 3's bounded noisy-neighbour impact for site HTML rests on a limiter that has not been seen to enforce live, so F2 is NOT resolved and the task is not done. Next step is either finding the cause (for example probes from other locations) or the owner's cost decision on Durable Objects for strict counts (docs/owner-review.md). Numbers are recorded in docs/capacity-and-fairness.md; docs/incident-runbooks.md C4 no longer implies enforcement. WH-074 and the other dependents (WH-069, WH-079, WH-080, WH-086, WH-103) must not be read as unblocked by WH-075.
+- 2026-10-31 UTC, docs only, NOT closed: root cause of the live probe result found. The rate-limit binding is enforced per counter and a counter covers a slice of a Cloudflare location. One IP, colo IAD: reused connections get near-exact limits (AUTH_LIMITER refused from request 12 of 10; API_LIMITER 121 allowed then refused; SITE_LIMITER 67 of 720 and 563 of 1,440 refused), new connections mostly avoid them (API_LIMITER 0 of 480, SITE_LIMITER 0 of 1,440, AUTH_LIMITER 382 allowed in 120 s). Upstream cloudflare/workers-sdk#16097 is open. D68 keeps the bindings. D69: a WAF rate-limit rule is the owner's to set (Q-011), untested. The D1 per-source counters are proven locally, not live. Durable Objects stay the owner cost decision (about $1.35 a month at 10M requests, about $390 under a sustained 1,000 rps flood). See docs/capacity-and-fairness.md.
 
 ## WH-078 — Measure composition reuse and full lifecycle cost per outcome
 
@@ -8759,7 +8763,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ## WH-070 — Separate visual customization from maintained backend behavior
 
-Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **planned**. Kind: implementation. Size: M.
+Phase: **Configuration and shared capabilities** (F5). Priority: **P1**. Planning readiness: **blocked**. Kind: implementation. Size: M.
 
 Reviewed: 2026-10-31. Source baseline: `b1bb81494021ad3769568fdd0e4c4c61f3ccc722`. This is a planning snapshot, not current execution or deployment status.
 
@@ -8794,7 +8798,7 @@ Distinctive sites and portals use different presentation while retaining the sam
 
 Planning dependencies: WH-066, WH-067. Verify completion in current issue evidence before execution; ordering is not proof of completion.
 
-No external blockers recorded. This does not grant deployment, purchase, provider activation, or customer-action approval.
+- Level 3 (small custom frontend component) is blocked by WH-014 and docs/roadmap/composition-architecture.md section 3: custom JavaScript stays out until its hosting, origin and isolation contract is accepted. Levels 1 and 2 land in WH-091 (D57).
 
 ### References
 
@@ -8816,6 +8820,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 - 2026-10-31 UTC (standard appointment form slice, schema batch 6; source and local verification only; NOT deployed and NOT live-tested): a button-driven owner setup (typed appointmentFormReview control, one trigger project_spec_appointment_setup_admit, the existing exact specification, publication and activation reviews unchanged), a hosted GET /forms/appointment page on the application host (server-rendered from the registered records instance; closed with no submit unless the form is bound and the deployed Worker holds TURNSTILE_SECRET, which whumpo-apps does not yet), and a 'Request an appointment' link on the published site while the form is bound. The records panel's false 'Ask Whumpo in Chat to add a form' copy is replaced by the real action. Acceptance lines of WH-070 are NOT claimed: this is one standard backend and its hosted page, not the three extension levels. Evidence: tests/records-setup.mjs (SQLite and --d1) and tests/appointment-form-browser.mjs (Chromium 360/390/1280px, light and dark, 200% text, axe, keyboard). Anonymous public intake stays not live-accepted until the owner sets TURNSTILE_SECRET on whumpo-apps and confirms the widget hostname list covers app-*.whumpo.site. docs/shared-modules.md#owner-appointment-form-setup-wh-070--october-31-2026-utc.
 - 2026-10-31 UTC, NOT closed. Batch 6 is cut over (PR #533, release 077c051b-adf1-432a-b43d-cd3752c21a37, DB whumpo-control-2026-10-31d) and tests/module-live.mjs passed on it (reported by the orchestrator), so the appointment setup trigger and hosted page are deployed. Live read: the platform Worker holds TURNSTILE_SECRET while whumpo-apps (which serves /forms/appointment) lists no secrets, so the public form path is unproven live until TURNSTILE_SECRET is set on whumpo-apps (not changed here). The task asks for three extension levels with composition conformance, which this one standard backend does not meet. Stays planned.
 - 2026-10-31 UTC (same branch; analysis only, no code): the other two extension levels were assessed and NOT built. Level 1 (design configuration) is bounded: the specification's design object is exactly {theme} with three palettes, so tokens such as font pairing, density and navigation style need a new specification shape, a compiler identity bump past project-content@6 with regenerated lock artifacts, renderer changes and review display, but no D1 schema change. Level 2 (component composition) needs a typed section/component vocabulary and, for module-backed pages, a Worker that serves composed frontends, which does not exist (docs/shared-modules.md: 'No Worker serves a composed frontend yet'); it needs no D1 change in principle but adds a new served surface. Level 3 (small custom frontend component) is blocked by docs/roadmap/composition-architecture.md section 3: custom JavaScript stays out of the owner workspace and the credential-bearing visitor shell until its hosting, origin and isolation contract is designed and accepted, which is an owner decision. The five acceptance lines and the three-composition conformance run depend on those. Owner-only promise for WH-093 and WH-095 checked: leads and conversions are readable only through owner routes (foreign owner, visitor, staff and anonymous refused), absent from records.get, records.view, the staff and visitor export slices, the records summary and every Chat binding, and removed with the record. Stays planned.
+- 2026-10-31 UTC, docs only, nothing re-run: split by D57: levels 1 (design configuration) and 2 (component composition) are delivered by WH-091; level 3 stays here, blocked on WH-014.
 
 ## WH-072 — Design project data provisioning, migrations and recovery boundaries
 
