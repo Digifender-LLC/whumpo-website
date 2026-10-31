@@ -8,7 +8,10 @@ import com.whumpo.android.ui.common.Tone
 import com.whumpo.android.ui.common.loadUi
 import com.whumpo.android.ui.common.timeLabel
 import com.whumpo.android.ui.common.userMessage
+import com.whumpo.android.ui.photos.NoUploadStore
+import com.whumpo.android.ui.photos.PendingUpload
 import com.whumpo.android.ui.photos.PhotoPreparer
+import com.whumpo.android.ui.photos.UploadStore
 import com.whumpo.android.ui.photos.PhotoRejected
 import com.whumpo.android.ui.photos.PreparedPhoto
 import com.whumpo.android.ui.state.UiState
@@ -25,6 +28,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -70,6 +74,7 @@ data class PhotosState(
 class ProjectsViewModel(
     private val api: MobileApiClient,
     private val preparer: PhotoPreparer,
+    private val store: UploadStore = NoUploadStore,
     private val clock: () -> Instant = { Clock.System.now() },
 ) : ViewModel() {
     private val _list = MutableStateFlow<UiState<ProjectList>>(UiState.Loading)
@@ -88,13 +93,73 @@ class ProjectsViewModel(
     private var detailJob: Job? = null
     private var photosJob: Job? = null
 
-    /** Prepared bytes by upload ID, held until the upload is confirmed or dismissed. */
-    private class Held(val projectId: String, val photo: PreparedPhoto)
+    /**
+     * Every upload on this phone for the signed-in account: its project, its row and, once prepared, the exact bytes to repeat.
+     * One map, so releasing a row releases its bytes. Cleared whenever the account changes.
+     */
+    private class Entry(val projectId: String, val photo: PreparedPhoto?, val row: UploadRow, val gen: Int)
 
-    private val held = mutableMapOf<String, Held>()
+    private val entries = linkedMapOf<String, Entry>()
+
+    /** Bumps on every account change; work that started under an older value drops itself instead of crossing accounts. */
+    private var generation = 0
+
+    /** The account the store last reported (an opaque key). Saves are made for this account only. */
+    private var account: Any? = null
 
     init {
-        refresh()
+        viewModelScope.launch {
+            store.account.collectLatest { who ->
+                // A different account (or sign-out): forget everything the last one had on screen or in memory, then start
+                // clean for the new one. Uploads left by an earlier process come back as retries of the same request.
+                generation++
+                account = who
+                listJob?.cancel()
+                detailJob?.cancel()
+                photosJob?.cancel()
+                entries.clear()
+                _selected.value = null
+                _detail.value = UiState.Loading
+                _photos.value = PhotosState()
+                refresh()
+                restore()
+                publishUploads()
+            }
+        }
+    }
+
+    /** Stored uploads whose project is gone (or whose ID is not a project ID) can never succeed: drop them, free their slot. */
+    private suspend fun restore() {
+        val gen = generation
+        val stored = try {
+            store.load()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            emptyList()
+        }
+        for (projectId in stored.map { it.projectId }.distinct()) {
+            val gone = try {
+                api.getProject(projectId)
+                false
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: MobileApiException.NotFound) {
+                true
+            } catch (_: IllegalArgumentException) {
+                true
+            } catch (_: Exception) {
+                false // offline or busy: keep it and let the owner retry later
+            }
+            if (gen != generation) return
+            stored.filter { it.projectId == projectId }.forEach { u ->
+                if (gone) {
+                    store.remove(u.id)
+                } else {
+                    entries[u.id] = Entry(u.projectId, PreparedPhoto(u.name, u.jpeg), UploadRow(u.id, UploadPhase.Failed, INTERRUPTED, canRetry = true), gen)
+                }
+            }
+        }
     }
 
     fun refresh() {
@@ -110,7 +175,7 @@ class ProjectsViewModel(
         val cursor = current.nextCursor ?: return
         if (current.loadingMore) return
         _list.value = UiState.Content(current.copy(loadingMore = true, moreFailed = false))
-        viewModelScope.launch {
+        listJob = viewModelScope.launch {
             _list.value = try {
                 val page = fetchPage(cursor)
                 UiState.Content(ProjectList(current.rows + page.rows, page.nextCursor))
@@ -128,6 +193,7 @@ class ProjectsViewModel(
         detailJob?.cancel()
         photosJob?.cancel()
         _photos.value = PhotosState()
+        publishUploads()
         if (projectId != null) {
             loadDetail(projectId)
             loadPhotos(projectId)
@@ -146,66 +212,97 @@ class ProjectsViewModel(
     fun addPhoto(source: String) {
         val projectId = _selected.value ?: return
         val uploadId = newRequestId()
-        setUpload(UploadRow(uploadId, UploadPhase.Preparing))
+        val gen = generation
+        val owner = account
+        setUpload(uploadId, Entry(projectId, null, UploadRow(uploadId, UploadPhase.Preparing), gen))
         viewModelScope.launch {
             val prepared = try {
                 preparer.prepare(source)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: PhotoRejected) {
-                setUpload(UploadRow(uploadId, UploadPhase.Failed, e.message, canRetry = false))
+                if (gen == generation) setUpload(uploadId, Entry(projectId, null, UploadRow(uploadId, UploadPhase.Failed, e.message, canRetry = false), gen))
+                return@launch
+            } catch (_: Exception) {
+                // A hostile or broken handle (a provider that throws, a revoked grant): refuse it, never crash.
+                if (gen == generation) setUpload(uploadId, Entry(projectId, null, UploadRow(uploadId, UploadPhase.Failed, "That photo can't be read. Choose it again.", canRetry = false), gen))
                 return@launch
             }
-            held[uploadId] = Held(projectId, prepared)
+            // The account changed while the photo was being prepared: these bytes belong to the old one. Drop them.
+            if (gen != generation) return@launch
+            setUpload(uploadId, Entry(projectId, prepared, UploadRow(uploadId, UploadPhase.Preparing), gen))
+            // Keep the exact bytes before the first request, so a killed process can repeat it. If they cannot be kept (full,
+            // a Keystore failure, the account just changed) the upload still goes ahead; it just cannot outlive this process.
+            try {
+                store.save(PendingUpload(uploadId, projectId, prepared.name, prepared.jpeg), owner)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+            }
+            if (gen != generation) {
+                store.remove(uploadId)
+                return@launch
+            }
             send(uploadId)
         }
     }
 
     /** An explicit owner retry: same ID, same bytes, same name. */
     fun retryUpload(uploadId: String) {
-        val row = _photos.value.uploads.firstOrNull { it.id == uploadId } ?: return
-        if (row.phase != UploadPhase.Failed || !row.canRetry || uploadId !in held) return
+        val e = entries[uploadId] ?: return
+        if (e.row.phase != UploadPhase.Failed || !e.row.canRetry || e.photo == null) return
         viewModelScope.launch { send(uploadId) }
     }
 
     fun dismissUpload(uploadId: String) {
-        held.remove(uploadId)
-        _photos.update { it.copy(uploads = it.uploads.filterNot { u -> u.id == uploadId }) }
+        entries.remove(uploadId)
+        publishUploads()
+        viewModelScope.launch { store.remove(uploadId) }
     }
 
     private suspend fun send(uploadId: String) {
-        val h = held[uploadId] ?: return
-        setUpload(UploadRow(uploadId, UploadPhase.Uploading))
+        val e0 = entries[uploadId] ?: return
+        val photo = e0.photo ?: return
+        val projectId = e0.projectId
+        val gen = e0.gen
+        setUpload(uploadId, Entry(projectId, photo, UploadRow(uploadId, UploadPhase.Uploading), gen))
         try {
-            api.uploadPhoto(h.projectId, uploadId, h.photo.name, h.photo.jpeg)
-            uploaded(uploadId, h.projectId)
+            api.uploadPhoto(projectId, uploadId, photo.name, photo.jpeg)
+            uploaded(uploadId, projectId, gen)
         } catch (e: CancellationException) {
             throw e
         } catch (e: MobileApiException) {
             if (e is MobileApiException.Transport && e.outcomeUnknown) {
-                resolveLostReply(uploadId, h)
+                resolveLostReply(uploadId, projectId, photo, gen)
             } else {
                 val retry = e is MobileApiException.RateLimited || e is MobileApiException.Unavailable
-                setUpload(UploadRow(uploadId, UploadPhase.Failed, uploadMessage(e), canRetry = retry))
+                val row = UploadRow(uploadId, UploadPhase.Failed, uploadMessage(e), canRetry = retry)
+                // Refused for good: the bytes can never be retried, so they are released first and only then is the failure shown.
+                if (!retry) store.remove(uploadId)
+                setUpload(uploadId, Entry(projectId, if (retry) photo else null, row, gen))
             }
         }
     }
 
     /** The reply was lost: read the upload instead of guessing. Not found means nothing committed. */
-    private suspend fun resolveLostReply(uploadId: String, h: Held) {
+    private suspend fun resolveLostReply(uploadId: String, projectId: String, photo: PreparedPhoto, gen: Int) {
         try {
-            api.getPhotoUpload(h.projectId, uploadId)
-            uploaded(uploadId, h.projectId)
+            api.getPhotoUpload(projectId, uploadId)
+            uploaded(uploadId, projectId, gen)
         } catch (e: CancellationException) {
             throw e
         } catch (_: MobileApiException.NotFound) {
-            setUpload(UploadRow(uploadId, UploadPhase.Failed, "The upload didn't finish. Nothing was added.", canRetry = true))
+            setUpload(uploadId, Entry(projectId, photo, UploadRow(uploadId, UploadPhase.Failed, "The upload didn't finish. Nothing was added.", canRetry = true), gen))
         } catch (_: MobileApiException) {
-            setUpload(UploadRow(uploadId, UploadPhase.Failed, "We couldn't confirm the upload. Try again; it won't be added twice.", canRetry = true))
+            setUpload(uploadId, Entry(projectId, photo, UploadRow(uploadId, UploadPhase.Failed, "We couldn't confirm the upload. Try again; it won't be added twice.", canRetry = true), gen))
         }
     }
 
-    private fun uploaded(uploadId: String, projectId: String) {
-        held.remove(uploadId)
-        _photos.update { it.copy(uploads = it.uploads.filterNot { u -> u.id == uploadId }) }
+    private suspend fun uploaded(uploadId: String, projectId: String, gen: Int) {
+        if (gen != generation) return
+        entries.remove(uploadId)
+        publishUploads()
+        store.remove(uploadId)
         if (_selected.value == projectId) loadPhotos(projectId)
     }
 
@@ -218,9 +315,15 @@ class ProjectsViewModel(
         else -> "The photo wasn't added. Nothing was changed."
     }
 
-    private fun setUpload(row: UploadRow) = _photos.update { s ->
-        val exists = s.uploads.any { it.id == row.id }
-        s.copy(uploads = if (exists) s.uploads.map { if (it.id == row.id) row else it } else s.uploads + row)
+    private fun setUpload(uploadId: String, entry: Entry) {
+        if (entry.gen != generation) return // late work from another account never touches this one
+        entries[uploadId] = entry
+        publishUploads()
+    }
+
+    private fun publishUploads() {
+        val shown = entries.values.filter { it.projectId == _selected.value }.map { it.row }
+        _photos.update { it.copy(uploads = shown) }
     }
 
     private suspend fun fetchPage(cursor: String?): ProjectList {
@@ -251,6 +354,8 @@ class ProjectsViewModel(
         }
     }
 }
+
+private const val INTERRUPTED = "This upload was interrupted. Try again; it won't be added twice."
 
 private fun Project.toRow(now: Instant): ProjectRow = ProjectRow(
     id = id,

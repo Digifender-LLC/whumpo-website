@@ -107,6 +107,19 @@ class AccountStateStore(
         return true
     }
 
+    /** The slot names [owner] holds for [kind], or empty when [owner] is not active. */
+    @Synchronized
+    fun list(owner: AccountScope, kind: StateKind): List<String> {
+        if (active.value != owner) return emptyList()
+        val prefix = "${kind.fileTag}-"
+        return File(root, owner.storageKey).listFiles().orEmpty()
+            .map { it.name }
+            .filter { it.startsWith(prefix) && it.endsWith(".bin") }
+            .map { it.removePrefix(prefix).removeSuffix(".bin") }
+            .filter { StateSlot.isValidName(it) }
+            .sorted()
+    }
+
     private fun eraseAll() {
         if (root.exists() && !root.deleteRecursively()) {
             throw IOException("Could not erase account state")

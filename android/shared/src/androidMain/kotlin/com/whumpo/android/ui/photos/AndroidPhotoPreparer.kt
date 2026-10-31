@@ -27,25 +27,7 @@ class AndroidPhotoPreparer(private val resolver: ContentResolver) : PhotoPrepare
         PhotoPipeline.prepare(bytes, displayName(uri))
     }
 
-    /** At most one byte over the input limit, so the pipeline can refuse a larger file without loading all of it. */
-    private fun readBytes(uri: Uri): ByteArray? =
-        try {
-            resolver.openInputStream(uri)?.use { stream ->
-                val out = ByteArrayOutputStream()
-                val buffer = ByteArray(8 * 1024)
-                val limit = PhotoPipeline.MAX_INPUT_BYTES + 1
-                while (out.size() < limit) {
-                    val n = stream.read(buffer, 0, minOf(buffer.size, limit - out.size()))
-                    if (n < 0) break
-                    out.write(buffer, 0, n)
-                }
-                out.toByteArray()
-            }
-        } catch (_: IOException) {
-            null
-        } catch (_: SecurityException) {
-            null
-        }
+    private fun readBytes(uri: Uri): ByteArray? = readCapped(resolver, uri)
 
     private fun displayName(uri: Uri): String? =
         try {
@@ -159,4 +141,32 @@ internal object PhotoPipeline {
     }
 
     private val ALLOWED_TYPES = setOf("image/jpeg", "image/png", "image/webp")
+}
+
+/**
+ * Reads a `content://` photo into memory, at most one byte over [PhotoPipeline.MAX_INPUT_BYTES] so a larger file can be
+ * refused without loading all of it. Shared by the upload preparer and the share preview, so both apply the same cap.
+ * Null when the provider cannot be read.
+ */
+internal fun readCapped(resolver: ContentResolver, uri: Uri): ByteArray? =
+    try {
+        resolver.openInputStream(uri)?.use { stream -> readCapped(stream) }
+    } catch (_: IOException) {
+        null
+    } catch (_: SecurityException) {
+        null
+    } catch (_: RuntimeException) {
+        null // a hostile provider can throw anything
+    }
+
+internal fun readCapped(stream: java.io.InputStream): ByteArray {
+    val out = ByteArrayOutputStream()
+    val buffer = ByteArray(8 * 1024)
+    val limit = PhotoPipeline.MAX_INPUT_BYTES + 1
+    while (out.size() < limit) {
+        val n = stream.read(buffer, 0, minOf(buffer.size, limit - out.size()))
+        if (n < 0) break
+        out.write(buffer, 0, n)
+    }
+    return out.toByteArray()
 }

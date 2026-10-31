@@ -86,11 +86,11 @@ export const dimensions = deepFreeze({
 } satisfies Record<string, Dimension>);
 export type CostDimension = keyof typeof dimensions;
 
-// `source-adapter` sources have a pure adapter in cost-event-adapters.ts; the others have no producer yet.
+// `source-adapter` sources have a pure adapter (cost-event-adapters.ts, or liability-register.ts for the operator register); the others have no producer yet.
 export const sources = deepFreeze({
  'inference-receipt': { readiness: 'source-adapter', table: 'inference_calls' }, 'gateway-settlement': { readiness: 'source-adapter', table: 'gateway_spend_attempts' },
  'storage-operations': { readiness: 'source-adapter', table: 'storage_project_usage' }, 'cloudflare-usage-import': { readiness: 'planned', table: null },
- 'liability-register': { readiness: 'planned', table: null }, 'notification-delivery': { readiness: 'planned', table: null }, 'connector-call': { readiness: 'planned', table: null }
+ 'liability-register': { readiness: 'source-adapter', table: null }, 'notification-delivery': { readiness: 'planned', table: null }, 'connector-call': { readiness: 'planned', table: null }
 } satisfies Record<string, { readiness: 'source-adapter' | 'planned'; table: string | null }>);
 export type CostSource = keyof typeof sources;
 
