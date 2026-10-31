@@ -31,6 +31,9 @@ try{
  const tenantGates=['tests/tenant-classification.mjs','tests/tenant-schema-bodies.mjs','tests/sqlite-authorizer.mjs','tests/tenant-sql-surface.mjs'];
  assert.ok(Object.values(profiles).flat().every(script=>!tenantGates.includes(script)),'WH-054 tenant gates stay out of the verify profiles');
  assert.equal(JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8')).scripts['test:tenant-gates'],tenantGates.map(script=>'node '+script).join(' && '));
+ // WH-204: browser suites need Playwright and a fixed port, so they stay out of every profile; the email-change one must stay reachable as a package script on SQLite and local D1.
+ assert.ok(Object.values(profiles).flat().every(script=>!/-browser\.mjs$/.test(script)),'browser suites stay out of the verify profiles');
+ assert.equal(JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8')).scripts['test:email-change-browser'],'node tests/email-change-browser.mjs && node tests/email-change-browser.mjs --d1');
  writeFileSync(join(cwd,'.dev.vars'),'SYNTHETIC=1');
  assert.throws(()=>runProfile('fast',{cwd,run:()=>assert.fail('Must not launch')}),/Local/);
 }finally{rmSync(cwd,{recursive:true,force:true});}
