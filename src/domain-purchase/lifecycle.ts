@@ -6,7 +6,7 @@
 import {enqueueNotice} from '../notification-outbox';
 import {dueReminder,confirmAutoRenew,currentRenewalTotal,prepareAutoRenew,renewalDecision,requestTransferOut} from './renewal';
 import type {Registration} from './order';
-import {DomainPurchaseError,check} from './quote';
+import {DomainPurchaseError,check,domainPurchaseBounds} from './quote';
 import type {Actor,PurchasePolicy} from './quote';
 import type {RegistrarAdapter} from './registrar';
 
@@ -53,8 +53,8 @@ export async function turnOffAutoRenew(db:Db,actor:Actor,hostname:string){
  await db.prepare('UPDATE domain_registrations SET auto_renew=0,renewal_review_id=NULL,renewal_total_cents=NULL WHERE hostname=?1 AND owner_user_id=?2 AND auto_renew=1').bind(hostname,actor.ownerId).run();
  return loadRegistration(db,actor.ownerId,hostname);
 }
-/** The renewal-time decision for one name. A current opt-in covering the current price writes the approval a charger must require; a higher price turns
- * auto-renew off until a new review; no opt-in approves nothing. Returns what happened; it never charges. */
+/** The renewal-time decision for one name. A current opt-in covering the current price writes (or updates, so it follows the price) the one approval a
+ * charger must require; a higher price turns auto-renew off, which deletes the approval in the same statement; no opt-in approves nothing. It never charges. */
 export async function decideRenewal({db,hostname,registrar,policy,now}:{db:Db;hostname:string;registrar:RegistrarAdapter;policy:PurchasePolicy;now:number}){
  const row=await db.prepare(`SELECT ${registrationColumns} FROM domain_registrations WHERE hostname=?`).bind(hostname).first<RegistrationRow>();
  const registration=row?toRegistration(row):null;
@@ -64,44 +64,62 @@ export async function decideRenewal({db,hostname,registrar,policy,now}:{db:Db;ho
   return decision;
  }
  const reg=registration!,price=await currentRenewalTotal(hostname,registrar,policy);
- await db.prepare('INSERT INTO domain_renewal_approvals(hostname,for_expiry,review_id,price_cents,approved_at) VALUES(?,?,?,?,?) ON CONFLICT(hostname,for_expiry) DO NOTHING')
+ // The window is the schema's: 30 days before the expiry. Outside it nothing is written and the answer says so.
+ if(reg.state!=='active'||reg.expiresAt===null||now>=reg.expiresAt||now<reg.expiresAt-30*86400000)return {renew:false as const,reason:'outside-renewal-window'};
+ await db.prepare(`INSERT INTO domain_renewal_approvals(hostname,for_expiry,review_id,price_cents,approved_at) VALUES(?1,?2,?3,?4,?5)
+  ON CONFLICT(hostname,for_expiry) DO UPDATE SET review_id=excluded.review_id,price_cents=excluded.price_cents,approved_at=excluded.approved_at`)
   .bind(hostname,reg.expiresAt,reg.renewalOptIn!.reviewId,price,now).run();
  return {renew:true as const,priceCents:price};
 }
 
-/** Read the registrar after the fact: a larger expiry (renewed elsewhere) is recorded, and a name the registrar no longer holds for us past its expiry is
- * marked lapsed, which is what the expired reminder is about. Read-only at the registrar. */
+/** Read the registrar after the fact. A lookup that shows the name is ours backfills a missing expiry or records a later one. A registration that names another
+ * known order is definite proof the name is no longer ours: a name in transfer-out has been transferred, any other lapses, at any time. "Not found" is not proof, so
+ * a name the registrar no longer shows lapses only after its expiry. Read-only at the registrar. */
 export async function syncRegistration({db,hostname,registrar,now}:{db:Db;hostname:string;registrar:RegistrarAdapter;now:number}){
  const row=await db.prepare(`SELECT ${registrationColumns} FROM domain_registrations WHERE hostname=? AND state IN ('active','transfer-out')`).bind(hostname).first<RegistrationRow>();
  if(!row)return null;
- const found=await registrar.lookup(hostname),ours=found.status==='registered'&&found.orderRef===row.order_id;
- if(ours&&found.status==='registered'&&Number.isSafeInteger(found.expiresAt)&&row.expires_at!==null&&found.expiresAt>row.expires_at)
-  await db.prepare('UPDATE domain_registrations SET expires_at=?1 WHERE hostname=?2 AND expires_at=?3').bind(found.expiresAt,hostname,row.expires_at).run();
- else if(!ours&&row.expires_at!==null&&now>=row.expires_at&&found.status!=='in_progress')
-  await db.prepare("UPDATE domain_registrations SET state='lapsed',auto_renew=0,renewal_review_id=NULL,renewal_total_cents=NULL WHERE hostname=?1 AND state IN ('active','transfer-out') AND expires_at<=?2").bind(hostname,now).run();
+ const found=await registrar.lookup(hostname);
+ const registered=found.status==='registered'&&typeof found.orderRef==='string'&&found.orderRef.length>0;
+ const ours=found.status==='registered'&&found.orderRef===row.order_id;
+ const foreign=registered&&!ours;
+ if(ours&&found.status==='registered'&&Number.isSafeInteger(found.expiresAt)&&(row.expires_at===null||found.expiresAt>row.expires_at))
+  await db.prepare('UPDATE domain_registrations SET expires_at=?1 WHERE hostname=?2 AND (expires_at IS NULL OR expires_at<?1)').bind(found.expiresAt,hostname).run();
+ else if(foreign){
+  if(row.state==='transfer-out'){
+   const open=await db.prepare(`SELECT ${transferColumns} FROM domain_transfer_requests WHERE hostname=?1 AND state IN ('requested','unlocked','unknown-outcome')`).bind(hostname).first<TransferRow>();
+   if(open)await db.prepare(`UPDATE domain_transfer_requests SET state='completed',completion_evidence='registered-elsewhere',updated_at=max(?1,updated_at),version=version+1 WHERE request_id=?2 AND version=?3`).bind(now,open.request_id,open.version).run();
+  }else await db.prepare("UPDATE domain_registrations SET state='lapsed',auto_renew=0,renewal_review_id=NULL,renewal_total_cents=NULL WHERE hostname=?1 AND state='active'").bind(hostname).run();
+ }
+ else if(found.status==='not-found'&&row.state==='active'&&row.expires_at!==null&&now>=row.expires_at)
+  await db.prepare("UPDATE domain_registrations SET state='lapsed',auto_renew=0,renewal_review_id=NULL,renewal_total_cents=NULL WHERE hostname=?1 AND state='active' AND expires_at<=?2").bind(hostname,now).run();
  const next=await db.prepare(`SELECT ${registrationColumns} FROM domain_registrations WHERE hostname=?`).bind(hostname).first<RegistrationRow>();
  return next?toRegistration(next):null;
 }
 
-/** Reminders for names whose expiry window has opened. One notice per name, kind and expiry (a duplicate queues nothing), through the shared outbox: the row
- * is the only effect. Content-free by design (no name in the email), and queued rows are never sent while the sender gate is closed. */
+/** Reminders for names whose expiry window has opened (and for a lapsed name, its expired notice). One notice per name, kind and expiry (a duplicate queues nothing),
+ * through the shared outbox: the row is the only effect. Content-free by design (no name in the email); queued rows are never sent while the sender gate is closed.
+ * Names already reminded sit earlier in the order, so the scan pages by (expiry, name) until `limit` notices are queued instead of re-reading the same first rows. */
 export async function queueDueReminders(db:Db,now:number,limit=100){
  check(Number.isSafeInteger(limit)&&limit>0&&limit<=500,'INVALID_LIMIT','limit');
- const rows=(await db.prepare(`SELECT hostname,owner_user_id,project_id,expires_at FROM domain_registrations WHERE state IN ('active','transfer-out') AND expires_at BETWEEN ?1 AND ?2 ORDER BY expires_at LIMIT ?3`)
-  .bind(now-5*86400000,now+30*86400000,limit).all<{hostname:string;owner_user_id:string;project_id:string;expires_at:number}>()).results;
- let queued=0;
- for(const r of rows){
-  const kind=dueReminder(r.expires_at,now);
-  if(!kind)continue;
-  const result=await enqueueNotice(db as D1Database,{userId:r.owner_user_id,scope:'account-email',template:`domain.expiry-${kind}@1`,eventRef:`${r.hostname}:${kind}:${r.expires_at}`,now});
-  if(result.queued)queued++;
+ let queued=0,afterExpiry=-1,afterName='';
+ for(let page=0;page<50&&queued<limit;page++){
+  const rows=(await db.prepare(`SELECT hostname,owner_user_id,state,expires_at FROM domain_registrations WHERE state IN ('active','transfer-out','lapsed') AND expires_at BETWEEN ?1 AND ?2
+   AND (expires_at>?3 OR (expires_at=?3 AND hostname>?4)) ORDER BY expires_at,hostname LIMIT 100`).bind(now-5*86400000,now+30*86400000,afterExpiry,afterName).all<{hostname:string;owner_user_id:string;state:string;expires_at:number}>()).results;
+  if(!rows.length)break;
+  for(const r of rows){
+   afterExpiry=r.expires_at;afterName=r.hostname;
+   const kind=dueReminder(r.expires_at,now);
+   if(!kind||(r.state==='lapsed'&&kind!=='expired'))continue;
+   const result=await enqueueNotice(db as D1Database,{userId:r.owner_user_id,scope:'account-email',template:`domain.expiry-${kind}@1`,eventRef:`${r.hostname}:${kind}:${r.expires_at}`,now});
+   if(result.queued&&++queued>=limit)break;
+  }
  }
  return {queued};
 }
 
-type TransferRow={request_id:string;hostname:string;owner_user_id:string;state:'requested'|'unlocked'|'unknown-outcome'|'failed'|'completed';requested_at:number;version:number};
-const transferColumns='request_id,hostname,owner_user_id,state,requested_at,version';
-const toTransfer=(r:TransferRow)=>({requestId:r.request_id,hostname:r.hostname,ownerId:r.owner_user_id,state:r.state,requestedAt:r.requested_at,version:r.version});
+type TransferRow={request_id:string;hostname:string;owner_user_id:string;state:'requested'|'unlocked'|'unknown-outcome'|'failed'|'completed';requested_at:number;version:number;missing_reads:number};
+const transferColumns='request_id,hostname,owner_user_id,state,requested_at,version,missing_reads';
+const toTransfer=(r:TransferRow)=>({requestId:r.request_id,hostname:r.hostname,ownerId:r.owner_user_id,state:r.state,requestedAt:r.requested_at,version:r.version,missingReads:r.missing_reads});
 export type TransferRequest=ReturnType<typeof toTransfer>;
 async function moveTransfer(db:Db,r:TransferRequest,to:TransferRequest['state'],now:number){
  const row=await db.prepare(`UPDATE domain_transfer_requests SET state=?1,updated_at=?2,version=version+1 WHERE request_id=?3 AND version=?4 RETURNING ${transferColumns}`).bind(to,now,r.requestId,r.version).first<TransferRow>();
@@ -138,24 +156,57 @@ export async function startTransferOut({db,actor,hostname,registrar,requestId,no
  const request=await moveTransfer(db,toTransfer(claimed),to,now);
  return {request:request as TransferRequest,replayed:false as const};
 }
-/** Settle unknown or open transfers by reading the registrar. "Unlocked" is the registrar's own report; a name the registrar no longer holds for us after
- * we unlocked it has been transferred; nothing here repeats the unlock. */
+/** Settle unknown or open transfers by reading the registrar. "Unlocked" is the registrar's own report. A registration naming another order proves the name has
+ * left; "not found" is not proof, so it counts as one absent read and the transfer completes only on a second one at least the reconcile spacing later (and only
+ * after we unlocked it). Reads are spaced and round-robin (least recently touched first); one failing lookup does not stop the batch; nothing repeats the unlock. */
 export async function reconcileTransfers(db:Db,registrar:RegistrarAdapter,now:number,limit=20){
- const rows=(await db.prepare(`SELECT ${transferColumns} FROM domain_transfer_requests WHERE state IN ('unknown-outcome','unlocked') ORDER BY requested_at LIMIT ?1`).bind(limit).all<TransferRow>()).results;
+ const rows=(await db.prepare(`SELECT ${transferColumns} FROM domain_transfer_requests WHERE state IN ('unknown-outcome','unlocked') AND updated_at<=?2 ORDER BY updated_at LIMIT ?1`).bind(limit,now-domainPurchaseBounds.reconcileSpacingMs).all<TransferRow>()).results;
  let moved=0;
  for(const row of rows){
-  const r=toTransfer(row),found=await registrar.lookup(r.hostname);
-  const to=found.status==='not-found'?(r.state==='unlocked'||r.state==='unknown-outcome'?'completed':null):found.status==='registered'&&found.unlocked===true&&r.state==='unknown-outcome'?'unlocked':null;
-  if(to&&await moveTransfer(db,r,to,now))moved++;
+  try{
+   const r=toTransfer(row),found=await registrar.lookup(r.hostname);
+   let result:TransferRequest|null=null;
+   if(found.status==='registered'&&typeof found.orderRef==='string'&&found.orderRef.length>0&&!(await ours(db,r.hostname,found.orderRef)))
+    result=await bump(db,r,'completed',now,{evidence:'registered-elsewhere'});
+   else if(found.status==='not-found')
+    result=await bump(db,r,r.missingReads+1>=2&&r.state==='unlocked'?'completed':r.state,now,{missing:true});
+   else if(found.status==='registered'&&found.unlocked===true&&r.state==='unknown-outcome')result=await bump(db,r,'unlocked',now,{});
+   else result=await bump(db,r,r.state,now,{});// touched: it goes to the back of the line
+   if(result&&result.state!==r.state)moved++;
+  }catch{/* one failing lookup costs this request one retry later */}
  }
  return {moved};
+}
+const ours=async(db:Db,hostname:string,orderRef:string)=>!!await db.prepare('SELECT 1 x FROM domain_registrations WHERE hostname=?1 AND order_id=?2').bind(hostname,orderRef).first();
+async function bump(db:Db,r:TransferRequest,to:TransferRequest['state'],now:number,{evidence,missing}:{evidence?:'registered-elsewhere';missing?:boolean}){
+ const row=await db.prepare(`UPDATE domain_transfer_requests SET state=?1,updated_at=max(?2,updated_at),version=version+1,missing_reads=missing_reads+?3,completion_evidence=?4 WHERE request_id=?5 AND version=?6 RETURNING ${transferColumns}`)
+  .bind(to,now,missing?1:0,evidence??null,r.requestId,r.version).first<TransferRow>();
+ return row?toTransfer(row):null;
+}
+/** A transfer request no worker will finish never traps the owner: a claim older than the lease becomes an unknown outcome, and a request that stays unresolved or
+ * unlocked longer than fourteen days is failed, which returns the name to active so the owner can start again (a repeat unlock is safe; nothing is lost). */
+export async function sweepTransfers(db:Db,now:number,limit=50){
+ let moved=0;
+ const stuck=(await db.prepare(`SELECT ${transferColumns} FROM domain_transfer_requests WHERE state='requested' AND updated_at<=?1 LIMIT ?2`).bind(now-domainPurchaseBounds.leaseMs,limit).all<TransferRow>()).results;
+ for(const row of stuck){try{if(await bump(db,toTransfer(row),'unknown-outcome',now,{}))moved++;}catch{/* next */}}
+ const old=(await db.prepare(`SELECT ${transferColumns} FROM domain_transfer_requests WHERE state IN ('unknown-outcome','unlocked') AND requested_at<=?1 LIMIT ?2`).bind(now-14*86400000,limit).all<TransferRow>()).results;
+ for(const row of old){try{if(await bump(db,toTransfer(row),'failed',now,{}))moved++;}catch{/* next */}}
+ return {moved};
+}
+/** The owner leaves the transfer: an open request that is not yet completed is failed and the name returns to active. Owner only. */
+export async function cancelTransfer(db:Db,actor:Actor,hostname:string,now:number){
+ check(actor.kind==='owner'&&typeof actor.ownerId==='string','HUMAN_REVIEW_REQUIRED','actor');
+ const open=await loadTransfer(db,actor.ownerId,hostname);
+ check(open&&['requested','unknown-outcome','unlocked'].includes(open.state),'NO_OPEN_TRANSFER',hostname);
+ return bump(db,open,'failed',now,{});
 }
 /** The authorization code for the owner of an unlocked name, read from the registrar now. Owners only: a model, visitor, service or operator is refused, and the
  * code is returned to this caller alone, never stored, logged or put in an error. */
 export async function readAuthCode({db,actor,hostname,registrar}:{db:Db;actor:Actor;hostname:string;registrar:RegistrarAdapter}){
  check(actor?.kind==='owner'&&typeof actor.ownerId==='string','AUTH_CODE_OWNER_ONLY','actor');
  const transfer=await loadTransfer(db,actor.ownerId,hostname);
- check(transfer&&transfer.state==='unlocked','TRANSFER_NOT_UNLOCKED',hostname);
+ const registration=await loadRegistration(db,actor.ownerId,hostname);
+ check(transfer&&transfer.state==='unlocked'&&registration?.state==='transfer-out','TRANSFER_NOT_UNLOCKED',hostname);
  let found:unknown;
  try{found=await registrar.authCode(hostname);}catch{throw new DomainPurchaseError('AUTH_CODE_UNAVAILABLE',hostname);}
  const code=(found as {code?:unknown})?.code;
@@ -166,13 +217,13 @@ export async function readAuthCode({db,actor,hostname,registrar}:{db:Db;actor:Ac
 /** G-D8, decided: a purchased name enters hosting through the same ownership claim as any name, with registrar evidence as the proof instead of a DNS
  * TXT record. The claim is written (verified now) only for the owner of an active registration of that exact name in that project, and expires like
  * a TXT claim, so hosting review and confirmation are unchanged. Buying a name never connects it. */
-export async function claimPurchasedName({db,actor,projectId,hostname,now,windowMs=600000}:{db:Db;actor:Actor;projectId:string;hostname:string;now:number;windowMs?:number}){
+export async function claimPurchasedName({db,actor,projectId,hostname,now,windowMs=7*86400000}:{db:Db;actor:Actor;projectId:string;hostname:string;now:number;windowMs?:number}){
  check(actor.kind==='owner'&&typeof actor.ownerId==='string','HUMAN_REVIEW_REQUIRED','actor');
  const at=new Date(now).toISOString(),expires=new Date(now+windowMs).toISOString(),token='registrar-evidence:'+[...crypto.getRandomValues(new Uint8Array(16))].map(b=>b.toString(16).padStart(2,'0')).join('');
  const row=await db.prepare(`INSERT INTO domain_claims(id,project_id,hostname,token,expires_at,verified_at,created_at)
-  SELECT ?1,g.project_id,g.hostname,?2,?3,?4,?4 FROM domain_registrations g WHERE g.hostname=?5 AND g.owner_user_id=?6 AND g.project_id=?7 AND g.state='active'
+  SELECT ?1,g.project_id,g.hostname,?2,?3,?4,?4 FROM domain_registrations g WHERE g.hostname=?5 AND g.owner_user_id=?6 AND g.project_id=?7 AND g.state='active' AND g.expires_at>?8
   ON CONFLICT(project_id,hostname) DO UPDATE SET token=excluded.token,expires_at=excluded.expires_at,verified_at=excluded.verified_at RETURNING id`)
-  .bind(crypto.randomUUID(),token,expires,at,hostname,actor.ownerId,projectId).first<{id:string}>();
+  .bind(crypto.randomUUID(),token,expires,at,hostname,actor.ownerId,projectId,now).first<{id:string}>();
  check(row,'NOT_REGISTERED',hostname);
  return {claimId:row.id};
 }

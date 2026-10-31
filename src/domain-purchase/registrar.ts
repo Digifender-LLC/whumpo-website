@@ -47,7 +47,7 @@ export function createSyntheticRegistrar({adapterId='synthetic-registrar',adapte
   adapterId,adapterVersion,calls,registerLog,
   setPrice(name:string,price:Partial<SyntheticPrice>){s.prices[name]={...s.prices[name],...price} as SyntheticPrice;},
   /** Someone else registers the name. */
-  takeBy(name:string,orderRef:string|null=null){record(name,orderRef);},
+  takeBy(name:string,orderRef:string|null='other-registrar-order'){record(name,orderRef);},
   next(kind:SyntheticOutcome){s.script.push(kind);},
   nextTransfer(kind:SyntheticTransfer){s.transferScript.push(kind);},
   /** The owner took the name to another registrar. */
