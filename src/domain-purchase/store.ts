@@ -186,8 +186,8 @@ export async function pruneDomainDrafts(db:Db,now:number,limit=200){
  return {quotes:r.results.length};
 }
 
-/** The exact review as every surface shows it (Chat card `domain.purchase-review@1` and the Domains page read this one function), so the two can
- * never differ. The text is rendered by the server from the stored quote; the order state shows what consent already did. Read-only, owner-only. */
+/** The exact review, as one server reader for every surface that will show it (the Chat card `domain.purchase-review@1` is registered to this handler; no card
+ * or Domains page reads it yet), so they cannot differ. The text is rendered by the server from the stored quote; the order state shows what consent already did. Read-only, owner-only. */
 export async function readDomainReview(db:Db,ownerId:string,reviewId:string,now:number){
  const loaded=await loadReview(db,ownerId,reviewId);
  if(!loaded)return null;
