@@ -89,7 +89,7 @@ try{
   const {orderId}=await toReserved('a',names.crash);
   const original=registrar.register;registrar.register=()=>new Promise(()=>{});
   dispatch(A,'a',orderId).catch(()=>{});
-  for(let i=0;i<40&&await state(orderId)==='reserved';i++)await new Promise(r=>setTimeout(r,5));
+  for(let i=0;i<1000&&await state(orderId)==="reserved";i++)await new Promise(r=>setTimeout(r,10));// wait for the claim itself (a fixed short wait raced under load)
   registrar.register=original;assert.equal(await state(orderId),'dispatching');
   const swept=await Promise.all([m.sweepLeases(A,T0+3+MINUTE),m.sweepLeases(B,T0+3+MINUTE)]);assert.equal(swept[0].moved+swept[1].moved,1);
   assert.equal(await state(orderId),'unknown-outcome');assert.equal(await hold(orderId),'held');
