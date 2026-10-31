@@ -306,11 +306,19 @@ try{
 
  await check('no public bucket, bearer URL, booking engine or maintainer inference in module or composition paths',async()=>{
   for(const config of ['wrangler.jsonc','wrangler.apps.jsonc','wrangler.sites.jsonc','wrangler.runtime.jsonc']){const text=await readFile(config,'utf8');assert.ok(!/r2\.dev|public_access|presign/i.test(text),config);}
-  // D4/LC-06: a new module deletion statement must be examined for safety holds before this list grows. Each is held by a BEFORE DELETE
-  // trigger (records, files via project_files), removes no content (the files-gallery module_files link) or holds no submitted value (receipts).
+  // LC-06 mechanism (D4): any new statement that deletes or rewrites module-held data must be examined for safety holds before this list grows.
+  // Each is backed by a BEFORE DELETE/UPDATE trigger the hold tests execute (records, files via project_files, visitor erasure) or removes no content.
   {const {readdir}=await import('node:fs/promises');const found=[];
-   for(const f of await readdir('src/shared-modules'))for(const [,table] of (await readFile('src/shared-modules/'+f,'utf8')).matchAll(/DELETE FROM (module_\w+|app_visitors)/g))found.push(f+':'+table);
-   assert.deepEqual(found.sort(),['files-gallery.ts:module_files','api.ts:module_request_receipts','records.ts:module_records','records.ts:module_records'].sort());}
+   for(const f of (await readdir('src',{recursive:true})).filter(f=>f.endsWith('.ts')))for(const [,verb,table] of (await readFile('src/'+f,'utf8')).matchAll(/(DELETE FROM|UPDATE) (module_records|module_files|module_record_files|module_record_events|project_files|app_visitors|module_instances|module_access_roles)\b/g))found.push(f+':'+verb+' '+table);
+   assert.deepEqual(found.sort(),[
+    'app-auth.ts:UPDATE app_visitors',                           // revocation flag only
+    'app-lifecycle.ts:DELETE FROM app_visitors',                 // safety_hold_visitor_retained + module cascades; tests/boundary-visitor-deletion-hold.mjs, shared-modules-records.mjs
+    'files.ts:UPDATE project_files',                             // pending to ready after the object is stored
+    'shared-modules/files-gallery.ts:DELETE FROM module_files',  // removes the collection link only, never the photo
+    'shared-modules/records.ts:DELETE FROM module_records',      // owner removal, held by safety_hold_module_record_retained
+    'shared-modules/records.ts:DELETE FROM module_records',      // retention expiry, same trigger and held-project/object filter
+    'shared-modules/records.ts:UPDATE module_records',           // records.update, frozen by safety_hold_module_record_frozen
+   ].sort());}
   // D4: every closed operation is either handled or permanently replaced, never both and never neither.
   const handled=Object.keys(m.sharedModules.moduleHandlers),replaced=Object.keys(m.modulePolicy.replacedOperations);
   assert.deepEqual([...handled,...replaced].sort(),Object.keys(m.modulePolicy.moduleOperations).sort());

@@ -19,18 +19,18 @@ try{
  await new Promise(done=>server.listen(0,'127.0.0.1',done));origin='http://127.0.0.1:'+server.address().port;
  browser=await chromium.launch({headless:true,...(process.env.WHUMPO_CHROMIUM?{executablePath:process.env.WHUMPO_CHROMIUM}:{})});
  const context=await browser.newContext({viewport:{width:390,height:844},deviceScaleFactor:2,isMobile:true,hasTouch:true,locale:'en-US'});page=await context.newPage();page.setDefaultTimeout(10000);page.on('pageerror',e=>errors.push(e.message));
- await page.goto(origin);await page.locator('#bound [role=status]').waitFor();
+ await page.goto(origin);await page.locator('#bound p').waitFor();
  phase='each state says plainly whether the form is open and why not';
- const say=(id,text)=>page.locator('#'+id+' [role=status]').filter({hasText:text}).waitFor();
- await say('bound','Open to anonymous visitors on the live website version.');await say('inactive','Closed: this module is not active.');
- await say('unpublished','Closed: the website is not published.');await say('stale','the website changed after this module was activated');
+ const say=(id,text)=>page.locator('#'+id+' p').filter({hasText:text}).waitFor();
+ await say('bound','Bound to the live website version.');await say('inactive','Anonymous submissions are closed: this module is not active.');
+ await say('unavailable','a module this form depends on is off');await say('unpublished','Anonymous submissions are closed: the website is not published.');assert.equal(await page.locator('[role=status]').count(),0,'Static text, not a live region');assert(!(await page.locator('#bound').innerText()).match(/open to|can submit/i),'bound makes no claim that visitors can submit');await say('stale','the website changed after this module was activated');
  assert.equal(await page.locator('#none *').count(),0,'No public form, no line');
  for(const width of [360,390,1280]){
   phase='layout at '+width+'px';await page.setViewportSize({width,height:width===1280?900:844});
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'No horizontal scroll at '+width);
-  for(const id of ['bound','inactive','unpublished','stale']){const b=await page.locator('#'+id+' [role=status]').boundingBox();assert(b.x>=0&&b.x+b.width<=width,id+' inside the viewport at '+width);}
+  for(const id of ['bound','inactive','unavailable','unpublished','stale']){const b=await page.locator('#'+id+' p').boundingBox();assert(b.x>=0&&b.x+b.width<=width,id+' inside the viewport at '+width);}
  }
  assert.equal(errors.length,0,errors.join('\n'));assert(!requests.some(path=>path.startsWith('/api/')));
- console.log('Public form note browser passed: built component at 360, 390 and 1280px; open, inactive, unpublished and stale states with reasons; no line without a public form; no horizontal scroll; no server request.');
+ console.log('Public form note browser passed: built component at 360, 390 and 1280px; bound, inactive, unavailable, unpublished and stale states with reasons; no line without a public form; no horizontal scroll; no server request.');
 }catch(error){console.error('Public form note browser phase:',phase);throw error;}
 finally{await browser?.close();if(server){server.closeAllConnections();await new Promise(done=>server.close(done));}await rm(html,{force:true});await rm(dir,{recursive:true,force:true});}

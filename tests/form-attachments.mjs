@@ -27,8 +27,8 @@ function memoryBucket(){
 const FILES=d1?fixture.env.FILES:memoryBucket();
 const dir=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whumpo-form-attachments-');
 // Distinct bytes per image: the same cleaned digest may not be stored twice by one project, so every upload differs.
-execFileSync('python3',['-c',"from PIL import Image; import sys\nfor i in range(16): Image.new('RGB',(32+i,24),(80+i*20,120,60)).save(sys.argv[1]+'/%d.jpg'%i)",dir]);
-const jpegs=[];for(let i=0;i<16;i++)jpegs.push(new Uint8Array(await readFile(`${dir}/${i}.jpg`)));await rm(dir,{recursive:true,force:true});
+execFileSync('python3',['-c',"from PIL import Image; import sys\nfor i in range(24): Image.new('RGB',(32+i,24),(80+i*20,120,60)).save(sys.argv[1]+'/%d.jpg'%i)",dir]);
+const jpegs=[];for(let i=0;i<24;i++)jpegs.push(new Uint8Array(await readFile(`${dir}/${i}.jpg`)));await rm(dir,{recursive:true,force:true});
 const row=(q,...p)=>db.prepare(q).bind(...p).first(),rows=async(q,...p)=>(await db.prepare(q).bind(...p).all()).results,run=(q,...p)=>db.prepare(q).bind(...p).run();
 let cases=0;const check=async(name,fn)=>{try{await fn();cases++;}catch(error){originals.error(name);throw error;}};
 const {appAuth:auth,appGateway}=m;
@@ -188,6 +188,37 @@ try{
   assert.equal(await row('SELECT 1 x FROM module_records WHERE id=?',sent.body.result.entryId),null);
   assert.equal(await row('SELECT 1 x FROM project_files WHERE id=?',f),null);
   assert.deepEqual(await links(sent.body.result.entryId),[]);
+ });
+
+ await check('an object-scope hold freezes one record and never stops another tenant\'s expiry or the receipt prune',async()=>{
+  const va=await visitor(a),fa=await upload(a,va,next()),sa=await gateway(a,submit(records,'photo-form',[fa]),va);assert.equal(sa.status,200,JSON.stringify(sa.body));
+  const vb=await visitor(b);b.media=await instance(b,'media');const fb=await upload(b,vb,next()),sb=await gateway(b,submit(theirs,'photo-form',[fb]),vb);assert.equal(sb.status,200,JSON.stringify(sb.body));
+  await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES('case-obj',?,'intake-1','human:reviewer',unixepoch(),unixepoch()+31536000)",a.user);
+  await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,project_id,file_id,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES('hold-obj','case-obj',?,'object',?,?,'basis-1','human:approver',unixepoch(),unixepoch()+86400)",a.user,a.project,fa);
+  // The held record cannot be overwritten or cleared by the owner (handler message) or by any SQL update (trigger); an unheld record of the same tenant can.
+  const before=(await row('SELECT values_json,revision FROM module_records WHERE id=?',sa.body.result.entryId));
+  for(const changes of [{name:'overwritten'},{name:null}]){
+   const refused=await ownerCall(a,envelope(records,'records.update',{target:{recordId:'request',entryId:sa.body.result.entryId,revision:before.revision,changes}}));
+   assert.equal(code(refused),'unavailable');assert.match(refused.body.error,/safety review is open/);
+  }
+  await assert.rejects(()=>run("UPDATE module_records SET values_json='{}',revision=revision+1,last_request_id=? WHERE id=?",'9'.repeat(36),sa.body.result.entryId),/safety_preservation_hold/);
+  assert.deepEqual(await row('SELECT values_json,revision FROM module_records WHERE id=?',sa.body.result.entryId),before);
+  // Age both records and one receipt past their windows (test-only clock substitute: the immutability triggers are lifted and restored).
+  const lifted=await rows("SELECT name,sql FROM sqlite_master WHERE type='trigger' AND name IN ('module_record_update','safety_hold_module_record_frozen','module_request_receipt_immutable')");
+  for(const t of lifted)await run('DROP TRIGGER '+t.name);
+  try{
+   await run('UPDATE module_records SET created_at=unixepoch()-40*86400,updated_at=unixepoch()-40*86400,expires_at=unixepoch()-86400 WHERE id IN (?,?)',sa.body.result.entryId,sb.body.result.entryId);
+   await run("UPDATE module_request_receipts SET created_at=unixepoch()-40*86400 WHERE instance_id=? AND request_id=?",theirs.id,sb.body.requestId);
+  }finally{for(const t of lifted)await run(t.sql);}
+  const {cleanupModuleRecords,cleanupModuleRequestReceipts}=m.sharedModuleRecords&&{...m.sharedModuleRecords,...m.sharedModules};
+  await cleanupModuleRecords(db);await cleanupModuleRequestReceipts(db);
+  assert.ok(await row('SELECT 1 x FROM module_records WHERE id=?',sa.body.result.entryId),'The held record stays');
+  assert.ok(await row('SELECT 1 x FROM project_files WHERE id=?',fa),'The held file stays');
+  assert.equal(await row('SELECT 1 x FROM module_records WHERE id=?',sb.body.result.entryId),null,'Another tenant\'s expired record is removed');
+  assert.equal(await row('SELECT 1 x FROM project_files WHERE id=?',fb),null);
+  assert.equal(await row('SELECT 1 x FROM module_request_receipts WHERE instance_id=? AND request_id=?',theirs.id,sb.body.requestId),null,'The receipt prune ran');
+  await run("UPDATE safety_preservation_holds SET released_at=unixepoch(),released_by='human:approver',release_ref='release-1' WHERE id='hold-obj'");
+  await cleanupModuleRecords(db);assert.equal(await row('SELECT 1 x FROM module_records WHERE id=?',sa.body.result.entryId),null,'Expiry resumes after release');
  });
 
  assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);

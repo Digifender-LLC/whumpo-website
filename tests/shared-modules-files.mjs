@@ -518,6 +518,9 @@ try{
   await assert.rejects(()=>run('DELETE FROM module_instances WHERE id=?',fresh.id),/safety_preservation_hold/);
   await assert.rejects(()=>run('DELETE FROM projects WHERE id=?',a.project),/safety_preservation_hold/);
   assert.equal((await row('SELECT count(*) n FROM module_files WHERE project_id=?',a.project)).n,filesBefore);
+  // The real reviewed erasure is refused too: one unconfirmed deletion that never discloses the hold, with every upload still in place.
+  const refusedErase=await appLifecycle.prepareAppDeletion(db,other.session,a.project);
+  await assert.rejects(()=>appLifecycle.deleteAppAccount(db,other.session,a.project,refusedErase.id,refusedErase.revision,'DELETE'),e=>e.status===503&&/Deletion could not be confirmed\. Check the saved deletion result/.test(e.message)&&!/hold|safety/i.test(e.message));
   await run("UPDATE safety_preservation_holds SET released_at=unixepoch(),released_by='human:approver',release_ref='release-1' WHERE id='hold-wh128'");
   const again=await chat(a,'/delete-photo '+first),done=await chat(a,'/confirm-photo-delete '+again.turn);assert.equal(done.result.status,200,JSON.stringify(done.result));
   assert.equal((await row('SELECT count(*) n FROM module_files WHERE file_id=?',first)).n,0);assert.ok(await row('SELECT 1 FROM file_cleanup WHERE object_key=?',`photos/${a.project}/${first}.jpg`));

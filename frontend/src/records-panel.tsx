@@ -25,11 +25,12 @@ const who={public:'Anonymous form',visitor:'Visitor',staff:'Staff'} as const;
 const total=(s:Item['schemas'][number])=>s.records.public+s.records.visitor+s.records.staff;
 const shown=(v:unknown)=>typeof v==='boolean'?(v?'Yes':'No'):String(v);
 
-const publicForm:Record<Exclude<PublicFormState,'none'>,string>={bound:'Open to anonymous visitors on the live website version.',inactive:'Closed: this module is not active. Review activation in Chat to open it.',
- unpublished:'Closed: the website is not published. Publish it, then review activation to open the form.',stale:'Closed: the website changed after this module was activated. Review activation to reopen the form for the live version.'};
-/** Whether a public form accepts anonymous submissions and, if not, why. Plain text in a status region; no colour carries the meaning. */
+const publicForm:Record<Exclude<PublicFormState,'none'>,string>={bound:'Bound to the live website version.',inactive:'Anonymous submissions are closed: this module is not active. Review activation in Chat to turn it on.',
+ unavailable:'Anonymous submissions are closed: a module this form depends on is off, or this module version is no longer current.',
+ unpublished:'Anonymous submissions are closed: the website is not published. Publish it, then review activation.',stale:'Anonymous submissions are closed: the website changed after this module was activated. Review activation to bind the form to the live version.'};
+/** Whether a public form is bound to the live website and, if not, why anonymous submissions are closed. Plain static text; no colour carries the meaning. */
 export function PublicFormNote({state}:{state:PublicFormState}){
- return state==='none'?null:<p role="status" className="rounded-md border border-line bg-surface-raised p-3 text-body-sm break-words"><span className="font-medium">Public form: </span>{publicForm[state]}</p>;
+ return state==='none'?null:<p className="rounded-md border border-line bg-surface-raised p-3 text-body-sm break-words"><span className="font-medium">Public form: </span>{publicForm[state]}</p>;
 }
 /** WH-127 `records.summary@1` card: counts per records instance and schema, never a value. Opening the private records
  * panel is a navigation only; values are read there from the owner list route, not through Chat or this binding. */

@@ -1,6 +1,6 @@
 /** Pure view-fact shape for `module.instances@1`, shared by the server read binding, the view validator and the
  * owner panel. States and counts only: never configuration values, request receipts or visitor-submitted data. */
-export const publicFormStates=['none','inactive','unpublished','stale','bound'] as const;
+export const publicFormStates=['none','inactive','unavailable','unpublished','stale','bound'] as const;
 export type PublicFormState=(typeof publicFormStates)[number];
 export type ModuleInstanceFacts={
  specification:'current'|'none'|'unavailable';

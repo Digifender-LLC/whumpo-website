@@ -521,6 +521,11 @@ BEGIN SELECT RAISE(ABORT,'module_request_stale'); END;
 CREATE TRIGGER safety_hold_module_record_retained BEFORE DELETE ON module_records
 WHEN EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
 BEGIN SELECT RAISE(ABORT,'safety_preservation_hold'); END;
+-- A held record is frozen: values are never overwritten or cleared under a project or account hold, or while an attached file is held on its own.
+CREATE TRIGGER safety_hold_module_record_frozen BEFORE UPDATE ON module_records
+WHEN EXISTS(SELECT 1 FROM safety_held_projects WHERE project_id=OLD.project_id)
+ OR EXISTS(SELECT 1 FROM module_record_files mf JOIN safety_held_files hf ON hf.file_id=mf.file_id WHERE mf.entry_id=OLD.id)
+BEGIN SELECT RAISE(ABORT,'safety_preservation_hold'); END;
 CREATE TRIGGER module_record_event_admit BEFORE INSERT ON module_record_events BEGIN
  SELECT RAISE(ABORT,'module_request_stale') WHERE abs(NEW.created_at-unixepoch())>60 OR CASE NEW.event
   WHEN 'form.accepted' THEN NOT EXISTS(SELECT 1 FROM module_records WHERE id=NEW.entry_id AND instance_id=NEW.instance_id AND project_id=NEW.project_id AND revision=1 AND created_request_id=NEW.request_id AND NEW.revision=1)
