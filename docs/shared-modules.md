@@ -510,6 +510,14 @@ Result: two passing runs back to back (`success:true`, `cleanupVerified:true`, `
 - **UI.** The records panel shows, under each record, the lead's stage, a follow-up date, a private note (with a character count and the over-limit message beside the field) and a Save button that sends only what changed; stage and "Overdue" are text, not colour. Filters sit above the list (stage, follow-up date, clear filters). A stale save shows a plain conflict message and a reload; without Business the fields are read-only with the reason. `tests/record-leads-browser.mjs` runs the built editor at 360, 390 and 1280 px, 200% text and dark.
 - **Verification.** `node tests/module-record-leads.mjs` (add `--d1` for local D1): first edit, partial change and clearing, stale and concurrent writers with one winner, input bounds, every non-owner and cross-owner or cross-project refusal (including forged SQL), the filters, deleted and expired records, the hold, Business admission with plan loss, the export, the absence of any lead Chat surface and of any lead value from Chat, receipts, events and logs. The test-platform cutover is the orchestrator's: nothing here is deployed.
 
+## Conversion summary (WH-095) — October 31, 2026 UTC
+
+**Implemented in source; no schema change.** The records panel shows, for one schema, how many records were submitted in the last 30 days and still kept, and how many are in each lead stage now (decision D44: a read, not an event stream). `GET /api/projects/P/module-records/R/S/conversions` (workspace origin, owner only, no query parameters) counts `module_records` joined to `module_record_leads` (no lead row is `new`); there is no events table, no Chat or view binding and no model context. It needs current `business.conversions` inclusion (`operation: read`); without it the response is `{eligible:false}` with no figure.
+
+- **What it cannot say.** It keeps no history. A lead moved back, a deleted record or one that expired lowers a figure, so a past period can shrink; the panel says so and shows no trend. A form younger than 30 days is marked a partial period with the date it started collecting. A failed read shows "unavailable", never zero. Site requests are not shown here and are never called visitors or used as a denominator.
+- **UI.** Plain text: one sentence ("3 of 12 records ... are now Won (25%)"), a label/count list per stage, the counting rule and the no-history note. No chart and no colour meaning.
+- **Verification.** `node tests/module-record-conversions.mjs` (add `--d1`): known counts, duplicate delivery, reversal, removal and expiry, partial period, plan gate, two tenants, visitor refusal, nothing in the Chat summary. `tests/record-leads-browser.mjs` covers the panel at 360, 390 and 1280 px, 200% text and dark.
+
 
 ## Public forms bound to the published version (WH-127) — October 31, 2026 UTC
 

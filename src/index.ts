@@ -87,7 +87,7 @@ import {handleModuleRequest,cleanupModuleRequestReceipts} from './shared-modules
 import {ModuleError} from './shared-modules/policy';
 import {readNotificationSetup,deliveryState} from './notification-configurations';
 import {readRecordsSetup} from './shared-modules/records-setup';
-import {readOwnerRecords,readRecordsSummary,cleanupModuleRecords,leadFilter} from './shared-modules/records';
+import {readOwnerRecords,readConversions,readRecordsSummary,cleanupModuleRecords,leadFilter} from './shared-modules/records';
 import {readOwnerFileCollections,removeOwnerFileFromCollection} from './shared-modules/files-gallery';
 import {listDNSActions,reviewTXT,reviewCNAME,confirmDNS} from './cloudflare-dns';
 import {cloudflareConfig,cloudflareStatus,startCloudflare,cancelCloudflare,finishCloudflare,disconnectCloudflare,cloudflareZones,cleanupCloudflare} from './cloudflare-connection';
@@ -435,8 +435,10 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
   // WH-158: the appointment notice settings and sending state ride on the same owner read; counts and switches only.
   if(method==='GET'&&recordsSummary)return json({...await readRecordsSummary(env.DB,user.id,recordsSummary[1]),appointment:await readRecordsSetup(env.DB,user.id,recordsSummary[1]),notifications:await readNotificationSetup(env.DB,user.id,recordsSummary[1],deliveryState(contactDelivery(env)))});
   // WH-127 owner records list (dashboard only; never Chat or model input).
-  const ownerRecords=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/module-records\/([0-9a-f-]{36})\/([a-z][a-z0-9-]{0,39})$/);
+  const ownerRecords=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/module-records\/([0-9a-f-]{36})\/([a-z][a-z0-9-]{0,39})(\/conversions)?$/);
   if(method==='GET'&&ownerRecords){
+    // WH-095 owner conversion summary: counts only, no parameters.
+    if(ownerRecords[4]){if([...new URL(request.url).searchParams.keys()].length)return error(400,'Use the current records link.');return json(await readConversions(env.DB,user.id,ownerRecords[1],ownerRecords[2],ownerRecords[3]));}
     const params=new URL(request.url).searchParams;
     if([...params.keys()].some(key=>!['after','stage','due','today'].includes(key)||params.getAll(key).length!==1))return error(400,'Use the current records link.');
     // WH-093 lead filters (owner only): a stage, and whether a due date is set, missing or overdue as of the owner's own date.

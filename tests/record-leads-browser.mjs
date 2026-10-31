@@ -69,6 +69,17 @@ try{
  await f.getByLabel('Stage',{exact:true}).selectOption('won');await f.getByLabel('Follow-up date',{exact:true}).selectOption('overdue');
  assert.equal(await state(),'won|overdue');await f.getByRole('button',{name:'Clear filters'}).focus();await page.keyboard.press('Enter');
  assert.equal(await state(),'all|any');assert.equal(await f.getByRole('button',{name:'Clear filters'}).count(),0);
+ phase='conversion summary: honest sentence, text counts, partial, empty, plan and unavailable states';
+ const cv=id=>page.locator('#'+id);
+ await cv('conv-ok').getByText('3 of 12 records submitted in the last 30 days are now Won (25%).').waitFor();
+ await cv('conv-ok').getByRole('heading',{name:'Conversions, last 30 days'}).waitFor();
+ assert.equal((await cv('conv-ok').locator('dt').allTextContents()).join(','),'New,Contacted,Qualified,Won,Lost');assert.equal((await cv('conv-ok').locator('dd').allTextContents()).join(','),'5,2,2,3,0');
+ await cv('conv-ok').getByText('Whumpo does not keep past stages, so a figure can fall').waitFor();await cv('conv-ok').getByText('not a count of visitors').waitFor();
+ assert.equal(await cv('conv-ok').getByText('Partial period').count(),0);
+ await cv('conv-partial').getByText('Partial period: this form has only been collecting since 2026-10-25').waitFor();await cv('conv-partial').getByText('0 of 1 record submitted in the last 30 days are now Won (0%).').waitFor();
+ await cv('conv-empty').getByText('No records were submitted in the last 30 days.').waitFor();assert.equal(await cv('conv-empty').getByText('%').count(),0,'No rate without a denominator');
+ await cv('conv-plan').getByText('needs the Business plan').waitFor();
+ await cv('conv-fail').getByRole('alert').getByText('unavailable').waitFor();assert.equal(await cv('conv-fail').getByText('0 of').count(),0,'A failure is never shown as zero');
  const widths=[360,390,1280];
  for(const width of widths){
   phase='layout at '+width+'px';
@@ -80,16 +91,18 @@ try{
   }
   const fb=await f.boundingBox();assert(fb.x>=0&&fb.x+fb.width<=width);for(const control of await f.locator('select,button').all()){const box=await control.boundingBox();if(box)assert(box.height>=44);}
   await ed('late').screenshot({path:`${shots}/whumpo-record-leads-${width}.png`});
+  for(const id of ['conv-ok','conv-partial','conv-empty','conv-plan','conv-fail']){await cv(id).scrollIntoViewIfNeeded();const b=await cv(id).boundingBox();assert(b.x>=0&&b.x+b.width<=width,id+' inside the viewport at '+width);}
+  await cv('conv-ok').screenshot({path:`${shots}/whumpo-conversions-${width}.png`});
  }
  phase='200% text';
  await page.setViewportSize({width:360,height:844});await page.evaluate(()=>{document.documentElement.style.fontSize='32px';});
  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'No horizontal scroll at 200% text');
- await ed('late').screenshot({path:`${shots}/whumpo-record-leads-200pct.png`});await page.evaluate(()=>{document.documentElement.style.fontSize='';});
+ await ed('late').screenshot({path:`${shots}/whumpo-record-leads-200pct.png`});await cv('conv-partial').screenshot({path:`${shots}/whumpo-conversions-200pct.png`});await page.evaluate(()=>{document.documentElement.style.fontSize='';});
  phase='dark theme';
  await page.setViewportSize({width:390,height:844});await page.evaluate(()=>document.documentElement.classList.add('dark'));
  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
  const dark=await ed('late').locator('fieldset').evaluate(el=>{const s=getComputedStyle(el);return [s.color,s.backgroundColor];});assert.notEqual(dark[0],dark[1]);
- await ed('late').screenshot({path:`${shots}/whumpo-record-leads-dark.png`});
+ await ed('late').screenshot({path:`${shots}/whumpo-record-leads-dark.png`});await cv('conv-ok').screenshot({path:`${shots}/whumpo-conversions-dark.png`});
  assert.equal(errors.length,0,errors.join('\n'));assert(!requests.some(path=>path.startsWith('/api/')));
  console.log('Record leads browser passed: actual built editor and filters at 360, 390 and 1280px, 200% text and dark; labelled stage, date and note; keyboard-only order and save of changed fields only; note limit explained beside the field; overdue as text from the owner date and never for won or lost; plain stale-save conflict with reload; read-only without Business; filters with a clear route; no horizontal scroll; 44px targets.');
 }catch(error){console.error('Record leads browser phase:',phase);if(page)await page.screenshot({path:(process.env.WHUMPO_SHOTS||'/tmp')+'/whumpo-record-leads-failure.png',fullPage:true}).catch(()=>{});throw error;}
