@@ -86,6 +86,7 @@ import {dispatchJobs} from './job-dispatcher';
 import {handleModuleRequest,cleanupModuleRequestReceipts} from './shared-modules/api';
 import {ModuleError} from './shared-modules/policy';
 import {readNotificationSetup,deliveryState} from './notification-configurations';
+import {readRecordsSetup} from './shared-modules/records-setup';
 import {readOwnerRecords,readRecordsSummary,cleanupModuleRecords,leadFilter} from './shared-modules/records';
 import {readOwnerFileCollections,removeOwnerFileFromCollection} from './shared-modules/files-gallery';
 import {listDNSActions,reviewTXT,reviewCNAME,confirmDNS} from './cloudflare-dns';
@@ -432,7 +433,7 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
   // WH-127 owner records panel: counts per records instance (the records.summary@1 facts), then the list below.
   const recordsSummary=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/module-records$/);
   // WH-158: the appointment notice settings and sending state ride on the same owner read; counts and switches only.
-  if(method==='GET'&&recordsSummary)return json({...await readRecordsSummary(env.DB,user.id,recordsSummary[1]),notifications:await readNotificationSetup(env.DB,user.id,recordsSummary[1],deliveryState(contactDelivery(env)))});
+  if(method==='GET'&&recordsSummary)return json({...await readRecordsSummary(env.DB,user.id,recordsSummary[1]),appointment:await readRecordsSetup(env.DB,user.id,recordsSummary[1]),notifications:await readNotificationSetup(env.DB,user.id,recordsSummary[1],deliveryState(contactDelivery(env)))});
   // WH-127 owner records list (dashboard only; never Chat or model input).
   const ownerRecords=pathname.match(/^\/api\/projects\/([0-9a-f-]{36})\/module-records\/([0-9a-f-]{36})\/([a-z][a-z0-9-]{0,39})$/);
   if(method==='GET'&&ownerRecords){
@@ -677,9 +678,10 @@ export default {
     // The every-minute trigger is a job-type registry (docs/job-orchestration.md, WH-052 P-1). Contact notice delivery (WH-036) is
     // its first type; the account lane (WH-202: security events and the email-change notices) and the support lane run beside it. Each does nothing unless its own
     // provider variables and the email binding are present (contactDelivery, supportDelivery).
-    if(_event.cron==='* * * * *'){await dispatchJobs([{type:'contact_delivery',run:async ctx=>{const delivery=contactDelivery(env);if(delivery)await contactDeliveryLane(env.DB,{settings:delivery.settings,sender:delivery.sender,now:Date.now}).run(ctx);}},
+    // R8: recorded under its own maintenance_health name (job_dispatch), so a healthy minute cannot hide a stuck daily prune on `jobs`; a failure is stored as a category and escapes sanitized.
+    if(_event.cron==='* * * * *'){await runMaintenance(env.DB,[{name:'job_dispatch',run:()=>dispatchJobs([{type:'contact_delivery',run:async ctx=>{const delivery=contactDelivery(env);if(delivery)await contactDeliveryLane(env.DB,{settings:delivery.settings,sender:delivery.sender,now:Date.now}).run(ctx);}},
      {type:'account_delivery',run:async ctx=>{const delivery=contactDelivery(env);if(delivery)await accountDeliveryLane(env.DB,{settings:delivery.settings,sender:delivery.sender,now:Date.now}).run(ctx);}},
-     {type:'support_delivery',run:async ctx=>{const delivery=supportDelivery(env);if(delivery)await supportDeliveryLane(env.DB,{...delivery,now:Date.now}).run(ctx);}}]);return;}
+     {type:'support_delivery',run:async ctx=>{const delivery=supportDelivery(env);if(delivery)await supportDeliveryLane(env.DB,{...delivery,now:Date.now}).run(ctx);}}])}]);return;}
     const imports={name:'imports' as const,run:()=>scanBackendImports(env.DB)};
     if(_event.cron==='47 * * * *'){
       await runMaintenance(env.DB,[imports,{name:'chat_drafts',run:()=>cleanupInteractionDrafts(env.DB)},

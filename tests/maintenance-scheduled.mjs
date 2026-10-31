@@ -46,6 +46,7 @@ try{
  for(const name of ['github','cloudflare'])assert.equal(report.jobs.find(j=>j.job===name).state,'skipped',name);
  assert.equal(listCalls,1);assert.ok(!JSON.stringify(report).includes('PRIVATE_SCHEDULER_CANARY'));
  failTraffic=false;await worker.scheduled({cron:'17 3 * * *'},env);
+ await worker.scheduled({cron:'* * * * *'},env);// the every-minute dispatch has its own health row (R8)
  await worker.scheduled({cron:'47 * * * *'},env);
  report=await maintenanceReport(db);
  assert.equal(report.jobs.find(j=>j.job==='traffic').state,'completed');

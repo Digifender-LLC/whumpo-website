@@ -1,3 +1,4 @@
+import {requireSpecificationAvailable} from '../specification-safety';
 import {moduleCatalog} from '../project-specification/catalog';
 import {validateSpecification} from '../project-specification/v3/schema';
 import {moduleKinds,type ModuleInstance,type ModuleKind,type ModulePin} from '../project-specification/v3/modules';
@@ -70,8 +71,14 @@ export async function publicFormState(db:D1Database,row:RegistryRow):Promise<Pub
  if(row.state!=='active')return 'inactive';
  // Agree with resolveResource: a withdrawn or stale pin or an inactive dependency refuses every non-owner request.
  if(catalogState(row.kind,row.module_digest,row.schema_digest)!=='available'||!await dependenciesActive(db,row))return 'unavailable';
- const live=await db.prepare('SELECT revision FROM publications WHERE project_id=? AND version_id IS NOT NULL').bind(row.project_id).first<{revision:number}>();
- return !live?'unpublished':live.revision===row.publication_revision?'bound':'stale';
+ const live=await db.prepare('SELECT revision,version_id FROM publications WHERE project_id=? AND version_id IS NOT NULL').bind(row.project_id).first<{revision:number;version_id:string}>();
+ if(!live)return 'unpublished';
+ // WH-070: content the site host refuses to serve (held for safety review, retired format or compiler) closes its public form too.
+ try{await requireSpecificationAvailable(db,live.version_id);}catch{return 'unavailable';}
+ // The operator's `contact` containment allowance of 0 refuses every anonymous submission (module_record_admit), so it closes the form.
+ const contained=await db.prepare("SELECT coalesce(allowance,0) allowance FROM operator_contained_projects WHERE project_id=? AND scope='contact' ORDER BY allowance IS NULL DESC,created_at DESC,id DESC LIMIT 1").bind(row.project_id).first<{allowance:number}>();
+ if(contained&&contained.allowance<=0)return 'unavailable';
+ return live.revision===row.publication_revision?'bound':'stale';
 }
 export async function instanceOf(row:RegistryRow):Promise<ModuleInstance>{
  const config=JSON.parse(row.config_json);

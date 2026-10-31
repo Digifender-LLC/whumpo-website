@@ -8,7 +8,8 @@
   "preview_urls": false,
   "routes": [],
   "vars": {
-    "ENVIRONMENT": "test"
+    "ENVIRONMENT": "test",
+    "TURNSTILE_SITE_KEY": "0x4AAAAAAFIoE2toIv5N36J5"
   },
   "assets": {
     "directory": "./public-app",

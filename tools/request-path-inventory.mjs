@@ -144,7 +144,7 @@ export async function measure({allowedArguments=[]}={}){
  const assets={fetch:async()=>{tally.assets();return new Response('synthetic asset',{headers:{'content-type':'text/plain'}});}};
  // The customer's own backend runtime: a synthetic successful execution (visitor backend calls only; no model or provider).
  const runtime={fetch:async()=>{tally.service('BACKEND_RUNTIME');return Response.json({ok:true,value:{}});}};
- const appsEnv={DB:db,FILES:files,ENVIRONMENT:'test',API_LIMITER:limiter('apps.API_LIMITER'),AUTH_LIMITER:limiter('apps.AUTH_LIMITER'),ASSETS:assets,BACKEND_RUNTIME:runtime,TURNSTILE_SECRET:'fixture'};
+ const appsEnv={DB:db,FILES:files,ENVIRONMENT:'test',API_LIMITER:limiter('apps.API_LIMITER'),AUTH_LIMITER:limiter('apps.AUTH_LIMITER'),ASSETS:assets,BACKEND_RUNTIME:runtime,TURNSTILE_SECRET:'fixture',TURNSTILE_SITE_KEY:'fixture'};
  const apps={fetch:async request=>{tally.service('APP_HOST');tally.invoke('whumpo-apps');return m.appHost.fetch(request,appsEnv,ctx);}};
  const sitesEnv={DB:db,FILES:files,BACKEND_RUNTIME:runtime,APP_HOST:apps};
  const platformEnv={DB:db,FILES:files,ENVIRONMENT:'test',API_LIMITER:limiter('platform.API_LIMITER'),AUTH_LIMITER:limiter('platform.AUTH_LIMITER'),ASSETS:assets,BACKEND_RUNTIME:runtime,TURNSTILE_SECRET:'fixture',TURNSTILE_SITE_KEY:'fixture'};
@@ -220,6 +220,8 @@ export async function measure({allowedArguments=[]}={}){
    ['app.page.get','Visitor app page (no live page)','GET',app+'/',{}],
    ['app.page.live','Visitor app page (live page)','GET',liveApp+'/',{}],
    ['app.script.get','Visitor app script','GET',app+'/visitor.js',{}],
+   ['app.appointment.get','Hosted appointment page (no form: the closed page)','GET',app+'/forms/appointment',{}],
+   ['app.appointment.script','Hosted appointment script','GET',app+'/appointment.js',{}],
    ['app.module.post','Visitor app module call (unauthenticated)','POST',app+'/modules',{headers:{'content-type':'application/json',origin:app},body:'{}'}],
    ['app.module.access.me','Visitor app module call (signed-in visitor, access.me)','POST',liveApp+'/modules',{headers:{'content-type':'application/json',origin:liveApp,cookie:served.cookie,'cf-connecting-ip':'192.0.2.31'},body:JSON.stringify(served.me)}],
    ['contact.form.get','Contact form','GET',`https://whumpo.com/contact/${project}`,{}],

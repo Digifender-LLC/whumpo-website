@@ -10,6 +10,9 @@ export const moduleBindings=Object.freeze({
  // WH-128 owner photo collection setup: prepares the existing exact specification review for the fixed standard files
  // instance (one owner-only collection); saving is specificationApply and activation is moduleActivationReview/Apply.
  filesModuleReview:{mode:'prepare',scope:'project',handler:'prepareFilesModuleCommand',surface:'ChatControl filesModuleReview (Photos panel)',inclusion:'identity and ownership only (activation re-checks core.editing)',modelContext:'specification review summary'},
+ // WH-070 owner appointment form setup: prepares the existing exact specification review for the fixed standard records
+ // instance (one public form, owner-read fields); saving is specificationApply and activation is moduleActivationReview/Apply.
+ appointmentFormReview:{mode:'prepare',scope:'project',handler:'prepareAppointmentFormCommand',surface:'ChatControl appointmentFormReview (Form records panel)',inclusion:'identity and ownership only (activation re-checks core.forms)',modelContext:'specification review summary'},
  // WH-128 published gallery: prepares the existing exact specification review that sets one page's photos to the newest
  // approved owner-filed photos of an owner collection; saving is specificationApply and going public is the existing
  // exact publication review. Never a model action.
