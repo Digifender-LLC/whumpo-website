@@ -11,8 +11,9 @@ const idPattern=/^[a-f0-9-]{36}$/;
 /** WH-196 / G-D8: a claim whose token starts with `registrar-evidence:` was written for the owner of an active purchased registration of this exact name in this
  * project (src/domain-purchase/lifecycle.ts claimPurchasedName); its proof is that registration, read from D1, instead of a DNS TXT record, and it ends with it.
  * Every other claim is proved in DNS as before. A token that only says so proves nothing: the registration must exist. */
-export async function claimProofHolds(db:D1Database,claim:{project_id:string;hostname:string;token:string},transport:typeof fetch=fetch){
- if(claim.token.startsWith('registrar-evidence:'))return !!await db.prepare("SELECT 1 x FROM domain_registrations WHERE hostname=? AND project_id=? AND state='active'").bind(claim.hostname,claim.project_id).first();
+export async function claimProofHolds(db:D1Database,claim:{project_id:string;hostname:string;token:string},transport:typeof fetch=fetch,now:number=Date.now()){
+ // The registration must be active and unexpired; an unknown (NULL) expiry fails closed.
+ if(claim.token.startsWith('registrar-evidence:'))return !!await db.prepare("SELECT 1 x FROM domain_registrations WHERE hostname=? AND project_id=? AND state='active' AND expires_at>?").bind(claim.hostname,claim.project_id,now).first();
  return verifyDNS('_whumpo.'+claim.hostname,'whumpo-verification='+claim.token,transport);
 }
 function configured(config:HostingConfig|undefined){if(!config||!config.token||!/^[a-f0-9]{32}$/.test(config.zone)||config.target!=='hosting.whumpo.site')throw new DomainError(503,'Domain hosting is awaiting platform configuration.');return config;}

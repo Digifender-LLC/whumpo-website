@@ -26,7 +26,7 @@ const count=async(sql,...v)=>Object.values(await one(sql,...v))[0];
 const refuse=(p,re)=>assert.rejects(p,re);
 let cases=0;const check=async(name,fn)=>{try{await fn();cases++;}catch(e){console.error('FAILED:',name);throw e;}};
 
-const DAY=86400000,T0=1_800_000_000_000,MINUTE=60000;
+const HOUR=3600000,DAY=86400000,T0=1_800_000_000_000,MINUTE=60000;
 const policy={pricing:{markupCents:0,feeCents:30,taxBasisPoints:800},allowPremium:false};
 const owners={a:{id:'owner-a',project:'project-a',pm:'pm-a'},b:{id:'owner-b',project:'project-b',pm:'pm-b'}};
 for(const o of Object.values(owners)){
@@ -50,7 +50,7 @@ async function registered(o='a'){
  const accept={contractVersion:1,reviewId:prep.review.reviewId,quoteDigest:prep.review.quoteDigest,consentTextDigest:prep.review.consentTextDigest,decision:'accept'};
  const step=await m.consent({db:A,actor:actorOf(o),submission:accept,reviewId:prep.review.reviewId,project:projectOf(o),owner:fundingOf(o),registrar:reg,policy,orderId:id('order'),now:T0+1});
  await m.reserve(A,owners[o].id,step.order.orderId,T0+2);
- await m.dispatch({db:A,ownerId:owners[o].id,orderId:step.order.orderId,owner:fundingOf(o),registrar:reg,policy,now:T0+3});
+ await m.dispatch({db:A,ownerId:owners[o].id,orderId:step.order.orderId,owner:fundingOf(o),project:projectOf(o),registrar:reg,policy,now:T0+3});
  const registration=await m.loadRegistration(A,owners[o].id,host);assert.equal(registration.state,'active');
  return {host,reg,registration};
 }
@@ -94,7 +94,7 @@ try{
   assert.deepEqual([d1x.renew,d2x.renew],[true,true]);assert.equal(await count('SELECT count(*) FROM domain_renewal_approvals WHERE hostname=?',host),1,'one approval per name and expiry');
   const approval=await one('SELECT review_id,price_cents,for_expiry FROM domain_renewal_approvals WHERE hostname=?',host);
   assert.deepEqual([approval.review_id,approval.price_cents,approval.for_expiry],[prep.review.reviewId,prep.review.renewalTotalCents,expiry]);
-  await refuse(run('UPDATE domain_renewal_approvals SET price_cents=1 WHERE hostname=?',host),/domain_renewal_frozen/);
+  await refuse(run('UPDATE domain_renewal_approvals SET price_cents=? WHERE hostname=?',prep.review.renewalTotalCents+1,host),/domain_renewal_not_opted_in/);
   await refuse(run('INSERT INTO domain_renewal_approvals(hostname,for_expiry,review_id,price_cents,approved_at) VALUES(?,?,?,?,?)',host,expiry+1,prep.review.reviewId,approval.price_cents,expiry-DAY),/domain_renewal_not_opted_in/);
   // A price rise: auto-renew goes off, nothing is approved for a later term, and a raw approval above the opted-in price is refused.
   reg.setPrice(host,{renewal:1500});
@@ -116,13 +116,14 @@ try{
   const rows=await mine();
   assert.deepEqual(rows.map(r=>r.template).sort(),['domain.expiry-expired@1','domain.expiry-month@1','domain.expiry-week@1']);assert.ok(rows.every(r=>r.state==='queued'&&r.user_id===owners.a.id));
   assert.deepEqual(rows.map(r=>r.event_ref).sort(),['month','week','expired'].map(k=>`${host}:${k}:${expiry}`).sort());
+  assert.ok(await count("SELECT count(*) FROM job_journal WHERE purpose='platform-email'")>=3,'envelopes exist, so the check below is not vacuous');assert.match(JSON.stringify(await all('SELECT event_ref FROM notification_notices')),new RegExp(host.replace('.','\\.')),'the outbox row keys on the name internally');
   assert.doesNotMatch(JSON.stringify(await all('SELECT envelope_json FROM job_journal')),new RegExp(host.replace('.','\\.')),'no domain name in a job envelope');
  });
 
  await check('transfer-out: owner only, after the 60-day lock, one provider unlock per request, replays and concurrent starts repeat nothing, the code never leaves the owner',async()=>{
   const {host,reg}=await registered();
   const start=(db,o=actorOf('a'),at=T0+61*DAY,requestId=id('transfer'))=>m.startTransferOut({db,actor:o,hostname:host,registrar:reg,requestId,now:at});
-  await refuse(start(A,actorOf('a'),T0+30*DAY),/TRANSFER_LOCKED/);await refuse(start(A,{kind:'model',ownerId:owners.a.id}),/FOREIGN_OWNER/);await refuse(start(A,actorOf('b')),/FOREIGN_OWNER|NOT_ACTIVE/);
+  await refuse(start(A,actorOf('a'),T0+30*DAY),/TRANSFER_LOCKED/);await refuse(start(A,{kind:'model',ownerId:owners.a.id}),/FOREIGN_OWNER/);await refuse(start(A,actorOf('b')),/NOT_ACTIVE/);
   assert.equal(reg.calls.transferOut,0);
   await refuse(run("INSERT INTO domain_transfer_requests(request_id,hostname,owner_user_id,state,requested_at,updated_at) VALUES('forged',?,?,'requested',?,?)",host,owners.a.id,T0+30*DAY,T0+30*DAY),/domain_transfer_scope/);
   const [x,y]=await Promise.all([start(A),start(B)]);
@@ -131,7 +132,7 @@ try{
   const after=await renewalState(host);assert.deepEqual([after.state,after.auto_renew],['transfer-out',0]);
   assert.equal((await start(A)).replayed,true);assert.equal(reg.calls.transferOut,1);
   await refuse(run('DELETE FROM users WHERE id=?',owners.a.id),/domain_registration_active/);
-  await refuse(run("UPDATE domain_registrations SET auto_renew=1,renewal_review_id='x',renewal_total_cents=1 WHERE hostname=?",host),/CHECK|domain_registration_renewal/);
+  await refuse(run("UPDATE domain_registrations SET auto_renew=1,renewal_review_id='x',renewal_total_cents=1 WHERE hostname=?",host),/domain_registration_renewal/);
   // The code is read for the owner now: a model, visitor, operator, service or foreign owner gets nothing, and nothing stores it.
   for(const kind of ['model','visitor','operator','service'])await refuse(m.readAuthCode({db:A,actor:{kind,ownerId:owners.a.id},hostname:host,registrar:reg}),/AUTH_CODE_OWNER_ONLY/);
   await refuse(m.readAuthCode({db:A,actor:actorOf('b'),hostname:host,registrar:reg}),/TRANSFER_NOT_UNLOCKED/);
@@ -142,7 +143,10 @@ try{
   assert.doesNotMatch(dump,/SYNTHETIC-AUTH/,'the code has no column, event or job');
   for(const t of ['domain_quotes','domain_reviews','domain_orders','domain_funding_holds','domain_order_attempts','domain_registrar_events','domain_registrations','domain_registrant_contacts','domain_renewal_reviews','domain_renewal_approvals','domain_transfer_requests'].map(name=>({name})))assert.deepEqual((await all(`SELECT name FROM pragma_table_info('${t.name}')`)).map(r=>r.name).filter(n=>/auth|epp|secret|token|password|card|credential/i.test(n)),[],t.name);
   // The registrar reports the name gone: the request completes and the registration is released for purge.
-  reg.completeTransfer(host);assert.deepEqual(await m.reconcileTransfers(A,reg,T0+62*DAY),{moved:1});
+  // One absent read is not proof (registrar.ts): the first leaves the transfer open, a second one six hours later completes it.
+  reg.completeTransfer(host);assert.deepEqual(await m.reconcileTransfers(A,reg,T0+62*DAY),{moved:0});assert.equal((await m.loadTransfer(A,owners.a.id,host)).state,'unlocked');assert.equal((await renewalState(host)).state,'transfer-out');
+  assert.deepEqual(await m.reconcileTransfers(A,reg,T0+62*DAY+HOUR),{moved:0},'inside the spacing');
+  assert.deepEqual(await m.reconcileTransfers(A,reg,T0+62*DAY+7*HOUR),{moved:1});
   assert.equal((await renewalState(host)).state,'transferred-out');assert.equal((await m.loadTransfer(A,owners.a.id,host)).state,'completed');
   await refuse(run("UPDATE domain_registrations SET state='active' WHERE hostname=?",host),/domain_registration_final/);
  });
@@ -153,7 +157,7 @@ try{
   const first=await start(lost);assert.equal(first.request.state,'unknown-outcome');assert.equal(lost.reg.calls.transferOut-base,1);
   assert.equal((await start(lost)).replayed,true);assert.equal(lost.reg.calls.transferOut-base,1);
   await refuse(m.readAuthCode({db:A,actor:actorOf('b'),hostname:lost.host,registrar:lost.reg}),/TRANSFER_NOT_UNLOCKED/);
-  await refuse(run('DELETE FROM users WHERE id=?',owners.b.id),/domain_registration_active|domain_order_unresolved/);
+  await refuse(run('DELETE FROM users WHERE id=?',owners.b.id),/domain_registration_active/);
   assert.deepEqual(await m.reconcileTransfers(A,lost.reg,T0+71*DAY),{moved:1});
   assert.equal((await m.loadTransfer(A,owners.b.id,lost.host)).state,'unlocked');assert.equal(lost.reg.calls.transferOut-base,1,'reconciliation only reads');
   const kept=await registered('b');kept.reg.nextTransfer('timeout-before');
@@ -175,23 +179,98 @@ try{
   const row=await one('SELECT * FROM domain_claims WHERE id=?',claim.claimId);assert.ok(row.verified_at&&row.token.startsWith('registrar-evidence:'));
   let dnsQueries=0;const transport=async()=>{dnsQueries++;return Response.json({Status:0,Answer:[]});};
   const stored={project_id:row.project_id,hostname:row.hostname,token:row.token};
-  assert.equal(await m.claimProofHolds(A,stored,transport),true);assert.equal(dnsQueries,0,'no DNS proof is needed for registrar evidence');
+  assert.equal(await m.claimProofHolds(A,stored,transport,T0+DAY),true);assert.equal(dnsQueries,0,'no DNS proof is needed for registrar evidence');
+  const expiry=(await one('SELECT expires_at FROM domain_registrations WHERE hostname=?',host)).expires_at;
+  assert.equal(await m.claimProofHolds(A,stored,transport,expiry),false,'an expired registration proves nothing');assert.equal(await m.claimProofHolds(A,stored,transport,expiry-1),true);
+  assert.equal(new Date(row.expires_at).getTime()-new Date(row.verified_at).getTime(),7*DAY,'the claim lasts as long as a TXT claim');
+  await refuse(m.claimPurchasedName({db:A,actor:actorOf('a'),projectId:owners.a.project,hostname:host,now:expiry}),/NOT_REGISTERED/);
   // The proof ends with the registration, and an ordinary TXT claim is still checked in DNS.
-  await run("UPDATE domain_registrations SET state='lapsed' WHERE hostname=?",host);assert.equal(await m.claimProofHolds(A,stored,transport),false);
-  assert.equal(await m.claimProofHolds(A,{...stored,token:'plain-token'},transport),false);assert.ok(dnsQueries>0);
+  await run("UPDATE domain_registrations SET state='lapsed' WHERE hostname=?",host);assert.equal(await m.claimProofHolds(A,stored,transport,T0+DAY),false);
+  assert.equal(await m.claimProofHolds(A,{...stored,token:'plain-token'},transport,T0+DAY),false);assert.ok(dnsQueries>0);
   // A name is not hosted just because its token says so: a forged marker for a name nobody registered proves nothing.
-  assert.equal(await m.claimProofHolds(A,{project_id:owners.a.project,hostname:'synthetic-unbought.com',token:'registrar-evidence:forged'},transport),false);
+  assert.equal(await m.claimProofHolds(A,{project_id:owners.a.project,hostname:'synthetic-unbought.com',token:'registrar-evidence:forged'},transport,T0+DAY),false);
  });
 
- await check('the registrar is read after the fact: a name the registrar no longer holds for us lapses only after its expiry, and the expiry never moves back',async()=>{
+ await check('the registrar is read after the fact: foreign proof lapses a name at once, absence only after its expiry, a missing expiry is backfilled, the expiry never moves back',async()=>{
   const {host,reg,registration}=await registered();const expiry=registration.expiresAt;
   assert.equal((await m.syncRegistration({db:A,hostname:host,registrar:reg,now:T0+DAY})).expiresAt,expiry);
   await refuse(run('UPDATE domain_registrations SET expires_at=expires_at-1 WHERE hostname=?',host),/domain_registration_expiry/);
-  reg.takeBy(host,'someone-else');
-  const gone=await m.syncRegistration({db:A,hostname:host,registrar:reg,now:expiry-DAY});assert.equal(gone.state,'active','not yet expired');
-  const lapsed=await m.syncRegistration({db:A,hostname:host,registrar:reg,now:expiry+DAY});assert.equal(lapsed.state,'lapsed');assert.equal(lapsed.autoRenew,false);
-  const wait=(await m.listRegistrations(A,owners.a.id)).find(r=>r.hostname===host);assert.equal(wait.state,'lapsed');
-  assert.equal((await m.listRegistrations(A,owners.b.id)).some(r=>r.hostname===host),false);
+  // Absence ("not found") is not proof: the name stays active until its expiry has passed.
+  reg.completeTransfer(host);
+  assert.equal((await m.syncRegistration({db:A,hostname:host,registrar:reg,now:expiry-DAY})).state,'active');
+  assert.equal((await m.syncRegistration({db:A,hostname:host,registrar:reg,now:expiry+DAY})).state,'lapsed');
+  // A registration naming another known order is proof at any time.
+  const other=await registered();other.reg.takeBy(other.host,'someone-elses-order');
+  const lapsed=await m.syncRegistration({db:A,hostname:other.host,registrar:other.reg,now:T0+DAY});assert.equal(lapsed.state,'lapsed');assert.equal(lapsed.autoRenew,false);
+  assert.equal((await m.listRegistrations(A,owners.a.id)).find(r=>r.hostname===other.host).state,'lapsed');assert.equal((await m.listRegistrations(A,owners.b.id)).some(r=>r.hostname===other.host),false);
+  // A null reference proves nothing either way.
+  const quiet=await registered();quiet.reg.takeBy(quiet.host,null);assert.equal((await m.syncRegistration({db:A,hostname:quiet.host,registrar:quiet.reg,now:T0+DAY})).state,'active');
+  // A lost reply and an event without an expiry leave no expiry; that fails closed for hosting proof until a lookup that shows the name is ours fills it in.
+  const host2=`synthetic-l${++names}.com`,reg2=registrar(host2);
+  const prep=await m.prepareDomainPurchase({actor:actorOf('a'),request:{contractVersion:1,projectId:owners.a.project,hostname:host2},project:projectOf('a'),owner:fundingOf('a'),registrar:reg2,policy,ids:{quoteId:id('quote'),reviewId:id('review')},now:T0});
+  await m.saveReview(A,prep.quote,prep.review,T0);
+  const step=await m.consent({db:A,actor:actorOf('a'),submission:{contractVersion:1,reviewId:prep.review.reviewId,quoteDigest:prep.review.quoteDigest,consentTextDigest:prep.review.consentTextDigest,decision:'accept'},reviewId:prep.review.reviewId,project:projectOf('a'),owner:fundingOf('a'),registrar:reg2,policy,orderId:id('order'),now:T0+1});
+  await m.reserve(A,owners.a.id,step.order.orderId,T0+2);reg2.next('timeout-after');
+  await m.dispatch({db:A,ownerId:owners.a.id,orderId:step.order.orderId,owner:fundingOf('a'),project:projectOf('a'),registrar:reg2,policy,now:T0+3});
+  await m.receiveRegistrarEvent(A,{eventId:id('evt'),orderId:step.order.orderId,attemptId:`${step.order.orderId}:a1`,type:'registered',authenticated:true},T0+4);
+  assert.equal((await renewalState(host2)).state,'active');assert.equal((await one('SELECT expires_at FROM domain_registrations WHERE hostname=?',host2)).expires_at,null);
+  await refuse(m.claimPurchasedName({db:A,actor:actorOf('a'),projectId:owners.a.project,hostname:host2,now:T0+5}),/NOT_REGISTERED/);
+  assert.equal(await m.claimProofHolds(A,{project_id:owners.a.project,hostname:host2,token:'registrar-evidence:x'},async()=>assert.fail('no DNS'),T0+5),false);
+  const filled=await m.syncRegistration({db:A,hostname:host2,registrar:reg2,now:T0+6});assert.ok(filled.expiresAt>T0,'a lookup that shows the name is ours backfills the expiry');
+  assert.ok((await m.claimPurchasedName({db:A,actor:actorOf('a'),projectId:owners.a.project,hostname:host2,now:T0+7})).claimId);
+ });
+
+ await check('renewal approvals follow the live opt-in: window, current price, revoked with the opt-in and the lapse',async()=>{
+  const {host,reg,registration}=await registered();const expiry=registration.expiresAt;
+  const prep=await prepare(A,'a',host,reg,id('renewal'),expiry-40*DAY);await confirm(A,'a',prep,reg,expiry-40*DAY+1);
+  assert.deepEqual(await m.decideRenewal({db:A,hostname:host,registrar:reg,policy,now:expiry-40*DAY+2}),{renew:false,reason:'outside-renewal-window'},'only inside 30 days before the expiry');
+  await refuse(run('INSERT INTO domain_renewal_approvals(hostname,for_expiry,review_id,price_cents,approved_at) VALUES(?,?,?,?,?)',host,expiry,prep.review.reviewId,prep.review.renewalTotalCents,expiry-31*DAY),/domain_renewal_not_opted_in/);
+  assert.equal((await m.decideRenewal({db:A,hostname:host,registrar:reg,policy,now:expiry-10*DAY})).renew,true);
+  // The row follows a lower price and never exceeds the opted-in one.
+  reg.setPrice(host,{renewal:1000});const lower=await m.decideRenewal({db:A,hostname:host,registrar:reg,policy,now:expiry-9*DAY});
+  assert.equal((await one('SELECT price_cents FROM domain_renewal_approvals WHERE hostname=?',host)).price_cents,lower.priceCents);assert.ok(lower.priceCents<prep.review.renewalTotalCents);
+  await refuse(run('UPDATE domain_renewal_approvals SET price_cents=? WHERE hostname=?',prep.review.renewalTotalCents+1,host),/domain_renewal_not_opted_in/);
+  // The charger's gate is the view over the live opt-in (it uses the real clock, and these synthetic dates are ahead of it, so the row is current and listed).
+  assert.deepEqual((await all('SELECT hostname,price_cents,for_expiry FROM domain_renewal_chargeable WHERE hostname=?',host)).map(r=>({...r})),[{hostname:host,price_cents:lower.priceCents,for_expiry:expiry}]);
+  // Turning auto-renew off deletes the approval in the same statement; so does a lapse.
+  await m.turnOffAutoRenew(A,actorOf('a'),host);assert.equal(await count('SELECT count(*) FROM domain_renewal_approvals WHERE hostname=?',host),0);assert.equal(await count('SELECT count(*) FROM domain_renewal_chargeable WHERE hostname=?',host),0);
+  reg.setPrice(host,{renewal:1150});const again=await prepare(A,'a',host,reg,id('renewal'),expiry-8*DAY);await confirm(A,'a',again,reg,expiry-8*DAY+1);
+  await m.decideRenewal({db:A,hostname:host,registrar:reg,policy,now:expiry-7*DAY});assert.equal(await count('SELECT count(*) FROM domain_renewal_approvals WHERE hostname=?',host),1);
+  await run("UPDATE domain_registrations SET state='lapsed',auto_renew=0,renewal_review_id=NULL,renewal_total_cents=NULL WHERE hostname=?",host);assert.equal(await count('SELECT count(*) FROM domain_renewal_approvals WHERE hostname=?',host),0);
+ });
+
+ await check('transfer requests always have an exit: a stuck claim becomes unknown, an old one fails and returns the name, the owner can cancel, two absent reads complete one and a failed lookup costs one retry',async()=>{
+  const a=await registered('b'),b=await registered('b'),c=await registered('b');
+  a.reg.nextTransfer('timeout-before');
+  const start=(r,at)=>m.startTransferOut({db:A,actor:actorOf('b'),hostname:r.host,registrar:r.reg,requestId:id('transfer'),now:at});
+  assert.equal((await start(a,T0+70*DAY)).request.state,'unknown-outcome');assert.equal((await start(b,T0+70*DAY)).request.state,'unlocked');
+  assert.equal((await m.sweepTransfers(A,T0+71*DAY)).moved,0,'young requests are left alone');
+  assert.equal((await m.sweepTransfers(A,T0+70*DAY+15*DAY)).moved>=2,true);
+  for(const r of [a,b]){assert.equal((await m.loadTransfer(A,owners.b.id,r.host)).state,'failed');assert.equal((await renewalState(r.host)).state,'active');}
+  await start(c,T0+90*DAY);await refuse(m.cancelTransfer(A,{kind:'model',ownerId:owners.b.id},c.host,T0+91*DAY),/HUMAN_REVIEW_REQUIRED/);
+  await refuse(m.readAuthCode({db:A,actor:actorOf('b'),hostname:a.host,registrar:a.reg}),/TRANSFER_NOT_UNLOCKED/);
+  assert.equal((await m.cancelTransfer(A,actorOf('b'),c.host,T0+91*DAY)).state,'failed');assert.equal((await renewalState(c.host)).state,'active');
+  const d=await registered('b'),e=await registered('b');await start(d,T0+100*DAY);await start(e,T0+100*DAY);
+  const lookup=shared.lookup;let boom=true;shared.lookup=async n=>{if(boom&&n===d.host){boom=false;throw Error('down');}return lookup.call(shared,n);};
+  shared.completeTransfer(e.host);
+  await m.reconcileTransfers(A,shared,T0+101*DAY);await m.reconcileTransfers(A,shared,T0+101*DAY+7*HOUR);shared.lookup=lookup;
+  assert.equal((await m.loadTransfer(A,owners.b.id,e.host)).state,'completed');assert.equal((await renewalState(e.host)).state,'transferred-out');
+  assert.equal((await m.loadTransfer(A,owners.b.id,d.host)).state,'unlocked','the failed read cost d one retry only');
+ });
+
+ await check('a registration naming another order completes a transfer at once; reminders cover a lapsed name and page past names already reminded',async()=>{
+  const a=await registered('b');await m.startTransferOut({db:A,actor:actorOf('b'),hostname:a.host,registrar:a.reg,requestId:id('transfer'),now:T0+70*DAY});
+  a.reg.takeBy(a.host,'new-owner-order');const synced=await m.syncRegistration({db:A,hostname:a.host,registrar:a.reg,now:T0+71*DAY});
+  assert.equal(synced.state,'transferred-out');assert.equal((await m.loadTransfer(A,owners.b.id,a.host)).state,'completed');
+  const l=await registered('a');const expiry=(await m.loadRegistration(A,owners.a.id,l.host)).expiresAt;
+  await run("UPDATE domain_registrations SET state='lapsed' WHERE hostname=?",l.host);
+  await m.queueDueReminders(A,expiry+2*DAY,500);
+  assert.deepEqual((await all("SELECT template FROM notification_notices WHERE event_ref GLOB ?",l.host+':*')).map(r=>r.template),['domain.expiry-expired@1']);
+  // Paging: with a limit of one, repeated passes reach every name instead of re-reading the first.
+  const open=await count("SELECT count(*) FROM domain_registrations WHERE state IN ('active','transfer-out') AND expires_at BETWEEN ? AND ?",expiry-6*DAY-DAY,expiry-6*DAY+30*DAY);
+  for(let i=0;i<open+3;i++)await m.queueDueReminders(A,expiry-6*DAY+i*2*HOUR,1);/* two hours apart: the per-recipient hourly cap is the outbox's own */
+  const week=await count("SELECT count(*) FROM notification_notices WHERE template='domain.expiry-week@1'");
+  assert.equal(week>=3,true,`later names are reached past the ones already reminded (${week} of ${open}; the rest wait on the outbox's own per-recipient caps)`);
  });
 }finally{for(const f of files)f.close();}
 console.log(`Domain purchase lifecycle passed: ${cases} cases on ${d1?'actual local D1':'SQLite'}.`);

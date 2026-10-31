@@ -94,6 +94,8 @@ export type DispatchInput={
  /** Commit the claimed `dispatching` order (compare-and-set from `reserved`). Return false when another worker won;
   * register is called only after this resolves true. */
  claim:(claimed:Order)=>Promise<boolean>|boolean;
+ /** The server found the project changed since the review (revision or owner): cancel before the purchase call. */
+ stale?:boolean;
 };
 /** At most one registrar purchase call per order, ever. A lost, malformed or pending result becomes unknown-outcome. */
 export async function dispatchOrder(input:DispatchInput):Promise<OrderStep&{claimed:boolean}> {
@@ -101,6 +103,7 @@ export async function dispatchOrder(input:DispatchInput):Promise<OrderStep&{clai
  check(!inFlight.includes(order.state),'NO_REDISPATCH',order.state);
  if(order.state!=='reserved')return {...step(order),claimed:false};
  if(now>=quote.expiresAt)return {...step(moved(order,'expired','quote-expired'),'release'),claimed:false};
+ if(input.stale)return {...step(moved(order,'cancelled','project-changed'),'release'),claimed:false};
  if(!await pricesUnchanged(quote,{owner,registrar,policy,now}))return {...step(moved(order,'cancelled','price-changed'),'release'),claimed:false};
  const attempts=order.attempts+1;
  const claimed:Order={...moved(order,'dispatching'),attempts,attempt:{attemptId:`${order.orderId}:a${attempts}`,startedAt:now}};
@@ -123,6 +126,12 @@ export function expireDispatchLease({order,now}:{order:Order;now:number}):OrderS
  return step({...moved(order,'unknown-outcome','interrupted'),uncertainAt:now});
 }
 
+/** Sweep for orders no worker will finish: an unreserved or reserved order whose quote has expired is released so it stops blocking the name for every tenant. */
+export function expireStale({order,quote,now}:{order:Order;quote:DomainPurchaseQuote;now:number}):OrderStep {
+ if(!['consented','reserved'].includes(order.state)||now<quote.expiresAt)return step(order);
+ return step(moved(order,'expired','quote-expired'),order.state==='reserved'?'release':null);
+}
+
 /** Bounded read-only reconciliation. Never calls register; "not found" or "in progress" is not proof either way. */
 export async function reconcileOrder({order,registrar,now}:{order:Order;registrar:RegistrarAdapter;now:number}):Promise<OrderStep> {
  if(order.state!=='unknown-outcome')return step(order);
@@ -133,7 +142,8 @@ export async function reconcileOrder({order,registrar,now}:{order:Order;registra
  const ours=plain(found)&&found.status!=='not-found'&&found.orderRef===order.orderId;
  if(ours&&found.status==='registered'&&Number.isSafeInteger(found.expiresAt))return step(moved(read,'registered','reconciled'),'capture',newRegistration(order,now,found.expiresAt,null));
  if(ours&&found.status==='failed')return step(moved(read,'failed','reconciled-failed'),'release');
- if(plain(found)&&found.status==='registered')return step(moved(read,'failed','registered-elsewhere'),'release');
+ // Only a registration that names a different, known order is proof it is not ours. A null reference or a malformed answer proves nothing (it may be ours with a lost reference), so it ends in the bound, never in a release.
+ if(!ours&&plain(found)&&found.status==='registered'&&typeof found.orderRef==='string'&&found.orderRef.length>0&&found.orderRef!==order.orderId)return step(moved(read,'failed','registered-elsewhere'),'release');
  if(read.reconcileReads>=domainPurchaseBounds.reconcileReads)return step(moved(read,'unresolved','reconcile-bound'));
  return step(read);
 }

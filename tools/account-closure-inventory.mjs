@@ -125,6 +125,7 @@ const metrics={
  domainRenewalReviews:['domain_renewal_reviews','hostname IN (SELECT hostname FROM domain_registrations WHERE project_id IN (SELECT id FROM owned_projects))'],
  domainRenewalApprovals:['domain_renewal_approvals','hostname IN (SELECT hostname FROM domain_registrations WHERE project_id IN (SELECT id FROM owned_projects))'],
  domainTransferRequests:['domain_transfer_requests','hostname IN (SELECT hostname FROM domain_registrations WHERE project_id IN (SELECT id FROM owned_projects))'],
+ openDomainTransfers:['domain_transfer_requests','hostname IN (SELECT hostname FROM domain_registrations WHERE project_id IN (SELECT id FROM owned_projects))',"state IN ('requested','unlocked','unknown-outcome')"],
  domainRegistrations:['domain_registrations','project_id IN (SELECT id FROM owned_projects)'],
  activeDomainRegistrations:['domain_registrations','project_id IN (SELECT id FROM owned_projects)',"state IN ('active','transfer-out')"],
 };

@@ -1,7 +1,8 @@
 -- WH-194 domain purchase storage (current schema input; contract: docs/domain-purchases.md, source: src/domain-purchase/).
 -- Quotes, exact reviews, orders, funding holds, attempts, registrar events, registrations and the owner's registrant contact.
--- Every contract predicate of the pure module is repeated here, so a caller that skips the module still cannot create two orders
--- for a name, register twice, move an order backwards, or release a hold whose purchase may have happened. Times are epoch
+-- The contract predicates that SQL can see are repeated here, so a caller that skips the module still cannot create two orders
+-- for a name, register twice, move an order backwards, or settle a hold except through its order. Not enforced here: the server-resolved project
+-- revision and funding source (bound by the consenting statement, re-checked by dispatch in code) and the authenticated evidence that ends an unknown outcome. Times are epoch
 -- milliseconds. An owner column is a plain copy of projects.owner_user_id (a trigger checks it), so these tables reach a tenant
 -- through project_id like module_records. Nothing here calls a registrar or a payment provider: a hold row is a ledger entry
 -- for the reviewed amount, not a card authorization, and no auth code, registrar credential or card data has a column.
@@ -9,7 +10,7 @@ CREATE TABLE domain_quotes (
  quote_id TEXT PRIMARY KEY CHECK(quote_id GLOB '[A-Za-z0-9]*' AND length(quote_id) BETWEEN 1 AND 128 AND quote_id NOT GLOB '*[^A-Za-z0-9_.:-]*'),
  owner_user_id TEXT NOT NULL CHECK(length(owner_user_id) BETWEEN 1 AND 128),
  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
- hostname TEXT NOT NULL CHECK(length(hostname) BETWEEN 3 AND 253 AND hostname=lower(hostname) AND hostname NOT GLOB '*[^a-z0-9.-]*'),
+ hostname TEXT NOT NULL CHECK(length(hostname) BETWEEN 3 AND 253 AND hostname=lower(hostname) AND hostname NOT GLOB '*[^a-z0-9.-]*' AND hostname GLOB '[a-z0-9]*' AND hostname GLOB '*.[a-z][a-z]*' AND hostname GLOB '*[a-z]' AND hostname NOT GLOB '*.*.*' AND hostname NOT GLOB '*-.*' AND hostname NOT GLOB '*.-*' AND hostname NOT GLOB '*..*' AND hostname NOT GLOB '*-'),
  quote_json TEXT NOT NULL CHECK(json_valid(quote_json) AND length(quote_json)<=6144),
  quote_digest TEXT NOT NULL CHECK(length(quote_digest)=64 AND quote_digest NOT GLOB '*[^0-9a-f]*'),
  quoted_at INTEGER NOT NULL CHECK(typeof(quoted_at)='integer' AND quoted_at>0),
@@ -26,7 +27,7 @@ CREATE TABLE domain_reviews (
  owner_user_id TEXT NOT NULL CHECK(length(owner_user_id) BETWEEN 1 AND 128),
  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
  project_revision INTEGER NOT NULL CHECK(typeof(project_revision)='integer' AND project_revision>=0),
- hostname TEXT NOT NULL CHECK(length(hostname) BETWEEN 3 AND 253),
+ hostname TEXT NOT NULL CHECK(length(hostname) BETWEEN 3 AND 253 AND hostname=lower(hostname) AND hostname NOT GLOB '*[^a-z0-9.-]*' AND hostname GLOB '[a-z0-9]*' AND hostname GLOB '*.[a-z][a-z]*' AND hostname GLOB '*[a-z]' AND hostname NOT GLOB '*.*.*' AND hostname NOT GLOB '*-.*' AND hostname NOT GLOB '*.-*' AND hostname NOT GLOB '*..*' AND hostname NOT GLOB '*-'),
  funding_source_id TEXT NOT NULL CHECK(length(funding_source_id) BETWEEN 1 AND 128),
  consent_text_digest TEXT NOT NULL CHECK(length(consent_text_digest)=64 AND consent_text_digest NOT GLOB '*[^0-9a-f]*'),
  created_at INTEGER NOT NULL CHECK(typeof(created_at)='integer' AND created_at>0),
@@ -54,7 +55,7 @@ END;
 CREATE TRIGGER domain_reviews_frozen BEFORE UPDATE ON domain_reviews BEGIN SELECT RAISE(ABORT,'domain_review_frozen'); END;
 
 -- The owner's registrant contact for one review (ICANN Registration Data Policy elements only, entered for this purchase, redacted in
--- public RDDS). Personal data: never in model context, logs, Chat history or exports. It leaves with its review.
+-- public RDDS). Personal data: never in model context, logs or Chat history; the owner's own contact may appear in the owner's own export (docs/data-lifecycle.json) and nowhere else. Erased when the order fails, is cancelled or expires, and when the registration is transferred out or lapses; an unused draft is pruned.
 CREATE TABLE domain_registrant_contacts (
  review_id TEXT PRIMARY KEY REFERENCES domain_reviews(review_id) ON DELETE CASCADE,
  owner_user_id TEXT NOT NULL CHECK(length(owner_user_id) BETWEEN 1 AND 128),
@@ -86,7 +87,7 @@ CREATE TABLE domain_orders (
  quote_digest TEXT NOT NULL CHECK(length(quote_digest)=64 AND quote_digest NOT GLOB '*[^0-9a-f]*'),
  owner_user_id TEXT NOT NULL CHECK(length(owner_user_id) BETWEEN 1 AND 128),
  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
- hostname TEXT NOT NULL CHECK(length(hostname) BETWEEN 3 AND 253),
+ hostname TEXT NOT NULL CHECK(length(hostname) BETWEEN 3 AND 253 AND hostname=lower(hostname) AND hostname NOT GLOB '*[^a-z0-9.-]*' AND hostname GLOB '[a-z0-9]*' AND hostname GLOB '*.[a-z][a-z]*' AND hostname GLOB '*[a-z]' AND hostname NOT GLOB '*.*.*' AND hostname NOT GLOB '*-.*' AND hostname NOT GLOB '*.-*' AND hostname NOT GLOB '*..*' AND hostname NOT GLOB '*-'),
  state TEXT NOT NULL CHECK(state IN ('consented','reserved','dispatching','registered','failed','unknown-outcome','unresolved','cancelled','expired')),
  history_json TEXT NOT NULL CHECK(json_valid(history_json) AND length(history_json)<=2048),
  attempts INTEGER NOT NULL DEFAULT 0 CHECK(typeof(attempts)='integer' AND attempts BETWEEN 0 AND 1),
@@ -99,12 +100,14 @@ CREATE TABLE domain_orders (
  consented_at INTEGER NOT NULL CHECK(typeof(consented_at)='integer' AND consented_at>0),
  updated_at INTEGER NOT NULL CHECK(typeof(updated_at)='integer' AND updated_at>=consented_at),
  version INTEGER NOT NULL DEFAULT 0 CHECK(typeof(version)='integer' AND version>=0),
+ released INTEGER NOT NULL DEFAULT 0 CHECK(released IN (0,1)),
  CHECK(state!='dispatching' OR (attempt_id IS NOT NULL AND attempt_started_at IS NOT NULL)),
  CHECK(state NOT IN ('unknown-outcome','unresolved') OR (attempt_id IS NOT NULL AND uncertain_at IS NOT NULL)),
  CHECK(attempts=0 OR attempt_id IS NOT NULL),
  CHECK(state!='registered' OR attempt_id IS NOT NULL)
 ) STRICT;
-CREATE UNIQUE INDEX domain_orders_active_name ON domain_orders(hostname) WHERE state NOT IN ('failed','cancelled','expired');
+-- A registered order stops holding the name once its registration is transferred out or lapses (released), so the name can be bought again.
+CREATE UNIQUE INDEX domain_orders_active_name ON domain_orders(hostname) WHERE state NOT IN ('failed','cancelled','expired') AND released=0;
 CREATE INDEX domain_orders_project ON domain_orders(project_id,consented_at);
 CREATE INDEX domain_orders_owner ON domain_orders(owner_user_id,state);
 CREATE INDEX domain_orders_open ON domain_orders(state,updated_at) WHERE state IN ('reserved','dispatching','unknown-outcome','unresolved');
@@ -120,7 +123,7 @@ CREATE TRIGGER domain_orders_admit BEFORE INSERT ON domain_orders BEGIN
   OR NOT EXISTS(SELECT 1 FROM projects WHERE id=NEW.project_id AND owner_user_id=NEW.owner_user_id);
  SELECT RAISE(ABORT,'domain_order_state') WHERE NEW.state!='consented' OR NEW.attempts!=0 OR NEW.attempt_id IS NOT NULL OR NEW.attempt_started_at IS NOT NULL
   OR NEW.reconcile_reads!=0 OR NEW.uncertain_at IS NOT NULL OR NEW.registration_expires_at IS NOT NULL OR NEW.charge_mismatch IS NOT NULL
-  OR NEW.version!=0 OR NEW.updated_at!=NEW.consented_at OR NEW.history_json IS NOT '["quoted","consented"]';
+  OR NEW.version!=0 OR NEW.released!=0 OR NEW.updated_at!=NEW.consented_at OR NEW.history_json IS NOT '["quoted","consented"]';
 END;
 -- Transitions: only the contract's edges, identity never changes, and every change moves the version by one. Nothing re-enters
 -- dispatching, so the attempt table below holds at most one register claim per order.
@@ -145,7 +148,17 @@ CREATE TRIGGER domain_orders_transition BEFORE UPDATE ON domain_orders BEGIN
  SELECT RAISE(ABORT,'domain_order_registration') WHERE (NEW.registration_expires_at IS NOT OLD.registration_expires_at AND NOT (NEW.state='registered' AND OLD.state!='registered'))
   OR (NEW.charge_mismatch IS NOT OLD.charge_mismatch AND NOT (NEW.state='registered' AND OLD.state!='registered'));
 END;
-CREATE TRIGGER domain_orders_final BEFORE UPDATE ON domain_orders WHEN OLD.state IN ('registered','failed','cancelled','expired') BEGIN SELECT RAISE(ABORT,'domain_order_final'); END;
+CREATE TRIGGER domain_orders_final BEFORE UPDATE ON domain_orders WHEN OLD.state IN ('registered','failed','cancelled','expired') AND NOT (OLD.state='registered' AND OLD.released=0 AND NEW.released=1
+ AND NEW.state=OLD.state AND NEW.history_json=OLD.history_json AND NEW.attempts=OLD.attempts AND NEW.attempt_id IS OLD.attempt_id AND NEW.uncertain_at IS OLD.uncertain_at
+ AND NEW.reconcile_reads=OLD.reconcile_reads AND NEW.registration_expires_at IS OLD.registration_expires_at AND NEW.charge_mismatch IS OLD.charge_mismatch) BEGIN SELECT RAISE(ABORT,'domain_order_final'); END;
+-- A dispatch needs a live quote: the claim cannot be written after the quote expired, whoever writes it.
+CREATE TRIGGER domain_orders_dispatch_live BEFORE UPDATE OF state ON domain_orders WHEN NEW.state='dispatching' AND OLD.state='reserved' BEGIN
+ SELECT RAISE(ABORT,'domain_order_expired') WHERE NOT EXISTS(SELECT 1 FROM domain_quotes q WHERE q.quote_id=OLD.quote_id AND NEW.attempt_started_at<q.expires_at);
+END;
+-- Contact erasure: a failed, cancelled or expired order no longer needs the owner's registrant contact.
+CREATE TRIGGER domain_orders_erase_contact AFTER UPDATE OF state ON domain_orders WHEN NEW.state IN ('failed','cancelled','expired') BEGIN
+ DELETE FROM domain_registrant_contacts WHERE review_id=NEW.review_id;
+END;
 -- An order that holds funds or may have bought the name cannot be purged: not by a project or account cascade, not by hand.
 CREATE TRIGGER domain_orders_keep BEFORE DELETE ON domain_orders WHEN OLD.state IN ('reserved','dispatching','unknown-outcome','unresolved') BEGIN SELECT RAISE(ABORT,'domain_order_unresolved'); END;
 
@@ -172,8 +185,11 @@ CREATE TRIGGER domain_orders_release AFTER UPDATE OF state ON domain_orders WHEN
  UPDATE domain_funding_holds SET state='released',settled_at=NEW.updated_at WHERE order_id=NEW.order_id AND state='held';
 END;
 CREATE TRIGGER domain_funding_holds_admit BEFORE INSERT ON domain_funding_holds BEGIN
- SELECT RAISE(ABORT,'domain_hold_admit') WHERE NEW.state!='held' OR NOT EXISTS(SELECT 1 FROM domain_orders WHERE order_id=NEW.order_id AND state='reserved');
+ SELECT RAISE(ABORT,'domain_hold_admit') WHERE NEW.state!='held' OR NEW.settled_at IS NOT NULL OR NOT EXISTS(SELECT 1 FROM domain_orders o JOIN domain_quotes q ON q.quote_id=o.quote_id
+  WHERE o.order_id=NEW.order_id AND o.state='reserved' AND json_extract(q.quote_json,'$.funding.sourceId') IS NEW.source_id AND json_extract(q.quote_json,'$.funding.customerChargeCents') IS NEW.amount_cents);
 END;
+-- A held hold is never deleted: it ends by settlement through its order, or the order cannot be purged.
+CREATE TRIGGER domain_funding_holds_keep BEFORE DELETE ON domain_funding_holds WHEN OLD.state='held' BEGIN SELECT RAISE(ABORT,'domain_hold_open'); END;
 CREATE TRIGGER domain_funding_holds_settle BEFORE UPDATE ON domain_funding_holds BEGIN
  SELECT RAISE(ABORT,'domain_hold_settle') WHERE OLD.state!='held' OR NEW.state='held' OR NEW.order_id IS NOT OLD.order_id OR NEW.source_id IS NOT OLD.source_id
   OR NEW.amount_cents IS NOT OLD.amount_cents OR NEW.placed_at IS NOT OLD.placed_at
@@ -212,7 +228,7 @@ CREATE TRIGGER domain_registrar_events_frozen BEFORE UPDATE ON domain_registrar_
 -- the registered transition itself. It records the name Whumpo bought for the owner; closing the account or deleting the project
 -- never cancels it, so an active registration cannot be purged (the owner transfers it out first).
 CREATE TABLE domain_registrations (
- hostname TEXT PRIMARY KEY CHECK(length(hostname) BETWEEN 3 AND 253),
+ hostname TEXT PRIMARY KEY CHECK(length(hostname) BETWEEN 3 AND 253 AND hostname=lower(hostname) AND hostname NOT GLOB '*[^a-z0-9.-]*' AND hostname GLOB '[a-z0-9]*' AND hostname GLOB '*.[a-z][a-z]*' AND hostname GLOB '*[a-z]' AND hostname NOT GLOB '*.*.*' AND hostname NOT GLOB '*-.*' AND hostname NOT GLOB '*.-*' AND hostname NOT GLOB '*..*' AND hostname NOT GLOB '*-'),
  order_id TEXT NOT NULL UNIQUE REFERENCES domain_orders(order_id) ON DELETE CASCADE,
  owner_user_id TEXT NOT NULL CHECK(length(owner_user_id) BETWEEN 1 AND 128),
  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -230,9 +246,21 @@ CREATE TABLE domain_registrations (
 CREATE INDEX domain_registrations_project ON domain_registrations(project_id);
 CREATE INDEX domain_registrations_owner ON domain_registrations(owner_user_id,state);
 CREATE INDEX domain_registrations_expiry ON domain_registrations(state,expires_at);
+-- A name that was transferred out or lapsed can be bought and registered again: the old terminal row is replaced.
 CREATE TRIGGER domain_orders_registration AFTER UPDATE OF state ON domain_orders WHEN NEW.state='registered' AND OLD.state!='registered' BEGIN
+ DELETE FROM domain_registrations WHERE hostname=NEW.hostname AND state IN ('transferred-out','lapsed');
  INSERT INTO domain_registrations(hostname,order_id,owner_user_id,project_id,created_at,expires_at,charge_mismatch)
   VALUES(NEW.hostname,NEW.order_id,NEW.owner_user_id,NEW.project_id,NEW.updated_at,NEW.registration_expires_at,NEW.charge_mismatch);
+END;
+-- A registration exists only for a registered order of the same name, owner and project, new and not auto-renewing; no direct insert forges proof or consent.
+CREATE TRIGGER domain_registrations_admit BEFORE INSERT ON domain_registrations BEGIN
+ SELECT RAISE(ABORT,'domain_registration_admit') WHERE NEW.state!='active' OR NEW.auto_renew!=0 OR NEW.renewal_review_id IS NOT NULL
+  OR NOT EXISTS(SELECT 1 FROM domain_orders o WHERE o.order_id=NEW.order_id AND o.state='registered' AND o.hostname=NEW.hostname AND o.owner_user_id=NEW.owner_user_id AND o.project_id=NEW.project_id AND o.released=0);
+END;
+-- Registrant contact leaves when the registration does.
+CREATE TRIGGER domain_registrations_release AFTER UPDATE OF state ON domain_registrations WHEN NEW.state IN ('transferred-out','lapsed') AND OLD.state NOT IN ('transferred-out','lapsed') BEGIN
+ DELETE FROM domain_registrant_contacts WHERE review_id=(SELECT review_id FROM domain_orders WHERE order_id=NEW.order_id);
+ UPDATE domain_orders SET released=1,version=version+1 WHERE order_id=NEW.order_id AND released=0;
 END;
 -- A registration moves active -> transfer-out (the owner asked to leave) -> transferred-out, or lapses; the last two are final. Auto-renew turns
 -- on only through a confirmed renewal review for the same name, owner and price (the review's own confirmation writes it), and off at any time.
@@ -285,11 +313,28 @@ CREATE TABLE domain_renewal_approvals (
  approved_at INTEGER NOT NULL CHECK(typeof(approved_at)='integer' AND approved_at>0),
  PRIMARY KEY(hostname,for_expiry)
 ) STRICT;
+-- Live opt-in, price at or below it, and a window of 30 days before the expiry; the same rule for a first approval and for the row following a new price.
 CREATE TRIGGER domain_renewal_approvals_admit BEFORE INSERT ON domain_renewal_approvals BEGIN
  SELECT RAISE(ABORT,'domain_renewal_not_opted_in') WHERE NOT EXISTS(SELECT 1 FROM domain_registrations g WHERE g.hostname=NEW.hostname AND g.state='active' AND g.auto_renew=1
-  AND g.renewal_review_id=NEW.review_id AND NEW.price_cents<=g.renewal_total_cents AND g.expires_at=NEW.for_expiry AND NEW.approved_at<g.expires_at);
+  AND g.renewal_review_id=NEW.review_id AND NEW.price_cents<=g.renewal_total_cents AND g.expires_at=NEW.for_expiry AND NEW.approved_at<g.expires_at AND NEW.approved_at>=g.expires_at-2592000000);
 END;
-CREATE TRIGGER domain_renewal_approvals_frozen BEFORE UPDATE ON domain_renewal_approvals BEGIN SELECT RAISE(ABORT,'domain_renewal_frozen'); END;
+CREATE TRIGGER domain_renewal_approvals_follow BEFORE UPDATE ON domain_renewal_approvals BEGIN
+ SELECT RAISE(ABORT,'domain_renewal_frozen') WHERE NEW.hostname IS NOT OLD.hostname OR NEW.for_expiry IS NOT OLD.for_expiry;
+ SELECT RAISE(ABORT,'domain_renewal_not_opted_in') WHERE NOT EXISTS(SELECT 1 FROM domain_registrations g WHERE g.hostname=NEW.hostname AND g.state='active' AND g.auto_renew=1
+  AND g.renewal_review_id=NEW.review_id AND NEW.price_cents<=g.renewal_total_cents AND g.expires_at=NEW.for_expiry AND NEW.approved_at<g.expires_at AND NEW.approved_at>=g.expires_at-2592000000);
+END;
+-- An approval ends with the opt-in it rests on: turning auto-renew off, a new review, leaving active (transfer-out, lapse) all delete it in the same statement.
+CREATE TRIGGER domain_registrations_revoke AFTER UPDATE ON domain_registrations
+WHEN (OLD.auto_renew=1 AND NEW.auto_renew=0) OR NEW.state!='active' OR NEW.renewal_total_cents IS NOT OLD.renewal_total_cents OR NEW.renewal_review_id IS NOT OLD.renewal_review_id BEGIN
+ DELETE FROM domain_renewal_approvals WHERE hostname=NEW.hostname;
+END;
+-- The charger's gate (WH-042 extension): a charge is allowed only for a row of this view, whose join is the live opt-in and whose approval is recent; the charger
+-- also compares the price it is about to charge, read fresh from the registrar, with price_cents. Nothing else authorizes a renewal charge.
+CREATE VIEW domain_renewal_chargeable AS
+ SELECT a.hostname,a.for_expiry,a.price_cents,a.approved_at,g.owner_user_id,g.project_id,g.renewal_total_cents
+ FROM domain_renewal_approvals a JOIN domain_registrations g ON g.hostname=a.hostname
+ WHERE g.state='active' AND g.auto_renew=1 AND g.renewal_review_id=a.review_id AND g.expires_at=a.for_expiry AND a.price_cents<=g.renewal_total_cents
+  AND a.approved_at>unixepoch()*1000-604800000 AND unixepoch()*1000<g.expires_at;
 
 -- Transfer-out: one open request per name, claimed before the registrar is asked to unlock it, so a lost response is reconciled by reading, never by
 -- asking again. The ICANN 60-day lock is checked here too. The auth code has no column: it is read from the registrar for the owner at the moment it is shown.
@@ -300,7 +345,9 @@ CREATE TABLE domain_transfer_requests (
  state TEXT NOT NULL CHECK(state IN ('requested','unlocked','unknown-outcome','failed','completed')),
  requested_at INTEGER NOT NULL CHECK(typeof(requested_at)='integer' AND requested_at>0),
  updated_at INTEGER NOT NULL CHECK(typeof(updated_at)='integer' AND updated_at>=requested_at),
- version INTEGER NOT NULL DEFAULT 0 CHECK(typeof(version)='integer' AND version>=0)
+ version INTEGER NOT NULL DEFAULT 0 CHECK(typeof(version)='integer' AND version>=0),
+ missing_reads INTEGER NOT NULL DEFAULT 0 CHECK(typeof(missing_reads)='integer' AND missing_reads BETWEEN 0 AND 5),
+ completion_evidence TEXT CHECK(completion_evidence IS NULL OR completion_evidence='registered-elsewhere')
 ) STRICT;
 CREATE UNIQUE INDEX domain_transfer_requests_open ON domain_transfer_requests(hostname) WHERE state IN ('requested','unlocked','unknown-outcome');
 CREATE INDEX domain_transfer_requests_owner ON domain_transfer_requests(owner_user_id,state);
@@ -314,10 +361,14 @@ END;
 CREATE TRIGGER domain_transfer_requests_transition BEFORE UPDATE ON domain_transfer_requests BEGIN
  SELECT RAISE(ABORT,'domain_transfer_identity') WHERE NEW.request_id IS NOT OLD.request_id OR NEW.hostname IS NOT OLD.hostname OR NEW.owner_user_id IS NOT OLD.owner_user_id OR NEW.requested_at IS NOT OLD.requested_at;
  SELECT RAISE(ABORT,'domain_transfer_version') WHERE NEW.version IS NOT OLD.version+1 OR NEW.updated_at<OLD.updated_at;
- SELECT RAISE(ABORT,'domain_transfer_transition') WHERE NOT (
+ SELECT RAISE(ABORT,'domain_transfer_transition') WHERE OLD.state IN ('failed','completed') OR (NEW.state IS NOT OLD.state AND NOT (
    (OLD.state='requested' AND NEW.state IN ('unlocked','unknown-outcome','failed'))
    OR (OLD.state='unknown-outcome' AND NEW.state IN ('unlocked','failed','completed'))
-   OR (OLD.state='unlocked' AND NEW.state IN ('completed','failed')));
+   OR (OLD.state='unlocked' AND NEW.state IN ('completed','failed'))));
+ -- "Not found" is not proof (registrar.ts): a transfer completes on two spaced absent reads or on a registration naming another order, and nothing else.
+ SELECT RAISE(ABORT,'domain_transfer_reads') WHERE NEW.missing_reads<OLD.missing_reads OR NEW.missing_reads>OLD.missing_reads+1
+  OR (NEW.state='completed' AND OLD.state!='completed' AND NEW.missing_reads<2 AND NEW.completion_evidence IS NOT 'registered-elsewhere')
+  OR (NEW.completion_evidence IS NOT OLD.completion_evidence AND NOT (NEW.state='completed' AND OLD.state!='completed'));
 END;
 CREATE TRIGGER domain_transfer_requests_settle AFTER UPDATE OF state ON domain_transfer_requests WHEN NEW.state IN ('failed','completed') BEGIN
  UPDATE domain_registrations SET state=CASE NEW.state WHEN 'completed' THEN 'transferred-out' ELSE 'active' END WHERE hostname=NEW.hostname AND state='transfer-out';

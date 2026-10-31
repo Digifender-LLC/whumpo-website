@@ -29,7 +29,7 @@ const refuse=(p,re)=>assert.rejects(p,re);
 let cases=0;const check=async(name,fn)=>{try{await fn();cases++;}catch(e){console.error('FAILED:',name);throw e;}};
 
 const P1='synthetic-p1.com',P2='synthetic-p2.com',P3='synthetic-p3.com',P4='synthetic-p4.com';
-const T0=1_800_000_000_000,NAME='synthetic-bakery.com',CAFE='synthetic-cafe.com',SHOP='synthetic-shop.com',PREMIUM='synthetic-premium.com',MINUTE=60000;
+const DAY=86400000,T0=1_800_000_000_000,NAME='synthetic-bakery.com',CAFE='synthetic-cafe.com',SHOP='synthetic-shop.com',PREMIUM='synthetic-premium.com',MINUTE=60000,HOUR=3600000;
 const policy={pricing:{markupCents:0,feeCents:30,taxBasisPoints:800},allowPremium:false};
 const owners={a:{id:'owner-a',project:'project-a',pm:'pm-a'},b:{id:'owner-b',project:'project-b',pm:'pm-b'}};
 for(const o of Object.values(owners)){
@@ -40,7 +40,7 @@ const fundingOf=o=>({coverage:null,paymentMethod:{kind:'payment-method',id:owner
 const actorOf=o=>({kind:'owner',ownerId:owners[o].id});
 const projectOf=(o,revision=1)=>({projectId:owners[o].project,ownerId:owners[o].id,revision});
 let seq=0;const id=p=>`${p}-${String(++seq).padStart(4,'0')}`;
-const extra=Object.fromEntries(['p1','p2','p3','p4'].map(n=>[`synthetic-${n}.com`,{registration:1500,renewal:1500}]));
+const extra=Object.fromEntries(['p1','p2','p3','p4','p5','p6','p7','p8','p9','p10','p11','p12','p13','p14'].map(n=>[`synthetic-${n}.com`,{registration:1500,renewal:1500}]));
 function registrar(clock=()=>T0){
  return m.createSyntheticRegistrar({clock,prices:{...extra,[NAME]:{registration:1050,renewal:1150},[CAFE]:{registration:2400,renewal:2400},[SHOP]:{registration:1500,renewal:1500},[PREMIUM]:{registration:45000,renewal:45000,premium:true}}});
 }
@@ -55,7 +55,7 @@ async function reserved(reg,o='a',hostname=NAME,db=A){
  const prep=await prepare(reg,o,hostname),step=await consent(db,reg,prep,o);
  const order=await m.reserve(db,owners[o].id,step.order.orderId,T0+2);assert.equal(order.state,'reserved');return {prep,orderId:order.orderId};
 }
-const dispatch=(db,reg,orderId,o='a',now=T0+3)=>m.dispatch({db,ownerId:owners[o].id,orderId,owner:fundingOf(o),registrar:reg,policy,now});
+const dispatch=(db,reg,orderId,o='a',now=T0+3)=>m.dispatch({db,ownerId:owners[o].id,orderId,owner:fundingOf(o),project:projectOf(o),registrar:reg,policy,now});
 const state=async orderId=>(await one('SELECT state FROM domain_orders WHERE order_id=?',orderId)).state;
 const hold=async orderId=>{const r=await one('SELECT state,amount_cents,source_id FROM domain_funding_holds WHERE order_id=?',orderId);return r&&{...r};};
 
@@ -82,12 +82,18 @@ try{
   await refuse(insertQuote({...q,quoteId:id('quote'),autoRenew:true}),/domain_quote_scope/);
   await refuse(insertQuote({...q,quoteId:id('quote'),funding:{...q.funding,benefitCents:100}}),/domain_quote_scope/);
   await refuse(insertQuote({...q,quoteId:id('quote'),funding:{...q.funding,customerChargeCents:1}}),/domain_quote_scope/);
-  await refuse(insertQuote({...q,quoteId:id('quote'),expiresAt:q.quotedAt+MINUTE*60}),/CHECK|domain_quote/);
-  const review=(over)=>run('INSERT INTO domain_reviews(review_id,quote_id,quote_digest,owner_user_id,project_id,project_revision,hostname,funding_source_id,consent_text_digest,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
-   over.reviewId??id('review'),q.quoteId,over.digest??r.quoteDigest,over.owner??r.ownerId,r.projectId,1,r.hostname,over.source??r.fundingSourceId,r.consentTextDigest,T0,over.expiresAt??T0+MINUTE);
-  await refuse(review({digest:'0'.repeat(64)}),/domain_review_scope|UNIQUE/);
-  await refuse(review({owner:owners.b.id}),/domain_review_scope|UNIQUE/);
-  await refuse(review({source:'pm-other'}),/domain_review_scope|UNIQUE/);
+  await refuse(insertQuote({...q,quoteId:id('quote'),expiresAt:q.quotedAt+MINUTE*60}),/CHECK constraint failed: typeof\(expires_at\)|domain_quote_scope/);
+  // Each variant gets its own quote, so the review trigger (not the UNIQUE quote key) is what refuses it.
+  const review=async(over)=>{const quote={...q,quoteId:id('quote')};await insertQuote(quote);
+   return run('INSERT INTO domain_reviews(review_id,quote_id,quote_digest,owner_user_id,project_id,project_revision,hostname,funding_source_id,consent_text_digest,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+    id('review'),quote.quoteId,over.digest??r.quoteDigest,over.owner??r.ownerId,r.projectId,1,over.host??r.hostname,over.source??r.fundingSourceId,r.consentTextDigest,over.createdAt??T0,over.expiresAt??T0+MINUTE);};
+  await review({});
+  await refuse(review({digest:'0'.repeat(64)}),/domain_review_scope/);
+  await refuse(review({owner:owners.b.id}),/domain_review_scope/);
+  await refuse(review({source:'pm-other'}),/domain_review_scope/);
+  await refuse(review({host:CAFE}),/domain_review_scope/);
+  await refuse(review({createdAt:q.expiresAt,expiresAt:q.expiresAt+MINUTE}),/domain_review_scope/);
+  await refuse(review({expiresAt:q.expiresAt+1}),/domain_review_scope|CHECK/);
  });
 
  await check('concurrent identical consents make one order; the loser replays it; a second review of the name is refused',async()=>{
@@ -124,7 +130,7 @@ try{
   const raw=(over={})=>{const v={order:id('order'),key:'a'.repeat(64),review:prep.review.reviewId,quote:prep.quote.quoteId,digest:prep.review.quoteDigest,owner:owners.a.id,project:owners.a.project,host:SHOP,at:T0+1,state:'consented',history:'["quoted","consented"]',...over};
    return run('INSERT INTO domain_orders(order_id,idempotency_key,review_id,quote_id,quote_digest,owner_user_id,project_id,hostname,state,history_json,consented_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',v.order,v.key,v.review,v.quote,v.digest,v.owner,v.project,v.host,v.state,v.history,v.at,v.at);};
   await refuse(raw({owner:owners.b.id}),/domain_order_scope/);await refuse(raw({host:CAFE}),/domain_order_scope/);await refuse(raw({digest:'1'.repeat(64)}),/domain_order_scope/);
-  await refuse(raw({at:prep.review.expiresAt}),/domain_order_scope/);await refuse(raw({state:'reserved'}),/domain_order_state|CHECK/);await refuse(raw({history:'["quoted","consented","registered"]'}),/domain_order_state/);
+  await refuse(raw({at:prep.review.expiresAt}),/domain_order_scope/);await refuse(raw({state:'reserved'}),/domain_order_state/);await refuse(raw({history:'["quoted","consented","registered"]'}),/domain_order_state/);
   assert.equal(await count('SELECT count(*) FROM domain_orders WHERE hostname=?',SHOP),0);
  });
 
@@ -142,7 +148,7 @@ try{
   await refuse(set("hostname='other.com',version=version+1"),/domain_order_identity/);
   await refuse(run("UPDATE domain_funding_holds SET state='captured',settled_at=5 WHERE order_id=?",step.order.orderId),/domain_hold_settle/);
   await refuse(run("UPDATE domain_funding_holds SET state='released',settled_at=5 WHERE order_id=?",step.order.orderId),/domain_hold_settle/);
-  await refuse(run("INSERT INTO domain_funding_holds(order_id,source_id,amount_cents,state,placed_at) VALUES(?,?,1,'held',5)",id('order'),'pm-a'),/FOREIGN KEY|domain_hold_admit/);
+  await refuse(run("INSERT INTO domain_funding_holds(order_id,source_id,amount_cents,state,placed_at) VALUES(?,?,1,'held',5)",id('order'),'pm-a'),/domain_hold_admit/);
   await refuse(run('DELETE FROM domain_orders WHERE order_id=?',step.order.orderId),/domain_order_unresolved/);
   const cancelled=await m.cancel(A,actorOf('a'),step.order.orderId,T0+3);assert.equal(cancelled.state,'cancelled');
   assert.equal((await hold(step.order.orderId)).state,'released','cancel releases the hold in the same statement');
@@ -176,7 +182,7 @@ try{
   assert.equal((await hold(orderId)).state,'held');
   await refuse(run('DELETE FROM projects WHERE id=?',owners.b.project),/domain_order_unresolved/);await refuse(run('DELETE FROM users WHERE id=?',owners.b.id),/domain_order_unresolved/);
   await refuse(dispatch(A,reg,orderId,'b'),/NO_REDISPATCH/);assert.equal(reg.calls.register,1);
-  const done=await m.reconcileUnknown(A,reg,T0+10);assert.equal(done.moved,1);
+  const done=await m.reconcileUnknown(A,reg,T0+7*HOUR);assert.equal(done.moved,1);
   assert.equal(await state(orderId),'registered');assert.equal((await hold(orderId)).state,'captured');assert.equal(reg.calls.register,1,'reconciliation is read-only');
  });
 
@@ -185,7 +191,7 @@ try{
   const r=await dispatch(A,reg,orderId);assert.equal(r.order.state,'failed');assert.equal((await hold(orderId)).state,'released');assert.equal(await count('SELECT count(*) FROM domain_registrations WHERE hostname=?',SHOP),0);
   const again=await reserved(reg,'a',SHOP);reg.next('pending');
   assert.equal((await dispatch(A,reg,again.orderId)).order.state,'unknown-outcome');
-  reg.finishPending(SHOP,false);assert.equal((await m.reconcileUnknown(A,reg,T0+10)).moved,1);assert.equal(await state(again.orderId),'failed');assert.equal((await hold(again.orderId)).state,'released');
+  reg.finishPending(SHOP,false);assert.equal((await m.reconcileUnknown(A,reg,T0+7*HOUR)).moved,1);assert.equal(await state(again.orderId),'failed');assert.equal((await hold(again.orderId)).state,'released');
  });
 
  await check('a worker that dies after the claim is swept to unknown-outcome once; no redispatch follows',async()=>{
@@ -199,7 +205,7 @@ try{
   assert.equal(swept[0].moved+swept[1].moved,1,'exactly one sweep moves it');assert.equal(await state(orderId),'unknown-outcome');
   assert.equal((await hold(orderId)).state,'held');
   // Three read-only lookups that find nothing end in unresolved, which still holds the funds and blocks purge.
-  const quiet=registrar();for(let i=0;i<3;i++)await m.reconcileUnknown(A,quiet,T0+MINUTE*5+i);
+  const quiet=registrar();for(let i=0;i<3;i++)await m.reconcileUnknown(A,quiet,T0+(8+7*i)*HOUR);
   assert.equal(await state(orderId),'unresolved');assert.equal((await hold(orderId)).state,'held');assert.equal(quiet.calls.register,0);
   await refuse(run('DELETE FROM users WHERE id=?',owners.a.id),/domain_order_unresolved|domain_registration_active/);
   // Only authenticated evidence ends it; a duplicate, a stale attempt and an unauthenticated event do nothing more.
@@ -252,17 +258,99 @@ try{
   await m.cancel(A,actorOf('a'),usedStep.order.orderId,T0+302);
  });
 
+ await check('hostnames are one registrable label pair everywhere: a trailing dot, an empty label or a bad edge never reaches a table',async()=>{
+  const reg=registrar(),prep=await prepare(reg,'a','synthetic-p5.com');
+  for(const bad of ['example.com.','.example.com','a..com','-a.com','a-.com','a.-com','a.b.com','a.c0m','A.com'])
+   await refuse(m.saveReview(A,{...prep.quote,quoteId:id('quote'),hostname:bad},{...prep.review,hostname:bad},T0),/INVALID_HOSTNAME/);
+  for(const bad of ['example.com.','.example.com','a..com','-a.com','a-.com','a.-com','a.b.com','a.c0m'])
+   {const quoteId=id('quote');await refuse(run('INSERT INTO domain_quotes(quote_id,owner_user_id,project_id,hostname,quote_json,quote_digest,quoted_at,expires_at) VALUES(?,?,?,?,?,?,?,?)',quoteId,owners.a.id,owners.a.project,bad,JSON.stringify({...prep.quote,quoteId,hostname:bad}),prep.review.quoteDigest,prep.quote.quotedAt,prep.quote.expiresAt),/CHECK constraint failed/);}
+ });
+
+ await check('a missing or malformed registrar reference is never proof: reads end unresolved with the hold kept; a named foreign order is proof',async()=>{
+  const reg=registrar(),{orderId}=await reserved(reg,'a','synthetic-p5.com');reg.next('timeout-before');
+  await dispatch(A,reg,orderId);reg.takeBy('synthetic-p5.com',null);
+  for(let i=0;i<3;i++)await m.reconcileUnknown(A,reg,T0+(8+7*i)*HOUR);
+  assert.equal(await state(orderId),'unresolved');assert.equal((await hold(orderId)).state,'held','a null reference releases nothing');
+  const mal=await reserved(reg,'a','synthetic-p6.com');reg.next('timeout-before');await dispatch(A,reg,mal.orderId);
+  const lookup=reg.lookup;reg.lookup=async()=>({status:'registered',orderRef:mal.orderId,expiresAt:'soon',renewal:{currency:'USD',wholesaleCents:1}});
+  for(let i=0;i<3;i++)await m.reconcileUnknown(A,reg,T0+(8+7*i)*HOUR);reg.lookup=lookup;
+  assert.equal(await state(mal.orderId),'unresolved');assert.equal((await hold(mal.orderId)).state,'held','a malformed answer for our own order releases nothing');
+  const foreign=await reserved(reg,'a','synthetic-p7.com');reg.next('timeout-before');await dispatch(A,reg,foreign.orderId);reg.takeBy('synthetic-p7.com','someone-elses-order');
+  await m.reconcileUnknown(A,reg,T0+8*HOUR);assert.equal(await state(foreign.orderId),'failed');assert.equal((await hold(foreign.orderId)).state,'released');
+ });
+
+ await check('reconciliation reads are spaced, one thrown lookup does not stop the batch, and a slow worker cannot hand a capture to its caller',async()=>{
+  const reg=registrar(),a=await reserved(reg,'a','synthetic-p8.com'),b=await reserved(reg,'a','synthetic-p9.com');
+  reg.next('timeout-after');await dispatch(A,reg,a.orderId);reg.next('timeout-after');await dispatch(A,reg,b.orderId);
+  assert.equal((await m.reconcileUnknown(A,reg,T0+HOUR)).moved,0,'inside the spacing');
+  const lookup=reg.lookup;let first=true;reg.lookup=async n=>{if(first){first=false;throw Error('lookup down');}return lookup.call(reg,n);};
+  assert.equal((await m.reconcileUnknown(A,reg,T0+7*HOUR)).moved,1,'the second order is still read');reg.lookup=lookup;
+  assert.equal((await m.reconcileUnknown(A,reg,T0+14*HOUR)).moved,1);
+  // A worker whose register call returns after the sweep moved the order carries no capture and no registration.
+  const slow=await reserved(reg,'b','synthetic-p10.com');let release;const register=reg.register;
+  reg.register=(req)=>new Promise(resolve=>{release=()=>resolve(register.call(reg,req));});
+  const pending=dispatch(A,reg,slow.orderId,'b');
+  for(let i=0;i<1000&&await state(slow.orderId)==='reserved';i++)await new Promise(r=>setTimeout(r,10));
+  assert.equal((await m.sweepLeases(B,T0+3+MINUTE)).moved,1);release();reg.register=register;
+  const late=await pending;assert.deepEqual([late.hold,late.registration],[null,null]);assert.equal(late.order.state,'unknown-outcome');
+ });
+
+ await check('stranded orders are swept: an unreserved or reserved order past its quote frees the name; a changed project cancels before the call',async()=>{
+  const reg=registrar(),p=await prepare(reg,'a','synthetic-p11.com'),c=await consent(A,reg,p),r=await reserved(reg,'a','synthetic-p12.com');
+  assert.equal((await m.sweepStranded(A,p.quote.expiresAt-1)).moved,0);
+  assert.equal((await m.sweepStranded(A,p.quote.expiresAt+1)).moved>=2,true);
+  assert.equal(await state(c.order.orderId),'expired');assert.equal(await state(r.orderId),'expired');assert.equal((await hold(r.orderId)).state,'released');
+  assert.equal((await consent(A,reg,await prepare(reg,'a','synthetic-p11.com',p.quote.expiresAt+5),'a',p.quote.expiresAt+6)).order.state,'consented','the name is free again');
+  const fresh=registrar(),moved=await reserved(fresh,'b','synthetic-p3.com');
+  const r2=await m.dispatch({db:A,ownerId:owners.b.id,orderId:moved.orderId,owner:fundingOf('b'),project:projectOf('b',2),registrar:fresh,policy,now:T0+3});
+  assert.equal(r2.order.state,'cancelled');assert.equal(fresh.calls.register,0);assert.equal((await hold(moved.orderId)).state,'released');
+ });
+
+ await check('forged writes: a registration without its registered order, a hold deleted or replaced, and a claim after the quote expired are refused; a bought name can be bought again once released; contacts are erased',async()=>{
+  const reg=registrar(),{orderId}=await reserved(reg,'a','synthetic-p14.com');
+  await refuse(run("INSERT INTO domain_registrations(hostname,order_id,owner_user_id,project_id,created_at) VALUES('forged-name.com',?,?,?,?)",orderId,owners.a.id,owners.a.project,T0),/domain_registration_admit/);
+  await refuse(run('DELETE FROM domain_funding_holds WHERE order_id=?',orderId),/domain_hold_open/);
+  await refuse(run('INSERT INTO domain_funding_holds(order_id,source_id,amount_cents,state,placed_at) VALUES(?,?,1,?,5)',id('order'),'pm-a','held'),/domain_hold_admit/);
+  await refuse(run("UPDATE domain_orders SET state='dispatching',attempts=1,attempt_id=?,attempt_started_at=?,version=version+1,updated_at=? WHERE order_id=?",orderId+':a1',T0+MINUTE*20,T0+MINUTE*20,orderId),/domain_order_expired/);
+  await dispatch(A,reg,orderId);assert.equal(await state(orderId),'registered');
+  await refuse(run("INSERT INTO domain_registrations(hostname,order_id,owner_user_id,project_id,created_at) VALUES('synthetic-p14.com',?,?,?,?)",orderId,owners.a.id,owners.a.project,T0),/domain_registration_admit|UNIQUE constraint failed: domain_registrations.order_id/);
+  // Released (transferred out): the name can be bought and registered again, and the old order's contact is gone.
+  await run("UPDATE domain_registrations SET state='transferred-out' WHERE order_id=?",orderId);
+  assert.equal((await one('SELECT released FROM domain_orders WHERE order_id=?',orderId)).released,1);
+  const again=registrar(),second=await prepare(again,'b','synthetic-p14.com',T0+DAY);
+  await m.saveRegistrantContact(A,actorOf('b'),second.review.reviewId,{name:'Synthetic Owner',street:'1 Test Street',city:'Testville',country:'US',phone:'+1.5550100',email:'owner@example.test'},T0+DAY+1);
+  const step=await consent(A,again,second,'b',T0+DAY+2);await m.reserve(A,owners.b.id,step.order.orderId,T0+DAY+3);
+  assert.equal(await count('SELECT count(*) FROM domain_registrant_contacts WHERE review_id=?',second.review.reviewId),1);
+  await m.dispatch({db:A,ownerId:owners.b.id,orderId:step.order.orderId,owner:fundingOf('b'),project:projectOf('b'),registrar:again,policy,now:T0+DAY+4});
+  assert.equal(await state(step.order.orderId),'registered');assert.equal((await one('SELECT owner_user_id FROM domain_registrations WHERE hostname=?','synthetic-p14.com')).owner_user_id,owners.b.id);
+ });
+
+ await check('two different registrar events racing for one order apply once and leave one receipt (the receipt is written only when the change won)',async()=>{
+  const reg=registrar(),{orderId}=await reserved(reg,'a','synthetic-p13.com');reg.next('timeout-before');await dispatch(A,reg,orderId);
+  const at=`${orderId}:a1`;
+  const results=await Promise.all([m.receiveRegistrarEvent(A,{eventId:'race-1',orderId,attemptId:at,type:'registered',authenticated:true,expiresAt:T0+365*86400000},T0+20),m.receiveRegistrarEvent(B,{eventId:'race-2',orderId,attemptId:at,type:'failed',authenticated:true},T0+20)]);
+  assert.equal(results.filter(r=>r.applied).length,1);
+  assert.equal(await count('SELECT count(*) FROM domain_registrar_events WHERE order_id=? AND applied=1',orderId),1);
+  assert.equal(await count('SELECT count(*) FROM domain_registrar_events WHERE order_id=?',orderId),1,'the loser leaves no receipt');
+ });
  await check('an active registration blocks project and account purge until it is transferred out; a settled order does not',async()=>{
   const reg=registrar(),{orderId}=await reserved(reg,'a',P4);await dispatch(A,reg,orderId);assert.equal(await state(orderId),'registered');
   await refuse(run('DELETE FROM projects WHERE id=?',owners.a.project),/domain_registration_active/);await refuse(run('DELETE FROM users WHERE id=?',owners.a.id),/domain_registration_active/);
-  await refuse(run("UPDATE domain_registrations SET auto_renew=1 WHERE order_id=?",orderId),/CHECK|domain_registration_renewal/);
+  await refuse(run("UPDATE domain_registrations SET auto_renew=1 WHERE order_id=?",orderId),/domain_registration_renewal/);
   assert.equal(await count('SELECT count(*) FROM domain_orders WHERE order_id=?',orderId),1);
+  await refuse(run("UPDATE domain_registrations SET hostname='renamed-name.com' WHERE order_id=?",orderId),/domain_registration_identity/);
   await run("UPDATE domain_registrations SET state='transferred-out' WHERE order_id=?",orderId);
   await refuse(run("UPDATE domain_registrations SET state='active' WHERE order_id=?",orderId),/domain_registration_final/);
   for(const r of await all("SELECT order_id FROM domain_registrations WHERE owner_user_id=? AND state='active'",owners.a.id))await run("UPDATE domain_registrations SET state='transferred-out' WHERE order_id=?",r.order_id);
+  // Earlier cases left open orders for this tenant; settle each the way an operator would (cancel before the call, authenticated evidence after).
+  for(const o of await all("SELECT order_id,state FROM domain_orders WHERE owner_user_id=? AND state IN ('reserved','dispatching','unknown-outcome','unresolved')",owners.a.id)){
+   if(o.state==='reserved')await m.cancel(A,actorOf('a'),o.order_id,T0+9);
+   else await m.receiveRegistrarEvent(A,{eventId:'settle-'+o.order_id,orderId:o.order_id,attemptId:o.order_id+':a1',type:'failed',authenticated:true},T0+9);
+  }
   await run('DELETE FROM users WHERE id=?',owners.a.id);
   assert.equal(await count('SELECT count(*) FROM domain_orders WHERE owner_user_id=?',owners.a.id),0);assert.equal(await count('SELECT count(*) FROM domain_quotes WHERE owner_user_id=?',owners.a.id),0);
  });
+
 }catch(error){throw error;}
 finally{for(const f of files)f.close();if(directory)await rm(directory,{recursive:true,force:true});}
 console.log(`Domain purchase store passed: ${cases} cases on ${d1?'actual local D1':'SQLite'}.`);
