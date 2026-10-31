@@ -32,7 +32,7 @@ export function cloudflareEmailOutcome(cause:unknown):ContactProviderOutcome{
 export function contactEmailMessage(notice:ContactNotice){
  if(notice.kind==='verification'){
   if(!notice.verificationCode||!/^[A-Z0-9]{8}$/.test(notice.verificationCode))throw Error('Invalid verification notice');
-  return renderCatalogNotification('owner.destination-verification@1',{code:notice.verificationCode});
+  return renderCatalogNotification(notice.template==='visitor.address-verification@1'?notice.template:'owner.destination-verification@1',{code:notice.verificationCode});
  }
  if(notice.kind==='configured'&&notice.configured)return renderCatalogNotification(notice.template,notice.configured.variables,notice.configured.fields);
  if(notice.kind==='account'&&notice.template==='account.email-confirm@1')return renderCatalogNotification(notice.template,{confirmationCode:notice.confirmationToken});

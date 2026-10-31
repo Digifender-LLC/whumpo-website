@@ -223,6 +223,8 @@ export async function measure({allowedArguments=[]}={}){
    ['app.appointment.get','Hosted appointment page (no form: the closed page)','GET',app+'/forms/appointment',{}],
    ['app.appointment.script','Hosted appointment script','GET',app+'/appointment.js',{}],
    ['app.module.post','Visitor app module call (unauthenticated)','POST',app+'/modules',{headers:{'content-type':'application/json',origin:app},body:'{}'}],
+   ['app.notifications.get','Visitor notification settings (unauthenticated)','GET',app+'/account/notifications',{}],
+   ['app.notifications.post','Visitor notification address (unauthenticated)','POST',app+'/account/notifications/address',{headers:{'content-type':'application/json',origin:app,'cf-connecting-ip':'192.0.2.32'},body:'{"address":"visitor@example.com"}'}],
    ['app.module.access.me','Visitor app module call (signed-in visitor, access.me)','POST',liveApp+'/modules',{headers:{'content-type':'application/json',origin:liveApp,cookie:served.cookie,'cf-connecting-ip':'192.0.2.31'},body:JSON.stringify(served.me)}],
    ['contact.form.get','Contact form','GET',`https://whumpo.com/contact/${project}`,{}],
    ['contact.form.post','Contact submission','POST',`https://whumpo.com/contact/${project}`,{contact:true}],

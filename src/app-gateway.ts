@@ -2,6 +2,7 @@ import {customerCeilingFromEnv} from './notification-configurations';
 import {visitorProject,visitorOrigin} from './hosts';
 import {deleteAppAccount,exportAppAccount,prepareAppDeletion,readAppDeletion} from './app-lifecycle';
 import {appPasskeyOptions,appPasskeyVerify,recoverAppVisitor} from './app-auth';
+import {appNotifications,notificationSteps,type NotificationStep} from './app-notifications';
 import {readAppData,readAppReceipt,revokeAppSession,transitionAppData} from './app-data';
 import {BackendError} from './backend-versions';
 import {liveAppPage} from './app-pages';
@@ -88,12 +89,25 @@ export async function applicationGateway(request:Request,env:AppEnv,fetcher:type
   }
   const deletionStatus=path.match(new RegExp(`^account/deletions/(${uuid})/(0|[1-9][0-9]{0,15})$`));
   if(method==='GET'&&deletionStatus)return json(await readAppDeletion(env.DB,session,project,deletionStatus[1],Number(deletionStatus[2])));
+  // WH-214: the visitor's own notification address, its verification and the staff opt-in. Consent withdrawal (removing the address, opting
+  // out) and reading the state stay available during a serving stop; setting, verifying and opting in do not.
+  const notification=path.match(/^account\/notifications(?:\/(.+))?$/);
+  const step=(notification?.[1]??'') as NotificationStep;
+  const notices=notification&&(notificationSteps as readonly string[]).includes(step)&&(step===''?method==='GET':method==='POST');
   // Operator serving stop: only a visitor's own sign-in, recovery, passkey replacement, sign-out, saved-data and
   // request-receipt reads, export and deletion stay available, so existing visitors keep access to their stored data.
   // New signups, modules, configuration and execution are refused with the same response as an application without a
   // live page; the visitor page treats that configuration answer as its account-only view.
-  if(await servingStopped(env.DB,project)&&!(method==='GET'&&(path==='export'||path==='data'||new RegExp(`^receipts/${uuid}$`).test(path)))&&!(method==='POST'&&(path==='account/deletion-review'||path==='auth/recover'||path==='auth/logout'||/^auth\/(login|add)\/(options|verify)$/.test(path))))
+  const stopped=await servingStopped(env.DB,project);
+  if(stopped&&!(method==='GET'&&(path==='export'||path==='data'||new RegExp(`^receipts/${uuid}$`).test(path)))&&!(notices&&['','address/remove','staff/opt-out'].includes(step))&&!(method==='POST'&&(path==='account/deletion-review'||path==='auth/recover'||path==='auth/logout'||/^auth\/(login|add)\/(options|verify)$/.test(path))))
    return json({error:'Application page unavailable'},404);
+  if(notification){
+   if(!notices)return json({error:'Not found'},404);
+   // Starting and completing verification are the guessable and billable steps, and `address` answers differently for an address the owner suppressed or owns, which
+   // could be probed: the sign-in limiter bounds all three per connection on top of the per-visitor caps.
+   if((step.startsWith('verify/')||step==='address')&&!(await env.AUTH_LIMITER.limit({key:'app-notify:'+ip})).success)return json({error:'Too many attempts. Try again in a minute.'},429);
+   return json(await appNotifications(env.DB,session,project,step,step===''?{}:await body(request),{ceilingCents:customerCeilingFromEnv(env as {NOTIFICATION_CUSTOMER_CEILING_CENTS?:string}),stopped}));
+  }
   // WH-126 shared module requests (whumpo-modules v1), same-origin POST only. The principal is derived solely from this
   // project's visitor session cookie (never a workspace cookie); module serving checks the instance's own activation.
   // WH-128 module uploads: one cleaned-JPEG body (at most 1 MiB, streamed with a hard bound) with the whumpo-modules v1

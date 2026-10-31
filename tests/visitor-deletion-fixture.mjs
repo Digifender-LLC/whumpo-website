@@ -2,8 +2,8 @@
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
 import {currentSiteFixtureHandlers,enableFixtureVisitorAccess} from './current-site-fixture.mjs';
-export async function deletionFixture(){
- const store=await databaseFixture({d1:true});
+export async function deletionFixture({d1=true}={}){
+ const store=await databaseFixture({d1});
  try{
   const db=store.db,m=await currentSiteFixtureHandlers(),modules={...m.appLifecycle,...m.appData,...m.appPages,...m.backend,...m.appActivation,...m.appGateway,hashToken:m.hashToken};
   const id=()=>crypto.randomUUID(),service={fetch:async(_url,init)=>Response.json({ok:true,value:{state:JSON.parse(init.body).input.input,result:'saved'}})};

@@ -656,6 +656,7 @@
   async function enter() {
     await loadConfig();
     await refresh();
+    await loadNotices();
     $("#signin").hidden = true;
     $("#workspace").hidden = false;
     $("#application-form").hidden = accountOnly;
@@ -725,6 +726,8 @@
   });
   $("#logout").onclick = () => act(async () => {
     await api("auth/logout", {});
+    $("#notify-address").reset();
+    $("#notify-code-form").reset();
     clearDeletionReview();
     $("#workspace").hidden = true;
     $("#signin").hidden = false;
@@ -733,6 +736,80 @@
     HTMLFormElement.prototype.reset.call($("#application-form"));
     status("You\u2019re signed out.");
   });
+  var notice;
+  var asked = false;
+  function noticeError(id, text) {
+    const error = $("#" + id + "-error"), input = $("#" + id);
+    error.textContent = text || "";
+    if (input?.tagName === "INPUT") input.setAttribute("aria-invalid", text ? "true" : "false");
+  }
+  function renderNotices(s, requested) {
+    if (requested) asked = true;
+    if (!s.address || s.verified) asked = false;
+    notice = s;
+    const has = !!s.address, waiting = has && !s.verified;
+    $("#notify-summary").textContent = !has ? "No address saved. Add one if you want this application to be able to email you." : s.verified ? `Your address ${s.address} is verified.` : `Your address ${s.address} is saved but not verified.`;
+    $("#notify-remove").hidden = !has;
+    const delivery = $("#notify-delivery");
+    delivery.hidden = !(waiting || s.stopped);
+    delivery.textContent = !(waiting || s.stopped) ? "" : s.stopped ? "This application is paused, so notice settings cannot change right now. You can still remove your address." : !s.deliveryAvailable ? "Whumpo cannot send verification codes yet, so this address cannot be verified for now and no email will be sent to it. It stays saved; come back later." : asked || s.codePending ? `A code was requested. If it arrives, enter it below.${s.codePending ? " Asking for another replaces the last one." : ""}` : "We can request a code for this address.";
+    const open = waiting && s.deliveryAvailable && !s.stopped;
+    $("#notify-send").hidden = !open;
+    $("#notify-send").textContent = asked || s.codePending ? "Send a new code" : "Send me a code";
+    $("#notify-code-form").hidden = !open || !(asked || s.codePending);
+    for (const id of ["notify-email-label", "notify-email", "notify-save"]) $("#" + id).hidden = !!s.stopped;
+    const staff = $("#notify-staff"), toggle = $("#notify-staff-toggle");
+    staff.hidden = !s.staffRole;
+    toggle.hidden = !s.staffRole || !s.verified || !!s.stopped && !s.staffOptIn;
+    $("#notify-staff-text").textContent = !s.verified ? "You hold the staff role. Verify an address first to receive staff notices." : s.staffOptIn ? "You receive staff notices at your verified address." : "You can receive staff notices at your verified address.";
+    toggle.textContent = s.staffOptIn ? "Stop staff notices" : "Receive staff notices";
+  }
+  async function loadNotices() {
+    try {
+      renderNotices(await api("account/notifications"));
+    } catch {
+      $("#notify-summary").textContent = "Email notice settings are not available right now.";
+    }
+  }
+  function notices(errorId, path, body, after) {
+    return act(async () => {
+      noticeError(errorId, "");
+      try {
+        renderNotices(await api("account/notifications/" + path, body), path === "verify/start");
+        if (after) after();
+      } catch (error) {
+        noticeError(errorId, error.message);
+        $("#" + errorId).focus?.();
+      }
+    });
+  }
+  $("#notify-address").onsubmit = (event) => {
+    event.preventDefault();
+    const value = $("#notify-email").value.trim();
+    if (!value) {
+      noticeError("notify-email", "Enter the email address you want notices sent to.");
+      $("#notify-email").focus();
+      return;
+    }
+    notices("notify-email", "address", { address: value }, () => {
+      $("#notify-email").value = "";
+    });
+  };
+  $("#notify-remove").onclick = () => notices("notify-email", "address/remove", {}, () => $("#notify-email").focus());
+  $("#notify-send").onclick = () => notices("notify-send", "verify/start", {});
+  $("#notify-code-form").onsubmit = (event) => {
+    event.preventDefault();
+    const value = $("#notify-code").value.trim();
+    if (!/^[A-Za-z0-9]{8}$/.test(value)) {
+      noticeError("notify-code", "Enter the 8-character code from the email.");
+      $("#notify-code").focus();
+      return;
+    }
+    notices("notify-code", "verify/complete", { code: value }, () => {
+      $("#notify-code").value = "";
+    });
+  };
+  $("#notify-staff-toggle").onclick = () => notices("notify-staff", notice.staffOptIn ? "staff/opt-out" : "staff/opt-in", {});
   $("#export-data").href = base + "/export";
   function deletionView() {
     $("#description").textContent = "Account deletion status";
