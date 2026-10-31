@@ -192,7 +192,7 @@ try{
   const reg=registrar(),{orderId}=await reserved(reg,'a',SHOP);
   reg.register=()=>new Promise(()=>{});// the worker never comes back
   dispatch(A,reg,orderId).catch(()=>{});
-  for(let i=0;i<20&&await state(orderId)==='reserved';i++)await new Promise(r=>setTimeout(r,5));
+  for(let i=0;i<1000&&await state(orderId)==="reserved";i++)await new Promise(r=>setTimeout(r,10));// wait for the claim itself (a fixed short wait raced under load)
   assert.equal(await state(orderId),'dispatching');assert.equal(await count('SELECT count(*) FROM domain_order_attempts WHERE order_id=?',orderId),1);
   assert.equal((await m.sweepLeases(A,T0+3+MINUTE-1)).moved,0,'inside the lease');
   const swept=await Promise.all([m.sweepLeases(A,T0+3+MINUTE),m.sweepLeases(B,T0+3+MINUTE)]);
