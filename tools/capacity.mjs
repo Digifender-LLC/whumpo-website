@@ -74,7 +74,7 @@ const cleanup=async()=>{try{if(server){server.closeAllConnections();await new Pr
 process.on('SIGINT',()=>cleanup().finally(()=>process.exit(130)));
 
 // ---------------------------------------------------------------- fixtures
-const limiterState={denied:{AUTH:0,API:0}};
+const limiterState={denied:{AUTH:0,API:0,SITE:0}};
 // Local stand-in for the Workers rate-limit binding: exact fixed window per key. The real
 // binding is per Cloudflare location and eventually consistent; this is NOT a model of it.
 function limiter(name,limit,period=60){
@@ -98,7 +98,7 @@ const m=await currentSiteFixtureHandlers();
 
 // Limits copied from wrangler.jsonc / wrangler.apps.jsonc (verified below against the files).
 const wranglerLimits=async(file)=>{const text=await readFile(file,'utf8');const out={};for(const mm of text.matchAll(/"name":\s*"(\w+_LIMITER)"[\s\S]*?"limit":\s*(\d+),\s*"period":\s*(\d+)/g))out[mm[1]]={limit:Number(mm[2]),period:Number(mm[3])};return out;};
-const configured={platform:await wranglerLimits('wrangler.jsonc'),apps:await wranglerLimits('wrangler.apps.jsonc')};
+const configured={platform:await wranglerLimits('wrangler.jsonc'),apps:await wranglerLimits('wrangler.apps.jsonc'),sites:await wranglerLimits('wrangler.sites.jsonc')};
 const AUTH_LIMITER=limiter('AUTH',configured.platform.AUTH_LIMITER.limit,configured.platform.AUTH_LIMITER.period),API_LIMITER=limiter('API',configured.platform.API_LIMITER.limit,configured.platform.API_LIMITER.period);
 
 const service={fetch:async(url,init)=>{
@@ -108,7 +108,8 @@ const service={fetch:async(url,init)=>{
 // Seeding calls testBackend directly, bypassing the platform's per-project lane wrapper; give them a fixture lane.
 const seedRuntime={fetch:(url,init)=>service.fetch(url,{...init,headers:{'x-whumpo-lane':'e'.repeat(64),...init?.headers}})};
 const cdb=countingDatabase(db);
-const env={...store.env,DB:cdb,ENVIRONMENT:'local',AUTH_LIMITER,API_LIMITER,BACKEND_RUNTIME:service,ASSETS:{fetch:async request=>{const p=new URL(request.url).pathname;const file=['/visitor.js','/visitor.css','/design-tokens.css'].includes(p)?p:'/index.html';return new Response(await readFile('public-app'+file),{headers:{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'}});}}};
+const SITE_LIMITER=limiter('SITE',configured.sites.SITE_LIMITER.limit,configured.sites.SITE_LIMITER.period);
+const env={...store.env,DB:cdb,ENVIRONMENT:'local',AUTH_LIMITER,API_LIMITER,SITE_LIMITER,BACKEND_RUNTIME:service,ASSETS:{fetch:async request=>{const p=new URL(request.url).pathname;const file=['/visitor.js','/visitor.css','/design-tokens.css'].includes(p)?p:'/index.html';return new Response(await readFile('public-app'+file),{headers:{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'}});}}};
 const seedEnv={...store.env,DB:db};
 
 server=createServer(async(req,res)=>{try{
@@ -117,6 +118,8 @@ server=createServer(async(req,res)=>{try{
  const pending=[],ctx={waitUntil:t=>pending.push(t),passThroughOnException(){}};
  let response;
  if(req.url.startsWith('/apps/'))response=await m.appHost.fetch(new Request('http://localhost:8787'+req.url,{method:req.method,headers:req.headers,body}),env);
+ // WH-075 F2: the same site, reached by its real <project>.whumpo.site hostname so the sites Worker applies SITE_LIMITER (local hosts skip it).
+ else if(req.url.startsWith('/site-host/')){const [,,project,...rest]=req.url.split('/');response=await m.host.fetch(new Request('https://'+project+'.whumpo.site/'+rest.join('/'),{method:req.method,headers:req.headers}),env,ctx);}
  else if(req.url.startsWith('/s/'))response=await m.host.fetch(new Request(base+req.url,{method:req.method,headers:req.headers,body}),env,ctx);
  else response=await m.worker.fetch(new Request(base+req.url,{method:req.method,headers:req.headers,body}),env,ctx);
  await Promise.all(pending);
@@ -181,6 +184,7 @@ async function timed(meta,url,init){
 const ipHeader=ip=>({'cf-connecting-ip':ip});
 const ops={
  site:(t,meta,ip=freshIp())=>timed({...meta,kind:'site',tenant:t.name},base+'/s/'+t.project+'/',{headers:ipHeader(ip)}),
+ siteHost:(t,meta,ip=freshIp())=>timed({...meta,kind:'site_host',tenant:t.name},base+'/site-host/'+t.project+'/',{headers:ipHeader(ip)}),
  photo:(t,meta,ip=freshIp())=>timed({...meta,kind:'photo',tenant:t.name},base+'/s/'+t.project+'/assets/'+t.photo+'.jpg',{headers:ipHeader(ip)}),
  contactGet:(t,meta,ip=freshIp())=>timed({...meta,kind:'contact_get',tenant:t.name},base+'/contact/'+t.project,{headers:ipHeader(ip)}),
  contactPost:(t,meta,ip=freshIp())=>timed({...meta,kind:'contact_post',tenant:t.name},base+'/contact/'+t.project,{method:'POST',headers:{...ipHeader(ip),origin:base,'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({id:id(),revision:String(t.revision),name:'Synthetic Visitor',email:'visitor@example.invalid',message:'Synthetic capacity message.'}).toString()}),
@@ -336,7 +340,8 @@ try{
   report.limiterProbe=[
    await probe('contact form GET, one IP (API_LIMITER 120/60 s)',()=>ops.contactGet(t,{phase:'P'},'203.0.113.77'),n),
    await probe('contact form GET, distinct IP each request',()=>ops.contactGet(t,{phase:'P'}),n),
-   await probe('site page GET, one IP (no limiter in site host)',()=>ops.site(t,{phase:'P'},'203.0.113.78'),n),
+   await probe(`site page GET by <project>.whumpo.site, one IP (SITE_LIMITER ${configured.sites.SITE_LIMITER.limit}/${configured.sites.SITE_LIMITER.period} s)`,()=>ops.siteHost(t,{phase:'P'},'203.0.113.78'),smoke?n:configured.sites.SITE_LIMITER.limit+50),
+   await probe('site page GET by <project>.whumpo.site, distinct IP each request',()=>ops.siteHost(t,{phase:'P'}),n),
    await probe('public backend POST, one IP (20/client/project/day inside the project quota)',(i)=>ops.backend(t,{phase:'P'},{a:i,b:1},'203.0.113.79'),smoke?3:5),
    await probe('visitor app page GET, one IP (API_LIMITER 120/60 s)',()=>ops.appPage(t,{phase:'P'},'203.0.113.80'),n),
   ];
@@ -356,6 +361,31 @@ try{
   ];
   report.phases.L={wallSeconds:round((performance.now()-start)/1000),rows,projectBackendCalls:(await db.prepare('SELECT calls FROM backend_public_usage WHERE project_id=?').bind(t.project).first())?.calls??0,clientLimits:{backend:20,contact:10,photo:400}};
   log(`Phase L (anonymous lockout) ${report.phases.L.wallSeconds}s`);
+ }
+
+ // ---- Phase I (WH-075 D41): batch flood against interactive calls. The flood goes straight to the runtime gate with
+ // fresh lanes (a worst case for the per-lane cap); interactive work is public backend calls through the real handler.
+ {
+  const t=await seedTenant('batch-victim','victim'),slow='export default async()=>{let n=0;for(let i=0;i<40;i++){n+=await Promise.resolve(i)}return n}';
+  const counter=async()=>(await db.prepare('SELECT calls FROM backend_public_usage WHERE project_id=?').bind(t.project).first())?.calls??0;
+  const floodCall=async work=>{const r=await runtime.dispatchFetch('https://runtime/execute',{method:'POST',headers:{'content-type':'application/json','x-whumpo-lane':newLane(),...(work?{'x-whumpo-class':work}:{})},body:JSON.stringify({version:1,source:slow,input:null})});const b=await r.json();return {status:r.status,ok:b.ok===true,wrong:b.ok===true&&b.value!==780,busy:b.error==='busy'};};
+  const run=async(label,work)=>{
+   const stop={now:false},flood=[],before=await counter(),start=performance.now();
+   const flooding=(async()=>{while(!stop.now)flood.push(...await Promise.all(Array.from({length:4},()=>floodCall(work))));})();
+   for(let i=0;i<bounded(30);i++)await ops.backend(t,{phase:'I-'+label,group:'victim'});
+   stop.now=true;await flooding;
+   const mine=records.filter(r=>r.phase==='I-'+label),executed=mine.filter(r=>r.status===200||r.status===422).length,busy=mine.filter(r=>r.status===503&&r.tag==='busy').length,ms=mine.map(r=>r.ms).sort((a,b)=>a-b);
+   const out={label,floodClass:work??'interactive (no class header)',wallSeconds:round((performance.now()-start)/1000),flood:{calls:flood.length,ok:flood.filter(r=>r.ok).length,busy:flood.filter(r=>r.busy).length,wrongValue:flood.filter(r=>r.wrong).length},interactive:{n:mine.length,ok:mine.filter(r=>r.status===200).length,busy,other:mine.length-executed-busy,p50:round(pct(ms,50)),p95:round(pct(ms,95)),max:round(ms[ms.length-1])},projectCounterDelta:(await counter())-before,executed};
+   if(out.flood.wrongValue)throw Error('Phase I '+label+': accepted flood work returned a wrong value');
+   if(out.projectCounterDelta!==executed)throw Error('Phase I '+label+': refused calls were charged (counter '+out.projectCounterDelta+', executed '+executed+')');
+   return out;
+  };
+  const baseline=await run('no-class',undefined),batch=await run('batch','batch');
+  if(batch.interactive.busy||batch.interactive.other)throw Error('Phase I: batch work refused or broke interactive calls '+JSON.stringify(batch.interactive));
+  const recovery=[await floodCall('batch'),await floodCall('batch'),...[1,2,3].map(()=>null)];for(let i=2;i<5;i++)recovery[i]={ok:(await ops.backend(t,{phase:'I-recovery',group:'victim'})).status===200}; // sequential: one project is one lane, so parallel calls would legitimately be busy;
+  if(!recovery.every(r=>r.ok))throw Error('Phase I: runtime did not recover after the batch flood '+JSON.stringify(recovery)+JSON.stringify(baseline)+JSON.stringify(batch));
+  report.phases.I={baseline,batch,recovery:{batchCallsOk:2,interactiveOk:3,allOk:true}};
+  log(`Phase I (batch flood vs interactive): interactive busy ${baseline.interactive.busy} without the class, ${batch.interactive.busy} with it`);
  }
  // ---- Phase D: shared daily budgets. Real traffic from filler accounts, 5 projects each.
  {

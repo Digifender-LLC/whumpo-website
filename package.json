@@ -168,6 +168,7 @@
     "test:visitor-notifications-browser": "node tests/visitor-notifications-browser.mjs",
     "test:form-attachments": "node tests/form-attachments.mjs && node tests/form-attachments.mjs --d1",
     "test:module-record-leads": "node tests/module-record-leads.mjs && node tests/module-record-leads.mjs --d1",
+    "test:module-record-conversions": "node tests/module-record-conversions.mjs && node tests/module-record-conversions.mjs --d1",
     "test:record-leads-browser": "node tests/record-leads-browser.mjs",
     "test:job-journal": "node tests/job-journal.mjs && node tests/job-journal.mjs --d1",
     "test:email-change-review": "node tests/email-change-review.mjs && node tests/email-change-review.mjs --d1",

@@ -8011,7 +8011,7 @@
     {
      "file": "src/index.ts",
      "kind": "regex",
-     "match": "/^\\/api\\/projects\\/([0-9a-f-]{36})\\/module-records\\/([0-9a-f-]{36})\\/([a-z][a-z0-9-]{0,39})$/",
+     "match": "/^\\/api\\/projects\\/([0-9a-f-]{36})\\/module-records\\/([0-9a-f-]{36})\\/([a-z][a-z0-9-]{0,39})(\\/conversions)?$/",
      "methods": [
       "GET"
      ]
@@ -13007,11 +13007,11 @@
     },
     "admission": {
      "state": "evidenced",
-     "detail": "Per-isolate gate: two concurrent executions, one per fairness lane (lane = per-project hash set by the caller; advisory across isolates, R13). The global active>=2 refusal is not deterministically tested.",
+     "detail": "Per-isolate gate: two concurrent executions, one per fairness lane (lane = per-project hash set by the caller; advisory across isolates, R13), and batch work (x-whumpo-class: batch, WH-075 D41) holds at most one. The global active>=2 refusal is not deterministically tested.",
      "enforcedAt": [
       {
        "file": "src/runtime/worker.ts",
-       "contains": "if(active>=2||lanes.has(lane))return response({ok:false,error:'busy'},503);"
+       "contains": "if(active>=2||lanes.has(lane)||(isBatch&&batch))return response({ok:false,error:'busy'},503);"
       }
      ],
      "tests": [
@@ -13019,6 +13019,11 @@
        "file": "tests/backend-runtime.mjs",
        "contains": "assert.deepEqual(r[3],{status:200,data:{ok:true,value:780}},'another lane always keeps a slot: '+JSON.stringify(r));",
        "asserts": "another lane keeps a slot"
+      },
+      {
+       "file": "tests/backend-runtime.mjs",
+       "contains": "assert.deepEqual(await request(slow,null,lane()),{status:200,data:{ok:true,value:780}},'an interactive call on another lane keeps the second slot');",
+       "asserts": "interactive keeps a slot against batch work"
       }
      ]
     },

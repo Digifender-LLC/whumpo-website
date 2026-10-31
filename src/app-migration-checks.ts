@@ -41,7 +41,7 @@ export async function advanceMigrationCheck(db:D1Database,service:Fetcher,user:s
  for(const doc of pending){
   let claimed=false;try{const result=await db.prepare("UPDATE app_migration_documents SET state='running' WHERE migration_id=? AND visitor_id=? AND state='pending'").bind(id,doc.visitor_id).run();claimed=result.meta.changes===1;}catch{return readMigrationCheck(db,user,id); /* Uncertain claim: no execution. */}
   if(!claimed)continue;
-  const result=await callBackend(await projectRuntime(service,m.project_id),code.source,{state:JSON.parse(doc.state_json)});
+  const result=await callBackend(await projectRuntime(service,m.project_id,'batch'),code.source,{state:JSON.parse(doc.state_json)});
   let encoded:string|null=null;
   if(result.ok&&result.value&&typeof result.value==='object'&&!Array.isArray(result.value)&&Object.keys(result.value).length===1&&Object.hasOwn(result.value,'state')){const value=JSON.stringify((result.value as {state:unknown}).state);if(value!==undefined&&new TextEncoder().encode(value).length<=4096)encoded=value;}
   try{await db.prepare("UPDATE app_migration_documents SET state=?,next_json=?,error=? WHERE migration_id=? AND visitor_id=? AND state='running'").bind(encoded===null?'failed':'ready',encoded,encoded===null?(result.ok?'invalid_output':result.error):null,id,doc.visitor_id).run();}catch{return readMigrationCheck(db,user,id); /* Lost write or changed roster: never rerun. */}

@@ -34,7 +34,7 @@ const business = [
   {id:'business.leads',name:'Lead stages, notes and due dates',implementation:'private-test'},
   {id:'business.reminders',name:'Follow-up reminders',implementation:'planned'},
   {id:'business.workflows',name:'Reviewed form-to-record-to-notification workflows',implementation:'planned'},
-  {id:'business.conversions',name:'Conversion summaries',implementation:'planned'}
+  {id:'business.conversions',name:'Conversion summaries',implementation:'private-test'}
 ] as const satisfies readonly FeatureDefinition[];
 const pro = [
   {id:'pro.members',name:'Workspace members and roles',implementation:'planned'},
