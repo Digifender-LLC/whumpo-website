@@ -53,7 +53,7 @@ export async function ownerUsabilityJourney({page,context,db,env,state,origin,ac
  phase('truthful unavailable billing and provider controls');
  await activate(navigation().getByRole('link',{name:'Settings',exact:true}));
  await activate(page.getByRole('link',{name:'Billing & usage',exact:true}));await page.getByRole('heading',{name:'Sandbox billing',exact:true}).waitFor();
- assert.match(await page.locator('#workspace-content').innerText(),/Subscriptions are being connected. Explore is available without a card/);
+ assert.match(await page.locator('#workspace-content').innerText(),/Checkout isn't open yet. Explore is available without a card/);
  assert.match(await page.locator('#workspace-content').innerText(),/Advanced model credit purchases are not connected/);assert.equal(await page.getByRole('button',{name:'Continue to test checkout',exact:true}).count(),0);await audit(page,'billing-unavailable');
  await activate(navigation().getByRole('link',{name:'Settings',exact:true}));await activate(page.getByRole('link',{name:'External connections',exact:true}));
  await page.getByRole('button',{name:'Authorize with GitHub',exact:true}).waitFor();

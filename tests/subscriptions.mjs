@@ -7,7 +7,7 @@ const m=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0]
 const {startSubscription,refreshSubscriptions,subscriptionStatus,stripeBillingWebhook,billingPortal,subscriptionsEnabled,getBilling,publicPlans,worker}=m;
 const fixture=await databaseFixture({d1:true}),db=fixture.db,scopes=new Map(),scope=user=>scopes.get(user);
 const prices={},priceMap=new Map();for(const p of publicPlans.filter(p=>p.monthlyCents))for(const interval of ['month','year']){const id='price_'+p.id.replaceAll('-','')+interval;prices[p.id+':'+interval]=id;priceMap.set(id,{id,livemode:false,currency:'usd',unit_amount:interval==='month'?p.monthlyCents:p.annualCents,recurring:{interval,interval_count:1}});}
-const env={STRIPE_TEST_KEY:'sk_test_synthetic',STRIPE_WEBHOOK_SECRET:'whsec_synthetic',STRIPE_SANDBOX_CATALOG:JSON.stringify({version:1,prices,portal:'bpc_synthetic'})},app='whumpo-sandbox-v1';
+const env={STRIPE_TEST_KEY:'sk_test_synthetic',STRIPE_WEBHOOK_SECRET:'whsec_synthetic',STRIPE_CHECKOUT_OPEN:'true',STRIPE_SANDBOX_CATALOG:JSON.stringify({version:1,prices,portal:'bpc_synthetic'})},app='whumpo-sandbox-v1';
 const sessions=new Map(),customers=new Map(),subs=new Map(),invoices=new Map(),keys=new Map();let writes=0;
 const transport=async(url,init)=>{
  assert.equal(init.redirect,'manual');assert.equal(init.headers.authorization,'Bearer '+env.STRIPE_TEST_KEY);assert.equal(init.headers['Stripe-Version'],'2025-02-24.acacia');
@@ -34,6 +34,8 @@ function paid(session,{paid=true,start=Math.floor(Date.now()/1000)-10,end=start+
 try{
  assert.equal(subscriptionsEnabled({}),false);assert.equal(subscriptionsEnabled({...env,STRIPE_TEST_KEY:'sk_live_synthetic'}),false);
  const owner=await account(),other=await account(),id=crypto.randomUUID();
+ // Q-007: anything but exactly 'true' keeps checkout closed, with zero transport calls.
+ for(const open of [undefined,'','TRUE','1','true ','yes']){const closed={...env,STRIPE_CHECKOUT_OPEN:open};let hits=0;const probe=async()=>{hits++;throw Error();};assert.equal(subscriptionsEnabled(closed),false);await assert.rejects(startSubscription(scope(owner),closed,owner,{id,plan:'personal',interval:'month'},probe),{status:503});await assert.rejects(billingPortal(scope(owner),closed,owner,probe),{status:503});await assert.rejects(refreshSubscriptions(scope(owner),closed,owner,probe),{status:503});assert.equal(hits,0);}
  await assert.rejects(startSubscription(scope(owner),env,owner,{id,plan:'free',interval:'month'},transport),{status:400});assert.equal(writes,0);
  await refreshSubscriptions(scope(owner),env,owner,transport);assert.equal((await db.prepare('SELECT COUNT(*) n FROM stripe_customers').first()).n,0);
  const attempts=await Promise.allSettled([startSubscription(scope(owner),env,owner,{id,plan:'personal',interval:'month'},transport),startSubscription(scope(owner),env,owner,{id,plan:'personal',interval:'month'},transport)]);assert(attempts.some(x=>x.status==='fulfilled'));assert.equal(sessions.size,1);for(const a of attempts.filter(x=>x.status==='rejected'))assert.equal(a.reason.status,409);
