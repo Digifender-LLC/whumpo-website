@@ -354,14 +354,21 @@ try{
   assert.equal((await complete(h,cookie)).status,200);assert.equal((await preview(h.token)).status,409,'a bound handoff reveals nothing');
  });
 
- await check('the 2000 row cap: a full table refuses a new handoff with unavailable and writes nothing',async()=>{
+ await check('the handoff table: anonymous starts get a 1500 row share, a flood cannot block a signed-in handoff, and the 2000 row table cap stays a retryable 503',async()=>{
   await run('DELETE FROM identity_handoffs');
-  await run(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<2000)
-   INSERT INTO identity_handoffs(id,browser_token_hash,purpose,state,code_challenge,redirect_uri,created_at,expires_at)
-   SELECT lower(hex(randomblob(18))),lower(hex(randomblob(32))),'signin',?,?,'https://whumpo.com/app/return',unixepoch(),unixepoch()+300 FROM n`,'s'.repeat(24),'c'.repeat(43));
-  assert.equal(await count('identity_handoffs'),2000);
+  const h=await start(),cookie=await webSignIn(a),source=await sourceOf(cookie),n=(rows,extra)=>`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<${rows}) ${extra}`;
+  await run(n(1499,`INSERT INTO identity_handoffs(id,browser_token_hash,purpose,state,code_challenge,redirect_uri,created_at,expires_at)
+   SELECT lower(hex(randomblob(18))),lower(hex(randomblob(32))),'signin',?,?,'https://whumpo.com/app/return',unixepoch(),unixepoch()+300 FROM n`),'s'.repeat(24),'c'.repeat(43));
+  assert.equal(await count('identity_handoffs'),1500);
   const body={version:1,purpose:'signin',state:randomBytes(24).toString('base64url'),codeChallenge:sha256('v'.repeat(43)),codeChallengeMethod:'S256',redirectUri:'https://whumpo.com/app/return'};
-  const full=await mobile('/session/handoff/start',{body});assert.equal(full.status,503,full.text);assert.equal(full.data.error.code,'unavailable');assert.equal(await count('identity_handoffs'),2000);
+  const full=await mobile('/session/handoff/start',{body});assert.equal(full.status,503,full.text);assert.equal(full.data.error.code,'unavailable','a full anonymous share is retryable overload, never identity_changed');assert.equal(await count('identity_handoffs'),1500);
+  // The flood did not take the table: the pending sign-in completes, and a bound row still fits in the reserved rows.
+  const done=await complete(h,cookie);assert.equal(done.status,200,done.text);
+  assert.ok(await bound({id:crypto.randomUUID(),state:'s'.repeat(24),verifier:'v'.repeat(43)},a,source.id));assert.equal(await count('identity_handoffs'),1501);
+  await run(n(499,`INSERT INTO identity_handoffs(id,browser_token_hash,purpose,state,code_challenge,redirect_uri,created_at,expires_at,account_id,source_session_id,auth_epoch,code_hash,code_issued_at,code_expires_at)
+   SELECT lower(hex(randomblob(18))),lower(hex(randomblob(32))),'signin',?,?,'https://whumpo.com/app/return',unixepoch(),unixepoch()+300,?,?,1,lower(hex(randomblob(32))),unixepoch(),unixepoch()+60 FROM n`),'s'.repeat(24),'c'.repeat(43),a.account,source.id);
+  assert.equal(await count('identity_handoffs'),2000);
+  const total=await mobile('/session/handoff/start',{body});assert.equal(total.status,503,total.text);assert.equal(total.data.error.code,'unavailable');assert.equal(await count('identity_handoffs'),2000);
   await run('DELETE FROM identity_handoffs');
  });
 

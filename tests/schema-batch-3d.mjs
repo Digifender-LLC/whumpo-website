@@ -116,12 +116,19 @@ try{
   await rejects('a consumed handoff cannot be consumed again',()=>issuedUpdate(`native_session_id='${id()}'`,h),/identity_handoff_transition/);
   await rejects('a consumed handoff cannot be cleared',()=>issuedUpdate('native_session_id=NULL',h),/identity_handoff_transition/);
  });
- await ok('the 2000-row limit aborts the next insert',async()=>{
-  const room=2000-await count('identity_handoffs');
-  await run(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<?) INSERT INTO identity_handoffs(id,browser_token_hash,purpose,state,code_challenge,redirect_uri,created_at,expires_at)
-   SELECT lower(hex(randomblob(18))),lower(hex(randomblob(32))),'signin','filler'||printf('%010d',i)||'abcd',substr(lower(hex(randomblob(32))),1,43),'https://whumpo.com/app/return',?,? FROM n`,room,now,now+300);
+ await ok('the anonymous share (1500 unbound rows) and the 2000-row limit abort the next insert',async()=>{
+  const fill=async rows=>run(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<?) INSERT INTO identity_handoffs(id,browser_token_hash,purpose,state,code_challenge,redirect_uri,created_at,expires_at)
+   SELECT lower(hex(randomblob(18))),lower(hex(randomblob(32))),'signin','filler'||printf('%010d',i)||'abcd',substr(lower(hex(randomblob(32))),1,43),'https://whumpo.com/app/return',?,? FROM n`,rows,now,now+300);
+  const src=await session(acct),unbound=async()=>(await row('SELECT count(*) AS n FROM identity_handoffs WHERE account_id IS NULL')).n;
+  await fill(1500-await unbound());
+  assert.equal(await unbound(),1500);
+  await rejects('1501st unbound row',()=>insertHandoff({}),/identity_handoff_limit/);
+  // The reserved rows stay open to bound handoffs until the table holds 2000.
+  await insertHandoff(bound(acct,src.sid));
+  await run(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<?) INSERT INTO identity_handoffs(id,browser_token_hash,purpose,state,code_challenge,redirect_uri,created_at,expires_at,account_id,source_session_id,auth_epoch,code_hash,code_issued_at,code_expires_at)
+   SELECT lower(hex(randomblob(18))),lower(hex(randomblob(32))),'signin','filler'||printf('%010d',i)||'abcd',substr(lower(hex(randomblob(32))),1,43),'https://whumpo.com/app/return',?,?,?,?,1,lower(hex(randomblob(32))),?,? FROM n`,2000-await count('identity_handoffs'),now,now+300,acct.a,src.sid,now,now+60);
   assert.equal(await count('identity_handoffs'),2000);
-  await rejects('2001st row',()=>insertHandoff({}),/identity_handoff_limit/);
+  await rejects('2001st row, bound',()=>insertHandoff(bound(acct,src.sid)),/identity_handoff_limit/);
   await run('DELETE FROM identity_handoffs WHERE state LIKE ?','filler%');
  });
 
