@@ -29,7 +29,7 @@ export async function costEventFromLiabilityEntry(input: unknown): Promise<CostE
  if (!known && e.ref !== null) bad('an unknown amount has no ref');
  const event: CostEvent = {
   contractVersion, source: 'liability-register', sourceEventId: `${e.id}:${e.period}`, providerEventId: null, revision: e.revision as number, idempotencyKey: '', kind: 'liability',
-  dimension: e.dimension as CostDimension, workload: 'platform-standing', workClass: 'standing', taskRef: null, attempt: 1, attribution: { scope: 'platform', pool: e.pool },
+  dimension: e.dimension as CostDimension, workload: 'platform-standing', workClass: 'standing', taskRef: null, attempt: 1, attribution: { scope: 'platform', pool: e.pool as LiabilityEntry['pool'] },
   placementClass: 'platform', quantity: { state: 'known', value: 1, unit: 'item' },
   cost: known ? { basis: 'provider-reported', micros: e.amountMicros as number, ref: e.ref as string } : { basis: 'unknown', reason: 'invoice-pending', exposureMicros: null },
   outcome: 'settled', customerUnits: 0, aiTier: null, detail: {}, occurredAt: `${e.period}-01T00:00:00.000Z`, observedAt: e.observedAt as string
