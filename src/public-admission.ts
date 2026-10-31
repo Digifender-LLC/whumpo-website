@@ -28,7 +28,7 @@ export async function publicClientKey(request:Request,scope:PublicScope,project:
 /** Counts one attempt (or `count` attempts, all or none) for this client against the project's
  * per-client sub-limit; never refunded. */
 export async function reservePublicClient(db:D1Database,scope:PublicScope,project:string,key:string,count=1){
- if(!Number.isSafeInteger(count)||count<1||count>4)throw Error('Invalid public client reservation');
+ if(!Number.isSafeInteger(count)||count<1||count>5)throw Error('Invalid public client reservation');
  const attempt=()=>db.prepare("INSERT INTO public_client_usage(scope,project_id,client_key,day,uses) VALUES(?,?,?,strftime('%Y-%m-%d','now'),1) ON CONFLICT(scope,project_id,client_key,day) DO UPDATE SET uses=uses+1").bind(scope,project,key);
  try{
   if(count===1)await attempt().run();else await db.batch(Array.from({length:count},attempt));

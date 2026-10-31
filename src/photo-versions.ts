@@ -2,6 +2,7 @@ import {approvedPhotoSQL} from './photo-safety';
 import {requireSpecificationAvailable} from './specification-safety';
 import {siteConfig,photoConfig,previewHeaders,type SiteConfig,type PhotoConfig} from './components';
 import {FileError} from './photo-format';
+import {assetPhotos} from './brand-tokens';
 import {reserveStorage} from './storage-budget';
 export type PageConfig=SiteConfig|PhotoConfig;
 export function savedPage(component:string,json:string):PageConfig{
@@ -14,9 +15,10 @@ export type PhotoAsset={id:string;alt:string;digest:string;size:number;bytes:Uin
 /** Charges `count` private photo reads before any object is read. Owner previews and exports use the
  * platform pool; anonymous guest views charge their project budget (reserveGuestPreviewPhotoReads). */
 export type PhotoReadReservation=(count:number)=>Promise<void>;
-export async function versionPhotos(env:Pick<Env,'DB'|'FILES'>,versionId:string,config:PhotoConfig,reserve:PhotoReadReservation=count=>reserveStorage(env.DB,'read',count)):Promise<PhotoAsset[]>{
+export async function versionPhotos(env:Pick<Env,'DB'|'FILES'>,versionId:string,config:PageConfig,reserve:PhotoReadReservation=count=>reserveStorage(env.DB,'read',count)):Promise<PhotoAsset[]>{
  const {results}=await env.DB.prepare(`SELECT f.id,f.object_key,f.digest,f.size,v.alt,${approvedPhotoSQL} AS approved FROM version_photos v JOIN project_files f ON f.id=v.file_id WHERE v.version_id=? ORDER BY v.position`).bind(versionId).all<{id:string;object_key:string;digest:string;size:number;alt:string;approved:number}>();
- if(results.length!==config.photos.length||results.some((row,n)=>row.id!==config.photos[n].id||row.alt!==config.photos[n].alt))throw new FileError(503,'Saved photo references could not be verified');
+ const expected=assetPhotos(config);
+ if(results.length!==expected.length||results.some((row,n)=>row.id!==expected[n].id||row.alt!==expected[n].alt))throw new FileError(503,'Saved photo references could not be verified');
  if(results.some(row=>!row.approved))throw new FileError(423,'This version includes photos held for safety checks');
  if(results.length)await reserve(results.length);
  const assets:PhotoAsset[]=[];
@@ -33,9 +35,11 @@ export type SavedVersionRow={id:string;html:string;component_id:string;config_js
  * data URIs. No object URL, asset alias or other version is ever exposed. */
 export async function savedVersionHTML(env:Pick<Env,'DB'|'FILES'>,row:SavedVersionRow,reserve?:PhotoReadReservation){
  await requireSpecificationAvailable(env.DB,row.id);let html=row.html;
- if(row.component_id==='photo-page@1'){
-  const photos=await versionPhotos(env,row.id,photoConfig(JSON.parse(row.config_json)),reserve);
-  for(const photo of photos){let binary='';for(let n=0;n<photo.bytes.length;n+=8192)binary+=String.fromCharCode(...photo.bytes.subarray(n,n+8192));html=html.replace(`src="assets/${photo.id}.jpg"`,`src="data:image/jpeg;base64,${btoa(binary)}"`);}
+ // Page photos and the brand logo are both inlined, for either component, and every occurrence is replaced.
+ const config=savedPage(row.component_id,row.config_json);
+ if(assetPhotos(config).length){
+  const photos=await versionPhotos(env,row.id,config,reserve);
+  for(const photo of photos){let binary='';for(let n=0;n<photo.bytes.length;n+=8192)binary+=String.fromCharCode(...photo.bytes.subarray(n,n+8192));html=html.replaceAll(`src="assets/${photo.id}.jpg"`,()=>`src="data:image/jpeg;base64,${btoa(binary)}"`);}
  }
  return html;
 }

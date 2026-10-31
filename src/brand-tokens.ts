@@ -25,6 +25,8 @@ export type Brand = {
 };
 export const brandKeys = ['source', 'light', 'dark', 'font', 'radius', 'density', 'logo'] as const;
 export const minimumContrast = 4.5;
+/** Ratio for people to read: rounded down to two places, so 4.496 is shown as 4.49 and never as a passing 4.5. */
+export const ratioText = (ratio: number) => (Math.floor(ratio * 100) / 100).toFixed(2);
 
 const hex = /^#[0-9a-f]{6}$/;
 const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
@@ -56,7 +58,7 @@ export function colorProblems(c: BrandColors, mode: 'light' | 'dark'): BrandProb
   if (out.length) return out;
   const check = (fg: string, bg: string, path: string, label: string, against: string) => {
     const ratio = contrast(fg, bg);
-    if (ratio < minimumContrast) out.push({path, message: `${label} on ${against} is too hard to read in ${where} (contrast ${ratio.toFixed(1)} to 1; at least ${minimumContrast} to 1 is needed so people with low vision can read it).`});
+    if (ratio < minimumContrast) out.push({path, message: `${label} on ${against} is too hard to read in ${where} (contrast ${ratioText(ratio)} to 1; at least ${minimumContrast} to 1 is needed so people with low vision can read it).`});
   };
   check(c.ink, c.paper, `${mode}.ink`, names.ink, 'the background');
   check(c.accent, c.paper, `${mode}.accent`, names.accent, 'the background');
@@ -73,11 +75,15 @@ export function adjustColors(c: BrandColors, mode: 'light' | 'dark'): BrandColor
   const next = {...c};
   const toward = contrast(next.paper, '#000000') >= contrast(next.paper, '#ffffff') ? '#000000' : '#ffffff';
   for (const key of ['ink', 'accent'] as const) {
-    for (let step = 0; step <= 25 && colorProblems(next, mode).some(p => p.path === `${mode}.${key}`); step++) next[key] = mix(c[key], toward, step * 0.04);
+    const failing = () => colorProblems(next, mode).some(p => p.path === `${mode}.${key}`);
+    for (let step = 0; step <= 25 && failing(); step++) next[key] = mix(c[key], toward, step * 0.04);
+    // No shade reaches the ratio on this background (or its panels): leave the owner's color alone rather than return black on black.
+    if (failing()) next[key] = c[key];
   }
   return next;
 }
-/** A readable dark palette from a light one (paper and text swap roles; accent is lightened until it passes). */
+/** A suggested dark palette from a light one (paper and text swap roles; accent is lightened until it passes). It is only a suggestion:
+ * check `colorProblems` on the result, since some light palettes have no readable dark counterpart. */
 export function deriveDark(light: BrandColors): BrandColors {
   const paper = mix(light.ink, '#000000', 0.55), ink = mix(light.paper, '#ffffff', 0.4);
   return adjustColors({paper, ink, accent: mix(light.accent, '#ffffff', 0.35)}, 'dark');
@@ -131,4 +137,13 @@ export function describeAdjustment(before: BrandColors, after: BrandColors): str
   const names = {ink: 'text color', accent: 'accent color'} as const, out: string[] = [];
   for (const key of ['ink', 'accent'] as const) if (before[key] !== after[key]) out.push(`Changed the ${names[key]} from ${before[key]} to ${after[key]}, which is ${luminance(after[key]) < luminance(before[key]) ? 'darker' : 'lighter'}, so it reads at ${minimumContrast} to 1 or better.`);
   return out;
+}
+
+export type AssetPhoto = {id: string; alt: string};
+/** Every project photo a configuration serves from its own `assets/` path, once each and in a fixed order: the page photos, then the
+ * brand logo unless it is also a page photo. Saved versions store exactly this list (version_photos positions 0 to 4), and every reader
+ * (saved preview, guest preview, export, site health, review) compares against it, so a logo never changes how many photos a page shows. */
+export function assetPhotos(config: {photos?: AssetPhoto[]; brand?: {logo: AssetPhoto | null}}): AssetPhoto[] {
+  const photos = [...(config.photos ?? [])], logo = config.brand?.logo;
+  return logo && !photos.some(p => p.id === logo.id) ? [...photos, {id: logo.id, alt: logo.alt}] : photos;
 }

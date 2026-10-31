@@ -2,7 +2,7 @@ import {useEffect,useId,useMemo,useRef,useState,type ReactNode} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import {AlertTriangle,Check,Moon,Sun} from 'lucide-react';
 import {renderSite,type SiteConfig,type SiteSection} from '../../src/components';
-import {adjustColors,brandDensities,brandFonts,brandRadii,contrastPairs,deriveDark,describeAdjustment,isHex,sectionVariants,colorProblems,type BrandColors,type BrandDensity,type BrandFont,type BrandRadius,type SectionVariant} from '../../src/brand-tokens';
+import {adjustColors,brandDensities,brandFonts,brandRadii,contrastPairs,deriveDark,describeAdjustment,isHex,ratioText,sectionVariants,colorProblems,type BrandColors,type BrandDensity,type BrandFont,type BrandRadius,type SectionVariant} from '../../src/brand-tokens';
 import type {KitTokens,SectionContent} from '../../src/brand-kits/policy';
 import {api,message,queryClient,send} from './lib/api';
 import {Button} from './components/ui/button';
@@ -19,7 +19,7 @@ import {ConfirmButton,QueryStatus} from './workspace-controls';
 export type Kit={id:string;name:string;version:number;tokens:KitTokens};
 export type SavedSection={id:string;name:string;version:number;content:SectionContent};
 export const defaultTokens:KitTokens={light:{ink:'#1f2a44',paper:'#fbf8f1',accent:'#8a2c0d'},dark:null,font:'classic',radius:'soft',density:'comfortable',logoAlt:null};
-const sampleSections:SiteSection[]=[{heading:'Opening hours',text:'Tuesday to Sunday, 7 to 3.',variant:'plain'},{heading:'Order ahead',text:'Call or message us the day before for large orders.',variant:'plain'}];
+const sampleSections:SiteSection[]=[{heading:'Opening hours',text:'Tuesday to Sunday, 7 to 3.',variant:'callout'},{heading:'Order ahead',text:'Call or message us the day before.',variant:'card'}];
 export const sampleSite=(sections:SiteSection[]=sampleSections):SiteConfig=>({name:'Harbour Bakery',description:'Bread, pastry and coffee, baked fresh every morning.',theme:'ocean',headline:'Good bread takes time',aboutTitle:'Our story',aboutText:'We bake in small batches and sell out most days.',sections});
 const hexLabel=(c:BrandColors)=>`text ${c.ink}, background ${c.paper}, accent ${c.accent}`;
 
@@ -33,7 +33,10 @@ function Dyn({css,className,children}:{css:Record<string,string>;className?:stri
 /** The real site renderer drawn in a shadow root. The workspace policy blocks inline styles in iframes and elements, so the
  * generated stylesheet is adopted (constructable stylesheets are not an inline-style load). The markup comes only from
  * `renderSite` over validated tokens; it is parsed inert, never executed, and hidden from assistive technology. */
-export function BrandPreview({tokens,mode,sections,label}:{tokens:KitTokens;mode:'light'|'dark';sections?:SiteSection[];label?:string}){
+/** Preview-only compaction (never part of a published site): a short hero so the about panel and a section panel, which show corners and
+ * spacing, sit inside the box without scrolling. A section preview hides the hero and about panel so the section is at the top. */
+const previewCss=(focus:'site'|'sections')=>focus==='sections'?'.hero,.about{display:none}header{padding-block:12px}main{padding-block:0}.sections{margin:12px 0}':'header{padding-block:8px}.tag,.eyebrow,.rule,.intro,footer{display:none}.hero{padding:6px 7%}h1{font-size:24px;margin:2px 0}main{padding-block:8px;display:grid;gap:12px;align-items:start}.about{grid-template-columns:1fr;gap:6px;padding:calc(12px*var(--space))}.about h2{font-size:16px}.about p{font-size:13px;line-height:1.4}.sections{margin:0;grid-template-columns:1fr;gap:calc(8px*var(--space))}.feature{padding:calc(10px*var(--space))}.feature h2{font-size:15px;margin:0}.feature p{font-size:13px;line-height:1.4;margin:4px 0 0}@media(min-width:600px){main{grid-template-columns:1fr 2fr}.hero{grid-column:1/-1}.sections{grid-template-columns:1fr 1fr}}';
+export function BrandPreview({tokens,mode,sections,label,focus='site'}:{tokens:KitTokens;mode:'light'|'dark';sections?:SiteSection[];label?:string;focus?:'site'|'sections'}){
  const host=useRef<HTMLDivElement>(null);
  const view=useMemo(()=>{
   const colors=mode==='dark'?tokens.dark:tokens.light;
@@ -46,15 +49,15 @@ export function BrandPreview({tokens,mode,sections,label}:{tokens:KitTokens;mode
   const root=el.shadowRoot??el.attachShadow({mode:'open'});
   // Plain string slicing, not DOMParser: a parsed `<style>` element is checked against the workspace policy even in an inert document.
   const css=/<style>([\s\S]*?)<\/style>/.exec(html)?.[1]??'',markup=html.slice(html.indexOf('<body>')+6,html.lastIndexOf('</body>'));
-  const sheet=new CSSStyleSheet();sheet.replaceSync(css.replace(/:root/g,':host').replace(/(^|[,}{])\s*body\s*\{/g,'$1.pv{'));
+  const sheet=new CSSStyleSheet();sheet.replaceSync(css.replace(/:root/g,':host').replace(/(^|[,}{])\s*body\s*\{/g,'$1.pv{')+previewCss(focus));
   root.adoptedStyleSheets=[sheet];
   const body=document.createElement('div');body.className='pv';
   const template=document.createElement('template');template.innerHTML=markup;body.append(template.content);
   root.replaceChildren(body);
- },[view]);
+ },[view,focus]);
  return <div className="space-y-2">
   {'error' in view?<p role="status" className="rounded-md border border-line bg-surface-sunken p-4 text-body-sm">{view.error}</p>
-   :<div ref={host} aria-hidden="true" data-testid="brand-preview" className="max-h-[560px] overflow-auto rounded-md border border-line-strong"/>}
+   :<div ref={host} aria-hidden="true" data-testid="brand-preview" className="brand-preview-box max-h-[min(70dvh,560px)] overflow-auto rounded-md border border-line-strong"/>}
   <p className="text-caption text-ink-muted">{label??'A picture of how the example site below will look. Your own text and photos are used when you apply it.'}</p>
  </div>;
 }
@@ -66,17 +69,17 @@ function ColorField({label,value,onChange,describedBy}:{label:string;value:strin
   <label htmlFor={id} className="text-sm font-medium">{label}</label>
   <div className="flex items-center gap-2">
    <input type="color" aria-label={label+', color picker'} value={isHex(value)?value:'#000000'} onChange={e=>onChange(e.target.value.toLowerCase())} className="h-11 w-14 shrink-0 cursor-pointer rounded-md border border-line-strong bg-surface-raised p-1"/>
-   <Input id={id} value={draft} maxLength={7} spellCheck={false} autoCapitalize="off" autoComplete="off" aria-invalid={!valid} aria-describedby={[describedBy,valid?'':id+'-err'].filter(Boolean).join(' ')||undefined} className="h-11 w-32 font-mono"
+   <Input id={id} value={draft} maxLength={7} spellCheck={false} autoCapitalize="off" autoComplete="off" aria-invalid={!valid} aria-describedby={[describedBy,valid?'':id+'-err'].filter(Boolean).join(' ')||undefined} className="h-11 min-w-0 max-w-32 flex-1 font-mono" onBlur={()=>{if(!isHex(draft))setDraft(value);}}
     onChange={e=>{const v=e.target.value.trim().toLowerCase();setDraft(v);if(isHex(v))onChange(v);}}/>
   </div>
-  {!valid&&<p id={id+'-err'} className="text-caption text-attention-ink">Use six digits after the #, like #1f2a44.</p>}
+  {!valid&&<p id={id+'-err'} className="text-caption text-attention-ink">Use six digits after the #, like #1f2a44. Until then the color stays {value}.</p>}
  </div>;
 }
 
 /** Radio cards: a native radio per choice, so arrow keys, labels and focus work as the browser provides. */
 function Choices<T extends string>({legend,help,name,value,options,onChange}:{legend:string;help?:string;name:string;value:T;options:{value:T;label:string;note:string;sample?:ReactNode}[];onChange:(v:T)=>void}){
  const id=useId();
- return <fieldset className="grid gap-2" aria-describedby={help?id:undefined}>
+ return <fieldset className="grid min-w-0 gap-2" aria-describedby={help?id:undefined}>
   <legend className="text-sm font-medium">{legend}</legend>{help&&<p id={id} className="text-caption text-ink-muted">{help}</p>}
   <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{options.map(o=><label key={o.value} className="flex min-h-11 cursor-pointer items-start gap-3 rounded-md border border-line-strong bg-surface-raised p-3 has-[:checked]:border-action has-[:checked]:bg-action-soft has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[var(--focus-ring)]">
    <input type="radio" name={name} value={o.value} checked={value===o.value} onChange={()=>onChange(o.value)} className="mt-1 size-5 shrink-0"/>
@@ -88,10 +91,10 @@ function Choices<T extends string>({legend,help,name,value,options,onChange}:{le
 export function ContrastReport({colors,mode}:{colors:BrandColors;mode:'light'|'dark'}){
  const pairs=contrastPairs(colors);
  if(!pairs.length)return null;
- return <table className="w-full text-left text-body-sm"><caption className="sr-only">Contrast of the {mode} mode colors. At least 4.5 to 1 is needed.</caption>
-  <thead><tr><th scope="col" className="py-1 pr-2 font-medium">Pairing</th><th scope="col" className="py-1 pr-2 font-medium">Contrast</th><th scope="col" className="py-1 font-medium">Result</th></tr></thead>
-  <tbody>{pairs.map(p=><tr key={p.id} className="border-t border-line"><th scope="row" className="py-1.5 pr-2 font-normal">{p.label}</th><td className="py-1.5 pr-2 tabular-nums">{p.ratio.toFixed(1)} to 1</td>
-   <td className="py-1.5"><span className="inline-flex items-center gap-1 font-medium">{p.pass?<><Check className="size-4" aria-hidden="true"/>Readable</>:<><AlertTriangle className="size-4 text-attention-ink" aria-hidden="true"/><span className="text-attention-ink">Too hard to read</span></>}</span></td></tr>)}</tbody>
+ return <table className="w-full table-fixed break-words text-left text-body-sm"><caption className="sr-only">Contrast of the {mode} mode colors. At least 4.5 to 1 is needed.</caption>
+  <thead><tr><th scope="col" className="w-1/2 py-1 pr-2 font-medium">Pairing</th><th scope="col" className="py-1 font-medium">Contrast and result</th></tr></thead>
+  <tbody>{pairs.map(p=><tr key={p.id} className="border-t border-line"><th scope="row" className="py-1.5 pr-2 align-top font-normal">{p.label}</th>
+   <td className="py-1.5 align-top"><span className="tabular-nums">{ratioText(p.ratio)} to 1</span>{' '}<span className="inline-flex flex-wrap items-center gap-1 font-medium">{p.pass?<><Check className="size-4 shrink-0" aria-hidden="true"/>Readable</>:<><AlertTriangle className="size-4 shrink-0 text-attention-ink" aria-hidden="true"/><span className="text-attention-ink">Too hard to read</span></>}</span></td></tr>)}</tbody>
  </table>;
 }
 
@@ -111,7 +114,7 @@ function Palette({mode,colors,onChange,onNotice}:{mode:'light'|'dark';colors:Bra
   {problems.length>0&&<div role="alert" className="space-y-2 rounded-md border border-attention-ink/40 bg-attention-soft p-3 text-body-sm">
    <p className="font-medium">These {mode} colors cannot be saved yet.</p>
    <ul className="list-disc space-y-1 pl-5">{problems.map(p=><li key={p.path}>{p.message}</li>)}</ul>
-   <Button type="button" variant="secondary" className="min-h-11" onClick={fix}>Fix {mode} colors automatically</Button>
+   <Button type="button" variant="secondary" className="h-auto min-h-11 min-w-0 shrink! whitespace-normal py-2 text-center" onClick={fix}>Fix {mode} colors automatically</Button>
   </div>}
  </div>;
 }
@@ -128,16 +131,22 @@ export function KitEditor({initial,busy,error,onSave,onCancel}:{initial?:Kit;bus
  const changed=!initial||name.trim()!==initial.name||JSON.stringify(tokens)!==JSON.stringify(initial.tokens);
  const why=!name.trim()?'Give the kit a name.':problems.length?'Fix the colors marked above.':!changed?'Change something to save.':'';
  const patch=(p:Partial<KitTokens>)=>{setTokens(t=>({...t,...p}));setNotice([]);};
- return <form className="space-y-6" onSubmit={e=>{e.preventDefault();if(!why&&!busy)onSave(name.trim(),tokens);}} aria-labelledby={id+'-h'}>
+ function suggestDark(){const dark=deriveDark(tokens.light),left=colorProblems(dark,'dark');setTokens(t=>({...t,dark}));setNotice([left.length?'Suggested dark colors from your light colors, but some pairings are still too hard to read. Adjust the dark colors.':'Suggested dark colors from your light colors. Every pairing is readable.']);}
+ return <form className="brand-form space-y-6" onSubmit={e=>{e.preventDefault();if(!why&&!busy)onSave(name.trim(),tokens);}} aria-labelledby={id+'-h'}>
   <h3 id={id+'-h'} ref={heading} tabIndex={-1} className="text-base font-semibold outline-none">{initial?`Edit “${initial.name}” (version ${initial.version})`:'New brand kit'}</h3>
   <div className="grid gap-2"><label htmlFor={id+'-name'} className="text-sm font-medium">Kit name</label>
    <Input id={id+'-name'} value={name} maxLength={60} onChange={e=>setName(e.target.value)} className="h-11 max-w-sm" autoComplete="off"/></div>
-  <fieldset className="space-y-4"><legend className="text-sm font-semibold">Colors</legend>
+  <section aria-label="Preview" className="brand-sticky space-y-3 rounded-md border border-line bg-surface-raised p-3">
+   <div className="flex flex-wrap items-center gap-2"><h4 className="text-sm font-semibold">Preview</h4>
+    <div role="group" aria-label="Preview mode" className="flex gap-2">{(['light','dark'] as const).map(m=><Button key={m} type="button" variant={mode===m?'primary':'secondary'} size="sm" className="h-auto min-h-11 min-w-0 shrink! whitespace-normal py-2 text-center" aria-pressed={mode===m} onClick={()=>setMode(m)}>{m==='light'?<Sun className="size-4" aria-hidden="true"/>:<Moon className="size-4" aria-hidden="true"/>}{m==='light'?'Light':'Dark'}</Button>)}</div></div>
+   <BrandPreview tokens={tokens} mode={mode}/>
+  </section>
+  <fieldset className="min-w-0 space-y-4"><legend className="text-sm font-semibold">Colors</legend>
    <Palette mode="light" colors={tokens.light} onChange={light=>patch({light})} onNotice={setNotice}/>
-   <label className="flex min-h-11 items-start gap-3"><input type="checkbox" className="mt-1 size-5 shrink-0" checked={!!tokens.dark} onChange={e=>{patch({dark:e.target.checked?deriveDark(tokens.light):null});if(!e.target.checked)setMode('light');}}/>
+   <label className="flex min-h-11 items-start gap-3"><input type="checkbox" className="mt-1 size-5 shrink-0" checked={!!tokens.dark} onChange={e=>{if(e.target.checked)suggestDark();else{patch({dark:null});setMode('light');}}}/>
     <span><span className="block text-sm font-medium">Also design for dark mode</span><span className="block text-caption text-ink-muted">Visitors whose device is set to dark see these colors. Without them the site stays light.</span></span></label>
    {tokens.dark&&<div className="space-y-3"><Palette mode="dark" colors={tokens.dark} onChange={dark=>patch({dark})} onNotice={setNotice}/>
-    <Button type="button" variant="quiet" className="min-h-11" onClick={()=>{patch({dark:deriveDark(tokens.light)});setNotice(['Suggested dark colors from your light colors.']);}}>Suggest dark colors from my light colors</Button></div>}
+    <Button type="button" variant="quiet" className="h-auto min-h-11 min-w-0 shrink! whitespace-normal py-2 text-center" onClick={suggestDark}>Suggest dark colors from my light colors</Button></div>}
    <div role="status" aria-live="polite" className="text-body-sm">{notice.map((n,i)=><p key={i}>{n}</p>)}</div>
   </fieldset>
   <Choices legend="Type style" help="Fonts already on your visitors’ devices, so pages stay fast and nothing is downloaded." name={id+'-font'} value={tokens.font} options={fontOptions} onChange={font=>patch({font})}/>
@@ -146,15 +155,10 @@ export function KitEditor({initial,busy,error,onSave,onCancel}:{initial?:Kit;bus
   <div className="grid gap-2"><label htmlFor={id+'-logo'} className="text-sm font-medium">Logo description (optional)</label>
    <Input id={id+'-logo'} value={tokens.logoAlt??''} maxLength={100} onChange={e=>patch({logoAlt:e.target.value.trim()?e.target.value:null})} className="h-11 max-w-md" autoComplete="off" aria-describedby={id+'-logo-help'}/>
    <p id={id+'-logo-help'} className="text-caption text-ink-muted">Read aloud to people who cannot see the logo. The logo picture itself is chosen from a project’s approved photos when you apply the kit.</p></div>
-  <section aria-label="Preview" className="space-y-3">
-   <div className="flex flex-wrap items-center gap-2"><h4 className="text-sm font-semibold">Preview</h4>
-    <div role="group" aria-label="Preview mode" className="flex gap-2">{(['light','dark'] as const).map(m=><Button key={m} type="button" variant={mode===m?'primary':'secondary'} size="sm" className="min-h-11" aria-pressed={mode===m} onClick={()=>setMode(m)}>{m==='light'?<Sun className="size-4" aria-hidden="true"/>:<Moon className="size-4" aria-hidden="true"/>}{m==='light'?'Light':'Dark'}</Button>)}</div></div>
-   <BrandPreview tokens={tokens} mode={mode}/>
-  </section>
   {error&&<p role="alert" className="text-body-sm text-attention-ink">{error}</p>}
   <div className="flex flex-wrap items-center gap-3">
-   <Button type="submit" className="min-h-11" disabled={busy||!!why} aria-describedby={why?id+'-why':undefined}>{busy?'Saving…':initial?'Save as a new version':'Save brand kit'}</Button>
-   <Button type="button" variant="secondary" className="min-h-11" onClick={onCancel}>Cancel</Button>
+   <Button type="submit" className="h-auto min-h-11 min-w-0 shrink! whitespace-normal py-2 text-center" disabled={busy||!!why} aria-describedby={why?id+'-why':undefined}>{busy?'Saving…':initial?'Save as a new version':'Save brand kit'}</Button>
+   <Button type="button" variant="secondary" className="h-auto min-h-11 min-w-0 shrink! whitespace-normal py-2 text-center" onClick={onCancel}>Cancel</Button>
    {why&&<p id={id+'-why'} className="text-body-sm text-ink-muted">{why}</p>}
   </div>
   <p className="sr-only">Colors: {hexLabel(tokens.light)}</p>
@@ -175,9 +179,9 @@ export function SectionEditor({initial,busy,error,onSave,onCancel}:{initial?:Sav
   <div className="grid gap-2"><label htmlFor={id+'-text'} className="text-sm font-medium">Text</label><Textarea id={id+'-text'} value={content.text} rows={4} onChange={e=>setContent({...content,text:e.target.value})} aria-describedby={id+'-count'} className="max-w-xl"/>
    <p id={id+'-count'} className="text-caption text-ink-muted">{content.text.length} of 800 characters. Plain text only.</p></div>
   <Choices legend="Style" name={id+'-variant'} value={content.variant} options={sectionVariants.map(v=>({value:v,label:variantNotes[v][0],note:variantNotes[v][1]}))} onChange={variant=>setContent({...content,variant})}/>
-  <section aria-label="Preview" className="space-y-2"><h4 className="text-sm font-semibold">Preview</h4><BrandPreview tokens={defaultTokens} mode="light" sections={shown} label="Shown with neutral example colors. On your site it uses that site’s own colors and type."/></section>
+  <section aria-label="Preview" className="space-y-2"><h4 className="text-sm font-semibold">Preview</h4><BrandPreview tokens={defaultTokens} mode="light" focus="sections" sections={shown} label="Shown with neutral example colors. On your site it uses that site’s own colors and type."/></section>
   {error&&<p role="alert" className="text-body-sm text-attention-ink">{error}</p>}
-  <div className="flex flex-wrap items-center gap-3"><Button type="submit" className="min-h-11" disabled={busy||!!why} aria-describedby={why?id+'-why':undefined}>{busy?'Saving…':initial?'Save as a new version':'Save section'}</Button><Button type="button" variant="secondary" className="min-h-11" onClick={onCancel}>Cancel</Button>{why&&<p id={id+'-why'} className="text-body-sm text-ink-muted">{why}</p>}</div>
+  <div className="flex flex-wrap items-center gap-3"><Button type="submit" className="h-auto min-h-11 min-w-0 shrink! whitespace-normal py-2 text-center" disabled={busy||!!why} aria-describedby={why?id+'-why':undefined}>{busy?'Saving…':initial?'Save as a new version':'Save section'}</Button><Button type="button" variant="secondary" className="h-auto min-h-11 min-w-0 shrink! whitespace-normal py-2 text-center" onClick={onCancel}>Cancel</Button>{why&&<p id={id+'-why'} className="text-body-sm text-ink-muted">{why}</p>}</div>
  </form>;
 }
 
@@ -202,8 +206,8 @@ function ApplyKit({kit}:{kit:Kit}){
    <p className="text-caption text-ink-muted">{photos.isPending?'Loading approved photos…':approved.length?`Only approved photos of this project are listed. It will be described as “${kit.tokens.logoAlt}”.`:'This project has no approved photos yet. Add one in Photos first.'}</p></div>}
   {error&&<p role="alert" className="text-body-sm text-attention-ink">{error}</p>}
   <div className="flex flex-wrap gap-3">
-   <Button type="button" variant="secondary" className="min-h-11" disabled={!project||commandBusy} onClick={()=>void go({type:'brandKitReview',projectId:project,kitId:kit.id,version:kit.version,logoId:logo||null})}>Review in Chat</Button>
-   <Button type="button" variant="quiet" className="min-h-11" disabled={!project||commandBusy} onClick={()=>void go({type:'brandRemoveReview',projectId:project})}>Review removing the brand</Button></div>
+   <Button type="button" variant="secondary" className="h-auto min-h-11 min-w-0 shrink! whitespace-normal py-2 text-center" disabled={!project||commandBusy} onClick={()=>void go({type:'brandKitReview',projectId:project,kitId:kit.id,version:kit.version,logoId:logo||null})}>Review in Chat</Button>
+   <Button type="button" variant="quiet" className="h-auto min-h-11 min-w-0 shrink! whitespace-normal py-2 text-center" disabled={!project||commandBusy} onClick={()=>void go({type:'brandRemoveReview',projectId:project})}>Review removing the brand</Button></div>
   <p className="text-caption text-ink-muted">Chat shows the exact change and a preview of the website. Nothing is saved or published until you confirm it, and later edits to this kit never change a site that already has it.</p>
  </div>;
 }
@@ -212,7 +216,7 @@ function ApplySection({section}:{section:SavedSection}){
  async function go(){setError('');try{await runAction({type:'savedSectionReview',projectId:project,sectionId:section.id,version:section.version,pageId:'home'});}catch(e){setError(message(e));}}
  return <div className="space-y-3 rounded-md bg-surface-sunken p-4"><ProjectChoice value={project} onChange={setProject}/>
   {error&&<p role="alert" className="text-body-sm text-attention-ink">{error}</p>}
-  <Button type="button" variant="secondary" className="min-h-11" disabled={!project||commandBusy} onClick={()=>void go()}>Review adding to the home page</Button>
+  <Button type="button" variant="secondary" className="h-auto min-h-11 min-w-0 shrink! whitespace-normal py-2 text-center" disabled={!project||commandBusy} onClick={()=>void go()}>Review adding to the home page</Button>
   <p className="text-caption text-ink-muted">Adds a copy at the end of the page. Chat shows the exact change first; a page holds up to six sections.</p></div>;
 }
 
@@ -244,12 +248,12 @@ export function BrandPanel(){
         <p className="flex flex-wrap items-center gap-x-4 gap-y-2 text-body-sm"><Swatches colors={k.tokens.light} label="Light colors"/>{k.tokens.dark?<Swatches colors={k.tokens.dark} label="Dark colors"/>:<span className="text-ink-muted">No dark colors</span>}</p>
         <p className="text-body-sm text-ink-muted">{brandFonts[k.tokens.font].label} type · {brandRadii[k.tokens.radius].label.toLowerCase()} corners · {brandDensities[k.tokens.density].label.toLowerCase()} spacing</p>
         <div className="flex flex-wrap gap-3">
-         <Button type="button" variant="secondary" className="min-h-11" onClick={opener(()=>setEditing(k.id))}>Edit<span className="sr-only"> {k.name}</span></Button>
-         <Button type="button" variant="secondary" className="min-h-11" aria-expanded={open===k.id} onClick={()=>setOpen(open===k.id?null:k.id)}>Apply to a project<span className="sr-only">: {k.name}</span></Button>
+         <Button type="button" variant="secondary" className="h-auto min-h-11 min-w-0 shrink! whitespace-normal py-2 text-center" onClick={opener(()=>setEditing(k.id))}>Edit<span className="sr-only"> {k.name}</span></Button>
+         <Button type="button" variant="secondary" className="h-auto min-h-11 min-w-0 shrink! whitespace-normal py-2 text-center" aria-expanded={open===k.id} onClick={()=>setOpen(open===k.id?null:k.id)}>Apply to a project<span className="sr-only">: {k.name}</span></Button>
          <ConfirmButton label="Delete" description={`Delete “${k.name}” and all its versions? Websites that already use it keep their own copy.`} run={()=>remove('brand-kits',k.id)}/></div>
         {open===k.id&&<ApplyKit kit={k}/>}</>}
      </li>)}</ul>
-     <Button type="button" className="min-h-11" onClick={opener(()=>setEditing('new'))}>New brand kit</Button>
+     <Button type="button" className="h-auto min-h-11 min-w-0 shrink! whitespace-normal py-2 text-center" onClick={opener(()=>setEditing('new'))}>New brand kit</Button>
     </div>}
   </Section>
   <Section title="Saved sections" description="A heading and text you reuse, with a style. Add one to a page through a review.">
@@ -262,12 +266,12 @@ export function BrandPanel(){
        :<><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="min-w-0 break-words text-base font-semibold">{s.name}</h3><span className="text-caption text-ink-muted">Version {s.version} · {variantNotes[s.content.variant][0]}</span></div>
         <p className="break-words text-body-sm"><span className="font-medium">{s.content.heading}</span> — {s.content.text.length>140?s.content.text.slice(0,140)+'…':s.content.text}</p>
         <div className="flex flex-wrap gap-3">
-         <Button type="button" variant="secondary" className="min-h-11" onClick={opener(()=>setEditingSection(s.id))}>Edit<span className="sr-only"> {s.name}</span></Button>
-         <Button type="button" variant="secondary" className="min-h-11" aria-expanded={open===s.id} onClick={()=>setOpen(open===s.id?null:s.id)}>Add to a project<span className="sr-only">: {s.name}</span></Button>
+         <Button type="button" variant="secondary" className="h-auto min-h-11 min-w-0 shrink! whitespace-normal py-2 text-center" onClick={opener(()=>setEditingSection(s.id))}>Edit<span className="sr-only"> {s.name}</span></Button>
+         <Button type="button" variant="secondary" className="h-auto min-h-11 min-w-0 shrink! whitespace-normal py-2 text-center" aria-expanded={open===s.id} onClick={()=>setOpen(open===s.id?null:s.id)}>Add to a project<span className="sr-only">: {s.name}</span></Button>
          <ConfirmButton label="Delete" description={`Delete “${s.name}” and all its versions? Pages that already use it keep their own copy.`} run={()=>remove('saved-sections',s.id)}/></div>
         {open===s.id&&<ApplySection section={s}/>}</>}
      </li>)}</ul>
-     <Button type="button" className="min-h-11" onClick={opener(()=>setEditingSection('new'))}>New saved section</Button>
+     <Button type="button" className="h-auto min-h-11 min-w-0 shrink! whitespace-normal py-2 text-center" onClick={opener(()=>setEditingSection('new'))}>New saved section</Button>
     </div>}
   </Section>
  </div>;

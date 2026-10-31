@@ -21,8 +21,9 @@ async function gate(db:D1Database,userId:string,featureId:typeof brandKitFeature
 }
 function mapFailure(error:unknown,what:string){
  const text=String(error);
+ if(text.includes('safety_preservation_hold'))return new BrandKitError(409,'This cannot be deleted right now. Contact support if you need help.');
  if(text.includes('capacity'))return new BrandKitError(409,`You have reached the limit of saved ${what}s (${what==='brand kit'?kitLimits.kits:kitLimits.sections}). Delete one you no longer use first.`);
- if(text.includes('version_order')||text.includes('UNIQUE')||text.includes('PRIMARY KEY')||text.includes('CHECK constraint failed: version'))return new BrandKitError(409,`This ${what} changed since you opened it, or it already has ${kitLimits.versions} versions. Reload it and try again.`);
+ if(text.includes('version_order')||text.includes('UNIQUE')||text.includes('PRIMARY KEY')||text.includes('CHECK constraint failed'))return new BrandKitError(409,`This ${what} changed since you opened it, or it already has ${kitLimits.versions} versions. Reload it and try again.`);
  return null;
 }
 const ownerKit=(r:Row)=>({id:r.id,name:r.name,version:r.latest_version,createdAt:r.created_at,updatedAt:r.updated_at,tokens:JSON.parse(r.body) as KitTokens,digest:r.digest});
@@ -54,7 +55,7 @@ export async function createBrandKit(db:D1Database,userId:string,value:unknown){
     db.prepare(`INSERT INTO brand_kits(id,owner_user_id,name,latest_version,created_at,updated_at) SELECT ?,?,?,1,?,? WHERE ${g.sql}`).bind(kit,userId,name,now,now,...g.params),
     db.prepare('INSERT INTO brand_kit_versions(kit_id,version,tokens_json,tokens_digest,created_at) VALUES(?,1,?,?,?)').bind(kit,body,digest,now)
    ]);
-  }catch(error){throw mapFailure(error,'brand kit')??new BrandKitError(403,'Feature eligibility changed. Refresh the current plan and try again.');}
+  }catch(error){if(/UNIQUE|PRIMARY KEY/.test(String(error)))throw new BrandKitError(409,'This request ID is already in use. Try again.');throw mapFailure(error,'brand kit')??new BrandKitError(403,'Feature eligibility changed. Refresh the current plan and try again.');}
  }
  return (await listBrandKits(db,userId)).kits.find(k=>k.id===kit)!;
 }
@@ -66,6 +67,7 @@ export async function saveBrandKitVersion(db:D1Database,userId:string,kitId:stri
  const expected=v.expectedVersion as number,name=cleanName(v.name,'brand kit'),tokens=kitTokens(v.tokens),body=tokensJSON(tokens),digest=await digestOf(body);
  const current=await db.prepare('SELECT latest_version FROM brand_kits WHERE id=? AND owner_user_id=?').bind(kitId,userId).first<{latest_version:number}>();
  if(!current)throw new BrandKitError(404,'Brand kit not found.');
+ if(current.latest_version>=kitLimits.versions&&current.latest_version===expected)throw new BrandKitError(409,`This brand kit already has ${kitLimits.versions} versions, the most it can hold. Make a copy as a new kit, or delete this one.`);
  if(current.latest_version!==expected)throw new BrandKitError(409,'This brand kit changed since you opened it. Reload it and try again.');
  const g=await gate(db,userId,brandKitFeature),now=new Date().toISOString();
  try{
@@ -81,7 +83,8 @@ export async function saveBrandKitVersion(db:D1Database,userId:string,kitId:stri
 /** Deleting a kit never touches a project: sites keep the tokens they copied in. */
 export async function deleteBrandKit(db:D1Database,userId:string,kitId:string){
  await assertWorkspace(db,userId);
- const n=(await db.prepare('DELETE FROM brand_kits WHERE id=? AND owner_user_id=?').bind(id(kitId,'brand kit'),userId).run()).meta.changes;
+ let n=0;
+ try{n=(await db.prepare('DELETE FROM brand_kits WHERE id=? AND owner_user_id=?').bind(id(kitId,'brand kit'),userId).run()).meta.changes;}catch(error){throw mapFailure(error,'brand kit')??error;}
  if(n<1)throw new BrandKitError(404,'Brand kit not found.');
  return {version:1 as const,deleted:true};
 }
@@ -111,7 +114,7 @@ export async function createSavedSection(db:D1Database,userId:string,value:unkno
     db.prepare(`INSERT INTO saved_sections(id,owner_user_id,name,latest_version,created_at,updated_at) SELECT ?,?,?,1,?,? WHERE ${g.sql}`).bind(section,userId,name,now,now,...g.params),
     db.prepare('INSERT INTO saved_section_versions(section_id,version,content_json,content_digest,created_at) VALUES(?,1,?,?,?)').bind(section,body,digest,now)
    ]);
-  }catch(error){throw mapFailure(error,'saved section')??new BrandKitError(403,'Feature eligibility changed. Refresh the current plan and try again.');}
+  }catch(error){if(/UNIQUE|PRIMARY KEY/.test(String(error)))throw new BrandKitError(409,'This request ID is already in use. Try again.');throw mapFailure(error,'saved section')??new BrandKitError(403,'Feature eligibility changed. Refresh the current plan and try again.');}
  }
  return (await listSavedSections(db,userId)).sections.find(s=>s.id===section)!;
 }
@@ -122,6 +125,7 @@ export async function saveSavedSectionVersion(db:D1Database,userId:string,sectio
  const expected=v.expectedVersion as number,name=cleanName(v.name,'saved section'),content=sectionContent(v.content),body=contentJSON(content),digest=await digestOf(body);
  const current=await db.prepare('SELECT latest_version FROM saved_sections WHERE id=? AND owner_user_id=?').bind(sectionId,userId).first<{latest_version:number}>();
  if(!current)throw new BrandKitError(404,'Saved section not found.');
+ if(current.latest_version>=kitLimits.versions&&current.latest_version===expected)throw new BrandKitError(409,`This saved section already has ${kitLimits.versions} versions, the most it can hold. Save the text as a new section, or delete this one.`);
  if(current.latest_version!==expected)throw new BrandKitError(409,'This saved section changed since you opened it. Reload it and try again.');
  const g=await gate(db,userId,savedSectionFeature),now=new Date().toISOString();
  try{
@@ -136,7 +140,8 @@ export async function saveSavedSectionVersion(db:D1Database,userId:string,sectio
 }
 export async function deleteSavedSection(db:D1Database,userId:string,sectionId:string){
  await assertWorkspace(db,userId);
- const n=(await db.prepare('DELETE FROM saved_sections WHERE id=? AND owner_user_id=?').bind(id(sectionId,'saved section'),userId).run()).meta.changes;
+ let n=0;
+ try{n=(await db.prepare('DELETE FROM saved_sections WHERE id=? AND owner_user_id=?').bind(id(sectionId,'saved section'),userId).run()).meta.changes;}catch(error){throw mapFailure(error,'saved section')??error;}
  if(n<1)throw new BrandKitError(404,'Saved section not found.');
  return {version:1 as const,deleted:true};
 }

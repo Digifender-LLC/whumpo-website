@@ -4,7 +4,7 @@
   "schemaVersion": 1,
   "esbuildVersion": "0.28.2",
   "target": "es2022",
-  "renderer": "be9e4b998998ef4182221110fdc3f99c60108ab9d53d861095ce3cf1028f5052",
+  "renderer": "de2fa812b78e54bca1a1240ec53a49980e8781e2da2840c7a8ced77e03e15a60",
   "sources": [
     {
       "path": "src/backend-error.ts",
@@ -28,7 +28,7 @@
     },
     {
       "path": "src/brand-tokens.ts",
-      "digest": "a69ba1ab45ab7d0d1271de2dbdd4f34a2da29e782809b861e94faee8e71848c1"
+      "digest": "ab72184501c91b13983289cc0483d4b86c9322c2b5b1435f30c084215aba50b9"
     },
     {
       "path": "src/components.ts",
@@ -55,5 +55,5 @@
       "digest": "d25c3ba0a195fe9b85dd42589dced1ffb921604667ea4eed34ce7964f26a9ace"
     }
   ],
-  "compilerDigest": "8771c04c53410901b34f41315314dcc7bab26a2b0cc9c165e6d748da881ae08a"
+  "compilerDigest": "6831aa2203a05b396faf8f04f34fa40a5d0f289aa4778d277731ce4965cebfa8"
 }

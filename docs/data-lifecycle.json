@@ -2121,8 +2121,8 @@
       "purpose": "WH-091 the owner's own versioned brand kits (light and optional dark colors, one of five type styles, corner and spacing options, a logo description) and saved reusable page sections (heading, text, style). Plain validated tokens and bounded text only: no file bytes, no credentials, no visitor data. A project never reads these tables; applying one copies a version into the project's specification through the exact website review.",
       "currentRetention": "Kept until the owner deletes the kit or section, which removes all its versions, or the account is deleted. Versions are immutable and append-only (50 per kit or section); limits are 20 kits and 60 sections per owner. Deleting a kit or section never changes a saved, reviewed or published website, which holds its own copy. There is no age-based expiry: the content is the owner's own design material.",
       "proposedRetention": "Owner-retained while used. Account closure deletes kits and sections with the account unless a preservation hold applies to the account.",
-      "deletionAuthority": "Current owner (identity and ownership; no paid-feature gate) deletes a kit or section; account deletion cascades. Models, Chat and jobs cannot create, change or delete them.",
-      "exportPolicy": "Owner JSON reads (list and exact version) are the current export surface: name, version, tokens or section text and digest. The copied tokens in a project travel with that project's specification export. Never carries another owner's data, a credential, or an approved photo's bytes.",
+      "deletionAuthority": "Current owner (identity and ownership; no paid-feature gate) deletes a kit or section; account deletion cascades. Both are refused while an active account safety preservation hold applies (safety_hold_brand_kit_retained, safety_hold_saved_section_retained). Models, Chat and jobs cannot create, change or delete them.",
+      "exportPolicy": "Owner JSON reads (list and exact version) are the only export surface today: name, version, tokens or section text and digest. The portable account export does not include kits or saved sections yet (to be added with PR #554); the copied tokens in a project travel with that project's specification export. Never carries another owner's data, a credential, or an approved photo's bytes.",
       "references": [
         "src/brand-kits/schema.sql",
         "src/brand-kits/owner.ts",
@@ -2145,7 +2145,7 @@
           "Deterministic owner handlers only; no model, Chat history, notification, job or third-party processor reads kits or saved sections"
         ],
         "remainingExposure": [
-          "Rows are readable to privileged operators. Section text is owner-written and becomes public only after a reviewed apply, website review and publication review."
+          "Rows are readable to privileged operators. Kit names, logo descriptions and section text are owner-written and may be evidence, so a safety hold keeps them; section text becomes public only after a reviewed apply, website review and publication review."
         ],
         "decision": "retain-and-verify",
         "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; the content is the owner's own design material and blanket encryption would not remove authorized owner access. Verify minimization and recovery before broader admission.",

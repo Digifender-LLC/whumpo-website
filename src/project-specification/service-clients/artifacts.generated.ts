@@ -1,5 +1,5 @@
 // Generated from compiler-locks/project-service-clients-v5.json. Never repin an existing identity.
 export const serviceClientArtifacts = {
-  "compiler": "8771c04c53410901b34f41315314dcc7bab26a2b0cc9c165e6d748da881ae08a",
-  "renderer": "be9e4b998998ef4182221110fdc3f99c60108ab9d53d861095ce3cf1028f5052"
+  "compiler": "6831aa2203a05b396faf8f04f34fa40a5d0f289aa4778d277731ce4965cebfa8",
+  "renderer": "de2fa812b78e54bca1a1240ec53a49980e8781e2da2840c7a8ced77e03e15a60"
 } as const;

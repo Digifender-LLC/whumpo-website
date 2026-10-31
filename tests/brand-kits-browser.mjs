@@ -23,7 +23,7 @@ try{
  }catch{res.writeHead(404).end();}});
  await new Promise(done=>server.listen(0,'127.0.0.1',done));origin='http://127.0.0.1:'+server.address().port;
  browser=await chromium.launch({headless:true,...(process.env.WHUMPO_CHROMIUM?{executablePath:process.env.WHUMPO_CHROMIUM}:{})});
- const context=await browser.newContext({viewport:{width:390,height:844},deviceScaleFactor:2,isMobile:true,hasTouch:true,locale:'en-US'});page=await context.newPage();page.setDefaultTimeout(10000);
+ const context=await browser.newContext({viewport:{width:390,height:844},deviceScaleFactor:1,locale:'en-US'});page=await context.newPage();page.setDefaultTimeout(10000);
  page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(['error','warning'].includes(m.type()))errors.push(m.text()+' @'+m.location().url+':'+m.location().lineNumber);});
  await page.goto(origin);await page.locator('#new form').waitFor();
  const ed=id=>page.locator('#'+id),log=async id=>JSON.parse(await page.locator('#'+id+'-log').textContent()),axe=async label=>{const r=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21a','wcag21aa']).analyze();assert.deepEqual(r.violations.map(v=>[v.id,v.nodes.map(n=>n.target)]),[],'axe: '+label);};
@@ -36,14 +36,14 @@ try{
  await ed('new').getByLabel('Kit name').fill('Harbour');assert(await save('new').isEnabled());
  assert.equal(await ed('new').getByRole('alert').count(),0,'Default colors are readable');
  phase='the contrast report is text and numbers, not color alone';
- const rows=await ed('new').locator('table tbody tr').allTextContents();assert.equal(rows.length,4);assert(rows.every(r=>/\d+\.\d to 1/.test(r)&&/Readable/.test(r)),rows.join('|'));
+ const rows=await ed('new').locator('table tbody tr').allTextContents();assert.equal(rows.length,4);assert(rows.every(r=>/\d+\.\d\d to 1/.test(r)&&/Readable/.test(r)),rows.join('|'));
  phase='a typed color must be six hex digits; a bad value is explained and not applied';
  await hex('new','Light mode text').fill('#12');await ed('new').getByText('Use six digits after the #, like #1f2a44.').waitFor();assert.equal(await hex('new','Light mode text').getAttribute('aria-invalid'),'true');
  assert.equal((await ed('new').locator('table tbody tr').allTextContents()).length,4,'The last valid color is still in use');
  phase='unreadable colors are refused in plain words, save is blocked, and the fix is offered';
  await hex('new','Light mode text').fill('#9a9a9a');await hex('new','Light mode background').fill('#ffffff');
  const alert=ed('new').getByRole('alert');await alert.getByText('These light colors cannot be saved yet.').waitFor();
- await alert.getByText(/Text on the background is too hard to read in light mode \(contrast \d+\.\d to 1; at least 4\.5 to 1 is needed so people with low vision can read it\)/).waitFor();
+ await alert.getByText(/Text on the background is too hard to read in light mode \(contrast \d+\.\d\d to 1; at least 4\.5 to 1 is needed so people with low vision can read it\)/).waitFor();
  assert(await save('new').isDisabled());await ed('new').getByText('Fix the colors marked above.').waitFor();
  assert((await ed('new').locator('table tbody tr').allTextContents()).some(r=>/Too hard to read/.test(r)));
  await alert.getByRole('button',{name:'Fix light colors automatically'}).click();
@@ -86,25 +86,77 @@ try{
  await page.waitForFunction(()=>document.querySelector('#section [data-testid=brand-preview]').shadowRoot.querySelectorAll('.feature-quote').length===1);
  phase='the dark preview of a saved kit uses its dark colors';
  assert.equal((await preview('preview-dark'))[0],'rgb(20, 22, 28)');await ed('preview-light-only').getByText('Dark colors are not set, so visitors who prefer dark mode see the light colors.').waitFor();
+ phase='a typed color that is not six hex digits is explained, then the field returns to the color actually in use';
+ await ed('edit').getByLabel('Light mode accent',{exact:true}).fill('#8a2');await ed('edit').getByText(/Until then the color stays #8a2c0d\./).waitFor();
+ await page.keyboard.press('Tab');assert.equal(await ed('edit').getByLabel('Light mode accent',{exact:true}).inputValue(),'#8a2c0d','leaving the field restores the real color');assert.equal(await ed('edit').getByText(/Until then the color stays/).count(),0);
+ phase='nothing can be fixed on a background with no readable text color: the owner color is kept, the message says so, and a near miss reads as a miss';
+ await hex('new','Light mode text').fill('#777777');await hex('new','Light mode background').fill('#777777');
+ await ed('new').getByRole('alert').getByRole('button',{name:'Fix light colors automatically'}).click();
+ await ed('new').getByRole('status').filter({hasText:'Some pairings still cannot be read. Choose a lighter or darker background color.'}).waitFor();
+ assert.equal(await hex('new','Light mode text').inputValue(),'#777777','the text color was not forced to black');assert(await save('new').isDisabled());
+ await hex('new','Light mode background').fill('#ffffff');await hex('new','Light mode text').fill('#767676');await ed('new').locator('table tbody tr').first().waitFor();
+ assert.match((await ed('new').locator('table tbody tr').first().textContent())??'',/4\.54 to 1/,'#767676 on white is 4.54, shown with two places');
+ await hex('new','Light mode text').fill('#777777');assert.match((await ed('new').locator('table tbody tr').first().textContent())??'',/4\.47 to 1[\s\S]*Too hard to read/,'4.47 is a miss, never rounded up to 4.5');
+ await hex('new','Light mode text').fill('#1f2a44');
+ phase='dark suggestions say whether they are readable';
+ await ed('new').getByRole('button',{name:'Suggest dark colors from my light colors'}).click();await ed('new').getByRole('status').filter({hasText:/Suggested dark colors from your light colors\./}).waitFor();
  phase='axe on the light and dark workspace';
  await axe('light');await page.evaluate(()=>document.documentElement.classList.add('dark'));await axe('dark');await page.evaluate(()=>document.documentElement.classList.remove('dark'));
+ const frame=()=>page.evaluate(()=>{
+  const main=document.querySelector('main.workspace-main'),bad=[];
+  for(const form of document.querySelectorAll('form')){const fr=form.getBoundingClientRect();
+   for(const el of form.querySelectorAll('input,button,select,textarea,th,td,label,legend,h3,h4,p,table,tr')){const r=el.getBoundingClientRect();if(r.width&&(r.left<fr.left-1||r.right>fr.right+1))bad.push([form.parentElement.id,el.tagName,(el.textContent||el.getAttribute('aria-label')||'').slice(0,30),Math.round(r.left),Math.round(r.right),Math.round(fr.left),Math.round(fr.right),getComputedStyle(el).whiteSpace,getComputedStyle(el).flexShrink,getComputedStyle(el).minWidth,getComputedStyle(el).maxWidth,Math.round(el.parentElement.getBoundingClientRect().width),getComputedStyle(el.parentElement).display].join(' '));}
+   if(form.scrollWidth>form.clientWidth+1)bad.push('form scrolls sideways '+form.parentElement.id+' '+[...form.querySelectorAll('*')].filter(e=>e.getBoundingClientRect().right>fr.right+1&&e.getBoundingClientRect().width).slice(0,4).map(e=>e.tagName+'.'+String(e.className).slice(0,50)+':'+Math.round(e.getBoundingClientRect().right)).join(' | '));}
+  return {bad,mainFits:main.scrollWidth<=main.clientWidth+1,pageFits:document.documentElement.scrollWidth<=innerWidth};
+ });
  for(const width of [360,390,1280]){
-  phase='layout at '+width+'px';
-  await page.setViewportSize({width,height:width===1280?900:844});
-  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'No horizontal scroll at '+width);
+  phase='layout at '+width+'px in the real workspace frame (not mobile emulation)';
+  await page.setViewportSize({width,height:width===1280?900:800});
+  const f=await frame();assert.deepEqual(f.bad,[],'inside the form at '+width);assert(f.mainFits,'main has no sideways scroll at '+width);assert(f.pageFits);
   for(const id of ['new','edit','section']){
-   await ed(id).scrollIntoViewIfNeeded();const b=await ed(id).locator('form').boundingBox();assert(b.x>=0&&b.x+b.width<=width,id+' inside the viewport at '+width);
+   await ed(id).scrollIntoViewIfNeeded();
    for(const control of await ed(id).locator('input:not([type=radio]):not([type=checkbox]),button,select').all()){const box=await control.boundingBox();if(box)assert(box.height>=44,`${id} ${await control.evaluate(el=>el.outerHTML.slice(0,60))} is ${box.height}px at ${width}`);}
   }
-  await ed('new').screenshot({path:`${shots}/whumpo-brand-kit-editor-${width}.png`});await ed('section').screenshot({path:`${shots}/whumpo-saved-section-${width}.png`});
+  if(width===1280){// the preview is sticky here, so a viewport capture (top, then scrolled into the colors) shows what the owner sees
+   await page.evaluate(()=>document.querySelector('#new').scrollIntoView({block:'start'}));await page.screenshot({path:`${shots}/whumpo-brand-kit-editor-${width}-top.png`});
+   await page.evaluate(()=>document.querySelector('main.workspace-main').scrollBy(0,650));await page.screenshot({path:`${shots}/whumpo-brand-kit-editor-${width}-scrolled.png`});
+  }else await ed('new').screenshot({path:`${shots}/whumpo-brand-kit-editor-${width}.png`});
+  await ed('section').screenshot({path:`${shots}/whumpo-saved-section-${width}.png`});
  }
- phase='200% text';
- await page.setViewportSize({width:360,height:844});await page.evaluate(()=>{document.documentElement.style.fontSize='32px';});
- assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'No horizontal scroll at 200% text');
- await ed('new').screenshot({path:`${shots}/whumpo-brand-kit-editor-200pct.png`});await page.evaluate(()=>{document.documentElement.style.fontSize='';});
+ phase='the preview sits right after the kit name and shows an about panel and a section panel without scrolling';
+ await page.setViewportSize({width:1280,height:900});
+ const order=await ed('new').evaluate(el=>{const all=[...el.querySelectorAll('input,section[aria-label=Preview]')];return all.map(n=>n.tagName==='SECTION'?'preview':(n.getAttribute('id')||'').includes('name')?'name':n.getAttribute('type')==='color'?'color':'other');});
+ assert.deepEqual(order.slice(0,3),['name','preview','color'],'name, then preview, then the colors');
+ for(const [w,h] of [[1280,900],[1024,800],[390,844]]){
+  await page.setViewportSize({width:w,height:h});const box=ed('new').getByTestId('brand-preview');await box.scrollIntoViewIfNeeded();
+  const m=await box.evaluate(el=>{const r=el.getBoundingClientRect(),inside=sel=>{const n=el.shadowRoot.querySelector(sel);if(!n)return null;const b=n.getBoundingClientRect();return b.top>=r.top-1&&b.bottom<=r.bottom+1;};return {about:inside('.about'),card:inside('.feature-card'),callout:inside('.feature-callout')};});
+  assert.equal(m.about,true,`${w}x${h}: the about panel (corners, spacing) is fully visible`);assert.equal(m.card,true,`${w}x${h}: a card panel is fully visible`);assert.equal(m.callout,true,`${w}x${h}: a callout panel is fully visible`);
+ }
+ phase='sticky only on large tall screens: solid, at most 38dvh, and Tab never lands under it';
+ const pos=async(w,h)=>{await page.setViewportSize({width:w,height:h});return ed('new').locator('.brand-sticky').evaluate(el=>{const c=getComputedStyle(el),r=el.getBoundingClientRect();return {position:c.position,bg:c.backgroundColor,h:r.height,vh:innerHeight};});};
+ const big=await pos(1280,900);assert.equal(big.position,'sticky');assert.notEqual(big.bg,'rgba(0, 0, 0, 0)','a solid background');assert(big.h<=0.38*big.vh+1,`sticky preview is ${big.h}px of ${big.vh}`);
+ assert.equal((await pos(1280,700)).position,'static','short screens keep it in flow');assert.equal((await pos(900,900)).position,'static','narrow screens keep it in flow');assert.equal((await pos(390,844)).position,'static','phones keep it in flow');
+ await page.setViewportSize({width:1280,height:900});await ed('new').getByLabel('Kit name').focus();
+ for(let i=0;i<60;i++){
+  await page.keyboard.press('Tab');
+  const hidden=await page.evaluate(()=>{const a=document.activeElement,s=document.querySelector('#new .brand-sticky');if(!a||!s||s.contains(a)||!document.querySelector('#new form').contains(a))return null;const sb=s.getBoundingClientRect().bottom,r=a.getBoundingClientRect();return r.top<sb-1&&r.bottom>0?[a.tagName,Math.round(r.top),Math.round(sb)]:null;});
+  assert.equal(hidden,null,'focus landed under the sticky preview at Tab '+i);
+ }
+ phase='200% text in the real frame';
+ for(const width of [360,1280]){
+  await page.setViewportSize({width,height:width===1280?900:800});await page.evaluate(()=>{document.documentElement.style.fontSize='32px';});
+  const f=await frame();assert.deepEqual(f.bad,[],'200% text inside the form at '+width);assert(f.mainFits,'main has no sideways scroll at 200% and '+width);assert(f.pageFits);
+  if(width===360)await ed('new').screenshot({path:`${shots}/whumpo-brand-kit-editor-200pct.png`});
+  await page.evaluate(()=>{document.documentElement.style.fontSize='';});
+ }
+ phase='saved section preview shows the section itself, at the top';
+ await page.setViewportSize({width:1280,height:900});
+ const sec=await ed('section').getByTestId('brand-preview').evaluate(el=>{const r=el.getBoundingClientRect(),f=el.shadowRoot.querySelector('.feature'),b=f.getBoundingClientRect();return {hero:getComputedStyle(el.shadowRoot.querySelector('.hero')).display,top:b.top-r.top,fits:b.bottom<=r.bottom,text:f.textContent};});
+ assert.equal(sec.hero,'none');assert(sec.top<90,'section is near the top of its preview: '+sec.top);assert(sec.fits);assert.match(sec.text,/Hours/);
+ await ed('section').screenshot({path:`${shots}/whumpo-saved-section-preview-1280.png`});
  phase='dark workspace';
  await page.setViewportSize({width:390,height:844});await page.evaluate(()=>document.documentElement.classList.add('dark'));
- assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+ assert((await frame()).mainFits);
  await ed('edit').screenshot({path:`${shots}/whumpo-brand-kit-editor-dark.png`});
  assert.equal(errors.length,0,[...new Set(errors)].join('\n'));
  console.log('Brand kit browser passed: actual built editors at 360, 390 and 1280px, 200% text, light and dark, keyboard radio groups, axe, plain-words contrast refusal with automatic fix, real renderer preview under the workspace CSP, exact saved tokens.');

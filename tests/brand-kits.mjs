@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import {currentSiteFixtureHandlers,createFixtureProject} from './current-site-fixture.mjs';
+import {currentSiteFixtureHandlers,createFixtureProject,proposeFixtureWebsite} from './current-site-fixture.mjs';
+import {accountClosureInventory} from '../tools/account-closure-inventory.mjs';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
 Error.stackTraceLimit=0;
@@ -72,7 +73,8 @@ try{
   kit=await kits.createBrandKit(a.scope,a.user,request);assert.equal(kit.version,1);assert.deepEqual(kit.tokens,tokens());
   assert.deepEqual(await kits.createBrandKit(a.scope,a.user,request),kit);
   await rejects(()=>kits.createBrandKit(a.scope,a.user,{...request,tokens:tokens({font:'modern'})}),409);
-  await rejects(()=>kits.createBrandKit(b.scope,b.user,request),409,undefined).catch(()=>{});
+  await rejects(()=>kits.createBrandKit(b.scope,b.user,request),409,/request ID is already in use/);
+  assert.deepEqual((await kits.listBrandKits(b.scope,b.user)).kits,[],'the other owner gained nothing');
   assert.equal((await rows('SELECT kit_id FROM brand_kit_versions WHERE kit_id=?',request.id)).length,1);
  });
 
@@ -92,7 +94,7 @@ try{
   await rejects(()=>kits.saveBrandKitVersion(b.scope,b.user,kit.id,{expectedVersion:2,name:'x',tokens:tokens()}),404);
   await rejects(()=>kits.deleteBrandKit(b.scope,b.user,kit.id),404);
   const r=await control(b,{type:'brandKitReview',projectId:b.project,kitId:kit.id,version:2,logoId:null});assert.equal(r.status,404);assert.match(r.error,/Brand kit not found/);
-  const foreignProject=await control(b,{type:'brandKitReview',projectId:a.project,kitId:kit.id,version:2,logoId:null});assert.ok(foreignProject.status>=400);
+  const foreignProject=await control(b,{type:'brandKitReview',projectId:a.project,kitId:kit.id,version:2,logoId:null});assert.equal(foreignProject.status,404);
   assert.equal((await rows('SELECT id FROM project_spec_proposals WHERE project_id IN(?,?)',a.project,b.project)).length,0);
  });
 
@@ -113,7 +115,8 @@ try{
   const copy=(turn,specJSON)=>run('INSERT INTO project_spec_proposals SELECT ?,user_id,project_id,operation,expected_revision,draft_revision,base_version_id,target_version_id,base_digest,request_hash,proposal_digest,spec_digest,manifest_digest,policy_version,expires_at,?,lock_json,manifest_json,config_json,html,html_digest,diff_json,envelope_json FROM project_spec_proposals WHERE id=?',turn,specJSON,proposal.id);
   const spec=JSON.parse(proposal.spec_json),tweak=fn=>{const s=structuredClone(spec);fn(s);return JSON.stringify(s);};
   const action={type:'brandKitReview',projectId:a.project,kitId:kit.id,version:2,logoId:null};
-  for(const [name,json] of [['other color',tweak(s=>{s.design.brand.light.accent='#000000';})],['other font',tweak(s=>{s.design.brand.font='classic';})],['other version',tweak(s=>{s.design.brand.source.version=1;})],['unknown kit',tweak(s=>{s.design.brand.source.kitId=id();})],['no source',tweak(s=>{s.design.brand.source=null;})],['extra change',tweak(s=>{s.name='Renamed';})]]){
+  const bKit=await kits.createBrandKit(b.scope,b.user,{id:id(),name:'B same tokens',tokens:tokens({font:'modern'})});
+  for(const [name,json] of [['foreign kit with identical tokens',tweak(s=>{s.design.brand.source.kitId=bKit.id;s.design.brand.source.version=1;})],['other color',tweak(s=>{s.design.brand.light.accent='#000000';})],['other font',tweak(s=>{s.design.brand.font='classic';})],['other version',tweak(s=>{s.design.brand.source.version=1;})],['unknown kit',tweak(s=>{s.design.brand.source.kitId=id();})],['no source',tweak(s=>{s.design.brand.source=null;})],['extra change',tweak(s=>{s.name='Renamed';})]]){
    const t=await synthetic(a,action);await assert.rejects(()=>copy(t,json),/specification_changed|constraint/,name);
   }
   const t=await synthetic(b,{...action,projectId:b.project});
@@ -138,7 +141,7 @@ try{
   const k=await kits.createBrandKit(a.scope,a.user,{id:id(),name:'With logo',tokens:tokens({font:'classic'})});
   const noAlt=await kits.createBrandKit(a.scope,a.user,{id:id(),name:'No alt',tokens:tokens({logoAlt:null})});
   const good=await approvedPhoto(a),pending=await approvedPhoto(a,a.project,false),foreign=await approvedPhoto(b);
-  for(const bad of [pending,foreign,id()]){const r=await control(a,{type:'brandKitReview',projectId:a.project,kitId:k.id,version:1,logoId:bad});assert.ok(r.status>=400,'refused '+bad);}
+  for(const bad of [pending,foreign,id()]){const r=await control(a,{type:'brandKitReview',projectId:a.project,kitId:k.id,version:1,logoId:bad});assert.ok([404,409,423].includes(r.status),`refused ${bad} with ${r.status}: ${r.error}`);}
   const missing=await control(a,{type:'brandKitReview',projectId:a.project,kitId:noAlt.id,version:1,logoId:good});assert.equal(missing.status,409);assert.match(missing.error,/no logo description/);
   const r=await control(a,{type:'brandKitReview',projectId:a.project,kitId:k.id,version:1,logoId:good});assert.equal(r.status,200,r.error);
   const p=await apply(a,r.id);const saved=await head(a);
@@ -176,11 +179,96 @@ try{
  await check('a stale review is refused at apply: the site changed after it was prepared',async()=>{
   const k=await kits.createBrandKit(a.scope,a.user,{id:id(),name:'Stale',tokens:tokens()});
   const first=await control(a,{type:'brandKitReview',projectId:a.project,kitId:k.id,version:1,logoId:null});assert.equal(first.status,200,first.error);
-  const second=await control(a,{type:'brandRemoveReview',projectId:a.project});
-  const p1=await row('SELECT * FROM project_spec_proposals WHERE id=?',first.id);
-  await apply(a,first.id);
-  const stale=await row('SELECT * FROM project_spec_proposals WHERE id=?',second.id);
-  if(stale){const r=await control(a,{type:'specificationApply',reviewId:stale.id,proposalDigest:stale.proposal_digest,expectedRevision:stale.expected_revision});assert.ok(r.status>=400,'the second review was prepared against an older site');}
+  // The site moves on after the brand review was prepared: an ordinary reviewed rename is saved first.
+  const rename=await proposeFixtureWebsite(a.scope,a.user,a.project,[{type:'project.setName',name:'Moved on '+id().slice(0,4)}]);
+  await apply(a,rename.id);
+  const stale=await row('SELECT * FROM project_spec_proposals WHERE id=?',first.id);assert.ok(stale,'the brand review exists');
+  await assert.rejects(()=>control(a,{type:'specificationApply',reviewId:stale.id,proposalDigest:stale.proposal_digest,expectedRevision:stale.expected_revision}),e=>e.status===409&&/changed|expired|fresh review/i.test(e.message));
+  assert.equal((await head(a)).spec.design.brand,null,'the stale brand review changed nothing');
+  // A fresh review of the same kit applies.
+  const again=await control(a,{type:'brandKitReview',projectId:a.project,kitId:k.id,version:1,logoId:null});assert.equal(again.status,200,again.error);await apply(a,again.id);
+  assert.equal((await head(a)).spec.design.brand.source.kitId,k.id);
+ });
+
+ await check('the model cannot apply a brand: change, create and project drafts refuse it, and the commit refuses a forged proposal, with or without the plan feature',async()=>{
+  const provider={baseURL:'https://provider.test/v1',apiKey:'synthetic',model:'fixture',protocol:'responses'};
+  const forged={source:{kitId:id(),version:1},light:tokens().light,dark:null,font:'modern',radius:'sharp',density:'compact',logo:null};
+  async function modelTurn(o,action){
+   const tid=id(),state=(await m.readChat(o.scope,o.user)).state;
+   const r=await m.sendAIChat(o.scope,o.user,tid,state.revision,'Set my colours',provider,async()=>Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({reply:'Prepared',action})}]}],usage:{input_tokens:10,output_tokens:10}}));
+   return {tid,r,proposal:await row('SELECT id FROM project_spec_proposals WHERE id=?',tid),reply:(await row('SELECT assistant_text FROM chat_turns WHERE id=?',tid))?.assistant_text??''};
+  }
+  for(const o of [a,nofeature]){
+   const before=await head(o),rev=(await row('SELECT revision FROM project_spec_heads WHERE project_id=?',o.project)).revision;
+   const t=await modelTurn(o,{kind:'specification',operation:'change',projectId:o.project,expectedRevision:rev,operations:[{type:'design.setBrand',brand:forged}]});
+   assert.equal(t.proposal,null,'no proposal exists');assert.match(t.reply,/only be applied by you from Brand & sections/);
+   assert.equal((await head(o)).spec_digest,before.spec_digest,'the saved website did not change');
+   // The same turn with an ordinary change is still prepared: the refusal is about the brand, not the turn.
+   const ok=await modelTurn(o,{kind:'specification',operation:'change',projectId:o.project,expectedRevision:rev,operations:[{type:'project.setName',name:'Renamed '+id().slice(0,4)}]});
+   assert.ok(ok.proposal,'an ordinary change is prepared');
+   const spec=JSON.parse((await row('SELECT spec_json FROM project_spec_proposals WHERE id=?',ok.tid)).spec_json);assert.deepEqual(spec.design.brand,before.spec.design.brand);
+  }
+  // First drafts: a brand in the model's configuration is refused whether it arrives as a specification create or a new project.
+  const bare=id();await run("INSERT INTO projects(id,owner_user_id,name,purpose,status,created_at,updated_at) VALUES(?,?,'No site','','draft',strftime('%Y-%m-%dT%H:%M:%fZ','now'),strftime('%Y-%m-%dT%H:%M:%fZ','now'))",bare,a.user);
+  const config={name:'Draft',headline:'Hello',description:'Hi there.',theme:'ocean',aboutTitle:'About',aboutText:'Text.',sections:[],photos:[],brand:forged};
+  const create=await modelTurn(a,{kind:'specification',operation:'create',projectId:bare,config});
+  assert.match(create.reply,/only be applied by you from Brand & sections/);assert.equal((await rows('SELECT id FROM site_versions WHERE project_id=?',bare)).length,0);
+  const names=(await rows('SELECT id FROM projects WHERE owner_user_id=?',a.user)).length;
+  const fresh=await modelTurn(a,{kind:'project',purpose:'A bakery',config});
+  assert.equal((await rows('SELECT id FROM projects WHERE owner_user_id=?',a.user)).length,names,'no project was created from a branded draft');
+  // The commit itself: a model-turn proposal whose brand differs from the head is aborted even if the application layer were bypassed.
+  const valid={...forged,source:null};
+  await assert.rejects(()=>proposeFixtureWebsite(a.scope,a.user,a.project,[{type:'design.setBrand',brand:valid}]),/specification_changed|constraint/);
+  await assert.rejects(()=>proposeFixtureWebsite(nofeature.scope,nofeature.user,nofeature.project,[{type:'design.setBrand',brand:valid}]),/specification_changed|constraint/);
+  assert.ok(await proposeFixtureWebsite(a.scope,a.user,a.project,[{type:'project.setName',name:'Still fine '+id().slice(0,4)}]),'an ordinary change passes the same trigger');
+ });
+
+ await check('owner HTTP routes: create, list, read a version, save, delete; foreign owner, cross-origin, query strings and no session are refused',async()=>{
+  const http=async(o,method,path,body,origin='https://whumpo.com',session=true)=>{
+   const r=await m.worker.fetch(new Request('https://whumpo.com'+path,{method,headers:{...(session?{cookie:`__Host-whumpo_session=${o.token}`}:{}),origin,'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)}),{...(fixture.env??{}),DB:db,ENVIRONMENT:'test',AUTH_LIMITER:{limit:async()=>({success:true})},API_LIMITER:{limit:async()=>({success:true})}},{waitUntil(){}});
+   return {status:r.status,body:await r.json().catch(()=>null)};
+  };
+  const kid=id(),created=await http(a,'POST','/api/brand-kits',{id:kid,name:'Route kit',tokens:tokens()});assert.equal(created.status,200,JSON.stringify(created.body));assert.equal(created.body.version,1);
+  assert.ok((await http(a,'GET','/api/brand-kits')).body.kits.some(k=>k.id===kid));
+  assert.equal((await http(a,'GET',`/api/brand-kits/${kid}/versions/1`)).body.tokens.font,'editorial');
+  const bad=await http(a,'POST','/api/brand-kits',{id:id(),name:'Weak',tokens:tokens({light:{ink:'#9a9a9a',paper:'#ffffff',accent:'#8a2c0d'}})});assert.equal(bad.status,422);assert.match(bad.body.error,/hard to read/);
+  const put=await http(a,'PUT',`/api/brand-kits/${kid}`,{expectedVersion:1,name:'Route kit 2',tokens:tokens({font:'modern'})});assert.equal(put.status,200,JSON.stringify(put.body));assert.equal(put.body.version,2);
+  assert.equal((await http(a,'PUT',`/api/brand-kits/${kid}`,{expectedVersion:1,name:'Late',tokens:tokens()})).status,409);
+  for(const [method,path,body] of [['GET',`/api/brand-kits/${kid}/versions/1`],['PUT',`/api/brand-kits/${kid}`,{expectedVersion:2,name:'x',tokens:tokens()}],['DELETE',`/api/brand-kits/${kid}`]])assert.equal((await http(b,method,path,body)).status,404,'foreign owner '+method);
+  assert.equal((await http(a,'POST','/api/brand-kits',{id:id(),name:'X',tokens:tokens()},'https://evil.example')).status,403,'cross-origin write');
+  assert.equal((await http(a,'GET','/api/brand-kits?x=1')).status,400);assert.equal((await http(a,'PATCH','/api/brand-kits')).status,405);assert.equal((await http(a,'GET','/api/brand-kits',undefined,'https://whumpo.com',false)).status,401);
+  assert.equal((await http(nofeature,'POST','/api/brand-kits',{id:id(),name:'Free',tokens:tokens()})).status,403,'the plan gate holds over HTTP');
+  const sid=id(),sec=await http(a,'POST','/api/saved-sections',{id:sid,name:'Route section',content:{heading:'H',text:'T',variant:'card'}});assert.equal(sec.status,200,JSON.stringify(sec.body));
+  assert.equal((await http(a,'PUT',`/api/saved-sections/${sid}`,{expectedVersion:1,name:'Route section',content:{heading:'H2',text:'T2',variant:'quote'}})).body.version,2);
+  assert.equal((await http(a,'GET',`/api/saved-sections/${sid}/versions/1`)).body.content.heading,'H');assert.equal((await http(a,'GET',`/api/saved-sections/${sid}/versions/2`)).body.content.variant,'quote');
+  assert.equal((await http(a,'GET',`/api/saved-sections/${sid}/versions/9`)).status,404);assert.equal((await http(b,'GET',`/api/saved-sections/${sid}/versions/1`)).status,404);assert.equal((await http(b,'DELETE',`/api/saved-sections/${sid}`)).status,404);
+  assert.equal((await http(a,'DELETE',`/api/saved-sections/${sid}`)).status,200);assert.equal((await http(a,'DELETE',`/api/brand-kits/${kid}`)).status,200);assert.equal((await http(a,'DELETE',`/api/brand-kits/${kid}`)).status,404);
+ });
+
+ await check('an account hold keeps kits and sections; the 51st version is a clear conflict; closure counts every table',async()=>{
+  const c=await owner();
+  const k=await kits.createBrandKit(c.scope,c.user,{id:id(),name:'Held kit',tokens:tokens()}),s=await kits.createSavedSection(c.scope,c.user,{id:id(),name:'Held section',content:{heading:'H',text:'T',variant:'plain'}});
+  const counts=(await accountClosureInventory(db,c.user)).counts;assert.deepEqual([counts.brandKits,counts.brandKitVersions,counts.savedSections,counts.savedSectionVersions],[1,1,1,1]);
+  const other=(await accountClosureInventory(db,b.user)).counts;assert.equal(other.brandKits,(await rows('SELECT id FROM brand_kits WHERE owner_user_id=?',b.user)).length,'counts are per account');
+  const caseId='case-'+id(),hold='hold-'+id();
+  await run("INSERT INTO safety_cases(id,subject_user_id,intake_ref,opened_by,opened_at,retention_due_at) VALUES(?,?,'intake-1','human:reviewer',unixepoch(),unixepoch()+31536000)",caseId,c.user);
+  await run("INSERT INTO safety_preservation_holds(id,case_id,subject_user_id,scope,legal_basis_ref,approved_by,placed_at,review_due_at) VALUES(?,?,?,'account','basis-1','human:approver',unixepoch(),unixepoch()+86400)",hold,caseId,c.user);
+  await rejects(()=>kits.deleteSavedSection(c.scope,c.user,s.id),409,/cannot be deleted right now/);await rejects(()=>kits.deleteBrandKit(c.scope,c.user,k.id),409,/cannot be deleted right now/);
+  assert.equal((await rows('SELECT id FROM saved_sections WHERE id=?',s.id)).length,1);assert.equal((await rows('SELECT id FROM brand_kits WHERE id=?',k.id)).length,1);
+  await assert.rejects(()=>run('DELETE FROM users WHERE id=?',c.user),/safety_preservation_hold|constraint|FOREIGN/,'the account cascade is blocked too');
+  await run("UPDATE safety_preservation_holds SET released_at=unixepoch(),released_by='human:approver',release_ref='release-1' WHERE id=?",hold);
+  await kits.deleteSavedSection(c.scope,c.user,s.id);await kits.deleteBrandKit(c.scope,c.user,k.id);
+  const d=await owner();let kit=await kits.createBrandKit(d.scope,d.user,{id:id(),name:'Many',tokens:tokens()});
+  for(let v=1;v<50;v++)kit=await kits.saveBrandKitVersion(d.scope,d.user,kit.id,{expectedVersion:v,name:'Many',tokens:tokens({font:v%2?'modern':'classic'})});
+  assert.equal(kit.version,50);await rejects(()=>kits.saveBrandKitVersion(d.scope,d.user,kit.id,{expectedVersion:50,name:'Many',tokens:tokens({font:'humanist'})}),409,/already has 50 versions/);
+  let section=await kits.createSavedSection(d.scope,d.user,{id:id(),name:'Many',content:{heading:'H',text:'T0',variant:'plain'}});
+  for(let v=1;v<50;v++)section=await kits.saveSavedSectionVersion(d.scope,d.user,section.id,{expectedVersion:v,name:'Many',content:{heading:'H',text:'T'+v,variant:'plain'}});
+  await rejects(()=>kits.saveSavedSectionVersion(d.scope,d.user,section.id,{expectedVersion:50,name:'Many',content:{heading:'H',text:'last',variant:'plain'}}),409,/already has 50 versions/);
+ });
+
+ await check('an oversized configuration is a clear refusal, not a database CHECK failure',async()=>{
+  const big=Array.from({length:6},(_,n)=>({heading:'H'+n,text:'"'.repeat(800)}));
+  await assert.rejects(()=>proposeFixtureWebsite(a.scope,a.user,a.project,[{type:'pages.setSections',pageId:'home',sections:big}]),e=>e.status===422&&/too large to save.*9,216 bytes/.test(e.message));
  });
 
  await check('limits hold in the commit and nothing used the network',async()=>{

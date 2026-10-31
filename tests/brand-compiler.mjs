@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {build} from 'esbuild';
 import {checkSpecificationCompiler} from '../tools/check-specification-compiler.mjs';
 import {checkServiceClientCompiler} from '../tools/check-service-client-compiler.mjs';
 Error.stackTraceLimit=0;
 // WH-091 / WH-070 levels 1 and 2: brand tokens in the specification, the contrast rule, section variants, and the D50 `$` fix.
 await checkSpecificationCompiler();await checkServiceClientCompiler();
-const bundle=await build({stdin:{contents:`export * from './src/project-specification/compiler';export * from './src/project-specification/v3/schema';export * from './src/brand-tokens';export * from './src/components';export {createContentSpecification} from './src/project-specification/v3/content';export {publishedHTML} from './src/published-html';export {renderServiceClients} from './src/project-specification/service-clients/v5/core';export {SpecificationError} from './src/project-specification/v2/json';`,resolveDir:process.cwd(),loader:'ts'},bundle:true,format:'esm',platform:'neutral',target:'es2022',write:false});
+const bundle=await build({stdin:{contents:`export * from './src/project-specification/compiler';export * from './src/project-specification/v3/schema';export * from './src/brand-tokens';export * from './src/components';export {createContentSpecification} from './src/project-specification/v3/content';export {publishedHTML} from './src/published-html';export * from './src/project-specification/service-clients/compiler';export {SpecificationError} from './src/project-specification/v2/json';`,resolveDir:process.cwd(),loader:'ts'},bundle:true,format:'esm',platform:'neutral',target:'es2022',write:false});
 const m=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].contents).toString('base64'));
 const kitId='11111111-1111-4111-8111-111111111111',logoId='22222222-2222-4222-8222-222222222222';
 const brand=(over={})=>({source:{kitId,version:1},light:{ink:'#1f2a44',paper:'#fbf8f1',accent:'#8a2c0d'},dark:{ink:'#f2efe6',paper:'#14161c',accent:'#f0a37f'},font:'editorial',radius:'round',density:'spacious',logo:null,...over});
@@ -81,4 +82,20 @@ assert.equal(dollarHtml.split('<h1>').length,2,'no replacement text duplicated t
 assert.equal(dollarHtml.split('</main>').length,2);
 const form={config_json:JSON.stringify({title:"Ask $& $'",description:"Hi $` there",buttonLabel:"Send $'",fields:[{key:'name',label:"Your $& name",type:'text'}]}),backend_publication_id:'33333333-3333-4333-8333-333333333333'};
 const out=m.publishedHTML(dollarHtml,true,'44444444-4444-4444-8444-444444444444',form);assert.equal(out.split('</main>').length,2);assert.ok(out.includes('Get in touch'));assert.ok(out.includes('Ask $&amp; $&#39;'),'form text literal');
+// 7. Readable ratios are never rounded up to a pass, and an unfixable background is left alone.
+assert.equal(m.ratioText(4.496),'4.49');assert.equal(m.ratioText(4.5),'4.50');assert.equal(m.ratioText(12.0049),'12.00');
+const nearly=m.colorProblems({ink:'#777777',paper:'#ffffff',accent:'#000000'},'light');assert.ok(nearly.some(p=>/contrast 4\.4\d to 1/.test(p.message)),'a 4.48 pairing reads 4.48, not 4.5: '+JSON.stringify(nearly));
+const stuck={ink:'#777777',paper:'#777777',accent:'#777777'};{const adj=m.adjustColors(stuck,'light');assert.equal(adj.ink,stuck.ink,'no text color reaches 4.5 on this background, so the owner color is left alone (not forced to black)');assert.equal(adj.paper,stuck.paper);assert.ok(m.colorProblems(adj,'light').some(p=>p.path==='light.ink'));}
+const mid={ink:'#9a9a9a',paper:'#8a8a8a',accent:'#8a2c0d'};const moved=m.adjustColors(mid,'light');assert.ok(moved.ink===mid.ink||m.colorProblems(moved,'light').every(p=>p.path!=='light.ink'),'a color is either fixed or left as the owner chose it, never forced to black');
+assert.notEqual(m.adjustColors({ink:'#9a9a9a',paper:'#ffffff',accent:'#8a2c0d'},'light').ink,'#000000');
+
+// 8. D50 in the service-client core (src line 68): owner form text in the inert preview copies literally.
+{
+ const hash=x=>createHash('sha256').update(x).digest('hex'),idn=n=>`${String(n).padStart(8,'0')}-1111-4111-8111-111111111111`;
+ const config=m.siteConfig({name:'Garden',headline:'Care',description:'Near.',aboutTitle:'Work',aboutText:'Local.',theme:'forest',sections:[]}),pageHtml=m.renderSite(config),website={componentId:'site-page@1',config,html:pageHtml};
+ const target={projectId:idn(1),website:{versionId:idn(2),digest:hash(pageHtml)},publication:{revision:1,versionId:idn(2)},contact:{revision:0,active:false},backend:{revision:1,reviewId:idn(3),versionId:idn(4),digest:hash('b')},form:{revision:0,reviewId:null,active:false}};
+ const form={title:"Ask $& $' $`",description:"Hi $` $$ there",buttonLabel:"Send $'",fields:[{key:'name',label:"Your $& name",type:'text'}]};
+ const out=await m.compileServiceClientArtifacts({schemaVersion:1,contact:{component:'contact-link@1'},statelessForm:{component:'stateless-form@1',config:form}},target,website,m.currentServiceClientLock());
+ for(const a of out.artifacts){assert.equal(a.html.split('</main>').length,2,a.kind+' has one main');assert.equal(a.html.split('<!doctype').length,2,a.kind+' is one document');assert.ok(a.html.includes('Ask $&amp; $&#39; $`'),a.kind+' title literal');assert.ok(a.html.includes('Hi $` $$ there'),a.kind+' description literal');}
+}
 console.log('Brand compiler checks passed: contrast rule and adjustment, closed token shape, light and dark CSS variables, logo path, design.setBrand, section variants, and literal $ handling.');

@@ -20,7 +20,7 @@ const core = [
 const creator = [
   {id:'creator.brand-kits',name:'Versioned brand kits',implementation:'private-test'},
   {id:'creator.saved-sections',name:'Saved reusable page sections',implementation:'private-test'},
-  {id:'creator.shared-styles',name:'Shared styles with reviewed project updates',implementation:'private-test'},
+  {id:'creator.shared-styles',name:'Shared styles with reviewed project updates',implementation:'planned'},
   {id:'creator.guest-feedback',name:'Private guest feedback without an account',implementation:'private-test'}
 ] as const satisfies readonly FeatureDefinition[];
 const business = [

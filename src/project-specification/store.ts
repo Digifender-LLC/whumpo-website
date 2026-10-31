@@ -27,7 +27,9 @@ async function removableInstances(db:D1Database,project:string,spec:ProjectSpeci
 }
 function id(value:unknown):asserts value is string {if(typeof value!=='string'||!uuid.test(value))throw new BackendError(400,'Choose an owned project, version or review.');}
 function revision(value:unknown):asserts value is number {if(!Number.isSafeInteger(value)||Number(value)<0)throw new BackendError(400,'Read the current website revision before proposing a change.');}
-function safe(error:unknown):never {if(error instanceof BackendError)throw error;if(error instanceof SpecificationError||error instanceof Error&&error.message==='Rendered site too large')throw new BackendError(422,'This website configuration is not supported. Ask for a smaller compatible change.');throw error;}
+/** Fixed, plain refusals for the brand and size limits an owner can actually hit; everything else keeps the generic message. */
+const refusals:Record<string,string>={LOW_CONTRAST:'These brand colors are too hard to read together (they need at least 4.5 to 1 contrast). Change them in Brand & sections.',INVALID_COLOR:'A brand color is not a valid #rrggbb value.','pages.componentConfiguration':'This website is too large to save with this change (the saved configuration is limited to 9,216 bytes). Shorten some text, remove a section or photo, or remove the brand logo.'};
+function safe(error:unknown):never {if(error instanceof BackendError)throw error;if(error instanceof SpecificationError&&(refusals[error.code]||refusals[error.path]))throw new BackendError(422,refusals[error.code]??refusals[error.path]);if(error instanceof SpecificationError||error instanceof Error&&error.message==='Rendered site too large')throw new BackendError(422,'This website configuration is not supported. Ask for a smaller compatible change.');throw error;}
 type Head={project_id:string;name:string;draft_revision:number;revision:number;version_id:string|null;head_draft_revision:number|null;spec_json:string|null;spec_digest:string|null;lock_json:string|null};
 type Site={id:string;project_id:string;component_id:string;config_json:string;html:string;digest:string};
 type Proposal={id:string;user_id:string;project_id:string;operation:'change'|'restore';expected_revision:number;draft_revision:number;base_version_id:string|null;target_version_id:string|null;base_digest:string|null;request_hash:string;proposal_digest:string;spec_digest:string;manifest_digest:string;policy_version:string;expires_at:string;spec_json:string;lock_json:string;manifest_json:string;config_json:string;html:string;html_digest:string;diff_json:string;envelope_json:string};
@@ -85,6 +87,8 @@ function link(db:D1Database,user:string,turn:string,review:string,hash:string){r
 export async function createWebsite(db:D1Database,user:string,turn:string,project:string,input:unknown){
  try{
   id(turn);id(project);
+  // A brand is applied only from an owner kit through the typed review, never from model-supplied configuration.
+  if(input&&typeof input==='object'&&!Array.isArray(input)&&Object.hasOwn(input,'brand'))throw new BackendError(422,'A brand kit can only be applied by you from Brand & sections. Create the website without a brand.');
   if(await db.prepare('SELECT id FROM site_versions WHERE project_id=? LIMIT 1').bind(project).first())throw new BackendError(409,'This project already has a website. Read its specification and prepare a change review.');
   const compiled=await compileNewWebsite(input),{artifact,config,assets}=home(compiled),now=new Date().toISOString();
   await requireSpecificationPhotos(db,user,project,assets);
@@ -196,6 +200,8 @@ export async function specificationAction(db:D1Database,user:string,turn:string,
    shape(request,['kind','operation','reviewId']);id(request.reviewId);const q=await readSpecificationProposal(db,user,request.reviewId),reply=description(q);
    return {reply,statements:[link(db,user,turn,q.id,await sha256(reply))]};
   }
+  // `design.setBrand` is reachable only through the typed owner controls, which call prepareSpecification directly.
+  if(Array.isArray(request.operations)&&request.operations.some(o=>o&&typeof o==='object'&&(o as {type?:unknown}).type==='design.setBrand'))throw new BackendError(422,'A brand kit can only be applied by you from Brand & sections.');
   return await prepareSpecification(db,user,turn,request);
  }catch(error){return safe(error);}
 }

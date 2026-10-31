@@ -4,7 +4,7 @@
   "schemaVersion": 3,
   "esbuildVersion": "0.28.2",
   "target": "es2022",
-  "content": "f4b077b548086fd5d30045b70cd499a42b2c641e251de61e0b0668e82f40b712",
+  "content": "c259e1afd0fb7890725b30515600793d1d0615ac44abf0f01829b50a9daed598",
   "component": "c77ae5241a02fe3578da31b435e96db141496745e9a8b99724f45a993fffe803",
   "modules": [
     {
@@ -75,7 +75,7 @@
     },
     {
       "path": "src/brand-tokens.ts",
-      "digest": "a69ba1ab45ab7d0d1271de2dbdd4f34a2da29e782809b861e94faee8e71848c1"
+      "digest": "ab72184501c91b13983289cc0483d4b86c9322c2b5b1435f30c084215aba50b9"
     },
     {
       "path": "src/components.ts",
@@ -106,5 +106,5 @@
       "digest": "7ac3104c5f2da44639f24806ac9ae52d0671864398e1bcc83a03f47dddf2bba7"
     }
   ],
-  "compilerDigest": "d35bd95083978da11e94c9d6fa22b55190965f5aa2d55f8534d82e72ffd090fc"
+  "compilerDigest": "fd164ae03c003ea8ceeddc63e41e28b09a5eb64d7271a0feda8b253d1cfbe145"
 }

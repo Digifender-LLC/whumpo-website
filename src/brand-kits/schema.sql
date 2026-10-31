@@ -71,3 +71,22 @@ WHEN EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id AND t.user_id=NEW.user_
    AND json_extract(kv.tokens_json,'$.radius')=json_extract(NEW.spec_json,'$.design.brand.radius')
    AND json_extract(kv.tokens_json,'$.density')=json_extract(NEW.spec_json,'$.design.brand.density'))));
 END;
+
+-- WH-091 preservation: a kit's name and logo description, and a saved section's text, are owner-written text that may be evidence.
+-- While an account safety hold is active they are kept; deletion (including the account cascade) is refused like other held owner text.
+CREATE TRIGGER safety_hold_brand_kit_retained BEFORE DELETE ON brand_kits
+WHEN EXISTS(SELECT 1 FROM safety_preservation_holds WHERE released_at IS NULL AND scope='account' AND subject_user_id=OLD.owner_user_id)
+BEGIN SELECT RAISE(ABORT,'safety_preservation_hold'); END;
+CREATE TRIGGER safety_hold_saved_section_retained BEFORE DELETE ON saved_sections
+WHEN EXISTS(SELECT 1 FROM safety_preservation_holds WHERE released_at IS NULL AND scope='account' AND subject_user_id=OLD.owner_user_id)
+BEGIN SELECT RAISE(ABORT,'safety_preservation_hold'); END;
+
+-- Model and tool paths can never apply a brand: outside the typed brand controls a change must leave design.brand exactly as the saved
+-- head has it, and a first draft carries none. (The typed controls are admitted by project_spec_brand_apply_admit above.)
+CREATE TRIGGER project_spec_brand_unchanged BEFORE INSERT ON project_spec_proposals
+WHEN NEW.operation='change' AND NOT EXISTS(SELECT 1 FROM chat_turns t WHERE t.id=NEW.id AND t.user_id=NEW.user_id AND json_extract(t.action_json,'$.type') IN('brandKitReview','brandRemoveReview')) BEGIN
+ SELECT RAISE(ABORT,'specification_changed') WHERE NOT EXISTS(SELECT 1 FROM project_spec_versions v WHERE v.version_id=NEW.base_version_id AND v.project_id=NEW.project_id
+  AND json(json_extract(v.spec_json,'$.design.brand')) IS json(json_extract(NEW.spec_json,'$.design.brand')));
+END;
+CREATE TRIGGER project_spec_first_draft_no_brand BEFORE INSERT ON project_spec_versions
+WHEN NEW.revision=1 AND json_type(NEW.spec_json,'$.design.brand') IS NOT 'null' BEGIN SELECT RAISE(ABORT,'specification_changed'); END;
