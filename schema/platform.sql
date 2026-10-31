@@ -4268,6 +4268,8 @@ CREATE TRIGGER project_spec_proposal_admit BEFORE INSERT ON project_spec_proposa
    OR (t.mode='guided' AND t.status='completed' AND NEW.operation='change' AND json_extract(t.action_json,'$.type')='accessModuleReview' AND json_extract(t.action_json,'$.projectId')=NEW.project_id)
    -- WH-128 owner photo collection setup: the typed filesModuleReview control of this project prepares a change.
    OR (t.mode='guided' AND t.status='completed' AND NEW.operation='change' AND json_extract(t.action_json,'$.type')='filesModuleReview' AND json_extract(t.action_json,'$.projectId')=NEW.project_id)
+   -- WH-070 owner appointment form setup: the typed appointmentFormReview control of this project prepares a change.
+   OR (t.mode='guided' AND t.status='completed' AND NEW.operation='change' AND json_extract(t.action_json,'$.type')='appointmentFormReview' AND json_extract(t.action_json,'$.projectId')=NEW.project_id)
    -- WH-128 published gallery: the typed galleryPageReview control of this project prepares a change.
    OR (t.mode='guided' AND t.status='completed' AND NEW.operation='change' AND json_extract(t.action_json,'$.type')='galleryPageReview' AND json_extract(t.action_json,'$.projectId')=NEW.project_id))
   LEFT JOIN project_spec_heads h ON h.project_id=p.id LEFT JOIN project_spec_versions v ON v.version_id=h.version_id

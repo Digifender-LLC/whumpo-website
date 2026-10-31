@@ -1,13 +1,14 @@
 import {activeBackendForm} from './backend-forms';
 import {hashToken} from './security';
 import {publishedHTML} from './published-html';
+import {withAppointmentLink,appointmentLinkShown} from './appointment-link';
 import {platformCheckAgent} from './site-traffic';
 export class HealthError extends Error{constructor(public status:number,message:string){super(message);}}
 export type HealthOptions={healthChecks?:boolean;healthTransport?:typeof fetch};
-type Snapshot={id:string;name:string;owner_user_id:string;version_id:string;revision:number;html:string;digest:string;contact_revision:number;contact_enabled:number};
+type Snapshot={id:string;name:string;owner_user_id:string;version_id:string;revision:number;html:string;digest:string;contact_revision:number;contact_enabled:number;appointment_enabled:number};
 type Check={id:string;project_id:string;user_id:string;version_id:string;publication_revision:number;contact_revision:number;state:string;detail:string;started_at:string;finished_at:string|null};
 const uuid=/^[0-9a-f-]{36}$/,now=()=>new Date().toISOString();
-const currentSQL="SELECT p.id,p.name,p.owner_user_id,s.version_id,s.revision,v.html,v.digest,COALESCE(c.revision,-1) AS contact_revision,CASE WHEN c.enabled=1 AND c.publication_revision=s.revision AND NOT EXISTS(SELECT 1 FROM service_client_blocked_contacts WHERE project_id=c.project_id) THEN 1 ELSE 0 END AS contact_enabled FROM projects p JOIN publications s ON s.project_id=p.id JOIN site_versions v ON v.id=s.version_id AND v.project_id=p.id LEFT JOIN contact_settings c ON c.project_id=p.id WHERE p.id=? AND p.owner_user_id=?";
+const currentSQL="SELECT p.id,p.name,p.owner_user_id,s.version_id,s.revision,v.html,v.digest,COALESCE(c.revision,-1) AS contact_revision,CASE WHEN c.enabled=1 AND c.publication_revision=s.revision AND NOT EXISTS(SELECT 1 FROM service_client_blocked_contacts WHERE project_id=c.project_id) THEN 1 ELSE 0 END AS contact_enabled,EXISTS(SELECT 1 FROM module_instances i JOIN module_activations a ON a.instance_id=i.id AND a.state='active' AND a.publication_revision=s.revision WHERE i.project_id=s.project_id AND i.kind='records' AND EXISTS(SELECT 1 FROM json_each(i.config_json,'$.forms') f WHERE json_extract(f.value,'$.id')='appointment' AND json_extract(f.value,'$.submit')='public')) AS appointment_enabled FROM projects p JOIN publications s ON s.project_id=p.id JOIN site_versions v ON v.id=s.version_id AND v.project_id=p.id LEFT JOIN contact_settings c ON c.project_id=p.id WHERE p.id=? AND p.owner_user_id=?";
 async function current(db:D1Database,user:string,project:string){if(!uuid.test(project))throw new HealthError(400,"Choose one of your projects.");const row=await db.prepare(currentSQL).bind(project,user).first<Snapshot>();if(!row)throw new HealthError(404,'Published project not found.');return row;}
 export async function listHealth(db:D1Database,user:string,project?:string){
  if(project&&!uuid.test(project))throw new HealthError(400,"Choose one of your projects.");
@@ -27,7 +28,7 @@ export async function checkHealth(db:D1Database,user:string,project:string,trans
   if(await hashToken(s.html)!==s.digest)throw Error('The saved website artifact failed its integrity check.');
   const url='https://'+project+'.whumpo.site/';
   const response=await transport(url,{method:'GET',headers:{accept:'text/html','cache-control':'no-cache','user-agent':platformCheckAgent},redirect:'manual',signal:AbortSignal.timeout(10000)});
-  const html=await pageText(response);if(await hashToken(html)!==await hashToken(publishedHTML(s.html,s.contact_enabled===1,project,form)))throw Error('The served page did not match the current saved version.');
+  const html=await pageText(response);if(await hashToken(html)!==await hashToken(withAppointmentLink(publishedHTML(s.html,s.contact_enabled===1,project,form),project,await appointmentLinkShown(db,project,s.appointment_enabled))))throw Error('The served page did not match the current saved version.');
   // WH-183: a directory the platform serves (live and bound to this publication) must return the approved snapshot: ETag and listings hash both equal its digest.
   if(dir?.live_json&&dir.publication_revision===s.revision){
    const expected=dir.live_digest,r=await transport(url+'directory.json',{method:'GET',headers:{accept:'application/json','cache-control':'no-cache','user-agent':platformCheckAgent},redirect:'manual',signal:AbortSignal.timeout(10000)});

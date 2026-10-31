@@ -32,6 +32,7 @@ export type ChatControl =
  | {type:'moduleActivationReview';projectId:string;instanceId:string;action:'activate'|'disable'}
  | {type:'accessModuleReview';projectId:string}
  | {type:'filesModuleReview';projectId:string}
+ | {type:'appointmentFormReview';projectId:string}
  | {type:'galleryPageReview';projectId:string;instanceId:string;collectionId:string;pageId:string}
  | {type:'moduleActivationApply';reviewId:string;reviewDigest:string;expectedRevision:number}
  | {type:'accessRoleReview';projectId:string;instanceId:string;visitorId:string;action:'grant'|'revoke'}
@@ -82,6 +83,11 @@ export function chatControl(value:unknown):{action:ChatControl;command:string;la
  if(a.type==='filesModuleReview'&&exact(a,['type','projectId'])&&Object.keys(a).length===2&&id(a.projectId)){
   const action={type:'filesModuleReview' as const,projectId:a.projectId};
   return {action,command:`/review-photo-collection-setup ${action.projectId}`,label:'Review setting up a photo collection for this project.',recentAuth:false};
+ }
+ // WH-070 owner appointment form setup: the project id only. The server chooses the fixed standard records instance.
+ if(a.type==='appointmentFormReview'&&exact(a,['type','projectId'])&&Object.keys(a).length===2&&id(a.projectId)){
+  const action={type:'appointmentFormReview' as const,projectId:a.projectId};
+  return {action,command:`/review-appointment-form-setup ${action.projectId}`,label:'Review adding an appointment request form to this project.',recentAuth:false};
  }
  // WH-128 published gallery: ids only. The server chooses the photos (approved owner-filed photos of the collection).
  if(a.type==='galleryPageReview'&&exact(a,['type','projectId','instanceId','collectionId','pageId'])&&Object.keys(a).length===5&&id(a.projectId)&&[a.instanceId,a.collectionId,a.pageId].every(v=>typeof v==='string'&&/^[a-z][a-z0-9-]{0,39}$/.test(v))){

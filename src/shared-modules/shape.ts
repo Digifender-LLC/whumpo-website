@@ -65,3 +65,7 @@ export type OwnerFileCollections={
  candidates:{fileId:string;sha256:string}[];
  collections:{instanceId:string;resourceId:string;configRevision:number;state:'inactive'|'active'|'suspended'|'migrating';collectionId:string;files:{fileId:string;safety:'pending'|'approved'|'blocked'}[]}[];
 };
+
+/** WH-070 standard appointment form setup (records panel, `GET /api/projects/P/module-records` field `appointment`): which step
+ * comes next, the local id once saved or registered, and the public form state once registered. States and ids only. */
+export type RecordsSetup={state:'website-required'|'not-configured'|'saved'|'registered'|'unavailable';instanceId:string|null;publicForm:PublicFormState};

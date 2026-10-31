@@ -12,6 +12,7 @@ import {ModuleError,moduleRequest} from './shared-modules/policy';
 import {publicClientKey,reservePublicClient,PublicClientLimitError} from './public-admission';
 import {verifyTurnstile} from './turnstile';
 import {servingStopped} from './operator-serving';
+import {requireSpecificationAvailable} from './specification-safety';
 import {moduleCompositions} from './module-compositions';
 import type {AuthenticationResponseJSON,RegistrationResponseJSON} from '@simplewebauthn/server';
 
@@ -130,6 +131,9 @@ export async function applicationGateway(request:Request,env:AppEnv,fetcher:type
      // contact form, counted before verification), and Siteverify must name this visitor host, the module-form action
      // and this exact resource. The commit trigger repeats the public form, publication and atomic caps.
      if(!local&&!env.TURNSTILE_SECRET)throw new ModuleError('unavailable','Public form submissions are temporarily unavailable.');
+     // WH-070: content the site host refuses to serve (held, retired format or compiler) takes no anonymous submission either.
+     const served=await env.DB.prepare('SELECT version_id FROM publications WHERE project_id=? AND version_id IS NOT NULL').bind(project).first<{version_id:string}>();
+     if(served)try{await requireSpecificationAvailable(env.DB,served.version_id);}catch{throw new ModuleError('unavailable','Public form submissions are temporarily unavailable.');}
      try{await reservePublicClient(env.DB,'contact',project,await publicClientKey(request,'contact',project));}
      catch(cause){if(cause instanceof PublicClientLimitError)throw new ModuleError('limited','Too many submissions from this connection today. Please try again tomorrow.');throw cause;}
      if(local)return;
