@@ -20,9 +20,9 @@ If you authorize a GitHub connection and confirm a supported backup, selected pr
 
 A customer-authorized Cloudflare connection permits supported account, domain or DNS operations within granted permissions and applicable approval controls. The customer's own relationship with Cloudflare is separate from Digifender LLC's use of Cloudflare infrastructure. Not every customer-authorized integration is automatically a Whumpo subprocessor acting only on our behalf.
 
-## Stripe sandbox pricing and checkout
+## Stripe sandbox checkout
 
-Configured homepage pricing tables use Stripe's embedded script and content and can open Stripe test checkout. Where these tables are displayed, Stripe receives technical request information, and test checkout can collect the information entered into its forms. We may receive sandbox customer and transaction records through our Stripe account. Use test information and documented test payment methods only. Stripe describes its own processing in its [Privacy Policy](https://stripe.com/privacy) and [Cookies Policy](https://stripe.com/legal/cookies-policy).
+The homepage loads no Stripe content. In Billing, Whumpo's own checkout page uses Stripe.js and Stripe's embedded payment form. Stripe receives technical request information, and the payment form collects the information entered into it. We may receive sandbox customer and transaction records through our Stripe account. Use test information and documented test payment methods only. Stripe describes its own processing in its [Privacy Policy](https://stripe.com/privacy) and [Cookies Policy](https://stripe.com/legal/cookies-policy).
 
 Live Whumpo subscriptions and trial entitlements remain unavailable. A test subscription, test trial or checkout confirmation does not activate Whumpo access. Sandbox configuration is not evidence of completed live billing, a final provider contract schedule or compliance with every consent requirement for an embedded widget. See the [Cookie Notice](cookies.md) for the remaining provider-storage assessment.
 

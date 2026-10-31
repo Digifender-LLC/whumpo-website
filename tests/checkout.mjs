@@ -3,7 +3,7 @@ import {build} from 'esbuild';
 const {outputFiles}=await build({stdin:{contents:"export * from './src/stripe-common';export {stripeBillingWebhook,subscriptionsEnabled} from './src/stripe-billing';export {publicPlans} from './src/plans';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
 const {stripeTestConfigured,boundedText,readStripeEvent,stripeBillingWebhook,subscriptionsEnabled,publicPlans}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 const prices={};for(const p of publicPlans.filter(p=>p.monthlyCents))for(const i of ['month','year'])prices[p.id+':'+i]='price_fixture';
-const env={STRIPE_TEST_KEY:'sk_test_synthetic',STRIPE_WEBHOOK_SECRET:'whsec_synthetic',STRIPE_SANDBOX_CATALOG:JSON.stringify({version:1,prices,portal:'bpc_fixture'})};
+const env={STRIPE_TEST_KEY:'sk_test_synthetic',STRIPE_WEBHOOK_SECRET:'whsec_synthetic',STRIPE_SANDBOX_CATALOG:JSON.stringify({version:1,prices}),STRIPE_CHECKOUT_OPEN:'true'};
 const db={prepare(){throw Error('Retired checkout must not access a database');},batch(){throw Error('Retired checkout must not fulfill');}};
 let calls=0;const transport=async(url,init)=>{calls++;assert.equal(init.method,'GET');assert.equal(init.redirect,'manual');return Response.json({id:'cs_test_retired',livemode:false,mode:'payment',metadata:{order_id:crypto.randomUUID()},status:'complete',payment_status:'paid',amount_total:500,currency:'usd'});};
 async function signed({t=Math.floor(Date.now()/1000),bad=false,live=false,type='checkout.session.completed',raw,multiple=false}={}){

@@ -15,6 +15,7 @@ export function providerReturn(search:string):{view:'chat'|'connections'|'billin
   const interactionId=known&&id?id:undefined;
   return {view:interactionId?'chat':'connections',...(interactionId?{interactionId}:{}),notice:params.has('connection_error')||params.has('error')?'Authorization needs a status check. Your saved connection may be unchanged or its outcome unconfirmed.':'Checking the latest connection status…'};
  }
+ if(params.has('payment_method'))return {view:'billing',notice:'Checking your payment method…'};
  if(params.has('checkout'))return {view:'billing',notice:params.get('checkout')==='canceled'?'Checkout was canceled. Check your latest balance here.':'Checking your latest balance…'};
 }
 /** One strict project locator, accepted only when the current owned-project

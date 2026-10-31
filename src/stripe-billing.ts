@@ -3,38 +3,49 @@ import {boundedText,stripeTestConfigured,readStripeEvent} from './stripe-common'
 import {plans} from './plans';
 import {hashToken} from './security';
 
-export const stripeVersion='2025-02-24.acacia';
+// D17: one pin for every request; @stripe/stripe-js 10.x is the matching 'endive' release train.
+export const stripeVersion='2026-10-28.endive';
 export const stripeApp='whumpo-sandbox-v1';
-type Config={STRIPE_TEST_KEY?:string;STRIPE_WEBHOOK_SECRET?:string;STRIPE_SANDBOX_CATALOG?:string};
-type Catalog={version:1;prices:Record<string,string>;portal:string};
+type Config={STRIPE_TEST_KEY?:string;STRIPE_WEBHOOK_SECRET?:string;STRIPE_SANDBOX_CATALOG?:string;STRIPE_TEST_PUBLISHABLE_KEY?:string;STRIPE_CHECKOUT_OPEN?:string};
+// A catalogue saved before the portal was retired may still carry `portal`; it is ignored.
+type Catalog={version:1;prices:Record<string,string>};
 type Order={id:string;user_id:string;plan_id:string;interval:'month'|'year';price_id:string;amount_cents:number;created_at:number;state:string;session_id:string|null;subscription_id:string|null};
 type Customer={user_id:string;customer_id:string|null;created_at:number};
-type Metadata={app?:string;owner?:string;order?:string};
+type Metadata={app?:string;owner?:string;order?:string;purpose?:string};
 type Price={id:string;livemode:boolean;currency:string;unit_amount:number;recurring?:{interval:string;interval_count:number}};
-type Session={id:string;livemode:boolean;customer:string;mode:string;status:string;subscription:string|null;client_reference_id:string;metadata:Metadata;url?:string;currency:string;amount_total:number;line_items:{has_more:boolean;data:{quantity:number;price:Price}[]}};
-type Subscription={id:string;livemode:boolean;customer:string;metadata:Metadata;status:string;cancel_at_period_end:boolean;current_period_end:number;latest_invoice:string|null;items:{has_more:boolean;data:{quantity:number;price:Price}[]}};
-type Invoice={id:string;livemode:boolean;customer:string;subscription:string;status:string;paid:boolean;paid_out_of_band:boolean;currency:string;amount_paid:number;total:number;hosted_invoice_url:string|null;created:number;billing_reason:string;lines:{has_more:boolean;data:{type:string;subscription:string;quantity:number;proration:boolean;price:Price;amount:number;period:{start:number;end:number}}[]}};
+type Session={id:string;livemode:boolean;customer:string;mode:string;ui_mode?:string;status:string;subscription:string|null;client_reference_id:string;client_secret?:string|null;metadata:Metadata;currency:string;amount_total:number;line_items:{has_more:boolean;data:{quantity:number;price:Price}[]}};
+type Subscription={id:string;livemode:boolean;customer:string;metadata:Metadata;status:string;cancel_at_period_end:boolean;current_period_end?:number;latest_invoice:string|null;items:{has_more:boolean;data:{quantity:number;price:Price;current_period_end?:number}[]}};
+// Basil and later move these fields; the legacy spellings stay readable so a replayed older payload still verifies.
+type InvoiceLine={type?:string;subscription?:string|null;quantity:number;proration?:boolean;price?:Price;amount:number;period:{start:number;end:number};pricing?:{price_details?:{price?:string}};parent?:{type?:string;subscription_item_details?:{subscription?:string|null;proration?:boolean}}};
+type Invoice={id:string;livemode:boolean;customer:string;subscription?:string|null;parent?:{subscription_details?:{subscription?:string|null}};status:string;paid?:boolean;paid_out_of_band?:boolean;currency:string;amount_paid:number;total:number;hosted_invoice_url:string|null;created:number;billing_reason:string;lines:{has_more:boolean;data:InvoiceLine[]}};
+const invoiceSubscription=(i:Invoice)=>i.parent?.subscription_details?.subscription??i.subscription??null;
+const periodEnd=(s:Subscription)=>s.items?.data?.[0]?.current_period_end??s.current_period_end;
+const returnURL='https://whumpo.com/workspace/?checkout=returned&session_id={CHECKOUT_SESSION_ID}';
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 const now=()=>Math.floor(Date.now()/1000);
 const objectId=(id:unknown,prefix:string):id is string=>typeof id==='string'&&new RegExp('^'+prefix+'_[A-Za-z0-9]+$').test(id);
 function requireMatch(value:unknown){if(!value)throw new BillingError(409,'Stripe sandbox details do not match the saved billing record.');}
 function catalog(env:Config):Catalog{
  try{
+  // D20 lock 1: closed unless the owner sets STRIPE_CHECKOUT_OPEN to exactly 'true'. Lock 2 is the sk_test_-only key check and the livemode===false reads.
+  if(env.STRIPE_CHECKOUT_OPEN!=='true')throw Error();
   if(!stripeTestConfigured(env))throw Error();
   const c=JSON.parse(env.STRIPE_SANDBOX_CATALOG??'') as Catalog;
-  if(c.version!==1||!objectId(c.portal,'bpc'))throw Error();
+  if(c.version!==1)throw Error();
   for(const p of plans.filter(p=>p.monthlyCents))for(const interval of ['month','year'])if(!objectId(c.prices?.[p.id+':'+interval],'price'))throw Error();
   return c;
- }catch{throw new BillingError(503,'Sandbox subscriptions are not configured. Explore is still available.');}
+ }catch{throw new BillingError(503,'Checkout is not open yet. Explore is still available without a card.');}
 }
 export function subscriptionsEnabled(env:Config){try{catalog(env);return true;}catch{return false;}}
+// Public Worker var, never a secret. Anything but a test publishable key is refused, so real-money mode stays impossible.
+export function publishableKey(env:Config){const k=env.STRIPE_TEST_PUBLISHABLE_KEY??'';return /^pk_test_[A-Za-z0-9]{20,200}$/.test(k)?k:null;}
 async function stripe<T>(env:Config,path:string,transport:typeof fetch,form?:URLSearchParams,key?:string):Promise<T>{
- catalog(env);
+ catalog(env);let declined=false;
  try{
   const response=await transport('https://api.stripe.com/v1/'+path,{method:form?'POST':'GET',headers:{authorization:'Bearer '+env.STRIPE_TEST_KEY,'Stripe-Version':stripeVersion,...(form?{'content-type':'application/x-www-form-urlencoded','Idempotency-Key':key!}:{})},body:form,redirect:'manual',signal:AbortSignal.timeout(15000)});
-  if(!response.ok){await response.body?.cancel();throw Error();}
+  if(!response.ok){declined=response.status===402;await response.body?.cancel();throw Error();}
   return JSON.parse(await boundedText(response,262144)) as T;
- }catch{throw new BillingError(502,'Stripe sandbox could not be reached. Refresh or retry the same checkout; your billing record is saved.');}
+ }catch{if(declined)throw new BillingError(402,'The card on file was declined. Update your payment method and try again.');throw new BillingError(502,'Stripe sandbox could not be reached. Refresh or retry the same checkout; your billing record is saved.');}
 }
 function hostedURL(value:unknown,host:string){
  if(typeof value!=='string'||value.length>4096)throw new BillingError(502,'Invalid Stripe destination');
@@ -72,12 +83,13 @@ async function readSession(db:D1Database,env:Config,order:Order,customer:string,
 async function recordInvoice(db:D1Database,env:Config,id:string,sub:Subscription,order:Order,transport:typeof fetch){
  requireMatch(objectId(id,'in'));
  const invoice=await stripe<Invoice>(env,'invoices/'+id,transport);
- requireMatch(invoice.id===id&&invoice.livemode===false&&invoice.customer===sub.customer&&invoice.subscription===sub.id);
- if(invoice.status!=='paid'||!invoice.paid)return invoice.status;
- requireMatch(invoice.paid_out_of_band===false&&invoice.currency==='usd'&&invoice.amount_paid===order.amount_cents&&invoice.total===order.amount_cents&&['subscription_create','subscription_cycle'].includes(invoice.billing_reason));
+ requireMatch(invoice.id===id&&invoice.livemode===false&&invoice.customer===sub.customer&&invoiceSubscription(invoice)===sub.id);
+ if(invoice.status!=='paid')return invoice.status;
+ requireMatch(!invoice.paid_out_of_band&&invoice.currency==='usd'&&invoice.amount_paid===order.amount_cents&&invoice.total===order.amount_cents&&['subscription_create','subscription_cycle'].includes(invoice.billing_reason));
  requireMatch(invoice.lines?.has_more===false&&invoice.lines.data.length===1);
- const line=invoice.lines.data[0];checkPrice(line.price,order);
- requireMatch(line.type==='subscription'&&line.subscription===sub.id&&line.quantity===1&&line.proration===false&&line.amount===order.amount_cents);
+ const line=invoice.lines.data[0],detail=line.parent?.subscription_item_details;
+ if(line.price)checkPrice(line.price,order);else requireMatch(line.pricing?.price_details?.price===order.price_id);
+ requireMatch((line.type===undefined||line.type==='subscription')&&(detail?.subscription??line.subscription)===sub.id&&line.quantity===1&&(detail?.proration??line.proration)===false&&line.amount===order.amount_cents);
  const {start,end}=line.period;
  requireMatch(Number.isSafeInteger(start)&&Number.isSafeInteger(end)&&start>0&&end>start&&end-start<=(order.interval==='year'?367:32)*86400);
  const url=invoice.hosted_invoice_url?hostedURL(invoice.hosted_invoice_url,'invoice.stripe.com'):null;
@@ -95,10 +107,10 @@ async function syncSubscription(db:D1Database,env:Config,id:string,customer:stri
  if(!order)return;
  requireMatch(order.state!=='expired'&&(!order.subscription_id||order.subscription_id===id));
  requireMatch(sub.items?.has_more===false&&sub.items.data.length===1&&sub.items.data[0].quantity===1);checkPrice(sub.items.data[0].price,order);
- requireMatch(Number.isSafeInteger(sub.current_period_end)&&typeof sub.cancel_at_period_end==='boolean');
+ const end=periodEnd(sub);requireMatch(Number.isSafeInteger(end)&&typeof sub.cancel_at_period_end==='boolean');
  await db.batch([
   db.prepare("UPDATE stripe_subscription_orders SET subscription_id=?,state='complete' WHERE id=? AND state='pending'").bind(id,order.id),
-  db.prepare('INSERT INTO stripe_subscriptions(id,order_id,user_id,status,cancel_at_period_end,period_end,latest_invoice_id,updated_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,cancel_at_period_end=excluded.cancel_at_period_end,period_end=excluded.period_end,latest_invoice_id=excluded.latest_invoice_id,updated_at=excluded.updated_at').bind(id,order.id,order.user_id,sub.status,sub.cancel_at_period_end?1:0,sub.current_period_end,sub.latest_invoice,now())
+  db.prepare('INSERT INTO stripe_subscriptions(id,order_id,user_id,status,cancel_at_period_end,period_end,latest_invoice_id,updated_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,cancel_at_period_end=excluded.cancel_at_period_end,period_end=excluded.period_end,latest_invoice_id=excluded.latest_invoice_id,updated_at=excluded.updated_at').bind(id,order.id,order.user_id,sub.status,sub.cancel_at_period_end?1:0,end,sub.latest_invoice,now())
  ]);
  if(sub.latest_invoice){const status=await recordInvoice(db,env,sub.latest_invoice,sub,order,transport);await db.prepare('UPDATE stripe_subscriptions SET payment_status=? WHERE id=? AND latest_invoice_id=?').bind(status,id,sub.latest_invoice).run();}
  if(invoiceId&&invoiceId!==sub.latest_invoice)await recordInvoice(db,env,invoiceId,sub,order,transport);
@@ -116,7 +128,7 @@ export async function subscriptionStatus(db:D1Database,env:Config,user:string){
  const subscription=await db.prepare("SELECT s.id,s.status,s.cancel_at_period_end,s.period_end,s.payment_status,o.plan_id,o.interval,o.amount_cents FROM stripe_subscriptions s JOIN stripe_subscription_orders o ON o.id=s.order_id WHERE s.user_id=? ORDER BY CASE WHEN s.status IN ('canceled','incomplete_expired') THEN 1 ELSE 0 END,o.created_at DESC,s.id DESC LIMIT 1").bind(user).first();
  const invoices=(await db.prepare('SELECT id,plan_id,amount_cents,interval,starts_at,ends_at,hosted_url,created_at FROM stripe_paid_invoices WHERE user_id=? ORDER BY created_at DESC,id DESC LIMIT 24').bind(user).all()).results;
  const pending=await db.prepare("SELECT id,plan_id,interval,amount_cents FROM stripe_subscription_orders WHERE user_id=? AND state='pending'").bind(user).first();
- return {enabled:subscriptionsEnabled(env),testMode:true,subscription,invoices,pending,portalAvailable:!!(await db.prepare('SELECT customer_id FROM stripe_customers WHERE user_id=? AND customer_id IS NOT NULL').bind(user).first())};
+ return {enabled:subscriptionsEnabled(env)&&!!publishableKey(env),publishableKey:publishableKey(env),testMode:true,subscription,invoices,pending,hasCustomer:!!(await db.prepare('SELECT customer_id FROM stripe_customers WHERE user_id=? AND customer_id IS NOT NULL').bind(user).first())};
 }
 export async function refreshSubscriptions(db:D1Database,env:Config,user:string,transport:typeof fetch=fetch){
  catalog(env);if(await db.prepare('SELECT user_id FROM stripe_customers WHERE user_id=?').bind(user).first())await withCustomer(db,user,c=>syncCustomer(db,env,c,transport));return subscriptionStatus(db,env,user);
@@ -144,19 +156,106 @@ export async function startSubscription(db:D1Database,env:Config,user:string,inp
    order=await db.prepare('SELECT * FROM stripe_subscription_orders WHERE id=? AND user_id=?').bind(id,user).first<Order>();requireMatch(order);
   }
   if(order!.created_at+3600<=now()&&!order!.session_id)throw new BillingError(409,'This unfinished checkout needs operator reconciliation. It will not be charged again.');
-  const form=new URLSearchParams({mode:'subscription',customer:customerID,'payment_method_types[0]':'card','line_items[0][price]':order!.price_id,'line_items[0][quantity]':'1',client_reference_id:id,'metadata[app]':stripeApp,'metadata[order]':id,'subscription_data[metadata][app]':stripeApp,'subscription_data[metadata][order]':id,success_url:'https://whumpo.com/workspace/?checkout=returned',cancel_url:'https://whumpo.com/workspace/?checkout=canceled',expires_at:String(order!.created_at+3600),'expand[0]':'line_items.data.price'});
-  const s=await readSession(db,env,order!,customerID,transport,order!.session_id?undefined:await stripe<Session>(env,'checkout/sessions',transport,form,'whumpo-subscription-'+id));
+  const form=new URLSearchParams({mode:'subscription',customer:customerID,'payment_method_types[0]':'card','line_items[0][price]':order!.price_id,'line_items[0][quantity]':'1',client_reference_id:id,'metadata[app]':stripeApp,'metadata[order]':id,'subscription_data[metadata][app]':stripeApp,'subscription_data[metadata][order]':id,ui_mode:'elements',return_url:returnURL,expires_at:String(order!.created_at+3600),'expand[0]':'line_items.data.price'});
+  let s=await readSession(db,env,order!,customerID,transport,order!.session_id?undefined:await stripe<Session>(env,'checkout/sessions',transport,form,'whumpo-subscription-'+id));
   if(s.status==='complete')return {complete:true,testMode:true};
   if(s.status!=='open')throw new BillingError(409,'This checkout expired. Refresh Billing to choose again.');
-  return {url:hostedURL(s.url,'checkout.stripe.com'),testMode:true};
+  if(s.ui_mode!=='elements'||typeof s.client_secret!=='string'||!/^cs_test_[A-Za-z0-9]+_secret_[A-Za-z0-9]+$/.test(s.client_secret)){
+   // A hosted-mode leftover, or a session that will not hand its secret back, is expired and never reused. Expiring an
+   // unpaid session cannot charge; if a payment raced it, Stripe refuses and the re-read below reports it complete.
+   await stripe<Session>(env,'checkout/sessions/'+s.id+'/expire',transport,new URLSearchParams(),'whumpo-expire-'+s.id);
+   s=await readSession(db,env,order!,customerID,transport);
+   if(s.status==='complete')return {complete:true,testMode:true};
+   throw new BillingError(409,'This saved checkout was refreshed. Choose your plan again.');
+  }
+  return {clientSecret:s.client_secret,testMode:true};
  });
 }
-export async function billingPortal(db:D1Database,env:Config,user:string,transport:typeof fetch=fetch){
- const c=catalog(env),customer=await db.prepare('SELECT customer_id FROM stripe_customers WHERE user_id=?').bind(user).first<Customer>();
- if(!customer?.customer_id)throw new BillingError(409,'Start a sandbox checkout first.');
- const portal=await stripe<{id:string;livemode:boolean;customer:string;configuration:string;url:string}>(env,'billing_portal/sessions',transport,new URLSearchParams({customer:customer.customer_id,configuration:c.portal,return_url:'https://whumpo.com/workspace/?checkout=returned'}),'whumpo-portal-'+crypto.randomUUID());
- requireMatch(portal.livemode===false&&portal.customer===customer.customer_id&&portal.configuration===c.portal);
- return {url:hostedURL(portal.url,'billing.stripe.com'),testMode:true};
+// In-app replacements for the retired billing portal. Every route resolves the caller's own customer and subscription from
+// their rows; no customer, subscription, invoice or session id is accepted from the client except the setup session id,
+// which is verified against the caller's customer and owner metadata before anything is written.
+type Card={brand:string;last4:string;exp_month:number;exp_year:number};
+type PaymentMethod={id:string;livemode:boolean;customer:string|null;type:string;card?:Card};
+// Management routes never create a customer row; only checkout does.
+async function requireCustomer(db:D1Database,user:string){
+ const row=await db.prepare('SELECT customer_id FROM stripe_customers WHERE user_id=? AND customer_id IS NOT NULL').bind(user).first<Customer>();
+ if(!row?.customer_id)throw new BillingError(409,'Start a sandbox checkout first.');return row.customer_id;
+}
+async function ownedSubscription(db:D1Database,env:Config,user:string,transport:typeof fetch){
+ const row=await db.prepare("SELECT s.id,s.order_id,c.customer_id FROM stripe_subscriptions s JOIN stripe_customers c ON c.user_id=s.user_id WHERE s.user_id=? AND c.customer_id IS NOT NULL AND s.status NOT IN ('canceled','incomplete_expired') ORDER BY s.updated_at DESC LIMIT 1").bind(user).first<{id:string;order_id:string;customer_id:string}>();
+ if(!row)throw new BillingError(409,'You do not have an active sandbox subscription.');
+ const sub=await stripe<Subscription>(env,'subscriptions/'+row.id,transport);
+ requireMatch(sub.id===row.id&&sub.livemode===false&&sub.customer===row.customer_id&&sub.metadata?.app===stripeApp&&sub.metadata.order===row.order_id);
+ return {sub,customer:row.customer_id};
+}
+const cardOf=(pm:PaymentMethod|null|undefined,customer:string)=>{
+ if(!pm||typeof pm!=='object')return null;
+ requireMatch(pm.livemode===false&&pm.customer===customer);
+ return pm.type==='card'&&pm.card?{brand:String(pm.card.brand),last4:String(pm.card.last4),expMonth:pm.card.exp_month,expYear:pm.card.exp_year}:null;
+};
+// Card brand and last four are read from Stripe on demand and stored nowhere.
+export async function paymentMethodCard(db:D1Database,env:Config,user:string,transport:typeof fetch=fetch){
+ catalog(env);
+ const row=await db.prepare('SELECT customer_id FROM stripe_customers WHERE user_id=? AND customer_id IS NOT NULL').bind(user).first<Customer>();
+ if(!row?.customer_id)return {card:null,testMode:true};
+ const customer=await stripe<{id:string;livemode:boolean;invoice_settings?:{default_payment_method?:PaymentMethod|null}}>(env,'customers/'+row.customer_id+'?expand[]=invoice_settings.default_payment_method',transport);
+ requireMatch(customer.id===row.customer_id&&customer.livemode===false);
+ let pm=customer.invoice_settings?.default_payment_method;
+ if(!pm){
+  const active=await db.prepare("SELECT id FROM stripe_subscriptions WHERE user_id=? AND status NOT IN ('canceled','incomplete_expired') LIMIT 1").bind(user).first<{id:string}>();
+  if(active)pm=(await stripe<{id:string;customer:string;livemode:boolean;default_payment_method?:PaymentMethod|null}>(env,'subscriptions/'+active.id+'?expand[]=default_payment_method',transport)).default_payment_method;
+ }
+ return {card:cardOf(pm,row.customer_id),testMode:true};
+}
+export async function setCancelAtPeriodEnd(db:D1Database,env:Config,user:string,cancel:boolean,transport:typeof fetch=fetch){
+ catalog(env);await requireCustomer(db,user);
+ return withCustomer(db,user,async customer=>{
+  const {sub,customer:cus}=await ownedSubscription(db,env,user,transport);
+  if(sub.status==='canceled'||sub.status==='incomplete_expired')throw new BillingError(409,'This subscription has ended.');
+  if(sub.cancel_at_period_end!==cancel)await stripe<Subscription>(env,'subscriptions/'+sub.id,transport,new URLSearchParams({cancel_at_period_end:String(cancel)}),'whumpo-cancel-'+sub.id+'-'+cancel+'-'+Math.floor(now()/60));
+  await syncSubscription(db,env,sub.id,cus,transport);
+  return subscriptionStatus(db,env,customer.user_id);
+ });
+}
+export async function startPaymentMethodUpdate(db:D1Database,env:Config,user:string,transport:typeof fetch=fetch){
+ catalog(env);
+ const customerID=await requireCustomer(db,user);
+ const s=await stripe<Session>(env,'checkout/sessions',transport,new URLSearchParams({mode:'setup',ui_mode:'elements',customer:customerID,currency:'usd','payment_method_types[0]':'card',return_url:'https://whumpo.com/workspace/?payment_method=returned&session_id={CHECKOUT_SESSION_ID}','metadata[app]':stripeApp,'metadata[owner]':user,'metadata[purpose]':'payment-method','expand[0]':'setup_intent'}),'whumpo-setup-'+crypto.randomUUID());
+ requireMatch(objectId(s.id,'cs_test')&&s.livemode===false&&s.mode==='setup'&&s.customer===customerID&&s.metadata?.owner===user&&typeof s.client_secret==='string');
+ return {clientSecret:s.client_secret,testMode:true};
+}
+export async function completePaymentMethodUpdate(db:D1Database,env:Config,user:string,input:{session?:unknown},transport:typeof fetch=fetch){
+ catalog(env);
+ if(!objectId(input.session,'cs_test'))throw new BillingError(400,'Payment method update not found.');
+ await requireCustomer(db,user);
+ return withCustomer(db,user,async customer=>{
+  if(!customer.customer_id)throw new BillingError(409,'Start a sandbox checkout first.');
+  const s=await stripe<Session&{setup_intent:{status:string;customer:string;payment_method:string|null}|null}>(env,'checkout/sessions/'+input.session+'?expand[]=setup_intent',transport);
+  requireMatch(s.id===input.session&&s.livemode===false&&s.mode==='setup'&&s.customer===customer.customer_id&&s.metadata?.app===stripeApp&&s.metadata.owner===user&&s.metadata.purpose==='payment-method');
+  if(s.status!=='complete')throw new BillingError(409,'The new payment method was not saved. Try again.');
+  const si=s.setup_intent;requireMatch(si&&si.status==='succeeded'&&si.customer===customer.customer_id&&objectId(si.payment_method,'pm'));
+  const pm=await stripe<PaymentMethod>(env,'payment_methods/'+si!.payment_method,transport);
+  requireMatch(pm.id===si!.payment_method&&pm.livemode===false&&pm.customer===customer.customer_id);
+  // Setting the same default again is harmless, so a repeated return or retried reply cannot do damage.
+  await stripe(env,'customers/'+customer.customer_id,transport,new URLSearchParams({'invoice_settings[default_payment_method]':pm.id}),'whumpo-default-pm-'+s.id);
+  const active=await db.prepare("SELECT id FROM stripe_subscriptions WHERE user_id=? AND status NOT IN ('canceled','incomplete_expired') LIMIT 1").bind(user).first<{id:string}>();
+  if(active){const {sub}=await ownedSubscription(db,env,user,transport);await stripe(env,'subscriptions/'+sub.id,transport,new URLSearchParams({default_payment_method:pm.id}),'whumpo-sub-pm-'+s.id);}
+  return {card:cardOf(pm,customer.customer_id),testMode:true};
+ });
+}
+export async function retryLatestInvoice(db:D1Database,env:Config,user:string,transport:typeof fetch=fetch){
+ catalog(env);await requireCustomer(db,user);
+ return withCustomer(db,user,async()=>{
+  const {sub,customer}=await ownedSubscription(db,env,user,transport);
+  if(!sub.latest_invoice)throw new BillingError(409,'There is no unpaid invoice to retry.');
+  const invoice=await stripe<Invoice>(env,'invoices/'+sub.latest_invoice,transport);
+  requireMatch(invoice.id===sub.latest_invoice&&invoice.livemode===false&&invoice.customer===customer&&invoiceSubscription(invoice)===sub.id);
+  if(invoice.status==='paid'){await syncSubscription(db,env,sub.id,customer,transport);return subscriptionStatus(db,env,user);}
+  if(invoice.status!=='open')throw new BillingError(409,'This invoice cannot be retried.');
+  try{await stripe(env,'invoices/'+invoice.id+'/pay',transport,new URLSearchParams(),'whumpo-retry-'+invoice.id+'-'+Math.floor(now()/60));}
+  finally{await syncSubscription(db,env,sub.id,customer,transport,invoice.id).catch(()=>{});}
+  return subscriptionStatus(db,env,user);
+ });
 }
 export async function stripeBillingWebhook(request:Request,db:D1Database,env:Config,transport:typeof fetch=fetch){
  const event=await readStripeEvent(request,env),id=event.data?.object?.id;
@@ -171,7 +270,8 @@ export async function stripeBillingWebhook(request:Request,db:D1Database,env:Con
  }else if(event.type?.startsWith('invoice.')&&objectId(id,'in')){
   const invoice=await stripe<Invoice>(env,'invoices/'+id,transport);requireMatch(invoice.id===id&&invoice.livemode===false);
   const c=await db.prepare('SELECT user_id FROM stripe_customers WHERE customer_id=?').bind(invoice.customer).first();
-  if(c&&objectId(invoice.subscription,'sub'))await syncSubscription(db,env,invoice.subscription,invoice.customer,transport,id);
+  const invoiceSub=invoiceSubscription(invoice);
+  if(c&&objectId(invoiceSub,'sub'))await syncSubscription(db,env,invoiceSub,invoice.customer,transport,id);
  }else if(event.type?.startsWith('customer.subscription.')&&objectId(id,'sub')){
   const sub=await stripe<Subscription>(env,'subscriptions/'+id,transport);requireMatch(sub.id===id&&sub.livemode===false);
   if(await db.prepare('SELECT user_id FROM stripe_customers WHERE customer_id=?').bind(sub.customer).first())await syncSubscription(db,env,id,sub.customer,transport);

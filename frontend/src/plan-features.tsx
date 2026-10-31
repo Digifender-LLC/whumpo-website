@@ -1,5 +1,6 @@
 import {useState} from 'react';
 import {Check} from 'lucide-react';
+import {Button} from './components/ui/button';
 import {publicPlans} from '../../src/plans';
 import {commonFeatureNotice,connectionProviderNames,guestFeedbackNotice,launchAvailabilityNotice,launchFeatureCatalogue,launchHighlights,launchPackaging} from '../../src/plan-features';
 
@@ -40,7 +41,7 @@ const audiencePlans={personal:['starter','personal'],business:['business','busin
 const recommendedPlan={personal:'personal',business:'business'} as const;
 const dollars=(cents:number)=>'$'+cents/100;
 
-/** Native plan cards from the draft catalogue. Display only: nothing here grants access or starts a purchase. */
+/** Native plan cards from the draft catalogue. Display only: nothing here grants access or starts a purchase; the call to action opens the invite-only sign-up. */
 export function PlanCards({audience,billingInterval}:{audience:'personal'|'business';billingInterval:'monthly'|'annual'}) {
   const plans=audiencePlans[audience].map(id=>publicPlans.find(p=>p.id===id)!);
   return <ul className={'grid list-none gap-6 p-0 md:grid-cols-2'}>
@@ -56,7 +57,11 @@ export function PlanCards({audience,billingInterval}:{audience:'personal'|'busin
         <ul className="grid list-none gap-2 p-0 text-body-sm text-ink">
           {launchHighlights[plan.id as keyof typeof launchHighlights].slice(0,3).map(h=><li key={h} className="flex gap-2"><Check aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-ready-ink"/>{h}</li>)}
         </ul>
-        <div className="mt-auto"><PlanFeatureDetails planId={plan.id}/></div>
+        <div className="mt-auto grid gap-3">
+          <PlanFeatureDetails planId={plan.id}/>
+          {/* Plain anchor: this card renders on the landing page and in static markup, outside the router. */}
+          <Button asChild variant={recommended?'primary':'secondary'} className="min-h-11 w-full"><a href="/workspace?signup=true">Explore with an invite<span className="sr-only"> — {plan.name} is not on sale yet</span></a></Button>
+        </div>
       </li>;
     })}
   </ul>;

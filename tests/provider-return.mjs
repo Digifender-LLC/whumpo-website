@@ -9,6 +9,9 @@ for(const provider of ['cloudflare','github']){
 }
 assert.equal(providerReturn('?checkout=canceled').view,'billing');assert.match(providerReturn('?checkout=canceled').notice,/canceled/);
 assert.match(providerReturn('?checkout=returned').notice,/Checking/);
+// The custom checkout returns with its session id and the setup return with payment_method; neither reflects query text or names a destination.
+assert.deepEqual(providerReturn('?checkout=returned&session_id=cs_test_SECRET_VALUE'),{view:'billing',notice:'Checking your latest balance…'});
+assert.deepEqual(providerReturn('?payment_method=returned&session_id=cs_test_SECRET_VALUE'),{view:'billing',notice:'Checking your payment method…'});
 assert.equal(providerReturn('?project=example'),undefined);
 const handoff=crypto.randomUUID();
 assert.deepEqual(providerReturn('?connection=github&interaction='+handoff),{view:'chat',interactionId:handoff,notice:'Checking the latest connection status…'});

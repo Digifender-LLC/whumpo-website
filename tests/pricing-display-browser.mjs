@@ -1,47 +1,31 @@
-// Explicit read-only display check against the testing site and real Stripe
-// pricing embeds. No checkout, account enrollment or message submission.
+// Explicit read-only display check against the testing site: Whumpo's own plan cards for each audience and interval, matching the
+// plan catalogue, with no Stripe script, frame or request. No checkout, account enrollment or message submission.
 import assert from 'node:assert/strict';
-import {readFile,writeFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
-if(process.argv.length!==3||process.argv[2]!=='--live')throw Error('Use --live to inspect testing-site pricing and Enterprise composer navigation.');
+import {build} from 'esbuild';
+if(process.argv.length!==3||process.argv[2]!=='--live')throw Error('Use --live to inspect testing-site pricing.');
 const {chromium,expect}=createRequire(import.meta.url)(process.env.WHUMPO_PLAYWRIGHT||'@playwright/test');
-const configuration=JSON.parse(await readFile('frontend/public/stripe-pricing.json','utf8'));
-const browser=await chromium.launch({headless:true}),results=[],errors=[];
+const bundle=await build({stdin:{contents:"export {publicPlans} from './src/plans';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false});
+const {publicPlans}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
+const byId=id=>publicPlans.find(p=>p.id===id),dollars=cents=>'$'+cents/100;
+const browser=await chromium.launch({headless:true}),errors=[],stripe=[];
 try{
  const page=await browser.newPage({viewport:{width:390,height:844}});
- page.on('pageerror',error=>errors.push(error.message));
+ page.on('pageerror',error=>errors.push(error.message));page.on('request',r=>{if(/stripe\.com/.test(r.url()))stripe.push(r.url());});
  await page.goto('https://whumpo.com/#pricing');
  const pricing=page.locator('#pricing');
- for(const [audience,interval] of [['Personal','Monthly'],['Personal','Annual'],['Business','Annual'],['Business','Monthly']]){
+ for(const [audience,interval,ids] of [['Personal','Monthly',['starter','personal']],['Personal','Annual',['starter','personal']],['Business','Annual',['business','business-pro']],['Business','Monthly',['business','business-pro']]]){
   await pricing.getByRole('button',{name:audience,exact:true}).click();
   await pricing.getByRole('button',{name:interval,exact:true}).click();
-  await expect(pricing.locator('stripe-pricing-table')).toHaveAttribute('pricing-table-id',configuration[audience.toLowerCase()+interval+'TableId']);
-  await expect(pricing.locator('iframe')).toHaveCount(1);
-  const frame=await(await pricing.locator('iframe').elementHandle()).contentFrame();
-  await expect(frame.getByRole('button',{name:audience==='Personal'?'Start trial':'Subscribe',exact:true})).toHaveCount(2);
-  await expect(frame.getByRole('tablist')).toHaveCount(0);
-  await expect(pricing.getByText('Test mode. Test checkout does not activate trial or paid access in Whumpo.',{exact:true})).toBeVisible();
-  const contact=frame.getByRole('button',{name:'Contact us',exact:true});
-  await expect(contact).toHaveCount(audience==='Business'?1:0);
-  let contactURL=null;
-  if(audience==='Business'){
-   await expect(frame.getByText('Enterprise',{exact:true})).toHaveCount(1);
-   const navigation=[],sessions=await Promise.all([page.context().newCDPSession(page),page.context().newCDPSession(frame)]);
-   try{
-    // External-protocol actions in the cross-origin frame are not HTTP requests.
-    // Observe both frame navigation and new-window intent; headless Chromium
-    // cannot submit an email and this fixture never composes one.
-    for(const session of sessions){await session.send('Page.enable');session.on('Page.frameRequestedNavigation',e=>navigation.push(e.url));session.on('Page.windowOpen',e=>navigation.push(e.url));}
-    await contact.click();await expect.poll(()=>navigation).toContain('mailto:enterprise@whumpo.com');contactURL='mailto:enterprise@whumpo.com';
-   }finally{for(const session of sessions)await session.detach();}
+  for(const id of ids){
+   const plan=byId(id),card=pricing.locator('li',{has:page.getByRole('heading',{name:plan.name,exact:true})}).first();
+   await expect(card).toContainText(dollars(interval==='Annual'?plan.annualCents:plan.monthlyCents));
+   await expect(card.getByRole('link',{name:/Explore with an invite/})).toHaveAttribute('href','/workspace?signup=true');
   }
-  const text=await frame.locator('body').innerText();assert.match(text,/Sandbox/);
-  const amounts=audience==='Personal'?(interval==='Monthly'?['$17','$30']:['$170 billed annually','$300 billed annually']):(interval==='Monthly'?['$79','$139']:['$790 billed annually','$1,390 billed annually']);
-  for(const amount of amounts)assert(text.includes(amount),audience+' '+interval+' amount '+amount);
-  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
-  results.push({audience,interval,amounts,contactURL,overflow:false,testDisclosure:true});
+  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),audience+' '+interval+' overflow');
  }
- assert.deepEqual(errors,[]);
- await writeFile('.secrets/usability-pricing-display.json',JSON.stringify({at:new Date().toISOString(),results,scope:'Live testing-site/Stripe display and exact external-protocol intent. No checkout, email sent, mailbox-delivery proof or real-money activation.'},null,2),{mode:0o600});
- console.log('Testing pricing display passed: four table selections, exact intervals/prices, no duplicate interval selector, 390px layout and both Enterprise mailto intents. No checkout or email sent.');
+ assert.equal(await page.locator('iframe,stripe-pricing-table,script[src*="stripe"]').count(),0);
+ const text=await pricing.innerText();assert.doesNotMatch(text,/free trial|payment method required|enterprise/i);
+ assert.deepEqual(stripe,[],'the landing page makes no Stripe request');assert.deepEqual(errors,[]);
+ console.log('Pricing display passed: four audience/interval selections match the plan catalogue, invite-only CTAs, no Stripe request, frame or script, 390px layout. No checkout or email sent.');
 }finally{await browser.close();}

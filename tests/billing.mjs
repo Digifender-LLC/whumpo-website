@@ -33,7 +33,7 @@ try{
  await assert.rejects(reconcileChat(db,owner),e=>e.status===409);assert.equal(sql.prepare('SELECT status FROM chat_turns WHERE id=?').get(orphan).status,'pending');
  const token=identity.token;
  const env={DB:rawDB,ENVIRONMENT:'test',API_LIMITER:{limit:async()=>({success:true})}},ctx={waitUntil(){throw Error('No background work')}};
- for(const path of ['checkout','preferences']){
+ for(const path of ['checkout','preferences','portal']){
   const r=await worker.fetch(new Request('https://whumpo.com/api/billing/'+path,{method:'POST',headers:{origin:'https://whumpo.com',cookie:'__Host-whumpo_session='+token,'content-type':'application/json'},body:JSON.stringify({id:crypto.randomUUID(),product:'credits-100',overageEnabled:true})}),env,ctx);assert.equal(r.status,404,path);
  }
  const r=await worker.fetch(new Request('https://whumpo.com/api/billing',{headers:{cookie:'__Host-whumpo_session='+token}}),env,ctx);assert.equal(r.status,200);assert(!Object.hasOwn(await r.json(),'creditPack'));
