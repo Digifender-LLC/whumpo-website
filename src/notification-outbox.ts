@@ -52,22 +52,39 @@ async function admitAttempt(db:Db,envelope:Record<string,any>,noticeId:string,gu
  * and recipient) or a recipient over its caps queues nothing and returns `queued:false`; the caller can tell the two apart by `duplicate`.
  * The template is checked against the source catalog here, not by a CHECK list in the schema.
  */
-export async function enqueueNotice(db:Db,spec:NoticeSpec){
+/**
+ * The statements that queue one notice and its first attempt's envelope, for a caller that commits them inside a bigger batch (the form admission, WH-158).
+ * `safe` adds the checks of the scope trigger to the guarded insert, so a recipient or project that is not valid inserts zero rows instead of aborting
+ * the caller's batch; the rate guard is already at or below the trigger's caps. Nothing here can raise, so a notice can never fail the batch it rides in.
+ */
+export async function noticeStatements(db:Db,spec:NoticeSpec&{safe?:boolean}){
  const entry=notificationCatalog.templates[spec.template];
  if(!entry||entry.state!=='available'||!(entry.template.audiences as string[]).includes(spec.scope)||!spec.eventRef||spec.eventRef.length>128||!Number.isSafeInteger(spec.now))throw new NoticeError('INVALID_NOTICE');
  const id=crypto.randomUUID(),jobId=crypto.randomUUID(),key=recipientKey(spec),expires=spec.now+noticeTtlMs,caps=spec.caps??{hour:10,day:50};
  const envelope=await attemptEnvelope(jobId,spec,id,1,spec.now,spec.now,expires);
- const [insert]=await db.batch([
+ const valid=spec.safe?` AND (?3!='owner-destination' OR EXISTS(SELECT 1 FROM contact_notification_destinations d WHERE d.id=?5 AND d.user_id=?2 AND d.project_id=?4 AND d.state IN ('unverified','verified')))
+    AND (?3 NOT IN ('project-staff','submitter') OR EXISTS(SELECT 1 FROM projects WHERE id=?4 AND owner_user_id=?2))`:'';
+ const statements=[
   db.prepare(`INSERT INTO notification_notices(id,user_id,scope,project_id,destination_id,recipient_ref,recipient_key,template,event_ref,created_at,expires_at)
    SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11 WHERE (SELECT count(*) FROM notification_notices WHERE recipient_key=?7 AND (template GLOB 'appointment.*')=(?8 GLOB 'appointment.*') AND created_at>?10-3600000)<?12
     AND (SELECT count(*) FROM notification_notices WHERE recipient_key=?7 AND (template GLOB 'appointment.*')=(?8 GLOB 'appointment.*') AND created_at>?10-86400000)<?13
     AND (?14 IS NULL OR (SELECT count(*) FROM notification_notices WHERE recipient_key=?7 AND template=?8 AND created_at>?10-86400000)<?14)
-    AND (?15 IS NULL OR (SELECT count(*) FROM notification_notices WHERE user_id=?2 AND template=?8 AND created_at>?10-86400000)<?15)
+    AND (?15 IS NULL OR (SELECT count(*) FROM notification_notices WHERE user_id=?2 AND template=?8 AND created_at>?10-86400000)<?15)${valid}
    ON CONFLICT(template,event_ref,recipient_key) DO NOTHING RETURNING id`)
    .bind(id,spec.userId,spec.scope,spec.projectId??null,spec.destinationId??null,spec.recipientRef??null,key,spec.template,spec.eventRef,spec.now,expires,caps.hour,caps.day,caps.templateDay??null,caps.userTemplateDay??null),
   await admitAttempt(db,envelope,id,"job_id IS NULL AND state='queued'"),
   db.prepare("UPDATE notification_notices SET job_id=?1 WHERE id=?2 AND job_id IS NULL AND state='queued' AND EXISTS(SELECT 1 FROM job_journal WHERE id=?1)").bind(jobId,id),
-  ...(spec.after?.(id)??[])]);
+  ...(spec.after?.(id)??[])];
+ return {id,jobId,key,statements};
+}
+/**
+ * Queue one notice and the envelope of its first attempt in one batch. The insert is a guarded INSERT ... SELECT, so a duplicate (same template, event
+ * and recipient) or a recipient over its caps queues nothing and returns `queued:false`; the caller can tell the two apart by `duplicate`.
+ * The template is checked against the source catalog here, not by a CHECK list in the schema.
+ */
+export async function enqueueNotice(db:Db,spec:NoticeSpec){
+ const {id,jobId,key,statements}=await noticeStatements(db,spec);
+ const [insert]=await db.batch(statements);
  if(insert.results.length)return {queued:true as const,id,jobId};
  const duplicate=!!await db.prepare('SELECT 1 FROM notification_notices WHERE template=? AND event_ref=? AND recipient_key=?').bind(spec.template,spec.eventRef,key).first();
  return {queued:false as const,duplicate};
@@ -185,9 +202,9 @@ async function attempt(db:Db,deps:DeliveryDeps,job:JobRow,lease:JobLease,ctx:Job
    db.prepare('INSERT INTO notification_send_ledger(provider,day,sends,ceiling) VALUES(?1,?2,0,?3) ON CONFLICT(provider,day) DO UPDATE SET ceiling=min(ceiling,excluded.ceiling)').bind(noticeProvider,day,ceiling),
    beginStatement(db,lease,now),
    ...(verifier?[db.prepare("UPDATE owner_email_changes SET token_verifier=?1,revision=revision+1 WHERE change_id=?2 AND account_id=?3 AND state='pending' AND revision=?4").bind(verifier,n.event_ref,n.user_id,n.c_revision)]:[]),
-   db.prepare(`UPDATE notification_notices SET state='dispatching',attempts=attempts+1,dispatched_at=?1,outcome_at=NULL,reason=NULL
+   db.prepare(`UPDATE notification_notices SET state='dispatching',attempts=attempts+1,dispatched_at=?1,outcome_at=NULL,reason=NULL,sent_to=?7
     WHERE id=?2 AND state IN ('queued','deferred') AND job_id=?3 AND EXISTS(SELECT 1 FROM job_journal WHERE id=?3 AND state='awaiting' AND fence=?4)
-     AND (?5 IS NULL OR EXISTS(SELECT 1 FROM owner_email_changes WHERE change_id=?6 AND token_verifier=?5)) RETURNING attempts`).bind(now,n.id,job.id,lease.fence,verifier,n.event_ref)]);
+     AND (?5 IS NULL OR EXISTS(SELECT 1 FROM owner_email_changes WHERE change_id=?6 AND token_verifier=?5)) RETURNING attempts`).bind(now,n.id,job.id,lease.fence,verifier,n.event_ref,recipient)]);
   begun=claimed[1];dispatched=claimed[claimed.length-1];
  }catch(cause){
   if(String(cause).includes('notification_send_ceiling'))return deny('ceiling');
@@ -261,14 +278,15 @@ const evidence:Record<string,{state:string;from:string}>={
 export async function applyNoticeEvent(db:Db,event:NoticeEvent,now:number=Date.now()){
  if(event.authenticated!==true)throw new NoticeError('EVENT_NOT_AUTHENTICATED');
  if(!(event.noticeId&&uuid.test(event.noticeId))&&!(typeof event.providerRef==='string'&&event.providerRef.length>=1&&event.providerRef.length<=100))throw new NoticeError('INVALID_NOTICE');
- const row=await db.prepare(`SELECT n.id,n.user_id,coalesce(d.address,va.address,lower(u.email)) AS address FROM notification_notices n JOIN users u ON u.id=n.user_id LEFT JOIN contact_notification_destinations d ON d.id=n.destination_id
-  LEFT JOIN visitor_notification_addresses va ON va.visitor_id=n.recipient_ref AND n.scope IN ('project-staff','submitter')
-  WHERE (?1 IS NOT NULL AND n.id=?1) OR (?1 IS NULL AND n.provider_ref=?2)`).bind(event.noticeId??null,event.providerRef??null).first<{id:string;user_id:string;address:string}>();
+ const row=await db.prepare(`SELECT n.id,n.user_id,n.sent_to AS address FROM notification_notices n
+  WHERE (?1 IS NOT NULL AND n.id=?1) OR (?1 IS NULL AND n.provider_ref=?2)`).bind(event.noticeId??null,event.providerRef??null)
+  .first<{id:string;user_id:string;address:string|null}>();
  if(!row)return {applied:false};
  const move=evidence[event.type];
  if(move)await db.prepare(`UPDATE notification_notices SET state=?1,reason=NULL,outcome_at=coalesce(outcome_at,?2),provider_ref=coalesce(provider_ref,?3) WHERE id=?4 AND state IN (${move.from})`)
   .bind(move.state,now,event.providerRef??null,row.id).run();
- if(event.type==='bounce'||event.type==='complaint'||event.type==='unsubscribe')await db.prepare('INSERT OR IGNORE INTO contact_notification_suppressions(user_id,address,reason,created_at) VALUES(?,?,?,?)').bind(row.user_id,row.address,event.type,new Date(now).toISOString()).run();
+ // Suppress only the exact address this notice was sent to (recorded at the claim); if it is not known, suppress nothing, and never fall back to the owner's login email.
+ if(row.address&&(event.type==='bounce'||event.type==='complaint'||event.type==='unsubscribe'))await db.prepare('INSERT OR IGNORE INTO contact_notification_suppressions(user_id,address,reason,created_at) VALUES(?,?,?,?)').bind(row.user_id,row.address,event.type,new Date(now).toISOString()).run();
  return {applied:true};
 }
 /** A read-only reconciliation lookup was made without evidence: count it (at most three). The hourly pass moves a notice at three lookups to unresolved. */

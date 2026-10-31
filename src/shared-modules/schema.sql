@@ -765,14 +765,9 @@ CREATE TABLE notification_configurations (
  digest TEXT NOT NULL CHECK(length(digest)=64 AND digest NOT GLOB '*[^0-9a-f]*'),
  review_id TEXT NOT NULL UNIQUE CHECK(length(review_id)=36),
  created_at INTEGER NOT NULL CHECK(created_at>0),
- -- The resolver's durable cursor: accepted events strictly after (cursor_at, cursor_entry) are still to be queued. It moves only after an event's recipients were all queued.
- cursor_at INTEGER NOT NULL CHECK(cursor_at>=0),
- cursor_entry TEXT NOT NULL CHECK(length(cursor_entry)<=36),
  PRIMARY KEY(instance_id,form_id)
 ) STRICT;
 CREATE INDEX notification_configurations_project ON notification_configurations(project_id);
--- The resolver reads accepted events of one instance in time order after its cursor (no full scan each minute).
-CREATE INDEX module_record_events_resolver ON module_record_events(instance_id,event,created_at,entry_id);
 -- The exact owner review. The id is the preparing chat turn; the confirming control is a later typed `confirm` turn for this review.
 CREATE TABLE notification_configuration_reviews (
  id TEXT PRIMARY KEY CHECK(length(id)=36),
@@ -813,10 +808,10 @@ CREATE TRIGGER notification_configuration_review_confirm BEFORE UPDATE ON notifi
  SELECT RAISE(ABORT,'notification_configuration_stale') WHERE coalesce((SELECT revision FROM notification_configurations WHERE instance_id=NEW.instance_id AND form_id=NEW.form_id),0)!=NEW.base_revision;
 END;
 CREATE TRIGGER notification_configuration_review_apply AFTER UPDATE ON notification_configuration_reviews BEGIN
- INSERT INTO notification_configurations(instance_id,form_id,project_id,owner_notice,staff_notice,receipt,business_name,config_json,price_micros,price_checked_at,revision,digest,review_id,created_at,cursor_at,cursor_entry)
-  VALUES(NEW.instance_id,NEW.form_id,NEW.project_id,NEW.owner_notice,NEW.staff_notice,NEW.receipt,NEW.business_name,NEW.config_json,NEW.price_micros,NEW.price_checked_at,NEW.base_revision+1,NEW.digest,NEW.id,unixepoch(),unixepoch(),'')
+ INSERT INTO notification_configurations(instance_id,form_id,project_id,owner_notice,staff_notice,receipt,business_name,config_json,price_micros,price_checked_at,revision,digest,review_id,created_at)
+  VALUES(NEW.instance_id,NEW.form_id,NEW.project_id,NEW.owner_notice,NEW.staff_notice,NEW.receipt,NEW.business_name,NEW.config_json,NEW.price_micros,NEW.price_checked_at,NEW.base_revision+1,NEW.digest,NEW.id,unixepoch())
   ON CONFLICT(instance_id,form_id) DO UPDATE SET owner_notice=excluded.owner_notice,staff_notice=excluded.staff_notice,receipt=excluded.receipt,business_name=excluded.business_name,config_json=excluded.config_json,
-   price_micros=excluded.price_micros,price_checked_at=excluded.price_checked_at,revision=excluded.revision,digest=excluded.digest,review_id=excluded.review_id,created_at=excluded.created_at,cursor_at=excluded.cursor_at,cursor_entry=excluded.cursor_entry;
+   price_micros=excluded.price_micros,price_checked_at=excluded.price_checked_at,revision=excluded.revision,digest=excluded.digest,review_id=excluded.review_id,created_at=excluded.created_at;
  INSERT INTO activity_events(id,user_id,project_id,action,summary,created_at) VALUES('notification-config:'||NEW.id,NEW.user_id,NEW.project_id,'notifications.configuration','Set the reviewed appointment email notices (nothing is sent until delivery is active)',strftime('%Y-%m-%dT%H:%M:%fZ','now'));
 END;
 -- Admission of a configuration row: only the maintained approved-configuration appointment templates (never a platform template), only the
@@ -828,8 +823,7 @@ CREATE TRIGGER notification_configuration_admit BEFORE INSERT ON notification_co
  -- An upsert of an existing row fires this too; its revision is then held by notification_configuration_revise.
  SELECT RAISE(ABORT,'notification_configuration_stale') WHERE NEW.revision!=1 AND NOT EXISTS(SELECT 1 FROM notification_configurations WHERE instance_id=NEW.instance_id AND form_id=NEW.form_id);
 END;
-CREATE TRIGGER notification_configuration_revise BEFORE UPDATE ON notification_configurations
-WHEN NEW.config_json IS NOT OLD.config_json OR NEW.revision IS NOT OLD.revision OR NEW.instance_id IS NOT OLD.instance_id OR NEW.form_id IS NOT OLD.form_id OR NEW.project_id IS NOT OLD.project_id BEGIN
+CREATE TRIGGER notification_configuration_revise BEFORE UPDATE ON notification_configurations BEGIN
  SELECT RAISE(ABORT,'notification_configuration_platform_template') WHERE EXISTS(SELECT 1 FROM json_each(NEW.config_json) j
   WHERE json_extract(j.value,'$.template.id') IS NULL OR json_extract(j.value,'$.template.id') NOT IN ('appointment.staff-notice','appointment.request-receipt') OR json_extract(j.value,'$.sender')!='whumpo-notify');
  SELECT RAISE(ABORT,'notification_configuration_stale') WHERE NEW.revision!=OLD.revision+1 OR NEW.instance_id!=OLD.instance_id OR NEW.form_id!=OLD.form_id OR NEW.project_id!=OLD.project_id;

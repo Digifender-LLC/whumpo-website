@@ -27,7 +27,7 @@ try{
  await card('saved').getByRole('status').filter({hasText:'Not sending yet. Whumpo has not turned on email delivery. Saved settings: revision 2. Emails for this form so far: 3 sent, 1 waiting, 4 not sent.'}).waitFor();
  await card('anonymous').getByRole('status').filter({hasText:'Sending is on for this form.'}).waitFor();
  await card('quiet').getByRole('status').filter({hasText:'All appointment emails are turned off for this form.'}).waitFor();
- await card('nobody').getByRole('status').filter({hasText:'no notification address is verified'}).waitFor();
+ await card('nobody').getByRole('status').filter({hasText:'nobody can be reached'}).waitFor();
  assert(await card('fresh').getByRole('status').filter({hasText:'not queued or sent'}).count(),'The unset-limit copy says nothing is queued');
  phase='saved settings are shown and the anonymous form cannot send receipts';
  assert(await box('saved',0).isChecked());assert(!await box('saved',1).isChecked());assert(await box('saved',2).isChecked());

@@ -1,3 +1,4 @@
+import {customerCeilingFromEnv} from './notification-configurations';
 import {visitorProject,visitorOrigin} from './hosts';
 import {deleteAppAccount,exportAppAccount,prepareAppDeletion,readAppDeletion} from './app-lifecycle';
 import {appPasskeyOptions,appPasskeyVerify,recoverAppVisitor} from './app-auth';
@@ -123,7 +124,7 @@ export async function applicationGateway(request:Request,env:AppEnv,fetcher:type
      if(!(bytes instanceof Uint8Array))throw new ModuleError('unavailable');
      return new Response(bytes,{headers:{'content-type':'image/jpeg','content-length':String(bytes.length),'content-disposition':'inline; filename="file.jpg"','cache-control':'private, no-store','content-security-policy':"sandbox; default-src 'none'",'x-content-type-options':'nosniff','referrer-policy':'no-referrer','cross-origin-resource-policy':'same-origin','x-frame-options':'DENY'}});
     }
-    return json(await handleModuleRequest(env.DB,principal,envelope,undefined,{publicAdmission:async()=>{
+    return json(await handleModuleRequest(env.DB,principal,envelope,undefined,{notices:{customerCeilingCents:customerCeilingFromEnv(env as {NOTIFICATION_CUSTOMER_CEILING_CENTS?:string})},publicAdmission:async()=>{
      // WH-127 anonymous public form intake reuses the contact form's admission: deployed environments fail closed
      // without the Turnstile secret, one connection gets the contact allowance per project per UTC day (shared with the
      // contact form, counted before verification), and Siteverify must name this visitor host, the module-form action

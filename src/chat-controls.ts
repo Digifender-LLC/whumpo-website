@@ -1,3 +1,4 @@
+import {businessNameProblem} from './business-name';
 /** Explicit UI intents. These are never accepted as agent proposals or parsed from chat text.
  * Command strings below are private adapters for the existing receipt handlers. */
 export const confirmationControls = {
@@ -63,7 +64,7 @@ export function chatControl(value:unknown):{action:ChatControl;command:string;la
  }
  // WH-158: ids, the fixed notice choices and the owner's plain business name only. The server derives every template, recipient, sender and price.
  if(a.type==='notificationSetupReview'&&exact(a,['type','projectId','instanceId','formId','notices','businessName'])&&Object.keys(a).length===6&&id(a.projectId)&&[a.instanceId,a.formId].every(v=>typeof v==='string'&&/^[a-z][a-z0-9-]{0,39}$/.test(v))
-  &&Array.isArray(a.notices)&&a.notices.length<=3&&new Set(a.notices).size===a.notices.length&&a.notices.every(n=>n==='owner'||n==='staff'||n==='receipt')&&typeof a.businessName==='string'&&/^[\p{L}\p{N}][\p{L}\p{N} '&.,-]{0,79}$/u.test(a.businessName)&&!/ {2}|\s$/.test(a.businessName)){
+  &&Array.isArray(a.notices)&&a.notices.length<=3&&new Set(a.notices).size===a.notices.length&&a.notices.every(n=>n==='owner'||n==='staff'||n==='receipt')&&typeof a.businessName==='string'&&!businessNameProblem(a.businessName)&&a.businessName===a.businessName.trim().normalize('NFC')){
   const action={type:'notificationSetupReview' as const,projectId:a.projectId,instanceId:a.instanceId as string,formId:a.formId as string,notices:[...a.notices].sort() as ('owner'|'staff'|'receipt')[],businessName:a.businessName};
   return {action,command:`/review-notification-setup ${action.projectId} ${action.instanceId} ${action.formId} ${action.notices.join(',')||'none'} ${action.businessName}`,label:'Review appointment email notices for the “'+action.formId+'” form.',recentAuth:false};
  }

@@ -2,7 +2,7 @@ import {ContactError} from './contacts';
 import {receiptStatement,reviewedReply,reviewChangedMessage} from './chat-review-receipts';
 import {notificationCatalog} from './notification-catalog';
 import {enqueueNotice,maxNoticeAttempts,noticeSendsInWindow,notificationLane,runNotificationDelivery,applyNoticeEvent,type DeliveryDeps} from './notification-outbox';
-import {queueConfiguredNotices} from './notification-configurations';
+import {customerCeilingFromEnv} from './notification-configurations';
 import type {JobType} from './job-dispatcher';
 /**
  * WH-036 contact notifications. The private inbox (`contact_submissions`) is the source of truth; a notice is only a
@@ -52,7 +52,7 @@ export const verificationValidityMs=3600000;
 const cleaned=(value:unknown,max:number)=>typeof value==='string'&&value.trim()&&value.trim().length<=max&&!/[\u0000-\u001f\u007f]/.test(value)?value.trim():null;
 export function contactNotificationConfig(env:ContactNotificationEnv,implemented:Readonly<Record<string,{sendCeiling:number}>>=implementedContactNotificationProviders){
  const provider=cleaned(env.CONTACT_NOTIFICATION_PROVIDER,60),review=cleaned(env.CONTACT_NOTIFICATION_REVIEW,200);
- const cents=/^[1-9][0-9]{0,5}$/.test(env.NOTIFICATION_CUSTOMER_CEILING_CENTS??'')?Number(env.NOTIFICATION_CUSTOMER_CEILING_CENTS):undefined;
+ const cents=customerCeilingFromEnv(env);
  const settings:ContactNotificationSettings|null=provider&&review&&Object.hasOwn(implemented,provider)?{provider,review,sendCeiling:implemented[provider].sendCeiling,...(cents?{customerCeilingCents:cents}:{})}:null;
  return {settings};
 }
@@ -157,11 +157,11 @@ export async function queueContactNotices(db:Pick<D1Database,'prepare'|'batch'>,
 }
 /** The contact adapter on journalLane (the every-minute registry entry): queues contact notices, then drains due attempts. Same caps, ceiling, suppression and at-most-one provider call per attempt as WH-036. */
 export function contactDeliveryLane(db:Pick<D1Database,'prepare'|'batch'>,deps:Omit<DeliveryDeps,'tally'>&{tally?:DeliveryDeps['tally']}):JobType{
- return notificationLane(db,{type:'contact_delivery',...deps,tally:deps.tally??{enabled:false,queued:0,accepted:0,retried:0,failed:0,cancelled:0,refused:0},queue:async now=>await queueContactNotices(db,deps.settings,now)+await queueConfiguredNotices(db,deps.settings,now)});
+ return notificationLane(db,{type:'contact_delivery',...deps,tally:deps.tally??{enabled:false,queued:0,accepted:0,retried:0,failed:0,cancelled:0,refused:0},queue:now=>queueContactNotices(db,deps.settings,now)});
 }
 /** One dispatcher pass for tests and one-shot callers; the scheduled handler registers `contactDeliveryLane`. */
 export async function runContactDelivery(db:Pick<D1Database,'prepare'|'batch'>,settings:ContactNotificationSettings|null,sender:ContactSender,options:{now?:Date;timeoutMs?:number}={}){
- return runNotificationDelivery(db,settings,sender,{...options,queue:async now=>await queueContactNotices(db,settings!,now)+await queueConfiguredNotices(db,settings,now)});
+ return runNotificationDelivery(db,settings,sender,{...options,queue:now=>queueContactNotices(db,settings!,now)});
 }
 export const destinationReviewMs=600000;
 /**

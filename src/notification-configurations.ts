@@ -4,7 +4,8 @@ import {assertFeature} from './feature-admission';
 import {featureRequest,inclusionPredicate,FeatureInclusionError} from './feature-inclusion';
 import {assertWorkspace} from './workspace-identity/admission';
 import {receiptStatement,reviewedReply,reviewChangedMessage} from './chat-review-receipts';
-import {enqueueNotice} from './notification-outbox';
+import {noticeStatements} from './notification-outbox';
+import {businessNameProblem} from './business-name';
 /**
  * WH-158 customer notification configuration for the standard appointment presets (docs/notifications.md, gap G-N8).
  * An owner turns on up to three notices for one records form through an exact Chat review (`/review-notification-setup`, prepared by the owner's typed
@@ -42,7 +43,9 @@ async function build(db:Pick<D1Database,'prepare'>,user:string,project:string,lo
   if(form.submit==='public')throw invalid('Receipts need a form that visitors sign in to use. An anonymous form cannot send receipts.');
   if(!service||!day)throw invalid('Receipts need “service” and “day” choice fields on this form.');
  }
- if(!variableTypes['text-line'](businessName))throw invalid('Give a business name of 1 to 80 plain characters, without a link or an email address.');
+ businessName=businessName.normalize('NFC');
+ const problem=businessNameProblem(businessName);
+ if(problem||!variableTypes['text-line'](businessName))throw invalid(problem||'Give a business name of 1 to 80 plain characters, without a link or an email address.');
  const configs=[];
  for(const p of appointmentPresets){
   if(!flags[p.flag])continue;
@@ -122,7 +125,7 @@ type ReviewRow={id:string;project_id:string;instance_id:string;form_id:string;ow
 export type DeliveryState='inactive'|'spending-limit-unset'|'active';
 /** What the dashboard says about sending: inactive (no provider binding), active-but-no-spending-limit (nothing is queued or sent) or active. */
 export const deliveryState=(delivery:{settings:{customerCeilingCents?:number}}|null):DeliveryState=>!delivery?'inactive':delivery.settings.customerCeilingCents?'active':'spending-limit-unset';
-export type FormSending=DeliveryState|'off'|'plan'|'needs-address';
+export type FormSending=DeliveryState|'off'|'plan'|'no-recipient';
 /**
  * Owner dashboard read: per form of each owned records module its saved notice settings, whether THIS form would send (its own notices on, `core.forms`
  * included, and an owner address verified when the owner notice is the only one on) and counts of the notices of THIS form. Counts and flags only, never an
@@ -132,50 +135,47 @@ export async function readNotificationSetup(db:Pick<D1Database,'prepare'>,user:s
  if(!uuid.test(project)||!await db.prepare('SELECT 1 FROM projects WHERE id=? AND owner_user_id=?').bind(project,user).first())throw new ModuleError('not_found','Project not found.');
  const rows=(await db.prepare('SELECT c.instance_id,i.local_id,c.form_id,c.owner_notice,c.staff_notice,c.receipt,c.business_name,c.revision FROM notification_configurations c JOIN module_instances i ON i.id=c.instance_id WHERE c.project_id=? ORDER BY i.local_id,c.form_id LIMIT 32').bind(project).all<{instance_id:string;local_id:string;form_id:string;owner_notice:number;staff_notice:number;receipt:number;business_name:string;revision:number}>()).results;
  const counts=(await db.prepare("SELECT r.instance_id,r.form_id,n.state,count(*) n FROM notification_notices n JOIN module_records r ON r.id=substr(n.event_ref,6,36) AND r.project_id=n.project_id WHERE n.project_id=? AND n.template IN ('appointment.staff-notice@1','appointment.request-receipt@1') GROUP BY r.instance_id,r.form_id,n.state").bind(project).all<{instance_id:string;form_id:string;state:string;n:number}>()).results;
- const ownerVerified=!!await db.prepare("SELECT 1 FROM notification_recipients WHERE project_id=? AND scope='owner'").bind(project).first();
+ const reach=async(sql:string)=>!!await db.prepare(sql).bind(project).first();
+ // Who could be reached right now: the verified owner address, an opted-in staff member with a verified address, a project visitor with a verified address.
+ const ownerOk=await reach("SELECT 1 FROM notification_recipients WHERE project_id=? AND scope='owner'"),staffOk=await reach("SELECT 1 FROM notification_recipients WHERE project_id=? AND scope='staff'"),
+  visitorOk=await reach('SELECT 1 FROM visitor_notification_addresses a JOIN app_visitors v ON v.id=a.visitor_id WHERE v.project_id=? AND a.verified_at IS NOT NULL');
  const included=await includedNow(db,user,project);
  return {delivery,forms:rows.map(r=>{
   const mine=counts.filter(c=>c.instance_id===r.instance_id&&c.form_id===r.form_id),sum=(states:string[])=>mine.filter(c=>states.includes(c.state)).reduce((a,c)=>a+c.n,0);
   const any=r.owner_notice||r.staff_notice||r.receipt;
-  const sending:FormSending=!any?'off':!included?'plan':delivery!=='active'?delivery:r.owner_notice&&!r.staff_notice&&!r.receipt&&!ownerVerified?'needs-address':'active';
+  const reachable=(r.owner_notice&&ownerOk)||(r.staff_notice&&staffOk)||(r.receipt&&visitorOk);
+  const sending:FormSending=!any?'off':!included?'plan':delivery!=='active'?delivery:reachable?'active':'no-recipient';
   return {instanceId:r.local_id,formId:r.form_id,notices:{owner:!!r.owner_notice,staff:!!r.staff_notice,receipt:!!r.receipt},businessName:r.business_name,revision:r.revision,sending,
    counts:{sent:sum(['accepted','delivered']),waiting:sum(['queued','dispatching','deferred','unknown-outcome']),notSent:sum(['cancelled','failed','bounced','complained','unresolved'])}};
  })};
 }
 
+/** The owner's monthly spending limit for configured notices, in whole cents, from `NOTIFICATION_CUSTOMER_CEILING_CENTS`; undefined (nothing queued, nothing sent) unless it is a plain positive integer. */
+export function customerCeilingFromEnv(env:{NOTIFICATION_CUSTOMER_CEILING_CENTS?:string}){const v=env.NOTIFICATION_CUSTOMER_CEILING_CENTS;return /^[1-9][0-9]{0,5}$/.test(v??'')?Number(v):undefined;}
 /**
- * The approved-configuration resolver for `form.accepted` (inside the every-minute lane's queue step). Per configuration it walks the instance's accepted
- * events in time order after a durable cursor, within 24 hours and after the configuration took effect, and queues one outbox row per current recipient
- * of each enabled notice through `enqueueNotice`. The cursor moves only after every recipient of every event in the page was queued (`enqueueNotice` is
- * idempotent, so a crash mid-page only repeats work); an event with no recipient then is final, which is the no-backfill rule. Nothing is queued while the
- * owner's monthly spending limit is unset (D8), so cancelled rows can never use up the contact notice caps. No model, no provider call.
+ * Configured notices queue in the SAME batch that admits the form record (WH-158, D12), so there is no polling, no cursor, no backfill and no lag: a
+ * request that arrives while the owner's limit is unset, or while the form's notices are off, is never emailed later. `notice` is the receiving Worker's
+ * view of the limit. Every statement is a guarded INSERT ... SELECT that cannot raise (`noticeStatements` with `safe`): a recipient over its cap, a
+ * suppressed or removed recipient or a duplicate inserts zero rows and the record is still admitted. Any read failure here also yields no notices, never
+ * a failed submission. Send-time rechecks (`resolveConfiguredNotice`) all stay.
  */
-export async function queueConfiguredNotices(db:Db,settings:{customerCeilingCents?:number}|null,nowMs:number,pageSize=25,configLimit=50){
- if(!(Number(settings?.customerCeilingCents)>0))return 0;
- const configs=(await db.prepare(`SELECT c.instance_id,c.form_id,c.project_id,c.revision,c.owner_notice,c.staff_notice,c.receipt,c.cursor_at,c.cursor_entry,p.owner_user_id AS user_id
-   FROM notification_configurations c JOIN projects p ON p.id=c.project_id WHERE c.owner_notice+c.staff_notice+c.receipt>0 ORDER BY c.project_id,c.instance_id,c.form_id LIMIT ?`).bind(configLimit)
-  .all<{instance_id:string;form_id:string;project_id:string;revision:number;owner_notice:number;staff_notice:number;receipt:number;cursor_at:number;cursor_entry:string;user_id:string}>()).results;
- const refs=async(project:string,scope:'owner'|'staff'|'submitter',ref?:string)=>(await db.prepare('SELECT ref FROM notification_recipients WHERE project_id=?1 AND scope=?2 AND (?3 IS NULL OR ref=?3) LIMIT 20').bind(project,scope,ref??null).all<{ref:string}>()).results.map(x=>x.ref);
- let queued=0;
- for(const c of configs){
-  if(!await includedNow(db,c.user_id,c.project_id))continue;
-  const floor=Math.max(c.cursor_at,Math.floor(nowMs/1000)-86400),settled=Math.floor(nowMs/1000)-2; // events are whole seconds ordered by (second, id): only a settled second is final, so a late commit in the cursor's second cannot fall behind it
-  const events=(await db.prepare(`SELECT e.entry_id,e.created_at,r.receipt_consent,r.visitor_id FROM module_record_events e JOIN module_records r ON r.id=e.entry_id AND r.instance_id=e.instance_id AND r.form_id=?3
-    WHERE e.instance_id=?1 AND e.event='form.accepted' AND (e.created_at>?2 OR e.created_at=?2 AND e.entry_id>?4) AND e.created_at>=?5 AND e.created_at<=?7 ORDER BY e.created_at,e.entry_id LIMIT ?6`)
-   .bind(c.instance_id,c.cursor_at,c.form_id,c.cursor_entry,floor,pageSize,settled).all<{entry_id:string;created_at:number;receipt_consent:number;visitor_id:string|null}>()).results;
-  if(!events.length)continue;
-  for(const e of events){
-   const eventRef=`form:${e.entry_id}:r${c.revision}`,base={userId:c.user_id,projectId:c.project_id,eventRef,now:nowMs};
-   const one=async(spec:Parameters<typeof enqueueNotice>[1])=>{if((await enqueueNotice(db,spec)).queued)queued++;};
-   if(c.owner_notice)for(const ref of await refs(c.project_id,'owner'))await one({...base,scope:'owner-destination',destinationId:ref,template:'appointment.staff-notice@1',caps:{hour:10,day:50}});
-   if(c.staff_notice)for(const ref of await refs(c.project_id,'staff'))await one({...base,scope:'project-staff',recipientRef:ref,template:'appointment.staff-notice@1',caps:{hour:10,day:50}});
-   // A receipt's recipient key is the visitor, so the promised 3 an hour and 10 a day hold per visitor across submissions.
-   if(c.receipt&&e.receipt_consent&&e.visitor_id&&(await refs(c.project_id,'submitter',e.entry_id)).length)await one({...base,scope:'submitter',recipientRef:e.visitor_id,template:'appointment.request-receipt@1',caps:{hour:3,day:10}});
-  }
-  const last=events.at(-1)!;
-  await db.prepare('UPDATE notification_configurations SET cursor_at=?,cursor_entry=? WHERE instance_id=? AND form_id=? AND revision=?').bind(last.created_at,last.entry_id,c.instance_id,c.form_id,c.revision).run();
- }
- return queued;
+export type AdmissionNotice={customerCeilingCents?:number}|null|undefined;
+export async function admissionNotices(db:Pick<D1Database,'prepare'|'batch'>,notice:AdmissionNotice,at:{instanceId:string;projectId:string;formId:string;entryId:string;visitorId:string|null;consent:boolean;now:number}):Promise<D1PreparedStatement[]>{
+ if(!(Number(notice?.customerCeilingCents)>0))return [];
+ try{
+  const c=await db.prepare('SELECT c.revision,c.owner_notice,c.staff_notice,c.receipt,p.owner_user_id AS user_id FROM notification_configurations c JOIN projects p ON p.id=c.project_id WHERE c.instance_id=? AND c.form_id=? AND c.project_id=? AND c.owner_notice+c.staff_notice+c.receipt>0')
+   .bind(at.instanceId,at.formId,at.projectId).first<{revision:number;owner_notice:number;staff_notice:number;receipt:number;user_id:string}>();
+  if(!c||!await includedNow(db,c.user_id,at.projectId))return [];
+  const refs=async(scope:'owner'|'staff')=>(await db.prepare('SELECT ref FROM notification_recipients WHERE project_id=?1 AND scope=?2 LIMIT 20').bind(at.projectId,scope).all<{ref:string}>()).results.map(x=>x.ref);
+  const base={userId:c.user_id,projectId:at.projectId,eventRef:`form:${at.entryId}:r${c.revision}`,now:at.now,safe:true};
+  const specs:Parameters<typeof noticeStatements>[1][]=[];
+  if(c.owner_notice)for(const ref of await refs('owner'))specs.push({...base,scope:'owner-destination',destinationId:ref,template:'appointment.staff-notice@1',caps:{hour:10,day:50}});
+  if(c.staff_notice)for(const ref of await refs('staff'))specs.push({...base,scope:'project-staff',recipientRef:ref,template:'appointment.staff-notice@1',caps:{hour:10,day:50}});
+  // A receipt's recipient key is the visitor, so the promised 3 an hour and 10 a day hold per visitor across submissions.
+  if(c.receipt&&at.consent&&at.visitorId&&await db.prepare('SELECT 1 FROM visitor_notification_addresses WHERE visitor_id=? AND verified_at IS NOT NULL').bind(at.visitorId).first())
+   specs.push({...base,scope:'submitter',recipientRef:at.visitorId,template:'appointment.request-receipt@1',caps:{hour:3,day:10}});
+  return (await Promise.all(specs.map(spec=>noticeStatements(db,spec)))).flatMap(x=>x.statements);
+ }catch{return [];}
 }
 
 /** Current `core.forms` inclusion for a background effect. The scheduled lane runs with platform authority, not a signed-in session, so this is the actor-free inclusion predicate (invoice or scoped preview grant) over the exact owned project. */

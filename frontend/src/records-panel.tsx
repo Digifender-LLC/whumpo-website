@@ -7,6 +7,7 @@ import {Button} from './components/ui/button';
 import {Section} from './workspace-layout';
 import {StateNote} from './view-states';
 import {useWorkspace} from './workspace';
+import {businessNameProblem} from '../../src/business-name';
 import {Input} from './components/ui/input';
 import {Field} from './workspace-layout';
 import {ConfirmButton,ProjectSelect,QueryStatus,StaleProject,useProjectSelection} from './workspace-controls';
@@ -14,12 +15,11 @@ import {ConfirmButton,ProjectSelect,QueryStatus,StaleProject,useProjectSelection
 type Item=RecordsSummaryFacts['items'][number];
 type RecordPage={resourceId:string;recordId:string;configRevision:number;fields:{key:string;label:string;type:string}[];
  items:{entryId:string;revision:number;createdAt:string;updatedAt:string;submittedBy:'public'|'visitor'|'staff';visitorId:string|null;values:Record<string,unknown>}[];next:string|null};
-export type FormSending='inactive'|'spending-limit-unset'|'active'|'off'|'plan'|'needs-address';
+export type FormSending='inactive'|'spending-limit-unset'|'active'|'off'|'plan'|'no-recipient';
 export type Setup={delivery:'inactive'|'spending-limit-unset'|'active';forms:{instanceId:string;formId:string;notices:{owner:boolean;staff:boolean;receipt:boolean};businessName:string;revision:number;sending:FormSending;counts:{sent:number;waiting:number;notSent:number}}[]};
 const sending:Record<FormSending,string>={inactive:'Not sending yet. Whumpo has not turned on email delivery.','spending-limit-unset':'Not sending yet. Whumpo has not set its monthly spending limit, so appointment emails are not queued or sent, and a request that arrives now is not emailed later.',
- active:'Sending is on for this form. Each email is checked again just before it goes out.',off:'All appointment emails are turned off for this form.',plan:'Not sending: appointment emails need Starter or a higher plan for this website.','needs-address':'Not sending yet: you turned on the notice to yourself, but no notification address is verified. Verify one in Dashboard → Contact inbox.'};
-const plainName=/^[\p{L}\p{N}][\p{L}\p{N} '&.,-]{0,79}$/u;
-const nameProblem=(name:string)=>!name?'Enter the business name to show in the emails.':!plainName.test(name)||/ {2}/.test(name)?'Use letters, numbers, spaces and . , \' & - only, up to 80 characters.':/@|:\/\/|\bwww\.|[\p{L}\p{N}-]\.\p{L}{2,}|\d+\.\d+\.\d+/iu.test(name)?'Leave out links, domain names and email addresses.':'';
+ active:'Sending is on for this form. Each email is checked again just before it goes out.',off:'All appointment emails are turned off for this form.',plan:'Not sending: appointment emails need Starter or a higher plan for this website.','no-recipient':'Not sending yet: nobody can be reached. Verify your notification address in Dashboard → Contact inbox, or have staff or visitors verify theirs.'};
+const nameProblem=businessNameProblem;
 const states={inactive:'Disabled',active:'Active',suspended:'Suspended',migrating:'Migrating'} as const;
 const who={public:'Anonymous form',visitor:'Visitor',staff:'Staff'} as const;
 const total=(s:Item['schemas'][number])=>s.records.public+s.records.visitor+s.records.staff;
