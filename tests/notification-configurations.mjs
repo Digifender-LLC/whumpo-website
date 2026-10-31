@@ -84,7 +84,7 @@ function provider(){
 }
 const settings=cents=>({provider:'cloudflare-email',review:'r',sendCeiling:1000,...(cents===undefined?{}:{customerCeilingCents:cents})});
 // The lane leases a few attempts per pass, so a test drains it with repeated passes.
-async function pass(p,cents,at){let total={cancelled:0,accepted:0};for(let i=0;i<30;i++){const t=await Contact.runContactDelivery(db,settings(cents),p.send,{now:at??new Date(),timeoutMs:200});total={cancelled:total.cancelled+t.cancelled,accepted:total.accepted+t.accepted};if(t.cancelled+t.accepted+t.refused+t.failed+t.retried===0)break;}return total;}
+async function pass(p,cents,at,via=db){let total={cancelled:0,accepted:0};for(let i=0;i<30;i++){const t=await Contact.runContactDelivery(via,settings(cents),p.send,{now:at??new Date(),timeoutMs:200});total={cancelled:total.cancelled+t.cancelled,accepted:total.accepted+t.accepted};if(t.cancelled+t.accepted+t.refused+t.failed+t.retried===0)break;}return total;}
 const notices=project=>rows("SELECT n.*,j.state AS job_state FROM notification_notices n LEFT JOIN job_journal j ON j.id=n.job_id WHERE n.project_id=? AND n.template LIKE 'appointment.%' ORDER BY n.created_at,n.id",project);
 const sourceOf=f=>readFileSync(new URL('../'+f,import.meta.url),'utf8');
 
@@ -391,10 +391,14 @@ try{
   const race=async(label,act)=>{
    const o=await owner(),rec=await setup(o),v=await visitor(o);await verifyVisitor(v,label+'-private@example.test');await configure(o,['receipt'],'Garden Salon');
    await submit(o,rec,v,{consent:true});
-   const real=db.batch.bind(db);let fired=false;
-   // The hook fires once, on the batch that carries the sent_to claim, i.e. after the recipient was read and before the claim commits.
-   db.batch=async st=>{if(!fired&&st.some(x=>/sent_to=\?7/.test(x.sql??x.statement??x.query??JSON.stringify(x)??''))){fired=true;await act(v);}return real(st);};
-   const p=provider();try{await pass(p,500);}finally{db.batch=real;}
+   // The delivery runs through a thin wrapper of the database: statements are tagged with their SQL as they are bound (the SQL is not visible on every database
+   // object, e.g. local D1), and the one batch that carries the sent_to claim runs the erasure first, i.e. after the recipient was read and before the claim commits.
+   const tag=new WeakMap();let fired=false;
+   const via=new Proxy(db,{get:(t,k)=>{
+    if(k==='prepare')return sql=>{const st=t.prepare(sql);return new Proxy(st,{get:(x,key)=>key==='bind'?(...a)=>{const b=x.bind(...a);tag.set(b,sql);return b;}:typeof x[key]==='function'?x[key].bind(x):x[key]});};
+    if(k==='batch')return async st=>{if(!fired&&st.some(x=>/sent_to=\?7/.test(tag.get(x)??''))){fired=true;await act(v);}return t.batch(st);};
+    const f=t[k];return typeof f==='function'?f.bind(t):f;}});
+   const p=provider();await pass(p,500,undefined,via);
    assert.ok(fired,label+': the race hook fired');
    assert.equal(p.calls.length,0,label+': no provider call');
    assert.equal((await row("SELECT count(*) n FROM notification_notices WHERE project_id=? AND sent_to IS NOT NULL",o.project)).n,0,label+': sent_to stays null');
