@@ -40,7 +40,7 @@ const fundingOf=o=>({coverage:null,paymentMethod:{kind:'payment-method',id:owner
 const actorOf=o=>({kind:'owner',ownerId:owners[o].id});
 const projectOf=(o,revision=1)=>({projectId:owners[o].project,ownerId:owners[o].id,revision});
 let seq=0;const id=p=>`${p}-${String(++seq).padStart(4,'0')}`;
-const extra=Object.fromEntries(['p1','p2','p3','p4','p5','p6','p7','p8','p9','p10','p11','p12','p13','p14','p15','p16','p17'].map(n=>[`synthetic-${n}.com`,{registration:1500,renewal:1500}]));
+const extra=Object.fromEntries(['p1','p2','p3','p4','p5','p6','p7','p8','p9','p10','p11','p12','p13','p14','p15','p16','p17','p18'].map(n=>[`synthetic-${n}.com`,{registration:1500,renewal:1500}]));
 function registrar(clock=()=>T0){
  return m.createSyntheticRegistrar({clock,prices:{...extra,[NAME]:{registration:1050,renewal:1150},[CAFE]:{registration:2400,renewal:2400},[SHOP]:{registration:1500,renewal:1500},[PREMIUM]:{registration:45000,renewal:45000,premium:true}}});
 }
@@ -323,6 +323,15 @@ try{
   assert.equal(await count('SELECT count(*) FROM domain_registrant_contacts WHERE review_id=?',second.review.reviewId),1);
   await m.dispatch({db:A,ownerId:owners.b.id,orderId:step.order.orderId,owner:fundingOf('b'),project:projectOf('b'),registrar:again,policy,now:T0+DAY+4});
   assert.equal(await state(step.order.orderId),'registered');assert.equal((await one('SELECT owner_user_id FROM domain_registrations WHERE hostname=?','synthetic-p14.com')).owner_user_id,owners.b.id);
+ });
+
+ await check('a pending order cannot be marked released by hand: release needs a registered order whose registration was transferred out or lapsed',async()=>{
+  const reg=registrar(),{orderId}=await reserved(reg,'a','synthetic-p18.com');
+  // reserved, dispatching and registered-but-held orders all refuse a direct release (it would drop the name from the one-active-order index).
+  await refuse(run('UPDATE domain_orders SET released=1,version=version+1 WHERE order_id=?',orderId),/domain_order_release/);
+  await dispatch(A,reg,orderId);assert.equal(await state(orderId),'registered');
+  await refuse(run('UPDATE domain_orders SET released=1,version=version+1 WHERE order_id=?',orderId),/domain_order_release|domain_order_final/);
+  assert.equal((await one('SELECT released FROM domain_orders WHERE order_id=?',orderId)).released,0);
  });
 
  await check('two different registrar events racing for one order apply once and leave one receipt (the receipt is written only when the change won)',async()=>{
