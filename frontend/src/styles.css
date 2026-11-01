@@ -77,8 +77,6 @@
 }
 @media(max-width:760px){
  .auth-screen{grid-template-columns:minmax(0,1fr)}
- .auth-screen>section{min-width:0;padding:24px 20px max(24px,env(safe-area-inset-bottom));padding-top:max(24px,env(safe-area-inset-top))}
- .auth-screen>section>div{padding-top:40px;padding-bottom:24px}
  .auth-screen h1{font-size:34px;line-height:1.15}
  .auth-screen button{min-height:48px;height:auto;padding-top:12px;padding-bottom:12px;white-space:normal;line-height:1.4;max-width:100%}
  .auth-screen input{height:48px}
@@ -128,6 +126,10 @@
  .security-content button,.sidebar-extra button{min-height:44px}
  .security-content summary{padding-block:12px}
 }
+
+/* View Transitions never take input from the live page below them. */
+::view-transition{pointer-events:none}
+@media(prefers-reduced-motion:reduce){::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation:none!important}}
 
 /* Skeleton: a sweep of light across a sunken block; transform-only, and the global reduced-motion rule stops it. */
 .skeleton{position:relative;overflow:hidden;background:var(--surface-sunken)}

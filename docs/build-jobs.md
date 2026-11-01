@@ -23,7 +23,7 @@ Visitor requests, public backend calls, webhooks, customer workflow events and c
 | Cancellation | `/cancel-build <id>` (owner only) moves a running or succeeded, not yet published, job to `cancelled`. It cannot then dispatch, finish, reserve its test or publish. A test that was already sent is not recalled, and its private receipt remains. Cancellation does not delete the saved draft; a later owner test and review of that version uses new owner authority, not the job's. |
 | Operator build freeze (WH-050) | Owner decision on issue #148 (October 4, 2026). An operator `build` containment ([capacity and fairness](capacity-and-fairness.md#f7-operator-containment-implemented-locally)) for a project or account refuses new jobs in `build_job_admit` with the same generic capacity error, and the `operator_containment_build_cancel` trigger cancels that scope's `running` and `succeeded`-but-unpublished jobs in the same write. Cancellation behaves exactly like owner cancellation: no dispatch, finish, spend or publish; a test already sent is not recalled; the saved draft stays; the deterministic reconciler records cleanup. Published jobs are not changed. The freeze is freeze-only: per-project, per-account and pool limits stay as built. Lifting restores admission; cancelled jobs stay cancelled. |
 | Scoped inputs/outputs | `input_digest` is the exact build request hash. `artifact_key` is `private/<project>/<job>/<source SHA-256>`, and a column check ties it to the row's project and job. |
-| Output ownership before publish | `assertBuildOutput` and the `build_job_publish` trigger require all of these before a review can cite the job's receipt: the same owner, project and version; a `succeeded` (or already `published`) job; released cleanup; and source bytes matching the artifact key. Success itself requires the job's own passing `backend_runs` receipt. |
+| Output ownership before publish | `assertBuildOutput` and the `build_job_publish` trigger require all of these before a review can cite the job's receipt: the same owner, project and version; a `succeeded` job (the `build_job_publish` trigger also allows an already `published` job, so a published job can back another review; `assertBuildOutput` allows `succeeded` only); released cleanup; and source bytes matching the artifact key. Success itself requires the job's own passing `backend_runs` receipt. |
 | Cleanup records | `build_job_cleanups` is append-only and allows at most five attempts. Release is recorded only when it is knowable: the runtime returned, the job was never dispatched, or 30 s (the runtime per-call bound) has passed since dispatch. An unconfirmed runtime outcome is recorded as `failed`/`runtime-unconfirmed` and keeps the capacity slot held. A cleanup that could not be recorded stays `pending`. |
 
 ## Shared caches versus private artifacts
@@ -36,7 +36,7 @@ Visitor requests, public backend calls, webhooks, customer workflow events and c
 
 Every build records `diagnostics_json`:
 
-- `schema`: the synthetic `{state,input}`/`{state,result}` pairs. A failure is rejected with HTTP 400 before anything is saved.
+- `schema`: the synthetic `{state,input}`/`{state,result}` pairs. A failure is rejected with HTTP 400.
 - `type`: a static module-shape check for a default-export handler. This is not a TypeScript type check, and no source runs in the control Worker.
 - `dependency`: no imports, dynamic code or embedded credentials. This reuses the import triage.
 - `build`: the bounded QuickJS expected-output check.

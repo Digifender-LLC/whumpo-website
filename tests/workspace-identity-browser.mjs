@@ -92,7 +92,7 @@ try{
  let auth=await authenticator();
  if(accessibility){
   phase='landing keyboard entry';
-  await page.goto(origin+'/');await page.getByText('Plans are coming soon',{exact:true}).waitFor();
+  await page.goto(origin+'/');await page.getByRole('heading',{name:'Start small. Dream bigger.'}).waitFor();
   const observations={mainLandmarks:await page.getByRole('main').count(),skipLinks:await page.getByRole('link',{name:'Skip to content',exact:true}).count(),cmsCopy:await page.getByText('A place for your words',{exact:true}).locator('..').innerText(),smallAccent:await page.locator('#how p').first().evaluate(e=>({text:e.textContent,color:getComputedStyle(e).color,fontSize:getComputedStyle(e).fontSize,background:getComputedStyle(e.closest('.landing')).backgroundColor}))};
   for(const width of [360,390,1280]){await page.setViewportSize({width,height:844});await page.screenshot({path:'/tmp/whumpo-landing-audit-'+width+'.png',fullPage:true});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));}
   await writeFile('.secrets/usability-landing-observations.json',JSON.stringify(observations,null,2));
