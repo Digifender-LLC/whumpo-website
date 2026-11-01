@@ -4,7 +4,7 @@
  * statement. The pure module (order.ts) still decides; nothing here calls a registrar except `dispatch`, which calls register only after
  * the claim committed. A caller that loses a race gets `false`/`null`, never a second purchase. No auth code is read or stored here. */
 import {canonicalJSON} from '../project-specification/v2/json';
-import {applyRegistrarEvent,cancelOrder,consentToOrder,dispatchOrder,expireDispatchLease,expireStale,orderIdempotencyKey,reconcileOrder,reserveOrder} from './order';
+import {type EventOutcome,applyRegistrarEvent,cancelOrder,consentToOrder,dispatchOrder,expireDispatchLease,expireStale,orderIdempotencyKey,reconcileOrder,reserveOrder} from './order';
 import type {ConsentInput,Order,OrderStep,RegistrarEvent} from './order';
 import {DomainPurchaseError,check,consentText,domainPurchaseBounds,registrableName} from './quote';
 import type {Actor,DomainPurchaseQuote,DomainPurchaseReview,OwnerFunding,ProjectAuthority,PurchasePolicy} from './quote';
@@ -156,14 +156,23 @@ export async function reconcileUnknown(db:Db,registrar:RegistrarAdapter,now:numb
  let moved=0;
  for(const row of rows){
   try{
-   const order=toOrder(row),step=await reconcileOrder({order,registrar,now});
-   if(!noChange(step,order)&&await commit(db,step,now)!==null)moved++;
+   const order=toOrder(row);
+   let base=order;
+   // Claim the read before the registrar is asked: one guarded UPDATE counts it and moves the version and clock, so overlapping or interrupted passes cannot exceed the bound or the spacing.
+   if(order.reconcileReads<domainPurchaseBounds.reconcileReads){
+    const claim=await db.prepare("UPDATE domain_orders SET reconcile_reads=reconcile_reads+1,version=version+1,updated_at=max(?1,updated_at) WHERE order_id=?2 AND version=?3 AND state='unknown-outcome' RETURNING version").bind(now,order.orderId,order.version).first<{version:number}>();
+    if(!claim)continue; // another pass holds this read
+    base={...order,version:claim.version} as StoredOrder;
+   }
+   const step=await reconcileOrder({order:base,registrar,now});
+   // The claim already stored the read, so only a state change needs a second commit.
+   if(step.order.state!==order.state&&await commit(db,step,now)!==null)moved++;
   }catch{/* a thrown lookup costs this order one retry later, not the whole batch */}
  }
  return {moved};
 }
 /** An authenticated registrar event, applied at most once. Duplicates and stale attempts are remembered and ignored. */
-export async function receiveRegistrarEvent(db:Db,event:RegistrarEvent,now:number){
+export async function receiveRegistrarEvent(db:Db,event:RegistrarEvent,now:number,retries=3):Promise<EventOutcome>{
  const order=await db.prepare(`SELECT ${orderColumns} FROM domain_orders WHERE order_id=?`).bind(event.orderId).first<OrderRow>();
  const seen=!!await db.prepare('SELECT 1 x FROM domain_registrar_events WHERE event_id=?').bind(event.eventId).first();
  const {outcome,step}=applyRegistrarEvent({order:order&&toOrder(order),event,seen,now});
@@ -179,7 +188,9 @@ export async function receiveRegistrarEvent(db:Db,event:RegistrarEvent,now:numbe
   db.prepare(`UPDATE domain_orders SET state=?1,history_json=?2,registration_expires_at=?3,charge_mismatch=?4,updated_at=max(?5,updated_at),version=version+1 WHERE order_id=?6 AND version=?7 RETURNING version`)
    .bind(o.state,JSON.stringify(o.history),reg?.expiresAt??null,reg?(reg.chargeMismatch===null?null:Number(reg.chargeMismatch)):null,now,o.orderId,o.version),
   remember(1)]);}catch(error){if(await duplicate())return {applied:false as const,duplicate:true as const};throw error;}// a racing copy of the same event won: the whole batch, change included, rolled back
- return update.results.length===1?outcome:{applied:false as const,stale:true as const};
+ if(update.results.length===1)return outcome;
+ // The version moved between the read and the batch (a reconciliation claim counts as a change). Re-read and judge the event again rather than lose authenticated evidence: if the order truly moved on, the re-read answers stale.
+ return retries>1?receiveRegistrarEvent(db,event,now,retries-1):{applied:false as const,stale:true as const};
 }
 
 /** Nightly: quotes and reviews that never became an order, with any registrant contact, a day after they expired. Orders are never pruned here. */

@@ -145,6 +145,9 @@ CREATE TRIGGER domain_orders_transition BEFORE UPDATE ON domain_orders BEGIN
  SELECT RAISE(ABORT,'domain_order_reconcile') WHERE NEW.reconcile_reads<OLD.reconcile_reads OR NEW.reconcile_reads>OLD.reconcile_reads+1
   OR (NEW.reconcile_reads!=OLD.reconcile_reads AND OLD.state!='unknown-outcome')
   OR (NEW.uncertain_at IS NOT OLD.uncertain_at AND NOT (NEW.state='unknown-outcome' AND OLD.state='dispatching'));
+ -- Release drops the name from the one-active-order index, so it is allowed only for a registered order whose registration left (never a pending order).
+ SELECT RAISE(ABORT,'domain_order_release') WHERE NEW.released IS NOT OLD.released AND NOT (OLD.state='registered' AND NEW.state='registered' AND OLD.released=0 AND NEW.released=1
+  AND EXISTS(SELECT 1 FROM domain_registrations g WHERE g.order_id=OLD.order_id AND g.state IN ('transferred-out','lapsed')));
  SELECT RAISE(ABORT,'domain_order_registration') WHERE (NEW.registration_expires_at IS NOT OLD.registration_expires_at AND NOT (NEW.state='registered' AND OLD.state!='registered'))
   OR (NEW.charge_mismatch IS NOT OLD.charge_mismatch AND NOT (NEW.state='registered' AND OLD.state!='registered'));
 END;

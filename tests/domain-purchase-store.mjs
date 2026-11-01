@@ -40,7 +40,7 @@ const fundingOf=o=>({coverage:null,paymentMethod:{kind:'payment-method',id:owner
 const actorOf=o=>({kind:'owner',ownerId:owners[o].id});
 const projectOf=(o,revision=1)=>({projectId:owners[o].project,ownerId:owners[o].id,revision});
 let seq=0;const id=p=>`${p}-${String(++seq).padStart(4,'0')}`;
-const extra=Object.fromEntries(['p1','p2','p3','p4','p5','p6','p7','p8','p9','p10','p11','p12','p13','p14','p15','p16','p17'].map(n=>[`synthetic-${n}.com`,{registration:1500,renewal:1500}]));
+const extra=Object.fromEntries(['p1','p2','p3','p4','p5','p6','p7','p8','p9','p10','p11','p12','p13','p14','p15','p16','p17','p18','p19','p20'].map(n=>[`synthetic-${n}.com`,{registration:1500,renewal:1500}]));
 function registrar(clock=()=>T0){
  return m.createSyntheticRegistrar({clock,prices:{...extra,[NAME]:{registration:1050,renewal:1150},[CAFE]:{registration:2400,renewal:2400},[SHOP]:{registration:1500,renewal:1500},[PREMIUM]:{registration:45000,renewal:45000,premium:true}}});
 }
@@ -325,13 +325,45 @@ try{
   assert.equal(await state(step.order.orderId),'registered');assert.equal((await one('SELECT owner_user_id FROM domain_registrations WHERE hostname=?','synthetic-p14.com')).owner_user_id,owners.b.id);
  });
 
- await check('two different registrar events racing for one order apply once and leave one receipt (the receipt is written only when the change won)',async()=>{
+ await check('a pending order cannot be marked released by hand: release needs a registered order whose registration was transferred out or lapsed',async()=>{
+  const reg=registrar(),{orderId}=await reserved(reg,'a','synthetic-p18.com');
+  // reserved, dispatching and registered-but-held orders all refuse a direct release (it would drop the name from the one-active-order index).
+  await refuse(run('UPDATE domain_orders SET released=1,version=version+1 WHERE order_id=?',orderId),/domain_order_release/);
+  await dispatch(A,reg,orderId);assert.equal(await state(orderId),'registered');
+  await refuse(run('UPDATE domain_orders SET released=1,version=version+1 WHERE order_id=?',orderId),/domain_order_release|domain_order_final/);
+  assert.equal((await one('SELECT released FROM domain_orders WHERE order_id=?',orderId)).released,0);
+ });
+
+ await check('overlapping reconciliation passes claim each read before the registrar is asked: eight passes make one lookup and persist one read',async()=>{
+  const reg=registrar(),{orderId}=await reserved(reg,'a','synthetic-p19.com');reg.next('timeout-before');
+  assert.equal((await dispatch(A,reg,orderId)).order.state,'unknown-outcome');
+  // Every unknown order in the table is due (earlier cases leave some); each must be looked up once, not once per overlapping pass.
+  const due=await count("SELECT count(*) FROM domain_orders WHERE state='unknown-outcome' AND reconcile_reads<3"),before=reg.calls.lookup;
+  await Promise.all(Array.from({length:8},()=>m.reconcileUnknown(A,reg,T0+7*HOUR)));
+  assert.equal(reg.calls.lookup-before,due,'one registrar lookup per claimed read, not per pass');
+  assert.equal((await one('SELECT reconcile_reads FROM domain_orders WHERE order_id=?',orderId)).reconcile_reads,1);
+  // The next read still waits out the spacing from the claim, so a second pass an hour later reads nothing.
+  await m.reconcileUnknown(A,reg,T0+8*HOUR);assert.equal(reg.calls.lookup-before,due);
+ });
+
+ await check('a valid registrar event survives a version-only conflict: it is judged again and applied, with its receipt',async()=>{
+  const reg=registrar(),{orderId}=await reserved(reg,'a','synthetic-p20.com');reg.next('timeout-before');
+  assert.equal((await dispatch(A,reg,orderId)).order.state,'unknown-outcome');
+  // A reconciliation read is claimed after the event handler loaded the order and before its batch runs (version and read count move, nothing else).
+  let armed=true;const racing={prepare:q=>A.prepare(q),batch:async list=>{if(armed){armed=false;await run("UPDATE domain_orders SET reconcile_reads=reconcile_reads+1,version=version+1 WHERE order_id=?",orderId);}return A.batch(list);}};
+  const event={eventId:'evt-conflict',orderId,attemptId:`${orderId}:a1`,type:'failed',authenticated:true};
+  assert.deepEqual(await m.receiveRegistrarEvent(racing,event,T0+MINUTE*8),{applied:true});
+  assert.equal(await state(orderId),'failed');assert.equal((await hold(orderId)).state,'released');
+  assert.equal(await count('SELECT count(*) FROM domain_registrar_events WHERE event_id=?','evt-conflict'),1);
+ });
+
+ await check('two different registrar events racing for one order apply once; the loser is judged again against the settled order and remembered as not applied',async()=>{
   const reg=registrar(),{orderId}=await reserved(reg,'a','synthetic-p13.com');reg.next('timeout-before');await dispatch(A,reg,orderId);
   const at=`${orderId}:a1`;
   const results=await Promise.all([m.receiveRegistrarEvent(A,{eventId:'race-1',orderId,attemptId:at,type:'registered',authenticated:true,expiresAt:T0+365*86400000},T0+20),m.receiveRegistrarEvent(B,{eventId:'race-2',orderId,attemptId:at,type:'failed',authenticated:true},T0+20)]);
   assert.equal(results.filter(r=>r.applied).length,1);
   assert.equal(await count('SELECT count(*) FROM domain_registrar_events WHERE order_id=? AND applied=1',orderId),1);
-  assert.equal(await count('SELECT count(*) FROM domain_registrar_events WHERE order_id=?',orderId),1,'the loser leaves no receipt');
+  assert.equal(await count('SELECT count(*) FROM domain_registrar_events WHERE order_id=? AND applied=0',orderId),1,'the loser is remembered as not applied, as a late event after settlement always is');
  });
 
  await check('INSERT OR REPLACE cannot rewrite or remove a genuine row on any guarded table, and cannot stretch a registration past its real expiry',async()=>{
