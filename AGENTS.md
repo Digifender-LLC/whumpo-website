@@ -10,6 +10,18 @@ Run everything through mise so Node and pnpm match the pins in `.node-version` a
 
 `mise exec node@24.21.0 pnpm@11.19.0 -- pnpm check`
 
+## Asking the owner
+
+Post questions with the `ask` app at https://ask.digifender.com. It goes to the owner's inbox and pings their phone. Use it only when you cannot decide yourself.
+
+- Multiple choice by default, always with a recommendation (0-based index): `ask "Which queue?" --option Kafka --option SQS --recommended 1 --wait`
+- A specific value only: `ask "Monthly price in USD?" --input number --wait` (`number`, `url` or `text`)
+- One short question. Put background in `--context`.
+- Run it with Bash `run_in_background` and `timeout` 7200000, then keep working on everything that does not depend on the answer. You are woken when it exits. If it stops at the 2-hour limit, run `ask wait Q-n` the same way.
+- Check open questions with `ask check Q-n`; `ask inbox` lists answers nobody collected after a restart.
+- `dismissed` means the owner chose none of the options: decide yourself and record why in the docs.
+- The token is `ASK_TOKEN`, loaded from `~/.config/ask/env` on the agent machine. Never write it into the repo, docs, logs or prompts. If `ask` fails or the token is missing, record the question in `docs/roadmap/` and keep going; say so in your report.
+
 ## The full gate
 
 Run before every push (this is what Workers Builds runs before a deploy, plus build):
@@ -28,5 +40,5 @@ Also run the tests for what you changed (`test:*` scripts in `package.json`), `n
 - **Ask before adding a dependency.** Prefer the standard library and what is installed.
 - **Sending, checkout and push stay off** unless the owner says so. `STRIPE_CHECKOUT_OPEN`, `PUSH_NOTIFICATION_PROVIDER`, `SUPPORT_NOTIFICATION_PROVIDER` and `NOTIFICATION_CUSTOMER_CEILING_CENTS` stay unset, and customer-configured notices are cancelled at send time while the ceiling is unset. Contact and account notices have a configured provider (`CONTACT_NOTIFICATION_PROVIDER` and the `CONTACT_EMAIL` binding in `wrangler.jsonc`); whether delivery is live is a deployment fact ([contact forms](docs/contact-forms.md)), so never trigger a real send from a test or script. Do not set Worker secrets or vars, and make no Stripe call.
 - **Do not change `src/` for docs or tooling tasks.**
-- **Agents merge without human intervention.** The owner gives agents full merge authority for this repo. An agent merges a PR once CI is green. No `review:clean` status or human approval is required. Review tiers, roles and the "What NOT to flag" lists remain in [agent review](docs/agent-review.md) as guidance.
+- **Agents merge without human intervention.** The owner gives agents full merge authority for this repo. An agent merges its PR once the CI checks pass (type-check, build, secret scan and the tests for what changed). No `review:clean` status or human approval is required. Review tiers, roles and the "What NOT to flag" lists remain in [agent review](docs/agent-review.md) as guidance.
 - **Docs keep planned, implemented and accepted distinct.** Record decisions in the docs; do not reopen recorded ones in review.

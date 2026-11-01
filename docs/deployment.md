@@ -14,7 +14,7 @@
 
 If a CI release is refused because a concurrent merge moved the Workers, it retries once; if it still fails, re-run the Workers Builds build for the latest `main` commit ([releases](releases.md#automatic-releases-merge-to-main)).
 
-Do not deploy by hand: no `wrangler deploy`, `wrangler versions`, `pnpm run deploy prepare/apply` or `--remote` commands from agent machines. (`pnpm deploy` is pnpm's built-in; use `pnpm run deploy`.) Schema changes, control-database replacement and CMS retirement remain **owner cutovers**: create a new empty D1 database, point the three `DB` bindings at it in a PR, then the owner runs `pnpm run deploy prepare` with a `schemaChange: "initialize"` review and `pnpm run deploy apply` (see [releases](releases.md)). Merge the PR only together with that cutover, because the automatic deploy refuses it.
+Routine deploys run in CI on merge. Do not deploy by hand with `wrangler deploy` or `wrangler versions`. Agents may run a schema cutover or wipe themselves with `pnpm run deploy prepare` then `apply` (plan with `testDataResetAuthorized: true` and a `cutoverReview`); see [AGENTS.md](../AGENTS.md). (`pnpm deploy` is pnpm's built-in; use `pnpm run deploy`.) Schema changes, control-database replacement and CMS retirement remain **owner cutovers**: create a new empty D1 database, point the three `DB` bindings at it in a PR, then the owner runs `pnpm run deploy prepare` with a `schemaChange: "initialize"` review and `pnpm run deploy apply` (see [releases](releases.md)). Merge the PR only together with that cutover, because the automatic deploy refuses it.
 
 Runtime secrets are set by the owner with `wrangler secret put --name whumpo-platform` and persist across deploys.
 
