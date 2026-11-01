@@ -95,6 +95,23 @@ await check('classes are compared only on equivalent evidence, never as a percen
  throws(()=>m.compareClasses(r,'composition','composition'),'INVALID_COMPARISON');throws(()=>m.compareClasses(r,'composition','custom-component',{minSuccesses:0}),'INVALID_THRESHOLD');
 });
 
+await check('review findings: a shadow-only outcome has no observed cost, a capability token is a shape-checked word list, a reordered repeat is a repeat',async()=>{
+ // 1. Five outcomes whose only events are shadow estimates must not make a class comparable with one that has observed cost.
+ const ev=[],out=[];
+ for(let i=0;i<5;i++){out.push(outcome({taskRef:`c${i}`,outcomeClass:'composition'}));ev.push(await event({taskRef:`c${i}`,cost:{basis:'receipt',micros:1000,ref:`c${i}`}}));}
+ for(let i=0;i<5;i++){out.push(outcome({taskRef:`s${i}`,outcomeClass:'custom-component',fallback:{reason:'owner-choice',capability:null}}));ev.push(await event({taskRef:`s${i}`,cost:{basis:'shadow',micros:999999,ref:`s${i}`}}));}
+ const r=m.outcomeCostReport(ev,out),sh=cls(r,'custom-component');
+ assert.equal(sh.noCostEvents,5,'shadow estimates are not observed cost events');assert.equal(sh.cost.shadowMicros,5*999999);assert.equal(sh.cost.knownMicros,0);
+ const cmp=m.compareClasses(r,'composition','custom-component');assert.equal(cmp.comparable,false);assert.ok(cmp.reasons.some(x=>/no cost events/.test(x)));
+ // 2. A missing capability is a short word list (letters and hyphens), so a number, address-like or free text cannot be echoed into the report.
+ for(const bad of ['jane-doe-555-0100','oak-street-12','Calendar','a b','x'.repeat(41),'one-two-three-four-five'])
+  throws(()=>m.validateOutcome(outcome({outcomeClass:'custom-component',fallback:{reason:'capability-missing',capability:bad}})),'INVALID_OUTCOME');
+ assert.doesNotThrow(()=>m.validateOutcome(outcome({outcomeClass:'custom-component',fallback:{reason:'capability-missing',capability:'calendar-sync'}})));
+ // 3. The same event with its keys in another order is the same repeat, not a conflict.
+ const e=await event({sourceEventId:'order'}),reordered=JSON.parse(JSON.stringify(Object.fromEntries(Object.entries(e).reverse())));
+ assert.equal(m.outcomeCostReport([e,reordered],[outcome()]).duplicateEventsDropped,1);
+});
+
 await check('shared-module break-even needs measured inputs and never guesses a saving',async()=>{
  assert.deepEqual(m.breakEvenOutcomes({fixedMaintenanceMicros:10_000,customMicrosPerOutcome:4000,sharedMicrosPerOutcome:1000}),{state:'known',outcomes:4});
  assert.deepEqual(m.breakEvenOutcomes({fixedMaintenanceMicros:9_000,customMicrosPerOutcome:4000,sharedMicrosPerOutcome:1000}),{state:'known',outcomes:3});

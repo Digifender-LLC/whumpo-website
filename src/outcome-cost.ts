@@ -4,7 +4,7 @@
 // free-form reason can enter analytics. Events join an outcome only by the same owner and task reference, are de-duplicated to their latest revision first, and
 // join at most once. Observed cost, tariff estimates, shadow estimates, unknown dimensions and unfinished work are reported apart; pooled standing overhead is
 // never allocated to an outcome; no savings percentage is ever produced, only micros per successful outcome when the comparison is equivalent.
-import { dimensions, type CostEvent } from './cost-events';
+import { canonical, dimensions, type CostEvent } from './cost-events';
 import { add, knownOf, side, type Side } from './cost-reconcile';
 
 export class OutcomeCostError extends Error {
@@ -14,7 +14,7 @@ const check: (ok: unknown, code: string, detail: string) => asserts ok = (ok, co
 const plain = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v) && Object.getPrototypeOf(v) === Object.prototype;
 const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER);
 const exact = (v: bigint, what: string) => { check(v >= -MAX_SAFE && v <= MAX_SAFE, 'AMOUNT_UNSAFE', `${what} is outside the exactly representable range`); return Number(v); };
-const UUID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/, REF = /^[A-Za-z0-9._:-]{1,64}$/, TOKEN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+const UUID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/, REF = /^[A-Za-z0-9._:-]{1,64}$/, TOKEN = /^[a-z]+(?:-[a-z]+){0,3}$/;
 
 /** How the owner's change was delivered, cheapest first: settings, a shared-module composition, a custom component, a custom backend, a dedicated runtime. */
 export const outcomeClasses = Object.freeze(['configuration', 'composition', 'custom-component', 'custom-backend', 'dedicated-runtime'] as const);
@@ -45,7 +45,8 @@ export function validateOutcome(input: unknown): OutcomeRecord {
  if (f !== null) {
   check(plain(f) && Object.keys(f).length === 2 && Object.hasOwn(f, 'reason') && Object.hasOwn(f, 'capability'), 'INVALID_OUTCOME', 'fallback is {reason, capability}');
   check(typeof f.reason === 'string' && (fallbackReasons as readonly string[]).includes(f.reason), 'INVALID_OUTCOME', 'fallback reason');
-  check(f.capability === null || (typeof f.capability === 'string' && TOKEN.test(f.capability)), 'INVALID_OUTCOME', 'fallback capability is a short lower-case token');
+  // A word list of at most four lower-case words (no digits, no free text); it is still only shape-checked, so a producer must draw it from a reviewed list before it is wired.
+  check(f.capability === null || (typeof f.capability === 'string' && f.capability.length <= 40 && TOKEN.test(f.capability)), 'INVALID_OUTCOME', 'fallback capability is a short lower-case word list');
   check(f.reason === 'capability-missing' || f.capability === null, 'INVALID_OUTCOME', 'only a missing-capability fallback names a capability');
   check(input.outcomeClass !== 'configuration' && input.outcomeClass !== 'composition', 'INVALID_OUTCOME', 'a shared-path outcome has no fallback');
  }
@@ -59,7 +60,7 @@ export function latestHeads(events: readonly CostEvent[]) {
  for (const e of events) {
   const seen = byKey.get(e.idempotencyKey);
   if (!seen || e.revision > seen.revision) { if (seen) duplicates++; byKey.set(e.idempotencyKey, e); }
-  else { duplicates++; if (e.revision === seen.revision) check(JSON.stringify(e) === JSON.stringify(seen), 'EVENT_CONFLICT', 'one revision of an event repeats with different content'); }
+  else { duplicates++; if (e.revision === seen.revision) check(canonical(e) === canonical(seen), 'EVENT_CONFLICT', 'one revision of an event repeats with different content'); }
  }
  return { heads: [...byKey.values()], duplicatesDropped: duplicates };
 }
@@ -94,7 +95,9 @@ export function outcomeCostReport(events: readonly CostEvent[], outcomes: readon
   if (e.workClass === 'standing' || e.attribution.scope === 'platform') { put(pooled, e); continue; }
   const r = e.taskRef === null ? undefined : index.get(`${e.attribution.ownerId}|${e.taskRef}`);
   if (!r) { put(unattributed, e); continue; }
-  put(perClass.get(r.outcomeClass)!, e); perOutcome.set(`${r.ownerId}|${r.taskRef}`, true);
+  put(perClass.get(r.outcomeClass)!, e);
+  // Only observed or estimated usage counts as cost for the outcome: a shadow estimate is shown apart and never makes an outcome 'costed'.
+  if (e.cost.basis !== 'shadow') perOutcome.set(`${r.ownerId}|${r.taskRef}`, true);
  }
  const classes = outcomeClasses.map(c => {
   const rs = records.filter(r => r.outcomeClass === c), b = perClass.get(c)!;
