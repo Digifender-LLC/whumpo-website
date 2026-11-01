@@ -76,6 +76,7 @@ const c:Record<string,[string,string,Disposition]>={
  cloudflareAuthorizationAttempts:['cloudflare_oauth_states','connections','cancel'],
  domainRecords:['domain_connections','domains-dns','cancel'],
  unresolvedDomainRecords:['domain_connections','domains-dns','cancel'],
+ unresolvedDnsActions:['cloudflare_dns_actions','domains-dns','retain'],
  cmsInstances:['cms_instances','cms-resources','cancel'],
  cmsResourceRecords:['cms_resource_jobs','cms-resources','cancel'],
  projectFileRecords:['project_files','project-media','delete'],
@@ -118,7 +119,7 @@ const c:Record<string,[string,string,Disposition]>={
  lookupConsents:['lookup_consents','connector-receipts','delete'],
  openLookupConsents:['lookup_consents','connector-receipts','cancel'],
  connectorReceipts:['connector_receipts','connector-receipts','delete'],
- openConnectorReceipts:['connector_receipts','connector-receipts','cancel'],
+ openConnectorReceipts:['connector_receipts','connector-receipts','retain'],
  ruleApprovals:['rule_approvals','connector-receipts','delete'],
  activeRuleApprovals:['rule_approvals','connector-receipts','cancel'],
  notificationNotices:['notification_notices','contact-notifications','delete'],
@@ -129,7 +130,23 @@ const c:Record<string,[string,string,Disposition]>={
  jobJournal:['job_journal','job-journal','delete'],
  openJobJournal:['job_journal','job-journal','cancel'],
  unresolvedJobs:['job_journal','job-journal','cancel'],
- domainQuotes:['domain_quotes','domain-registrations','delete'],
+ // Non-cascading references and settle-first work found by the WH-018 runtime. Owner-action rows are removed through their own
+ // reviewed controls first; retained rows need an operator before the purge (src/account-lifecycle/closure.ts).
+ visitorApplications:['app_spaces','visitor-app-data','cancel'],
+ backendPublicationReviews:['backend_publication_reviews','backend-artifacts','retain'],
+ backendFormReviews:['backend_form_reviews','backend-artifacts','retain'],
+ backendFormSettings:['backend_form_settings','backend-artifacts','retain'],
+ appActivationReviews:['app_activation_reviews','visitor-app-data','retain'],
+ gatewaySpendBuckets:['gateway_spend_buckets','premium-gateway','retain'],
+ gatewaySpendAttempts:['gateway_spend_attempts','premium-gateway','retain'],
+ connectionRotationGuards:['connection_rotation_guards','connections','cancel'],
+ uncertainGitHubBackups:['github_backups','github-backups','cancel'],
+ githubBackupRepositories:['github_backups','github-backups','retain'],
+ pendingCheckoutOrders:['stripe_subscription_orders','billing','cancel'],
+ activeSubscriptions:['stripe_subscriptions','billing','cancel'],
+ paidInvoices:['stripe_paid_invoices','billing','retain'],
+ domainZones:['domain_connections','domains-dns','retain'],
+domainQuotes:['domain_quotes','domain-registrations','delete'],
  domainReviews:['domain_reviews','domain-registrations','delete'],
  domainRegistrantContacts:['domain_registrant_contacts','domain-registrations','delete'],
  domainOrders:['domain_orders','domain-registrations','delete'],
@@ -141,8 +158,9 @@ const c:Record<string,[string,string,Disposition]>={
  activeDomainRegistrations:['domain_registrations','domain-registrations','retain'],
 };
 export const closureCategories:Readonly<Record<string,readonly [string,string,Disposition]>>=Object.freeze(c);
-/** Open provider work: closure refuses until each settles (cancelling a local row never settles a provider effect). */
-export const settleFirstKeys:readonly string[]=Object.freeze(['unresolvedStandardAI','unresolvedConnectionExchanges','githubGrantUncertain','githubPendingRevocations','cloudflarePendingRevocations','unresolvedDomainRecords','unresolvedChatInteractionContinuations','unresolvedJobs','unresolvedDomainOrders','activeDomainRegistrations','openConnectorReceipts']);
+/** Open provider work that ends by itself: closure waits until each settles or its window passes (cancelling a local row never settles a provider effect). Provider work with no window
+ * (an uncertain connector send, an uncertain grant) is a support-only key in src/account-lifecycle/closure.ts instead, refused before confirmation. */
+export const settleFirstKeys:readonly string[]=Object.freeze(['unresolvedStandardAI','unresolvedConnectionExchanges','githubGrantUncertain','githubPendingRevocations','cloudflarePendingRevocations','unresolvedDomainRecords','unresolvedChatInteractionContinuations','unresolvedJobs','pendingScanTickets','connectionRotationGuards','unresolvedDomainOrders','activeDomainRegistrations','uncertainGitHubBackups']);
 
 export const isCount=(v:unknown):v is number=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0;
 /** Every category present as a non-negative integer, nothing unknown. */

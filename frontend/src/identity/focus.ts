@@ -14,7 +14,7 @@ export function identityActionFocus(){
   if(!active()||!origin||moved||![origin,document.body].includes(document.activeElement as HTMLElement))return;
   const error=document.querySelector<HTMLElement>('[data-identity-error]'),after=step();
   if(error){error.focus();return;}
-  if(after&&(after.element!==before?.element||after.text!==before?.text)){after.element.focus();return;}
+  if(after&&(after.element!==before?.element||after.text!==before?.text)){const journey=!!after.element.closest('.journey');after.element.focus({preventScroll:journey});if(journey)after.element.scrollIntoView({block:'start',behavior:'instant'});return;}
   if(origin.isConnected&&!origin.matches(':disabled')&&document.activeElement===document.body)origin.focus();
  });
 }

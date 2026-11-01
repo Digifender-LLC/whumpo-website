@@ -214,7 +214,10 @@ try{
   assert.deepEqual(row.liabilityRegister.map(x=>[x.category,x.state]),[['license','known'],['renewal','unknown']]);
   // The producer: the synthetic register (all amounts unknown) goes through src/liability-register.ts into the real store. Unknown stays unknown, never zero.
   assert.equal((await heads()).filter(x=>x.kind==='liability').length,0,'nothing emits liability events until the register is read');
-  const register=JSON.parse(readFileSync(new URL('../docs/economics/liability-register.example.json',import.meta.url),'utf8')),evs=await m.costEventsFromRegister(register);
+  const register=JSON.parse(readFileSync(new URL('../docs/economics/liability-register.example.json',import.meta.url),'utf8'));
+  // The example file pins a past period; the statements below use the current one, so the fixture follows the test's period instead of the calendar.
+  for(const entry of register.entries)Object.assign(entry,{period,observedAt:stamp()});
+  const evs=await m.costEventsFromRegister(register);
   for(const e of evs)assert.equal((await m.appendCostEvent(db,e)).status,'accepted');
   for(const e of evs)assert.equal((await m.appendCostEvent(db,e)).status,'duplicate','re-reading the register adds nothing');
   const liab=(await heads()).filter(x=>x.kind==='liability');
@@ -222,7 +225,7 @@ try{
   const after=m.reconciliationReport(statementFor('company',lines),await heads()).rows.find(x=>x.provider==='company');
   assert.equal(after.recordedLiabilityMicros,0,'unknown amounts add nothing to a total');assert.equal(after.status,'incomplete');assert.equal(after.liabilityResidualMicros,5000000,'the invoiced license is still a residual until its amount is known');
   // A later revision supplies a real amount for the license only; the renewal stays unknown and keeps the report incomplete.
-  const lic=register.entries.find(x=>x.dimension==='liability.license'),known=await m.costEventFromLiabilityEntry({...lic,revision:2,amountMicros:5000000,ref:'invoice-line-1',observedAt:'2026-11-01T00:00:00.000Z'});
+  const lic=register.entries.find(x=>x.dimension==='liability.license'),known=await m.costEventFromLiabilityEntry({...lic,revision:2,amountMicros:5000000,ref:'invoice-line-1',observedAt:stamp()});
   assert.equal((await m.appendCostEvent(db,known)).status,'accepted');
   const filled=m.reconciliationReport(statementFor('company',lines),await heads()).rows.find(x=>x.provider==='company');
   assert.equal(filled.recordedLiabilityMicros,5000000);assert.equal(filled.liabilityResidualMicros,0);assert.equal(filled.status,'incomplete','the unknown renewal still holds the report incomplete');

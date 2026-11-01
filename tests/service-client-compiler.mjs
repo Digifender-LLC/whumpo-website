@@ -11,7 +11,7 @@ const root=process.cwd(),temp=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whump
 const oldFetch=globalThis.fetch;let network=0;
 try{
  const originalCompiler=await checkSpecificationCompiler(),checked=await checkServiceClientCompiler();assert.match(originalCompiler.compilerDigest,/^[0-9a-f]{64}$/);
- const bundle=await build({stdin:{contents:"export * from './src/project-specification/service-clients/compiler';export * from './src/project-specification/v2/json';export {siteConfig,renderSite,renderPhotoPage} from './src/components';export {publishedHTML} from './src/published-html';",resolveDir:root},bundle:true,format:'esm',platform:'neutral',write:false});
+ const bundle=await build({stdin:{contents:"export * from './src/project-specification/service-clients/compiler';export * from './src/project-specification/v2/json';export {siteConfig,photoConfig,renderSite,renderPhotoPage} from './src/components';export {publishedHTML} from './src/published-html';",resolveDir:root},bundle:true,format:'esm',platform:'neutral',write:false});
  await writeFile(join(temp,'module.mjs'),bundle.outputFiles[0].contents);const m=await import(pathToFileURL(join(temp,'module.mjs')));
  globalThis.fetch=async()=>{network++;throw Error('Compiler attempted inference/network.');};
  const id=n=>`${String(n).padStart(8,'0')}-1111-4111-8111-111111111111`;
@@ -25,6 +25,18 @@ try{
  const preview=output.artifacts[0],candidate=output.artifacts[1];
  assert.ok(!preview.html.includes('<script>'));assert.ok(!preview.html.includes('data-endpoint'));assert.ok(!preview.html.includes('href="https://whumpo.com/contact/'));assert.ok(preview.html.includes('<fieldset disabled'));assert.ok(preview.html.includes('&lt;script&gt;data&lt;/script&gt;'));
  assert.equal(candidate.html,m.publishedHTML(html,true,target.projectId,{config_json:m.canonicalJSON(form,4096),backend_publication_id:target.backend.reviewId}));
+ // D50: String.replace patterns in site text ($&, $', $`, $1) must render literally.
+ {const dollar="$& $' $` $1 $$",esc=v=>v.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const c2=m.siteConfig({...config,headline:dollar,aboutTitle:dollar,aboutText:dollar,sections:[{heading:dollar,text:dollar}]}),h2=m.renderSite(c2);
+  assert.equal(h2.split(`<h1>${esc(dollar)}</h1>`).length,2,'headline literal');
+  assert.ok(h2.includes(`<section class="about"><h2>${esc(dollar)}</h2><p>${esc(dollar)}</p></section>`),'about literal');
+  assert.ok(h2.includes(`<section class="feature"><h2>${esc(dollar)}</h2><p>${esc(dollar)}</p></section>`),'section literal');
+  const photo=m.renderPhotoPage(m.photoConfig({...c2,photos:[{id:id(9),alt:dollar}]}));
+  assert.ok(photo.includes(`alt="${esc(dollar)}"`),'photo alt literal');
+  const form2={...form,title:dollar,description:dollar},pub=m.publishedHTML(h2,false,id(1),{config_json:m.canonicalJSON(form2,4096),backend_publication_id:id(3)});
+  assert.ok(pub.includes(`<h2 id="whumpo-tool-title">${esc(dollar)}</h2>`),'form title literal');
+  const out2=await compile({...spec,statelessForm:{component:'stateless-form@1',config:form2}},{...target,website:{...target.website,digest:hash(h2)}},{componentId:'site-page@1',config:c2,html:h2});
+  assert.ok(out2.artifacts[0].html.includes(`<h2 id="whumpo-tool-title">${esc(dollar)}</h2>`),'inert preview literal');}
  assert.equal(output.services[1].destination,`https://${target.projectId}.whumpo.site/backend/${target.backend.reviewId}`);assert.equal(output.services[1].credentials,'omit');
  assert.match(output.previewHeaders['content-security-policy'],/^sandbox;/);assert.match(output.previewHeaders['content-security-policy'],/form-action 'none'/);assert.ok(!output.previewHeaders['content-security-policy'].includes('allow-scripts'));assert.match(output.candidateScriptPolicy,/^'sha256-[A-Za-z0-9+/]+=*'$/);
  for(const artifact of output.artifacts){assert.equal(artifact.bytes,Buffer.byteLength(artifact.html));assert.equal(artifact.digest,hash(artifact.html));}
@@ -62,7 +74,7 @@ try{
  assert.equal(network,0);
  // New process and copied source tree prove reproduction independently of module cache/timezone.
  const isolated=join(temp,'independent');await mkdir(isolated);
- const paths=[...checked.sources.map(s=>s.path),'src/project-specification/service-clients/catalog.ts','src/project-specification/service-clients/artifacts.generated.ts','tools/check-service-client-compiler.mjs','compiler-locks/project-service-clients-v4.json'];
+ const paths=[...checked.sources.map(s=>s.path),'src/project-specification/service-clients/catalog.ts','src/project-specification/service-clients/artifacts.generated.ts','tools/check-service-client-compiler.mjs','compiler-locks/project-service-clients-v5.json'];
  for(const path of new Set(paths)){await mkdir(dirname(join(isolated,path)),{recursive:true});await copyFile(join(root,path),join(isolated,path));}
  await writeFile(join(isolated,'package.json'),'{"type":"module"}');await symlink(resolve('node_modules'),join(isolated,'node_modules'),'dir');await writeFile(join(isolated,'fixture.json'),JSON.stringify({spec,target,website}));
  await writeFile(join(isolated,'run.mjs'),`import {build} from 'esbuild';import {readFile,writeFile} from 'node:fs/promises';globalThis.fetch=async()=>{throw Error('No network');};const b=await build({entryPoints:['src/project-specification/service-clients/compiler.ts'],bundle:true,format:'esm',platform:'neutral',write:false});await writeFile('bundle.mjs',b.outputFiles[0].contents);const m=await import('./bundle.mjs'),f=JSON.parse(await readFile('fixture.json','utf8'));try{console.log((await m.compileServiceClientArtifacts(f.spec,f.target,f.website,m.currentServiceClientLock())).manifestDigest);}catch(e){console.error(e.code);process.exitCode=1;}`);
@@ -71,7 +83,7 @@ try{
  const repeated=run(['run.mjs']);assert.equal(repeated.status,0,repeated.stderr);assert.equal(repeated.stdout.trim(),output.manifestDigest);
  const catalog=join(isolated,'src/project-specification/service-clients/catalog.ts'),catalogSource=await readFile(catalog,'utf8');await writeFile(catalog,catalogSource.replaceAll("state:'available'","state:'withdrawn'"));assert.equal(check().status,0);assert.match(run(['run.mjs']).stderr,/COMPILER_UNAVAILABLE/);await writeFile(catalog,catalogSource);
  assert.notEqual(run(['tools/check-service-client-compiler.mjs','--init']).status,0);
- const core=join(isolated,'src/project-specification/service-clients/v4/core.ts'),source=await readFile(core,'utf8');await writeFile(core,source+'\n// drift\n');assert.notEqual(check().status,0);assert.notEqual(run(['tools/check-service-client-compiler.mjs','--generate']).status,0);await writeFile(core,source);
+ const core=join(isolated,'src/project-specification/service-clients/v5/core.ts'),source=await readFile(core,'utf8');await writeFile(core,source+'\n// drift\n');assert.notEqual(check().status,0);assert.notEqual(run(['tools/check-service-client-compiler.mjs','--generate']).status,0);await writeFile(core,source);
  const constants=join(isolated,'src/project-specification/service-clients/artifacts.generated.ts');await writeFile(constants,'export const serviceClientArtifacts={};');assert.notEqual(check().status,0);assert.equal(run(['tools/check-service-client-compiler.mjs','--generate']).status,0);assert.equal(check().status,0);
  console.log('Service client compiler passed: exact current renderer bytes, no active preview actions, fixed destinations, strict contracts, independent reproduction, immutable locks and withdrawal. No network/inference or activation.');
 }finally{globalThis.fetch=oldFetch;await rm(temp,{recursive:true,force:true});}

@@ -19,9 +19,11 @@ import {currentSiteFixtureHandlers,createFixtureProject,enableFixtureVisitorAcce
 import {createRestoreInventory,openRestoreInventory} from '../tools/restore-inventory.mjs';
 import {inspectIsolatedRestore} from '../tools/restore-admission.mjs';
 import {restoreCapturedCMSDatabase,captureCMSDatabase} from '../tools/cms-database-snapshot.mjs';
-import {captureRecoveryPoint,verifyRecoveryPoint,openArchivedControl,restoreControlD1,restoreObjects,restoreWorkerArtifact,isolatedObjects,reconcileArtifacts,restoreDiscrepancies,recoveryCoverage,inventoryKeyVersions,inventoryCutovers,DrillHold} from '../tools/recovery-drill.mjs';
+import {captureRecoveryPoint,verifyRecoveryPoint,openArchivedControl,restoreControlD1,restoreObjects,restoreWorkerArtifact,isolatedObjects,reconcileArtifacts,reconcileRestoreSuppressions,restoreDiscrepancies,recoveryCoverage,inventoryKeyVersions,inventoryCutovers,DrillHold} from '../tools/recovery-drill.mjs';
 
+import {build} from 'esbuild';
 Error.stackTraceLimit=0;
+const suppression=await import('data:text/javascript;base64,'+Buffer.from((await build({stdin:{contents:"export * from './src/restore-suppression.ts';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false})).outputFiles[0].text).toString('base64'));
 const id=()=>crypto.randomUUID(),hash=v=>createHash('sha256').update(v).digest('hex');
 const directory=await mkdtemp('/tmp/whumpo-recovery-drill-'),phases={},holds={};let refusals=0;
 const phase=async(name,work)=>{const start=performance.now();try{return await work();}finally{phases[name]=Math.round((performance.now()-start)*10)/10;console.error(`drill phase ${name}: ${phases[name]} ms`);}};
@@ -247,7 +249,7 @@ try{
  const catalog=JSON.parse(await readFile('docs/data-lifecycle.json','utf8')),{snapshot:pointSnapshot}=await verifyRecoveryPoint(pointA,pointDigestA);
  const countRestored=async table=>(await target.DRILL_A.prepare(`SELECT count(*) n FROM "${table}"`).first()).n;
  const coverage=await phase('recoveryCoverage',()=>recoveryCoverage(pointSnapshot,countRestored,catalog));
- assert.equal(coverage.status,'complete',JSON.stringify(coverage.holds));assert.equal(coverage.tables,249);assert.equal(coverage.excluded,0);
+ assert.equal(coverage.status,'complete',JSON.stringify(coverage.holds));assert.equal(coverage.tables,253);assert.equal(coverage.excluded,0);
  for(const table of Object.keys(seeded))assert.equal(await countRestored(table),seeded[table],table+' restored with its archived rows');
  // A new table, a table that vanished from the restore, a stale exclusion and a mismatched count each fail until classified.
  const withTable=structuredClone(pointSnapshot);withTable.tables.push({name:'new_personal_data',columns:['id'],rows:[]});
@@ -255,7 +257,7 @@ try{
  holds.restoreMismatch=(await recoveryCoverage(pointSnapshot,async()=>-1,catalog)).holds;assert.deepEqual(holds.restoreMismatch,['coverage-restore-mismatch']);
  holds.staleExclusion=(await recoveryCoverage(pointSnapshot,countRestored,catalog,{retired_table:'none'})).holds;assert.deepEqual(holds.staleExclusion,['coverage-stale-exclusion']);
  const excludedCoverage=await recoveryCoverage(pointSnapshot,async()=>-1,catalog,Object.fromEntries(pointSnapshot.tables.filter(t=>t.name!=='sqlite_sequence').map(t=>[t.name,'drill rationale'])));
- assert.equal(excludedCoverage.status,'complete');assert.equal(excludedCoverage.excluded,249);
+ assert.equal(excludedCoverage.status,'complete');assert.equal(excludedCoverage.excluded,253);
  refusals+=3;
  // WH-117 key versions in the restored candidate: one registered key, all 4 credential rows under it, no running rotation.
  const keyVersions=await phase('inventoryKeyVersions',()=>inventoryKeyVersions(target.DRILL_A));
@@ -360,6 +362,18 @@ try{
  const orphan=await openRestoreInventory({inventoryFile,expectedStreamId:streamId,sourceDb:lost});closers.push(()=>orphan.close());
  holds.sourceLost=(await inspectOnce({evidenceSource:orphan.evidenceSource})).holds;assert.deepEqual(holds.sourceLost,['independent-evidence']);
  assert.equal((await restoreDiscrepancies(target.DRILL_A,lost)).sourceAvailable,false);
+ // WH-019: without the current source there is no ledger to replay; with it, one atomic idempotent replay removes what the
+ // current ledger says was erased or revoked, and the gate reports clear. Synthetic and local: sessions are epoch evidence, not ledger rows.
+ {const unavailable=await reconcileRestoreSuppressions(target.DRILL_A,lost,suppression);assert.equal(unavailable.status,'unavailable');assert.deepEqual(unavailable.holds,['suppression-source-unavailable'],'a caller that reads only holds sees a hold');}
+ await drillHold(()=>reconcileRestoreSuppressions(target.DRILL_A,db,{}),'suppression-module');
+ // The hold names why the replay was refused (error name, code and a bounded message), never row data.
+ {const refusing={...suppression,replayRestoreSuppressions:async()=>{throw Object.assign(Error('FOREIGN KEY constraint failed '+'f'.repeat(64)),{code:'ERR_SQLITE_ERROR'});}};
+  await assert.rejects(()=>reconcileRestoreSuppressions(target.DRILL_A,db,refusing),e=>e instanceof DrillHold&&e.code==='suppression-replay-refused'&&/^Error ERR_SQLITE_ERROR: FOREIGN KEY constraint failed/.test(e.detail)&&!/f{64}/.test(e.detail)&&e.detail.length<=240,'the replay refusal carries its real, bounded cause');}
+ const reconciled=await phase('reconcileRestoreSuppressions',()=>reconcileRestoreSuppressions(target.DRILL_A,db,suppression));
+ assert.equal(reconciled.status,'reconciled');assert.ok(reconciled.pendingBefore.visitor>=1,JSON.stringify(reconciled.pendingBefore));assert.ok(reconciled.applied.visitorsRemoved>=1);
+ assert.equal(await target.DRILL_A.prepare('SELECT id FROM app_visitors WHERE id=?').bind(erased.who).first(),null,'The erased visitor is not resurrected');
+ assert.deepEqual((await restoreDiscrepancies(target.DRILL_A,db)).tables.resurrected.app_visitors,undefined);
+ assert.ok(Object.values((await reconcileRestoreSuppressions(target.DRILL_A,db,suppression)).applied).every(n=>n===0),'A duplicate replay changes nothing');
 
  // ---- A point captured during in-flight provider work never dispatches or admits.
  const inflight=id();
