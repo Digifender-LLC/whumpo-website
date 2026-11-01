@@ -69,9 +69,9 @@ export function importStatements(inputs: unknown[]) {
 }
 
 const periodOf = (e: CostEvent) => e.occurredAt.slice(0, 7);
-type Side = { known: bigint; tariffNum: bigint; unknownEvents: number; unfinished: number; bounded: bigint; unbounded: number; events: number };
-const side = (): Side => ({ known: 0n, tariffNum: 0n, unknownEvents: 0, unfinished: 0, bounded: 0n, unbounded: 0, events: 0 });
-function add(b: Side, e: CostEvent) {
+export type Side = { known: bigint; tariffNum: bigint; unknownEvents: number; unfinished: number; bounded: bigint; unbounded: number; events: number };
+export const side = (): Side => ({ known: 0n, tariffNum: 0n, unknownEvents: 0, unfinished: 0, bounded: 0n, unbounded: 0, events: 0 });
+export function add(b: Side, e: CostEvent) {
  b.events++;
  if (e.outcome === 'pending' || e.outcome === 'uncertain') b.unfinished++;
  const c = e.cost;
@@ -81,7 +81,7 @@ function add(b: Side, e: CostEvent) {
  } else if (c.basis === 'receipt' || c.basis === 'provider-reported') b.known += BigInt(c.micros);
  else if (c.basis === 'unknown') { b.unknownEvents++; if (c.exposureMicros === null) b.unbounded++; else b.bounded += BigInt(c.exposureMicros); }
 }
-const knownOf = (b: Side) => b.known + (b.tariffNum + costScale - 1n) / costScale;
+export const knownOf = (b: Side) => b.known + (b.tariffNum + costScale - 1n) / costScale;
 
 /**
  * One aggregate row per provider and period. `events` are cost-event heads (any owner). Shadow estimates are excluded and only

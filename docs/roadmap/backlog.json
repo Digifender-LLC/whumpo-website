@@ -6082,7 +6082,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-11-01 UTC: source-only measurement layer, local synthetic evidence. src/outcome-cost.ts (docs/cost-events.md, Cost per outcome) classifies outcomes as configuration, composition, custom-component, custom-backend or dedicated-runtime, de-duplicates cost events to their latest revision, attributes them by owner and task, separates observed cost, tariff-priced usage, shadow estimates, unknown and unfinished events and standard from premium AI tier, keeps standing and platform cost as pooled overhead that is never allocated, records fallback reasons from a closed list and repeated missing capabilities as short tokens, and compares classes only on equivalent evidence (never as a percentage); breakEvenOutcomes returns unknown when an input is not measured. tests/outcome-cost.mjs (8 cases) fails when de-duplication or owner scoping is removed. Acceptance lines covered locally: no content in analytics, no double counting, standard AI non-billable (customerUnits stays 0, tiers apart), observed/estimated/unknown/pooled separate, equivalent-outcome comparison. Not done, WH-078 stays open: the composition-versus-custom benchmark on the WH-020 corpus (needs the paid evaluation, owner approval), a producer of outcome records from the planner and owner-change flow, support and module-maintenance cost, and any wiring."
+      ]
     },
     {
       "id": "WH-079",
