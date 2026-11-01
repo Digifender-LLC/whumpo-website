@@ -15,7 +15,9 @@ const ref = (v: unknown, what: string) => { check(typeof v === 'string' && REF.t
 
 export const lotKinds = Object.freeze(['monthly', 'rollover', 'purchased'] as const);
 export type LotKind = typeof lotKinds[number];
-export type Lot = { id: string; kind: LotKind; periodKey: string; granted: number; remaining: number; expiredUnits: number; grantedAt: number; expiresAt: number | null; carriedUnits: number };
+export type Lot = { id: string; kind: LotKind; periodKey: string; granted: number; remaining: number; expiredUnits: number; grantedAt: number; expiresAt: number | null; carriedUnits: number;
+ /** A monthly lot rolls into one target period, once. */ rolledTo: string | null;
+ /** A rollover lot remembers the next allowance it was sized for: the period's monthly grant may not exceed it, so monthly plus rollover stays within twice that allowance. */ allowanceCap: number | null };
 type Allocation = { lotId: string; units: number };
 export type Reservation = { id: string; units: number; at: number; state: 'held' | 'settled' | 'released'; allocation: Allocation[]; consumed: Allocation[]; settledUnits: number; refundedUnits: number };
 export type Ledger = { version: 1; terms: 'synthetic-proposal'; lots: Lot[]; reservations: Record<string, Reservation>; ops: Record<string, string>; journal: { op: string; id: string; at: number }[] };
@@ -45,6 +47,7 @@ const lotOf = (l: Ledger, id: string) => { const lot = l.lots.find(x => x.id ===
  */
 export function grant(l: Ledger, i: { id: string; kind: LotKind; periodKey: string; units: number; at: number; expiresAt: number | null; consentRef?: string }) {
  const id = ref(i.id, 'id'); ref(i.periodKey, 'periodKey');
+ check(!id.startsWith('rollover:'), 'INVALID_INPUT', "the 'rollover:' id prefix belongs to rollover lots");
  check((lotKinds as readonly string[]).includes(i.kind), 'INVALID_INPUT', 'kind');
  check(i.kind !== 'rollover', 'ROLLOVER_BY_RULE_ONLY', 'a rollover lot is created only by rollover()');
  check(isUnits(i.units, 1) && isTime(i.at), 'INVALID_INPUT', 'units and at');
@@ -53,7 +56,10 @@ export function grant(l: Ledger, i: { id: string; kind: LotKind; periodKey: stri
  return apply(l, 'grant', id, i.at, i, next => {
   check(!next.lots.some(x => x.id === id), 'DUPLICATE_LOT', id);
   check(i.kind !== 'monthly' || !next.lots.some(x => x.kind === 'monthly' && x.periodKey === i.periodKey), 'DUPLICATE_PERIOD', 'one monthly grant per period');
-  next.lots.push({ id, kind: i.kind, periodKey: i.periodKey, granted: i.units, remaining: i.units, expiredUnits: 0, grantedAt: i.at, expiresAt: i.expiresAt, carriedUnits: 0 });
+  // A rollover already sized for this period fixes the allowance: the monthly grant may not exceed it (monthly plus rollover stays within twice the allowance).
+  const sized = next.lots.find(x => x.kind === 'rollover' && x.periodKey === i.periodKey);
+  check(i.kind !== 'monthly' || !sized || i.units <= (sized.allowanceCap as number), 'ALLOWANCE_MISMATCH', 'the monthly grant exceeds the allowance the rollover was sized for');
+  next.lots.push({ id, kind: i.kind, periodKey: i.periodKey, granted: i.units, remaining: i.units, expiredUnits: 0, grantedAt: i.at, expiresAt: i.expiresAt, carriedUnits: 0, rolledTo: null, allowanceCap: null });
  });
 }
 
@@ -132,11 +138,15 @@ export function rollover(l: Ledger, i: { id: string; fromPeriod: string; toPerio
  return apply(l, 'rollover', id, i.at, i, next => {
   const from = next.lots.find(x => x.kind === 'monthly' && x.periodKey === i.fromPeriod); check(from, 'UNKNOWN_LOT', `no monthly lot for ${i.fromPeriod}`);
   check(!next.lots.some(x => x.kind === 'rollover' && x.periodKey === i.toPeriod), 'DUPLICATE_ROLLOVER', `${i.toPeriod} already received a rollover`);
+  check(from.rolledTo === null, 'DUPLICATE_ROLLOVER', `${i.fromPeriod} already rolled into ${from.rolledTo}`);
+  const target = next.lots.find(x => x.kind === 'monthly' && x.periodKey === i.toPeriod);
+  check(!target || target.granted === i.nextAllowance, 'ALLOWANCE_MISMATCH', 'the next allowance is the granted monthly allowance of that period');
+  check(!next.lots.some(x => x.id === `rollover:${id}`), 'DUPLICATE_LOT', id);
   // Carrying happens at or before the period boundary; units of a lot already past its expiry are lost and cannot be revived by a late rollover.
   check(from.expiresAt !== null && i.at <= from.expiresAt, 'LOT_EXPIRED', 'the period has already ended; expired units cannot carry');
   const carry = Math.min(from.remaining, i.previousAllowance, i.nextAllowance);
-  from.remaining -= carry; from.carriedUnits += carry;
-  if (carry > 0) next.lots.push({ id: `rollover:${id}`, kind: 'rollover', periodKey: i.toPeriod, granted: carry, remaining: carry, expiredUnits: 0, grantedAt: i.at, expiresAt: i.expiresAt, carriedUnits: 0 });
+  from.remaining -= carry; from.carriedUnits += carry; from.rolledTo = i.toPeriod;
+  if (carry > 0) next.lots.push({ id: `rollover:${id}`, kind: 'rollover', periodKey: i.toPeriod, granted: carry, remaining: carry, expiredUnits: 0, grantedAt: i.at, expiresAt: i.expiresAt, carriedUnits: 0, rolledTo: null, allowanceCap: i.nextAllowance });
  });
 }
 

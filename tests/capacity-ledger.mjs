@@ -85,12 +85,12 @@ await check('rollover carries the smaller of unused fresh units and both allowan
  assert.equal(m.rollover(l,{id:'ro1',fromPeriod:'2026-11',toPeriod:'2026-12',previousAllowance:100*T,nextAllowance:50*T,at:30*DAY,expiresAt:60*DAY}).replayed,true);
  throws(()=>m.rollover(l,{id:'ro2',fromPeriod:'2026-11',toPeriod:'2026-12',previousAllowance:100*T,nextAllowance:50*T,at:30*DAY,expiresAt:60*DAY}),'DUPLICATE_ROLLOVER');
  // the December rollover lot cannot carry again: only a monthly lot has a rollover source
- l=run(l,'grant',{id:'m2',kind:'monthly',periodKey:'2026-12',units:100*T,at:30*DAY,expiresAt:60*DAY});
+ l=run(l,'grant',{id:'m2',kind:'monthly',periodKey:'2026-12',units:50*T,at:30*DAY,expiresAt:60*DAY});
  throws(()=>m.rollover(l,{id:'ro3',fromPeriod:'2026-12-rollover',toPeriod:'2027-01',previousAllowance:100*T,nextAllowance:100*T,at:60*DAY,expiresAt:90*DAY}),'UNKNOWN_LOT');
- const jan=run(l,'rollover',{id:'ro4',fromPeriod:'2026-12',toPeriod:'2027-01',previousAllowance:100*T,nextAllowance:100*T,at:60*DAY,expiresAt:90*DAY});
- assert.equal(jan.lots.find(x=>x.periodKey==='2027-01').granted,100*T,'a full unused December allowance carries; the November rollover units are not carried again');
+ const jan=run(l,'rollover',{id:'ro4',fromPeriod:'2026-12',toPeriod:'2027-01',previousAllowance:50*T,nextAllowance:100*T,at:60*DAY,expiresAt:90*DAY});
+ assert.equal(jan.lots.find(x=>x.periodKey==='2027-01').granted,50*T,'a full unused December allowance carries; the November rollover units are not carried again');
  // after the boundary the units are already lost
- throws(()=>m.rollover(run(base(),'grant',{id:'m0',kind:'monthly',periodKey:'2026-10',units:5*T,at:1,expiresAt:5*DAY}),{id:'late',fromPeriod:'2026-10',toPeriod:'2026-11',previousAllowance:5*T,nextAllowance:5*T,at:6*DAY,expiresAt:9*DAY}),'LOT_EXPIRED');
+ throws(()=>m.rollover(run(base(),'grant',{id:'m0',kind:'monthly',periodKey:'2026-10',units:5*T,at:1,expiresAt:5*DAY}),{id:'late',fromPeriod:'2026-10',toPeriod:'2026-11',previousAllowance:5*T,nextAllowance:100*T,at:6*DAY,expiresAt:9*DAY}),'LOT_EXPIRED');
  // zero unused carries nothing and creates no lot
  let z=run(base(),'reserve',{id:'all',units:100*T,at:2});z=run(z,'settle',{id:'all',actualUnits:100*T,at:3});z=run(z,'rollover',{id:'roz',fromPeriod:'2026-11',toPeriod:'2026-12',previousAllowance:100*T,nextAllowance:100*T,at:30*DAY,expiresAt:60*DAY});
  assert.equal(z.lots.some(x=>x.kind==='rollover'),false);
@@ -113,6 +113,46 @@ await check('the balance view never shows full capacity on partial or unknown te
  for(const t of ['partial','unknown']){const v=m.capacityView(l,11,t);assert.equal(v.state,'unknown');assert.equal(v.availableUnits,null);assert.equal(v.byKind,null);assert.equal(v.heldUnits,10*T);assert.match(v.reason,new RegExp(t));}
  const v=m.capacityView(l,11,'complete');assert.equal(v.state,'known');assert.equal(v.terms,'synthetic-proposal');assert.deepEqual(v.byKind,{monthly:90*T,rollover:0,purchased:50*T});assert.equal(v.nextExpiry,30*DAY);
  throws(()=>m.capacityView(l,11,'full'),'INVALID_INPUT');
+});
+
+await check('review findings: no lot-id collision revives expired units, one source rolls once, the 2x cap is enforced, and random operation sequences conserve units',async()=>{
+ // 1. A purchased lot cannot take a rollover lot's id, in either order.
+ throws(()=>m.grant(m.emptyLedger(),{id:'rollover:ro1',kind:'purchased',periodKey:'x',units:10*T,at:1,expiresAt:null,consentRef:'c'}),'INVALID_INPUT');
+ // 2. One monthly lot rolls into one target period, even when the first carry was zero.
+ let l=run(base(),'rollover',{id:'ro1',fromPeriod:'2026-11',toPeriod:'2026-12',previousAllowance:100*T,nextAllowance:40*T,at:29*DAY,expiresAt:60*DAY});
+ throws(()=>m.rollover(l,{id:'ro2',fromPeriod:'2026-11',toPeriod:'2027-01',previousAllowance:100*T,nextAllowance:100*T,at:29*DAY,expiresAt:90*DAY}),'DUPLICATE_ROLLOVER');
+ // 3. The next period's total subscription balance (monthly plus rollover) cannot exceed twice the next allowance.
+ let c=run(m.emptyLedger(),'grant',{id:'n1',kind:'monthly',periodKey:'2026-11',units:1000*T,at:1,expiresAt:30*DAY});
+ c=run(c,'grant',{id:'d1',kind:'monthly',periodKey:'2026-12',units:100*T,at:2,expiresAt:60*DAY});
+ throws(()=>m.rollover(c,{id:'big',fromPeriod:'2026-11',toPeriod:'2026-12',previousAllowance:1000*T,nextAllowance:1000*T,at:29*DAY,expiresAt:60*DAY}),'ALLOWANCE_MISMATCH');
+ const ok=run(c,'rollover',{id:'fit',fromPeriod:'2026-11',toPeriod:'2026-12',previousAllowance:1000*T,nextAllowance:100*T,at:29*DAY,expiresAt:60*DAY});
+ assert.equal(sum(ok.lots.filter(x=>x.periodKey==='2026-12'),x=>x.granted)<=200*T,true);
+ // the other order: the rollover exists first, then a monthly grant larger than the allowance it was sized for is refused
+ let o=run(run(m.emptyLedger(),'grant',{id:'n2',kind:'monthly',periodKey:'2026-11',units:100*T,at:1,expiresAt:30*DAY}),'rollover',{id:'first',fromPeriod:'2026-11',toPeriod:'2026-12',previousAllowance:100*T,nextAllowance:100*T,at:29*DAY,expiresAt:60*DAY});
+ throws(()=>m.grant(o,{id:'d2',kind:'monthly',periodKey:'2026-12',units:101*T,at:30*DAY,expiresAt:60*DAY}),'ALLOWANCE_MISMATCH');
+ assert.doesNotThrow(()=>m.grant(o,{id:'d3',kind:'monthly',periodKey:'2026-12',units:100*T,at:30*DAY,expiresAt:60*DAY}));
+ // 4. Seeded random sequences: conservation and the no-revival rule after every applied operation.
+ let seed=12345;const rnd=n=>{seed=(seed*1103515245+12345)&0x7fffffff;return seed%n;};
+ let applied=0;
+ for(let run_=0;run_<150;run_++){
+  let g=m.emptyLedger();const reservations=[];let t=10;
+  for(let step=0;step<40;step++){
+   t+=1+rnd(DAY);const pick=rnd(8),id=`o${run_}-${step}`;
+   try{
+    if(pick===0)g=m.grant(g,{id,kind:'monthly',periodKey:`p${rnd(4)}-${run_}-${step}`,units:(1+rnd(50))*T,at:t,expiresAt:t+(1+rnd(40))*DAY}).ledger;
+    else if(pick===1)g=m.grant(g,{id,kind:'purchased',periodKey:'x',units:(1+rnd(30))*T,at:t,expiresAt:rnd(2)?null:t+10*DAY,consentRef:'c'}).ledger;
+    else if(pick===2){g=m.reserve(g,{id,units:(1+rnd(40))*T,at:t}).ledger;reservations.push(id);}
+    else if(pick===3&&reservations.length){const r=reservations[rnd(reservations.length)];g=m.settle(g,{id:r,actualUnits:rnd(g.reservations[r].units/T+1)*T,at:t}).ledger;}
+    else if(pick===4&&reservations.length){g=m.release(g,{id:reservations[rnd(reservations.length)],at:t}).ledger;}
+    else if(pick===5&&reservations.length){const r=reservations[rnd(reservations.length)];g=m.refund(g,{id,reservationId:r,units:(1+rnd(5))*T,at:t}).ledger;}
+    else if(pick===6)g=m.expire(g,t).ledger;
+    else if(pick===7&&g.lots.some(x=>x.kind==='monthly')){const from=g.lots.filter(x=>x.kind==='monthly')[rnd(g.lots.filter(x=>x.kind==='monthly').length)];g=m.rollover(g,{id,fromPeriod:from.periodKey,toPeriod:`to${run_}-${step}`,previousAllowance:100*T,nextAllowance:100*T,at:Math.min(t,from.expiresAt),expiresAt:t+30*DAY}).ledger;}
+    else continue;
+    applied++;conserved(g);
+   }catch(e){assert.ok(e.name==='LedgerError',`only ledger refusals: ${e.stack}`);}
+  }
+ }
+ assert.ok(applied>2000,`the random run applied ${applied} operations`);
 });
 
 console.log(`Capacity ledger passed (${cases} cases): earliest-expiry holds with no overdraft, idempotent operations, exactly-once settlement and refunds, conservation after every operation, expiry that never revives, bounded rollover, no metering of standard assistance, no automatic top-up, and an unknown-aware balance view; synthetic terms, no database, provider or network.`);
