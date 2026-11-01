@@ -26,6 +26,8 @@ try{
  sql.exec(`INSERT INTO lookup_consents(consent_id,owner_id,provider,operation_id,credential_id,params_digest,destination,created_at,expires_at,state,revision) VALUES('consent-b1','owner-b','gmail','messages.search','credential-b','${key}','owner-panel',${now},${now+600000},'issued',1);
   INSERT INTO rule_approvals(approval_id,owner_id,rule_id,rule_revision,provider,operation_id,destination_digest,template_digest,credential_id,max_per_period,period_start,used_count,created_at,revision) VALUES('approval-b1','owner-b','rule-b',1,'hubspot','contact.create','${key}','${key}','credential-b',2,0,0,${now},1);
   INSERT INTO connector_receipts(receipt_id,owner_id,provider,operation_id,authority,credential_id,provider_account_id,destination_id,operation_digest,request_digest,review_digest,price_units,price_basis,state,created_at,expires_at,updated_at,revision) VALUES('receipt-b1','owner-b','gmail','message.send','owner-request','credential-b','account-b','dest-b','${key}','${key}','${key}',0,'plan-inclusion','review',${now},${now+3600000},${now},1);`);
+ // An open receipt is one whose provider outcome is unresolved (dispatching or uncertain); an unsent review expires by itself and is not counted.
+ sql.exec("UPDATE connector_receipts SET state='dispatching',revision=revision+1,updated_at=updated_at+1");
  // WH-052 P-2: one unfinished ready job and one with a dispatch intent recorded (an unresolved outside effect).
  for(const id of ['0b0b0b0b-0000-4000-8000-00000000000a','0b0b0b0b-0000-4000-8000-00000000000b']){
   const envelope=JSON.stringify({jobId:id,limits:{maxAttempts:3},ownerAccountId:'owner-b',purpose:'platform-email',schedule:{createdAt:0,expiresAt:604800000,notBefore:0}});
@@ -40,7 +42,8 @@ try{
  assert.equal(a.counts.projects,0);assert.equal(a.counts.githubCredentials,0);
  assert.equal(b.counts.projects,1);assert.equal(b.counts.githubCredentials,1);assert.equal(b.counts.githubPendingRevocations,1);assert.equal(b.counts.githubStagedCredentials,1);assert.equal(a.counts.githubStagedCredentials,0);
  // Expired planning authority still has retained bytes; do not hide it from closure.
- assert.deepEqual([all,a,b].map(r=>[r.counts.jobJournal,r.counts.openJobJournal,r.counts.unresolvedJobs]),[[2,2,1],[0,0,0],[2,2,1]]);assert.equal(all.counts.compositionPlans,1);assert.equal(b.counts.compositionPlans,1);assert.equal(a.counts.compositionPlans,0);
+ assert.deepEqual([all,a,b].map(r=>[r.counts.jobJournal,r.counts.openJobJournal,r.counts.unresolvedJobs]),[[2,2,0],[0,0,0],[2,2,0]]);// the fixture's awaiting job last changed in 1970, far outside the 72 hour window that ends the wait (tests/account-lifecycle.mjs covers a recent one)
+ assert.equal(all.counts.compositionPlans,1);assert.equal(b.counts.compositionPlans,1);assert.equal(a.counts.compositionPlans,0);
  for(const key of ['costEvents','emailChanges','openEmailChanges','emailChangeLimits','securityReviews','lookupConsents','openLookupConsents','connectorReceipts','openConnectorReceipts','ruleApprovals','activeRuleApprovals'])assert.deepEqual([all,a,b].map(r=>r.counts[key]),[1,0,1],key);
  for(const r of [all,a,b]){assert.equal(r.readyForDeletion,false);assert.doesNotMatch(JSON.stringify(r),/PRIVATE|owner-[ab]|example.invalid|token-b|change-b1|review-b1|consent-b1|receipt-b1|credential-b|approval-b1|0b0b0b0b/);}
  await assert.rejects(()=>accountClosureInventory(db,"' OR 1=1 --"));

@@ -17,6 +17,8 @@ import {handleMobileRequest} from './mobile/router';
 import type {DNSChatOptions} from './dns-chat';
 import {handleIdentityRequest,workspaceIdentity} from './workspace-identity/http';
 import {handleSafetyCaseRequest} from './safety-case-http';
+import {handleAccountLifecycleRequest} from './account-lifecycle/http';
+import {continueAccountClosures} from './account-lifecycle/closure';
 import {IdentityError} from './workspace-identity/authority';
 import {admitWorkspace,workspaceBindings,workspacePrincipal,assertWorkspace,requireFreshWorkspace,workspaceTransport} from './workspace-identity/admission';
 import {FeatureInclusionError} from './feature-inclusion';
@@ -168,8 +170,10 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   if(pathname.startsWith('/api/auth/'))return error(404,'Not found');
   // WH-132 restricted operator case surface: own authentication/role gates, never the workspace router.
   const operator=await handleSafetyCaseRequest(request,env);if(operator)return operator;
+  // WH-018 account export and closure: own closure-permitting admission; every other route refuses a closing account.
+  const lifecycle=await handleAccountLifecycleRequest(request,env);if(lifecycle)return lifecycle;
   const principal=await workspaceIdentity(request,env);
-  const scoped=workspaceBindings(env,admitWorkspace(env.DB,principal),principal.accountId);
+  const scoped=workspaceBindings(env,admitWorkspace(env.DB,principal,pathname==='/api/support/v1'||pathname.startsWith('/api/support/v1/')?'permit':'refuse'),principal.accountId);
   const user=await scoped.DB.prepare('SELECT id,email FROM users WHERE id=?').bind(principal.accountId).first<User>();
   if(!user)throw new IdentityError(401,'proof_required','Sign in to continue.');
   const response=await handleWorkspace(request,scoped,ctx,user);
@@ -685,9 +689,11 @@ export default {
      {type:'account_delivery',run:async ctx=>{const delivery=contactDelivery(env);if(delivery)await accountDeliveryLane(env.DB,{settings:delivery.settings,sender:delivery.sender,now:Date.now}).run(ctx);}},
      {type:'support_delivery',run:async ctx=>{const delivery=supportDelivery(env);if(delivery)await supportDeliveryLane(env.DB,{...delivery,now:Date.now}).run(ctx);}}])}]);return;}
     const imports={name:'imports' as const,run:()=>scanBackendImports(env.DB)};
+    // WH-018 bounded continuation of confirmed account closures through the same journaled steps as closure/resume.
+    const closures={name:'account_closures' as const,run:()=>continueAccountClosures(env)};
     if(_event.cron==='47 * * * *'){
       await runMaintenance(env.DB,[imports,{name:'chat_drafts',run:()=>cleanupInteractionDrafts(env.DB)},
-      {name:'identity',run:()=>cleanIdentityCeremonies(env.DB)},{name:'hosting',enabled:!!hostingConfig(env),run:()=>maintainHosting(env.DB,hostingConfig(env))},{name:'health',run:async()=>{await maintainHealth(env.DB);await maintainNotices(env.DB);}},{name:'funnel',run:()=>maintainFunnelEvents(env.DB)}]);return;
+      {name:'identity',run:()=>cleanIdentityCeremonies(env.DB)},{name:'hosting',enabled:!!hostingConfig(env),run:()=>maintainHosting(env.DB,hostingConfig(env))},{name:'health',run:async()=>{await maintainHealth(env.DB);await maintainNotices(env.DB);}},{name:'funnel',run:()=>maintainFunnelEvents(env.DB)},closures]);return;
     }
     await runMaintenance(env.DB,[imports,{name:'chat_drafts',run:()=>cleanupInteractionDrafts(env.DB)},
       {name:'identity',run:()=>cleanIdentityCeremonies(env.DB)},
@@ -708,6 +714,7 @@ export default {
       {name:'cloudflare',enabled:!!cloudflareConfig(env),run:()=>cleanupCloudflare(env.DB,cloudflareConfig(env))},
       // WH-052 P-2: finished job-journal rows (with events and outbox entry) 30 days after their last transition.
       {name:'jobs',run:()=>pruneJobJournal(env.DB)},
+      closures,
     ]);
   },
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {

@@ -11,7 +11,7 @@ export async function mobilePrincipal(db:D1Database,token:string):Promise<Identi
  catch(error){throw mapIdentityError(error,signin());}
 }
 const codes:Record<IdentityError['code'],MobileCode>={invalid_identity_request:'invalid_request',proof_required:'proof_required',identity_incomplete:'identity_incomplete',
- identity_changed:'identity_changed',client_upgrade_required:'client_update_required',identity_unavailable:'unavailable',request_conflict:'request_conflict'};
+ identity_changed:'identity_changed',client_upgrade_required:'client_update_required',identity_unavailable:'unavailable',request_conflict:'request_conflict',account_closing:'unavailable'};
 /** Maps a domain failure into the mobile vocabulary; `proof` overrides what a proof_required carries (reauth failures ask for a fresh passkey, not sign-in). */
 export function mapIdentityError(error:unknown,proof:MobileError):unknown{
  if(!(error instanceof IdentityError))return error;

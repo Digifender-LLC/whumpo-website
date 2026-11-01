@@ -65,7 +65,7 @@ const suite=async m=>{
  refuse('invalid-lifecycle',()=>m.buildReview(counts(),null));
  refuse('unknown-class',()=>m.buildReview(counts({accounts:1}),classes.filter(c=>c.id!=='owner-identity')));
  refuse('unknown-class',()=>m.buildReview(counts(),classes.map(c=>c.id==='owner-identity'?{...c,tables:[]}:c)));
- assert.deepEqual([...m.settleFirstKeys].sort(),['cloudflarePendingRevocations','githubGrantUncertain','githubPendingRevocations','openConnectorReceipts','unresolvedChatInteractionContinuations','unresolvedConnectionExchanges','unresolvedDomainRecords','unresolvedJobs','unresolvedStandardAI']);
+ assert.deepEqual([...m.settleFirstKeys].sort(),['cloudflarePendingRevocations','connectionRotationGuards','githubGrantUncertain','githubPendingRevocations','pendingScanTickets','uncertainGitHubBackups','unresolvedChatInteractionContinuations','unresolvedConnectionExchanges','unresolvedDomainRecords','unresolvedJobs','unresolvedStandardAI']);
  for(const k of m.settleFirstKeys)assert.ok(m.buildReview(counts({[k]:1}),classes).blockers.includes('provider-work-open'),k);
 
  // ---- transitions: every edge ----
@@ -184,14 +184,18 @@ check('the source is pure: no storage, network, provider or Worker import and no
   assert.doesNotMatch(text,/\bfetch\(|Date\.now|new Date|crypto\.|\bD1|\.prepare\(|process\.|cloudflare:/,f);
  }
 });
-check('the module is unwired: nothing else in src/ imports it',()=>{
+check('the closure modules are wired only through src/account-lifecycle, and the pure ones stay pure',()=>{
  const walk=d=>readdirSync(d).flatMap(n=>{const p=join(d,n);return statSync(p).isDirectory()?walk(p):[p];});
- for(const p of walk(join(root,'src')).filter(p=>!p.includes('account-closure')&&/\.(ts|tsx|mjs|js)$/.test(p)))assert.doesNotMatch(readFileSync(p,'utf8'),/from\s+['"][^'"]*account-closure\//,p);
+ for(const p of walk(join(root,'src')).filter(p=>!p.includes('account-closure')&&!p.includes('account-lifecycle')&&/\.(ts|tsx|mjs|js)$/.test(p)))assert.doesNotMatch(readFileSync(p,'utf8'),/from\s+['"][^'"]*account-closure\//,p);
  assert.doesNotMatch(read('wrangler.jsonc'),/account-closure/);
+ // The inventory module carries the only database access; the metric list is the JSON the operator CLI reads.
+ assert.match(read('src/account-closure/inventory.ts'),/from '\.\/metrics\.json'/);
+ assert.match(read('tools/account-closure-inventory.mjs'),/account-closure\/metrics\.json/);
 });
 check('the inventory and the lifecycle contract still say nothing is enabled',()=>{
  assert.equal(lifecycle.runtimeEnforcement,false);
  assert.match(read('docs/account-closure.md'),/slice 1/i);
+ assert.match(read('docs/account-closure.md'),/WH-018 runtime/i);
 });
 
 const staticModule=await load();
@@ -204,7 +208,7 @@ const mutants=[
  ['hold is not a review blocker',R,"if(counts.activePreservationHolds)blockers.push('preservation-hold');",''],
  ['provider work is not a review blocker',R,"if(settleFirstKeys.some(k=>counts[k]))blockers.push('provider-work-open');",''],
  ['standard AI may stay unresolved',R,"['unresolvedStandardAI',",'['],
- ['openConnectorReceipts may stay open',R,",'openConnectorReceipts']",']'],
+ ['uncertainGitHubBackups may stay open',R,",'uncertainGitHubBackups']",']'],
  ['unknown lifecycle class accepted',R,"check(cls&&cls.tables.includes(table),'unknown-class',`${key} -> ${classId}`);",'if(!cls)continue;'],
  ['unknown category accepted',R,"check(Object.hasOwn(c,key),'unknown-category',key);",''],
  ['negative counts accepted',R,'Number.isSafeInteger(v)&&v>=0','Number.isSafeInteger(v)'],

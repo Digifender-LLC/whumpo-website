@@ -15,6 +15,7 @@ import {cloudflareStatus} from './cloudflare-connection';
 import type {DNSChatOptions} from './dns-chat';
 import {DomainError} from './domains';
 import { siteContext, agentPrompt,agentWorkspaceData,agentPromptFocus, prepareSiteAction, ProposalError } from './site-agent';
+import {settlementDatabase} from './workspace-identity/admission';
 import { complete, ProviderError, type AIConfig, type ChatMessage } from './ai';
 import { BillingError, ensureBilling } from './billing';
 import { hashToken } from './security';
@@ -111,7 +112,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
   }
   if (inserted[taskClaim.length+1].meta.changes !== 1) return noReservation();
   await emitInferenceCall(db,userId,id);
-  let routingResult:import('./ai').Completion|undefined,taskFollowupDispatched=false;
+  let routingResult:import('./ai').Completion|undefined,received:import('./ai').Completion|undefined,taskFollowupDispatched=false;
   let inspectionGuards:D1PreparedStatement[]=[];
   const modelTransport:typeof fetch=async(input,init)=>{if(inspectionGuards.length)await db.batch(inspectionGuards);if(task)await db.batch(informationTaskGuards(db,userId,task,formSubmissionId?'pending':'succeeded',id));if(task&&!formSubmissionId)taskFollowupDispatched=true;return transport(input,init);};
   const started = Date.now();
@@ -126,6 +127,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     }
     if(!task&&dnsOptions?.background)dnsOptions.background(startAcknowledgment(db,userId,id,billing.period,content,config,transport));
     let result = await complete({ ...config, maxOutputTokens: outputLimit, timeoutMs:canFollow?45000:config.timeoutMs, sessionId: `whumpo-${userId}` }, messages, modelTransport);
+    received=result;
     if(result.inputTokens>boundInput()||result.outputTokens>outputLimit)throw new ProviderError('invalid_response');
     // Validate task-only memory separately; ordinary agent envelopes stay strict.
     function scopedResponse(raw:string){try{return taskResponse(raw,task!.progress);}catch{throw new ProposalError('task_progress');}}
@@ -160,7 +162,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
         db.prepare('INSERT INTO agent_inspections(turn_id,user_id,result_text,input_tokens,output_tokens) VALUES(?,?,?,?,?)').bind(id,userId,JSON.stringify({type:'task_lookup',taskId:task.data.taskId,submissionId:task.form.submission.id,previousTurnId:task.progress!.turnId}),result.inputTokens,result.outputTokens)]);
       const final=await complete({...config,maxOutputTokens:outputLimit,timeoutMs:45000,sessionId:`whumpo-${userId}`},next,modelTransport);
       if(final.inputTokens>followupInputBound||final.outputTokens>outputLimit)throw new ProviderError('invalid_response');
-      result={text:final.text,inputTokens:result.inputTokens+final.inputTokens,outputTokens:result.outputTokens+final.outputTokens};
+      result={text:final.text,inputTokens:result.inputTokens+final.inputTokens,outputTokens:result.outputTokens+final.outputTokens};received=result;
     }else
     if(canFollow&&inspectionRequest(firstRaw)){
       if(firstProject&&!firstDraftProposalAllowed(result.text,firstProject.id,'app'))throw new ProposalError();
@@ -173,7 +175,7 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
         await db.batch([...inspectionGuards,...(task?informationTaskGuards(db,userId,task,formSubmissionId?'pending':'succeeded',id):[]),db.prepare('INSERT INTO agent_inspections(turn_id,user_id,result_text,input_tokens,output_tokens) VALUES(?,?,?,?,?)').bind(id,userId,inspection,result.inputTokens,result.outputTokens)]);
         const final=await complete({...config,maxOutputTokens:outputLimit,timeoutMs:45000,sessionId:`whumpo-${userId}`},next,modelTransport);
         if(final.inputTokens>followupInputBound||final.outputTokens>outputLimit)throw new ProviderError('invalid_response');
-        result={text:final.text,inputTokens:result.inputTokens+final.inputTokens,outputTokens:result.outputTokens+final.outputTokens};
+        result={text:final.text,inputTokens:result.inputTokens+final.inputTokens,outputTokens:result.outputTokens+final.outputTokens};received=result;
       }else proposal=lookup;
     }
     await observeInference(db,userId,id,result);
@@ -204,6 +206,16 @@ export async function sendAIChat(db: D1Database, userId: string, id: string, rev
     ]);
     await reconcileChat(db, userId);
   } catch (cause) {
+    if((cause as {code?:unknown})?.code==='account_closing'){
+      // Closure confirmed while this request was with the provider. The fence refuses ordinary writes, but the receipts of work dispatched before it settle here
+      // (outcome recorded when it arrived, otherwise uncertain); the chat turn itself is reconciled by closure (docs/account-closure.md). No new work starts.
+      const settle=settlementDatabase(db,userId);
+      const arrived=taskFollowupDispatched?received:routingResult??received;
+      if(arrived)await observeInference(settle,userId,id,arrived);
+      await uncertainInference(settle,userId,id);
+      await markStandardAIUncertain(settle,userId,id);
+      return {status:200};
+    }
     if(routingResult&&!taskFollowupDispatched)await observeInference(db,userId,id,routingResult);
     await uncertainInference(db,userId,id);
     if(String(cause).includes('chat_result_closed'))return {status:200};

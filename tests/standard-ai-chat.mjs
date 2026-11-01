@@ -44,6 +44,19 @@ try{
  const lost=await account(),lostId=crypto.randomUUID();let injected=false;
  const flaky=await identities.get(lost).scope(interceptDatabase(db,/INSERT INTO standard_ai_requests/,async()=>{},async()=>{if(!injected){injected=true;throw Error('Synthetic admission acknowledgment lost');}}));
  await assert.rejects(()=>sendAIChat(flaky,lost,lostId,0,'Help with my site',config,provider),/acknowledgment lost/);assert.equal(injected,true);const callsBeforeRetry=calls;assert.equal((await sendAIChat(scope(lost),lost,lostId,0,'Help with my site',config,provider)).status,200);assert.equal(calls,callsBeforeRetry);await db.prepare('UPDATE chat_turns SET created_at=? WHERE id=?').bind(new Date(Date.now()-180000).toISOString(),lostId).run();await reconcileChat(scope(lost),lost);assert.equal((await readStandardAI(scope(lost),lost,lostId)).state,'released');
+ // Closure confirms while the request is with the provider: the fence refuses the ordinary scope, but the request still records what the provider returned and settles its own receipts, and no new work starts.
+ const closing=await account(),closingId=crypto.randomUUID();let closed;
+ const closingResult=await sendAIChat(scope(closing),closing,closingId,0,'Help with my website',config,async()=>{
+  const at=Date.now(),cid=crypto.randomUUID(),step=(from,to,revision,set='',...bind)=>db.prepare(`UPDATE account_closures SET state='${to}',revision=${revision+1},updated_at=?${set},history=json_insert(history,'$[#]','${to}') WHERE closure_id=? AND account_id=? AND revision=? AND state='${from}'`).bind(at,...bind,cid,closing,revision);
+  // The same four forward states the confirmation statement walks, in one batch.
+  await db.batch([db.prepare("INSERT INTO account_closures(closure_id,account_id,state,revision,requested_at,updated_at,history) VALUES(?,?,'requested',1,?,?,'[\"requested\"]')").bind(cid,closing,at,at),step('requested','reviewed',1,',review_digest=?','a'.repeat(64)),step('reviewed','confirmed',2),step('confirmed','quiescing',3,',quiesced_at=?',at)]);
+  closed=true;return response();
+ });
+ assert.equal(closed,true);assert.equal(closingResult.status,200,'closing is not a server error for the request in flight');
+ const settled=await db.prepare('SELECT status,input_tokens,output_tokens FROM inference_calls WHERE id=?').bind(closingId).first();
+ assert.equal(settled.status,'observed','the outcome the provider returned is recorded');assert.equal(settled.input_tokens,100);assert.equal(settled.output_tokens,200);
+ assert.equal((await db.prepare('SELECT state FROM standard_ai_requests WHERE id=?').bind(closingId).first()).state,'uncertain','the standard receipt is settled as uncertain, as closure reconciliation would');
+ await assert.rejects(()=>sendAIChat(scope(closing),closing,crypto.randomUUID(),1,'More help',config,provider),/account_closing|closing/);
  await recordFixtureBenchmark(db,'failures',{transportCalls:calls+raceCalls+reasoningCalls,runtimeCalls:0});
  console.log('Standard Chat passed: bounded 4,096-token reasoning on both lookup/final calls with reserved cost and zero-charge replay, standard assistance without a customer credit ledger, exact replay, changed-ID refusal, failed proposal cost retention, uncertain provider outcomes, concurrent revision claims, atomic capacity denial and lost-admission recovery.');
 }finally{await fixture.close();}
