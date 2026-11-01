@@ -1108,6 +1108,15 @@ CREATE TABLE capacity_preferences (
  updated_at TEXT NOT NULL
 );
 
+-- WH-043 (owner decision Q-33, November 1, 2026): one capacity ledger per account as the plain-data state of src/capacity-ledger.ts, saved with optimistic concurrency (revision + 1 or the
+-- write is refused). Nothing grants into it yet: no route, invoice or admission path is wired, and the ledger's terms are the approved proposal in docs/resource-pool-economics.md.
+CREATE TABLE capacity_ledgers (
+ user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ revision INTEGER NOT NULL CHECK(revision >= 1),
+ state_json TEXT NOT NULL CHECK(json_valid(state_json) AND length(state_json) <= 1048576 AND json_extract(state_json,'$.version') IS 1),
+ updated_at INTEGER NOT NULL
+);
+
 CREATE TABLE user_profiles (
  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
  revision INTEGER NOT NULL DEFAULT 0 CHECK(revision>=0),
@@ -3214,6 +3223,10 @@ CREATE TRIGGER inference_delete_guard BEFORE DELETE ON inference_calls WHEN EXIS
 CREATE TRIGGER capacity_preferences_revision BEFORE UPDATE ON capacity_preferences
 WHEN NEW.user_id != OLD.user_id OR NEW.revision != OLD.revision+1
 BEGIN SELECT RAISE(ABORT,'capacity_revision'); END;
+
+CREATE TRIGGER capacity_ledgers_revision BEFORE UPDATE ON capacity_ledgers
+WHEN NEW.user_id != OLD.user_id OR NEW.revision != OLD.revision+1
+BEGIN SELECT RAISE(ABORT,'capacity_ledger_revision'); END;
 
 CREATE TRIGGER user_profiles_revision BEFORE UPDATE ON user_profiles
 WHEN NEW.user_id!=OLD.user_id OR NEW.revision!=OLD.revision+1

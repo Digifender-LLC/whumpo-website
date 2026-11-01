@@ -262,7 +262,7 @@ try{
  const catalog=JSON.parse(await readFile('docs/data-lifecycle.json','utf8')),{snapshot:pointSnapshot}=await verifyRecoveryPoint(pointA,pointDigestA);
  const countRestored=async table=>(await target.DRILL_A.prepare(`SELECT count(*) n FROM "${table}"`).first()).n;
  const coverage=await phase('recoveryCoverage',()=>recoveryCoverage(pointSnapshot,countRestored,catalog));
- assert.equal(coverage.status,'complete',JSON.stringify(coverage.holds));assert.equal(coverage.tables,261);assert.equal(coverage.excluded,0);
+ assert.equal(coverage.status,'complete',JSON.stringify(coverage.holds));assert.equal(coverage.tables,262);assert.equal(coverage.excluded,0);
  for(const table of Object.keys(seeded))assert.equal(await countRestored(table),seeded[table],table+' restored with its archived rows');
  // A new table, a table that vanished from the restore, a stale exclusion and a mismatched count each fail until classified.
  const withTable=structuredClone(pointSnapshot);withTable.tables.push({name:'new_personal_data',columns:['id'],rows:[]});
@@ -270,7 +270,7 @@ try{
  holds.restoreMismatch=(await recoveryCoverage(pointSnapshot,async()=>-1,catalog)).holds;assert.deepEqual(holds.restoreMismatch,['coverage-restore-mismatch']);
  holds.staleExclusion=(await recoveryCoverage(pointSnapshot,countRestored,catalog,{retired_table:'none'})).holds;assert.deepEqual(holds.staleExclusion,['coverage-stale-exclusion']);
  const excludedCoverage=await recoveryCoverage(pointSnapshot,async()=>-1,catalog,Object.fromEntries(pointSnapshot.tables.filter(t=>t.name!=='sqlite_sequence').map(t=>[t.name,'drill rationale'])));
- assert.equal(excludedCoverage.status,'complete');assert.equal(excludedCoverage.excluded,261);
+ assert.equal(excludedCoverage.status,'complete');assert.equal(excludedCoverage.excluded,262);
  refusals+=3;
  // WH-117 key versions in the restored candidate: one registered key, all 4 credential rows under it, no running rotation.
  const keyVersions=await phase('inventoryKeyVersions',()=>inventoryKeyVersions(target.DRILL_A));
