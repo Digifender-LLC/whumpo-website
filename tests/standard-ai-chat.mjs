@@ -55,7 +55,7 @@ try{
  assert.equal(closed,true);assert.equal(closingResult.status,200,'closing is not a server error for the request in flight');
  const settled=await db.prepare('SELECT status,input_tokens,output_tokens FROM inference_calls WHERE id=?').bind(closingId).first();
  assert.equal(settled.status,'observed','the outcome the provider returned is recorded');assert.equal(settled.input_tokens,100);assert.equal(settled.output_tokens,200);
- assert.notEqual((await db.prepare('SELECT state FROM standard_ai_requests WHERE id=?').bind(closingId).first()).state,'dispatched','the standard receipt no longer sits dispatched');
+ assert.equal((await db.prepare('SELECT state FROM standard_ai_requests WHERE id=?').bind(closingId).first()).state,'uncertain','the standard receipt is settled as uncertain, as closure reconciliation would');
  await assert.rejects(()=>sendAIChat(scope(closing),closing,crypto.randomUUID(),1,'More help',config,provider),/account_closing|closing/);
  await recordFixtureBenchmark(db,'failures',{transportCalls:calls+raceCalls+reasoningCalls,runtimeCalls:0});
  console.log('Standard Chat passed: bounded 4,096-token reasoning on both lookup/final calls with reserved cost and zero-charge replay, standard assistance without a customer credit ledger, exact replay, changed-ID refusal, failed proposal cost retention, uncertain provider outcomes, concurrent revision claims, atomic capacity denial and lost-admission recovery.');
