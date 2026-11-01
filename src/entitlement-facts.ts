@@ -1,6 +1,7 @@
 // WH-042 slice: paid entitlement derived from verified financial facts, as pure functions over plain data with explicitly SYNTHETIC terms. No D1, network, clock, provider or Stripe call,
-// no schema, and nothing here is wired into a route, webhook or billing path: the grace window and the refund/dispute treatment are the proposal in docs/plan-lifecycle.md, not enabled
-// terms (WH-041 holds that decision). Only a server-verified event can be recorded, so a browser success page has no event kind. The facts are a set merged by stable ids, so duplicate,
+// no schema, and nothing here is wired into a route, webhook or billing path: the grace window and the refund/dispute treatment are a proposal only, not enabled terms
+// (WH-041 holds that decision; docs/workspace-collaboration.md says no grace is approved). The caller must verify an event server-side and assert `verified: true`; this module only refuses
+// the rest, and a browser success page has no event kind. The facts are a set merged by stable ids, so duplicate,
 // reordered and late delivery converge on the same facts and the same answer; an id repeated with a different body is a conflict, never an overwrite. Entitlement is a function of the
 // facts and a time, so a refund or dispute is a compensating fact and nothing is edited or deleted (immutable compensating entries).
 export class EntitlementError extends Error {
@@ -8,7 +9,8 @@ export class EntitlementError extends Error {
 }
 const check: (ok: unknown, code: string, detail: string) => asserts ok = (ok, code, detail) => { if (!ok) throw new EntitlementError(code, detail); };
 const REF = /^[A-Za-z0-9._:-]{1,64}$/;
-const ref = (v: unknown, what: string) => { check(typeof v === 'string' && REF.test(v), 'INVALID_INPUT', `${what} is a short safe identifier`); return v as string; };
+// '__proto__' would set the table's prototype instead of a key and silently drop the fact.
+const ref = (v: unknown, what: string) => { check(typeof v === 'string' && REF.test(v) && v !== '__proto__', 'INVALID_INPUT', `${what} is a short safe identifier`); return v as string; };
 const cents = (v: unknown, min: number, what: string) => { check(Number.isSafeInteger(v) && (v as number) >= min && (v as number) <= 1_000_000_000_000, 'INVALID_INPUT', `${what} is whole minor units`); return v as number; };
 const time = (v: unknown, what: string) => { check(Number.isSafeInteger(v) && (v as number) > 0, 'INVALID_INPUT', `${what} is a positive millisecond time`); return v as number; };
 
@@ -49,7 +51,7 @@ export function record(f: Facts, e: FinancialEvent): { facts: Facts; replayed: b
   case 'refund': put(next.refunds, id, { invoiceId: ref(e.invoiceId, 'invoiceId'), amountCents: cents(e.amountCents, 1, 'amountCents') }); break;
   case 'dispute': {
    check(['open', 'won', 'lost'].includes(e.state), 'INVALID_INPUT', 'state');
-   const key = ref(e.disputeId, 'disputeId'), had = next.disputes[key];
+   const key = ref(e.disputeId, 'disputeId'), had = Object.hasOwn(next.disputes, key) ? next.disputes[key] : undefined;
    const invoiceId = ref(e.invoiceId, 'invoiceId');
    if (had) check(had.invoiceId === invoiceId, 'FACT_CONFLICT', `${key} names two invoices`);
    // A resolution outranks "open" whatever the arrival order; two different resolutions cannot both be true.
@@ -80,12 +82,13 @@ export function entitlement(f: Facts, now: number, graceMs: number): Entitlement
   if (refunded > 0) reasons.push(`partially-refunded:${id}`);
   return true;
  });
+ reasons.sort(); // arrival order must not show in the answer
  const cancelled = (sub: string) => Object.values(f.cancellations).some(c => c.subscriptionId === sub && c.effectiveAt <= now);
  const answer = (state: 'active' | 'grace', id: string, p: Paid, until: number): Entitlement => ({ state, planId: p.planId, invoiceId: id, until, reasons,
   disputed: Object.values(f.disputes).some(d => d.invoiceId === id && d.state === 'open') });
- const covering = usable.filter(([, p]) => p.startsAt <= now && now < p.endsAt).sort(([, a], [, b]) => b.endsAt - a.endsAt || (a.planId < b.planId ? -1 : 1))[0];
+ const covering = usable.filter(([, p]) => p.startsAt <= now && now < p.endsAt).sort(([ia, a], [ib, b]) => b.endsAt - a.endsAt || (a.planId < b.planId ? -1 : a.planId > b.planId ? 1 : 0) || (ia < ib ? -1 : 1))[0];
  if (covering) return answer('active', covering[0], covering[1], covering[1].endsAt);
  const lapsed = usable.filter(([, p]) => p.endsAt <= now && now < p.endsAt + graceMs && !cancelled(p.subscriptionId)
-  && Object.values(f.failures).some(x => x.subscriptionId === p.subscriptionId && x.at >= p.endsAt && x.at <= now)).sort(([, a], [, b]) => b.endsAt - a.endsAt)[0];
+  && Object.values(f.failures).some(x => x.subscriptionId === p.subscriptionId && x.at >= p.endsAt && x.at <= now)).sort(([ia, a], [ib, b]) => b.endsAt - a.endsAt || (ia < ib ? -1 : 1))[0];
  return lapsed ? answer('grace', lapsed[0], lapsed[1], lapsed[1].endsAt + graceMs) : none;
 }

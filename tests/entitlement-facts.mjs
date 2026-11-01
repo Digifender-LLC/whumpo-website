@@ -71,6 +71,47 @@ await check('the latest paid interval wins and a renewal continues seamlessly',(
  assert.equal(view([paid(),renew],S+Y).invoiceId,'in_2');assert.equal(view([paid(),renew],S+Y-1).invoiceId,'in_1');
  assert.equal(view([renew,paid()],S+2*Y-1).state,'active');
 });
+await check('equal intervals and plans resolve the same in either order, with the same flags and reasons',()=>{
+ const a=paid({id:'ea',invoiceId:'in_a'}),b=paid({id:'eb',invoiceId:'in_b'});
+ const d=ev({id:'d1',kind:'dispute',invoiceId:'in_a',disputeId:'dp_1',state:'open'});
+ const r=(id,inv)=>ev({id,kind:'refund',invoiceId:inv,amountCents:100});
+ const set=[a,b,d,r('r1','in_a'),r('r2','in_b')];
+ const want=JSON.stringify(m.entitlement(fold(set),S+DAY,GRACE));
+ for(const p of perms(set))assert.equal(JSON.stringify(m.entitlement(fold(p),S+DAY,GRACE)),want);
+ const got=JSON.parse(want);assert.deepEqual([got.invoiceId,got.disputed],['in_a',true]);
+ const fail=ev({id:'f1',kind:'payment_failed',subscriptionId:'sub_1',at:S+Y+1});
+ assert.equal(view([a,b,fail],S+Y+DAY).invoiceId,view([b,a,fail],S+Y+DAY).invoiceId);
+});
+await check('ids that name object internals cannot drop or reject a fact',()=>{
+ for(const bad of [paid({id:'__proto__'}),paid({invoiceId:'__proto__'}),ev({id:'x',kind:'dispute',invoiceId:'in_1',disputeId:'__proto__',state:'lost'})])throws(()=>m.record(m.emptyFacts(),bad),'INVALID_INPUT');
+ for(const key of ['constructor','toString','hasOwnProperty']){
+  const lost=ev({id:'dl',kind:'dispute',invoiceId:'in_1',disputeId:key,state:'lost'});
+  assert.equal(view([paid(),lost],S+DAY).state,'none',key+' as a dispute id records and voids');
+  const full=ev({id:key,kind:'refund',invoiceId:'in_1',amountCents:12000});
+  assert.equal(view([paid(),full],S+DAY).state,'none',key+' as an event id records');
+  assert.equal(m.record(fold([paid(),full]),full).replayed,true);
+ }
+});
+await check('compensating facts, failures and cancellations only touch what they name; record never mutates its input',()=>{
+ const two=[paid(),paid({id:'e-paid-2',invoiceId:'in_2',subscriptionId:'sub_2',planId:'pro',startsAt:S+DAY,endsAt:S+Y+DAY})];
+ const refundOther=ev({id:'r9',kind:'refund',invoiceId:'in_2',amountCents:12000});
+ assert.equal(view([...two,refundOther],S+2*DAY).invoiceId,'in_1','a refund on in_2 does not void in_1');
+ assert.equal(view([paid(),ev({id:'r8',kind:'refund',invoiceId:'in_2',amountCents:12000})],S+DAY).state,'active');
+ const lostOther=ev({id:'dl',kind:'dispute',invoiceId:'in_2',disputeId:'dp_9',state:'lost'}),openOther=ev({id:'do',kind:'dispute',invoiceId:'in_2',disputeId:'dp_8',state:'open'});
+ assert.equal(view([paid(),lostOther],S+DAY).state,'active');assert.equal(view([paid(),openOther],S+DAY).disputed,false);
+ const failOther=ev({id:'fo',kind:'payment_failed',subscriptionId:'sub_9',at:S+Y+1}),failEarly=ev({id:'fe',kind:'payment_failed',subscriptionId:'sub_1',at:S+Y-1}),failLater=ev({id:'fl',kind:'payment_failed',subscriptionId:'sub_1',at:S+Y+2*DAY});
+ assert.equal(view([paid(),failOther],S+Y+DAY).state,'none','another subscription failing earns no grace');
+ assert.equal(view([paid(),failEarly],S+Y+DAY).state,'none','a failure before the interval ended earns no grace');
+ assert.equal(view([paid(),failLater],S+Y+DAY).state,'none','a failure not yet recorded at "now" earns no grace');
+ const fail=ev({id:'f1',kind:'payment_failed',subscriptionId:'sub_1',at:S+Y+1});
+ assert.equal(view([paid(),fail,ev({id:'cx',kind:'cancellation',subscriptionId:'sub_9',effectiveAt:S})],S+Y+DAY).state,'grace','cancelling another subscription keeps grace');
+ assert.equal(view([paid(),fail,ev({id:'cf',kind:'cancellation',subscriptionId:'sub_1',effectiveAt:S+Y+3*DAY})],S+Y+DAY).state,'grace','a cancellation not yet effective keeps grace');
+ const overlap=[paid(),paid({id:'e-paid-3',invoiceId:'in_3',startsAt:S+DAY,endsAt:S+2*Y})];
+ assert.equal(view(overlap,S+2*DAY).invoiceId,'in_3','the interval that ends latest wins');
+ const f=fold([paid()]),before=JSON.stringify(f);m.record(f,ev({id:'r5',kind:'refund',invoiceId:'in_1',amountCents:5}));assert.equal(JSON.stringify(f),before,'record leaves the caller facts untouched');
+ const reordered=ev({kind:'invoice_paid',endsAt:S+Y,startsAt:S,amountCents:12000,planId:'creator',subscriptionId:'sub_1',invoiceId:'in_1',verified:true,id:'e-paid'});
+ assert.equal(m.record(f,reordered).replayed,true,'a redelivery with keys in another order is the same event');
+});
 await check('inputs are validated',()=>{
  throws(()=>m.record(m.emptyFacts(),paid({endsAt:S})),'INVALID_INPUT');
  throws(()=>m.record(m.emptyFacts(),paid({amountCents:1.5})),'INVALID_INPUT');
