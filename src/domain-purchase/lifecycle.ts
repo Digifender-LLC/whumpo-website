@@ -60,7 +60,8 @@ export async function decideRenewal({db,hostname,registrar,policy,now}:{db:Db;ho
  const registration=row?toRegistration(row):null;
  const {decision}=await renewalDecision({registration,registrar,policy});
  if(!decision.renew){
-  if(decision.reason==='renewal-price-changed')await db.prepare('UPDATE domain_registrations SET auto_renew=0,renewal_review_id=NULL,renewal_total_cents=NULL WHERE hostname=?1 AND auto_renew=1').bind(hostname).run();
+  // Only the opt-in this decision judged: a newer review the owner confirmed while the registrar was being read stays on.
+  if(decision.reason==='renewal-price-changed'&&registration?.renewalOptIn)await db.prepare('UPDATE domain_registrations SET auto_renew=0,renewal_review_id=NULL,renewal_total_cents=NULL WHERE hostname=?1 AND auto_renew=1 AND renewal_review_id=?2').bind(hostname,registration.renewalOptIn.reviewId).run();
   return decision;
  }
  const reg=registration!,price=await currentRenewalTotal(hostname,registrar,policy);
@@ -180,7 +181,10 @@ export async function reconcileTransfers(db:Db,registrar:RegistrarAdapter,now:nu
    else if(found.status==='registered'&&found.unlocked===true&&r.state==='unknown-outcome')result=await bump(db,r,'unlocked',now,{});
    else result=await bump(db,r,r.state,now,{});// touched, nothing proven: it goes to the back of the line
    if(result&&result.state!==r.state)moved++;
-  }catch{/* one failing lookup costs this request one retry later */}
+  }catch{
+   // A failed read still touches the request (guarded by its version), so it respects the spacing and moves behind the others instead of filling every batch.
+   try{await bump(db,toTransfer(row),row.state,now,{});}catch{/* the next pass retries */}
+  }
  }
  return {moved};
 }
