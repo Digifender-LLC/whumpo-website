@@ -7,8 +7,8 @@ await validateLifecycleReferences(catalog);
 const {db,schemaFiles}=await currentLifecycleSchema();
 try{
  const report=inspectLifecycleSchema(db,catalog);
- assert.equal(report.tableCount,245);assert.equal(report.classCount,59);assert.equal(schemaFiles.length,7);
- assert.equal(report.plannedClassCount,5);assert.equal(report.protectionClasses.length,64);
+ assert.equal(report.tableCount,260);assert.equal(report.classCount,62);assert.equal(schemaFiles.length,10);
+ assert.equal(report.plannedClassCount,5);assert.equal(report.protectionClasses.length,67);
  assert.equal(report.protectionStatus,'decision-not-runtime-enforcement');
  for(const group of report.protectionClasses){assert.equal(group.profile.endToEndEncrypted,false);assert.equal(group.profile.customerUnlockRequired,false);}
  const connections=report.protectionClasses.find(g=>g.id==='connections');
@@ -31,10 +31,13 @@ try{
  const recordsClass=report.protectionClasses.find(g=>g.id==='module-records');assert.equal(recordsClass.storageStatus,'current');assert.deepEqual(recordsClass.protection.storage,['control-d1']);
  assert.deepEqual(report.tables.filter(t=>t.class==='module-records').map(t=>t.name),['module_record_events','module_record_files','module_record_leads','module_records']);
  assert.match(recordsClass.protection.readers.join(' '),/never enter owner Chat, model context or Chat history/);
+ // WH-194: domain purchase tables are one current class; funding holds stay with billing; no table of either can hold an auth code.
+ assert.deepEqual(report.tables.filter(t=>t.class==='domain-registrations').map(t=>t.name),['domain_order_attempts','domain_orders','domain_quotes','domain_registrant_contacts','domain_registrar_events','domain_registrations','domain_renewal_approvals','domain_renewal_reviews','domain_reviews','domain_transfer_requests']);
+ assert.equal(report.tables.find(t=>t.name==='domain_funding_holds').class,'billing');
  assert.equal(report.readyForDeletion,false);assert.equal(report.policyStatus,'proposed-not-approved');
 
- assert.deepEqual(report.unlinkedOwnership.map(t=>t.table),['account_closures','file_cleanup','identity_challenges','notification_send_ledger','operator_containments','operator_retention_receipts','operator_session_revocations','safety_case_evidence','safety_case_findings','safety_cases','safety_disclosure_items','safety_disclosures','safety_evidence_objects','safety_preservation_holds','safety_preserved_records','safety_retention_decisions']);
- assert.ok(report.directOwnerBlocks.some(t=>t.table==='domain_connections'&&t.onDelete==='RESTRICT'));
+ assert.deepEqual(report.unlinkedOwnership.map(t=>t.table),['account_closure_steps','account_closures','file_cleanup','identity_challenges','notification_send_ledger','operator_containments','operator_retention_receipts','operator_session_revocations','restore_suppressions','safety_case_evidence','safety_case_findings','safety_cases','safety_disclosure_items','safety_disclosures','safety_evidence_objects','safety_preservation_holds','safety_preserved_records','safety_retention_decisions']);
+ assert.ok(report.directOwnerBlocks.some(t=>t.table==='github_refresh_custody'&&t.onDelete==='RESTRICT'));assert.ok(!report.directOwnerBlocks.some(t=>t.table==='domain_connections'),'WH-018: a settled hostname record leaves with the account (unsettled ones are refused by trigger)');
  assert.ok(report.directOwnerBlocks.some(t=>t.table==='gateway_spend_attempts'&&t.onDelete==='RESTRICT'));
  assert.ok(report.directOwnerBlocks.some(t=>t.table==='chat_review_receipts'&&t.onDelete==='NO ACTION'));
  for(const name of ['project_spec_proposals','project_spec_versions','service_client_proposals','service_client_versions']){
@@ -84,5 +87,5 @@ try{
  db.exec('PRAGMA query_only=ON');assert.deepEqual(inspectLifecycleSchema(db,catalog),report);assert.doesNotMatch(JSON.stringify(report),/PRIVATE_OWNER|PRIVATE_EMAIL|PRIVATE_SALT|PRIVATE_HASH/);
  db.exec('PRAGMA query_only=OFF');db.exec('CREATE TABLE new_personal_data(id TEXT,user_id TEXT REFERENCES users(id),secret TEXT)');db.exec('PRAGMA query_only=ON');
  assert.throws(()=>inspectLifecycleSchema(db,catalog),/missing: new_personal_data/);
- console.log(`Lifecycle catalog passed: 245 tables, 59 current/5 planned classes, ${invalidCatalogs.length+invalidReferences.length} rejected contract/reference cases, complete protection/recovery metadata, owner FK blockers, and zero application-data reads. No runtime authority granted.`);
+ console.log(`Lifecycle catalog passed: 260 tables, 62 current/5 planned classes, ${invalidCatalogs.length+invalidReferences.length} rejected contract/reference cases, complete protection/recovery metadata, owner FK blockers, and zero application-data reads. No runtime authority granted.`);
 }finally{db.close();}

@@ -11,7 +11,7 @@ const root=process.cwd(),temp=await mkdtemp((process.env.TMPDIR||'/tmp')+'/whump
 const oldFetch=globalThis.fetch;let network=0;
 try{
  const originalCompiler=await checkSpecificationCompiler(),checked=await checkServiceClientCompiler();assert.match(originalCompiler.compilerDigest,/^[0-9a-f]{64}$/);
- const bundle=await build({stdin:{contents:"export * from './src/project-specification/service-clients/compiler';export * from './src/project-specification/v2/json';export {siteConfig,renderSite,renderPhotoPage} from './src/components';export {publishedHTML} from './src/published-html';",resolveDir:root},bundle:true,format:'esm',platform:'neutral',write:false});
+ const bundle=await build({stdin:{contents:"export * from './src/project-specification/service-clients/compiler';export * from './src/project-specification/v2/json';export {siteConfig,photoConfig,renderSite,renderPhotoPage} from './src/components';export {publishedHTML} from './src/published-html';",resolveDir:root},bundle:true,format:'esm',platform:'neutral',write:false});
  await writeFile(join(temp,'module.mjs'),bundle.outputFiles[0].contents);const m=await import(pathToFileURL(join(temp,'module.mjs')));
  globalThis.fetch=async()=>{network++;throw Error('Compiler attempted inference/network.');};
  const id=n=>`${String(n).padStart(8,'0')}-1111-4111-8111-111111111111`;
@@ -25,6 +25,18 @@ try{
  const preview=output.artifacts[0],candidate=output.artifacts[1];
  assert.ok(!preview.html.includes('<script>'));assert.ok(!preview.html.includes('data-endpoint'));assert.ok(!preview.html.includes('href="https://whumpo.com/contact/'));assert.ok(preview.html.includes('<fieldset disabled'));assert.ok(preview.html.includes('&lt;script&gt;data&lt;/script&gt;'));
  assert.equal(candidate.html,m.publishedHTML(html,true,target.projectId,{config_json:m.canonicalJSON(form,4096),backend_publication_id:target.backend.reviewId}));
+ // D50: String.replace patterns in site text ($&, $', $`, $1) must render literally.
+ {const dollar="$& $' $` $1 $$",esc=v=>v.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const c2=m.siteConfig({...config,headline:dollar,aboutTitle:dollar,aboutText:dollar,sections:[{heading:dollar,text:dollar}]}),h2=m.renderSite(c2);
+  assert.equal(h2.split(`<h1>${esc(dollar)}</h1>`).length,2,'headline literal');
+  assert.ok(h2.includes(`<section class="about"><h2>${esc(dollar)}</h2><p>${esc(dollar)}</p></section>`),'about literal');
+  assert.ok(h2.includes(`<section class="feature"><h2>${esc(dollar)}</h2><p>${esc(dollar)}</p></section>`),'section literal');
+  const photo=m.renderPhotoPage(m.photoConfig({...c2,photos:[{id:id(9),alt:dollar}]}));
+  assert.ok(photo.includes(`alt="${esc(dollar)}"`),'photo alt literal');
+  const form2={...form,title:dollar,description:dollar},pub=m.publishedHTML(h2,false,id(1),{config_json:m.canonicalJSON(form2,4096),backend_publication_id:id(3)});
+  assert.ok(pub.includes(`<h2 id="whumpo-tool-title">${esc(dollar)}</h2>`),'form title literal');
+  const out2=await compile({...spec,statelessForm:{component:'stateless-form@1',config:form2}},{...target,website:{...target.website,digest:hash(h2)}},{componentId:'site-page@1',config:c2,html:h2});
+  assert.ok(out2.artifacts[0].html.includes(`<h2 id="whumpo-tool-title">${esc(dollar)}</h2>`),'inert preview literal');}
  assert.equal(output.services[1].destination,`https://${target.projectId}.whumpo.site/backend/${target.backend.reviewId}`);assert.equal(output.services[1].credentials,'omit');
  assert.match(output.previewHeaders['content-security-policy'],/^sandbox;/);assert.match(output.previewHeaders['content-security-policy'],/form-action 'none'/);assert.ok(!output.previewHeaders['content-security-policy'].includes('allow-scripts'));assert.match(output.candidateScriptPolicy,/^'sha256-[A-Za-z0-9+/]+=*'$/);
  for(const artifact of output.artifacts){assert.equal(artifact.bytes,Buffer.byteLength(artifact.html));assert.equal(artifact.digest,hash(artifact.html));}

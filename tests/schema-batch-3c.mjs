@@ -26,7 +26,7 @@ try{
  await check('the view reads the existing suppression list (D5): no new suppression table, keyed by the project owner',async()=>{
   const [{sql}]=await all("SELECT sql FROM sqlite_master WHERE name='notification_recipients'");
   assert.equal((sql.match(/contact_notification_suppressions/g)??[]).length,3);assert.equal((sql.match(/s\.user_id=/g)??[]).length,3);
-  assert.equal((await all("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '%suppression%' ORDER BY name")).map(r=>r.name).join(),'contact_notification_suppression_resets,contact_notification_suppressions');
+  assert.equal((await all("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '%suppression%' AND name<>'restore_suppressions' ORDER BY name")).map(r=>r.name).join(),'contact_notification_suppression_resets,contact_notification_suppressions');
   assert.deepEqual(await all('SELECT * FROM notification_recipients'),[]);
  });
  console.log(`Schema batch 3c: ${cases} cases passed on ${process.argv.includes('--d1')?'local D1':'SQLite'}; visitor_notification_addresses, staff_notification_optins, module_records.receipt_consent with its public CHECK, eight triggers and the notification_recipients view reusing the shared suppression list. No provider call.`);

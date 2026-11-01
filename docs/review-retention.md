@@ -61,6 +61,7 @@ Class, lane and turnover values:
 <!-- review-retention:inventory:start -->
 | Counted table | Capacity trigger(s) | Caps | Class | Lane | Turnover today | Deleted by | WH-009 class |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| `account_lifecycle_reviews` | `account_lifecycle_reviews_capacity` | owner 20 | review | R1 | expiring | app+cascade | account-exports |
 | `app_activation_reviews` | `app_activation_admit` | project 25 (filtered) · owner 25 (filtered) · owner 100 (filtered) · platform 2500 (filtered) · platform 5000 (filtered) | review | R1 | active-only | none | visitor-app-data |
 | `app_auth_challenges` | `app_challenge_admit` | project 5 (filtered) · project 50 · platform 1000 | inventory | R6 | expiring | app+trigger+cascade | visitor-identity |
 | `app_daily_usage` | `app_run_admit` | owner 100 (window) · platform 500 (window) · platform 1000 (window) | rate | R6 | window | app | visitor-app-data |
@@ -110,7 +111,7 @@ Class, lane and turnover values:
 | `directories` | `directory_capacity` | owner ≤62 · owner ≤250 · platform ≤1000 · platform ≤2000 | version | R4 | owner-removable | cascade | directories |
 | `directory_reviews` | `directory_review_insert` | project 25 (filtered) · owner 25 (filtered) · owner 100 (filtered) · platform 2500 (filtered) · platform 5000 (filtered) | review | R1 | active-only | cascade | directories |
 | `domain_claims` | `domain_claim_quota` | project 3 · owner 10 · platform 80 | inventory | R6 | owner-removable | trigger+cascade | domains-dns |
-| `domain_connections` | `domain_connection_capacity`, `domain_connection_owner` | project 25 (filtered) · owner 25 (filtered) · owner 100 (filtered) · platform 80 (filtered) · platform 2500 (filtered) · platform 5000 (filtered) | operation | R3 | active-only | none | domains-dns |
+| `domain_connections` | `domain_connection_capacity`, `domain_connection_owner` | project 25 (filtered) · owner 25 (filtered) · owner 100 (filtered) · platform 80 (filtered) · platform 2500 (filtered) · platform 5000 (filtered) | operation | R3 | active-only | cascade | domains-dns |
 | `feature_preview_grants` | `feature_preview_admit` | owner 1000 · platform 20000 | inventory | R6 | lifetime | cascade | feature-preview-authority |
 | `github_backups` | `github_backup_owner` | project 25 (filtered) · owner 25 (filtered) · owner 100 (filtered) · platform 2500 (filtered) · platform 5000 (filtered) | operation | R3 | active-only | cascade | github-backups |
 | `github_token_vault` | `github_token_quota` | owner 10 | inventory | R6 | owner-removable | app+cascade | connections |
@@ -136,11 +137,11 @@ Class, lane and turnover values:
 | `owner_email_change_limits` | `owner_email_change_limit_rate` | account 3 (filtered) · account 5 (filtered) · other 3 (filtered) | rate | R6 | expiring | app+cascade | owner-email-change-limits |
 | `owner_security_reviews` | `owner_security_review_new` | account 20 (filtered) | inventory | R6 | expiring | app+cascade | owner-security-reviews |
 | `photo_scan_tickets` | `photo_scan_ticket_quota` | owner 100 · platform 5000 | evidence | R5 | lifetime | cascade | safety-checks |
-| `project_files` | `project_file_quota` | project 20 · owner 50 · platform 500 | inventory | R6 | owner-removable | trigger+cascade | project-media |
+| `project_files` | `project_file_quota` | project 20 · owner 50 · platform 500 | inventory | R6 | owner-removable | app+trigger+cascade | project-media |
 | `project_files+file_cleanup` | `project_file_cleanup_capacity` | platform 500 | inventory | R6 | owner-removable | app+trigger+cascade | project-media |
 | `project_spec_applies` | `project_spec_apply_admit` | project 500 · platform 20000 | receipt | R2 | lifetime | cascade | configuration-authority |
 | `project_spec_proposals` | `project_spec_proposal_admit` | project 50 · platform 4000 | review | R1 | expiring | app+trigger+cascade | project-configurations |
-| `projects` | `project_quota` | owner 20 | inventory | R6 | owner-removable | cascade | projects |
+| `projects` | `project_quota` | owner 20 | inventory | R6 | owner-removable | app+cascade | projects |
 | `push_devices` | `push_device_limit` | account 20 | inventory | R6 | expiring | app+cascade | contact-notifications |
 | `push_events` | `push_event_limit` | account 20 (window) · account 100 (window) | receipt | R2 | expiring | app+cascade | contact-notifications |
 | `rule_approvals` | `rule_approval_new` | other 200 | inventory | R6 | owner-removable | cascade | connector-receipts |

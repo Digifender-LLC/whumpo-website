@@ -234,7 +234,7 @@ try{
  function reorder(value){if(Array.isArray(value))return value.map(reorder);if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).reverse().map(([k,v])=>[k,reorder(v)]));return value;}
  assert.deepEqual(await m.compileProjectSpecification(reorder(content),reorder(lock)),output);
  const mutableLock=m.currentCompilerLock();mutableLock.modules.length=0;assert.deepEqual(m.currentCompilerLock(),lock);
- for(const mutate of [l=>{l.compiler.digest='0'.repeat(64);},l=>{l.compiler.version=1;},l=>{l.compiler.version=2;},l=>{l.compiler.version=3;},l=>{l.compiler.version=4;},l=>{l.compiler.version=5;},l=>{l.schemaVersion=2;},l=>{l.modules[0].digest='0'.repeat(64);},l=>{l.modules[0].dependencies.push('invented');},l=>{l.components=[];},l=>{l.approved=true;}]){const bad=clone(lock);mutate(bad);await rejectsAsync(()=>m.compileProjectSpecification(content,bad),'COMPILER_LOCK_MISMATCH');}
+ for(const mutate of [l=>{l.compiler.digest='0'.repeat(64);},l=>{l.compiler.version=1;},l=>{l.compiler.version=2;},l=>{l.compiler.version=3;},l=>{l.compiler.version=4;},l=>{l.compiler.version=5;},l=>{l.compiler.version=6;},l=>{l.schemaVersion=2;},l=>{l.modules[0].digest='0'.repeat(64);},l=>{l.modules[0].dependencies.push('invented');},l=>{l.components=[];},l=>{l.approved=true;}]){const bad=clone(lock);mutate(bad);await rejectsAsync(()=>m.compileProjectSpecification(content,bad),'COMPILER_LOCK_MISMATCH');}
  const available=[lock.compiler,...lock.modules,...lock.components].map(a=>({...a,state:'available'}));
  m.assertCompilerAvailable(lock,available);
  for(let n=0;n<available.length;n++){const withdrawn=clone(available);withdrawn[n].state='withdrawn';rejects(()=>m.assertCompilerAvailable(lock,withdrawn),'COMPILER_UNAVAILABLE');}

@@ -61,14 +61,14 @@ export function navigationSection(view:string):'chat'|'dashboard'|'pages'|'setti
  if(view==='profile'||essentialDestinations.some(item=>item.view===view))return 'help';
  return null;
 }
-const reservedLabels=new Set(['chat','dashboard','yourpages','pages','settings','help','helpandaccount','profile','yourprofile','signout','accounthelp','skiptoworkspace',...essentialDestinations.map(item=>item.label)].map(label=>normalized(label)));
+const reservedLabels=new Set(['chat','dashboard','yourpages','pages','settings','help','helpandaccount','profile','yourprofile','signout','accounthelp','skiptoworkspace','Account data and closure',...essentialDestinations.map(item=>item.label)].map(label=>normalized(label)));
 function normalized(label:string){return label.toLowerCase().replace(/&/g,'and').replace(/[^a-z0-9]/g,'');}
 /** A generated page cannot impersonate or shadow a fixed control by name. */
 export const pageSuffix='your page';
 export function pageNavigationLabel(label:string){return reservedLabels.has(normalized(label))?label+' ('+pageSuffix+')':label;}
 /** Screen readers get a comma pause instead of a spoken parenthesis. */
 export function pageAccessibleName(label:string){return pageNavigationLabel(label)===label?label:label+', '+pageSuffix;}
-const pageless=new Set(['saved-work','safety','support','security','profile','operator-safety','missing']);
+const pageless=new Set(['saved-work','safety','support','security','profile','operator-safety','account','missing']);
 let origin='dashboard';
 /** Remember the last non-fixed page opened in this tab. A reload or a new tab
  * forgets it and returns to Dashboard. */

@@ -15,7 +15,8 @@ export async function currentSiteFixtureHandlers(){
   export {default as worker} from './src/index';
   export {comparisonErrorResponse} from './src/comparison-page';
   export {hashToken,newSessionToken} from './src/security';
-  export {admitWorkspace} from './src/workspace-identity/admission';
+  export {admitWorkspace,settlementDatabase} from './src/workspace-identity/admission';
+  export {markStandardAIUncertain} from './src/standard-ai-usage';
   export {resolveIdentity} from './src/workspace-identity/authority';
   export {createWebsite,prepareSpecification,readSpecificationProposal,readSpecification,specificationPreview,applySpecificationCommand} from './src/project-specification/store';
   export {readChat,sendChat,sendChatControl,sendConversation,chatState} from './src/chat';
@@ -46,6 +47,11 @@ export async function currentSiteFixtureHandlers(){
   export * as modulePolicy from './src/shared-modules/policy';
   export {moduleCatalog} from './src/project-specification/catalog';
   export {moduleCompositions} from './src/module-compositions';
+  export {continueAccountClosures,closureContinuation,ownerActions,needsSupportKeys} from './src/account-lifecycle/closure';
+  export {settleFirstKeys} from './src/account-closure/review';
+  export {assertExportWithinBudget} from './src/account-lifecycle/export';
+  export * as githubConnection from './src/github-connection';
+  export * as githubGrant from './src/github-grant-revocation';
   export {validateSpecification} from './src/project-specification/v3/schema';
   export {jsonDigest} from './src/project-specification/v2/json';
   export {readViewBinding,readSavedViewComponent} from './src/workspace-view-bindings';
