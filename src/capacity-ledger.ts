@@ -1,7 +1,7 @@
 // WH-043 first slice: the capacity ledger as pure, immutable functions over plain data, with explicitly SYNTHETIC terms. No D1, network, clock, provider or Stripe call, no
 // schema, and nothing here is wired into a route, billing path or admission: the lot, expiry and rollover rules are the proposal in docs/resource-pool-economics.md and are
 // not enabled billing terms, and no purchased balance exists. Units are integer micro-units (never floats). Every operation carries an id: repeating it with the same body is a
-// no-op, repeating it with a different body is refused, so concurrent or replayed work settles exactly once. Balances are never read from, translated from or revived from
+// no-op, repeating it with a different body is refused. Cross-writer serialization belongs to capacity-ledger-store.ts. Balances are never read from, translated from or revived from
 // the retired test-unit tables: the ledger only knows entries it created (version 1).
 export class LedgerError extends Error {
  constructor(readonly code: string, detail: string) { super(`${code}: ${detail}`); this.name = 'LedgerError'; }
@@ -84,7 +84,7 @@ export function reserve(l: Ledger, i: { id: string; units: number; at: number; w
   check(lots.reduce((s, x) => s + x.remaining, 0) >= i.units, 'INSUFFICIENT_CAPACITY', 'not enough live capacity; nothing was held');
   let need = i.units; const allocation: Allocation[] = [];
   for (const lot of lots) { if (!need) break; const take = Math.min(need, lot.remaining); lot.remaining -= take; need -= take; allocation.push({ lotId: lot.id, units: take }); }
-  next.reservations[id] = { id, units: i.units, at: i.at, state: 'held', allocation, consumed: [], settledUnits: 0, refundedUnits: 0 };
+  Object.defineProperty(next.reservations, id, { value: { id, units: i.units, at: i.at, state: 'held', allocation, consumed: [], settledUnits: 0, refundedUnits: 0 }, enumerable: true, writable: true, configurable: true });
  });
 }
 
@@ -93,7 +93,7 @@ export function settle(l: Ledger, i: { id: string; actualUnits: number; at: numb
  const id = ref(i.id, 'id');
  check(isUnits(i.actualUnits) && isTime(i.at), 'INVALID_INPUT', 'actualUnits and at');
  return apply(l, 'settle', id, i.at, i, next => {
-  const r = next.reservations[id]; check(r, 'UNKNOWN_RESERVATION', id);
+  const r = Object.hasOwn(next.reservations, id) ? next.reservations[id] : undefined; check(r, 'UNKNOWN_RESERVATION', id);
   check(r.state === 'held', 'ALREADY_SETTLED', `${id} is ${r.state}`);
   check(i.actualUnits <= r.units, 'EXCEEDS_RESERVATION', 'work beyond the hold needs a new reservation');
   let left = i.actualUnits; const consumed: Allocation[] = [];
@@ -106,7 +106,7 @@ export function settle(l: Ledger, i: { id: string; actualUnits: number; at: numb
 export function release(l: Ledger, i: { id: string; at: number }) {
  const id = ref(i.id, 'id'); check(isTime(i.at), 'INVALID_INPUT', 'at');
  return apply(l, 'release', id, i.at, i, next => {
-  const r = next.reservations[id]; check(r, 'UNKNOWN_RESERVATION', id);
+  const r = Object.hasOwn(next.reservations, id) ? next.reservations[id] : undefined; check(r, 'UNKNOWN_RESERVATION', id);
   check(r.state === 'held', 'ALREADY_SETTLED', `${id} is ${r.state}`);
   for (const a of r.allocation) giveBack(lotOf(next, a.lotId), a.units, i.at);
   r.state = 'released';
@@ -118,11 +118,16 @@ export function refund(l: Ledger, i: { id: string; reservationId: string; units:
  const id = ref(i.id, 'id'), rid = ref(i.reservationId, 'reservationId');
  check(isUnits(i.units, 1) && isTime(i.at), 'INVALID_INPUT', 'units and at');
  return apply(l, 'refund', id, i.at, i, next => {
-  const r = next.reservations[rid]; check(r, 'UNKNOWN_RESERVATION', rid);
+  const r = Object.hasOwn(next.reservations, rid) ? next.reservations[rid] : undefined; check(r, 'UNKNOWN_RESERVATION', rid);
   check(r.state === 'settled', 'NOT_SETTLED', rid);
   check(r.refundedUnits + i.units <= r.settledUnits, 'REFUND_EXCEEDS_SETTLEMENT', 'a refund cannot exceed what was consumed');
-  let left = i.units;
-  for (const c of [...r.consumed].reverse()) { const back = Math.min(left, c.units); left -= back; if (back) giveBack(lotOf(next, c.lotId), back, i.at); if (!left) break; }
+  let left = i.units, skipped = r.refundedUnits;
+  for (const c of [...r.consumed].reverse()) {
+   const prior = Math.min(skipped, c.units); skipped -= prior;
+   const back = Math.min(left, c.units - prior); left -= back;
+   if (back) giveBack(lotOf(next, c.lotId), back, i.at);
+   if (!left) break;
+  }
   r.refundedUnits += i.units;
  });
 }
