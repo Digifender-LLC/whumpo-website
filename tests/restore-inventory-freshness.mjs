@@ -128,7 +128,7 @@ try{
    await run("INSERT INTO owner_email_change_limits(kind,account_id,at) VALUES('request',?,?)",owner.account,Date.now());
    if(deliverable)await run("INSERT INTO owner_email_change_limits(kind,address_key,at) VALUES('send',?,?)",key(changeId==='change-one'?'b':'c'),Date.now());
    await run("INSERT INTO owner_email_changes(change_id,account_id,request_id,request_hash,new_address,new_address_hash,epoch,created_at,expires_at,state,revision,history,deliverable) VALUES(?,?,?,?,?,?,1,?,?,'pending',1,'[\"pending\"]',?)",
-    changeId,owner.account,'request-'+changeId,key('a'),address,key(changeId==='change-one'?'b':'c'),Date.now(),Date.now()+3600000,deliverable?1:0);
+    changeId,owner.account,'request-'+changeId,key('a'),address,key(changeId==='change-one'?'b':'c'),now,now+3600000,deliverable?1:0); // One clock read: the schema requires exactly one hour between them.
   };
   await pending('change-one','one@example.test',false);
   const beforeSupersede=await register(inventory);await assertResult(beforeSupersede,inventory);
