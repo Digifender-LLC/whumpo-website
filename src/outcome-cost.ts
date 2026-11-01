@@ -1,5 +1,5 @@
 // WH-078: cost per successful owner outcome, by architecture class. Pure functions over plain data: no database, network, clock or provider, and nothing here
-// is wired into a route, producer or admission path. Cost events remain evidence about consumption; the report charges, credits, admits and throttles nothing
+// is wired into a route or admission path. Cost events remain evidence about consumption; the report charges, credits, admits and throttles nothing
 // (`customerUnits` stays 0 upstream). An outcome record names a class and a result with closed vocabularies only, so no prompt, source, visitor text, name or
 // free-form reason can enter analytics. Events join an outcome only by the same owner and task reference, are de-duplicated to their latest revision first, and
 // join at most once. Observed cost, tariff estimates, shadow estimates, unknown dimensions and unfinished work are reported apart; pooled standing overhead is
@@ -75,25 +75,36 @@ function put(b: Bucket, e: CostEvent) {
  add(b.side, e); add(into(b.byCategory, dim.financeCategory), e);
  if (e.aiTier) add(into(b.byTier, e.aiTier), e);
 }
-const view = (s: Side, what: string) => ({ events: s.events, knownMicros: exact(knownOf(s), what), unknownEvents: s.unknownEvents, unfinishedEvents: s.unfinished, boundedExposureMicros: exact(s.bounded, what + ' exposure'), unboundedExposureEvents: s.unbounded });
+const view = (s: Side, what: string) => ({ events: s.events, knownMicros: exact(knownOf(s), what), observedMicros: exact(s.known, what + ' observed'), tariffMicros: exact(knownOf(s) - s.known, what + ' tariff'), unknownEvents: s.unknownEvents, unfinishedEvents: s.unfinished, boundedExposureMicros: exact(s.bounded, what + ' exposure'), unboundedExposureEvents: s.unbounded });
 const complete = (s: Side) => s.unknownEvents === 0 && s.unfinished === 0;
 
+/** Exact receipt links only, not semantic task grouping. The event and its idempotency key are never rewritten. */
+export type OutcomeTaskLink = { ownerId: string; taskRef: string; outcomeTaskRef: string; projectId: string };
 /**
  * One row per outcome class plus the fallback picture and what could not be attributed. `events` may hold several revisions and repeats; `outcomes` are validated.
  * Per-success cost is null unless the class has a successful outcome, and `complete` says whether any unknown or unfinished event sits under it: an incomplete
  * number is a lower bound, never an estimate of the total.
  */
-export function outcomeCostReport(events: readonly CostEvent[], outcomes: readonly unknown[]) {
+export function outcomeCostReport(events: readonly CostEvent[], outcomes: readonly unknown[], taskLinks: readonly OutcomeTaskLink[] = []) {
  const records = outcomes.map(validateOutcome);
  const index = new Map<string, OutcomeRecord>();
  for (const r of records) { const k = `${r.ownerId}|${r.taskRef}`; check(!index.has(k), 'DUPLICATE_OUTCOME', 'one outcome per owner and task'); index.set(k, r); }
+ const links = new Map<string, OutcomeTaskLink>();
+ for (const link of taskLinks) {
+  check(plain(link) && Object.keys(link).length === 4 && ['ownerId', 'taskRef', 'outcomeTaskRef', 'projectId'].every(k => Object.hasOwn(link, k)), 'INVALID_TASK_LINK', 'exact receipt link fields');
+  check(UUID.test(link.ownerId) && UUID.test(link.projectId) && REF.test(link.taskRef) && REF.test(link.outcomeTaskRef), 'INVALID_TASK_LINK', 'receipt identities');
+  const key = `${link.ownerId}|${link.taskRef}`, target = index.get(`${link.ownerId}|${link.outcomeTaskRef}`);
+  check(target && (!index.has(key) || link.taskRef === link.outcomeTaskRef) && !links.has(key), 'INVALID_TASK_LINK', 'one unambiguous owner-scoped outcome per source task');
+  links.set(key, link);
+ }
  const { heads, duplicatesDropped } = latestHeads(events);
  const perClass = new Map<OutcomeClass, Bucket>(outcomeClasses.map(c => [c, bucket()]));
  const perOutcome = new Map<string, boolean>();
  const unattributed = bucket(), pooled = bucket();
  for (const e of heads) {
   if (e.workClass === 'standing' || e.attribution.scope === 'platform') { put(pooled, e); continue; }
-  const r = e.taskRef === null ? undefined : index.get(`${e.attribution.ownerId}|${e.taskRef}`);
+  const key = `${e.attribution.ownerId}|${e.taskRef}`, link = links.get(key);
+  const r = e.taskRef === null || (link && e.attribution.projectId !== null && e.attribution.projectId !== link.projectId) ? undefined : index.get(link ? `${link.ownerId}|${link.outcomeTaskRef}` : key);
   if (!r) { put(unattributed, e); continue; }
   put(perClass.get(r.outcomeClass)!, e);
   // Only observed or estimated usage counts as cost for the outcome: a shadow estimate is shown apart and never makes an outcome 'costed'.
