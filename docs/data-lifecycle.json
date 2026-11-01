@@ -1510,7 +1510,7 @@
       ],
       "scope": "project",
       "purpose": "Owned-domain verification, reviewed DNS and custom-hosting serving authority.",
-      "currentRetention": "Unknown provider operations are retained; RESTRICT references intentionally block cascades. Verification tokens and provider IDs may remain in receipts.",
+      "currentRetention": "An unsettled hostname or DNS action is retained and a trigger refuses the account delete while one exists; settled hostname records and operator reconciliation receipts leave with the account's cascade. Verification tokens and provider IDs may remain in receipts until then.",
       "proposedRetention": "Stop Whumpo serving and reconcile owned custom-hostname detach. Retain minimum unknown-operation/proof metadata until settled. Never cancel registration, delete a zone or remove unrelated DNS implicitly.",
       "deletionAuthority": "Exact owner routing/disconnect/removal review plus provider ownership evidence; customer zone/repository ownership remains external.",
       "exportPolicy": "Hostname, intended configuration and customer-visible receipts; omit proof tokens, operational identifiers and internal reconciliation notes.",
@@ -2949,17 +2949,20 @@
     {
       "id": "account-closures",
       "tables": [
-        "account_closures"
+        "account_closures",
+        "account_closure_steps"
       ],
       "scope": "owner",
-      "purpose": "The durable record of a platform account closure (WH-018): opaque closure and account identifiers, state, revision, the review digest, quiesce and close times, a bounded failure code and the list of states. No inventory content, name, address or reason text. It has no foreign key to users, so it outlives the account it closes.",
-      "currentRetention": "Table exists; no route, job or store writes it yet (WH-018 slice 1 is pure source). States only move forward (requested, reviewed, confirmed, quiescing, closed, with cancelled and failed), a closed, cancelled or failed row is immutable, and one open closure per account is allowed. A table trigger refuses every delete. The retention window is not approved.",
+      "purpose": "The durable record of a platform account closure (WH-018): opaque closure and account identifiers, state, revision, the review digest, quiesce and close times, a bounded failure code and the list of states, plus the ordered cleanup journal (step name, state, content-free counts, attempts, time and whether the owner or maintenance ran it). No inventory content, name, address or reason text. Neither table has a foreign key to users, so both outlive the account they close.",
+      "currentRetention": "Written by the WH-018 closure runtime (schema batch 7). States only move forward (requested, reviewed, confirmed, quiescing, closed; the machine also allows cancelled and failed, which no route reaches), a closed, cancelled or failed row is immutable, and one open closure per account is allowed. The confirmed and quiescing states are the stop-new-work flag read by workspace admission. Table triggers refuse every delete of a closure or of a journal step. The retention window is not approved.",
       "proposedRetention": "Unapproved: keep the record until a later reviewed decision sets a window; it is the deletion evidence that restore must replay.",
       "deletionAuthority": "None today: no delete path exists. A later reviewed cleanup decision would own it; account closure never cascades to it.",
-      "exportPolicy": "Allowlist the owner's own closure state and times. Never the review digest or other accounts' records.",
+      "exportPolicy": "Allowlist the owner's own closure state, step names and times while the account exists. Never the review digest or other accounts' records. After closure nothing remains addressable by the owner.",
       "references": [
         "schema/platform.sql",
+        "src/account-lifecycle/schema.sql",
         "src/account-closure/machine.ts",
+        "src/account-lifecycle/closure.ts",
         "docs/account-closure.md",
         "docs/data-protection.md"
       ],
@@ -2970,13 +2973,101 @@
           "control-d1"
         ],
         "readers": [
-          "Restricted operator diagnostics and, later, the owner's own closure status; no support, model or Chat reader"
+          "The owner's own closure status while the account exists (fresh-proof workspace session); restricted operator diagnostics; no support, model or Chat reader"
         ],
         "processors": [
-          "Deterministic closure state machine; no model or provider"
+          "Deterministic closure state machine and the journaled cleanup steps; no model. Provider revocation runs only through the existing GitHub and Cloudflare disconnect paths."
         ],
         "remainingExposure": [
           "Rows link an opaque account identifier to the fact and timing of a closure request; no content."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
+      "id": "account-exports",
+      "tables": [
+        "account_lifecycle_reviews",
+        "account_export_usage"
+      ],
+      "scope": "owner",
+      "purpose": "The exact review an owner confirms before a platform account export download or an account closure (WH-018; project-scope export reviews for WH-187 use the same table), and the per-account monthly export counters. A review holds a content-free binding (account id, revisions and counts the owner saw), an opaque digest and a ten-minute expiry; the counters hold a month and two integers. No credential, Chat text, filename, object key or provider identifier.",
+      "currentRetention": "A review expires after ten minutes, is single use for a download (the download deletes it), is purged when the owner prepares another review after expiry and is capped at 20 open rows per account. Counters are kept for the life of the account (10 downloads and 5,000 photo reads per month). Both tables cascade with the account and, for project-scope reviews, with the project.",
+      "proposedRetention": "Keep the current behaviour: reviews are transient and counters are bounded by the account.",
+      "deletionAuthority": "Expiry and the download delete reviews; the account cascade deletes counters. No operator or model deletes them.",
+      "exportPolicy": "Not exported: a review is a transient authorization and the counters are operational. The export itself is produced from current data (docs/account-closure.md).",
+      "references": [
+        "src/account-lifecycle/schema.sql",
+        "src/account-lifecycle/closure.ts",
+        "src/account-lifecycle/export.ts",
+        "docs/account-closure.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "The owning account through the closure-permitting lifecycle routes; no support, model or Chat reader"
+        ],
+        "processors": [
+          "The lifecycle routes only; no model or provider"
+        ],
+        "remainingExposure": [
+          "A review binding reveals the shape of an account (counts and revisions) for at most ten minutes."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
+      "id": "restore-suppressions",
+      "tables": [
+        "restore_suppressions"
+      ],
+      "scope": "owner",
+      "purpose": "The restore-reconciliation ledger (WH-019): one row per erased or revoked subject, holding only an opaque identifier, its kind (account, project, visitor, staff grant, module record, file, provider token), whether it was deleted or revoked and, for staff grants, the access revision that ended the grant. It is written by database triggers inside the same transaction as the erasure or revocation (every path, including cascades) and consulted by guard triggers in later commits, so a logical restore of an older row is refused and an isolated whole-database restore is reconciled by the operator replay before it serves anyone. No name, value, filename, object key, ciphertext, token or address is stored.",
+      "currentRetention": "Written by triggers (schema batch 7). Append-only: a row is never deleted and only a staff row's revision may rise; table triggers refuse every other update and every delete. It has no foreign key to any table, so it survives the account cascade. No retention window is approved, so identifiers are kept until a later reviewed decision; the ledger is bounded at 100,000 entries per replay.",
+      "proposedRetention": "Unapproved: keep each entry at least as long as the longest backup that could still contain the erased subject (D1 Time Travel is documented as 30 days, and any longer-lived export copy), then a reviewed compaction. Until that is decided nothing is removed.",
+      "deletionAuthority": "None today: no delete path exists. A later reviewed compaction decision would own it; account closure and erasure only append.",
+      "exportPolicy": "Never exported: it records that a subject was erased, not who they were. An owner's export is built from current data and does not include ledger rows.",
+      "references": [
+        "src/restore-suppression/schema.sql",
+        "src/restore-suppression.ts",
+        "tools/recovery-drill.mjs",
+        "docs/account-closure.md",
+        "docs/restore-admission.md",
+        "docs/data-protection.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "Operator restore tooling that captures and replays the ledger; no customer, support, model or Chat reader"
+        ],
+        "processors": [
+          "Database triggers and the operator-only replay module; no model or provider"
+        ],
+        "remainingExposure": [
+          "An opaque identifier proves that a subject once existed and when it was erased; it names no person and carries no content."
         ],
         "decision": "retain-and-verify",
         "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",

@@ -124,8 +124,12 @@ export async function finishCloudflare(db:D1Database,userId:string,state:string,
  }finally{await custody.retire();await cleanupCloudflare(db,config,transport,userId);}
 }
 export async function disconnectCloudflare(db:D1Database,userId:string,configuration:CloudflareConfig|undefined,transport:typeof fetch=fetch){
+ await revokeCloudflareCustody(db,userId,configuration,transport);return cloudflareStatus(db,userId,configuration);
+}
+/** The disconnect effect without the status read; shared by disconnect and WH-018 account closure (owner or maintenance). */
+export async function revokeCloudflareCustody(db:D1Database,userId:string,configuration:CloudflareConfig|undefined,transport:typeof fetch=fetch){
  await db.batch([db.prepare('UPDATE cloudflare_oauth_states SET cancelled=1 WHERE user_id=?').bind(userId),db.prepare("UPDATE cloudflare_token_vault SET state='revoking' WHERE user_id=?").bind(userId)]);
- await cleanupCloudflare(db,configuration,transport,userId);return cloudflareStatus(db,userId,configuration);
+ await cleanupCloudflare(db,configuration,transport,userId);
 }
 export async function cloudflareZones(db:D1Database,userId:string,configuration:CloudflareConfig|undefined,page=1,transport:typeof fetch=fetch){
  const config=required(configuration),scope=connectionFeature(userId,'cloudflare',null,'read');await requireFeature(db,scope);if(!Number.isSafeInteger(page)||page<1||page>100)throw new ConnectionError(400,'Choose a valid zone page.');

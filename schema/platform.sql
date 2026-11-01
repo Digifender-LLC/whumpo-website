@@ -221,7 +221,7 @@ BEGIN SELECT RAISE(ABORT,'github_connection_refresh_identity'); END;
 -- of the exact retired credential set; unknown dispatch has no TTL/retry escape.
 CREATE TABLE github_grant_revocations (
  id TEXT PRIMARY KEY,
- user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  client_id TEXT NOT NULL,
  github_user_id TEXT NOT NULL,
  login TEXT NOT NULL,
@@ -297,9 +297,9 @@ CREATE TABLE github_backups (
 
 CREATE TABLE domain_connections (
  id TEXT PRIMARY KEY,
- user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
- claim_id TEXT NOT NULL REFERENCES domain_claims(id) ON DELETE RESTRICT,
- project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ claim_id TEXT NOT NULL REFERENCES domain_claims(id) ON DELETE CASCADE,
+ project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
  hostname TEXT NOT NULL,
  zone_id TEXT NOT NULL,
  target TEXT NOT NULL,
@@ -317,7 +317,7 @@ CREATE TABLE domain_connections (
 
 CREATE TABLE domain_reconciliations (
  id TEXT PRIMARY KEY,
- connection_id TEXT NOT NULL REFERENCES domain_connections(id) ON DELETE RESTRICT,
+ connection_id TEXT NOT NULL REFERENCES domain_connections(id) ON DELETE CASCADE,
  user_id TEXT NOT NULL,
  hostname TEXT NOT NULL,
  zone_id TEXT NOT NULL,
@@ -366,7 +366,7 @@ CREATE TABLE cloudflare_dns_actions (
  created_at TEXT NOT NULL,expires_at TEXT NOT NULL,
  state TEXT NOT NULL DEFAULT 'review' CHECK(state IN ('review','sending','uncertain','applied','unchanged','observed')),
  provider_id TEXT,detail TEXT NOT NULL DEFAULT ''
-, record_type TEXT NOT NULL DEFAULT 'TXT' CHECK(record_type IN ('TXT','CNAME')), connection_id TEXT REFERENCES domain_connections(id) ON DELETE RESTRICT, proof_token TEXT);
+, record_type TEXT NOT NULL DEFAULT 'TXT' CHECK(record_type IN ('TXT','CNAME')), connection_id TEXT REFERENCES domain_connections(id) ON DELETE CASCADE, proof_token TEXT);
 
 CREATE TABLE version_removals (
  id TEXT PRIMARY KEY REFERENCES chat_turns(id) ON DELETE CASCADE,
@@ -1765,7 +1765,7 @@ CREATE TABLE content_risk_reversals (
 );
 
 CREATE TABLE maintenance_health (
- job TEXT PRIMARY KEY CHECK(job IN ('identity','chat_drafts','imports','hosting','health','fair_use','traffic','funnel','guest_previews','email_changes','reviews','applications','contacts','photos','github','cloudflare','jobs','job_dispatch')),
+ job TEXT PRIMARY KEY CHECK(job IN ('identity','chat_drafts','imports','hosting','health','fair_use','traffic','funnel','guest_previews','email_changes','reviews','applications','contacts','photos','github','cloudflare','jobs','job_dispatch','account_closures')),
  run_id TEXT NOT NULL,
  started_at INTEGER NOT NULL CHECK(started_at>=0),
  finished_at INTEGER,
@@ -2523,7 +2523,10 @@ END;
 
 CREATE TRIGGER domain_reconciliation_no_update BEFORE UPDATE ON domain_reconciliations BEGIN SELECT RAISE(ABORT,'domain_reconciliation_immutable'); END;
 
-CREATE TRIGGER domain_reconciliation_no_delete BEFORE DELETE ON domain_reconciliations BEGIN SELECT RAISE(ABORT,'domain_reconciliation_immutable'); END;
+-- Immutable while the account exists; the receipt leaves only with the account's cascade, like the other retained rows.
+CREATE TRIGGER domain_reconciliation_no_delete BEFORE DELETE ON domain_reconciliations
+WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
+BEGIN SELECT RAISE(ABORT,'domain_reconciliation_immutable'); END;
 
 CREATE TRIGGER photo_removal_identity BEFORE UPDATE ON photo_removals
 WHEN NEW.id!=OLD.id OR NEW.user_id!=OLD.user_id OR NEW.project_id!=OLD.project_id OR NEW.file_id!=OLD.file_id OR NEW.name!=OLD.name OR NEW.expires_at!=OLD.expires_at OR OLD.status!='pending' OR NEW.status!='applied'
@@ -6127,6 +6130,19 @@ BEGIN SELECT RAISE(ABORT,'account_closure_guard'); END;
 -- No age-based retention is approved (docs/data-lifecycle.json); the record is kept until a later reviewed decision.
 CREATE TRIGGER account_closure_retained BEFORE DELETE ON account_closures
 BEGIN SELECT RAISE(ABORT,'account_closure_retained'); END;
+
+-- WH-018 closure guards for the records above that used to be RESTRICT. A settled grant review and a review or disconnected hostname record leave with
+-- the account (their own retention triggers stand aside once the owner row is gone, as for every other cascaded receipt), but an unsettled
+-- provider effect still refuses the account or project delete: it may hold a grant or a live hostname.
+CREATE TRIGGER github_grant_account_unresolved BEFORE DELETE ON users
+WHEN EXISTS(SELECT 1 FROM github_grant_revocations WHERE user_id=OLD.id AND state IN ('dispatching','uncertain'))
+BEGIN SELECT RAISE(ABORT,'github_grant_unresolved'); END;
+CREATE TRIGGER domain_connection_account_active BEFORE DELETE ON users
+WHEN EXISTS(SELECT 1 FROM domain_connections WHERE user_id=OLD.id AND state NOT IN ('review','disconnected'))
+BEGIN SELECT RAISE(ABORT,'domain_connection_active'); END;
+CREATE TRIGGER domain_connection_project_active BEFORE DELETE ON projects
+WHEN EXISTS(SELECT 1 FROM domain_connections WHERE project_id=OLD.id AND state NOT IN ('review','disconnected'))
+BEGIN SELECT RAISE(ABORT,'domain_connection_active'); END;
 
 -- WH-145 rule approval (docs/connectors.md "Rule authority"). One row is the owner's approval of one deterministic rule revision to run
 -- one connector action: operation, destination digest, body template digest, per-period limit and credential are fixed at issue.

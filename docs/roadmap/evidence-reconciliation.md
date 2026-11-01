@@ -48,8 +48,8 @@ Outcome: evidence strings were added to 7 entries (WH-140, WH-131, WH-013, WH-03
 | WH-012 | readiness `planned`; no issue mapped | `tests/photo-scan-results.mjs` exists for recording synthetic scan results; no bounded dispatch or result reconciliation worker. | `photo-scan-results.mjs` and `current-schema.mjs` passed: they prove result recording and the private delivery gate only. | None. | Do not mark complete; scanner implementation remains owner-deferred. |
 | WH-014 | readiness `planned`; no issue mapped | Issue #171 exists but the backlog `issue` is null. Draft PR #170 claims the gate; not on main. | `content-screening-decisions.mjs` and `backend-imports.mjs` passed: pre-existing screening and import quarantine only. | None. | PR #170 changes the schema (219 to 228 tables) and needs an owner-authorized cutover. Do not mark complete. |
 | WH-016 | readiness `planned`; no issue mapped | Issue #172 exists but the backlog `issue` is null. Its comment says the work is in draft PR #170; nothing on main. | Not run: nothing on main. | None. | Do not mark complete; policy adoption needs counsel, schema cutover needs the owner. |
-| WH-018 | readiness `planned`; no issue mapped | Account closure inventory only; draft PR #170 claims export and closure, not on main. | `tests/account-closure-inventory.mjs` passed (read-only inventory). | None. | Do not mark complete. |
-| WH-019 | readiness `planned`; no issue mapped | Draft PR #170 claims the restore-suppression ledger; nothing on main. | Not run. | None. | Do not mark complete. |
+| WH-018 | readiness `planned`; no issue mapped | Open PR #554 (replaces the closed #170 draft) holds the source and local tests for the reviewed export, resumable closure and maintenance continuation; not on main, not deployed, not accepted, and its schema cutover has not been run. Restore acceptance of a closed account is WH-019 (#563). | `tests/account-lifecycle.mjs` (also `--d1`), `tests/account-lifecycle-client.mjs`, `tests/account-closure-contract.mjs` and `tests/account-closure-inventory.mjs`, synthetic and offline, on the PR branch only. | None. | Do not mark complete; schema cutover C1 needs the owner. |
+| WH-019 | readiness `planned`; no issue mapped | Open PR #563, stacked on #554, holds the restore-suppression ledger and its gated replay; nothing on main. | Not run from main; the PR's own suites run on its branch only. | None. | Do not mark complete. |
 | WH-030 | readiness `planned`; no issue mapped | Private nominations exist (consent, withdrawal); no promotion or update governance. | `backend-nominations.mjs` and `backend-nomination-intake.mjs` passed: nomination intake only. | None. | Do not mark complete. |
 | WH-084 | readiness `planned`; no issue mapped | Android shell Chat screen from PR #159; web Chat is separate. No native Chat journey, explicit review or identity. | `tests/natural-chat.mjs` passed: web Chat only. | None. | Do not infer native Chat from web Chat tests or the shell. |
 | WH-073 | readiness `planned`; no issue mapped | At `ca17c6a`: only `docs/workload-placement.md`; open PRs #175 and #176 addressed it. Since then #175 merged as `64cab65` and added its own evidence entry (no longer empty); #176 was closed and replaced by #203, and #205 is a further open slice. | Not run by this slice. | None from this slice. | WH-073 stays open per its own entry; do not duplicate the open slices. |
@@ -446,3 +446,19 @@ node tests/verification-profiles.mjs && node tests/lifecycle-catalog.mjs
 node tools/verify.mjs fast
 git diff --check
 ```
+
+## Slice 4 (November 1, 2026 UTC, source `6871a7a`)
+
+Source and local verification only; no Cloudflare read, deployment, provider call or status upgrade. WH-001 remains open.
+
+| Fact | Before | Now (measured) |
+| --- | --- | --- |
+| Composed schema | 221 tables / 1,063 objects / 6 files (Oct 11) | 245 tables / 1,273 objects / 8 files, digest `855ca3e91b40d4b99b4c93fe765ae616c4de416dcf6b12f8ba2d66e33a41b214` (`currentSchemaArtifact().expected`) |
+| Data classes | 51 current + 6 planned | 60 current + 6 planned (`node tests/lifecycle-catalog.mjs`: 245 tables, 42 rejected cases) |
+| Control database bound in the three Worker configs | `whumpo-control-2026-10-04` | `whumpo-control-2026-11-01` (#567) |
+| Verify profiles (script counts) | fast 8, protection 15, site 3, app 1 | fast 21, protection 15, site 140, app 1, security 9, tenant 4 |
+| Roadmap | 176 tasks | 191 tasks, 7 phases (`node tools/roadmap.mjs validate`) |
+
+Corrected: `README.md` (schema row) and `docs/capability-matrix.md` (Schema and Control database rows). Not verified: deployed database/Worker state after #567, the #567 deploy outcome, all dated release readbacks, and device/browser/provider evidence. Merges of #567-#570 on November 1 went in on owner instruction with the Review gate red and no `review:clean` status; the open question is recorded in draft PR #571.
+
+Commands: `node tests/current-schema.mjs`, `node tests/lifecycle-catalog.mjs`, `node tools/roadmap.mjs validate`, a one-line import of `tools/current-schema.mjs` and `tools/verify.mjs` for counts.

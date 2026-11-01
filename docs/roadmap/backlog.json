@@ -1042,7 +1042,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-11-01 UTC: merged to main as #554 (9b08c1f) and deployed to the test platform in the November 1 C1 cutover (docs/releases.md; release b6a348b6, database whumpo-control-2026-11-01). Six account routes with journaled steps (freeze, withdraw, operations, credentials, holds, purge), hourly and daily maintenance continuation, owner page /workspace/account, reviewed export with a download allowance, and one admission fence that stops new work. Acceptance lines: delayed OAuth callbacks and new work refused (tests/account-lifecycle.mjs, SQLite and --d1); customer GitHub repositories and Cloudflare zones left in place and counted in the freeze step; holds and unresolved operations stay visible (pending, waiting, support-only refusal); the final receipt survives the account cascade. In-flight requests settle their own receipts through settlementDatabase (tests/standard-ai-chat.mjs). Independent whole-PR Opus review passed at 95f676c. Local synthetic evidence only: tests/account-lifecycle-browser.mjs passed on ampere; no live closure of a real account, no Orca. WH-018 stays open: the owner cannot cancel after confirm, there is no automatic failed state, retention windows are interim, and the dependency WH-117 is still blocked."
+      ]
     },
     {
       "id": "WH-019",
@@ -1083,7 +1085,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-11-01 UTC: merged to main as #563 (d6ea2b9) on top of WH-018 and deployed in the same C1 cutover. A restore_suppressions ledger is written by triggers inside every erasure and revocation commit; guard triggers refuse a later restore of an erased account, project, photo, visitor, record or token row; for a whole-database restore, replayRestoreSuppressions merges the current ledger into an isolated candidate and applies it atomically (including generated deletes of RESTRICT and NO ACTION children, src/restore-blockers.generated.ts, checked by pnpm check) before checkRestoreSuppressions reports clear (tests/restore-suppression.mjs, tests/recovery-drill.mjs, local D1 drill). Independent whole-PR Opus review passed at 7c9ff9c. Not shown: a drill on the real deployed platform database, a provider backup, WH-059, or any reviewed traffic switch; the whole-backup replay group runs on SQLite only. WH-019 stays open for that evidence."
+      ]
     },
     {
       "id": "WH-020",
@@ -2741,7 +2745,8 @@
         "Sandbox slice authorized independently of commercial cost-period gates: optional onboarding Checkout, exact paid invoice coverage, renewal reconciliation and restricted billing portal. WH-022/023 remain prerequisites for real-money activation. Proration, refunds/disputes and resource-wallet funding remain open.",
         "2026-10-01: PR31 merged, release fcb8723b deployed 114 migrations/four Workers/16 assets. Synthetic owner completed mobile onboarding against deployed APIs and a real Stripe sandbox test-card Checkout; webhook independently recorded one paid invoice before any refresh. Paid state did not bypass project-first gate. Invoice portal and end-of-period cancellation accepted; paid access preserved, standard AI/customer credits zero, fixture cleaned. Detailed scoped evidence in docs/stripe-sandbox.md. Full commercial lifecycle remains open.",
         "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.",
-        "2026-10-31 UTC (WH-001 catch-up; commit bodies read, no Stripe call made): PR #521 (993345e) makes catalog() in src/stripe-billing.ts the single gate for every Stripe path, closed unless STRIPE_CHECKOUT_OPEN is exactly \"true\" (Q-007; it is not set), and PR #522 (b278f27) holds the publishable key as an unread public var. PR #523 (151e5a6) moves to an Elements checkout with in-app cancel, resume, payment-method update and retry in place of the billing portal and the pricing table, with random idempotency keys, hosted-invoice links for 3D Secure renewals and API pin 2026-10-28.endive. Test keys and livemode===false checks only; no live product, price or webhook exists. Checkout stays closed; this task's readiness is unchanged and WH-041 still holds the activation decision."
+        "2026-10-31 UTC (WH-001 catch-up; commit bodies read, no Stripe call made): PR #521 (993345e) makes catalog() in src/stripe-billing.ts the single gate for every Stripe path, closed unless STRIPE_CHECKOUT_OPEN is exactly \"true\" (Q-007; it is not set), and PR #522 (b278f27) holds the publishable key as an unread public var. PR #523 (151e5a6) moves to an Elements checkout with in-app cancel, resume, payment-method update and retry in place of the billing portal and the pricing table, with random idempotency keys, hosted-invoice links for 3D Secure renewals and API pin 2026-10-28.endive. Test keys and livemode===false checks only; no live product, price or webhook exists. Checkout stays closed; this task's readiness is unchanged and WH-041 still holds the activation decision.",
+        "2026-11-01 UTC, source and local tests only (no Stripe call, deploy, schema or wiring): src/entitlement-facts.ts adds paid entitlement as a pure function of recorded verified financial facts with synthetic terms (grace window and refund/dispute treatment are proposals pending WH-041). Only a verified event records; duplicate and reordered delivery converge on the same facts and answer (all permutations tested); an id repeated with a different body is refused; an annual purchase covers exactly its interval with no extra month; full refunds and lost disputes void an invoice as compensating facts, partial refunds and open disputes keep access and say so; a failed renewal earns bounded grace unless cancelled. tests/entitlement-facts.mjs (9 cases) is in the site profile. Still open: persistence (schema cutover), the webhook and reconciliation wiring, proration, resource-wallet funding, and real refund/dispute event mapping."
       ]
     },
     {
@@ -2787,7 +2792,8 @@
       "issue": null,
       "owner": null,
       "evidence": [
-        "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass."
+        "2026-10-02 UTC: implementation now consumes the explicit completed shared admission handoff WH-122/#65. Full cumulative feature/collaboration acceptance remains in WH-090/#62 and WH-104; this corrects a dependency on the feature being built, not an entitlement bypass.",
+        "2026-11-01 UTC: first offline slice, source only, local synthetic evidence. src/capacity-ledger.ts (docs/resource-pool-economics.md, Capacity ledger mechanisms) is an integer micro-unit ledger with monthly, rollover and purchased lots, earliest-expiry-first holds with no overdraft, id-keyed idempotent operations (a changed body is refused), exactly-once settlement and refunds (idempotent against one ledger value, not across two writers), expiry that never revives, bounded rollover from monthly lots (once per source and per target, within twice the next allowance), zero metering of standard assistance, a purchased lot only with a consent receipt reference, and a balance view that answers unknown (no number) on partial or unknown telemetry. Explicitly synthetic terms; no schema, no wiring, no purchased balance, nothing reads the retired test-unit tables. tests/capacity-ledger.mjs (10 cases, conservation checked after every operation and over a seeded random run of more than 2,000 operations; the reviewer's lot-id collision, second-rollover and twice-the-allowance findings are fixed and each fix fails the test when reverted). Covers locally: standard assistance debits zero, replayed work settles once (two concurrent writers from one base are not merged here), rollover expiry and refunds settle once, unknown telemetry never shows false full capacity, no automatic upgrade or top-up. Not done, WH-043 stays open: persistent D1 ledger tables (schema change and owner cutover), atomic cross-service reservations, the proposed-versus-actual balance UI, premium funding, WH-041 terms approval, WH-023 calibration, pnpm test:billing and test:plan-periods integration."
       ]
     },
     {
@@ -6078,7 +6084,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-11-01 UTC: source-only measurement layer, local synthetic evidence. src/outcome-cost.ts (docs/cost-events.md, Cost per outcome) classifies outcomes as configuration, composition, custom-component, custom-backend or dedicated-runtime, de-duplicates cost events to their latest revision, attributes them by owner and task, separates observed cost, tariff-priced usage, shadow estimates, unknown and unfinished events and standard from premium AI tier, keeps standing and platform cost as pooled overhead that is never allocated, records fallback reasons from a closed list and repeated missing capabilities as short tokens, and compares classes only on equivalent evidence (never as a percentage); breakEvenOutcomes returns unknown when an input is not measured. tests/outcome-cost.mjs (8 cases) fails when de-duplication or owner scoping is removed. Acceptance lines covered locally: no content in analytics, no double counting, standard AI non-billable (customerUnits stays 0, tiers apart), observed/estimated/unknown/pooled separate, equivalent-outcome comparison. Not done, WH-078 stays open: the composition-versus-custom benchmark on the WH-020 corpus (needs the paid evaluation, owner approval), a producer of outcome records from the planner and owner-change flow, support and module-maintenance cost, and any wiring."
+      ]
     },
     {
       "id": "WH-079",

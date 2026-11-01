@@ -32,6 +32,7 @@ Written 2026-10-31. Unattended work is continuing; this list is what is waiting 
 
 14. **WH-016 abuse intake.** Built as a held PR, waiting on your reading of the scanning deferral (WH-011). Nothing merges until you say so.
 15. **Agent-readiness for sites (free, owner-only: Cloudflare zone settings).** On both `whumpo.site` and `whumpo.com`: turn on AI Crawl Control, Content Signals and the managed robots.txt, and decide the training choice (allow or disallow AI training; this is the one real decision). Markdown for Agents needs Pro or above and its default allows AI training, so leave it off on the Free plan. Separately, adding the `cloudflare/mcp` remote server to an agent needs your sign-in; agents cannot do it for you.
+16. **Paid invoice retention schedule (WH-018, needed before paid plans go live).** Account closure keeps paid invoice records (class `billing`: "minimum real invoice/transaction records use a separately approved accountant/legal schedule"), so an owner who has ever paid cannot close their account, and support cannot do it for them, until a schedule is approved. The closure page says so plainly. Decide the minimum records and their term with your accountant (and counsel where needed); then closure can delete everything else and keep only that minimum. Nothing is affected while checkout is off. Recommended: decide before the first real payment.
 
 ## 2. Money
 

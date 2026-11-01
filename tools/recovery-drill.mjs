@@ -5,6 +5,7 @@ import {join} from 'node:path';
 import {stableCMSDatabase,captureCMSDatabase,restoreCapturedCMSDatabase} from './cms-database-snapshot.mjs';
 import {fileInventory,copyTree,same} from './release-manifest.mjs';
 import {writePrivate,readPrivate,pathCheck} from './operator-private-files.mjs';
+import {currentSchema} from './current-schema.mjs';
 import {captureRestoreArchive,captureRestoreRecordSnapshot,restoreRecordIdentity} from './restore-admission.mjs';
 
 // WH-008 local disaster-recovery drill helpers. Operator/local only: there is no
@@ -17,7 +18,9 @@ const id=v=>typeof v==='string'&&/^[a-zA-Z0-9_-]{1,128}$/.test(v);
 const ident=s=>'"'+s.replaceAll('"','""')+'"';
 const fenced={servingAllowed:false,providerDispatchAllowed:false,retirementAllowed:false};
 const limits={objects:10000,objectBytes:1048576,statements:20000,sqlBytes:64*1024*1024};
-export class DrillHold extends Error{constructor(code){super('Recovery drill step held: '+code);this.code=code;}}
+export class DrillHold extends Error{constructor(code,cause){super('Recovery drill step held: '+code);this.code=code;if(cause!==undefined)this.detail=causeDetail(cause);}}
+// Error name, code and a bounded message with long hex runs and quoted values removed: why a step refused, never the data it touched.
+const causeDetail=e=>`${e&&e.name||'Error'}${e&&e.code?' '+e.code:''}: ${String(e&&e.message||e).replace(/[0-9a-fA-F]{32,}/g,'<hex>').replace(/'[^']*'/g,"'<v>'").slice(0,160)}`;
 const hold=(value,code)=>{if(!value)throw new DrillHold(code);};
 const pointFile='recovery-point.json';
 
@@ -209,6 +212,28 @@ export async function restoreDiscrepancies(candidateDb,sourceDb){
  for(const [key,row] of restored){const now=current.get(key);if(!now)add('resurrected',row.table);else if(now.sha256!==row.sha256)add('rolledBack',row.table);}
  for(const [key,row] of current)if(!restored.has(key))add('lostSinceSnapshot',row.table);
  return {...fenced,sourceAvailable:true,candidateRecords:candidate.length,sourceRecords:source.length,counts,tables};
+}
+
+/** WH-019: reconcile an isolated restored candidate with the CURRENT suppression ledger before anything is admitted or served.
+ * `suppression` is the bundled src/restore-suppression.ts module (capture, replay, check), injected so this operator tool stays plain
+ * JavaScript. The ledger is captured from the operator-selected current source; replay is one atomic batch on the candidate and is
+ * idempotent; the gate must then report clear. Counts and codes only. Without a current source there is no ledger to replay, so
+ * reconciliation is unavailable and the candidate stays held. */
+export async function reconcileRestoreSuppressions(candidateDb,sourceDb,suppression){
+ hold(suppression&&['captureRestoreSuppressions','replayRestoreSuppressions','checkRestoreSuppressions','triggerSetDigest'].every(n=>typeof suppression[n]==='function'),'suppression-module');
+ // A caller that reads only `holds` must see a hold when there is nothing to reconcile with.
+ let ledger;try{ledger=await suppression.captureRestoreSuppressions(sourceDb);}catch{return {...fenced,status:'unavailable',holds:['suppression-source-unavailable'],reconciliation:'unavailable-without-current-source'};}
+ const expected={triggerSha256:await currentTriggerSha256(suppression)};
+ const before=await suppression.checkRestoreSuppressions(candidateDb,ledger,expected);
+ let replay;try{replay=await suppression.replayRestoreSuppressions(candidateDb,ledger,{source:sourceDb,name:'recovery drill candidate'});}catch(error){throw new DrillHold('suppression-replay-refused',error);}
+ const after=await suppression.checkRestoreSuppressions(candidateDb,ledger,expected);
+ hold(after.clear,'suppression-not-clear');
+ return {...fenced,status:'reconciled',holds:[],entries:ledger.entries.length,ledgerSha256:ledger.sha256,pendingBefore:before.pending,applied:replay.applied};
+}
+/** The trigger set of the current schema artifact, which a reconciled candidate must carry exactly. */
+async function currentTriggerSha256(suppression){
+ const sql=new DatabaseSync(':memory:');
+ try{sql.exec(await currentSchema());return await suppression.triggerSetDigest(sql.prepare("SELECT name,sql FROM sqlite_master WHERE type='trigger'").all());}finally{sql.close();}
 }
 
 // WH-008 refresh (2026-10-29): coverage, key-version and interrupted-cutover inventories.

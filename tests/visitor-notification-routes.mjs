@@ -282,7 +282,8 @@ try{
   await run("UPDATE module_access_roles SET state='revoked' WHERE visitor_id=? AND role='staff'",a1.who);
   assert.equal((await go(a,a1,'account/notifications')).json.staffOptIn,false,'role revocation removes the opt-in');
   assert.equal((await R.notificationRecipients(db,a.project,'staff')).length,0);
-  await run("UPDATE module_access_roles SET state='granted' WHERE visitor_id=? AND role='staff'",a1.who);
+  // A role cannot come back at its old revision after a revocation (WH-019 ledger); a new owner review carries a newer one.
+  await run("UPDATE module_access_roles SET state='granted',access_revision=access_revision+1 WHERE visitor_id=? AND role='staff'",a1.who);
   assert.equal((await go(a,a1,'account/notifications')).json.staffOptIn,false,'granting the role again does not opt in');
   await go(a,a1,N+'staff/opt-in',{body:{}});assert.equal((await go(a,a1,N+'address/remove',{body:{}})).json.staffOptIn,false);assert.equal((await R.notificationRecipients(db,a.project)).length,0);
   assert.equal((await one('SELECT count(*) n FROM staff_notification_optins WHERE visitor_id=?',a1.who)).n,0);
