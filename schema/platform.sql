@@ -2066,6 +2066,9 @@ CREATE UNIQUE INDEX domain_connection_provider ON domain_connections(zone_id,pro
 
 CREATE INDEX domain_connection_owner ON domain_connections(user_id,created_at DESC);
 
+-- WH-051: the service_client_blocked_contacts view joins contact_reviews on project_id for every published-page read where contact is enabled; without a project_id-leading index that is a scan of every review.
+CREATE INDEX contact_reviews_project ON contact_reviews(project_id,expected_revision);
+
 CREATE INDEX photo_removals_file ON photo_removals(file_id,status);
 
 CREATE UNIQUE INDEX cloudflare_one_active ON cloudflare_token_vault(user_id) WHERE state='active';
