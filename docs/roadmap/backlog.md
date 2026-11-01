@@ -928,7 +928,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-11-01 UTC: merged to main as #554 (9b08c1f) and deployed to the test platform in the November 1 C1 cutover (docs/releases.md; release b6a348b6, database whumpo-control-2026-11-01). Six account routes with journaled steps (freeze, withdraw, operations, credentials, holds, purge), hourly and daily maintenance continuation, owner page /workspace/account, reviewed export with a download allowance, and one admission fence that stops new work. Acceptance lines: delayed OAuth callbacks and new work refused (tests/account-lifecycle.mjs, SQLite and --d1); customer GitHub repositories and Cloudflare zones left in place and counted in the freeze step; holds and unresolved operations stay visible (pending, waiting, support-only refusal); the final receipt survives the account cascade. In-flight requests settle their own receipts through settlementDatabase (tests/standard-ai-chat.mjs). Independent whole-PR Opus review passed at 95f676c. Local synthetic evidence only: tests/account-lifecycle-browser.mjs passed on ampere; no live closure of a real account, no Orca. WH-018 stays open: the owner cannot cancel after confirm, there is no automatic failed state, retention windows are interim, and the dependency WH-117 is still blocked.
 
 ## WH-019 — Reconcile erasure and revocation after restores
 
@@ -981,7 +981,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 
 ### Evidence
 
-No completion evidence recorded. Add verified results and their scope to the execution issue; planning readiness is never a completion status.
+- 2026-11-01 UTC: merged to main as #563 (d6ea2b9) on top of WH-018 and deployed in the same C1 cutover. A restore_suppressions ledger is written by triggers inside every erasure and revocation commit; guard triggers refuse a later restore of an erased account, project, photo, visitor, record or token row; for a whole-database restore, replayRestoreSuppressions merges the current ledger into an isolated candidate and applies it atomically (including generated deletes of RESTRICT and NO ACTION children, src/restore-blockers.generated.ts, checked by pnpm check) before checkRestoreSuppressions reports clear (tests/restore-suppression.mjs, tests/recovery-drill.mjs, local D1 drill). Independent whole-PR Opus review passed at 7c9ff9c. Not shown: a drill on the real deployed platform database, a provider backup, WH-059, or any reviewed traffic switch; the whole-backup replay group runs on SQLite only. WH-019 stays open for that evidence.
 
 ## WH-020 — Benchmark customer outcomes and decide production inference privacy
 
