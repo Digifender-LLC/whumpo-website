@@ -58,6 +58,7 @@
     "test:domain-purchase-contract": "node tests/domain-purchase-contract.mjs",
     "test:domain-purchase-store": "node tests/domain-purchase-store.mjs && node tests/domain-purchase-store.mjs --d1",
     "test:domain-purchase-lifecycle": "node tests/domain-purchase-lifecycle.mjs && node tests/domain-purchase-lifecycle.mjs --d1",
+    "test:domain-purchase-journey": "node tests/domain-purchase-journey.mjs && node tests/domain-purchase-journey.mjs --d1",
     "test:workspace-agent": "node tests/workspace-agent.mjs",
     "test:workspace-read": "node tests/workspace-read.mjs",
     "test:github-connection": "node tests/github-connection.mjs && node tests/github-token-lifecycle.mjs",
