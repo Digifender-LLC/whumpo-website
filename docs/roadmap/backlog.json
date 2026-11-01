@@ -2712,7 +2712,8 @@
       "issue": null,
       "owner": null,
       "evidence": [
-        "2026-10-01: owner authorized Stripe sandbox signup/invoice/billing work and supplied a verified sk_test key. No real-money activation. Sandbox contract: docs/stripe-sandbox.md."
+        "2026-10-01: owner authorized Stripe sandbox signup/invoice/billing work and supplied a verified sk_test key. No real-money activation. Sandbox contract: docs/stripe-sandbox.md.",
+        "2026-11-01 UTC (docs only; no Stripe or Cloudflare call): owner answers recorded in docs/roadmap/wh-041-owner-decisions.md. Q-29: no automatic refunds, cancellation at period end, refunds at owner discretion through support. Q-30: 7 days of paid access after a failed renewal (read, export and existing published sites stay up; no new expensive work), not applied to cancelled subscriptions, not yet implemented. Q-31 (lost dispute), Q-32 (sales tax) and Q-33 (top-up and rollover) are still open. Checkout remains closed and no activation is implied; WH-041 stays blocked until every term is decided and tax gets qualified review."
       ]
     },
     {
