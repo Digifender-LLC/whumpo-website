@@ -285,6 +285,26 @@ export async function retryLatestInvoice(db:D1Database,env:Config,user:string,tr
   return subscriptionStatus(db,env,user);
  });
 }
+type PaymentFact={id:string;livemode:boolean;payment_intent?:string|null;refunded?:boolean;status?:string};
+type InvoicePayments={has_more:boolean;data:{invoice?:string|{id?:string}|null}[]};
+/**
+ * WH-042: a fully refunded charge or a dispute closed as lost ends the coverage of the invoice that payment settled. The event only names the object: it is read again, must be
+ * test mode, and is followed through its payment intent to the invoice payment. Partial refunds, open disputes and payments for no invoice of ours change nothing. Any shape
+ * that does not match throws (a 409 the provider retries), so an unrecognised event never silently keeps or removes access. The row is a compensating fact; the invoice is untouched.
+ */
+async function voidInvoiceForPayment(db:D1Database,env:Config,type:'charge.refunded'|'charge.dispute.closed',id:string,transport:typeof fetch){
+ const fact=await stripe<PaymentFact>(env,(type==='charge.refunded'?'charges/':'disputes/')+id,transport);
+ requireMatch(fact.id===id&&fact.livemode===false);
+ if(type==='charge.refunded'?fact.refunded!==true:fact.status!=='lost')return;
+ const intent=fact.payment_intent;requireMatch(objectId(intent,'pi'));
+ const found=await stripe<InvoicePayments>(env,'invoice_payments?'+new URLSearchParams({'payment[type]':'payment_intent','payment[payment_intent]':intent!,limit:'2'}),transport);
+ requireMatch(found.has_more===false&&Array.isArray(found.data)&&found.data.length<=1);
+ if(!found.data.length)return;
+ const ref=found.data[0].invoice,invoiceId=typeof ref==='string'?ref:ref?.id;
+ requireMatch(objectId(invoiceId,'in'));
+ if(!await db.prepare('SELECT id FROM stripe_paid_invoices WHERE id=?').bind(invoiceId).first())return;
+ await db.prepare('INSERT INTO stripe_invoice_voids(invoice_id,reason,source_id,created_at) VALUES(?,?,?,?) ON CONFLICT(invoice_id) DO NOTHING').bind(invoiceId,type==='charge.refunded'?'refund':'dispute-lost',id,now()).run();
+}
 export async function stripeBillingWebhook(request:Request,db:D1Database,env:Config,transport:typeof fetch=fetch){
  const event=await readStripeEvent(request,env),id=event.data?.object?.id;
  catalog(env);
@@ -308,6 +328,8 @@ export async function stripeBillingWebhook(request:Request,db:D1Database,env:Con
   const c=await db.prepare('SELECT user_id FROM stripe_customers WHERE customer_id=?').bind(invoice.customer).first();
   const invoiceSub=invoiceSubscription(invoice);
   if(c&&objectId(invoiceSub,'sub'))await syncSubscription(db,env,invoiceSub,invoice.customer,transport,id);
+ }else if(event.type==='charge.refunded'&&objectId(id,'ch')||event.type==='charge.dispute.closed'&&objectId(id,'dp')){
+  await voidInvoiceForPayment(db,env,event.type as 'charge.refunded'|'charge.dispute.closed',id as string,transport);
  }else if(event.type?.startsWith('customer.subscription.')&&objectId(id,'sub')){
   const sub=await stripe<Subscription>(env,'subscriptions/'+id,transport);requireMatch(sub.id===id&&sub.livemode===false);
   if(await db.prepare('SELECT user_id FROM stripe_customers WHERE customer_id=?').bind(sub.customer).first())await syncSubscription(db,env,id,sub.customer,transport);

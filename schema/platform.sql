@@ -1989,6 +1989,14 @@ CREATE TABLE stripe_paid_invoices (
  created_at INTEGER NOT NULL
 );
 
+-- WH-042: a full refund or a lost dispute is a compensating fact that ends an invoice's coverage. The invoice row stays immutable; the entitlement view reads past a voided one.
+CREATE TABLE stripe_invoice_voids (
+ invoice_id TEXT PRIMARY KEY REFERENCES stripe_paid_invoices(id) ON DELETE CASCADE,
+ reason TEXT NOT NULL CHECK(reason IN ('refund','dispute-lost')),
+ source_id TEXT NOT NULL,
+ created_at INTEGER NOT NULL
+);
+
 CREATE TABLE github_token_staging (
  token_id TEXT PRIMARY KEY REFERENCES github_token_vault(id) ON DELETE CASCADE,
  state_hash TEXT NOT NULL,
@@ -2362,7 +2370,7 @@ CREATE VIEW operator_contained_projects AS
 -- The one serving-stop predicate read by every public serving path (site host, visitor host, contact page, guest preview).
 CREATE VIEW operator_serving_stopped AS SELECT DISTINCT project_id FROM operator_contained_projects WHERE scope='serving';
 
-CREATE VIEW plan_entitlements AS SELECT user_id,plan_id,starts_at,ends_at FROM stripe_paid_invoices;
+CREATE VIEW plan_entitlements AS SELECT user_id,plan_id,starts_at,ends_at FROM stripe_paid_invoices p WHERE NOT EXISTS(SELECT 1 FROM stripe_invoice_voids v WHERE v.invoice_id=p.id);
 
 INSERT INTO cms_platform_deploy_lock("id","token","expires_at") VALUES(1,'','2000-01-01T00:00:00.000Z');
 
@@ -4508,6 +4516,12 @@ BEGIN SELECT RAISE(ABORT,'chat_result_closed'); END;
 
 CREATE TRIGGER stripe_invoice_delete_guard BEFORE DELETE ON stripe_paid_invoices
 WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) BEGIN SELECT RAISE(ABORT,'stripe_invoice_immutable'); END;
+
+CREATE TRIGGER stripe_invoice_void_immutable BEFORE UPDATE ON stripe_invoice_voids BEGIN SELECT RAISE(ABORT,'stripe_invoice_void_immutable'); END;
+
+-- Only the cascade from a deleted invoice may remove a void: deleting it alone would restore coverage.
+CREATE TRIGGER stripe_invoice_void_delete_guard BEFORE DELETE ON stripe_invoice_voids
+WHEN EXISTS(SELECT 1 FROM stripe_paid_invoices WHERE id=OLD.invoice_id) BEGIN SELECT RAISE(ABORT,'stripe_invoice_void_immutable'); END;
 
 CREATE TRIGGER plan_catalog_delete_guard BEFORE DELETE ON plan_catalog BEGIN SELECT RAISE(ABORT,'plan_catalog_immutable'); END;
 

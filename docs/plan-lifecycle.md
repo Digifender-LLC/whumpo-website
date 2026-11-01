@@ -15,3 +15,5 @@ The confirmation transaction checks owned current revisions, exact saved version
 ## Verification
 
 `tests/plan-periods.mjs` checks paid service intervals, tier ordering, expiry, preference non-authority, publication limits and current domain quote policy. `tests/subscriptions.mjs` verifies actual adapter behavior with a synthetic Stripe transport. `tests/billing.mjs` checks retired and unknown identities explicitly. See [current-only acceptance](current-version-policy.md) for source/deployment status.
+
+A fully refunded charge or a dispute closed as lost voids the invoice it settled (WH-042, `stripe_invoice_voids`): the invoice row is never edited, a compensating row ends its coverage and `plan_entitlements` skips it. Partial refunds and open disputes change nothing yet. Source and synthetic tests only, schema group C4 not cut over; the Stripe response shapes are not verified against the pinned API version.

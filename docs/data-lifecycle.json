@@ -1738,6 +1738,7 @@
         "stripe_subscription_orders",
         "stripe_subscriptions",
         "stripe_paid_invoices",
+        "stripe_invoice_voids",
         "capacity_preferences",
         "domain_funding_holds"
       ],
