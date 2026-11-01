@@ -44,6 +44,10 @@ jobs:
       # Outside every verify profile (WH-054), so only this step stops an unreviewed dynamic tenant SQL site; about 1 s.
       - name: Every dynamic SQL site is in the tenant allowlist
         run: node tests/tenant-sql-surface.mjs
+      # The WH-054 tenant gates (classification registry, trigger and view bodies, SQLite authorizer, SQL surface) are outside the deploy gate, and they went red unseen
+      # when a schema batch changed the column count (WH-018 review). Running all four here makes that a failed check before merge; about two minutes, Node 24 only.
+      - name: Tenant gates (registry, bodies, authorizer, SQL surface)
+        run: pnpm test:tenant-gates
       # Fails when AGENTS.md cites a path, pnpm script or tool version that no longer exists.
       - name: AGENTS.md is not stale
         run: node tools/agents-md-check.mjs

@@ -539,7 +539,7 @@ View components `members` and `approvals` register in the workspace view contrac
 | Transfer completion races removal, plan loss, closure or a hold | Guard rows decide once; the loser changes nothing. Under a hold, refused generically. |
 | Workspace closure starts while a transfer or invitation is open | They are cancelled by the freeze step; none completes afterwards. |
 | Owner deletes personal account right after starting closure | Allowed once closure has started; platform continues; the tenant is not stranded. |
-| Hold placed while closure is `closing` | Closure pauses at the holds step with a generic retention reason; workspace becomes `closed-held`. |
+| Hold placed while closure is `closing` | Closure pauses at the purge as a retained record, shown exactly like any other retained record (PR #554, decision D72); workspace becomes `closed-held`. |
 | Lost response on invite, claim, role change, remove, resume, transfer, closure | Authenticated readback by request ID; never auto-resend a first dispatch. |
 | Provider revocation after transfer is unknown | Visible pending obligation with retained readback authority; no new write. |
 | Plan loss during an unsent member-prepared job | Job stops before dispatch; status stays honest; no maintainer invoked. |

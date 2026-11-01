@@ -16,6 +16,7 @@
    "handleIdentityRequest",
    "exact-origin-gate",
    "handleSafetyCaseRequest",
+   "handleAccountLifecycleRequest",
    "workspaceIdentity",
    "handleWorkspace"
   ]
@@ -5795,7 +5796,7 @@
      "enforcedAt": [
       {
        "file": "src/workspace-identity/admission.ts",
-       "contains": "INSERT INTO identity_admission_checks(denied) SELECT 1 WHERE NOT (${gate.sql})"
+       "contains": "INSERT INTO identity_admission_checks(denied) SELECT CASE WHEN NOT (${gate.sql}) THEN 1 ELSE 2 END WHERE NOT (${gate.sql})"
       },
       {
        "file": "src/index.ts",
@@ -6163,7 +6164,7 @@
      "enforcedAt": [
       {
        "file": "src/workspace-identity/admission.ts",
-       "contains": "INSERT INTO identity_admission_checks(denied) SELECT 1 WHERE NOT (${gate.sql})"
+       "contains": "INSERT INTO identity_admission_checks(denied) SELECT CASE WHEN NOT (${gate.sql}) THEN 1 ELSE 2 END WHERE NOT (${gate.sql})"
       },
       {
        "file": "src/index.ts",
@@ -6217,6 +6218,169 @@
        "file": "tests/workspace-dashboard-http.mjs",
        "contains": "await json(o,api+'/mutate',input,db,403,'https://untrusted.example');",
        "asserts": "a cross-origin layout mutation is refused"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "account-lifecycle",
+   "title": "Owner account export and closure: prepare and download an account export, prepare, confirm, resume and read an account closure (WH-018)",
+   "privileged": [
+    "deletion",
+    "backup"
+   ],
+   "authorityClass": "session owner under closure-permitting admission; a fresh passkey (at most ten minutes) to download an export or confirm a closure; no Chat, agent action, model or restricted grant",
+   "entries": [
+    {
+     "file": "src/account-lifecycle/http.ts",
+     "kind": "exact",
+     "match": "export/prepare",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/account-lifecycle/http.ts",
+     "kind": "exact",
+     "match": "export/download",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/account-lifecycle/http.ts",
+     "kind": "exact",
+     "match": "closure/prepare",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/account-lifecycle/http.ts",
+     "kind": "exact",
+     "match": "closure/confirm",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/account-lifecycle/http.ts",
+     "kind": "exact",
+     "match": "closure/resume",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "file": "src/account-lifecycle/http.ts",
+     "kind": "exact",
+     "match": "closure/status",
+     "methods": [
+      "POST"
+     ]
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Every action resolves the ordinary workspace session and runs on a database admitted with closure permit, so each statement is batched with a current-identity assertion; the closure runtime is reachable from no other caller except the hourly maintenance continuation, which acts only on a durable quiescing closure row.",
+     "enforcedAt": [
+      {
+       "file": "src/account-lifecycle/http.ts",
+       "contains": "admitWorkspace(env.DB,principal,'permit')"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/account-lifecycle.mjs",
+       "contains": "await refused(await confirm(b,review),409,'stale_review');",
+       "asserts": "another account cannot confirm an owner's closure review"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "The mounted dispatcher runs after the global exact-Origin gate in handle(); every action is POST with a JSON body of at most 4 KiB.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(method) && !sameOrigin(request)) return error(403, \"Origin check failed\");"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/account-lifecycle.mjs",
+       "contains": "assert.equal(cross.status,403);",
+       "asserts": "a cross-origin closure request is refused before anything is read"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "evidenced",
+     "detail": "Confirming a closure and downloading an export elevate the workspace scope to a fresh passkey (at most ten minutes), which the committing batch rechecks; prepare, resume and status need only the current session.",
+     "enforcedAt": [
+      {
+       "file": "src/account-lifecycle/closure.ts",
+       "contains": "await requireFreshWorkspace(db,user);"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/account-lifecycle.mjs",
+       "contains": "await refused(await confirm(stale,review),401,'proof_required');",
+       "asserts": "a closure confirmation with a stale passkey is refused"
+      }
+     ]
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "A review is read by id, owner and kind, and an unexpired exact digest; the closure and every journal write are keyed by the owner's account, so another account's closure or export review is never visible.",
+     "enforcedAt": [
+      {
+       "file": "src/account-lifecycle/closure.ts",
+       "contains": "FROM account_lifecycle_reviews WHERE id=? AND user_id=? AND kind='closure' AND expires_at>?"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/account-lifecycle.mjs",
+       "contains": "await refused(await account(b,'export/download',{reviewId:prepared.id,reviewDigest:prepared.digest}),409,'stale_review');",
+       "asserts": "another account cannot download an owner's export review"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "One open closure per account is a unique index; the closure id is the review id, so a replayed confirmation returns the existing closure and another review cannot start a second one; an export review is consumed by its download in the same transaction as the monthly allowance.",
+     "enforcedAt": [
+      {
+       "file": "schema/platform.sql",
+       "contains": "CREATE UNIQUE INDEX account_closures_open"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/account-lifecycle.mjs",
+       "contains": "await refused(await account(a,'closure/prepare',{requestId:id()}),409,'closure_exists');",
+       "asserts": "a second closure for the same account is refused"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "Confirmation recomputes the exact binding (counts and owner actions) and refuses a changed account; an export download recomputes its project and module revisions; journal writes are compare-and-swap on the step's attempt count and valid only while the closure is quiescing.",
+     "enforcedAt": [
+      {
+       "file": "src/account-lifecycle/closure.ts",
+       "contains": "if(JSON.stringify(b.binding)!==review.binding_json)throw"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/account-lifecycle.mjs",
+       "contains": "await refused(await confirm(a,changed),409,'stale_review');",
+       "asserts": "a content change after the review invalidates it"
       }
      ]
     }
@@ -13129,6 +13293,14 @@
     {
      "file": "src/index.ts",
      "kind": "job",
+     "match": "47 * * * * account_closures",
+     "methods": [
+      "SCHEDULED"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "job",
      "match": "default imports",
      "methods": [
       "SCHEDULED"
@@ -13226,6 +13398,14 @@
      "file": "src/index.ts",
      "kind": "job",
      "match": "default jobs",
+     "methods": [
+      "SCHEDULED"
+     ]
+    },
+    {
+     "file": "src/index.ts",
+     "kind": "job",
+     "match": "default account_closures",
      "methods": [
       "SCHEDULED"
      ]
