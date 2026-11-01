@@ -130,6 +130,10 @@ await check('review findings: no lot-id collision revives expired units, one sou
  // the other order: the rollover exists first, then a monthly grant larger than the allowance it was sized for is refused
  let o=run(run(m.emptyLedger(),'grant',{id:'n2',kind:'monthly',periodKey:'2026-11',units:100*T,at:1,expiresAt:30*DAY}),'rollover',{id:'first',fromPeriod:'2026-11',toPeriod:'2026-12',previousAllowance:100*T,nextAllowance:100*T,at:29*DAY,expiresAt:60*DAY});
  throws(()=>m.grant(o,{id:'d2',kind:'monthly',periodKey:'2026-12',units:101*T,at:30*DAY,expiresAt:60*DAY}),'ALLOWANCE_MISMATCH');
+ throws(()=>m.grant(o,{id:'d2b',kind:'monthly',periodKey:'2026-12',units:99*T,at:30*DAY,expiresAt:60*DAY}),'ALLOWANCE_MISMATCH');
+ // a rollover sized for 1000 followed by a 100 grant would be 1100 against twice the real allowance (200): the grant must equal the allowance the rollover was sized for
+ const big=run(run(m.emptyLedger(),'grant',{id:'n3',kind:'monthly',periodKey:'2026-11',units:1000*T,at:1,expiresAt:30*DAY}),'rollover',{id:'sz',fromPeriod:'2026-11',toPeriod:'2026-12',previousAllowance:1000*T,nextAllowance:1000*T,at:29*DAY,expiresAt:60*DAY});
+ throws(()=>m.grant(big,{id:'d4',kind:'monthly',periodKey:'2026-12',units:100*T,at:30*DAY,expiresAt:60*DAY}),'ALLOWANCE_MISMATCH');
  assert.doesNotThrow(()=>m.grant(o,{id:'d3',kind:'monthly',periodKey:'2026-12',units:100*T,at:30*DAY,expiresAt:60*DAY}));
  // 4. Seeded random sequences: conservation and the no-revival rule after every applied operation.
  let seed=12345;const rnd=n=>{seed=(seed*1103515245+12345)&0x7fffffff;return seed%n;};

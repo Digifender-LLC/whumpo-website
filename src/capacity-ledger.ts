@@ -17,7 +17,7 @@ export const lotKinds = Object.freeze(['monthly', 'rollover', 'purchased'] as co
 export type LotKind = typeof lotKinds[number];
 export type Lot = { id: string; kind: LotKind; periodKey: string; granted: number; remaining: number; expiredUnits: number; grantedAt: number; expiresAt: number | null; carriedUnits: number;
  /** A monthly lot rolls into one target period, once. */ rolledTo: string | null;
- /** A rollover lot remembers the next allowance it was sized for: the period's monthly grant may not exceed it, so monthly plus rollover stays within twice that allowance. */ allowanceCap: number | null };
+ /** A rollover lot remembers the next allowance it was sized for: the period's monthly grant must equal it, so monthly plus rollover stays within twice that allowance. */ allowanceCap: number | null };
 type Allocation = { lotId: string; units: number };
 export type Reservation = { id: string; units: number; at: number; state: 'held' | 'settled' | 'released'; allocation: Allocation[]; consumed: Allocation[]; settledUnits: number; refundedUnits: number };
 export type Ledger = { version: 1; terms: 'synthetic-proposal'; lots: Lot[]; reservations: Record<string, Reservation>; ops: Record<string, string>; journal: { op: string; id: string; at: number }[] };
@@ -56,9 +56,9 @@ export function grant(l: Ledger, i: { id: string; kind: LotKind; periodKey: stri
  return apply(l, 'grant', id, i.at, i, next => {
   check(!next.lots.some(x => x.id === id), 'DUPLICATE_LOT', id);
   check(i.kind !== 'monthly' || !next.lots.some(x => x.kind === 'monthly' && x.periodKey === i.periodKey), 'DUPLICATE_PERIOD', 'one monthly grant per period');
-  // A rollover already sized for this period fixes the allowance: the monthly grant may not exceed it (monthly plus rollover stays within twice the allowance).
+  // A rollover already sized for this period fixes the allowance: the monthly grant must equal it, so rollover (at most that allowance) plus monthly stays within twice the allowance.
   const sized = next.lots.find(x => x.kind === 'rollover' && x.periodKey === i.periodKey);
-  check(i.kind !== 'monthly' || !sized || i.units <= (sized.allowanceCap as number), 'ALLOWANCE_MISMATCH', 'the monthly grant exceeds the allowance the rollover was sized for');
+  check(i.kind !== 'monthly' || !sized || i.units === sized.allowanceCap, 'ALLOWANCE_MISMATCH', 'the monthly grant must equal the allowance the rollover was sized for');
   next.lots.push({ id, kind: i.kind, periodKey: i.periodKey, granted: i.units, remaining: i.units, expiredUnits: 0, grantedAt: i.at, expiresAt: i.expiresAt, carriedUnits: 0, rolledTo: null, allowanceCap: null });
  });
 }
