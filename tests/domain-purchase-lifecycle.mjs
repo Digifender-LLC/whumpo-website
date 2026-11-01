@@ -418,6 +418,11 @@ try{
   shared.relockTransferOut=async req=>req.hostname===x.host?{kind:'rejected'}:relock.call(shared,req);
   try{for(let i=0;i<40;i++)await m.sweepTransfers(A,shared,base+15*DAY+i*HOUR,1);}finally{shared.relockTransferOut=relock;}
   assert.equal(await state(y),'failed','the second request was reached');assert.equal(await state(x),'unlocked','the stuck one stays open until the give-up age');
+  // 4. The re-lock endpoint keeps failing and the name leaves just before the give-up age: the final read still completes it, the give-up only ends a request nothing proves.
+  const g=await registered('b'),gt=T0+340*DAY;await start(g,gt);
+  shared.relockTransferOut=async req=>{if(req.hostname===g.host)throw Error('registrar refuses while a transfer is pending');return relock.call(shared,req);};
+  try{for(let t=gt+14*DAY;t<=gt+31*DAY;t+=5*HOUR){if(t>=gt+29*DAY+21*HOUR&&shared.isUnlocked(g.host))shared.completeTransfer(g.host);await m.sweepTransfers(A,shared,t);await m.reconcileTransfers(A,shared,t);}}finally{shared.relockTransferOut=relock;}
+  assert.equal(await state(g),'completed','a transfer that completed before the give-up age is not recorded as failed');assert.equal((await renewalState(g.host)).state,'transferred-out');
  });
 }finally{for(const f of files)f.close();}
 console.log(`Domain purchase lifecycle passed: ${cases} cases on ${d1?'actual local D1':'SQLite'}.`);

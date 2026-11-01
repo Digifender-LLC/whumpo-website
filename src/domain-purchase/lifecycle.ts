@@ -215,7 +215,7 @@ async function bump(db:Db,r:TransferRequest,to:TransferRequest['state'],now:numb
 }
 /** A transfer request no worker will finish never traps the owner: a claim older than the lease becomes an unknown outcome, and a request that stays unresolved or
  * unlocked longer than fourteen days is failed once the registrar confirms the name is locked again (`relockTransferOut`), which returns the name to active so the owner can start
- * again; an unconfirmed lock keeps it open and retried until thirty days, then it is failed anyway. */
+ * again; an unconfirmed lock keeps it open and retried until thirty days, then it is failed only if a final registrar read proves nothing. */
 export async function sweepTransfers(db:Db,registrar:RegistrarAdapter,now:number,limit=50){
  let moved=0;
  const stuck=(await db.prepare(`SELECT ${transferColumns} FROM domain_transfer_requests WHERE state='requested' AND updated_at<=?1 LIMIT ?2`).bind(now-domainPurchaseBounds.leaseMs,limit).all<TransferRow>()).results;
@@ -226,10 +226,12 @@ export async function sweepTransfers(db:Db,registrar:RegistrarAdapter,now:number
    const r=toTransfer(row);
    // The name is returned to active only once the registrar confirms it is locked again. An unconfirmed lock keeps the request open and moves it behind the others
    // until it is retried, up to the give-up age.
-   if(await relockConfirmed(registrar,r)||now-r.requestedAt>=relockGiveUpMs){if(await bump(db,r,'failed',now,{}))moved++;}
+   if(await relockConfirmed(registrar,r)){if(await bump(db,r,'failed',now,{}))moved++;continue;}
    // An unconfirmed lock may be because the name already left: read it now, so the registrar's own report completes the request instead of waiting for a reconcile pass that this
-   // touch would otherwise keep postponing. Nothing proven leaves it open, behind the others.
-   else if((await readTransfer(db,registrar,row,now))?.state!==r.state)moved++;
+   // touch would otherwise keep postponing. Only when that read proves nothing and the give-up age has passed is the request failed (on the version the read left it at).
+   const read=await readTransfer(db,registrar,row,now);
+   if(read&&read.state!==r.state)moved++;
+   else if(read&&now-r.requestedAt>=relockGiveUpMs&&await bump(db,read,'failed',now,{}))moved++;
   }catch{/* next */}
  }
  return {moved};
