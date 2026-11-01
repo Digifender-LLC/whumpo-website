@@ -462,3 +462,17 @@ Source and local verification only; no Cloudflare read, deployment, provider cal
 Corrected: `README.md` (schema row) and `docs/capability-matrix.md` (Schema and Control database rows). Not verified: deployed database/Worker state after #567, the #567 deploy outcome, all dated release readbacks, and device/browser/provider evidence. Merges of #567-#570 on November 1 went in on owner instruction with the Review gate red and no `review:clean` status; the open question is recorded in draft PR #571.
 
 Commands: `node tests/current-schema.mjs`, `node tests/lifecycle-catalog.mjs`, `node tools/roadmap.mjs validate`, a one-line import of `tools/current-schema.mjs` and `tools/verify.mjs` for counts.
+
+## Slice 5 (November 1, 2026 UTC, source `main` after #586)
+
+Source and local verification only; no Cloudflare read, deployment, provider call or status upgrade. WH-001 remains open.
+
+| Fact | Slice 4 (`6871a7a`) | Now (measured) |
+| --- | --- | --- |
+| Composed schema | 245 tables / 1,273 objects / 8 files | 262 tables / 1,376 objects / 10 files, digest `820edcede50d400fe96723d7fed7955a4fb1d3dd0b7bd4ce1d1945514bafffe2` |
+| Data classes | 60 current + 6 planned | 62 current + 5 planned |
+| Verify profiles (script counts) | fast 21, protection 15, site 140, app 1, security 9, tenant 4 | fast 21, protection 15, site 155, app 1, security 9, tenant 4 |
+| Roadmap readiness | 191 tasks | 191 tasks: 89 done, 1 ready, 27 blocked, 65 planned, 9 deferred |
+| Schema groups merged but not cut over | none recorded | C2, C3 (with the D50 change), C4, C5, C6 |
+
+Corrected: `README.md` (schema row) and `docs/capability-matrix.md` (Schema and Control database rows). The row for cutovers is the important correction: the control database binding is not evidence of what the live database contains. Not verified: the deployed database and Workers, the outcome of any Workers Builds run after the five schema merges, and all device, browser and provider evidence. The owner-only inputs that block the rest are in [owner actions](owner-actions.md).

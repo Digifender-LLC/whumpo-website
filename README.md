@@ -49,7 +49,7 @@ The local server sets `ENVIRONMENT=local`; do not expose it publicly. Use `http:
 | Public website host | `src/site-host.ts`, `wrangler.sites.jsonc` |
 | Controlled visitor frontend | `web/visitor.js` → `public-app/visitor.js` |
 | Separate visitor/runtime services | `wrangler.apps.jsonc`, `wrangler.runtime.jsonc` |
-| Database schema | Eight current SQL files composed by `tools/current-schema.mjs`: 245 tables, 1,273 objects, digest `855ca3e9...b214`, 60 current and 6 planned data classes (source `6871a7a`, November 1, 2026; was 221 tables / 1,063 objects on October 11). The configs bind `whumpo-control-2026-11-01` after the batch 7 cutover (#567); the live database and Workers were not re-read here, so deployed counts remain unverified |
+| Database schema | Ten current SQL files composed by `tools/current-schema.mjs`: 262 tables, 1,376 objects, digest `820edced...fe2`, 62 current and 5 planned data classes (source `main` after #586, November 1, 2026). The configs bind `whumpo-control-2026-11-01`, but that database predates five merged schema groups (C2 domain orders and lifecycle, C3 brand kits, C4 invoice voids, C5 a contact-reviews index, C6 the capacity ledger store; plus the D50 compiler change): none has had a cutover, so the live schema is behind the source and the automatic deploy refuses until one runs. The live database and Workers were not re-read here |
 
 Run `pnpm build` to generate assets. Never hand-edit bundles.
 
