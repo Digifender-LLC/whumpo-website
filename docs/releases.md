@@ -316,6 +316,8 @@ Release `077c051b-adf1-432a-b43d-cd3752c21a37`; binding commit PR #533 (main `07
 - `tests/guest-preview-live.mjs` (with the new `/view` header assertions) and `tests/module-live.mjs` pass with cleanup verified.
 - The release archive was not on the checking host, so `pnpm run deploy status` was not run.
 
+**SCHEMA CHANGE (November 1, 2026, schema group C6: WH-043 capacity ledger store): not cut over (merge only).** Adds the table `capacity_ledgers` (one plain-data ledger state per account, `ON DELETE CASCADE`, saved by compare-and-set on `revision`; checks on JSON validity, state version 1 and size) and its revision trigger. Nothing reads or writes it from a route, invoice or admission path; the live database does not have it until a cutover.
+
 **SCHEMA CHANGE (November 1, 2026, schema group C5: WH-051 index): not cut over (merge only).** Adds the index `contact_reviews_project` on `contact_reviews(project_id,expected_revision)`; no table, column or data changes, so the object count rises by one and the schema digest changes. Source-only until a cutover. The same change makes the two custom-domain host lookups in `src/site-host.ts` repeat the partial index predicate so they use `domain_connection_hostname` (no schema effect).
 
 **SCHEMA CHANGE (November 1, 2026, schema group C4: WH-042 invoice voids): not cut over (owner answer Q-22/Q-25: merge only).** Adds `stripe_invoice_voids` (immutable compensating row, deleted only with its invoice) and changes the `plan_entitlements` view to read past a voided invoice. The live database does not have it until a cutover; the automatic deploy refuses until then. Source and synthetic-transport tests only; no Stripe call.
