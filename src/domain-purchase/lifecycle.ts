@@ -12,8 +12,8 @@ import type {RegistrarAdapter} from './registrar';
 
 type Db=Pick<D1Database,'prepare'|'batch'>;
 export type StoredRegistration=Registration&{state:'active'|'transfer-out'|'transferred-out'|'lapsed'};
-type RegistrationRow={hostname:string;order_id:string;owner_user_id:string;project_id:string;state:StoredRegistration['state'];created_at:number;expires_at:number|null;auto_renew:number;renewal_review_id:string|null;renewal_total_cents:number|null;charge_mismatch:number|null};
-const registrationColumns='hostname,order_id,owner_user_id,project_id,state,created_at,expires_at,auto_renew,renewal_review_id,renewal_total_cents,charge_mismatch';
+type RegistrationRow={hostname:string;order_id:string;owner_user_id:string;project_id:string;state:StoredRegistration['state'];created_at:number;expires_at:number|null;auto_renew:number;renewal_review_id:string|null;renewal_total_cents:number|null;charge_mismatch:number|null;absent_since:number|null};
+const registrationColumns='hostname,order_id,owner_user_id,project_id,state,created_at,expires_at,auto_renew,renewal_review_id,renewal_total_cents,charge_mismatch,absent_since';
 const toRegistration=(r:RegistrationRow):StoredRegistration=>({hostname:r.hostname,ownerId:r.owner_user_id,projectId:r.project_id,orderId:r.order_id,createdAt:r.created_at,expiresAt:r.expires_at,autoRenew:r.auto_renew===1,
  renewalOptIn:r.auto_renew===1?{reviewId:r.renewal_review_id as string,renewalTotalCents:r.renewal_total_cents as number}:null,chargeMismatch:r.charge_mismatch===null?null:r.charge_mismatch===1,state:r.state});
 
@@ -75,7 +75,7 @@ export async function decideRenewal({db,hostname,registrar,policy,now}:{db:Db;ho
 
 /** Read the registrar after the fact. A lookup that shows the name is ours backfills a missing expiry or records a later one. A registration that names another
  * known order is definite proof the name is no longer ours: a name in transfer-out has been transferred, any other lapses, at any time. "Not found" is not proof, so
- * a name the registrar no longer shows lapses only after its expiry. Read-only at the registrar. */
+ * a name the registrar no longer shows lapses only after its expiry and only on a second absent read at least six hours after the first. Read-only at the registrar. */
 export async function syncRegistration({db,hostname,registrar,now}:{db:Db;hostname:string;registrar:RegistrarAdapter;now:number}){
  const row=await db.prepare(`SELECT ${registrationColumns} FROM domain_registrations WHERE hostname=? AND state IN ('active','transfer-out')`).bind(hostname).first<RegistrationRow>();
  if(!row)return null;
@@ -96,8 +96,14 @@ export async function syncRegistration({db,hostname,registrar,now}:{db:Db;hostna
   }else if(found.status==='transferred-out')await db.prepare("UPDATE domain_registrations SET state='transferred-out',auto_renew=0,renewal_review_id=NULL,renewal_total_cents=NULL WHERE hostname=?1 AND order_id=?2 AND state='active'").bind(hostname,row.order_id).run();
   else await db.prepare("UPDATE domain_registrations SET state='lapsed',auto_renew=0,renewal_review_id=NULL,renewal_total_cents=NULL WHERE hostname=?1 AND order_id=?2 AND state='active'").bind(hostname,row.order_id).run();
  }
- else if(found.status==='not-found'&&row.state==='active'&&row.expires_at!==null&&now>=row.expires_at)
-  await db.prepare("UPDATE domain_registrations SET state='lapsed',auto_renew=0,renewal_review_id=NULL,renewal_total_cents=NULL WHERE hostname=?1 AND order_id=?2 AND state='active' AND expires_at<=?3").bind(hostname,row.order_id,now).run();
+ else if(found.status==='not-found'&&row.state==='active'&&row.expires_at!==null&&now>=row.expires_at){
+  // A lapse is final, so one absent read is not enough: the first is noted, and a second at least the reconciliation spacing later lapses the name (owner decision).
+  if(row.absent_since===null)await db.prepare('UPDATE domain_registrations SET absent_since=?1 WHERE hostname=?2 AND order_id=?3 AND state=\'active\' AND absent_since IS NULL').bind(now,hostname,row.order_id).run();
+  else if(now-row.absent_since>=domainPurchaseBounds.reconcileSpacingMs)
+   await db.prepare("UPDATE domain_registrations SET state='lapsed',auto_renew=0,renewal_review_id=NULL,renewal_total_cents=NULL WHERE hostname=?1 AND order_id=?2 AND state='active' AND expires_at<=?3 AND absent_since<=?4").bind(hostname,row.order_id,now,now-domainPurchaseBounds.reconcileSpacingMs).run();
+ }
+ // Any read that shows the name is ours ends a pending lapse.
+ if(ours&&row.absent_since!==null)await db.prepare('UPDATE domain_registrations SET absent_since=NULL WHERE hostname=?1 AND order_id=?2 AND absent_since IS NOT NULL').bind(hostname,row.order_id).run();
  const next=await db.prepare(`SELECT ${registrationColumns} FROM domain_registrations WHERE hostname=?`).bind(hostname).first<RegistrationRow>();
  return next?toRegistration(next):null;
 }
@@ -131,6 +137,12 @@ async function moveTransfer(db:Db,r:TransferRequest,to:TransferRequest['state'],
  const row=await db.prepare(`UPDATE domain_transfer_requests SET state=?1,updated_at=?2,version=version+1 WHERE request_id=?3 AND version=?4 RETURNING ${transferColumns}`).bind(to,now,r.requestId,r.version).first<TransferRow>();
  return row?toTransfer(row):null;
 }
+/** A request that leaves open must leave the name locked: only a well-formed `locked` answer counts, and an error is unconfirmed. */
+const relockConfirmed=async(registrar:RegistrarAdapter,r:{hostname:string;requestId:string})=>{
+ try{return ((await registrar.relockTransferOut({hostname:r.hostname,requestRef:r.requestId})) as {kind?:unknown})?.kind==='locked';}catch{return false;}
+};
+/** After this long a request that cannot be re-locked is failed anyway, so an unreachable registrar can never trap closure; the name may then stay unlocked there. */
+export const relockGiveUpMs=30*86400000;
 export const loadTransfer=async(db:Db,ownerId:string,hostname:string)=>{
  const r=await db.prepare(`SELECT ${transferColumns} FROM domain_transfer_requests WHERE hostname=?1 AND owner_user_id=?2 ORDER BY requested_at DESC LIMIT 1`).bind(hostname,ownerId).first<TransferRow>();
  return r?toTransfer(r):null;
@@ -161,7 +173,13 @@ export async function startTransferOut({db,actor,hostname,registrar,requestId,no
  const to=kind==='unlocked'?'unlocked':kind==='rejected'?'failed':'unknown-outcome';
  const request=await moveTransfer(db,toTransfer(claimed),to,now);
  // A sweep or another worker moved the claim first: return the request as it stands now, never null.
- if(!request)return {request:await loadTransfer(db,actor.ownerId,hostname) as TransferRequest,replayed:true as const};
+ if(!request){
+  const current=await loadTransfer(db,actor.ownerId,hostname) as TransferRequest;
+  // A cancel or sweep failed the claim while the unlock was in flight, so the registrar may have unlocked after that decision: lock it again (best effort; the answer is not
+  // stored). A request that is still open (a lease sweep only made it an unknown outcome) keeps its unlock.
+  if(kind==='unlocked'&&current?.requestId===claimed.request_id&&current.state==='failed')await relockConfirmed(registrar,current);
+  return {request:current,replayed:true as const};
+ }
  return {request,replayed:false as const};
 }
 /** Settle unknown or open transfers by reading the registrar. Only positive evidence completes one: a registration naming another order, or the registrar's own
@@ -195,20 +213,31 @@ async function bump(db:Db,r:TransferRequest,to:TransferRequest['state'],now:numb
  return row?toTransfer(row):null;
 }
 /** A transfer request no worker will finish never traps the owner: a claim older than the lease becomes an unknown outcome, and a request that stays unresolved or
- * unlocked longer than fourteen days is failed, which returns the name to active so the owner can start again (a repeat unlock is safe; nothing is lost). */
-export async function sweepTransfers(db:Db,now:number,limit=50){
+ * unlocked longer than fourteen days is failed once the registrar confirms the name is locked again (`relockTransferOut`), which returns the name to active so the owner can start
+ * again; an unconfirmed lock keeps it open and retried until thirty days, then it is failed anyway. */
+export async function sweepTransfers(db:Db,registrar:RegistrarAdapter,now:number,limit=50){
  let moved=0;
  const stuck=(await db.prepare(`SELECT ${transferColumns} FROM domain_transfer_requests WHERE state='requested' AND updated_at<=?1 LIMIT ?2`).bind(now-domainPurchaseBounds.leaseMs,limit).all<TransferRow>()).results;
  for(const row of stuck){try{if(await bump(db,toTransfer(row),'unknown-outcome',now,{}))moved++;}catch{/* next */}}
- const old=(await db.prepare(`SELECT ${transferColumns} FROM domain_transfer_requests WHERE state IN ('unknown-outcome','unlocked') AND requested_at<=?1 LIMIT ?2`).bind(now-14*86400000,limit).all<TransferRow>()).results;
- for(const row of old){try{if(await bump(db,toTransfer(row),'failed',now,{}))moved++;}catch{/* next */}}
+ const old=(await db.prepare(`SELECT ${transferColumns} FROM domain_transfer_requests WHERE state IN ('unknown-outcome','unlocked') AND requested_at<=?1 ORDER BY updated_at LIMIT ?2`).bind(now-14*86400000,limit).all<TransferRow>()).results;
+ for(const row of old){
+  try{
+   const r=toTransfer(row);
+   // The name is returned to active only once the registrar confirms it is locked again. An unconfirmed lock keeps the request open and moves it behind the others
+   // until it is retried, up to the give-up age.
+   if(await relockConfirmed(registrar,r)||now-r.requestedAt>=relockGiveUpMs){if(await bump(db,r,'failed',now,{}))moved++;}
+   else await bump(db,r,r.state,now,{});
+  }catch{/* next */}
+ }
  return {moved};
 }
 /** The owner leaves the transfer: an open request that is not yet completed is failed and the name returns to active. Owner only. */
-export async function cancelTransfer(db:Db,actor:Actor,hostname:string,now:number){
+export async function cancelTransfer(db:Db,actor:Actor,hostname:string,registrar:RegistrarAdapter,now:number){
  check(actor.kind==='owner'&&typeof actor.ownerId==='string','HUMAN_REVIEW_REQUIRED','actor');
  const open=await loadTransfer(db,actor.ownerId,hostname);
  check(open&&['requested','unknown-outcome','unlocked'].includes(open.state),'NO_OPEN_TRANSFER',hostname);
+ // The registrar lock is what the owner is asking for back: the request fails only once it is confirmed locked, so a cancelled transfer never leaves the name open to transfer.
+ check(await relockConfirmed(registrar,open),'RELOCK_UNAVAILABLE',hostname);
  return bump(db,open,'failed',now,{});
 }
 /** The authorization code for the owner of an unlocked name, read from the registrar now. Owners only: a model, visitor, service or operator is refused, and the

@@ -243,6 +243,8 @@ CREATE TABLE domain_registrations (
  renewal_review_id TEXT CHECK(renewal_review_id IS NULL OR length(renewal_review_id) BETWEEN 1 AND 128),
  renewal_total_cents INTEGER CHECK(renewal_total_cents IS NULL OR (typeof(renewal_total_cents)='integer' AND renewal_total_cents BETWEEN 0 AND 100000)),
  charge_mismatch INTEGER CHECK(charge_mismatch IS NULL OR charge_mismatch IN (0,1)),
+ -- First "not found" read after the expiry. A lapse is final, so it needs a second absent read at least six hours later; a read that shows the name clears this.
+ absent_since INTEGER CHECK(absent_since IS NULL OR (typeof(absent_since)='integer' AND absent_since>0)),
  CHECK(auto_renew=0 OR (renewal_review_id IS NOT NULL AND renewal_total_cents IS NOT NULL)),
  CHECK(auto_renew=1 OR (renewal_review_id IS NULL AND renewal_total_cents IS NULL)),
  CHECK(auto_renew=0 OR state='active')
