@@ -31,6 +31,14 @@ The [WH-111 account-help increment](chat-workspace-continuity.md#account-help-in
 - Account security supports reviewed key addition/removal and kit replacement. Removal warns that all sessions end, including the last-key consequence. A current passkey assertion precedes sensitive changes, and changed review state requires review again.
 - Uncertain responses direct the user to saved progress; the client does not retry ceremonies automatically. The saved new kit can resume a committed secure step even when its reply/cookie was lost. Authenticated cancellation deletes pending setup and preserves spent invitation state.
 
+### Onboarding journey
+
+Signup, enrollment and the first-project welcome render in one frame (`frontend/src/journey/`). This is presentation only: ceremonies, ordering, review rules and server authority are unchanged, and each passkey prompt still starts inside its own click handler. A move animates only after the reply it depends on, through `journeyMove`, which commits the state inside a View Transition and resolves once the new step is in the DOM. Reduced motion commits directly.
+
+`reload` takes an optional callback that lands in the same commit as the new identity. Preparing a kit uses it, so the kit text appears together with its offer and no frame reads "This unsaved kit can't be shown again". Saving uses it, so the text is discarded in the commit that shows the saved state. The saved-kit copy and the single acknowledgment are unchanged, and no timer or animation advances past them.
+
+`node tests/onboarding-journey-browser.mjs` drives the whole journey by keyboard at 360, 390 and 1280px in light and dark, with reduced motion and 200% text, under the deployed CSP. It also covers a cancelled ceremony, a reload on the kit step, a failed and a slow save, input during a held transition, and an interrupted transition.
+
 ## Kit delivery and privacy
 
 `frontend/src/identity/kit.tsx` offers plain-text download, clipboard copy, and a local printer-friendly iframe using the browser's Print / Save as PDF dialog. It inserts document text with `textContent`; no popup URL, remote PDF service, HTML interpretation or new dependency is involved. The filename is always `whumpo-recovery-kit.txt`. Print is optional; the single save acknowledgment states that it is not proof of backup storage.

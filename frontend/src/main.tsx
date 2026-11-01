@@ -1,15 +1,16 @@
-import React,{lazy} from 'react';
+import React,{lazy,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {QueryClientProvider} from '@tanstack/react-query';
 import {createRootRoute,createRoute,createRouter,RouterProvider,Outlet} from '@tanstack/react-router';
 import {queryClient} from './lib/api';
-import {Landing} from './landing';
+import {Landing,loadWorkspace,loadedWorkspace} from './landing';
 import {DeferredArea} from './deferred-area';
 import {initializePwa} from './lib/pwa';
 initializePwa();
-const Workspace=lazy(()=>import('./workspace').then(module=>({default:module.Workspace})));
+const Workspace=lazy(()=>loadWorkspace().then(module=>({default:module.Workspace})));
 const NativeHandoff=lazy(()=>import('./native-handoff').then(module=>({default:module.NativeHandoff})));
-function WorkspaceEntry(){return <DeferredArea label="Opening your workspace…"><Workspace/></DeferredArea>;}
+// Read once: swapping the lazy wrapper for the loaded component later would remount the whole workspace.
+function WorkspaceEntry(){const [ready]=useState(loadedWorkspace);return <DeferredArea label="Opening your workspace…">{ready?<ready.Workspace/>:<Workspace/>}</DeferredArea>;}
 import './styles.css';
 const rootRoute=createRootRoute({component:Outlet});
 const homeRoute=createRoute({getParentRoute:()=>rootRoute,path:'/',component:Landing});
