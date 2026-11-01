@@ -400,6 +400,25 @@ try{
   assert.equal((await one('SELECT absent_since FROM domain_registrations WHERE hostname=?',flaky.host)).absent_since,null,'seen again clears it');
   flaky.reg.vanish(flaky.host);assert.equal((await m.syncRegistration({db:A,hostname:flaky.host,registrar:flaky.reg,now:fexp+DAY+14*HOUR})).state,'active','the clock restarted');
  });
+ await check('review findings: sweeping never starves the evidence read, a lost unlock in a cancel race is re-locked, a stuck request does not monopolise a small sweep batch',async()=>{
+  const start=(r,at)=>m.startTransferOut({db:A,actor:actorOf('b'),hostname:r.host,registrar:r.reg,requestId:id('transfer'),now:at});
+  const state=async r=>(await m.loadTransfer(A,owners.b.id,r.host)).state;
+  const relock=shared.relockTransferOut;
+  // 1. The name leaves at day 14.5 (its re-lock is then refused). Sweeping every five hours must still let the registrar's own report complete the transfer.
+  const e=await registered('b'),t0=T0+300*DAY;await start(e,t0);shared.completeTransfer(e.host);
+  for(let t=t0+14*DAY+12*HOUR;t<=t0+31*DAY;t+=5*HOUR){await m.sweepTransfers(A,shared,t);await m.reconcileTransfers(A,shared,t);}
+  assert.equal(await state(e),'completed','the transfer completed on the registrar report, not failed by the sweep');assert.equal((await renewalState(e.host)).state,'transferred-out');
+  // 2. The unlock response is lost while a cancel lands: the registrar still unlocked after the cancel, so the name is locked again.
+  const f=await registered('b'),begin=shared.beginTransferOut;shared.nextTransfer('timeout-after');
+  shared.beginTransferOut=async req=>{if(req.hostname===f.host)await m.cancelTransfer(A,actorOf('b'),f.host,shared,T0+310*DAY+1);return begin.call(shared,req);};
+  try{await start(f,T0+310*DAY);}finally{shared.beginTransferOut=begin;}
+  assert.equal(await state(f),'failed');assert.equal(shared.isUnlocked(f.host),false,'a lost unlock response is still undone');
+  // 3. Two stuck requests and a batch of one: the one that cannot be re-locked goes behind the other instead of being retried every pass.
+  const x=await registered('b'),y=await registered('b'),base=T0+320*DAY;await start(x,base);await start(y,base+HOUR);
+  shared.relockTransferOut=async req=>req.hostname===x.host?{kind:'rejected'}:relock.call(shared,req);
+  try{for(let i=0;i<40;i++)await m.sweepTransfers(A,shared,base+15*DAY+i*HOUR,1);}finally{shared.relockTransferOut=relock;}
+  assert.equal(await state(y),'failed','the second request was reached');assert.equal(await state(x),'unlocked','the stuck one stays open until the give-up age');
+ });
 }finally{for(const f of files)f.close();}
 console.log(`Domain purchase lifecycle passed: ${cases} cases on ${d1?'actual local D1':'SQLite'}.`);
 process.exit(0);
