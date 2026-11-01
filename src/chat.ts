@@ -47,6 +47,7 @@ import {applyServiceClientsCommand,serviceClientChatLinks} from './project-speci
 import {prepareAccessModuleCommand} from './shared-modules/access-setup';
 import {prepareFilesModuleCommand} from './shared-modules/files-setup';
 import {prepareAppointmentFormCommand} from './shared-modules/records-setup';
+import {prepareBrandKitCommand,prepareBrandRemoveCommand,prepareSavedSectionCommand} from './brand-kits/apply';
 import {prepareGalleryPageCommand} from './shared-modules/files-gallery';
 import {BackendError} from './backend-error';
 import {prepareModuleActivationCommand,applyModuleActivationCommand,moduleActivationChatLinks,moduleActivationFailure} from './shared-modules/activation';
@@ -232,6 +233,10 @@ export async function sendChat(db: D1Database, userId: string, input: Record<str
     if(control?.action.type==='filesModuleReview')accessSetup=await prepareFilesModuleCommand(db,userId,input.id,command);
     // WH-070 owner appointment form setup: the same slot, the existing exact specification review (saved by specificationApply).
     if(control?.action.type==='appointmentFormReview')accessSetup=await prepareAppointmentFormCommand(db,userId,input.id,command);
+    // WH-091 owner brand kit and saved section reviews: the same slot, the existing exact specification review.
+    if(control?.action.type==='brandKitReview')accessSetup=await prepareBrandKitCommand(db,userId,input.id,command);
+    if(control?.action.type==='brandRemoveReview')accessSetup=await prepareBrandRemoveCommand(db,userId,input.id,command);
+    if(control?.action.type==='savedSectionReview')accessSetup=await prepareSavedSectionCommand(db,userId,input.id,command);
     // WH-128 published gallery: the same slot, the existing exact specification review (saved by specificationApply).
     if(control?.action.type==='galleryPageReview')accessSetup=await prepareGalleryPageCommand(db,userId,input.id,command);
   }catch(e){if(e instanceof ModuleError||e instanceof BackendError)return {status:e.status,error:e.message};throw e;}

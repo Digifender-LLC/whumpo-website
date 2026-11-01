@@ -128,5 +128,9 @@
 ["domainRenewalReviews", "domain_renewal_reviews", "hostname IN (SELECT hostname FROM domain_registrations WHERE project_id IN (SELECT id FROM owned_projects))"],
 ["domainRenewalApprovals", "domain_renewal_approvals", "hostname IN (SELECT hostname FROM domain_registrations WHERE project_id IN (SELECT id FROM owned_projects))"],
 ["domainTransferRequests", "domain_transfer_requests", "hostname IN (SELECT hostname FROM domain_registrations WHERE project_id IN (SELECT id FROM owned_projects))"],
-["openDomainTransfers", "domain_transfer_requests", "hostname IN (SELECT hostname FROM domain_registrations WHERE project_id IN (SELECT id FROM owned_projects))", "state IN ('requested','unlocked','unknown-outcome')"]
+["openDomainTransfers", "domain_transfer_requests", "hostname IN (SELECT hostname FROM domain_registrations WHERE project_id IN (SELECT id FROM owned_projects))", "state IN ('requested','unlocked','unknown-outcome')"],
+["brandKits", "brand_kits", "owner_user_id"],
+["brandKitVersions", "brand_kit_versions", "kit_id IN (SELECT id FROM brand_kits WHERE owner_user_id IN (SELECT id FROM scope))"],
+["savedSections", "saved_sections", "owner_user_id"],
+["savedSectionVersions", "saved_section_versions", "section_id IN (SELECT id FROM saved_sections WHERE owner_user_id IN (SELECT id FROM scope))"]
 ]

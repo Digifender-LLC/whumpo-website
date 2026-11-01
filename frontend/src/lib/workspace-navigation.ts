@@ -55,7 +55,7 @@ export type EssentialView=typeof essentialDestinations[number]['view'];
 /** The bottom bar groups views; essentials and Profile live in one Help sheet. */
 export function navigationSection(view:string):'chat'|'dashboard'|'pages'|'settings'|'help'|null{
  if(view==='chat')return 'chat';
- if(view==='dashboard'||['cms','project','photos','inbox','records','domains','visitors'].includes(view))return 'dashboard';
+ if(view==='dashboard'||['cms','project','photos','inbox','records','domains','visitors','brand'].includes(view))return 'dashboard';
  if(view.startsWith('tab-'))return 'pages';
  if(['settings','billing','connections'].includes(view))return 'settings';
  if(view==='profile'||essentialDestinations.some(item=>item.view===view))return 'help';

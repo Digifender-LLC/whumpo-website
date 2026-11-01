@@ -1,8 +1,8 @@
 // Generated from compiler-locks/project-content-v7.json. Do not repin an existing compiler ID.
 export const compilerArtifacts = {
-  "compiler": "8a30bd3885a2aa562f34d23c7e43526b6ba0f42ab1f7a743e7dd140e542df123",
-  "content": "ace2b52237dbe56611d8b9bdd9e90c2a3a6a98c8f599403a9c47d69b460086e9",
-  "component": "2d5f46c63ea41446877e7710e014b453657ba9a3209121970f7fd5c95e418ef5",
+  "compiler": "c7151b8c02a6c32b5a6079523892d0c78d3af9335fd6026d5898b7c10a0c8264",
+  "content": "bb3d030666fecae22965308b80ffc62e37931022ca064c6da839572589dbb806",
+  "component": "c77ae5241a02fe3578da31b435e96db141496745e9a8b99724f45a993fffe803",
   "modules": {
     "content": {
       "module": "a39345861954f5b86011432d08764d59a70da05948118e8a6cd04bef5354866e",

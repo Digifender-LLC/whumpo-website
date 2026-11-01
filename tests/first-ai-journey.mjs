@@ -28,7 +28,7 @@ try{
   assert.equal(result.status,200,`Step ${step}: ${JSON.stringify(result)}`);
   let version=id;if(step){const q=(await readChat(scope(user),user)).turns.at(-1).specification_review;assert.ok(q);version=crypto.randomUUID();assert.equal((await sendChatControl(scope(user),user,{id:version,revision:(await readChat(scope(user),user)).state.revision,action:{type:'specificationApply',reviewId:q.id,proposalDigest:q.proposalDigest,expectedRevision:q.expectedRevision}})).status,200);}else project=id;
   const row=await db.prepare('SELECT config_json,base_version_id FROM site_versions WHERE id=?').bind(version).first();assert.ok(row);
-  if(step)Object.assign(expected,changes);assert.deepEqual(JSON.parse(row.config_json),expected);assert.equal(row.base_version_id,base??null);
+  if(step)Object.assign(expected,changes);assert.deepEqual(JSON.parse(row.config_json),{...expected,sections:expected.sections.map(s=>({variant:'plain',...s}))});assert.equal(row.base_version_id,base??null);
   assert.equal((await readChat(scope(user),user)).turns.at(-1).status,'completed');
   const billing=await getBilling(scope(user),user);assert.equal(billing.standardAI.creditCharge,0);
   await sendAIChat(scope(user),user,id,state.revision,content,{baseURL:'https://provider.test/v1',apiKey:'synthetic',model:'fixture',protocol:'responses'},transport);assert.equal(calls,step+1);

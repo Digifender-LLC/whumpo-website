@@ -316,6 +316,8 @@ Release `077c051b-adf1-432a-b43d-cd3752c21a37`; binding commit PR #533 (main `07
 - `tests/guest-preview-live.mjs` (with the new `/view` header assertions) and `tests/module-live.mjs` pass with cleanup verified.
 - The release archive was not on the checking host, so `pnpm run deploy status` was not run.
 
+**SCHEMA CHANGE (October 31, 2026, schema group C3: WH-091 brand kits and saved sections, with compiler identities `project-content@7` and `project-service-clients@5`): merging requires an immediate test-platform cutover with a new empty database; do not merge other PRs between merge and cutover.** Adds `src/brand-kits/schema.sql` (four tables, capacity and immutability triggers, `project_spec_brand_apply_admit`), three typed controls in `project_spec_proposal_admit`, and compiler lock version 7 in three SQL guards. Schema-3 drafts saved under `@6` are test data and are reset, never converted. Source and local verification only; not deployed. Details: [brand-kits](brand-kits.md).
+
 ## Test-platform cutover — November 1, 2026 UTC (schema batch 7, C1: WH-018 and WH-019)
 
 Owner-instructed test-platform cutover for #554 (WH-018 account export and resumable closure, main `9b08c1f`) and #563 (WH-019 restore reconciliation, main `d6ea2b9`), run by an agent on the owner's session instruction. Source `1de74d5` (`d6ea2b9` plus the binding commit `cf8e22b` and the boundary-audit B4 line); binding PR #567.

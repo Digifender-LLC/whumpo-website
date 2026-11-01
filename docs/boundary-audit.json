@@ -9561,6 +9561,173 @@
    }
   },
   {
+   "id": "brand-kits",
+   "title": "Brand kits and saved sections: save, version, delete, and the typed apply reviews",
+   "privileged": [
+    "publish",
+    "deletion"
+   ],
+   "authorityClass": "session owner (writes feature-gated)",
+   "entries": [
+    {
+     "file": "src/index.ts",
+     "kind": "regex",
+     "match": "/^\\/api\\/(brand-kits|saved-sections)(?:\\/([0-9a-f-]{36})(?:\\/versions\\/([1-9][0-9]?))?)?$/",
+     "methods": [
+      "DELETE",
+      "GET",
+      "POST",
+      "PUT"
+     ]
+    }
+   ],
+   "controls": [
+    {
+     "id": "brandKitReview",
+     "recentAuth": false
+    },
+    {
+     "id": "brandRemoveReview",
+     "recentAuth": false
+    },
+    {
+     "id": "savedSectionReview",
+     "recentAuth": false
+    }
+   ],
+   "cells": {
+    "authority": {
+     "state": "evidenced",
+     "detail": "Every kit and section statement is filtered by owner_user_id; the typed apply controls read one owner-scoped version and prepare the existing owner-and-project-scoped website review. A foreign kit, section or project answers 404.",
+     "enforcedAt": [
+      {
+       "file": "src/brand-kits/owner.ts",
+       "contains": "WHERE k.id=? AND v.version=? AND k.owner_user_id=?"
+      },
+      {
+       "file": "src/brand-kits/apply.ts",
+       "contains": "WHERE v.kit_id=? AND v.version=? AND k.owner_user_id=?"
+      },
+      {
+       "file": "src/brand-kits/schema.sql",
+       "contains": "WHERE k.owner_user_id=NEW.user_id AND kv.kit_id=json_extract(NEW.spec_json,'$.design.brand.source.kitId')"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/brand-kits.mjs",
+       "contains": "await rejects(()=>kits.readBrandKitVersion(b.scope,b.user,kit.id,1),404);",
+       "asserts": "another owner cannot read a kit"
+      },
+      {
+       "file": "tests/brand-kits.mjs",
+       "contains": "assert.equal(r.status,404);assert.match(r.error,/Brand kit not found/);",
+       "asserts": "another owner cannot apply a kit to their own project"
+      }
+     ]
+    },
+    "origin": {
+     "state": "evidenced",
+     "detail": "Mutating methods pass the global exact-Origin gate in handle() before session admission and dispatch (position machine-checked); GET routes are read-only.",
+     "enforcedAt": [
+      {
+       "file": "src/index.ts",
+       "contains": "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(method) && !sameOrigin(request)) return error(403, \"Origin check failed\");"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/identity-http.mjs",
+       "contains": "assert.equal(crossOriginGrant.status,403)",
+       "asserts": "worker.fetch rejects a cross-origin workspace POST with 403 before any handler runs"
+      },
+      {
+       "file": "tests/boundary-audit.mjs",
+       "contains": "some(p=>p.startsWith('platform dispatch order changed'))",
+       "asserts": "a router moved ahead of the exact-Origin gate is reported; every route is registered with beforeOriginGate"
+      }
+     ]
+    },
+    "freshness": {
+     "state": "n/a",
+     "detail": "Not required: docs/brand-kits.md states identity and ownership only for kits; saving a reviewed change to a site keeps the existing recent-sign-in specificationApply control."
+    },
+    "target": {
+     "state": "evidenced",
+     "detail": "The apply review is bound to one exact kit id and saved version and copies its tokens; the commit trigger refuses any proposal whose brand differs from that saved version or whose specification differs elsewhere. The model never supplies tokens. A model can never supply a brand: its create and project configuration and design.setBrand are refused, and the commit aborts any non-brand-control change whose design.brand differs from the saved head.",
+     "enforcedAt": [
+      {
+       "file": "src/brand-kits/schema.sql",
+       "contains": "AND json(json_remove(NEW.spec_json,'$.design.brand'))=json(json_remove(v.spec_json,'$.design.brand'))"
+      },
+      {
+       "file": "src/brand-kits/apply.ts",
+       "contains": "const brand:Brand={source:{kitId:kit,version:Number(version)}"
+      },
+      {
+       "file": "src/brand-kits/schema.sql",
+       "contains": "CREATE TRIGGER project_spec_brand_unchanged BEFORE INSERT ON project_spec_proposals"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/brand-kits.mjs",
+       "contains": "['foreign kit with identical tokens'",
+       "asserts": "forged colors, font, version, kit, source or extra changes are refused in the commit"
+      },
+      {
+       "file": "tests/brand-kits.mjs",
+       "contains": "await check('the model cannot apply a brand",
+       "asserts": "driven model turns for change, create and project drafts are refused for owners with and without the plan feature, and a forged proposal aborts in the commit"
+      }
+     ]
+    },
+    "replay": {
+     "state": "evidenced",
+     "detail": "Creating a kit or section is idempotent per request id: the same body returns the same row and a different body under the same id is a conflict.",
+     "enforcedAt": [
+      {
+       "file": "src/brand-kits/owner.ts",
+       "contains": "throw new BrandKitError(409,'This request ID was already used for a different brand kit.')"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/brand-kits.mjs",
+       "contains": "await rejects(()=>kits.createBrandKit(a.scope,a.user,{...request,tokens:tokens({font:'modern'})}),409);",
+       "asserts": "a different body under the same request id is refused"
+      }
+     ]
+    },
+    "stale": {
+     "state": "evidenced",
+     "detail": "A kit or section save compares the version the owner was editing and refuses otherwise; an apply review is prepared against the saved website revision and the existing specificationApply refuses it when the site moved on.",
+     "enforcedAt": [
+      {
+       "file": "src/brand-kits/owner.ts",
+       "contains": "AND latest_version=? AND ${g.sql}`).bind(name,now,kitId,userId,expected,...g.params)"
+      },
+      {
+       "file": "src/brand-kits/apply.ts",
+       "contains": "expectedRevision:revision,operations"
+      }
+     ],
+     "tests": [
+      {
+       "file": "tests/brand-kits.mjs",
+       "contains": "await rejects(()=>kits.saveBrandKitVersion(a.scope,a.user,kit.id,{expectedVersion:1,name:'Late'",
+       "asserts": "a stale kit save is refused"
+      },
+      {
+       "file": "tests/brand-kits.mjs",
+       "contains": "e=>e.status===409&&/changed|expired|fresh review/i.test(e.message)",
+       "asserts": "a review prepared before another change is refused at apply"
+      }
+     ]
+    }
+   }
+  },
+  {
    "id": "site-publication",
    "title": "Website publish, restore, unpublish and saved-version removal, with previews/exports",
    "privileged": [

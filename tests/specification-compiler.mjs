@@ -284,7 +284,7 @@ try{
  // Exercise escaping expansion near the supported configuration/output ceilings.
  const dense=clone(content);dense.name='&'.repeat(100);
  for(const [index,length] of [160,1000,100,1000,100,800,100,800].entries())dense.content[index].text='&'.repeat(length);
- for(const suffix of ['one','two']){dense.content.push({id:'extra-title-'+suffix,text:'&'.repeat(100)},{id:'extra-copy-'+suffix,text:'&'.repeat(suffix==='one'?800:450)});dense.pages[0].sections.push({heading:'extra-title-'+suffix,text:'extra-copy-'+suffix});}
+ for(const suffix of ['one','two']){dense.content.push({id:'extra-title-'+suffix,text:'&'.repeat(100)},{id:'extra-copy-'+suffix,text:'&'.repeat(suffix==='one'?800:450)});dense.pages[0].sections.push({heading:'extra-title-'+suffix,text:'extra-copy-'+suffix,variant:'plain'});}
  m.validateSpecification(dense);
  const denseOutput=await m.compileProjectSpecification(dense,lock);assert.ok(denseOutput.artifacts[0].bytes>30000&&denseOutput.artifacts[0].bytes<=32768);
  const change=await m.compileSpecificationChange(content,operationBatches[0],lock);assert.equal(change.baseDigest,output.specificationDigest);assert.notEqual(change.nextDigest,change.baseDigest);assert.deepEqual(change.requiredReviews,[]);assert.ok(change.compiled.artifacts[0].html.includes('Monday to Saturday'));assert.equal(change.diff[0].path,'/content');assert.deepEqual(content,unchangedContent());
@@ -305,7 +305,7 @@ try{
  assert.match(renamed.compiled.artifacts[0].html,/Neighborhood gardens/);
  const sections=[{heading:'Seasonal care',text:'Tidy every spring.'}];
  const resectioned=await m.compileSpecificationChange(created.specification,[{type:'pages.setSections',pageId:'home',sections}],lock);
- assert.deepEqual(m.projectPage(resectioned.compiled.specification,'home').sections,sections);
+ assert.deepEqual(m.projectPage(resectioned.compiled.specification,'home').sections,sections.map(s=>({...s,variant:'plain'})));
  for(const operations of [[{type:'pages.setPhotos',pageId:'home',photos:[{id:'bad',alt:'Invalid'}]}],[{type:'pages.setPhotos',pageId:'home',photos:null}],[{type:'pages.setPhotos',pageId:'home',photos:[...photos,...photos]}],[{type:'pages.setSections',pageId:'home',sections:Array(7).fill(sections[0])}],[{type:'project.setName',name:''}]])assert.throws(()=>m.changeSpecification(content,operations));
  const shared=clone(content);shared.pages.push({...clone(shared.pages[0]),id:'other',path:'/other'});
  const modified=m.changeSpecification(shared,[{type:'pages.setSections',pageId:'home',sections}]).spec;

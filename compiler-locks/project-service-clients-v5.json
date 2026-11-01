@@ -4,7 +4,7 @@
   "schemaVersion": 1,
   "esbuildVersion": "0.28.2",
   "target": "es2022",
-  "renderer": "98d8fdcb002b63de0d31d8f5d503a0c96a921ad6dd0a56455a15de652cae07a9",
+  "renderer": "de2fa812b78e54bca1a1240ec53a49980e8781e2da2840c7a8ced77e03e15a60",
   "sources": [
     {
       "path": "src/backend-error.ts",
@@ -27,8 +27,12 @@
       "digest": "6e765689f7a7caedd041936ade4275dff931ddbcec37e83f5da672c04d6f99ab"
     },
     {
+      "path": "src/brand-tokens.ts",
+      "digest": "ab72184501c91b13983289cc0483d4b86c9322c2b5b1435f30c084215aba50b9"
+    },
+    {
       "path": "src/components.ts",
-      "digest": "2d5f46c63ea41446877e7710e014b453657ba9a3209121970f7fd5c95e418ef5"
+      "digest": "c77ae5241a02fe3578da31b435e96db141496745e9a8b99724f45a993fffe803"
     },
     {
       "path": "src/project-specification/service-clients/compiler.ts",
@@ -51,5 +55,5 @@
       "digest": "d25c3ba0a195fe9b85dd42589dced1ffb921604667ea4eed34ce7964f26a9ace"
     }
   ],
-  "compilerDigest": "9df50102a1fb1314d7c7f40346690fe032a2f6c6611e283cd568927369fdaae0"
+  "compilerDigest": "6831aa2203a05b396faf8f04f34fa40a5d0f289aa4778d277731ce4965cebfa8"
 }

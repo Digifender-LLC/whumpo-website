@@ -33,6 +33,9 @@ export type ChatControl =
  | {type:'accessModuleReview';projectId:string}
  | {type:'filesModuleReview';projectId:string}
  | {type:'appointmentFormReview';projectId:string}
+ | {type:'brandKitReview';projectId:string;kitId:string;version:number;logoId:string|null}
+ | {type:'brandRemoveReview';projectId:string}
+ | {type:'savedSectionReview';projectId:string;sectionId:string;version:number;pageId:string}
  | {type:'galleryPageReview';projectId:string;instanceId:string;collectionId:string;pageId:string}
  | {type:'moduleActivationApply';reviewId:string;reviewDigest:string;expectedRevision:number}
  | {type:'accessRoleReview';projectId:string;instanceId:string;visitorId:string;action:'grant'|'revoke'}
@@ -88,6 +91,20 @@ export function chatControl(value:unknown):{action:ChatControl;command:string;la
  if(a.type==='appointmentFormReview'&&exact(a,['type','projectId'])&&Object.keys(a).length===2&&id(a.projectId)){
   const action={type:'appointmentFormReview' as const,projectId:a.projectId};
   return {action,command:`/review-appointment-form-setup ${action.projectId}`,label:'Review adding an appointment request form to this project.',recentAuth:false};
+ }
+ // WH-091 brand kits and saved sections: ids and a version number only. The server reads the saved tokens or text itself and prepares the
+ // existing exact website review; the logo is an id of the project's own approved photo or none.
+ if(a.type==='brandKitReview'&&exact(a,['type','projectId','kitId','version','logoId'])&&Object.keys(a).length===5&&id(a.projectId)&&id(a.kitId)&&Number.isSafeInteger(a.version)&&Number(a.version)>=1&&Number(a.version)<=50&&(a.logoId===null||id(a.logoId))){
+  const action={type:'brandKitReview' as const,projectId:a.projectId,kitId:a.kitId,version:Number(a.version),logoId:a.logoId as string|null};
+  return {action,command:`/review-brand-kit ${action.projectId} ${action.kitId} ${action.version} ${action.logoId??'none'}`,label:'Review applying this brand kit to this project.',recentAuth:false};
+ }
+ if(a.type==='brandRemoveReview'&&exact(a,['type','projectId'])&&Object.keys(a).length===2&&id(a.projectId)){
+  const action={type:'brandRemoveReview' as const,projectId:a.projectId};
+  return {action,command:`/review-brand-remove ${action.projectId}`,label:'Review removing the brand kit from this project.',recentAuth:false};
+ }
+ if(a.type==='savedSectionReview'&&exact(a,['type','projectId','sectionId','version','pageId'])&&Object.keys(a).length===5&&id(a.projectId)&&id(a.sectionId)&&Number.isSafeInteger(a.version)&&Number(a.version)>=1&&Number(a.version)<=50&&typeof a.pageId==='string'&&/^[a-z][a-z0-9-]{0,39}$/.test(a.pageId)){
+  const action={type:'savedSectionReview' as const,projectId:a.projectId,sectionId:a.sectionId,version:Number(a.version),pageId:a.pageId};
+  return {action,command:`/review-saved-section ${action.projectId} ${action.sectionId} ${action.version} ${action.pageId}`,label:'Review adding this saved section to the page.',recentAuth:false};
  }
  // WH-128 published gallery: ids only. The server chooses the photos (approved owner-filed photos of the collection).
  if(a.type==='galleryPageReview'&&exact(a,['type','projectId','instanceId','collectionId','pageId'])&&Object.keys(a).length===5&&id(a.projectId)&&[a.instanceId,a.collectionId,a.pageId].every(v=>typeof v==='string'&&/^[a-z][a-z0-9-]{0,39}$/.test(v))){

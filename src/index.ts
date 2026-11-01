@@ -102,6 +102,7 @@ import {DomainError,listDomains} from './domains';
 import { ownedPreview } from './photo-versions';
 import {listGuestPreviews,revokeGuestPreview,deleteGuestPreview,listGuestFeedback,resolveGuestFeedback,deleteGuestFeedback,cleanupGuestPreviews} from './guest-previews/owner';
 import {GuestPreviewError} from './guest-previews/policy';
+import {listBrandKits,createBrandKit,saveBrandKitVersion,deleteBrandKit,readBrandKitVersion,listSavedSections,createSavedSection,saveSavedSectionVersion,deleteSavedSection,readSavedSectionVersion} from './brand-kits/owner';
 import {prepareGuestPreviewIssue,confirmGuestPreviewIssue} from './guest-previews/bindings';
 import {guestPreviewOrigin} from './hosts';
 import {maintainReviews} from './review-turnover';
@@ -494,6 +495,25 @@ async function handleWorkspace(request:Request,env:Env,ctx:ExecutionContext,user
   if (method === 'GET' && exportMatch) {
     const archive = await ownedExport(env.DB, user.id, exportMatch[1], env.FILES);
     return archive ? new Response(archive, {headers:{'content-type':'application/zip','content-disposition':`attachment; filename="whumpo-site-${exportMatch[1]}.zip"`,'cache-control':'private, no-store','x-content-type-options':'nosniff','content-security-policy':"sandbox; default-src 'none'",'referrer-policy':'no-referrer'}}) : error(404,'Saved version not found');
+  }
+  // WH-091 owner brand kits and saved sections. Writes need current creator.brand-kits / creator.saved-sections inside the handler;
+  // reading, listing and deleting need only the current identity and ownership.
+  const kitRoute=pathname.match(/^\/api\/(brand-kits|saved-sections)(?:\/([0-9a-f-]{36})(?:\/versions\/([1-9][0-9]?))?)?$/);
+  if(kitRoute){
+    if(new URL(request.url).search)return error(400,'Use the exact link.');
+    const [,kind,item,version]=kitRoute,kits=kind==='brand-kits';
+    if(!item){
+      if(method==='GET')return json(kits?await listBrandKits(env.DB,user.id):await listSavedSections(env.DB,user.id));
+      if(method==='POST')return json(kits?await createBrandKit(env.DB,user.id,await body(request)):await createSavedSection(env.DB,user.id,await body(request)));
+      return error(405,'Method not allowed');
+    }
+    if(version){
+      if(method==='GET')return json(kits?await readBrandKitVersion(env.DB,user.id,item,Number(version)):await readSavedSectionVersion(env.DB,user.id,item,Number(version)));
+      return error(405,'Method not allowed');
+    }
+    if(method==='PUT')return json(kits?await saveBrandKitVersion(env.DB,user.id,item,await body(request)):await saveSavedSectionVersion(env.DB,user.id,item,await body(request)));
+    if(method==='DELETE')return json(kits?await deleteBrandKit(env.DB,user.id,item):await deleteSavedSection(env.DB,user.id,item));
+    return error(405,'Method not allowed');
   }
   // WH-092 owner guest-preview controls. Issuance is feature-gated; listing, revocation,
   // resolution and deletion remain available to the current owner on any plan.

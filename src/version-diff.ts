@@ -1,5 +1,6 @@
 import {requireSpecificationAvailable} from './specification-safety';
 import {siteConfig,photoConfig,componentCatalog} from './components';
+import {describeBrand} from './brand-tokens';
 import {hashToken} from './security';
 export class DiffError extends Error {constructor(public status:number,message:string){super(message);}}
 type Version={id:string;component_id:string;config_json:string;html:string;digest:string;created_at:string};
@@ -16,8 +17,8 @@ function fields(v:Version|null){
  try{
   const c=v.component_id==='site-page@1'?siteConfig(value):v.component_id==='photo-page@1'?photoConfig(value):null;
   if(!c)throw Error('Unsupported component');
-  result.set('Layout',`${componentCatalog.find(c=>c.id===v.component_id)!.name} (version 1)`);result.set('Site name',c.name);result.set('Introduction',c.description);result.set('Theme',c.theme);
-  {const details=v.component_id==='photo-page@1'?photoConfig(value):siteConfig(value);result.set('Headline',details.headline);result.set('About heading',details.aboutTitle);result.set('About text',details.aboutText);details.sections.forEach((section,i)=>{result.set(`Section ${i+1} heading`,section.heading);result.set(`Section ${i+1} text`,section.text);});}
+  result.set('Layout',`${componentCatalog.find(c=>c.id===v.component_id)!.name} (version 1)`);result.set('Site name',c.name);result.set('Introduction',c.description);result.set('Theme',c.theme);{const brand=describeBrand(c.brand??null);if(brand)result.set('Brand kit',brand);}
+  {const details=v.component_id==='photo-page@1'?photoConfig(value):siteConfig(value);result.set('Headline',details.headline);result.set('About heading',details.aboutTitle);result.set('About text',details.aboutText);details.sections.forEach((section,i)=>{if(section.variant!=='plain')result.set(`Section ${i+1} style`,section.variant);result.set(`Section ${i+1} heading`,section.heading);result.set(`Section ${i+1} text`,section.text);});}
   if(v.component_id==='photo-page@1')photoConfig(value).photos.forEach((photo,i)=>result.set('Photo '+photo.id,`Position ${i+1}\nDescription: ${photo.alt}`));
  }catch{throw new DiffError(503,'This saved component cannot be compared.');}
  return result;

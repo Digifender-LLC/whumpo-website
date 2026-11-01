@@ -8,7 +8,7 @@ import {requireSpecificationAvailable} from '../../specification-safety';
 import {canonicalJSON,jsonDigest,sha256,shape,SpecificationError} from '../v2/json';
 import {compileServiceClientArtifacts,currentServiceClientLock,type ServiceClientSpecification,type ServiceClientTarget} from './compiler';
 import {compileOwnedServiceClients} from './owned';
-import {inlineSpecificationPhotos} from '../../specification-photos';
+import {inlineSpecificationPhotos,assetPhotos} from '../../specification-photos';
 const policy=contentPolicyVersion+':'+contentRiskPolicyVersion;
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 const digest=/^[0-9a-f]{64}$/;
@@ -142,7 +142,7 @@ const escape=(value:string)=>value.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;
 async function previewPhotos(db:D1Database,user:string,version:string,html:string,files?:R2Bucket){
  const row=await db.prepare('SELECT v.project_id,v.component_id,v.config_json FROM site_versions v JOIN projects p ON p.id=v.project_id WHERE v.id=? AND p.owner_user_id=?').bind(version,user).first<{project_id:string;component_id:string;config_json:string}>();
  if(!row)throw new BackendError(404,'Saved website not found.');
- return inlineSpecificationPhotos(db,files,user,row.project_id,html,row.component_id==='photo-page@1'?photoConfig(JSON.parse(row.config_json)).photos:[]);
+ return inlineSpecificationPhotos(db,files,user,row.project_id,html,assetPhotos(photoConfig({photos:[],...JSON.parse(row.config_json)})));
 }
 const photoPreviewHeaders={...previewHeaders,'content-security-policy':previewHeaders['content-security-policy']+'; img-src data:'};
 export async function serviceClientPreview(db:D1Database,user:string,review:string,comparison=false,files?:R2Bucket){

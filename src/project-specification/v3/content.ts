@@ -26,9 +26,9 @@ export function createContentSpecification(input:unknown):ProjectSpecification {
  const content=[{id:'headline',text:config.headline},{id:'description',text:config.description},{id:'about-title',text:config.aboutTitle},{id:'about-text',text:config.aboutText}];
  const sections=config.sections.map((section,index)=>{
   const heading=`section-${index+1}-heading`,text=`section-${index+1}-text`;
-  content.push({id:heading,text:section.heading},{id:text,text:section.text});return {heading,text};
+  content.push({id:heading,text:section.heading},{id:text,text:section.text});return {heading,text,variant:section.variant};
  });
- return validateSpecification({schemaVersion:3,name:config.name,design:{theme:config.theme},modules:[{id:'content',version:2}],content,
+ return validateSpecification({schemaVersion:3,name:config.name,design:{theme:config.theme,brand:config.brand??null},modules:[{id:'content',version:2}],content,
   pages:[{id:'home',path:'/',component:config.photos.length?'photo-page@1':'site-page@1',audience:'public',photos:config.photos,headline:'headline',description:'description',aboutTitle:'about-title',aboutText:'about-text',sections}],
   instances:[],integrations:[],rules:[]});
 }
