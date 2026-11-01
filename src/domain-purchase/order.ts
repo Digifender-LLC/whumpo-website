@@ -140,7 +140,7 @@ export async function reconcileOrder({order,registrar,now}:{order:Order;registra
  if(order.reconcileReads>=domainPurchaseBounds.reconcileReads)return step(moved(order,'unresolved','reconcile-bound'));
  const read:Order={...order,reconcileReads:order.reconcileReads+1};
  const found=await registrar.lookup(order.hostname);
- const ours=plain(found)&&found.status!=='not-found'&&found.orderRef===order.orderId;
+ const ours=plain(found)&&found.status!=='not-found'&&found.status!=='transferred-out'&&found.orderRef===order.orderId;
  if(ours&&found.status==='registered'&&Number.isSafeInteger(found.expiresAt))return step(moved(read,'registered','reconciled'),'capture',newRegistration(order,now,found.expiresAt,null));
  if(ours&&found.status==='failed')return step(moved(read,'failed','reconciled-failed'),'release');
  // Only a registration that names a different, known order is proof it is not ours. A null reference or a malformed answer proves nothing (it may be ours with a lost reference), so it ends in the bound, never in a release.

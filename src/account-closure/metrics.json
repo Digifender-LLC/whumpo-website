@@ -124,5 +124,9 @@
 ["domainRegistrarEvents", "domain_registrar_events", "order_id IN (SELECT order_id FROM domain_orders WHERE project_id IN (SELECT id FROM owned_projects))"],
 ["domainFundingHolds", "domain_funding_holds", "order_id IN (SELECT order_id FROM domain_orders WHERE project_id IN (SELECT id FROM owned_projects))"],
 ["domainRegistrations", "domain_registrations", "project_id IN (SELECT id FROM owned_projects)"],
-["activeDomainRegistrations", "domain_registrations", "project_id IN (SELECT id FROM owned_projects)", "state='active'"]
+["activeDomainRegistrations", "domain_registrations", "project_id IN (SELECT id FROM owned_projects)", "state IN ('active','transfer-out')"],
+["domainRenewalReviews", "domain_renewal_reviews", "hostname IN (SELECT hostname FROM domain_registrations WHERE project_id IN (SELECT id FROM owned_projects))"],
+["domainRenewalApprovals", "domain_renewal_approvals", "hostname IN (SELECT hostname FROM domain_registrations WHERE project_id IN (SELECT id FROM owned_projects))"],
+["domainTransferRequests", "domain_transfer_requests", "hostname IN (SELECT hostname FROM domain_registrations WHERE project_id IN (SELECT id FROM owned_projects))"],
+["openDomainTransfers", "domain_transfer_requests", "hostname IN (SELECT hostname FROM domain_registrations WHERE project_id IN (SELECT id FROM owned_projects))", "state IN ('requested','unlocked','unknown-outcome')"]
 ]

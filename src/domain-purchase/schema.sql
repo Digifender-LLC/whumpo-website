@@ -236,15 +236,18 @@ CREATE TABLE domain_registrations (
  order_id TEXT NOT NULL UNIQUE REFERENCES domain_orders(order_id) ON DELETE CASCADE,
  owner_user_id TEXT NOT NULL CHECK(length(owner_user_id) BETWEEN 1 AND 128),
  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
- state TEXT NOT NULL DEFAULT 'active' CHECK(state IN ('active','transferred-out','lapsed')),
+ state TEXT NOT NULL DEFAULT 'active' CHECK(state IN ('active','transfer-out','transferred-out','lapsed')),
  created_at INTEGER NOT NULL CHECK(typeof(created_at)='integer' AND created_at>0),
  expires_at INTEGER CHECK(expires_at IS NULL OR (typeof(expires_at)='integer' AND expires_at>0)),
  auto_renew INTEGER NOT NULL DEFAULT 0 CHECK(auto_renew IN (0,1)),
  renewal_review_id TEXT CHECK(renewal_review_id IS NULL OR length(renewal_review_id) BETWEEN 1 AND 128),
  renewal_total_cents INTEGER CHECK(renewal_total_cents IS NULL OR (typeof(renewal_total_cents)='integer' AND renewal_total_cents BETWEEN 0 AND 100000)),
  charge_mismatch INTEGER CHECK(charge_mismatch IS NULL OR charge_mismatch IN (0,1)),
+ -- First "not found" read after the expiry. A lapse is final, so it needs a second absent read at least six hours later; a read that shows the name clears this.
+ absent_since INTEGER CHECK(absent_since IS NULL OR (typeof(absent_since)='integer' AND absent_since>0)),
  CHECK(auto_renew=0 OR (renewal_review_id IS NOT NULL AND renewal_total_cents IS NOT NULL)),
- CHECK(auto_renew=1 OR (renewal_review_id IS NULL AND renewal_total_cents IS NULL))
+ CHECK(auto_renew=1 OR (renewal_review_id IS NULL AND renewal_total_cents IS NULL)),
+ CHECK(auto_renew=0 OR state='active')
 ) STRICT;
 CREATE INDEX domain_registrations_project ON domain_registrations(project_id);
 CREATE INDEX domain_registrations_owner ON domain_registrations(owner_user_id,state);
@@ -279,9 +282,116 @@ CREATE TRIGGER domain_registrations_release AFTER UPDATE OF state ON domain_regi
  DELETE FROM domain_registrant_contacts WHERE review_id=(SELECT review_id FROM domain_orders WHERE order_id=NEW.order_id);
  UPDATE domain_orders SET released=1,version=version+1 WHERE order_id=NEW.order_id AND released=0;
 END;
+-- A registration moves active -> transfer-out (the owner asked to leave) -> transferred-out, or lapses; the last two are final. Auto-renew turns
+-- on only through a confirmed renewal review for the same name, owner and price (the review's own confirmation writes it), and off at any time.
 CREATE TRIGGER domain_registrations_change BEFORE UPDATE ON domain_registrations BEGIN
  SELECT RAISE(ABORT,'domain_registration_identity') WHERE NEW.hostname IS NOT OLD.hostname OR NEW.order_id IS NOT OLD.order_id OR NEW.owner_user_id IS NOT OLD.owner_user_id
-  OR NEW.project_id IS NOT OLD.project_id OR NEW.created_at IS NOT OLD.created_at OR NEW.charge_mismatch IS NOT OLD.charge_mismatch
-  OR OLD.state!='active' OR (NEW.state!='active' AND NEW.auto_renew=1);
+  OR NEW.project_id IS NOT OLD.project_id OR NEW.created_at IS NOT OLD.created_at OR NEW.charge_mismatch IS NOT OLD.charge_mismatch;
+ SELECT RAISE(ABORT,'domain_registration_expiry') WHERE NEW.expires_at IS NOT OLD.expires_at AND OLD.expires_at IS NOT NULL AND (NEW.expires_at IS NULL OR NEW.expires_at<OLD.expires_at);
+ SELECT RAISE(ABORT,'domain_registration_final') WHERE OLD.state IN ('transferred-out','lapsed');
+ SELECT RAISE(ABORT,'domain_registration_state') WHERE NEW.state IS NOT OLD.state AND NOT (
+   (OLD.state='active' AND NEW.state IN ('transfer-out','transferred-out','lapsed')) OR (OLD.state='transfer-out' AND NEW.state IN ('active','transferred-out','lapsed')));
+ SELECT RAISE(ABORT,'domain_registration_renewal') WHERE NEW.auto_renew=1 AND (OLD.auto_renew=0 OR NEW.renewal_review_id IS NOT OLD.renewal_review_id OR NEW.renewal_total_cents IS NOT OLD.renewal_total_cents)
+  AND NOT EXISTS(SELECT 1 FROM domain_renewal_reviews r WHERE r.review_id=NEW.renewal_review_id AND r.hostname=NEW.hostname AND r.owner_user_id=NEW.owner_user_id
+   AND r.confirmed_at IS NOT NULL AND r.renewal_total_cents=NEW.renewal_total_cents);
 END;
-CREATE TRIGGER domain_registrations_keep BEFORE DELETE ON domain_registrations WHEN OLD.state='active' BEGIN SELECT RAISE(ABORT,'domain_registration_active'); END;
+CREATE TRIGGER domain_registrations_keep BEFORE DELETE ON domain_registrations WHEN OLD.state IN ('active','transfer-out') BEGIN SELECT RAISE(ABORT,'domain_registration_active'); END;
+
+-- The exact opt-in review: bound to the renewal price the server showed. Confirming it (once, before it expires, while the name is active) turns auto-renew on
+-- at that price; a later price rise is a new review (the renewal approval below refuses a price above the opted-in one).
+CREATE TABLE domain_renewal_reviews (
+ review_id TEXT PRIMARY KEY CHECK(review_id GLOB '[A-Za-z0-9]*' AND length(review_id) BETWEEN 1 AND 128 AND review_id NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+ hostname TEXT NOT NULL REFERENCES domain_registrations(hostname) ON DELETE CASCADE,
+ owner_user_id TEXT NOT NULL CHECK(length(owner_user_id) BETWEEN 1 AND 128),
+ renewal_total_cents INTEGER NOT NULL CHECK(typeof(renewal_total_cents)='integer' AND renewal_total_cents BETWEEN 1 AND 100000),
+ consent_text_digest TEXT NOT NULL CHECK(length(consent_text_digest)=64 AND consent_text_digest NOT GLOB '*[^0-9a-f]*'),
+ created_at INTEGER NOT NULL CHECK(typeof(created_at)='integer' AND created_at>0),
+ expires_at INTEGER NOT NULL CHECK(typeof(expires_at)='integer' AND expires_at>created_at AND expires_at<=created_at+600000),
+ confirmed_at INTEGER CHECK(confirmed_at IS NULL OR (typeof(confirmed_at)='integer' AND confirmed_at>=created_at AND confirmed_at<expires_at))
+) STRICT;
+CREATE INDEX domain_renewal_reviews_name ON domain_renewal_reviews(hostname,created_at);
+CREATE TRIGGER domain_renewal_reviews_admit BEFORE INSERT ON domain_renewal_reviews BEGIN
+ SELECT RAISE(ABORT,'domain_renewal_scope') WHERE NEW.confirmed_at IS NOT NULL OR NOT EXISTS(SELECT 1 FROM domain_registrations WHERE hostname=NEW.hostname AND owner_user_id=NEW.owner_user_id AND state='active');
+END;
+CREATE TRIGGER domain_renewal_reviews_once BEFORE INSERT ON domain_renewal_reviews BEGIN SELECT RAISE(ABORT,'domain_row_exists') WHERE EXISTS(SELECT 1 FROM domain_renewal_reviews WHERE review_id=NEW.review_id); END;
+CREATE TRIGGER domain_renewal_reviews_confirm BEFORE UPDATE ON domain_renewal_reviews BEGIN
+ SELECT RAISE(ABORT,'domain_renewal_frozen') WHERE OLD.confirmed_at IS NOT NULL OR NEW.confirmed_at IS NULL OR NEW.review_id IS NOT OLD.review_id OR NEW.hostname IS NOT OLD.hostname
+  OR NEW.owner_user_id IS NOT OLD.owner_user_id OR NEW.renewal_total_cents IS NOT OLD.renewal_total_cents OR NEW.consent_text_digest IS NOT OLD.consent_text_digest
+  OR NEW.created_at IS NOT OLD.created_at OR NEW.expires_at IS NOT OLD.expires_at;
+ SELECT RAISE(ABORT,'domain_renewal_scope') WHERE NOT EXISTS(SELECT 1 FROM domain_registrations WHERE hostname=NEW.hostname AND owner_user_id=NEW.owner_user_id AND state='active');
+END;
+CREATE TRIGGER domain_renewal_reviews_apply AFTER UPDATE OF confirmed_at ON domain_renewal_reviews BEGIN
+ UPDATE domain_registrations SET auto_renew=1,renewal_review_id=NEW.review_id,renewal_total_cents=NEW.renewal_total_cents WHERE hostname=NEW.hostname AND state='active';
+END;
+
+-- The only record that lets a renewal be charged: one per name and expiry, written while the name is active with auto-renew on, for the opted-in
+-- review, at a price no higher than the opted-in price. Nothing here charges or renews; the charger (WH-042 extension) must require this row.
+CREATE TABLE domain_renewal_approvals (
+ hostname TEXT NOT NULL REFERENCES domain_registrations(hostname) ON DELETE CASCADE,
+ for_expiry INTEGER NOT NULL CHECK(typeof(for_expiry)='integer' AND for_expiry>0),
+ review_id TEXT NOT NULL CHECK(length(review_id) BETWEEN 1 AND 128),
+ price_cents INTEGER NOT NULL CHECK(typeof(price_cents)='integer' AND price_cents BETWEEN 1 AND 100000),
+ approved_at INTEGER NOT NULL CHECK(typeof(approved_at)='integer' AND approved_at>0),
+ PRIMARY KEY(hostname,for_expiry)
+) STRICT;
+-- Live opt-in, price at or below it, and a window of 30 days before the expiry; the same rule for a first approval and for the row following a new price.
+CREATE TRIGGER domain_renewal_approvals_admit BEFORE INSERT ON domain_renewal_approvals BEGIN
+ SELECT RAISE(ABORT,'domain_renewal_not_opted_in') WHERE NOT EXISTS(SELECT 1 FROM domain_registrations g WHERE g.hostname=NEW.hostname AND g.state='active' AND g.auto_renew=1
+  AND g.renewal_review_id=NEW.review_id AND NEW.price_cents<=g.renewal_total_cents AND g.expires_at=NEW.for_expiry AND NEW.approved_at<g.expires_at AND NEW.approved_at>=g.expires_at-2592000000);
+END;
+CREATE TRIGGER domain_renewal_approvals_follow BEFORE UPDATE ON domain_renewal_approvals BEGIN
+ SELECT RAISE(ABORT,'domain_renewal_frozen') WHERE NEW.hostname IS NOT OLD.hostname OR NEW.for_expiry IS NOT OLD.for_expiry;
+ SELECT RAISE(ABORT,'domain_renewal_not_opted_in') WHERE NOT EXISTS(SELECT 1 FROM domain_registrations g WHERE g.hostname=NEW.hostname AND g.state='active' AND g.auto_renew=1
+  AND g.renewal_review_id=NEW.review_id AND NEW.price_cents<=g.renewal_total_cents AND g.expires_at=NEW.for_expiry AND NEW.approved_at<g.expires_at AND NEW.approved_at>=g.expires_at-2592000000);
+END;
+-- An approval ends with the opt-in it rests on: turning auto-renew off, a new review, leaving active (transfer-out, lapse) all delete it in the same statement.
+CREATE TRIGGER domain_registrations_revoke AFTER UPDATE ON domain_registrations
+WHEN (OLD.auto_renew=1 AND NEW.auto_renew=0) OR NEW.state!='active' OR NEW.renewal_total_cents IS NOT OLD.renewal_total_cents OR NEW.renewal_review_id IS NOT OLD.renewal_review_id BEGIN
+ DELETE FROM domain_renewal_approvals WHERE hostname=NEW.hostname;
+END;
+-- The charger's gate (WH-042 extension): a charge is allowed only for a row of this view, whose join is the live opt-in and whose approval is recent; the charger
+-- also compares the price it is about to charge, read fresh from the registrar, with price_cents. Nothing else authorizes a renewal charge.
+CREATE VIEW domain_renewal_chargeable AS
+ SELECT a.hostname,a.for_expiry,a.price_cents,a.approved_at,g.owner_user_id,g.project_id,g.renewal_total_cents
+ FROM domain_renewal_approvals a JOIN domain_registrations g ON g.hostname=a.hostname
+ WHERE g.state='active' AND g.auto_renew=1 AND g.renewal_review_id=a.review_id AND g.expires_at=a.for_expiry AND a.price_cents<=g.renewal_total_cents
+  AND a.approved_at>unixepoch()*1000-604800000 AND unixepoch()*1000<g.expires_at;
+
+-- Transfer-out: one open request per name, claimed before the registrar is asked to unlock it, so a lost response is reconciled by reading, never by
+-- asking again. The ICANN 60-day lock is checked here too. The auth code has no column: it is read from the registrar for the owner at the moment it is shown.
+CREATE TABLE domain_transfer_requests (
+ request_id TEXT PRIMARY KEY CHECK(request_id GLOB '[A-Za-z0-9]*' AND length(request_id) BETWEEN 1 AND 100 AND request_id NOT GLOB '*[^A-Za-z0-9_.-]*'),
+ hostname TEXT NOT NULL REFERENCES domain_registrations(hostname) ON DELETE CASCADE,
+ owner_user_id TEXT NOT NULL CHECK(length(owner_user_id) BETWEEN 1 AND 128),
+ state TEXT NOT NULL CHECK(state IN ('requested','unlocked','unknown-outcome','failed','completed')),
+ requested_at INTEGER NOT NULL CHECK(typeof(requested_at)='integer' AND requested_at>0),
+ updated_at INTEGER NOT NULL CHECK(typeof(updated_at)='integer' AND updated_at>=requested_at),
+ version INTEGER NOT NULL DEFAULT 0 CHECK(typeof(version)='integer' AND version>=0),
+ completion_evidence TEXT CHECK(completion_evidence IS NULL OR completion_evidence IN ('registered-elsewhere','registrar-reported'))
+) STRICT;
+CREATE UNIQUE INDEX domain_transfer_requests_open ON domain_transfer_requests(hostname) WHERE state IN ('requested','unlocked','unknown-outcome');
+CREATE INDEX domain_transfer_requests_owner ON domain_transfer_requests(owner_user_id,state);
+CREATE TRIGGER domain_transfer_requests_admit BEFORE INSERT ON domain_transfer_requests BEGIN
+ SELECT RAISE(ABORT,'domain_transfer_scope') WHERE NEW.state!='requested' OR NEW.version!=0 OR NEW.updated_at!=NEW.requested_at OR NOT EXISTS(SELECT 1 FROM domain_registrations g
+  WHERE g.hostname=NEW.hostname AND g.owner_user_id=NEW.owner_user_id AND g.state='active' AND NEW.requested_at-g.created_at>=5184000000);
+END;
+CREATE TRIGGER domain_transfer_requests_start AFTER INSERT ON domain_transfer_requests BEGIN
+ UPDATE domain_registrations SET state='transfer-out',auto_renew=0,renewal_review_id=NULL,renewal_total_cents=NULL WHERE hostname=NEW.hostname AND state='active';
+END;
+CREATE TRIGGER domain_transfer_requests_transition BEFORE UPDATE ON domain_transfer_requests BEGIN
+ SELECT RAISE(ABORT,'domain_transfer_identity') WHERE NEW.request_id IS NOT OLD.request_id OR NEW.hostname IS NOT OLD.hostname OR NEW.owner_user_id IS NOT OLD.owner_user_id OR NEW.requested_at IS NOT OLD.requested_at;
+ SELECT RAISE(ABORT,'domain_transfer_version') WHERE NEW.version IS NOT OLD.version+1 OR NEW.updated_at<OLD.updated_at;
+ SELECT RAISE(ABORT,'domain_transfer_transition') WHERE OLD.state IN ('failed','completed') OR (NEW.state IS NOT OLD.state AND NOT (
+   (OLD.state='requested' AND NEW.state IN ('unlocked','unknown-outcome','failed'))
+   OR (OLD.state='unknown-outcome' AND NEW.state IN ('unlocked','failed','completed'))
+   OR (OLD.state='unlocked' AND NEW.state IN ('completed','failed'))));
+ -- Absence is never evidence (registrar.ts: "not found" proves nothing, and an outage looks the same): a transfer completes only on positive evidence, a registration
+ -- naming another order or the registrar's own transfer-complete report. Nothing else, however often it is read, can reach `completed`.
+ SELECT RAISE(ABORT,'domain_transfer_evidence') WHERE (NEW.state='completed' AND OLD.state!='completed' AND NEW.completion_evidence IS NULL)
+  OR (NEW.completion_evidence IS NOT OLD.completion_evidence AND NOT (NEW.state='completed' AND OLD.state!='completed'));
+END;
+CREATE TRIGGER domain_transfer_requests_settle AFTER UPDATE OF state ON domain_transfer_requests WHEN NEW.state IN ('failed','completed') BEGIN
+ UPDATE domain_registrations SET state=CASE NEW.state WHEN 'completed' THEN 'transferred-out' ELSE 'active' END WHERE hostname=NEW.hostname AND state='transfer-out';
+END;
+CREATE TRIGGER domain_transfer_requests_keep BEFORE DELETE ON domain_transfer_requests WHEN OLD.state IN ('requested','unknown-outcome') BEGIN SELECT RAISE(ABORT,'domain_transfer_unresolved'); END;
+CREATE TRIGGER domain_transfer_requests_once BEFORE INSERT ON domain_transfer_requests BEGIN SELECT RAISE(ABORT,'domain_row_exists') WHERE EXISTS(SELECT 1 FROM domain_transfer_requests WHERE request_id=NEW.request_id); END;

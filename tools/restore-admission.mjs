@@ -252,7 +252,7 @@ function checkUnsettled(state){
   ['inference_calls','status',['reserved','dispatched','uncertain']],['gateway_spend_attempts','status',['reserved','dispatched','uncertain']],
   ['standard_ai_requests','state',['reserved','dispatched','uncertain']],['stripe_subscription_orders','state',['pending']],
   // WH-194: an order that holds funds or may have bought the name must not be restored into a state that can dispatch again.
-  ['domain_orders','state',['reserved','dispatching','unknown-outcome','unresolved']],
+  ['domain_orders','state',['reserved','dispatching','unknown-outcome','unresolved']],['domain_transfer_requests','state',['requested','unknown-outcome']],
  ];
  for(const [table,column,values] of checks)requireCheck(!state.rows.get(table).some(row=>values.includes(row[column])),'uncertain-effect');
  requireCheck(!state.rows.get('stripe_customers').some(row=>row.lease!==null||row.customer_id===null),'uncertain-effect');

@@ -136,7 +136,7 @@ try{
    // WH-093 (schema batch 6): the owner's lead row over that record.
    await run("INSERT INTO module_record_leads(entry_id,instance_id,project_id,stage,note,due_date,revision,last_request_id,created_at,updated_at) VALUES(?,?,?,'contacted','Synthetic drill note','2026-11-05',1,?,?,?)",entry,recordsInstance,app,request,at,at);
    // WH-194 (schema group C2): a cancelled order (its hold was placed by the reservation and released), a registered one with its registration, attempt and event, and a draft review with the owner's registrant contact. A reserved or dispatching order is not seeded: restore admission refuses to restore one (uncertain-effect).
-   for(const [label,host] of [['cancelled','drill-cancelled.example'],['registered','drill-registered.example']]){
+   for(const [label,host] of [['cancelled','drill-cancelled.example'],['registered','drill-registered.example'],['transfer','drill-transfer.example']]){
     const quote=id(),review=id(),order=id(),q=JSON.stringify({quoteId:quote,ownerId:owner.account,projectId:app,hostname:host,quotedAt:ms,expiresAt:ms+600000,contractVersion:1,operation:'register',autoRenew:false,premium:false,funding:{sourceKind:'payment-method',sourceId:'pm-drill',benefitCents:0,customerChargeCents:1300},initial:{totalCents:1300}});
     await run('INSERT INTO domain_quotes(quote_id,owner_user_id,project_id,hostname,quote_json,quote_digest,quoted_at,expires_at) VALUES(?,?,?,?,?,?,?,?)',quote,owner.account,app,host,q,hash(q),ms,ms+600000);
     await run('INSERT INTO domain_reviews(review_id,quote_id,quote_digest,owner_user_id,project_id,project_revision,hostname,funding_source_id,consent_text_digest,created_at,expires_at) VALUES(?,?,?,?,?,1,?,?,?,?,?)',review,quote,hash(q),owner.account,app,host,'pm-drill',hash('consent'),ms,ms+300000);
@@ -144,10 +144,23 @@ try{
     const move=(state,history,extra='')=>run(`UPDATE domain_orders SET state=?,history_json=?,updated_at=?,version=version+1${extra} WHERE order_id=?`,state,JSON.stringify(history),ms+2,order);
     await move('reserved',['quoted','consented','reserved']);
     if(label==='cancelled')await move('cancelled',['quoted','consented','reserved','cancelled:owner-cancelled']);
-    if(label==='registered'){
+    if(label!=='cancelled'){
      await move('dispatching',['quoted','consented','reserved','dispatching'],`,attempts=1,attempt_id='${order}:a1',attempt_started_at=${ms+2}`);
      await move('registered',['quoted','consented','reserved','dispatching','registered'],`,registration_expires_at=${ms+365*86400000},charge_mismatch=0`);
      await run("INSERT INTO domain_registrar_events(event_id,order_id,attempt_id,event_type,applied,received_at) VALUES(?,?,?,'registered',1,?)",id(),order,order+':a1',ms+3);
+     if(label==='registered'){
+      // WH-196: a confirmed renewal opt-in (the confirmation turns auto-renew on) and the approval it covers.
+      const renewal=id();
+      await run('INSERT INTO domain_renewal_reviews(review_id,hostname,owner_user_id,renewal_total_cents,consent_text_digest,created_at,expires_at) VALUES(?,?,?,1400,?,?,?)',renewal,host,owner.account,hash('renewal'),ms+4,ms+300000);
+      await run('UPDATE domain_renewal_reviews SET confirmed_at=? WHERE review_id=?',ms+5,renewal);
+      await run('INSERT INTO domain_renewal_approvals(hostname,for_expiry,review_id,price_cents,approved_at) VALUES(?,?,?,1400,?)',host,ms+365*86400000,renewal,ms+340*86400000);
+     }
+     if(label==='transfer'){
+      // WH-196: a settled transfer-out request (failed: the unlock was refused and the name returned to active). Open ones (requested, unknown-outcome) are refused by restore admission.
+      const request=id(),at=ms+61*86400000;
+      await run("INSERT INTO domain_transfer_requests(request_id,hostname,owner_user_id,state,requested_at,updated_at) VALUES(?,?,?,'requested',?,?)",request,host,owner.account,at,at);
+      await run("UPDATE domain_transfer_requests SET state='failed',updated_at=?,version=1 WHERE request_id=?",at+1,request);
+     }
     }
    }
    {
@@ -180,7 +193,7 @@ try{
    await run("INSERT INTO workspace_layout_receipts(request_id,user_id,request_hash,request_json,from_revision,to_revision,previous_json,layout_json,created_at) VALUES(?,?,?,'{}',?,?,?,?,?)",id(),owner.account,hash('layout'+n),previous.revision,previous.revision+1,previous.layout_json,next,iso);
    await run('UPDATE workspace_preferences SET revision=?,layout_json=?,updated_at=? WHERE user_id=?',previous.revision+1,next,iso,owner.account);
   }
-  for(const t of ['review_receipts','cost_events','lookup_consents','connector_receipts','account_closures','rule_approvals','owner_email_changes','owner_email_change_limits','owner_security_reviews','workspace_layout_receipts','job_journal','job_journal_events','job_outbox','module_records','module_files','module_record_files','module_record_leads','domain_quotes','domain_reviews','domain_orders','domain_funding_holds','domain_registrant_contacts','domain_order_attempts','domain_registrar_events','domain_registrations','visitor_notification_addresses','staff_notification_optins','identity_handoffs','push_devices','push_events','notification_notices','notification_send_ledger'])seeded[t]=(await db.prepare(`SELECT count(*) n FROM ${t}`).first()).n;
+  for(const t of ['review_receipts','cost_events','lookup_consents','connector_receipts','account_closures','rule_approvals','owner_email_changes','owner_email_change_limits','owner_security_reviews','workspace_layout_receipts','job_journal','job_journal_events','job_outbox','module_records','module_files','module_record_files','module_record_leads','domain_quotes','domain_reviews','domain_orders','domain_funding_holds','domain_registrant_contacts','domain_order_attempts','domain_registrar_events','domain_registrations','domain_renewal_reviews','domain_renewal_approvals','domain_transfer_requests','visitor_notification_addresses','staff_notification_optins','identity_handoffs','push_devices','push_events','notification_notices','notification_send_ledger'])seeded[t]=(await db.prepare(`SELECT count(*) n FROM ${t}`).first()).n;
   assert.ok(Object.values(seeded).every(n=>n>=1)&&seeded.workspace_layout_receipts===50,JSON.stringify(seeded));
  }
  const reference=async(database,runtime)=>{
@@ -249,7 +262,7 @@ try{
  const catalog=JSON.parse(await readFile('docs/data-lifecycle.json','utf8')),{snapshot:pointSnapshot}=await verifyRecoveryPoint(pointA,pointDigestA);
  const countRestored=async table=>(await target.DRILL_A.prepare(`SELECT count(*) n FROM "${table}"`).first()).n;
  const coverage=await phase('recoveryCoverage',()=>recoveryCoverage(pointSnapshot,countRestored,catalog));
- assert.equal(coverage.status,'complete',JSON.stringify(coverage.holds));assert.equal(coverage.tables,253);assert.equal(coverage.excluded,0);
+ assert.equal(coverage.status,'complete',JSON.stringify(coverage.holds));assert.equal(coverage.tables,256);assert.equal(coverage.excluded,0);
  for(const table of Object.keys(seeded))assert.equal(await countRestored(table),seeded[table],table+' restored with its archived rows');
  // A new table, a table that vanished from the restore, a stale exclusion and a mismatched count each fail until classified.
  const withTable=structuredClone(pointSnapshot);withTable.tables.push({name:'new_personal_data',columns:['id'],rows:[]});
@@ -257,7 +270,7 @@ try{
  holds.restoreMismatch=(await recoveryCoverage(pointSnapshot,async()=>-1,catalog)).holds;assert.deepEqual(holds.restoreMismatch,['coverage-restore-mismatch']);
  holds.staleExclusion=(await recoveryCoverage(pointSnapshot,countRestored,catalog,{retired_table:'none'})).holds;assert.deepEqual(holds.staleExclusion,['coverage-stale-exclusion']);
  const excludedCoverage=await recoveryCoverage(pointSnapshot,async()=>-1,catalog,Object.fromEntries(pointSnapshot.tables.filter(t=>t.name!=='sqlite_sequence').map(t=>[t.name,'drill rationale'])));
- assert.equal(excludedCoverage.status,'complete');assert.equal(excludedCoverage.excluded,253);
+ assert.equal(excludedCoverage.status,'complete');assert.equal(excludedCoverage.excluded,256);
  refusals+=3;
  // WH-117 key versions in the restored candidate: one registered key, all 4 credential rows under it, no running rotation.
  const keyVersions=await phase('inventoryKeyVersions',()=>inventoryKeyVersions(target.DRILL_A));
