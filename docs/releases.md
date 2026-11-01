@@ -311,3 +311,16 @@ Release `077c051b-adf1-432a-b43d-cd3752c21a37`; binding commit PR #533 (main `07
 - Independent read-only readback after the cutover: one active version per Worker (runtime `1aad55b9`, apps `28b94bdc`, sites `cd3c8a84`, platform `e8fcf4ab`); apps, sites and platform bind the database above; the live schema fingerprint equals source. Only the platform Worker lists secrets (including `TURNSTILE_SECRET`); `whumpo-apps` lists none, so the public appointment form stays closed live (WH-070).
 - `tests/guest-preview-live.mjs` (with the new `/view` header assertions) and `tests/module-live.mjs` pass with cleanup verified.
 - The release archive was not on the checking host, so `pnpm run deploy status` was not run.
+
+## Test-platform cutover — November 1, 2026 UTC (schema batch 7, C1: WH-018 and WH-019)
+
+Owner-instructed test-platform cutover for #554 (WH-018 account export and resumable closure, main `9b08c1f`) and #563 (WH-019 restore reconciliation, main `d6ea2b9`), run by an agent on the owner's session instruction. Source `1de74d5` (`d6ea2b9` plus the binding commit `cf8e22b` and the boundary-audit B4 line); binding PR #567.
+
+- Release: `b6a348b6-2115-4c6d-9b18-c3d89471ccaa`; apply started 2026-11-01T03:32:06Z and finished before 03:33:24Z.
+- New empty database: `whumpo-control-2026-11-01` (`8980d28a-8c97-4246-b136-1475cc844e58`), verified 0 objects and unbound before apply. Complete-SQL sha256 `caab841f1f68844f34b608be5e9c887f2d72e3fd4c503ed3a1f85060ad9a05dd`; inventory sha256 `855ca3e91b40d4b99b4c93fe765ae616c4de416dcf6b12f8ba2d66e33a41b214`: 245 tables, 1273 objects.
+- Worker versions: runtime `e580564f-b428-492f-9042-33972a05af65`, apps `3bd2637e-4b24-4199-8bf6-1043caad09fc`, sites `5de0f7b1-394e-4263-b49f-8e86aab567e1`, platform `e373df60-be58-42ea-883a-3c1abafe916e`; all four candidate tags matched; `deploy status` read `deployed`, schema observed equals target, CMS registry matches (empty).
+- Preflight on the old database `whumpo-control-2026-10-31d` (read 03:24Z): accounts 1 (the owner's), projects 1, identity sessions 1, chat turns 6; zero provider credentials, OAuth exchanges, domain records, CMS instances, guest links, module instances, preservation holds and scan tickets. The old database is kept untouched.
+- Independent readback (03:33Z): apps, sites and platform bind the new database; runtime binds none; only the platform Worker lists secrets (10). `/` and `/api/health` 200; anonymous `/api/chat` and `/api/profile` 401; an unregistered `*.whumpo.site` host 404.
+- `tests/guest-preview-live.mjs` passed with `cleanupVerified: true` (03:35Z). `tests/module-live.mjs` was **not run to completion**: it stopped at its first step because Python Pillow is not installed on this host; it wrote no row (the new database held 0 users and 0 projects afterwards, with only the invitation).
+- Invitation: one single-use, seven-day invitation, private file `invitation-dd082cca5575.txt` under `.secrets/` on the checking host (never the code).
+- Not done: owner re-enrollment; key policy re-registration (A7), which needs the owner's key capsule and recovery file (not on the checking host), so credential work stays refused until then; `module-live`; the binding PR merge until the owner says so.
