@@ -19,8 +19,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "whumpo-control-2026-10-31d",
-      "database_id": "dba36bb8-4d6b-4798-baf3-2572809b2919"
+      "database_name": "whumpo-control-2026-11-01",
+      "database_id": "8980d28a-8c97-4246-b136-1475cc844e58"
     }
   ],
   "r2_buckets": [
