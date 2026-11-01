@@ -2,6 +2,7 @@ import {currentSiteFixtureHandlers,createFixtureProject,changeFixtureWebsite} fr
 import assert from 'node:assert/strict';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
+import {paidPlan} from './helpers/paid-plan.mjs';
 const m=await currentSiteFixtureHandlers(),store=await databaseFixture({d1:true}),db=store.db,scopes=new Map(),scope=user=>scopes.get(user);
 async function accountAuthority(user=crypto.randomUUID()){const authority=await workspaceFixture(db,m,user);scopes.set(user,await authority.scope());return authority;}
 const {sendChat,readChat,host}=m;
@@ -29,6 +30,16 @@ try{
  assert.equal((await chat(user,'/confirm '+second.id)).result.status,200);assert.equal((await served(b.project)).status,200);
  assert.equal((await host.fetch(new Request(url(a.project)+'s/'+b.project),{DB:db})).status,404);
  assert.equal((await host.fetch(new Request('https://'+b.project+'.whumpo.site.evil.example/'),{DB:db})).status,404);
+ // Owner decisions Q-30 and Q-34 (November 1, 2026): after a failed renewal the customer keeps existing published sites, may still re-publish them, and gets no new site. That is what a
+ // lapse already does (the quota exempts a project that is already published), so there is no grace code; this pins it. Coverage ends here by voiding the invoice (WH-042), which is immediate.
+ {const u=await account(),x=await create(u,'Xray'),y=await create(u,'Yankee'),z=await create(u,'Zulu'),invoice=await paidPlan(db,u,'personal');
+  for(const site of [x,y]){const r=await chat(u,'/publish '+site.version);assert.equal((await chat(u,'/confirm '+r.id)).result.status,200);}
+  assert.equal((await served(y.project)).status,200);
+  await db.prepare("INSERT INTO stripe_invoice_voids(invoice_id,reason,source_id,created_at) VALUES(?,'refund','ch_pin',unixepoch())").bind(invoice).run();
+  const next={id:await changeFixtureWebsite(scope(u),u,x.project,[{type:'design.setTheme',theme:'clay'}])};
+  const again=await chat(u,'/publish '+next.id);assert.equal((await chat(u,'/confirm '+again.id)).result.status,200,'an already-published site can still be re-published after coverage ends');
+  assert.equal((await served(x.project)).status,200);assert.equal((await served(y.project)).status,200,'existing sites stay up');
+  const fresh=await chat(u,'/publish '+z.version);assert.equal((await chat(u,'/confirm '+fresh.id)).result.status,409,'no new site beyond the Explore limit once coverage has ended');assert.equal((await served(z.project)).status,404);}
  // No control-plane routes or write methods on the public host.
  assert.equal((await host.fetch(new Request(url(b.project)+'api/chat'),{DB:db})).status,404);
  assert.equal((await host.fetch(new Request(url(b.project),{method:'POST'}),{DB:db})).status,405);
