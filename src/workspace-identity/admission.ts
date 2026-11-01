@@ -62,6 +62,12 @@ export function admitWorkspace(db:D1Database,principal:IdentityPrincipal,closure
  scopes.set(admitted,context);return admitted;
 }
 
+/** Settlement of work dispatched before closure confirmed: the same identity check, without the closing fence. Only for state-guarded receipt updates
+ * on rows that already exist (an in-flight request recording its outcome); it never starts work. A raw maintenance database is returned as it is. */
+export function settlementDatabase(db:D1Database,userId:string):D1Database{
+ if(!scopes.has(db))return db;
+ const c=scope(db,userId);return admitWorkspace(c.db,c.principal,'permit');
+}
 export function workspacePrincipal(db:object,userId:string){return scope(db,userId).principal;}
 export function workspacePredicate(db:object,userId:string){
  const c=scope(db,userId);return identityPredicate(c.db,c.principal,c.policy);
