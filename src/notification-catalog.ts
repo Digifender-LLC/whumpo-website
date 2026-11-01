@@ -95,6 +95,8 @@ function deepFreeze<T>(v:T):T{if(v&&typeof v==='object'){for(const x of Object.v
 /** Account notices (WH-202, gap G-E10): platform-obligation, to the account's own verified address (the new address for the confirmation only). Content-free: no address, token (except the new-address code), device or credential detail; every other notice links to Settings. */
 const accountFooter:Segment[]=[{text:'\n\nReview your account in Whumpo: '},{link:'workspace-settings'},{text:'\n\nYou receive this because of a security-relevant change to your Whumpo account. If this was not you, open Whumpo and review your account security now.'}];
 const tpl=(e:readonly [string,CatalogEntry])=>Object.fromEntries([e]);
+// WH-196: expiry reminders on the ICANN Expired Registration Recovery Policy schedule. Content-free (no domain name); queued in the outbox, never sent while the sender gate is closed.
+const domainReminder=(id:string,subject:string,lead:string)=>[`${id}@1`,{state:'available',readiness:'planned',template:template({id,version:1,authority:'platform-obligation',trigger:'account.notice',audiences:['account-email'],subject:[{text:subject}],body:[{text:lead},{text:'\n\nReview your domains in Whumpo: '},{link:'workspace-settings'},{text:'\n\nWhumpo does not renew a domain unless you turned on auto-renew after reviewing its price. This email does not name the domain.'}]})}] as const;
 const accountTemplate=(id:string,subject:string,lead:string)=>[`${id}@1`,{state:'available',readiness:'planned',template:template({id,version:1,authority:'platform-obligation',trigger:'account.notice',audiences:['account-email'],subject:[{text:subject}],body:[{text:lead},...accountFooter]})}] as const;
 
 /**
@@ -149,6 +151,9 @@ export const notificationCatalog:NotificationCatalog=deepFreeze({
   ...tpl(accountTemplate('account.passkey-removed','A passkey was removed from your Whumpo account','A passkey was removed from your Whumpo account.')),
   ...tpl(accountTemplate('account.recovery-started','Recovery was started on your Whumpo account','Account recovery was started for your Whumpo account. You can rotate your recovery kit from a signed-in session to stop it.')),
   ...tpl(accountTemplate('account.recovery-secured','Recovery was completed on your Whumpo account','Account recovery was completed and a new passkey now secures your Whumpo account.')),
+  ...tpl(domainReminder('domain.expiry-month','A domain you registered with Whumpo expires in about a month','A domain you registered through Whumpo expires in about a month.')),
+  ...tpl(domainReminder('domain.expiry-week','A domain you registered with Whumpo expires in about a week','A domain you registered through Whumpo expires in about a week.')),
+  ...tpl(domainReminder('domain.expiry-expired','A domain you registered with Whumpo has expired','A domain you registered through Whumpo has passed its expiry date. It may still be possible to renew it for a short time.')),
   ...tpl(accountTemplate('account.kit-rotated','Your Whumpo recovery kit was replaced','The recovery kit for your Whumpo account was replaced. The old kit no longer works.')),
   'support.response-saved@1':{state:'available',readiness:'planned',template:template({id:'support.response-saved',version:1,authority:'platform-obligation',trigger:'account.notice',audiences:['account-email'],variables:{},
    subject:[{text:'A response to your Whumpo request is saved'}],

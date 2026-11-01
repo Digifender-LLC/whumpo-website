@@ -8,6 +8,14 @@ export function hostingConfig(env:{CLOUDFLARE_DOMAINS_TOKEN?:string;DOMAIN_HOSTI
 }
 type Connection={id:string;user_id:string;claim_id:string;project_id:string;hostname:string;zone_id:string;target:string;proof_hash:string;state:string;provider_id:string|null;provider_status:string;ssl_status:string;detail:string;created_at:string;expires_at:string;checked_at:string|null;serve_until:string|null};
 const idPattern=/^[a-f0-9-]{36}$/;
+/** WH-196 / G-D8: a claim whose token starts with `registrar-evidence:` was written for the owner of an active purchased registration of this exact name in this
+ * project (src/domain-purchase/lifecycle.ts claimPurchasedName); its proof is that registration, read from D1, instead of a DNS TXT record, and it ends with it.
+ * Every other claim is proved in DNS as before. A token that only says so proves nothing: the registration must exist. */
+export async function claimProofHolds(db:D1Database,claim:{project_id:string;hostname:string;token:string},transport:typeof fetch=fetch,now:number=Date.now()){
+ // The registration must be active and unexpired; an unknown (NULL) expiry fails closed.
+ if(claim.token.startsWith('registrar-evidence:'))return !!await db.prepare("SELECT 1 x FROM domain_registrations WHERE hostname=? AND project_id=? AND state='active' AND expires_at>?").bind(claim.hostname,claim.project_id,now).first();
+ return verifyDNS('_whumpo.'+claim.hostname,'whumpo-verification='+claim.token,transport);
+}
 function configured(config:HostingConfig|undefined){if(!config||!config.token||!/^[a-f0-9]{32}$/.test(config.zone)||config.target!=='hosting.whumpo.site')throw new DomainError(503,'Domain hosting is awaiting platform configuration.');return config;}
 function view(c:Connection){return {id:c.id,claimId:c.claim_id,projectId:c.project_id,hostname:c.hostname,state:c.state==='review'&&c.expires_at<=new Date().toISOString()?'expired':c.state==='active'&&(!c.serve_until||c.serve_until<=new Date().toISOString())?'needs_check':c.state,connected:c.state==='active'&&!!c.serve_until&&c.serve_until>new Date().toISOString(),target:c.target,providerStatus:c.provider_status,certificateStatus:c.ssl_status,detail:c.detail,expiresAt:c.expires_at,checkedAt:c.checked_at};}
 async function owned(db:D1Database,user:string,id:string){const c=await db.prepare('SELECT c.* FROM domain_connections c JOIN projects p ON p.id=c.project_id WHERE c.id=? AND c.user_id=? AND p.owner_user_id=?').bind(id,user,user).first<Connection>();if(!c)throw await compactedReview(db,'domain_connections',id,user,(s,m)=>new DomainError(s,m))??new DomainError(404,'Domain connection not found.');return c;}
@@ -41,7 +49,7 @@ export async function confirmHosting(db:D1Database,user:string,id:string,configu
  if(c.state!=='review')return view(c);
  if(c.expires_at<=new Date().toISOString())throw new DomainError(409,'Hosting review expired. Prepare a new review.');
  const claim=await currentProof(db,user,c.claim_id);if(await hashToken(claim.token)!==c.proof_hash)throw new DomainError(409,'Domain proof changed. Prepare a new review.');
- if(!await verifyDNS('_whumpo.'+c.hostname,'whumpo-verification='+claim.token,transport))throw new DomainError(409,'The current domain ownership proof was not found.');
+ if(!await claimProofHolds(db,{project_id:claim.project_id,hostname:c.hostname,token:claim.token},transport))throw new DomainError(409,'The current domain ownership proof was not found.');
  const inventory=await readJSON(await request(config,'?per_page=1', 'GET',undefined,transport));
  if(!Number.isSafeInteger(inventory.result_info?.total_count)||Number(inventory.result_info?.total_count)>=80)throw new DomainError(409,'Cloudflare hostname allowance needs operator review.');
  const existing=await readJSON(await request(config,'?hostname='+encodeURIComponent(c.hostname)+'&per_page=50','GET',undefined,transport));
@@ -83,7 +91,7 @@ export async function refreshHosting(db:D1Database,user:string,id:string,configu
   const config=configured(configuration);if(c.zone_id!==config.zone||c.target!==config.target)throw new DomainError(409,'Original hosting configuration is required.');
   const remote=providerRecord((await readJSON(await request(config,'/'+c.provider_id,'GET',undefined,transport))).result,c.hostname,c.provider_id);
   const claim=await currentProof(db,user,c.claim_id);
-  const proof=await verifyDNS('_whumpo.'+c.hostname,'whumpo-verification='+claim.token,transport);
+  const proof=await claimProofHolds(db,{project_id:claim.project_id,hostname:c.hostname,token:claim.token},transport);
   const routed=await verifyDNS(c.hostname,c.target,transport,'CNAME');
   const ready=remote.status==='active'&&remote.ssl==='active'&&proof&&routed,now=new Date().toISOString();
   await db.prepare("UPDATE domain_connections SET state=?,provider_status=?,ssl_status=?,checked_at=?,serve_until=?,detail=? WHERE id=? AND user_id=? AND provider_id=? AND check_id=? AND state IN ('active','provisioning') AND EXISTS(SELECT 1 FROM domain_claims d WHERE d.id=domain_connections.claim_id AND d.token=? AND d.expires_at=? AND d.expires_at>?)").bind(ready?'active':'provisioning',remote.status,remote.ssl,now,ready?new Date(Math.min(Date.now()+7200000,Date.parse(claim.expires_at))).toISOString():null,ready?'Certificate, hostname and DNS checks passed':'Awaiting active hostname, certificate, current TXT proof and direct CNAME',id,user,c.provider_id,checkId,claim.token,claim.expires_at,now).run();

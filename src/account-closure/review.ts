@@ -154,13 +154,17 @@ domainQuotes:['domain_quotes','domain-registrations','delete'],
  domainOrderAttempts:['domain_order_attempts','domain-registrations','delete'],
  domainRegistrarEvents:['domain_registrar_events','domain-registrations','delete'],
  domainFundingHolds:['domain_funding_holds','billing','delete'],
+ domainRenewalReviews:['domain_renewal_reviews','domain-registrations','delete'],
+ domainRenewalApprovals:['domain_renewal_approvals','domain-registrations','delete'],
+ domainTransferRequests:['domain_transfer_requests','domain-registrations','delete'],
  domainRegistrations:['domain_registrations','domain-registrations','retain'],
+ openDomainTransfers:['domain_transfer_requests','domain-registrations','cancel'],
  activeDomainRegistrations:['domain_registrations','domain-registrations','retain'],
 };
 export const closureCategories:Readonly<Record<string,readonly [string,string,Disposition]>>=Object.freeze(c);
 /** Open provider work that ends by itself: closure waits until each settles or its window passes (cancelling a local row never settles a provider effect). Provider work with no window
  * (an uncertain connector send, an uncertain grant) is a support-only key in src/account-lifecycle/closure.ts instead, refused before confirmation. */
-export const settleFirstKeys:readonly string[]=Object.freeze(['unresolvedStandardAI','unresolvedConnectionExchanges','githubGrantUncertain','githubPendingRevocations','cloudflarePendingRevocations','unresolvedDomainRecords','unresolvedChatInteractionContinuations','unresolvedJobs','pendingScanTickets','connectionRotationGuards','unresolvedDomainOrders','activeDomainRegistrations','uncertainGitHubBackups']);
+export const settleFirstKeys:readonly string[]=Object.freeze(['unresolvedStandardAI','unresolvedConnectionExchanges','githubGrantUncertain','githubPendingRevocations','cloudflarePendingRevocations','unresolvedDomainRecords','unresolvedChatInteractionContinuations','unresolvedJobs','pendingScanTickets','connectionRotationGuards','unresolvedDomainOrders','activeDomainRegistrations','openDomainTransfers','uncertainGitHubBackups']);
 
 export const isCount=(v:unknown):v is number=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0;
 /** Every category present as a non-negative integer, nothing unknown. */
