@@ -67,6 +67,8 @@ try{
  // Both same-owner/wrong-project and other-owner/same-task traps must stay out of the accepted outcome.
  await add(A.account,other.project,q.id,{cost:{basis:'receipt',micros:900,ref:'synthetic'}});
  await add(B.account,foreign.project,q.id,{cost:{basis:'receipt',micros:800,ref:'synthetic'}});
+ // A wrong-project event outside the window is unrelated history, not unattributed work in this period.
+ await add(A.account,other.project,q.id,{occurredAt:before,observedAt:before,cost:{basis:'receipt',micros:33,ref:'synthetic'}});
  await add(A.account,p.project,stale.id,{cost:{basis:'receipt',micros:110,ref:'synthetic'}});
  await add(A.account,p.project,failed.version,{cost:{basis:'receipt',micros:40,ref:'synthetic'}});
  await add(A.account,p.project,savedOnly.id,{cost:{basis:'unknown',reason:'usage-pending',exposureMicros:500},outcome:'pending'});

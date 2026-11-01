@@ -50,7 +50,7 @@ WHERE r.user_id=? AND r.created_at>=? AND r.created_at<? ORDER BY r.id LIMIT 200
  * Other events in the window stay unattributed (including failed/unfinished work); pool cost is never allocated. */
 export async function producedOutcomeCostReport(db: Pick<D1Database, 'prepare'>, from: string, to: string, owner: string) {
  const produced = await produceOutcomes(db, from, to, owner);
- const tasks = new Set(produced.taskLinks.map(l => l.taskRef));
+ const tasks = new Map(produced.taskLinks.map(l => [l.taskRef, l.projectId]));
  const { results } = await db.prepare(`SELECT event_json,scope,owner_id,project_id FROM cost_events
  WHERE owner_id=? OR (scope='platform' AND occurred_at>=? AND occurred_at<?)
  ORDER BY seq LIMIT 10001`).bind(owner, from, to).all<{ event_json: string; scope: string; owner_id: string | null; project_id: string | null }>();
@@ -60,7 +60,7 @@ export async function producedOutcomeCostReport(db: Pick<D1Database, 'prepare'>,
   const e = await validateCostEvent(JSON.parse(row.event_json));
   const a = e.attribution;
   requireFact(a.scope === row.scope && (a.scope === 'platform' ? row.owner_id === null && row.project_id === null : a.ownerId === owner && a.ownerId === row.owner_id && a.projectId === row.project_id), 'EVENT_SCOPE');
-  if ((e.occurredAt >= from && e.occurredAt < to) || (a.scope === 'tenant' && e.taskRef !== null && tasks.has(e.taskRef))) events.push(e);
+  if ((e.occurredAt >= from && e.occurredAt < to) || (a.scope === 'tenant' && e.taskRef !== null && tasks.has(e.taskRef) && (a.projectId === null || a.projectId === tasks.get(e.taskRef)))) events.push(e);
  }
  return { version: 1, scope: 'one-account', from, toExclusive: to,
   evidence: { receipts: produced.receipts, produced: produced.outcomes.length, unsupported: produced.unsupported, quality: 'not-assessed', fallback: 'unavailable', unsupportedClasses: ['custom-component', 'custom-backend', 'dedicated-runtime'] },
