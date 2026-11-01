@@ -281,6 +281,14 @@ try{
   await assert.rejects(()=>proposeFixtureWebsite(a.scope,a.user,a.project,[{type:'pages.setSections',pageId:'home',sections:big}]),e=>e.status===422&&/too large to save.*7,168 bytes.*9,216/.test(e.message));
  });
 
+ await check('a section the editor allows is saved or refused with a clear 400, never an internal size error',async()=>{
+  const c=await owner(),content={heading:'営業時間',text:'あ'.repeat(800),variant:'plain'};
+  // 800 Japanese characters pass the character limit but serialize past the 2,048 byte budget.
+  await rejects(()=>kits.createSavedSection(c.scope,c.user,{id:id(),name:'Wide',content}),400,/too long to save.*2,048 bytes/);
+  const section=await kits.createSavedSection(c.scope,c.user,{id:id(),name:'Fits',content:{...content,text:'あ'.repeat(100)}});
+  await rejects(()=>kits.saveSavedSectionVersion(c.scope,c.user,section.id,{expectedVersion:1,name:'Fits',content}),400,/too long to save.*2,048 bytes/);
+ });
+
  await check('limits hold in the commit and nothing used the network',async()=>{
   const c=await owner();
   for(let i=0;i<20;i++)await kits.createBrandKit(c.scope,c.user,{id:id(),name:'K'+i,tokens:tokens()});

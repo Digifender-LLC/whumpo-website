@@ -47,5 +47,9 @@ export function sectionContent(value:unknown):SectionContent{
  return {heading:line(s.heading,100,'The heading'),text:line(s.text,800,'The text'),variant:s.variant as SectionVariant};
 }
 export const tokensJSON=(t:KitTokens)=>canonicalJSON(t,1024);
-export const contentJSON=(c:SectionContent)=>canonicalJSON(c,2048);
+// The 2,048 byte budget is on UTF-8 bytes, so text the character limits allow can exceed it (800 Japanese characters are 2,400). Say so as a 400.
+export function contentJSON(c:SectionContent){
+ try{return canonicalJSON(c,2048);}
+ catch(error){if((error as {code?:string}).code==='INPUT_TOO_LARGE')throw new BrandKitError(400,'This section is too long to save (limit 2,048 bytes; characters outside the basic Latin alphabet count for more). Shorten the heading or text.');throw error;}
+}
 export const digestOf=(canonical:string)=>jsonDigest(JSON.parse(canonical));
