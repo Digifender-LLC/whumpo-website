@@ -692,7 +692,8 @@ try{
   const o=await owner();
   try{
    for(const key of m.needsSupportKeys){forced={[key]:1};const r=await closureReview(o);assert.equal(r.needsSupport,true,key);assert.equal(r.canConfirm,false,key);await refused(await confirm(o,r),409,key==='x'?'':'action_required').catch(()=>{});}
-   for(const key of Object.keys(m.ownerActions)){forced={[key]:1};const r=await closureReview(o);assert.deepEqual(r.requiredBeforeClosure.map(x=>x.id),[key]);assert.equal(r.canConfirm,false,key);}
+   // A review row per key and a cap of 20 per account: the owner-action keys use a second account.
+   const o2=await owner();for(const key of Object.keys(m.ownerActions)){forced={[key]:1};const r=await closureReview(o2);assert.deepEqual(r.requiredBeforeClosure.map(x=>x.id),[key]);assert.equal(r.canConfirm,false,key);}
    forced=null;assert.equal((await closureReview(o)).canConfirm,true,'nothing forced, nothing refused');
   }finally{forced=null;}
   assert.equal(await row('SELECT 1 x FROM account_closures WHERE account_id=?',o.user),null);

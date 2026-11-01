@@ -46,7 +46,7 @@ async function current(){const manifest=await capture();permit(manifest);return 
 const options=manifest=>({db,manifest,keyBackup,evidenceSource,expectedStreamId:streamId,objects,now:()=>now});
 let refusals=0;
 async function held(input,code){const report=await inspectIsolatedRestore(input);assert.deepEqual(report.holds,[code]);assert.equal(report.status,'held');assert.equal(report.servingAllowed,false);assert.equal(report.providerDispatchAllowed,false);assert.ok(!JSON.stringify(report).includes(canary));assert.ok(!JSON.stringify(report).includes(objectKey));refusals++;return report;}
-async function passed(input){const result=await inspectIsolatedRestore(input);assert.equal(result.status,'verified',JSON.stringify(result));assert.equal(result.servingAllowed,false);assert.equal(result.providerDispatchAllowed,false);assert.equal(result.retirementAllowed,false);assert.equal(result.tables,245);return result;}
+async function passed(input){const result=await inspectIsolatedRestore(input);assert.equal(result.status,'verified',JSON.stringify(result));assert.equal(result.servingAllowed,false);assert.equal(result.providerDispatchAllowed,false);assert.equal(result.retirementAllowed,false);assert.equal(result.tables,253);return result;}
 const altered=(mutate)=>({async fetch(request){const response=await evidenceSource.fetch(request);const body=await response.json();await mutate(body);return Response.json(body);}});
 const originalFetch=globalThis.fetch;globalThis.fetch=async()=>assert.fail('Restore verification cannot dispatch to any real provider');
 try{
@@ -125,6 +125,20 @@ try{
  // Mutating during the object read occurs after the first admitted snapshot.
  await held({...options(manifest),objects:{get:async key=>{await changing.prepare('SELECT * FROM "users"').all();return objects.get(key);}}},'candidate-changed');
  clear();manifest=await current();await passed(options(manifest));
+ // WH-194: an order that holds funds or may have bought the name is never restored into a state that can dispatch again.
+ {
+  const project=id(),quote=id(),review=id(),order=id(),at=Date.now(),digest='c'.repeat(64);
+  const q=JSON.stringify({quoteId:quote,ownerId:owner.account,projectId:project,hostname:'restore-check.example',quotedAt:at,expiresAt:at+600000,contractVersion:1,operation:'register',autoRenew:false,premium:false,funding:{sourceKind:'payment-method',sourceId:'pm-restore',benefitCents:0,customerChargeCents:1300},initial:{totalCents:1300}});
+  const run=(sql,...v)=>db.prepare(sql).bind(...v).run();
+  await run("INSERT INTO projects(id,owner_user_id,name,created_at,updated_at) VALUES(?,?,'Domain restore','2026-10-31','2026-10-31')",project,owner.account);
+  await run('INSERT INTO domain_quotes(quote_id,owner_user_id,project_id,hostname,quote_json,quote_digest,quoted_at,expires_at) VALUES(?,?,?,?,?,?,?,?)',quote,owner.account,project,'restore-check.example',q,digest,at,at+600000);
+  await run('INSERT INTO domain_reviews(review_id,quote_id,quote_digest,owner_user_id,project_id,project_revision,hostname,funding_source_id,consent_text_digest,created_at,expires_at) VALUES(?,?,?,?,?,1,?,?,?,?,?)',review,quote,digest,owner.account,project,'restore-check.example','pm-restore',digest,at,at+300000);
+  await run("INSERT INTO domain_orders(order_id,idempotency_key,review_id,quote_id,quote_digest,owner_user_id,project_id,hostname,state,history_json,consented_at,updated_at) VALUES(?,?,?,?,?,?,?,?,'consented','[\"quoted\",\"consented\"]',?,?)",order,digest,review,quote,digest,owner.account,project,'restore-check.example',at+1,at+1);
+  await run("UPDATE domain_orders SET state='reserved',history_json='[]',updated_at=?,version=1 WHERE order_id=?",at+2,order);
+  clear();manifest=await current();await held(options(manifest),'uncertain-effect');
+  await run("UPDATE domain_orders SET state='cancelled',updated_at=?,version=2 WHERE order_id=?",at+3,order);
+  clear();manifest=await current();await passed(options(manifest));
+ }
  // Already dispatched custody is unresolved even if independent history is empty.
  const exchange=id();await db.prepare("INSERT INTO connection_oauth_exchanges(token_id,user_id,provider,client_id,state_hash,key_id,revision,state) VALUES(?,?,'github','fixture','unknown','fixture-current',1,'dispatched')").bind(exchange,owner.account).run();
  clear();manifest=await current();await held(options(manifest),'uncertain-effect');

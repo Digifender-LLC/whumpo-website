@@ -2195,7 +2195,7 @@
       "title": "Current-schema domain orders, reviews, funding holds and registrant data class",
       "phase": "F3",
       "priority": "P1",
-      "readiness": "planned",
+      "readiness": "blocked",
       "kind": "implementation",
       "size": "M",
       "dependsOn": [
@@ -2203,7 +2203,9 @@
         "WH-116",
         "WH-052"
       ],
-      "blockers": [],
+      "blockers": [
+        "Acceptance line 3: the schema change ships only through the reviewed empty-database cutover (schema group C2) that the owner runs; source and local verification are complete and nothing is deployed."
+      ],
       "outcome": "Domain quotes, reviews, orders, holds, attempts, reconciliation reads and registrant contacts persist in the complete current schema with atomic transitions and lifecycle/protection registration.",
       "scope": [
         "Canonical schema inputs for quotes, reviews, orders (unique idempotency key and one active order per registrable name), funding holds, attempts and registrar events; D1 statements repeat every contract predicate (gap G-D10)",
@@ -2228,7 +2230,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-10-31 UTC (Batch 7, schema group C2, branch wh-194-domain-orders from dd835a5; source and local verification on disposable SQLite with two connections and actual local D1; synthetic registrar, no registrar account, domain, Stripe key or call, secret, var, deploy or dependency): storage delivered, nothing reaches it. New src/domain-purchase/schema.sql (added to currentSchemaFiles; 249 tables with this group alone) holds domain_quotes, domain_reviews, domain_registrant_contacts, domain_orders, domain_funding_holds, domain_order_attempts, domain_registrar_events and domain_registrations, and src/domain-purchase/store.ts is the only writer. Every contract predicate is repeated in D1: the order repeats its review, quote, owner and project and must be consented before either expires; the server-resolved project revision and funding source are bound into the inserting statement; UNIQUE idempotency key per exact review and a partial unique index allow one order per name that is not failed, cancelled or expired (across tenants); only the contract's transitions exist and settled orders are final; the dispatching transition writes the one attempt row (UNIQUE order_id), so a second claim or redispatch cannot insert one and register is called only after that claim commits; the hold is written by the reserving transition and settled by the order's own transition; the registered transition writes the registration with auto-renew off. A reserved, dispatching, unknown-outcome or unresolved order cannot be deleted and an active registration cannot be deleted by a project or account cascade, so unknown and unresolved orders keep their hold and block purge. No column holds an auth code, registrar credential or card data. Registered: lifecycle class domain-registrations (current; holds join billing), job purpose domain-registration under WH-052 (workspace-session actor, one project, no module resource, one attempt) in schema, journal, offline validator, fixtures and docs, Chat review binding domain.purchase-review@1 under WH-105 with its reader readDomainReview, tenant classification (eight tables, no users foreign key), closure inventory and review (unresolvedDomainOrders and activeDomainRegistrations are settle-first), restore admission and the recovery drill (a reserved and a registered order are seeded and restored). Acceptance map: A1 tests/domain-purchase-store.mjs (concurrent identical consents make one order; two tenants racing for a name make one; four concurrent dispatches plus a sweep make exactly one register call, one registration, one captured hold; a worker that never returns is swept to unknown-outcome once; two concurrent identical registrar events apply once); A2 same file (an unknown outcome and an unresolved order keep their hold, project and user deletes are refused, an event ends them); A3 met by the testing-deploy authority of 2026-10-26 (D60) but not exercised: the schema ships only through the C2 cutover, which the owner runs. Verification: node tools/lifecycle-catalog.mjs, tests/domain-purchase-store.mjs (SQLite and --d1), tests/domain-purchase-contract.mjs (the bundle check still holds: no Worker reaches the module), tests/job-journal.mjs and tests/job-envelope-contract.mjs, tenant classification, closure inventory and contract, restore admission, recovery drill, pnpm check. Recovery drill: it failed at restoreControlD1 with fetch failed (workerd closed the socket) on this host while load was 17 to 23 and 15 GB was swapped; the same failure reproduced with these changes reverted, schema-only batches of the same size succeed on local D1, and the drill passed at load 12 with 2 GB free, so it is memory pressure on the host, not the change. Still open: no route, Chat card, registrar adapter (WH-195), payment hold or scheduled pass uses the store, so pruneDomainDrafts and the lease and reconcile sweeps are unscheduled; the C2 cutover."
+      ]
     },
     {
       "id": "WH-195",

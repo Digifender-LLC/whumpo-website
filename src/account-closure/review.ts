@@ -146,11 +146,21 @@ const c:Record<string,[string,string,Disposition]>={
  activeSubscriptions:['stripe_subscriptions','billing','cancel'],
  paidInvoices:['stripe_paid_invoices','billing','retain'],
  domainZones:['domain_connections','domains-dns','retain'],
+domainQuotes:['domain_quotes','domain-registrations','delete'],
+ domainReviews:['domain_reviews','domain-registrations','delete'],
+ domainRegistrantContacts:['domain_registrant_contacts','domain-registrations','delete'],
+ domainOrders:['domain_orders','domain-registrations','delete'],
+ unresolvedDomainOrders:['domain_orders','domain-registrations','cancel'],
+ domainOrderAttempts:['domain_order_attempts','domain-registrations','delete'],
+ domainRegistrarEvents:['domain_registrar_events','domain-registrations','delete'],
+ domainFundingHolds:['domain_funding_holds','billing','delete'],
+ domainRegistrations:['domain_registrations','domain-registrations','retain'],
+ activeDomainRegistrations:['domain_registrations','domain-registrations','retain'],
 };
 export const closureCategories:Readonly<Record<string,readonly [string,string,Disposition]>>=Object.freeze(c);
 /** Open provider work that ends by itself: closure waits until each settles or its window passes (cancelling a local row never settles a provider effect). Provider work with no window
  * (an uncertain connector send, an uncertain grant) is a support-only key in src/account-lifecycle/closure.ts instead, refused before confirmation. */
-export const settleFirstKeys:readonly string[]=Object.freeze(['unresolvedStandardAI','unresolvedConnectionExchanges','githubGrantUncertain','githubPendingRevocations','cloudflarePendingRevocations','unresolvedDomainRecords','unresolvedChatInteractionContinuations','unresolvedJobs','pendingScanTickets','connectionRotationGuards','uncertainGitHubBackups']);
+export const settleFirstKeys:readonly string[]=Object.freeze(['unresolvedStandardAI','unresolvedConnectionExchanges','githubGrantUncertain','githubPendingRevocations','cloudflarePendingRevocations','unresolvedDomainRecords','unresolvedChatInteractionContinuations','unresolvedJobs','pendingScanTickets','connectionRotationGuards','unresolvedDomainOrders','activeDomainRegistrations','uncertainGitHubBackups']);
 
 export const isCount=(v:unknown):v is number=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0;
 /** Every category present as a non-negative integer, nothing unknown. */

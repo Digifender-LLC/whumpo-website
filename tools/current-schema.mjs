@@ -4,7 +4,7 @@ import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
 
-export const currentSchemaFiles=Object.freeze(['src/workspace-identity/canonical-inputs.sql','schema/platform.sql','src/workspace-identity/schema.sql','src/funnel-metrics/schema.sql','src/guest-previews/schema.sql','src/shared-modules/schema.sql','src/account-lifecycle/schema.sql','src/restore-suppression/schema.sql']);
+export const currentSchemaFiles=Object.freeze(['src/workspace-identity/canonical-inputs.sql','schema/platform.sql','src/workspace-identity/schema.sql','src/funnel-metrics/schema.sql','src/guest-previews/schema.sql','src/shared-modules/schema.sql','src/account-lifecycle/schema.sql','src/restore-suppression/schema.sql','src/domain-purchase/schema.sql']);
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const hash=value=>createHash('sha256').update(value).digest('hex');
 // _cf_KV and _cf_METADATA belong to D1/Wrangler. Everything else, including an obsolete migration ledger,

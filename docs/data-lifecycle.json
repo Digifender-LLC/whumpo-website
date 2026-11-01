@@ -1738,11 +1738,12 @@
         "stripe_subscription_orders",
         "stripe_subscriptions",
         "stripe_paid_invoices",
-        "capacity_preferences"
+        "capacity_preferences",
+        "domain_funding_holds"
       ],
       "scope": "owner",
-      "purpose": "Current plan preferences, sandbox subscriptions, invoice coverage and checkout idempotency.",
-      "currentRetention": "Current records cascade with owner deletion; paid invoice receipts are immutable. Stripe sandbox is configured; real payments are disabled. Obsolete test billing tables and rows were removed.",
+      "purpose": "Current plan preferences, sandbox subscriptions, invoice coverage and checkout idempotency. WH-194 adds `domain_funding_holds`: a ledger entry for exactly the reviewed charge of one domain order, placed with the order's reservation and settled by the order's own transition (captured only on registered, released only on failed, cancelled or expired). It authorizes no card and moves no money; a real hold and capture are the WH-042 extension consumed by WH-197.",
+      "currentRetention": "Current records cascade with owner deletion; paid invoice receipts are immutable. Stripe sandbox is configured; real payments are disabled. Obsolete test billing tables and rows were removed. A domain funding hold lives with its order: it stays held while the order is reserved, dispatching, unknown or unresolved (the schema refuses to purge those orders) and is settled, never deleted, by the order's transition.",
       "proposedRetention": "Ordinary preferences are purged; unsettled payments/refunds/credits require resolution. Minimum real invoice/transaction records use a separately approved accountant/legal schedule; no guessed tax-retention term.",
       "deletionAuthority": "Owner closure starts cancellation/settlement; qualified finance operator decides required minimal record retention. Closure cannot silently forfeit balances.",
       "exportPolicy": "Customer plan/credit/usage/payment history with explanatory test/live status; no provider secrets, other tenants or private margin data.",
@@ -3115,6 +3116,55 @@
         ],
         "remainingExposure": [
           "Rows link an opaque account identifier to the fact, purpose and timing of a job and to opaque receipt references; no message or customer content."
+        ],
+        "decision": "retain-and-verify",
+        "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",
+        "requirements": [
+          "DP-02",
+          "DP-03",
+          "DP-04",
+          "DP-05"
+        ]
+      }
+    },
+    {
+      "id": "domain-registrations",
+      "tables": [
+        "domain_quotes",
+        "domain_reviews",
+        "domain_registrant_contacts",
+        "domain_orders",
+        "domain_order_attempts",
+        "domain_registrar_events",
+        "domain_registrations"
+      ],
+      "scope": "owner",
+      "purpose": "WH-194 domain purchase storage (docs/domain-purchases.md): the server-computed quote and its exact review, the owner's registrant contact for that review, one order per review with its state, the single register-call attempt, authenticated registrar events and the registration an order produced. Funding holds belong to the `billing` class and ownership proofs and hosting to `domains-dns`. Registrant contact is personal data entered by the owner for one purchase; AuthInfo (transfer) codes, registrar credentials and card data have no column.",
+      "currentRetention": "Tables exist and are written only by src/domain-purchase/store.ts; no route, Chat tool, registrar adapter or payment path reaches them yet, so no customer data is stored. A quote, review and registrant contact that never became an order are deleted a day after the review expires (domainDraftRetentionMs, INTERIM DEFAULT pending an owner decision). An order is never pruned: a reserved, dispatching, unknown-outcome or unresolved order cannot be deleted at all (it holds funds or may have bought the name), a settled order stays with its attempt and events, and an active registration cannot be deleted by a project or account cascade until the owner transfers it out. Finance and dispute retention (LC-07) is not decided. The owner's registrant contact is erased in the same statement that fails, cancels or expires its order, and when its registration is transferred out or lapses (a draft's contact goes with the draft prune); a quote or review that never became an order is pruned a day after expiry.",
+      "proposedRetention": "Registrant contact is kept only while a purchase is pending or its registration is active, plus the dispute period decided under LC-07; orders, attempts and events are kept for the registration's life and the finance period. No guessed term.",
+      "deletionAuthority": "The draft prune (`pruneDomainDrafts`, not scheduled until a route can create a draft) for unused quotes, reviews and contacts; the account or project cascade only once no order is unresolved and every registration is transferred out or lapsed. Account closure never cancels, deletes or lets a registration lapse silently. No route, model, operator tool or visitor edits a row: transitions go through the guarded statements and triggers.",
+      "exportPolicy": "Owner export carries registration metadata (name, state, dates, renewal setting) and, while it exists, the owner's own registrant contact, to that owner only. Never an AuthInfo code, a registrar credential or event payload, another tenant's rows, or model context, Chat history or logs. The platform owner-export path (#554) does not carry domain data yet; adding it is open.",
+      "references": [
+        "src/domain-purchase/schema.sql",
+        "src/domain-purchase/store.ts",
+        "docs/domain-purchases.md",
+        "docs/data-protection.md",
+        "docs/account-closure.md"
+      ],
+      "storageStatus": "current",
+      "protection": {
+        "profile": "managed-readable",
+        "storage": [
+          "control-d1"
+        ],
+        "readers": [
+          "The owning workspace session through the guarded store; the registrar adapter reads the contact for one dispatch; restricted operator reconciliation of unresolved orders; no support, model or Chat reader"
+        ],
+        "processors": [
+          "The registrar of record receives the registrant contact when a real adapter exists (not built); no model, no payment provider"
+        ],
+        "remainingExposure": [
+          "A registrant name, address, phone and email are personal data readable by Whumpo processors and privileged operators; ICANN-required elements only, redacted from public RDDS by default. Registrar and finance retention terms are unresolved."
         ],
         "decision": "retain-and-verify",
         "rationale": "Retain the declared infrastructure/authentication layer and narrow current readers; extra blanket encryption would not remove authorized processing access. Verify minimization and recovery before broader admission.",

@@ -249,7 +249,7 @@ async function suite(m){
   await rt.reconcile(orderId);assert.equal(reg.calls.lookup,bounds.reconcileReads);
   ({rt,reg}=setup());({orderId}=await reserved(rt));reg.next('timeout-before');await rt.dispatch(orderId);
   rt.advance(bounds.reconcileWindowMs);await rt.reconcile(orderId);
-  assert.equal(rt.order(orderId).state,'unresolved');assert.equal(reg.calls.lookup,0);assert.equal(rt.hold(orderId).state,'held');
+  assert.equal(rt.order(orderId).state,'unresolved');assert.equal(reg.calls.lookup,1,'one read first, then the window ends it');assert.equal(rt.hold(orderId).state,'held');
   ({rt,reg}=setup());({orderId}=await reserved(rt));reg.next('timeout-after');await rt.dispatch(orderId);await rt.reconcile(orderId);
   assert.equal(rt.order(orderId).state,'registered');assert.equal(rt.hold(orderId).state,'captured');assert.equal(reg.calls.register,1);
   ({rt,reg}=setup());({orderId}=await reserved(rt));reg.next('pending');await rt.dispatch(orderId);await rt.reconcile(orderId);
@@ -257,6 +257,9 @@ async function suite(m){
   assert.equal(rt.order(orderId).state,'failed');assert.equal(rt.hold(orderId).state,'released');assert.equal(reg.calls.register,1);
   ({rt,reg}=setup());({orderId}=await reserved(rt));reg.next('timeout-before');await rt.dispatch(orderId);reg.takeBy(NAME);await rt.reconcile(orderId);
   assert.equal(rt.order(orderId).state,'failed');assert.ok(rt.order(orderId).history.includes('failed:registered-elsewhere'));assert.equal(reg.calls.register,1);
+  // A registration with no reference, or an answer we cannot read, is not proof it is someone else's: the order ends in the bound with its hold kept.
+  ({rt,reg}=setup());({orderId}=await reserved(rt));reg.next('timeout-before');await rt.dispatch(orderId);reg.takeBy(NAME,null);for(let i=0;i<4;i++)await rt.reconcile(orderId);
+  assert.equal(rt.order(orderId).state,'unresolved');assert.equal(rt.hold(orderId).state,'held');
  });
 
  await test('reordered and duplicate registrar events are ignored',async()=>{
@@ -402,8 +405,9 @@ const mutants=[
  ['redispatch after unknown outcome',O,"check(!inFlight.includes(order.state),'NO_REDISPATCH',order.state);","if(order.state==='unknown-outcome')return dispatchOrder({...input,order:{...order,state:'reserved'}});"],
  ['interrupted dispatch requeued',O,"return step({...moved(order,'unknown-outcome','interrupted'),uncertainAt:now});","return step({...order,state:'reserved',history:[...order.history,'reserved']});"],
  ['reconciliation re-sends the purchase',O,"const found=await registrar.lookup(order.hostname);","const found=(await registrar.register({hostname:order.hostname,orderRef:order.orderId,acknowledgePremium:false,autoRenew:false,privacy:'redaction'}),await registrar.lookup(order.hostname));"],
- ['not found treated as proof of failure',O,"if(plain(found)&&found.status==='registered')return step(moved(read,'failed','registered-elsewhere'),'release');","return step(moved(read,'failed','not-found'),'release');"],
- ['reconciliation read bound not applied',O,"if(read.reconcileReads>=domainPurchaseBounds.reconcileReads)return step(moved(read,'unresolved','reconcile-bound'));",''],
+ ['not found treated as proof of failure',O,"if(!ours&&plain(found)&&found.status==='registered'&&typeof found.orderRef==='string'&&found.orderRef.length>0&&found.orderRef!==order.orderId)return step(moved(read,'failed','registered-elsewhere'),'release');","return step(moved(read,'failed','not-found'),'release');"],
+ ['a missing reference treated as someone else\'s registration',O,"if(!ours&&plain(found)&&found.status==='registered'&&typeof found.orderRef==='string'&&found.orderRef.length>0&&found.orderRef!==order.orderId)","if(plain(found)&&found.status==='registered')"],
+ ['reconciliation read bound not applied',O,"if(read.reconcileReads>=domainPurchaseBounds.reconcileReads||now-since>=domainPurchaseBounds.reconcileWindowMs)return step(moved(read,'unresolved','reconcile-bound'));",''],
  ['reconciliation window not applied',O,"||now-since>=domainPurchaseBounds.reconcileWindowMs",''],
  ['unauthenticated events applied',O,"check(plain(event)&&event.authenticated===true,'EVENT_NOT_AUTHENTICATED','event');",''],
  ['duplicate events re-applied',O,"if(seen)return {outcome:{applied:false,duplicate:true},step:null};",''],
@@ -423,7 +427,7 @@ const killedBy={
  'duplicate consent creates another order':'duplicate consent and dispatch never create a second purchase',
  'lost response treated as failure':'a lost registrar response holds and never redispatches','hold released on uncertainty':'a lost registrar response holds and never redispatches',
  'redispatch after unknown outcome':'a lost registrar response holds and never redispatches','interrupted dispatch requeued':'an interrupted worker becomes unknown-outcome',
- 'reconciliation re-sends the purchase':'reconciliation is read-only and bounded','not found treated as proof of failure':'reconciliation is read-only and bounded',
+ 'reconciliation re-sends the purchase':'reconciliation is read-only and bounded','not found treated as proof of failure':'reconciliation is read-only and bounded','a missing reference treated as someone else\'s registration':'reconciliation is read-only and bounded',
  'reconciliation read bound not applied':'reconciliation is read-only and bounded','reconciliation window not applied':'reconciliation is read-only and bounded',
  'unauthenticated events applied':'reordered and duplicate registrar events are ignored','duplicate events re-applied':'reordered and duplicate registrar events are ignored',
  'premium receives the benefit':'premium domains are excluded from the annual benefit','AI or build credit funds a domain':'benefit redemption is not claimed and funding is a payment method',

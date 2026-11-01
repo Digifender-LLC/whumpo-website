@@ -34,6 +34,13 @@ try{
   sql.prepare("INSERT INTO job_journal(id,owner_user_id,purpose,envelope_json,envelope_digest,created_at,expires_at,max_attempts,due,initial_due,last_event,last_at) VALUES(?,'owner-b','platform-email',?,?,0,604800000,3,0,0,'enqueued',0)").run(id,envelope,key);
  }
  sql.exec("UPDATE job_journal SET state='leased',fence=1,lease_until=60000,last_event='claimed',last_at=0 WHERE id LIKE '%00b';UPDATE job_journal SET state='awaiting',attempt=1,attempt_id=id||'.1',last_event='intent',last_at=1,last_ref=id||'.1' WHERE id LIKE '%00b';");
+ // WH-194: a reserved domain order (holds funds, so unresolved) and an active registration of the same owner; owner-a has none.
+ const quote=JSON.stringify({quoteId:'quote-b1',ownerId:'owner-b',projectId:'project-b',hostname:'synthetic-b.com',quotedAt:now,expiresAt:now+600000,contractVersion:1,operation:'register',autoRenew:false,premium:false,funding:{sourceKind:'payment-method',sourceId:'pm-b',benefitCents:0,customerChargeCents:1200},initial:{totalCents:1200}});
+ sql.prepare("INSERT INTO domain_quotes(quote_id,owner_user_id,project_id,hostname,quote_json,quote_digest,quoted_at,expires_at) VALUES('quote-b1','owner-b','project-b','synthetic-b.com',?,?,?,?)").run(quote,key,now,now+600000);
+ sql.exec(`INSERT INTO domain_reviews(review_id,quote_id,quote_digest,owner_user_id,project_id,project_revision,hostname,funding_source_id,consent_text_digest,created_at,expires_at) VALUES('review-b2','quote-b1','${key}','owner-b','project-b',1,'synthetic-b.com','pm-b','${key}',${now},${now+300000});
+  INSERT INTO domain_registrant_contacts(review_id,owner_user_id,contact_name,street,city,country,phone,email,created_at) VALUES('review-b2','owner-b','PRIVATE','PRIVATE','PRIVATE','US','+1.5550100','private@example.invalid',${now});
+  INSERT INTO domain_orders(order_id,idempotency_key,review_id,quote_id,quote_digest,owner_user_id,project_id,hostname,state,history_json,consented_at,updated_at) VALUES('order-b1','${key}','review-b2','quote-b1','${key}','owner-b','project-b','synthetic-b.com','consented','["quoted","consented"]',${now+1},${now+1});
+  UPDATE domain_orders SET state='reserved',history_json='["quoted","consented","reserved"]',version=1 WHERE order_id='order-b1';`);
  sql.exec('PRAGMA query_only=ON'); // Enforce no writes, including accidental future mutations.
  const all=await accountClosureInventory(db),a=await accountClosureInventory(db,'owner-a'),b=await accountClosureInventory(db,'owner-b');
  assert.equal(all.counts.featurePreviewGrants,1);assert.equal(a.counts.featurePreviewGrants,0);assert.equal(b.counts.featurePreviewGrants,1);
@@ -45,6 +52,8 @@ try{
  assert.deepEqual([all,a,b].map(r=>[r.counts.jobJournal,r.counts.openJobJournal,r.counts.unresolvedJobs]),[[2,2,0],[0,0,0],[2,2,0]]);// the fixture's awaiting job last changed in 1970, far outside the 72 hour window that ends the wait (tests/account-lifecycle.mjs covers a recent one)
  assert.equal(all.counts.compositionPlans,1);assert.equal(b.counts.compositionPlans,1);assert.equal(a.counts.compositionPlans,0);
  for(const key of ['costEvents','emailChanges','openEmailChanges','emailChangeLimits','securityReviews','lookupConsents','openLookupConsents','connectorReceipts','openConnectorReceipts','ruleApprovals','activeRuleApprovals'])assert.deepEqual([all,a,b].map(r=>r.counts[key]),[1,0,1],key);
+ for(const key of ['domainQuotes','domainReviews','domainRegistrantContacts','domainOrders','unresolvedDomainOrders','domainFundingHolds'])assert.deepEqual([all,a,b].map(r=>r.counts[key]),[1,0,1],key);
+ assert.deepEqual([all,a,b].map(r=>[r.counts.domainRegistrations,r.counts.activeDomainRegistrations,r.counts.domainOrderAttempts,r.counts.domainRegistrarEvents]),[[0,0,0,0],[0,0,0,0],[0,0,0,0]]);
  for(const r of [all,a,b]){assert.equal(r.readyForDeletion,false);assert.doesNotMatch(JSON.stringify(r),/PRIVATE|owner-[ab]|example.invalid|token-b|change-b1|review-b1|consent-b1|receipt-b1|credential-b|approval-b1|0b0b0b0b/);}
  await assert.rejects(()=>accountClosureInventory(db,"' OR 1=1 --"));
  await assert.rejects(()=>accountClosureInventory(db,''));

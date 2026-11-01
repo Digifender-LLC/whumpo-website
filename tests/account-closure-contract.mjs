@@ -65,7 +65,7 @@ const suite=async m=>{
  refuse('invalid-lifecycle',()=>m.buildReview(counts(),null));
  refuse('unknown-class',()=>m.buildReview(counts({accounts:1}),classes.filter(c=>c.id!=='owner-identity')));
  refuse('unknown-class',()=>m.buildReview(counts(),classes.map(c=>c.id==='owner-identity'?{...c,tables:[]}:c)));
- assert.deepEqual([...m.settleFirstKeys].sort(),['cloudflarePendingRevocations','connectionRotationGuards','githubGrantUncertain','githubPendingRevocations','pendingScanTickets','uncertainGitHubBackups','unresolvedChatInteractionContinuations','unresolvedConnectionExchanges','unresolvedDomainRecords','unresolvedJobs','unresolvedStandardAI']);
+ assert.deepEqual([...m.settleFirstKeys].sort(),['activeDomainRegistrations','cloudflarePendingRevocations','connectionRotationGuards','githubGrantUncertain','githubPendingRevocations','pendingScanTickets','uncertainGitHubBackups','unresolvedChatInteractionContinuations','unresolvedConnectionExchanges','unresolvedDomainOrders','unresolvedDomainRecords','unresolvedJobs','unresolvedStandardAI']);
  for(const k of m.settleFirstKeys)assert.ok(m.buildReview(counts({[k]:1}),classes).blockers.includes('provider-work-open'),k);
 
  // ---- transitions: every edge ----

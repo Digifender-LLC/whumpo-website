@@ -6,7 +6,7 @@
  * The offline contract validator (tools/prototypes/job-envelope.mjs) stays the full envelope check; admitJob only requires the fields
  * the journal itself depends on and lets the schema cross-check them against the stored envelope. */
 type Db=Pick<D1Database,'prepare'|'batch'>;
-export const jobPurposes=['platform-email','deterministic-rule','owner-push','account-cleanup','project-build'] as const;
+export const jobPurposes=['platform-email','deterministic-rule','owner-push','account-cleanup','project-build','domain-registration'] as const;
 export type JobPurpose=typeof jobPurposes[number];
 export type JobState='ready'|'leased'|'awaiting'|'uncertain'|'complete'|'cancelled'|'operator'|'expired';
 export type JobRow={id:string;owner_user_id:string;purpose:JobPurpose;envelope_json:string;envelope_digest:string;created_at:number;expires_at:number;max_attempts:number;
