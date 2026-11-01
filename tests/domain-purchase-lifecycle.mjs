@@ -211,7 +211,11 @@ try{
   // Absence ("not found") is not proof: the name stays active until its expiry has passed.
   reg.vanish(host);
   assert.equal((await m.syncRegistration({db:A,hostname:host,registrar:reg,now:expiry-DAY})).state,'active');
-  assert.equal((await m.syncRegistration({db:A,hostname:host,registrar:reg,now:expiry+DAY})).state,'lapsed');
+  // One not-found read after the expiry only notes the absence; a second, at least six hours later, lapses it (owner decision Q-17: a lapse is final, so it needs two reads).
+  assert.equal((await m.syncRegistration({db:A,hostname:host,registrar:reg,now:expiry+DAY})).state,'active','one absent read is not enough');
+  assert.equal((await one('SELECT absent_since FROM domain_registrations WHERE hostname=?',host)).absent_since,expiry+DAY);
+  assert.equal((await m.syncRegistration({db:A,hostname:host,registrar:reg,now:expiry+DAY+HOUR})).state,'active','a second read inside the spacing does not count');
+  assert.equal((await m.syncRegistration({db:A,hostname:host,registrar:reg,now:expiry+DAY+7*HOUR})).state,'lapsed');
   // A registration naming another known order is proof at any time.
   const other=await registered();other.reg.takeBy(other.host,'someone-elses-order');
   const lapsed=await m.syncRegistration({db:A,hostname:other.host,registrar:other.reg,now:T0+DAY});assert.equal(lapsed.state,'lapsed');assert.equal(lapsed.autoRenew,false);
@@ -257,12 +261,12 @@ try{
   a.reg.nextTransfer('timeout-before');
   const start=(r,at)=>m.startTransferOut({db:A,actor:actorOf('b'),hostname:r.host,registrar:r.reg,requestId:id('transfer'),now:at});
   assert.equal((await start(a,T0+70*DAY)).request.state,'unknown-outcome');assert.equal((await start(b,T0+70*DAY)).request.state,'unlocked');
-  assert.equal((await m.sweepTransfers(A,T0+71*DAY)).moved,0,'young requests are left alone');
-  assert.equal((await m.sweepTransfers(A,T0+70*DAY+15*DAY)).moved>=2,true);
+  assert.equal((await m.sweepTransfers(A,shared,T0+71*DAY)).moved,0,'young requests are left alone');
+  assert.equal((await m.sweepTransfers(A,shared,T0+70*DAY+15*DAY)).moved>=2,true);
   for(const r of [a,b]){assert.equal((await m.loadTransfer(A,owners.b.id,r.host)).state,'failed');assert.equal((await renewalState(r.host)).state,'active');}
-  await start(c,T0+90*DAY);await refuse(m.cancelTransfer(A,{kind:'model',ownerId:owners.b.id},c.host,T0+91*DAY),/HUMAN_REVIEW_REQUIRED/);
+  await start(c,T0+90*DAY);await refuse(m.cancelTransfer(A,{kind:'model',ownerId:owners.b.id},c.host,shared,T0+91*DAY),/HUMAN_REVIEW_REQUIRED/);
   await refuse(m.readAuthCode({db:A,actor:actorOf('b'),hostname:a.host,registrar:a.reg}),/TRANSFER_NOT_UNLOCKED/);
-  assert.equal((await m.cancelTransfer(A,actorOf('b'),c.host,T0+91*DAY)).state,'failed');assert.equal((await renewalState(c.host)).state,'active');
+  assert.equal((await m.cancelTransfer(A,actorOf('b'),c.host,shared,T0+91*DAY)).state,'failed');assert.equal((await renewalState(c.host)).state,'active');
   const d=await registered('b'),e=await registered('b');await start(d,T0+100*DAY);await start(e,T0+100*DAY);
   const lookup=shared.lookup;let boom=true;shared.lookup=async n=>{if(boom&&n===d.host){boom=false;throw Error('down');}return lookup.call(shared,n);};
   shared.completeTransfer(e.host);
@@ -309,7 +313,7 @@ try{
   // the schema agrees: no row reaches completed without positive evidence, however it is written
   await refuse(run("UPDATE domain_transfer_requests SET state='completed',version=version+1 WHERE hostname=? AND state IN ('unlocked','unknown-outcome')",y.host),/domain_transfer_evidence/);
   // it ends in a bounded failure that returns the name to active, never in transferred-out
-  const swept=await m.sweepTransfers(A,T0+120*DAY+15*DAY);assert.ok(swept.moved>=1);
+  const swept=await m.sweepTransfers(A,shared,T0+120*DAY+15*DAY);assert.ok(swept.moved>=1);
   assert.equal(await open(y),'failed');assert.equal((await renewalState(y.host)).state,'active');
   shared.lookup=lookup;
  });
@@ -344,7 +348,7 @@ try{
   const done=await m.syncRegistration({db:A,hostname:q.host,registrar:q.reg,now:T0+71*DAY});assert.equal(done.state,'transferred-out');assert.equal((await m.loadTransfer(A,owners.b.id,q.host)).state,'completed');
   // a sweep moves the claim while the unlock is in flight: the caller gets the request as it stands, not null
   const w=await registered('b');const beginTransferOut=w.reg.beginTransferOut;
-  w.reg.beginTransferOut=async req=>{await m.sweepTransfers(A,T0+80*DAY+2*MINUTE);return beginTransferOut.call(w.reg,req);};
+  w.reg.beginTransferOut=async req=>{await m.sweepTransfers(A,shared,T0+80*DAY+2*MINUTE);return beginTransferOut.call(w.reg,req);};
   const res=await m.startTransferOut({db:A,actor:actorOf('b'),hostname:w.host,registrar:w.reg,requestId:id('transfer'),now:T0+80*DAY});
   assert.ok(res.request,'never null');assert.equal(res.request.state,'unknown-outcome');w.reg.beginTransferOut=beginTransferOut;
  });
@@ -355,12 +359,46 @@ try{
   const base=r.reg.calls.transferOut;
   const lookup=shared.lookup;shared.lookup=async n=>{const f=await lookup.call(shared,n);return n===r.host&&f.status==='registered'?{...f,unlocked:true}:f;};
   try{
-   await m.sweepTransfers(A,at+30000);assert.equal((await m.loadTransfer(A,owners.b.id,r.host)).state,'requested','inside the 60 second lease it is left alone');
-   await m.sweepTransfers(A,at+120000);assert.equal((await m.loadTransfer(A,owners.b.id,r.host)).state,'unknown-outcome');
+   await m.sweepTransfers(A,shared,at+30000);assert.equal((await m.loadTransfer(A,owners.b.id,r.host)).state,'requested','inside the 60 second lease it is left alone');
+   await m.sweepTransfers(A,shared,at+120000);assert.equal((await m.loadTransfer(A,owners.b.id,r.host)).state,'unknown-outcome');
    await m.reconcileTransfers(A,shared,at+120000+7*HOUR);
   }finally{shared.lookup=lookup;}
   assert.equal((await m.loadTransfer(A,owners.b.id,r.host)).state,'unlocked');assert.equal(r.reg.calls.transferOut-base,0,'reconciliation never repeats the unlock');
-  assert.equal((await m.cancelTransfer(A,actorOf('b'),r.host,at+DAY)).state,'failed');// leave the shared fixture as found
+  assert.equal((await m.cancelTransfer(A,actorOf('b'),r.host,shared,at+DAY)).state,'failed');// leave the shared fixture as found
+ });
+ await check('a cancelled or expired transfer leaves the name locked again: the request fails only once the registrar confirms the lock',async()=>{
+  const start=(r,at)=>m.startTransferOut({db:A,actor:actorOf('b'),hostname:r.host,registrar:r.reg,requestId:id('transfer'),now:at});
+  const open=async r=>(await m.loadTransfer(A,owners.b.id,r.host)).state;
+  const relock=shared.relockTransferOut,only=host=>fn=>{shared.relockTransferOut=async req=>req.hostname===host?fn(req):relock.call(shared,req);};
+  try{
+   // Cancel: an unconfirmed lock keeps the request open (the name really is still unlocked); a confirmed one fails it and the auth code stops working.
+   const a=await registered('b');await start(a,T0+150*DAY);assert.equal(shared.isUnlocked(a.host),true);
+   only(a.host)(async()=>({kind:'rejected'}));
+   await refuse(m.cancelTransfer(A,actorOf('b'),a.host,shared,T0+151*DAY),/RELOCK_UNAVAILABLE/);
+   assert.equal(await open(a),'unlocked');assert.equal((await renewalState(a.host)).state,'transfer-out');assert.equal(shared.isUnlocked(a.host),true,'still unlocked, and D1 says so');
+   shared.relockTransferOut=relock;
+   assert.equal((await m.cancelTransfer(A,actorOf('b'),a.host,shared,T0+151*DAY+1)).state,'failed');
+   assert.equal(shared.isUnlocked(a.host),false);assert.equal((await shared.authCode(a.host)).unavailable,true,'the issued code no longer works');assert.equal((await renewalState(a.host)).state,'active');
+   // Sweep: the same rule at 14 days, retried behind other requests, and bounded by the give-up age so an unreachable registrar cannot trap closure.
+   const b=await registered('b');await start(b,T0+160*DAY);only(b.host)(async()=>{throw Error('registrar down');});
+   await m.sweepTransfers(A,shared,T0+160*DAY+15*DAY);assert.equal(await open(b),'unlocked','an unconfirmed lock keeps the request open');
+   await m.sweepTransfers(A,shared,T0+160*DAY+31*DAY);assert.equal(await open(b),'failed','after the give-up age it ends anyway');assert.equal((await renewalState(b.host)).state,'active');
+   shared.relockTransferOut=relock;
+   const c=await registered('b');await start(c,T0+200*DAY);await m.sweepTransfers(A,shared,T0+200*DAY+15*DAY);
+   assert.equal(await open(c),'failed');assert.equal(shared.isUnlocked(c.host),false,'a confirmed lock lets the sweep fail it at 14 days');
+   // A cancel that lands while the unlock is in flight: the unlock still happens at the registrar, so the start locks it again.
+   const d=await registered('b'),begin=shared.beginTransferOut;
+   shared.beginTransferOut=async req=>{if(req.hostname===d.host)await m.cancelTransfer(A,actorOf('b'),d.host,shared,T0+210*DAY+1);return begin.call(shared,req);};
+   try{await start(d,T0+210*DAY);}finally{shared.beginTransferOut=begin;}
+   assert.equal(await open(d),'failed');assert.equal(shared.isUnlocked(d.host),false,'the late unlock was undone');
+  }finally{shared.relockTransferOut=relock;}
+ });
+ await check('a read that shows the name again clears a pending lapse, so the next absent read starts over',async()=>{
+  const flaky=await registered(),fexp=flaky.registration.expiresAt;
+  flaky.reg.vanish(flaky.host);assert.equal((await m.syncRegistration({db:A,hostname:flaky.host,registrar:flaky.reg,now:fexp+DAY})).state,'active');
+  flaky.reg.takeBy(flaky.host,flaky.registration.orderId);assert.equal((await m.syncRegistration({db:A,hostname:flaky.host,registrar:flaky.reg,now:fexp+DAY+7*HOUR})).state,'active');
+  assert.equal((await one('SELECT absent_since FROM domain_registrations WHERE hostname=?',flaky.host)).absent_since,null,'seen again clears it');
+  flaky.reg.vanish(flaky.host);assert.equal((await m.syncRegistration({db:A,hostname:flaky.host,registrar:flaky.reg,now:fexp+DAY+14*HOUR})).state,'active','the clock restarted');
  });
 }finally{for(const f of files)f.close();}
 console.log(`Domain purchase lifecycle passed: ${cases} cases on ${d1?'actual local D1':'SQLite'}.`);

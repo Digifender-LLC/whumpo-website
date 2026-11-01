@@ -31,6 +31,9 @@ export interface RegistrarAdapter {
  lookup(name:string):Promise<RegistrarLookup>;
  /** Unlock a registration for transfer-out. Anything other than a well-formed `unlocked` or `rejected` is an unknown outcome and is reconciled by `lookup`, never repeated. */
  beginTransferOut(request:TransferOutRequest):Promise<TransferOutResult|unknown>;
+ /** Re-lock a registration after a cancelled or expired transfer-out. The one call that undoes `beginTransferOut`; idempotent and safe to repeat. Only a well-formed
+  * `{kind:'locked'}` confirms the lock: anything else (a refusal, a malformed answer, an error) is unconfirmed and is retried, never treated as locked. */
+ relockTransferOut(request:TransferOutRequest):Promise<{kind:'locked'}|unknown>;
  /** Read the transfer authorization code of an unlocked registration. Read-only and repeatable; the caller shows it to the owner and nowhere else. */
  authCode(name:string):Promise<{code:string}|{unavailable:true}|unknown>;
 }
@@ -38,12 +41,13 @@ export interface RegistrarAdapter {
 type SyntheticPrice={registration:number;renewal:number;premium?:boolean;terms?:string};
 type SyntheticOutcome='ok'|'rejected'|'pending'|'timeout-before'|'timeout-after'|'malformed';
 type SyntheticTransfer='ok'|'rejected'|'timeout-before'|'timeout-after';
+type SyntheticRelock='ok'|'timeout-before'|'timeout-after';
 const year=365*86400000;
 /** Synthetic in-memory registrar: synthetic names and prices only, no network. Counts every call so tests can prove
  * that register is called at most once per order. `next` scripts the next register outcome. */
 export function createSyntheticRegistrar({adapterId='synthetic-registrar',adapterVersion=1,prices={},clock=()=>0}:{adapterId?:string;adapterVersion?:number;prices?:Record<string,SyntheticPrice>;clock?:()=>number}={}){
- const s={prices:structuredClone(prices),registrations:{} as Record<string,{orderRef:string|null;createdAt:number;expiresAt:number}>,workflows:{} as Record<string,{orderRef:string;status:'in_progress'|'succeeded'|'failed'}>,script:[] as SyntheticOutcome[],transferScript:[] as SyntheticTransfer[],unlocked:new Set<string>(),transferred:new Set<string>()};
- const calls={check:0,register:0,lookup:0,transferOut:0,authCode:0},registerLog:string[]=[];
+ const s={prices:structuredClone(prices),registrations:{} as Record<string,{orderRef:string|null;createdAt:number;expiresAt:number}>,workflows:{} as Record<string,{orderRef:string;status:'in_progress'|'succeeded'|'failed'}>,script:[] as SyntheticOutcome[],transferScript:[] as SyntheticTransfer[],relockScript:[] as SyntheticRelock[],unlocked:new Set<string>(),transferred:new Set<string>()};
+ const calls={check:0,register:0,lookup:0,transferOut:0,relock:0,authCode:0},registerLog:string[]=[];
  const record=(hostname:string,orderRef:string|null)=>{const now=clock();return s.registrations[hostname]={orderRef,createdAt:now,expiresAt:now+year};};
  return {
   adapterId,adapterVersion,calls,registerLog,
@@ -52,6 +56,8 @@ export function createSyntheticRegistrar({adapterId='synthetic-registrar',adapte
   takeBy(name:string,orderRef:string|null='other-registrar-order'){record(name,orderRef);},
   next(kind:SyntheticOutcome){s.script.push(kind);},
   nextTransfer(kind:SyntheticTransfer){s.transferScript.push(kind);},
+  nextRelock(kind:SyntheticRelock){s.relockScript.push(kind);},
+  isUnlocked(name:string){return s.unlocked.has(name);},
   /** The owner took the name to another registrar. */
   completeTransfer(name:string){delete s.registrations[name];s.unlocked.delete(name);s.transferred.add(name);},
   /** The name simply stops being found (an outage, a lookup gap): absence, which proves nothing. */
@@ -81,6 +87,15 @@ export function createSyntheticRegistrar({adapterId='synthetic-registrar',adapte
    s.unlocked.add(hostname);
    if(kind==='timeout-after')throw Error('synthetic timeout after the registrar acted');
    return {kind:'unlocked'};
+  },
+  async relockTransferOut({hostname}:TransferOutRequest):Promise<unknown>{
+   calls.relock++;
+   const kind=s.relockScript.shift()??'ok';
+   if(kind==='timeout-before')throw Error('synthetic timeout before the registrar acted');
+   if(!s.registrations[hostname])return {kind:'rejected',code:'not_registered'};
+   s.unlocked.delete(hostname);
+   if(kind==='timeout-after')throw Error('synthetic timeout after the registrar acted');
+   return {kind:'locked'};
   },
   async authCode(name:string):Promise<unknown>{
    calls.authCode++;
