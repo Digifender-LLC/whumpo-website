@@ -15,7 +15,8 @@ export async function currentSiteFixtureHandlers(){
   export {default as worker} from './src/index';
   export {comparisonErrorResponse} from './src/comparison-page';
   export {hashToken,newSessionToken} from './src/security';
-  export {admitWorkspace} from './src/workspace-identity/admission';
+  export {admitWorkspace,settlementDatabase} from './src/workspace-identity/admission';
+  export {markStandardAIUncertain} from './src/standard-ai-usage';
   export {resolveIdentity} from './src/workspace-identity/authority';
   export {createWebsite,prepareSpecification,readSpecificationProposal,readSpecification,specificationPreview,applySpecificationCommand} from './src/project-specification/store';
   export {readChat,sendChat,sendChatControl,sendConversation,chatState} from './src/chat';

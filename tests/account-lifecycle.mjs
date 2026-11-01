@@ -247,6 +247,15 @@ try{
   for(const [path,method] of [['/projects','GET'],['/chat','GET'],['/connections/github/callback?code=late&state=late','GET'],['/connections/github/start','POST'],['/profile','GET']])
    await refused(await call(a,path,method==='POST'?{}:undefined,method),409,'account_closing');
   assert.equal((await row('SELECT count(*) n FROM github_token_vault WHERE user_id=?',a.user)).n,vault);
+  // A request that was with the provider when closure confirmed still records its outcome: the fence refuses the ordinary scope, the settlement handle (same identity check, no closing fence) settles the receipt.
+  const inFlight=await turnFor(a.user,9100,'dispatched',aged(0));
+  await assert.rejects(()=>m.markStandardAIUncertain(a.scope,a.user,inFlight),e=>e.code==='account_closing');
+  assert.equal((await row('SELECT state FROM standard_ai_requests WHERE id=?',inFlight)).state,'dispatched','the fence refuses the ordinary scope');
+  await m.markStandardAIUncertain(m.settlementDatabase(a.scope,a.user),a.user,inFlight);
+  assert.equal((await row('SELECT state FROM standard_ai_requests WHERE id=?',inFlight)).state,'uncertain','the in-flight receipt settles through the settlement handle');
+  await refused(await call(a,'/projects',undefined,'GET'),409,'account_closing');// settlement is not a way back in
+  // The settled request is inside its 24 hour window, so closure rightly waits on it; remove the synthetic rows so the later steps of this suite are not held.
+  await run('DELETE FROM standard_ai_requests WHERE id=?',inFlight);await run('DELETE FROM chat_turns WHERE id=?',inFlight);
   // Support stays reachable while closing; an ordinary workspace write is refused.
   assert.equal((await call(a,'/support/v1',undefined,'GET')).status,200);
   // Export and status stay available while closing; the other tenant is unaffected.
