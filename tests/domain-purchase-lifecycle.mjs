@@ -105,6 +105,17 @@ try{
   assert.equal((await renewalState(host)).renewal_total_cents,fresh.review.renewalTotalCents);assert.ok(fresh.review.renewalTotalCents>prep.review.renewalTotalCents);
  });
 
+ await check('a price-rise invalidation cannot undo an opt-in the owner confirmed while the decision was waiting on the registrar',async()=>{
+  const {host,reg,registration}=await registered(),expiry=registration.expiresAt;
+  const first=await prepare(A,'a',host,reg,id('renewal'),expiry-5*DAY);await confirm(A,'a',first,reg,expiry-5*DAY+1);
+  reg.setPrice(host,{renewal:1500});
+  // The owner confirms a new review at the higher price after the decision loaded the old opt-in and before its lookup returns.
+  let fresh=null;const slow={...reg,lookup:async name=>{const found=await reg.lookup(name);if(!fresh){fresh=await prepare(B,'a',host,reg,id('renewal'),expiry-3*DAY);await confirm(B,'a',fresh,reg,expiry-3*DAY+1);}return found;}};
+  const rise=await m.decideRenewal({db:A,hostname:host,registrar:slow,policy,now:expiry-DAY});assert.deepEqual(rise,{renew:false,reason:'renewal-price-changed'});
+  const after=await renewalState(host);
+  assert.equal(after.auto_renew,1,'the newer opt-in stays on');assert.equal(after.renewal_review_id,fresh.review.reviewId);assert.equal(after.renewal_total_cents,fresh.review.renewalTotalCents);
+ });
+
  await check('expiry reminders follow the recovery schedule, queue one never-sent notice per name, kind and expiry, and the email names no domain',async()=>{
   const {host,registration}=await registered();const expiry=registration.expiresAt;
   assert.deepEqual([-40,-29,-8,-6,-1,0,1,3,5,6].map(d=>m.dueReminder(expiry,expiry+d*DAY)),[null,'month','month','week','week',null,'expired','expired',null,null]);
@@ -260,6 +271,15 @@ try{
   assert.equal((await m.loadTransfer(A,owners.b.id,d.host)).state,'unlocked','the failed read cost d one retry only');
  });
 
+ await check('a request whose registrar lookup keeps failing goes to the back of the line, so later requests still get read with a small batch',async()=>{
+  const d=await registered('b'),e=await registered('b'),start=r=>m.startTransferOut({db:A,actor:actorOf('b'),hostname:r.host,registrar:r.reg,requestId:id('transfer'),now:T0+130*DAY});
+  await start(d);await start(e);shared.completeTransfer(e.host);
+  const lookup=shared.lookup;shared.lookup=async n=>{if(n===d.host)throw Error('registrar down');return lookup.call(shared,n);};
+  try{for(let i=0;i<4;i++)await m.reconcileTransfers(A,shared,T0+131*DAY+i*7*HOUR,1);}finally{shared.lookup=lookup;}
+  assert.equal((await m.loadTransfer(A,owners.b.id,e.host)).state,'completed','the healthy request was reached despite the failing one ahead of it');
+  assert.equal((await m.loadTransfer(A,owners.b.id,d.host)).state,'unlocked');
+ });
+
  await check('a registration naming another order completes a transfer at once; reminders cover a lapsed name and page past names already reminded',async()=>{
   const a=await registered('b');await m.startTransferOut({db:A,actor:actorOf('b'),hostname:a.host,registrar:a.reg,requestId:id('transfer'),now:T0+70*DAY});
   a.reg.takeBy(a.host,'new-owner-order');const synced=await m.syncRegistration({db:A,hostname:a.host,registrar:a.reg,now:T0+71*DAY});
@@ -327,6 +347,20 @@ try{
   w.reg.beginTransferOut=async req=>{await m.sweepTransfers(A,T0+80*DAY+2*MINUTE);return beginTransferOut.call(w.reg,req);};
   const res=await m.startTransferOut({db:A,actor:actorOf('b'),hostname:w.host,registrar:w.reg,requestId:id('transfer'),now:T0+80*DAY});
   assert.ok(res.request,'never null');assert.equal(res.request.state,'unknown-outcome');w.reg.beginTransferOut=beginTransferOut;
+ });
+ await check('a transfer claim interrupted after the registrar unlocked the name is swept, read and unlocked for the owner without a second unlock',async()=>{
+  const r=await registered('b'),at=T0+140*DAY;
+  // The worker died after the registrar unlocked and before the result was stored: the row is still `requested`.
+  await run("INSERT INTO domain_transfer_requests(request_id,hostname,owner_user_id,state,requested_at,updated_at) VALUES(?,?,?,'requested',?,?)",id('transfer'),r.host,owners.b.id,at,at);
+  const base=r.reg.calls.transferOut;
+  const lookup=shared.lookup;shared.lookup=async n=>{const f=await lookup.call(shared,n);return n===r.host&&f.status==='registered'?{...f,unlocked:true}:f;};
+  try{
+   await m.sweepTransfers(A,at+30000);assert.equal((await m.loadTransfer(A,owners.b.id,r.host)).state,'requested','inside the 60 second lease it is left alone');
+   await m.sweepTransfers(A,at+120000);assert.equal((await m.loadTransfer(A,owners.b.id,r.host)).state,'unknown-outcome');
+   await m.reconcileTransfers(A,shared,at+120000+7*HOUR);
+  }finally{shared.lookup=lookup;}
+  assert.equal((await m.loadTransfer(A,owners.b.id,r.host)).state,'unlocked');assert.equal(r.reg.calls.transferOut-base,0,'reconciliation never repeats the unlock');
+  assert.equal((await m.cancelTransfer(A,actorOf('b'),r.host,at+DAY)).state,'failed');// leave the shared fixture as found
  });
 }finally{for(const f of files)f.close();}
 console.log(`Domain purchase lifecycle passed: ${cases} cases on ${d1?'actual local D1':'SQLite'}.`);
