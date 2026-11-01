@@ -65,3 +65,78 @@ Serving never waits for measurement. Each counted or excluded request costs one 
 `pnpm test:site-health` runs `tests/site-health.mjs` and `tests/site-diagnostics.mjs`; `node tests/site-traffic.mjs` covers counting. Synthetic cases cover missing, late and failed telemetry, shed work, exclusions, stale/interrupted/unhealthy/changed checks, DNS/TLS and form states, cross-owner reads and canary leakage. Live deployment, real bot traffic and custom-domain probes are not tested.
 
 WH-183: a health check's identity now includes the live directory review (`directory_review_id`, compared like the live form). When a directory is live for the current publication, the check also fetches `/directory.json` from the fixed platform origin and requires the `ETag` and the SHA-256 of the served listings to equal `live_digest`. Custom hostnames are still not probed.
+
+## WH-051 — offline hot-path evidence
+
+Status: source-only evidence recorded 2026-11-01. This does not deploy, cut over schema group C5, establish production D1 latency/cost, or complete WH-051. No serving, caching, TTL, provider or traffic behavior changed. The existing hostname partial-index predicate and `contact_reviews_project(project_id,expected_revision)` index are measured, not reimplemented. The known CMS scan remains deferred; no CMS functional suites were run.
+
+### Reproduce and interpret
+
+```sh
+mise exec node@24.21.0 pnpm@11.19.0 -- pnpm test:hot-path-performance
+```
+
+`tests/hot-path-performance.mjs` emits JSON (environment, schema hash, sizes, timings, operation counts and complete query plans). It accepts no database path or remote target. Each size starts from the complete current schema in a disposable SQLite file; independent copies hold current behavior, the hostname query without the repeated partial-index predicate, contact queries without `contact_reviews_project`, and traffic writes. Only the disposable pre-fix contact copy drops an index. Foreign keys and integrity are checked. SQL comes from `src/site-host.ts` and the current schema contact-review join, with result-equivalence, hit/miss and scan/index assertions. Timing thresholds are deliberately not regression gates.
+
+Recorded environment: Node v24.21.0, SQLite 3.53.4 (`node:sqlite`), Linux x64, kernel 6.8.0-1061-aws, CPU reported as Intel(R) Xeon(R) Processor. Current schema SQL SHA-256: `7978d4b2b57b0918ba329b622b163e43d819a7de1d015accb02dd990c73ab7c4`. These are single-process, warm OS-cache, local-file measurements, with DELETE journaling, synchronous FULL and no ANALYZE. They exclude Workers runtime/network/D1 scheduling, cold starts, and production contention.
+
+| Fixture | 100 projects | 1,000 projects |
+| --- | ---: | ---: |
+| Owners (20 projects each) | 5 | 50 |
+| Published versions (~8 KiB HTML each) | 100 | 1,000 |
+| Domain connections (40 active, rest disconnected history) | 400 | 4,000 |
+| Domain claims (within current claim/active-host limits) | 40 | 40 |
+| Contact settings / applied reviews | 100 / 1,000 | 1,000 / 10,000 |
+| Daily traffic rows / quality rows (30 days) | 3,000 / 3,000 | 30,000 / 30,000 |
+
+Fixtures use synthetic artifacts and historical contact reviews, not customer data or generated-artifact acceptance. There are no service-client activation reviews: the full page's blocked-contact view can short-circuit that empty relation. To avoid presenting that case as evidence of contact-page speedup, a separate microbenchmark exercises the **exact contact-review join** from `service_client_blocked_contacts`, excluding its activation-held join. This isolates index scaling; it is **not full-page latency**. Modern populated activation-held paths still need representative measurements.
+
+Reads use 20 warmup pairs then 40 measured batches of 10 queries per variant (400 measured queries each), alternating before/current order. Statements are prepared before timing. The numbers below are **median / p95 of batch-mean microseconds per query**, not request percentiles. Scheduler noise can affect tails (notably the 100-project current hostname-hit sample); no outliers were removed.
+
+| Read | 100 before | 100 current | 1,000 before | 1,000 current |
+| --- | ---: | ---: | ---: | ---: |
+| Custom hostname hit | 34.34 / 38.20 | 12.33 / 166.18 | 312.44 / 329.31 | 12.73 / 13.76 |
+| Custom hostname miss | 37.55 / 38.14 | 10.91 / 10.98 | 356.20 / 394.28 | 11.18 / 12.77 |
+| Traffic custom hostname hit | 34.11 / 40.13 | 11.89 / 14.61 | 304.51 / 329.21 | 12.26 / 13.65 |
+| Traffic custom hostname miss | 36.75 / 37.29 | 10.90 / 11.43 | 368.96 / 510.23 | 11.29 / 12.44 |
+| Contact-enabled full published-page read | 18.17 / 23.36 | 18.35 / 23.70 | 18.22 / 29.02 | 18.38 / 24.07 |
+| Isolated contact-review join (not page latency) | 58.25 / 68.43 | 12.58 / 13.52 | 487.30 / 513.18 | 13.01 / 14.59 |
+
+The pre-fix hostname plans scan `domain_connections`; current plans search `domain_connection_hostname`. Removing the contact index reproduces `SCAN r`; the current page/join plans search `contact_reviews_project`. All current non-CMS read plans have no full scan, and results match their isolated pre-fix copies. The hostname and isolated review join scale better locally; the full-page fixture shows **no measurable contact latency improvement**. Plan evidence is not a measured count of rows read or billed.
+
+### Per-page traffic write profile — no behavior fix
+
+The harness calls the actual bundled `measureTraffic` with the existing SQLite D1 adapter on a separate populated file. Each kind has 20 warmups and 400 measured individual calls, awaited sequentially, targeting a new UTC day then updating the same aggregate. Unlike reads, these timings include preparing the SQL and committing the write; p95 is over individual calls, not batch means.
+
+| Traffic kind | 100 projects median / p95 (µs) | 1,000 projects median / p95 (µs) |
+| --- | ---: | ---: |
+| Counted | 328.80 / 554.30 | 352.21 / 1,108.39 |
+| Excluded automation | 334.28 / 732.80 | 368.58 / 1,979.74 |
+
+For **each kind at each size**, the wrapper observed exactly 420 prepares, 420 runs and 420 changed rows, including warmups; the aggregate increased by exactly 420. The upsert's project/publication check uses indexed searches without a full scan. This establishes one aggregate-row write per normal measurement in this workload, not production write units or bills. It does not profile pending-gap flushing, concurrent isolates, retention cleanup or D1 saturation; local commit timing varies with filesystem scheduling.
+
+No measured production bottleneck or contract-supported batching/cache change is established, so no behavioral fix is justified by this experiment. Serving still uses `waitUntil`, fails open on telemetry failure and retains its bounded shedding/gap behavior. Writes are not billing events and no billing path was changed.
+
+### Correctness regressions and remaining evidence
+
+The following were rerun sequentially on disposable current-schema fixtures:
+
+```sh
+pnpm test:traffic
+pnpm test:publications
+pnpm test:site-health
+node tests/site-safety.mjs
+node tests/site-safety.mjs --d1
+pnpm test:contacts
+pnpm test:hosting-chat
+node tests/domain-hosting.mjs
+node tests/boundary-custom-domain-owner.mjs
+node tests/boundary-site-isolation.mjs
+node tests/hot-path-query-plans.mjs
+```
+
+These cover actual handlers/local D1 for private-before-publish and `no-store` responses, publish/restore/unpublish, withdrawal and stale-review revocation, contact disable/publication races, tenant and custom-host ownership boundaries, excluded traffic, delayed/gaps measurements, the 32-in-flight cap, and fail-open/nonblocking serving. No UI-driven test, live custom domain, production probe, provider call or real send was performed.
+
+Scope caveat: the site-isolation boundary suite includes a cross-host `/cms/` 404 rejection, not a CMS functionality test. No further CMS-path checks were run. The custom-domain owner suite also retains its existing S6-1 characterization: an orphaned connection after ownership transfer can starve later maintenance batches. That unrelated maintenance finding is not fixed or represented as passing behavior here.
+
+Remaining WH-051 evidence: production D1 query metadata and rows-read/written billing, request latency/throughput under representative load (including populated service-client activation/held paths and concurrent traffic/gap flushing), and independently authorized schema/deployment/live revocation acceptance. `node:sqlite` exposes neither D1 billing nor runtime scan/VM-step counters, so production cost and runtime rows read remain **unknown**. This slice does not close those gates or the roadmap task.
