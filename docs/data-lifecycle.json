@@ -1740,6 +1740,7 @@
         "stripe_paid_invoices",
         "stripe_invoice_voids",
         "capacity_preferences",
+        "capacity_ledgers",
         "domain_funding_holds"
       ],
       "scope": "owner",

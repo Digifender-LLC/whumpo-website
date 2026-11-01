@@ -6,9 +6,9 @@
  "evidence": "docs/workspace-collaboration-evidence.md",
  "baseline": {
   "sourceCommit": "4dea09c",
-  "reviewedSchemaSha256": "ade27d5df41e4b5dbd79c81f2ec62cefdb099871f9ceba04c97eaf1048f0af27",
-  "tables": 261,
-  "usersForeignKeyColumns": 127
+  "reviewedSchemaSha256": "820edcede50d400fe96723d7fed7955a4fb1d3dd0b7bd4ce1d1945514bafffe2",
+  "tables": 262,
+  "usersForeignKeyColumns": 128
  },
  "vocabulary": {
   "classes": {
@@ -67,6 +67,7 @@
   {"column":"backend_state_reviews.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace+actor","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id","actor":"actor_ref"},"status":"proposed","evidenceLevel":"review-spike","basis":"Preparer and confirmer provenance on every review type","evidence":["docs/workspace-collaboration.md#approvals-and-release-authority"]},
   {"column":"build_jobs.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace+actor","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id","actor":"actor_ref"},"status":"proposed","evidenceLevel":"review-spike","basis":"Job envelope actor.membership {id,revision} (contract Jobs)","evidence":["docs/workspace-collaboration.md#actor-references-chat-identity-and-receipt-principals"]},
   {"column":"capacity_preferences.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id"},"status":"proposed","evidenceLevel":"review-spike","basis":"Preferred plan/interval/overage are billing intent of the tenant (owner-only write; billing role read)","evidence":["docs/workspace-collaboration.md#engineering-decision-c2-a-dedicated-workspaces-tenant-proposed-engineering-not-an-owner-question"]},
+  {"column":"capacity_ledgers.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id"},"status":"proposed","evidenceLevel":"review-spike","basis":"The capacity ledger (monthly, rollover and purchased lots, holds) of the tenant: account-owned plain-data state, written only through the compare-and-set store (WH-043, not wired)","evidence":["docs/workspace-collaboration.md#engineering-decision-c2-a-dedicated-workspaces-tenant-proposed-engineering-not-an-owner-question"]},
   {"column":"chat_conversations.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace+actor","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id","actor":"actor_ref"},"privacy":"actor","status":"proposed","evidenceLevel":"review-spike","basis":"Chat is private to the acting account within a workspace","evidence":["docs/workspace-collaboration.md#roles-grants-and-effect-sets"]},
   {"column":"chat_interaction_requests.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace+actor","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id","actor":"actor_ref"},"privacy":"actor","status":"proposed","evidenceLevel":"review-spike","basis":"Chat is private to the acting account within a workspace","evidence":["docs/workspace-collaboration.md#roles-grants-and-effect-sets"]},
   {"column":"chat_interaction_submissions.user_id","sourceFile":"schema/platform.sql","onDelete":"CASCADE","class":"workspace+actor","subject":"workspace","retarget":"hand-written","roles":{"tenant":"workspace_id","actor":"actor_ref"},"privacy":"actor","status":"proposed","evidenceLevel":"review-spike","basis":"Chat is private to the acting account within a workspace","evidence":["docs/workspace-collaboration.md#roles-grants-and-effect-sets"]},
