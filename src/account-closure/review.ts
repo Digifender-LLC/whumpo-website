@@ -149,6 +149,7 @@ const c:Record<string,[string,string,Disposition]>={
  pendingCheckoutOrders:['stripe_subscription_orders','billing','cancel'],
  activeSubscriptions:['stripe_subscriptions','billing','cancel'],
  paidInvoices:['stripe_paid_invoices','billing','retain'],
+ invoiceVoids:['stripe_invoice_voids','billing','retain'],
  domainZones:['domain_connections','domains-dns','retain'],
 domainQuotes:['domain_quotes','domain-registrations','delete'],
  domainReviews:['domain_reviews','domain-registrations','delete'],
