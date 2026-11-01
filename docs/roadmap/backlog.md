@@ -5679,6 +5679,7 @@ Issue: Not created. Planning owner: Unassigned. Check the live issue state, assi
 ### Evidence
 
 - 2026-10-01: owner authorized Stripe sandbox signup/invoice/billing work and supplied a verified sk_test key. No real-money activation. Sandbox contract: docs/stripe-sandbox.md.
+- 2026-11-01 UTC (docs only; no Stripe or Cloudflare call): all five owner answers recorded in docs/roadmap/wh-041-owner-decisions.md. Q-29: no automatic refunds, cancellation at period end, refunds at owner discretion through support. Q-30: 7 days of paid access after a failed renewal (read, export and existing published sites stay up; no new expensive work), not for cancelled subscriptions. Q-31: a lost dispute voids that invoice's coverage and flags the account for support review. Q-32: Stripe Tax automatic collection from day one. Q-33: top-up ($10 for 1,000 units) and monthly rollover approved as proposed. None of these is implemented beyond the invoice void (#580). Known implications: automatic tax changes invoice totals, which src/stripe-billing.ts currently refuses unless they equal the order amount; the grace window and the support flag need new stored facts (schema changes); the ledger stays unwired. Checkout stays closed; no activation is implied, and the WH-041 acceptance line on qualified tax review still applies before real money.
 
 ## WH-042 — Implement subscription, invoice and entitlement lifecycle
 
