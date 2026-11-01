@@ -1,7 +1,7 @@
 // WH-043 first slice: the capacity ledger as pure, immutable functions over plain data, with explicitly SYNTHETIC terms. No D1, network, clock, provider or Stripe call, no
 // schema, and nothing here is wired into a route, billing path or admission: the lot, expiry and rollover rules are the proposal in docs/resource-pool-economics.md and are
 // not enabled billing terms, and no purchased balance exists. Units are integer micro-units (never floats). Every operation carries an id: repeating it with the same body is a
-// no-op, repeating it with a different body is refused. Cross-writer serialization belongs to capacity-ledger-store.ts. Balances are never read from, translated from or revived from
+// no-op, repeating it with a different body is refused. Cross-writer serialization is the revision compare-and-set in capacity-store.ts. Balances are never read from, translated from or revived from
 // the retired test-unit tables: the ledger only knows entries it created (version 1).
 export class LedgerError extends Error {
  constructor(readonly code: string, detail: string) { super(`${code}: ${detail}`); this.name = 'LedgerError'; }

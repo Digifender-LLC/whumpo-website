@@ -5,7 +5,8 @@ import {execFileSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 // `probe` opts the in-memory fixture into the report-only SQLite authorizer; miniflare fixtures report it as unavailable.
-export async function databaseFixture({d1=false,r2=false,allowedArguments=[],probe=false}={}){
+// `peer` adds a second, independent local D1 platform proxy over the same persisted database (own workerd instance), for multi-connection tests.
+export async function databaseFixture({d1=false,r2=false,allowedArguments=[],probe=false,peer=false}={}){
  if(process.argv.slice(2).some(arg=>arg!=='--d1'&&!allowedArguments.includes(arg)))throw Error('Unsupported fixture argument');
  if(new Set(process.argv.slice(2)).size!==process.argv.length-2)throw Error('Repeated fixture argument');
  if(!d1&&!r2&&process.argv.length===2)return sqliteD1({probe});
@@ -15,7 +16,7 @@ export async function databaseFixture({d1=false,r2=false,allowedArguments=[],pro
   await writeFile(directory+'/schema.sql',await currentSchema());
   // Only containment paths are forwarded, so Wrangler's config, logs and temp files follow the caller's sandbox.
   execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','execute','feature-inclusion-local','--local','--config',config,'--file',directory+'/schema.sql','--persist-to',directory+'/state'],{stdio:'pipe',maxBuffer:16*1024*1024,env:{PATH:process.env.PATH,CI:'true',WRANGLER_SEND_METRICS:'false',...Object.fromEntries(['HOME','TMPDIR','XDG_CONFIG_HOME','XDG_CACHE_HOME','XDG_DATA_HOME','XDG_STATE_HOME','WRANGLER_LOG_PATH'].filter(key=>process.env[key]).map(key=>[key,process.env[key]]))}});
-  const {getPlatformProxy}=await import('wrangler'),proxy=await getPlatformProxy({configPath:config,persist:{path:directory+'/state/v3'},remoteBindings:false});
-  return {db:proxy.env.DB,env:proxy.env,...(probe?{authorizer:unavailableAuthorizerProbe}:{}),close:async()=>{await proxy.dispose();await rm(directory,{recursive:true,force:true});}};
+  const {getPlatformProxy}=await import('wrangler'),open=()=>getPlatformProxy({configPath:config,persist:{path:directory+'/state/v3'},remoteBindings:false}),proxy=await open(),other=peer?await open():null;
+  return {db:proxy.env.DB,env:proxy.env,...(other?{peer:other.env.DB}:{}),...(probe?{authorizer:unavailableAuthorizerProbe}:{}),close:async()=>{await other?.dispose();await proxy.dispose();await rm(directory,{recursive:true,force:true});}};
  }catch(error){await rm(directory,{recursive:true,force:true});throw error;}
 }

@@ -9,12 +9,13 @@ import {sqliteD1Adapter} from './sqlite-d1.mjs';
 import {currentSchema} from '../tools/current-schema.mjs';
 
 // WH-043: stale and concurrent writers against the merged src/capacity-store.ts on real databases: two connections to one SQLite file
-// (default) or actual local D1 (--d1). Only scheduling is controlled: both writers finish their real read before either real write runs.
+// (default) or two independent local D1 platform proxies over one persisted database (--d1). Only scheduling is controlled: both writers finish their real read before either real write runs.
 // Synthetic terms; no route, invoice, admission, purchased balance or provider is involved.
 const bundle=await build({stdin:{contents:"export * from './src/capacity-store';export * from './src/capacity-ledger';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
 const m=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
-const d1=process.argv.includes('--d1'),fixture=await databaseFixture({d1});
-let directory,connections=[],A=fixture.db,B=fixture.db;
+const d1=process.argv.includes('--d1'),fixture=await databaseFixture({d1,peer:d1});
+let directory,connections=[],A=fixture.db,B=fixture.peer??fixture.db;
+if(d1)assert.ok(fixture.peer&&fixture.peer!==fixture.db,'two independent local D1 bindings');
 if(!d1){
  directory=await mkdtemp(join(tmpdir(),'whumpo-capacity-races-'));
  const open=()=>{const sql=new DatabaseSync(join(directory,'capacity.sqlite'));sql.exec('PRAGMA foreign_keys=ON;PRAGMA busy_timeout=5000');return sql;};
@@ -99,5 +100,5 @@ try{
   await Promise.all([update(a,'reserve',{id:'same',units:40,at:2},A),update(b,'reserve',{id:'same',units:10,at:2},B)]);
   assert.equal((await load(a)).ledger.reservations.same.units,40);assert.equal((await load(b)).ledger.reservations.same.units,10);
  });
- console.log(`Capacity store races passed: ${cases} cases on ${d1?'actual local D1':'file SQLite with two connections'} against src/capacity-store.ts. Synthetic/offline only; no billing, admission, provider, customer balance or cutover.`);
+ console.log(`Capacity store races passed: ${cases} cases on ${d1?'two independent local D1 platform proxies over one database':'file SQLite with two connections'} against src/capacity-store.ts. Synthetic/offline only; no billing, admission, provider, customer balance or cutover.`);
 }finally{for(const c of connections)c.close();await fixture.close?.();if(directory)await rm(directory,{recursive:true,force:true});}
