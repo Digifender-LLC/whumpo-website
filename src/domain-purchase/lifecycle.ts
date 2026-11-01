@@ -175,9 +175,9 @@ export async function startTransferOut({db,actor,hostname,registrar,requestId,no
  // A sweep or another worker moved the claim first: return the request as it stands now, never null.
  if(!request){
   const current=await loadTransfer(db,actor.ownerId,hostname) as TransferRequest;
-  // A cancel or sweep failed the claim while the unlock was in flight, so the registrar may have unlocked after that decision: lock it again (best effort; the answer is not
-  // stored). A request that is still open (a lease sweep only made it an unknown outcome) keeps its unlock.
-  if(kind==='unlocked'&&current?.requestId===claimed.request_id&&current.state==='failed')await relockConfirmed(registrar,current);
+  // A cancel or sweep failed the claim while the unlock was in flight, so the registrar may have unlocked after that decision (even if the response was lost): lock it again
+  // (idempotent, best effort; the answer is not stored). A request that is still open (a lease sweep only made it an unknown outcome) keeps its unlock.
+  if(kind!=='rejected'&&current?.requestId===claimed.request_id&&current.state==='failed')await relockConfirmed(registrar,current);
   return {request:current,replayed:true as const};
  }
  return {request,replayed:false as const};
@@ -189,22 +189,23 @@ export async function startTransferOut({db,actor,hostname,registrar,requestId,no
 export async function reconcileTransfers(db:Db,registrar:RegistrarAdapter,now:number,limit=20){
  const rows=(await db.prepare(`SELECT ${transferColumns} FROM domain_transfer_requests WHERE state IN ('unknown-outcome','unlocked') AND updated_at<=?2 ORDER BY updated_at LIMIT ?1`).bind(limit,now-domainPurchaseBounds.reconcileSpacingMs).all<TransferRow>()).results;
  let moved=0;
- for(const row of rows){
-  try{
-   const r=toTransfer(row),found=await registrar.lookup(r.hostname);
-   let result:TransferRequest|null=null;
-   if(found.status==='transferred-out')result=await bump(db,r,'completed',now,{evidence:'registrar-reported'});
-   else if(found.status==='registered'&&typeof found.orderRef==='string'&&found.orderRef.length>0&&!(await ours(db,r.hostname,found.orderRef)))
-    result=await bump(db,r,'completed',now,{evidence:'registered-elsewhere'});
-   else if(found.status==='registered'&&found.unlocked===true&&r.state==='unknown-outcome')result=await bump(db,r,'unlocked',now,{});
-   else result=await bump(db,r,r.state,now,{});// touched, nothing proven: it goes to the back of the line
-   if(result&&result.state!==r.state)moved++;
-  }catch{
-   // A failed read still touches the request (guarded by its version), so it respects the spacing and moves behind the others instead of filling every batch.
-   try{await bump(db,toTransfer(row),row.state,now,{});}catch{/* the next pass retries */}
-  }
- }
+ for(const row of rows){if((await readTransfer(db,registrar,row,now))?.state!==row.state)moved++;}
  return {moved};
+}
+/** One read of one open request: positive evidence completes it, a registrar that reports the name unlocked settles an unknown outcome, anything else touches the request
+ * (guarded by its version) so it goes behind the others. A failed lookup also touches it. Never calls a registrar mutation. */
+async function readTransfer(db:Db,registrar:RegistrarAdapter,row:TransferRow,now:number){
+ try{
+  const r=toTransfer(row),found=await registrar.lookup(r.hostname);
+  if(found.status==='transferred-out')return await bump(db,r,'completed',now,{evidence:'registrar-reported'});
+  if(found.status==='registered'&&typeof found.orderRef==='string'&&found.orderRef.length>0&&!(await ours(db,r.hostname,found.orderRef)))
+   return await bump(db,r,'completed',now,{evidence:'registered-elsewhere'});
+  if(found.status==='registered'&&found.unlocked===true&&r.state==='unknown-outcome')return await bump(db,r,'unlocked',now,{});
+  return await bump(db,r,r.state,now,{});// touched, nothing proven: it goes to the back of the line
+ }catch{
+  // A failed read still touches the request, so it respects the spacing and moves behind the others instead of filling every batch.
+  try{return await bump(db,toTransfer(row),row.state,now,{});}catch{return null;/* the next pass retries */}
+ }
 }
 const ours=async(db:Db,hostname:string,orderRef:string)=>!!await db.prepare('SELECT 1 x FROM domain_registrations WHERE hostname=?1 AND order_id=?2').bind(hostname,orderRef).first();
 async function bump(db:Db,r:TransferRequest,to:TransferRequest['state'],now:number,{evidence}:{evidence?:'registered-elsewhere'|'registrar-reported'}){
@@ -226,7 +227,9 @@ export async function sweepTransfers(db:Db,registrar:RegistrarAdapter,now:number
    // The name is returned to active only once the registrar confirms it is locked again. An unconfirmed lock keeps the request open and moves it behind the others
    // until it is retried, up to the give-up age.
    if(await relockConfirmed(registrar,r)||now-r.requestedAt>=relockGiveUpMs){if(await bump(db,r,'failed',now,{}))moved++;}
-   else await bump(db,r,r.state,now,{});
+   // An unconfirmed lock may be because the name already left: read it now, so the registrar's own report completes the request instead of waiting for a reconcile pass that this
+   // touch would otherwise keep postponing. Nothing proven leaves it open, behind the others.
+   else if((await readTransfer(db,registrar,row,now))?.state!==r.state)moved++;
   }catch{/* next */}
  }
  return {moved};
