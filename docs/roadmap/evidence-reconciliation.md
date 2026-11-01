@@ -446,3 +446,19 @@ node tests/verification-profiles.mjs && node tests/lifecycle-catalog.mjs
 node tools/verify.mjs fast
 git diff --check
 ```
+
+## Slice 4 (November 1, 2026 UTC, source `6871a7a`)
+
+Source and local verification only; no Cloudflare read, deployment, provider call or status upgrade. WH-001 remains open.
+
+| Fact | Before | Now (measured) |
+| --- | --- | --- |
+| Composed schema | 221 tables / 1,063 objects / 6 files (Oct 11) | 245 tables / 1,273 objects / 8 files, digest `855ca3e91b40d4b99b4c93fe765ae616c4de416dcf6b12f8ba2d66e33a41b214` (`currentSchemaArtifact().expected`) |
+| Data classes | 51 current + 6 planned | 60 current + 6 planned (`node tests/lifecycle-catalog.mjs`: 245 tables, 42 rejected cases) |
+| Control database bound in the three Worker configs | `whumpo-control-2026-10-04` | `whumpo-control-2026-11-01` (#567) |
+| Verify profiles (script counts) | fast 8, protection 15, site 3, app 1 | fast 21, protection 15, site 140, app 1, security 9, tenant 4 |
+| Roadmap | 176 tasks | 191 tasks, 7 phases (`node tools/roadmap.mjs validate`) |
+
+Corrected: `README.md` (schema row) and `docs/capability-matrix.md` (Schema and Control database rows). Not verified: deployed database/Worker state after #567, the #567 deploy outcome, all dated release readbacks, and device/browser/provider evidence. Merges of #567-#570 on November 1 went in on owner instruction with the Review gate red and no `review:clean` status; the open question is recorded in draft PR #571.
+
+Commands: `node tests/current-schema.mjs`, `node tests/lifecycle-catalog.mjs`, `node tools/roadmap.mjs validate`, a one-line import of `tools/current-schema.mjs` and `tools/verify.mjs` for counts.
