@@ -5,7 +5,7 @@ import {resolve,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
-const lockPath=resolve(root,'compiler-locks/project-content-v6.json');
+const lockPath=resolve(root,'compiler-locks/project-content-v7.json');
 const generatedPath=resolve(root,'src/project-specification/compiler-artifacts.generated.ts');
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 const encode=value=>JSON.stringify(value,null,2)+'\n';
@@ -30,13 +30,13 @@ export async function specificationCompilerArtifacts(){
  const sources=[];
  for(const path of paths)sources.push({path,digest:digest(await readFile(resolve(root,path)))});
  const content=digest(bundle.outputFiles[0].contents),component=sources.find(source=>source.path==='src/components.ts').digest;
- const evidence={formatVersion:1,compiler:'project-content@6',schemaVersion:3,esbuildVersion,target:'es2022',content,component,modules:await modulePins(sources),sources};
+ const evidence={formatVersion:1,compiler:'project-content@7',schemaVersion:3,esbuildVersion,target:'es2022',content,component,modules:await modulePins(sources),sources};
  return {...evidence,compilerDigest:digest(encode(evidence))};
 }
-function generated(evidence){return '// Generated from compiler-locks/project-content-v6.json. Do not repin an existing compiler ID.\nexport const compilerArtifacts = '+JSON.stringify({compiler:evidence.compilerDigest,content:evidence.content,component:evidence.component,modules:Object.fromEntries(evidence.modules.map(m=>[m.kind,{module:m.module.digest,schema:m.schema.digest}]))},null,2)+' as const;\n';}
+function generated(evidence){return '// Generated from compiler-locks/project-content-v7.json. Do not repin an existing compiler ID.\nexport const compilerArtifacts = '+JSON.stringify({compiler:evidence.compilerDigest,content:evidence.content,component:evidence.component,modules:Object.fromEntries(evidence.modules.map(m=>[m.kind,{module:m.module.digest,schema:m.schema.digest}]))},null,2)+' as const;\n';}
 export async function checkSpecificationCompiler(){
  const actual=await specificationCompilerArtifacts(),saved=JSON.parse(await readFile(lockPath,'utf8'));
- if(encode(actual)!==encode(saved))throw Error('Pinned project-content@6 compiler changed. Introduce a new reviewed current compiler identity; do not repin v6.');
+ if(encode(actual)!==encode(saved))throw Error('Pinned project-content@7 compiler changed. Introduce a new reviewed current compiler identity; do not repin v7.');
  if(await readFile(generatedPath,'utf8')!==generated(saved))throw Error('Compiler artifact constants are stale. Run node tools/check-specification-compiler.mjs --generate.');
  return actual;
 }
@@ -53,5 +53,5 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   if(encode(actual)!==encode(saved))throw Error('Cannot generate constants for changed compiler source.');
   await writeFile(generatedPath,generated(saved));
  }
- const checked=await checkSpecificationCompiler();console.log(`Specification compiler verified: project-content@6, ${checked.sources.length} source inputs, ${checked.compilerDigest}`);
+ const checked=await checkSpecificationCompiler();console.log(`Specification compiler verified: project-content@7, ${checked.sources.length} source inputs, ${checked.compilerDigest}`);
 }

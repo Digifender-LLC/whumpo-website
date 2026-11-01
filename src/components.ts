@@ -47,9 +47,9 @@ export function siteConfig(value:unknown):SiteConfig {
 export function renderSite(value:SiteConfig){
  const c=siteConfig(value);
  const base=renderPageShell({name:c.name,description:c.description,theme:c.theme});
- const html=base.replace(`<h1>${escape(c.name)}</h1>`,`<h1>${escape(c.headline)}</h1>`)
- .replace(`<section class="about"><h2>A little introduction.</h2><p>${escape(c.description||'More details are coming soon.')}</p></section>`,`<section class="about"><h2>${escape(c.aboutTitle)}</h2><p>${escape(c.aboutText)}</p></section>`)
- .replace('</main>',`<div class="sections">${c.sections.map(s=>`<section class="feature"><h2>${escape(s.heading)}</h2><p>${escape(s.text)}</p></section>`).join('')}</div></main>`)
+ const html=base.replace(`<h1>${escape(c.name)}</h1>`,()=>`<h1>${escape(c.headline)}</h1>`)
+ .replace(`<section class="about"><h2>A little introduction.</h2><p>${escape(c.description||'More details are coming soon.')}</p></section>`,()=>`<section class="about"><h2>${escape(c.aboutTitle)}</h2><p>${escape(c.aboutText)}</p></section>`)
+ .replace('</main>',()=>`<div class="sections">${c.sections.map(s=>`<section class="feature"><h2>${escape(s.heading)}</h2><p>${escape(s.text)}</p></section>`).join('')}</div></main>`)
  .replace('</style>',`.sections{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:28px;margin:40px 0}.feature{padding:24px 0;border-top:1px solid var(--ink)}.feature h2{font-family:Georgia,serif;font-size:28px;font-weight:400;overflow-wrap:anywhere}.feature p{line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere}</style>`)
  .replace('First draft · Made with Whumpo','Made with Whumpo');
  if(new TextEncoder().encode(html).length>32768)throw Error('Rendered site too large');
@@ -72,6 +72,6 @@ export function photoConfig(value:unknown):PhotoConfig {
 export function renderPhotoPage(value:PhotoConfig){
  const c=photoConfig(value);
  const {photos,...base}=c;
- const html=renderSite(base).replace('</main>',`<section class="photo-gallery" aria-label="Photos">${c.photos.map(p=>`<figure><img src="assets/${p.id}.jpg" alt="${escape(p.alt)}" loading="lazy"></figure>`).join('')}</section></main>`).replace('</style>',`.photo-gallery{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:24px;margin:40px 0}.photo-gallery figure{margin:0}.photo-gallery img{display:block;width:100%;height:auto;border-radius:18px}</style>`);
+ const html=renderSite(base).replace('</main>',()=>`<section class="photo-gallery" aria-label="Photos">${c.photos.map(p=>`<figure><img src="assets/${p.id}.jpg" alt="${escape(p.alt)}" loading="lazy"></figure>`).join('')}</section></main>`).replace('</style>',`.photo-gallery{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:24px;margin:40px 0}.photo-gallery figure{margin:0}.photo-gallery img{display:block;width:100%;height:auto;border-radius:18px}</style>`);
  if(new TextEncoder().encode(html).length>32768)throw Error('Rendered site too large');return html;
 }
