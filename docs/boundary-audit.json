@@ -11555,7 +11555,7 @@
     {
      "file": "src/site-host.ts",
      "kind": "host",
-     "match": "env.DB.prepare(\"SELECT c.project_id FROM domain_connections c JOIN projects p ON p.id=c.project_id AND p.owner_user_id=c.user_id WHERE c.hostname=? AND c.state='active' AND c.serve_until>? AND c.provider_id IS NOT NULL\").bind(url.hostname,new Date().toISOString())",
+     "match": "env.DB.prepare(\"SELECT c.project_id FROM domain_connections c JOIN projects p ON p.id=c.project_id AND p.owner_user_id=c.user_id WHERE c.hostname=? AND c.state NOT IN ('review','disconnected') AND c.state='active' AND c.serve_until>? AND c.provider_id IS NOT NULL\").bind(url.hostname,new Date().toISOString())",
      "methods": [
       "ANY"
      ]
@@ -11602,7 +11602,7 @@
      "enforcedAt": [
       {
        "file": "src/site-host.ts",
-       "contains": "JOIN projects p ON p.id=c.project_id AND p.owner_user_id=c.user_id WHERE c.hostname=? AND c.state='active' AND c.serve_until>? AND c.provider_id IS NOT NULL"
+       "contains": "JOIN projects p ON p.id=c.project_id AND p.owner_user_id=c.user_id WHERE c.hostname=? AND c.state NOT IN ('review','disconnected') AND c.state='active' AND c.serve_until>? AND c.provider_id IS NOT NULL"
       }
      ],
      "tests": [
@@ -11672,7 +11672,7 @@
     {
      "file": "src/site-host.ts",
      "kind": "host",
-     "match": "env.DB.prepare(\"SELECT project_id FROM domain_connections WHERE hostname=? AND state='active' AND serve_until>? AND provider_id IS NOT NULL\").bind(url.hostname,new Date().toISOString())",
+     "match": "env.DB.prepare(\"SELECT project_id FROM domain_connections WHERE hostname=? AND state NOT IN ('review','disconnected') AND state='active' AND serve_until>? AND provider_id IS NOT NULL\").bind(url.hostname,new Date().toISOString())",
      "methods": [
       "ANY"
      ]

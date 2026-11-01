@@ -33,7 +33,8 @@ const serving = {
   if(request.method!=='GET'&&request.method!=='HEAD')return new Response('Method not allowed',{status:405,headers:{...headers,allow:'GET, HEAD'}});
   try{
    if(!(local||!!project)){
-    const mapping=await env.DB.prepare("SELECT c.project_id FROM domain_connections c JOIN projects p ON p.id=c.project_id AND p.owner_user_id=c.user_id WHERE c.hostname=? AND c.state='active' AND c.serve_until>? AND c.provider_id IS NOT NULL").bind(url.hostname,new Date().toISOString()).first<{project_id:string}>();
+    // The NOT IN term is the predicate of the partial unique index domain_connection_hostname: without it SQLite scans every connection on every custom-domain request (tests/hot-path-query-plans.mjs).
+    const mapping=await env.DB.prepare("SELECT c.project_id FROM domain_connections c JOIN projects p ON p.id=c.project_id AND p.owner_user_id=c.user_id WHERE c.hostname=? AND c.state NOT IN ('review','disconnected') AND c.state='active' AND c.serve_until>? AND c.provider_id IS NOT NULL").bind(url.hostname,new Date().toISOString()).first<{project_id:string}>();
     if(!mapping||!/^\/(?:assets\/[0-9a-f-]{36}\.jpg|directory(?:\.json)?)?$/.test(url.pathname))return new Response('Site not found',{status:404,headers});
     url.pathname='/s/'+mapping.project_id+url.pathname;
    }
@@ -84,7 +85,7 @@ export default {
     const kind=trafficClass(request),count=async()=>{
      let project=customerProject(url.hostname);
      if(!project&&['localhost','127.0.0.1'].includes(url.hostname))project=url.pathname.match(/^\/s\/([0-9a-f-]{36})(?:\/|$)/)?.[1]??null;
-     if(!project){const mapping=await env.DB.prepare("SELECT project_id FROM domain_connections WHERE hostname=? AND state='active' AND serve_until>? AND provider_id IS NOT NULL").bind(url.hostname,new Date().toISOString()).first<{project_id:string}>();project=mapping?.project_id??null;}
+     if(!project){const mapping=await env.DB.prepare("SELECT project_id FROM domain_connections WHERE hostname=? AND state NOT IN ('review','disconnected') AND state='active' AND serve_until>? AND provider_id IS NOT NULL").bind(url.hostname,new Date().toISOString()).first<{project_id:string}>();project=mapping?.project_id??null;}
      if(project)await measureTraffic(env.DB,project,kind);
     };
     const task=count().catch(()=>{console.warn('site.traffic.unavailable')});
