@@ -213,6 +213,7 @@
     "test:cms-rich-editor": "node tests/cms-rich-editor.mjs",
     "test:cms-editor": "node tests/cms-editor-shape.mjs",
     "test:traffic": "node tests/site-traffic.mjs",
+    "test:hot-path-performance": "node tests/hot-path-performance.mjs",
     "test:cms-descriptions": "node tests/cms-content-description.mjs",
     "test:project-details": "node tests/project-details.mjs",
     "test:cms-chat-live": "node tests/cms-structured-lifecycle.mjs --live",
