@@ -36,7 +36,7 @@ const reset=()=>{live=baseline();counts=Object.fromEntries(['schema',...workerOr
 let review;
 const prepare=()=>prepareRelease(root,driver,review,{git:()=>({commit:'a'.repeat(40),dirty:false})});
 try{
- for(const dir of ['src','frontend','web','public-app','tools','dist','src/workspace-identity','src/funnel-metrics','src/guest-previews','src/shared-modules','src/account-lifecycle','node_modules/wrangler','compiler-locks','schema'])await mkdir(join(root,dir),{recursive:true});
+ for(const dir of ['src','frontend','web','public-app','tools','dist','src/workspace-identity','src/funnel-metrics','src/guest-previews','src/shared-modules','src/account-lifecycle','src/restore-suppression','node_modules/wrangler','compiler-locks','schema'])await mkdir(join(root,dir),{recursive:true});
  for(const name of ['package.json','pnpm-lock.yaml','vite.config.ts','tsconfig.json','tsconfig.frontend.json','tools/current-schema.mjs','schema/platform.sql','tools/build.mjs','tools/build-pwa.mjs','tools/build-snapshot.mjs','tools/deploy-platform.mjs','tools/check-specification-compiler.mjs','compiler-locks/project-content-v6.json','tools/check-service-client-compiler.mjs','compiler-locks/project-service-clients-v4.json'])await writeFile(join(root,name),'fixture');
  await writeFile(join(root,'node_modules/wrangler/package.json'),JSON.stringify({version:'4.test'}));
  for(const name of ['tools/artifact-protection.mjs','tools/secret-custody.mjs'])await writeFile(join(root,name),'fixture');
@@ -55,6 +55,7 @@ try{
  await writeFile(join(root,'src/guest-previews/schema.sql'),'CREATE TABLE guest_preview_links(owner_user_id TEXT REFERENCES users(id));');
   await writeFile(join(root,'src/shared-modules/schema.sql'),'CREATE TABLE module_instances(project_id TEXT REFERENCES projects(id));');
  await writeFile(join(root,'src/account-lifecycle/schema.sql'),'CREATE TABLE account_export_usage(user_id TEXT REFERENCES users(id));');
+ await writeFile(join(root,'src/restore-suppression/schema.sql'),'CREATE TABLE restore_suppressions(kind TEXT);');
  artifact=await currentSchemaArtifact(root);
  await saveBuildSnapshot(root);await writeFile(join(root,'.secrets/private.key'),'DO_NOT_ARCHIVE');reset();
  review={version:3,environment:'test',buildInputs:(await readJSON(join(root,'.secrets/build-snapshot.json'))).inputs.sha256,review:'synthetic mixed-version review',mixedWorkersCompatible:true,schemaChange:'none',schemaSha256:artifact.sqlSha256};
