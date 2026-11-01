@@ -21,6 +21,18 @@ const run=(l,fn,...a)=>conserved(m[fn](l,...a).ledger);
 let cases=0;const check=async(name,fn)=>{try{await fn();cases++;}catch(e){console.error('FAILED:',name);throw e;}};
 const base=()=>{let l=m.emptyLedger();l=run(l,'grant',{id:'m1',kind:'monthly',periodKey:'2026-11',units:100*T,at:1,expiresAt:30*DAY});l=run(l,'grant',{id:'p1',kind:'purchased',periodKey:'2026-11',units:50*T,at:1,expiresAt:null,consentRef:'consent-1'});return l;};
 
+await check('partial refunds skip units already returned to later-expiring lots',()=>{
+ let l=run(m.emptyLedger(),'grant',{id:'early',kind:'monthly',periodKey:'early',units:50,at:1,expiresAt:10});
+ l=run(l,'grant',{id:'late',kind:'monthly',periodKey:'late',units:50,at:1,expiresAt:100});
+ l=run(l,'reserve',{id:'both',units:100,at:2});l=run(l,'settle',{id:'both',actualUnits:100,at:3});
+ for(const [id,units,at] of [['r1',30,4],['r2',40,11],['r3',30,12]])l=run(l,'refund',{id,reservationId:'both',units,at});
+ assert.deepEqual(l.lots.map(x=>[x.id,x.remaining,x.expiredUnits]),[['early',0,50],['late',50,0]]);
+});
+await check('prototype-like reservation IDs use own state only',()=>{
+ let l=base();throws(()=>m.settle(l,{id:'constructor',actualUnits:1,at:2}),'UNKNOWN_RESERVATION');
+ for(const id of ['__proto__','constructor','toString']){l=run(l,'reserve',{id,units:10,at:2});assert.ok(Object.hasOwn(l.reservations,id));l=run(l,'settle',{id,actualUnits:10,at:3});l=run(l,'refund',{id,reservationId:id,units:5,at:4});}
+});
+
 await check('holds use the earliest-expiring lot first, never overdraw, and a shortfall holds nothing',async()=>{
  let l=run(base(),'reserve',{id:'r1',units:120*T,at:10});
  assert.equal(l.lots.find(x=>x.id==='m1').remaining,0);assert.equal(l.lots.find(x=>x.id==='p1').remaining,30*T,'the open-ended purchased lot is used last');
