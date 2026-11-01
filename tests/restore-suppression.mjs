@@ -225,9 +225,18 @@ try{
   // The older backup also points the GitHub connection at a token that was revoked later.
   await candidate.prepare("INSERT INTO github_connections(user_id,github_user_id,login,active_token_id,connected_at) VALUES(?,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(a.user,'4242','fixture',githubToken2).run();
   assert.ok(await crow('SELECT 1 x FROM users WHERE id=?',x.user),'X is back in the backup');
+  // The older backup still holds rows that closure had to clear before it could purge (RESTRICT / NO ACTION children of the closed account and its project):
+  // the replay removes them with the account instead of failing on the foreign key every time.
+  await candidate.prepare("INSERT INTO gateway_spend_buckets(id,scope,user_id,limit_micros) VALUES(?,'account',?,1000)").bind('bucket-'+c.user,c.user).run();
+  await candidate.prepare('INSERT INTO backend_form_settings(project_id,revision) VALUES(?,0)').bind(c.project).run();
+  // A child of a child: the attempt references the user and three buckets, so it has to go before its account bucket does.
+  await candidate.prepare("INSERT INTO gateway_spend_buckets(id,scope,user_id,task_id,limit_micros) VALUES(?,'task',?,'t',1000)").bind('task-'+c.user,c.user).run();
+  await candidate.prepare("INSERT OR IGNORE INTO gateway_spend_buckets(id,scope,limit_micros) VALUES('platform-restore-test','platform',1000)").run();
+  await candidate.prepare("INSERT INTO gateway_spend_attempts(id,user_id,task_id,snapshot,task_bucket,account_bucket,platform_bucket,provider_reserved,customer_reserved) VALUES(?,?,'t',?,?,?,?,0,0)").bind('attempt-'+c.user,c.user,JSON.stringify({ownerId:c.user,taskId:'t',providerReservationMicros:0,customerReservationMicros:0,role:'ack',tier:'standard',inputBound:1,outputBound:1,rate:{inputMicrosPerMillion:0,outputMicrosPerMillion:0},extraMicrosPerCall:0,rateValidUntil:Date.now()+86400000}),'task-'+c.user,'bucket-'+c.user,'platform-restore-test').run();
   // The replay applies the current ledger atomically; a duplicate replay changes nothing.
   const replay=await s.replayRestoreSuppressions(candidate,current,{source:db,name:'older backup candidate'});
   assert.equal(replay.applied.accountsRemoved,2);assert.equal(replay.applied.visitorsRevoked,3,'Revoked visitors, and erased ones before their removal');assert.equal(replay.applied.visitorsRemoved,1);assert.equal(replay.applied.staffGrantsRevoked,1);assert.equal(replay.applied.githubTokensRemoved,2);assert.equal(replay.applied.cloudflareTokensRevoking,1);
+  assert.equal(await crow('SELECT 1 x FROM gateway_spend_buckets WHERE user_id=?',c.user),null,'the closed account\'s RESTRICT child went with it');assert.equal(await crow('SELECT 1 x FROM gateway_spend_attempts WHERE user_id=?',c.user),null,'and the child of that child');assert.equal(await crow('SELECT 1 x FROM backend_form_settings WHERE project_id=?',c.project),null,'and the closed project\'s NO ACTION child');
   const again=await s.replayRestoreSuppressions(candidate,current,{source:db,name:'older backup candidate'});assert.ok(Object.values(again.applied).every(n=>n===0),JSON.stringify(again.applied));
   gate=await s.checkRestoreSuppressions(candidate,current,expected);assert.deepEqual(gate,{clear:true,pending:{},missingLedgerEntries:0,triggersMatch:true,ledgerSha256:current.sha256});
   // Actual handlers against the reconciled candidate: nothing erased or revoked comes back.
@@ -310,10 +319,11 @@ try{
    await assert.rejects(s.captureRestoreSuppressions({prepare:()=>({all:async()=>({results:Array.from({length:100001},()=>({kind:'record',subject_id:'x',effect:'deleted',revision:null,recorded_at:1}))})})}),/exceeds this replay bound/);
    // A replay that cannot apply is all or nothing and leaves the candidate held; the data is unchanged and the triggers are back.
    const x2=await workspaceFixture(candidate,m),x2scope=await x2.scope(),project=(await createFixtureProject(x2scope,x2.account,'Held '+marker,'Held project')).project;
-   await candidate.prepare('CREATE TABLE restore_blocker(project_id TEXT REFERENCES projects(id))').run();await candidate.prepare('INSERT INTO restore_blocker VALUES(?)').bind(project).run();
+   // SET NULL on a NOT NULL column fails mid-batch; a plain RESTRICT/NO ACTION child would now be cleared by the replay.
+   await candidate.prepare('CREATE TABLE restore_blocker(project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE SET NULL)').run();await candidate.prepare('INSERT INTO restore_blocker VALUES(?)').bind(project).run();
    const blocked=make([{kind:'project',subjectId:project,effect:'deleted'},{kind:'record',subjectId:'bbbbbbbb-0000-4000-8000-000000000002',effect:'deleted'}]);
    const ledgerRows=async()=>(await candidate.prepare('SELECT count(*) n FROM restore_suppressions').first()).n,before2=await ledgerRows();
-   await assert.rejects(s.replayRestoreSuppressions(spy,blocked,{source:db,name:'engine candidate'}),/FOREIGN KEY/);
+   await assert.rejects(s.replayRestoreSuppressions(spy,blocked,{source:db,name:'engine candidate'}),/NOT NULL|constraint/i);
    assert.ok(await candidate.prepare('SELECT 1 x FROM projects WHERE id=?').bind(project).first(),'nothing was deleted');assert.equal(await ledgerRows(),before2,'the ledger merge was rolled back with the rest');
    const afterFail=await s.triggerSetDigest((await candidate.prepare("SELECT name,sql FROM sqlite_master WHERE type='trigger'").all()).results);assert.equal(afterFail,expected.triggerSha256,'the triggers are back');
    gate=await s.checkRestoreSuppressions(candidate,blocked,expected);assert.equal(gate.clear,false,'held: the project is still there and the scratch table remains');

@@ -13,6 +13,7 @@
  * without triggers: `checkRestoreSuppressions` is the gate that must report `clear` before restored services may receive customer
  * traffic, and it refuses unless the candidate's trigger set equals the digest of the current schema artifact. Re-running the replay
  * resumes from the saved trigger set. Content-free: opaque identifiers, effects and staff revisions only. */
+import {restoreBlockerStatements} from './restore-blockers.generated';
 
 export type SuppressionKind='account'|'project'|'visitor'|'staff'|'record'|'file'|'github_token'|'cloudflare_token';
 export type SuppressionEntry={kind:SuppressionKind;subjectId:string;effect:'deleted'|'revoked';revision:number|null;recordedAt:number};
@@ -88,6 +89,7 @@ export async function checkRestoreSuppressions(db:D1Database,ledger:SuppressionL
 
 const ids=(kind:SuppressionKind,effect?:'deleted')=>`(SELECT subject_id FROM restore_suppressions WHERE kind='${kind}'${effect?` AND effect='${effect}'`:''})`;
 const quoted=(name:string)=>'"'+name.replaceAll('"','""')+'"';
+
 async function inBatches(db:D1Database,statements:D1PreparedStatement[],size=50){for(let i=0;i<statements.length;i+=size)await db.batch(statements.slice(i,i+size));}
 
 /** Merges the current ledger into an isolated candidate and applies it. Refuses unless the caller names the candidate and passes the live source
@@ -119,6 +121,9 @@ export async function replayRestoreSuppressions(candidate:D1Database,ledger:Supp
  // dependent visitor rows and attached files go first, and the notice, fair-use and access-revision bookkeeping follows the erasure.
  const doomedFiles=`f.id IN ${ids('file')} OR f.project_id IN ${ids('project')} OR p.owner_user_id IN ${ids('account')} OR f.id IN (SELECT file_id FROM module_record_files WHERE entry_id IN ${ids('record')}) OR f.id IN (SELECT file_id FROM module_files WHERE visitor_id IN ${ids('visitor','deleted')})`;
  const erasedVisitors=ids('visitor','deleted'),live=`(SELECT id FROM app_visitors WHERE revoked=0 AND id IN ${ids('visitor')})`;
+ // Rows that reference a doomed account or project with RESTRICT or NO ACTION would stop the final deletes on every attempt, so they go first. The list is generated from the
+ // schema (tools/generate-restore-blockers.mjs): the production D1 engine does not authorize reading foreign keys at run time.
+ const blockers=restoreBlockerStatements.map(sql=>candidate.prepare(sql));
  const statements=[...merge,
   // A revoking token must not stay the active connection: the cleanup only claims tokens no connection points at.
   candidate.prepare(`UPDATE github_connections SET active_token_id=NULL WHERE active_token_id IN ${ids('github_token')}`),
@@ -148,6 +153,7 @@ export async function replayRestoreSuppressions(candidate:D1Database,ledger:Supp
   candidate.prepare("UPDATE module_access_states SET revision=(SELECT max(s.revision) FROM restore_suppressions s WHERE s.kind='staff' AND s.subject_id LIKE module_access_states.instance_id||'/%') WHERE revision<coalesce((SELECT max(s.revision) FROM restore_suppressions s WHERE s.kind='staff' AND s.subject_id LIKE module_access_states.instance_id||'/%'),0)"),
   candidate.prepare(`DELETE FROM module_records WHERE id IN ${ids('record')}`),
   candidate.prepare(`DELETE FROM app_visitors WHERE id IN ${erasedVisitors}`),
+  ...blockers,
   candidate.prepare(`DELETE FROM projects WHERE id IN ${ids('project')}`),
   candidate.prepare(`DELETE FROM project_files WHERE id IN ${ids('file')}`),
   candidate.prepare(`DELETE FROM identity_challenges WHERE account_id IN ${ids('account')}`),
@@ -162,6 +168,6 @@ export async function replayRestoreSuppressions(candidate:D1Database,ledger:Supp
  }
  await candidate.prepare('DROP TABLE restore_replay_triggers').run();
  const added=results.slice(0,merge.length).filter((_,i)=>i%2===0).reduce((n,r)=>n+r.meta.changes,0),raised=results.slice(0,merge.length).filter((_,i)=>i%2===1).reduce((n,r)=>n+r.meta.changes,0);
- const rest=results.slice(merge.length);
+ const rest=results.slice(merge.length);if(blockers.length)rest.splice(statements.indexOf(blockers[0])-merge.length,blockers.length);// the labels name the fixed statements only
  return {version:1 as const,ledgerSha256:ledger.sha256,triggersRestored:saved.length,applied:{ledgerEntriesAdded:added,staffRevisionsRaised:raised,...Object.fromEntries(labels.map((l,i)=>[l,rest[i].meta.changes]))} as Record<string,number>};
 }
