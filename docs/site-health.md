@@ -97,8 +97,8 @@ Reads use 20 warmup pairs then 40 measured batches of 10 queries per variant (40
 | --- | ---: | ---: | ---: | ---: |
 | Custom hostname hit | 34.34 / 38.20 | 12.33 / 166.18 | 312.44 / 329.31 | 12.73 / 13.76 |
 | Custom hostname miss | 37.55 / 38.14 | 10.91 / 10.98 | 356.20 / 394.28 | 11.18 / 12.77 |
-| Traffic custom hostname hit | 34.11 / 40.13 | 11.89 / 14.61 | 304.51 / 329.21 | 12.26 / 13.65 |
-| Traffic custom hostname miss | 36.75 / 37.29 | 10.90 / 11.43 | 368.96 / 510.23 | 11.29 / 12.44 |
+| Traffic custom hostname hit (lookup removed 2026-11-02, see below) | 34.11 / 40.13 | 11.89 / 14.61 | 304.51 / 329.21 | 12.26 / 13.65 |
+| Traffic custom hostname miss (lookup removed 2026-11-02) | 36.75 / 37.29 | 10.90 / 11.43 | 368.96 / 510.23 | 11.29 / 12.44 |
 | Contact-enabled full published-page read | 18.17 / 23.36 | 18.35 / 23.70 | 18.22 / 29.02 | 18.38 / 24.07 |
 | Isolated contact-review join (not page latency) | 58.25 / 68.43 | 12.58 / 13.52 | 487.30 / 513.18 | 13.01 / 14.59 |
 
@@ -116,6 +116,28 @@ The harness calls the actual bundled `measureTraffic` with the existing SQLite D
 For **each kind at each size**, the wrapper observed exactly 420 prepares, 420 runs and 420 changed rows, including warmups; the aggregate increased by exactly 420. The upsert's project/publication check uses indexed searches without a full scan. This establishes one aggregate-row write per normal measurement in this workload, not production write units or bills. It does not profile pending-gap flushing, concurrent isolates, retention cleanup or D1 saturation; local commit timing varies with filesystem scheduling.
 
 No measured production bottleneck or contract-supported batching/cache change is established, so no behavioral fix is justified by this experiment. Serving still uses `waitUntil`, fails open on telemetry failure and retains its bounded shedding/gap behavior. Writes are not billing events and no billing path was changed.
+
+### Delayed analytics on custom domains — measured fix
+
+Status: source change, 2026-11-02. Not deployed or accepted live; WH-051 stays planned. No caching, TTL, DNS, provider, schema, billing or serving-response change.
+
+Finding: on a connected custom domain the after-response count (`src/site-host.ts` default export) repeated the hostname lookup serving had just made, before entering `measureTraffic`. That lookup ran outside the `MAX_IN_FLIGHT` measurement budget, so while D1 was slow every custom-domain page left one more D1 read pending in `waitUntil` with no cap. Serving now records the project its own owner-joined mapping resolved in a `WeakMap` keyed by the request, and the count reads it. The count still happens only for a served 200 HTML GET, for the project that page was served from.
+
+`node tests/delayed-traffic.mjs` (and `--d1`) drives the real sites Worker export on a custom domain connected through the real domain-hosting handlers (stubbed provider and DNS, network blocked). It treats statements a GET issues beyond the identical, unmeasured HEAD as measurement and stalls only those. Results on main before the change and on this branch, identical on SQLite and local D1:
+
+| Custom-domain page | Before | After |
+| --- | ---: | ---: |
+| D1 statements per page | 7 | 6 |
+| Of which after the response (measurement) | 2 (hostname lookup, daily upsert) | 1 (daily upsert) |
+| Hostname lookups per page | 2 | 1 |
+| Peak stalled measurement statements, 40 concurrent pages, budget 32 | 40 | 32 |
+| Measurements shed (and later disclosed as missed) in that burst | 0 | 8 |
+
+The test asserts the after column. Pages return with the same body and `cache-control: no-store` while every measurement is stalled. Medians of 20 sequential pages, normal and stalled, were 0.84 / 0.73 ms on SQLite and 31.0 / 28.1 ms on local D1, so a stall adds no serving latency. These are local timings, not gates. With the budget now applied, a burst over 32 sheds work that the old uncapped lookup would eventually have counted. Counted plus disclosed missed still equals pages served, as on project hosts. A stalled measurement that then fails is disclosed after the next successful write.
+
+Billing: across the stalled, shed, failed and flushed measurements every table other than `site_traffic_daily` and `site_traffic_quality` is compared row for row and unchanged, including 16 billing, cost, capacity, usage and quota tables (for example `stripe_paid_invoices`, `cost_events`, `capacity_ledgers`, `storage_usage`, `public_client_usage`). No trigger is defined on either traffic table, their only foreign key is `projects`, and a source guard fails if any module other than the seven current readers and writers (none of them billing, cost or capacity) references traffic. Traffic rows are not billing events.
+
+Not shown: production D1 rows read or billed, Workers `waitUntil` cancellation behaviour. If a stalled D1 call never settles before the runtime cancels it, the in-flight slot may never be released in that isolate. That is unverified locally and recorded as open. Project-host pages (`<project>.whumpo.site`) were already one lookup-free upsert and are unchanged (the `tools/capacity.mjs` site pin stays 5).
 
 ### Correctness regressions and remaining evidence
 

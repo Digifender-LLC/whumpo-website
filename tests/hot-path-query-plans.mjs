@@ -8,7 +8,6 @@ import {currentSchemaArtifact} from '../tools/current-schema.mjs';
 const source=readFileSync(new URL('../src/site-host.ts',import.meta.url),'utf8');
 const hot=[
  ['custom-domain host mapping',/prepare\("(SELECT c\.project_id FROM domain_connections c JOIN projects p[^"]*)"\)/,['good-host',new Date().toISOString()]],
- ['custom-domain host mapping (project route)',/prepare\("(SELECT project_id FROM domain_connections WHERE hostname=\?[^"]*)"\)/,['good-host',new Date().toISOString()]],
  ['native CMS article',/prepare\("(SELECT public_html,digest FROM cms_live_articles[^"]*)"\)/,['p','c','i'],'known'],
  ['published page',/prepare\(`(SELECT v\.id,v\.html,v\.component_id,EXISTS[^`]*)`\)/,['p']],
 ];

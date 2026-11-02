@@ -13,7 +13,6 @@ assert.equal(process.argv.length,2,'No database paths or remote targets are acce
 const source=readFileSync(new URL('../src/site-host.ts',import.meta.url),'utf8');
 const extract=pattern=>{const match=source.match(pattern);assert.ok(match,'Site-host SQL changed; update the benchmark');assert.ok(!match[1].includes('${'));return match[1];};
 const host=extract(/prepare\("(SELECT c\.project_id FROM domain_connections c JOIN projects p[^"]*)"\)/);
-const trafficHost=extract(/prepare\("(SELECT project_id FROM domain_connections WHERE hostname=\?[^"]*)"\)/);
 const page=extract(/prepare\(`(SELECT v\.id,v\.html,v\.component_id,EXISTS[^`]*)`\)/);
 const beforeHost=sql=>{const before=sql.replace(/ AND (?:c\.)?state NOT IN \('review','disconnected'\)/,'');assert.notEqual(before,sql);return before;};
 const schema=await currentSchemaArtifact(),directory=mkdtempSync(join(tmpdir(),'whumpo-hot-path-'));
@@ -89,8 +88,6 @@ try{
    const cases=[
     ['hostname hit',oldHost,beforeHost(host),host,['site-39.example.invalid',now]],
     ['hostname miss',oldHost,beforeHost(host),host,['missing.example.invalid',now]],
-    ['traffic hostname hit',oldHost,beforeHost(trafficHost),trafficHost,['site-39.example.invalid',now]],
-    ['traffic hostname miss',oldHost,beforeHost(trafficHost),trafficHost,['missing.example.invalid',now]],
     ['contact-enabled published page',oldContact,page,page,[uuid(size-1)]],
     ['isolated contact review join (not page latency)',oldContact,contactReview,contactReview,[uuid(size-1)]],
    ];
