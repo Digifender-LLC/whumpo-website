@@ -157,6 +157,54 @@ export function compareClasses(report: Report, a: OutcomeClass, b: OutcomeClass,
  return { comparable: true as const, [a]: x.microsPerSuccess, [b]: y.microsPerSuccess, differenceMicros: x.microsPerSuccess! - y.microsPerSuccess!, note: 'micros per successful outcome; no percentage is claimed' };
 }
 
+/** Standard module instance kinds and the standard modules beyond the required `content` module: the only names reuse evidence may carry. */
+export const reuseKinds = Object.freeze(['content', 'records', 'files', 'access'] as const);
+export const reuseModules = Object.freeze(['notifications', 'automation'] as const);
+/** Structural evidence for one outcome: instance counts per standard kind and which extra standard modules the saved specification includes. */
+export type CompositionUse = { ownerId: string; outcomeTaskRef: string; projectId: string; instances: Record<typeof reuseKinds[number], number>; modules: Record<typeof reuseModules[number], boolean> };
+const useKeys = ['ownerId', 'outcomeTaskRef', 'projectId', 'instances', 'modules'];
+const exactShape = (v: unknown, keys: readonly string[]): v is Record<string, unknown> => plain(v) && Object.keys(v).length === keys.length && keys.every(k => Object.hasOwn(v, k));
+
+/**
+ * Composition reuse: how many successful shared-path outcomes, and how many distinct projects, use each standard module kind and module. `uses` is structural
+ * evidence for an outcome (instance counts per closed kind, presence of each standard module); no instance id, configuration, name or content is accepted. The
+ * evidence must agree with the outcome's class (a composition uses at least one instance or extra module, a configuration none), and custom classes carry none.
+ * Counts are never turned into cost per module or a saving: module maintenance is not measured, so break-even stays unknown.
+ */
+export function compositionReuse(outcomes: readonly unknown[], uses: readonly unknown[]) {
+ const records = outcomes.map(validateOutcome), index = new Map<string, OutcomeRecord>();
+ for (const r of records) { const k = `${r.ownerId}|${r.taskRef}`; check(!index.has(k), 'DUPLICATE_OUTCOME', 'one outcome per owner and task'); index.set(k, r); }
+ const seen = new Set<string>(), kinds = reuseKinds.map(() => ({ outcomes: 0, instances: 0, projects: new Set<string>() })), modules = reuseModules.map(() => ({ outcomes: 0, projects: new Set<string>() }));
+ const compositionProjects = new Set<string>();
+ let configuration = 0, composition = 0, unsuccessful = 0;
+ for (const u of uses) {
+  check(exactShape(u, useKeys), 'INVALID_REUSE', 'exactly the fields ' + useKeys.join(', '));
+  check(typeof u.ownerId === 'string' && UUID.test(u.ownerId) && typeof u.projectId === 'string' && UUID.test(u.projectId) && typeof u.outcomeTaskRef === 'string' && REF.test(u.outcomeTaskRef), 'INVALID_REUSE', 'identities');
+  check(exactShape(u.instances, reuseKinds) && reuseKinds.every(k => Number.isSafeInteger((u.instances as Record<string, unknown>)[k]) && ((u.instances as Record<string, number>)[k]) >= 0), 'INVALID_REUSE', 'instances are counts per standard kind');
+  check(exactShape(u.modules, reuseModules) && reuseModules.every(k => typeof (u.modules as Record<string, unknown>)[k] === 'boolean'), 'INVALID_REUSE', 'modules are presence flags per standard module');
+  const key = `${u.ownerId}|${u.outcomeTaskRef}`, r = index.get(key);
+  check(r && !seen.has(key), 'INVALID_REUSE', 'one use per existing outcome');
+  seen.add(key);
+  const counts = u.instances as Record<string, number>, present = u.modules as Record<string, boolean>;
+  const structural = reuseKinds.some(k => counts[k] > 0) || reuseModules.some(k => present[k]);
+  check(r.outcomeClass === 'configuration' || r.outcomeClass === 'composition', 'REUSE_MISMATCH', 'only shared-path outcomes carry reuse evidence');
+  check(structural === (r.outcomeClass === 'composition'), 'REUSE_MISMATCH', 'reuse evidence disagrees with the outcome class');
+  if (!r.success) { unsuccessful++; continue; }
+  if (!structural) { configuration++; continue; }
+  composition++; compositionProjects.add(u.projectId);
+  reuseKinds.forEach((k, i) => { if (counts[k] > 0) { kinds[i].outcomes++; kinds[i].instances += counts[k]; kinds[i].projects.add(u.projectId); } });
+  reuseModules.forEach((k, i) => { if (present[k]) { modules[i].outcomes++; modules[i].projects.add(u.projectId); } });
+ }
+ const withoutEvidence = records.filter(r => (r.outcomeClass === 'configuration' || r.outcomeClass === 'composition') && !seen.has(`${r.ownerId}|${r.taskRef}`)).length;
+ return {
+  successfulConfiguration: configuration, successfulComposition: composition, compositionProjects: compositionProjects.size, unsuccessful, withoutEvidence,
+  byKind: reuseKinds.map((kind, i) => ({ kind, outcomes: kinds[i].outcomes, projects: kinds[i].projects.size, instances: kinds[i].instances, reusedAcrossProjects: kinds[i].projects.size >= 2 })),
+  byModule: reuseModules.map((module, i) => ({ module, outcomes: modules[i].outcomes, projects: modules[i].projects.size, reusedAcrossProjects: modules[i].projects.size >= 2 })),
+  costAllocated: false as const, moduleMaintenance: 'not-measured' as const,
+  limits: 'Counts of successful outcomes and distinct projects using each standard module; no cost is allocated to a module and no saving is claimed. Break-even needs measured module maintenance and an equivalent custom baseline.'
+ };
+}
+
 /**
  * Shared-module break-even: how many outcomes it takes before a fixed maintenance cost is repaid by the per-outcome saving. Inputs must be measured (null = unknown
  * gives an unknown answer, never a guess). Returns null outcomes when the shared path does not save anything per outcome.

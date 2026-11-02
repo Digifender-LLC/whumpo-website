@@ -35,6 +35,9 @@ try{
  const composition=await configureFixtureModules(a,A.account,p.project,[moduleInstances(pins).contentInstance],m);
  const otherReview=await proposeFixtureWebsite(a,A.account,other.project,[{type:'content.replace',contentId:headline,text:marker+'-other-project'}],m);
  assert.equal((await applyFixtureWebsite(a,A.account,otherReview,m)).status,200);
+ // The second project composes the same content kind plus access and files through the real owner path (WH-078 reuse).
+ const {accessInstance,filesInstance,contentInstance}=moduleInstances(pins);
+ assert.ok(await configureFixtureModules(a,A.account,other.project,[contentInstance,accessInstance,filesInstance],m));
  const savedOnly=await proposeFixtureWebsite(a,A.account,p.project,[{type:'content.replace',contentId:headline,text:marker+'-not-applied'}],m);
  const turn=id(),revision=(await m.readChat(a,A.account)).state.revision;
  await a.prepare("INSERT INTO chat_turns(id,user_id,revision,user_text,assistant_text,mode,status,created_at) VALUES(?,?,?,?,'','ai','pending',?)").bind(turn,A.account,revision+1,marker,from).run();
@@ -43,10 +46,10 @@ try{
  let produced;
  await check('only committed receipt identities produce outcomes, not stale/failed/proposed/planned turns',async()=>{
   produced=await api.produceOutcomes(db,from,to,A.account);
-  assert.equal(produced.receipts,3);assert.equal(produced.outcomes.length,3);
+  assert.equal(produced.receipts,4);assert.equal(produced.outcomes.length,4);
   assert.deepEqual(produced.unsupported,{missingVersion:0,classificationUnknown:0});
   assert.equal(produced.outcomes.filter(o=>o.outcomeClass==='configuration').length,2);
-  assert.equal(produced.outcomes.filter(o=>o.outcomeClass==='composition').length,1);
+  assert.equal(produced.outcomes.filter(o=>o.outcomeClass==='composition').length,2);
   assert.ok(produced.outcomes.every(o=>o.success&&o.qualityPass===null&&o.fallback===null));
   assert.ok(produced.outcomes.some(o=>o.taskRef===applied.version));
   for(const t of [p.version,other.version,q.id,stale.id,failed.version,savedOnly.id,turn,foreign.version])assert.ok(!produced.outcomes.some(o=>o.taskRef===t));
@@ -88,7 +91,7 @@ try{
   assert.equal(result.report.unattributed.knownMicros,1050);assert.equal(result.report.unattributed.unknownEvents,1);
   assert.equal(result.report.unattributed.boundedExposureMicros,500);assert.equal(result.report.unattributed.shadowMicros,60);
   assert.equal(result.report.pooledOverhead.knownMicros,700);assert.equal(result.report.duplicateEventsDropped,1);
-  assert.equal(result.report.customerUnits,0);assert.equal(config.qualityNotAssessed,2);assert.equal(comp.qualityNotAssessed,1);
+  assert.equal(result.report.customerUnits,0);assert.equal(config.qualityNotAssessed,2);assert.equal(comp.qualityNotAssessed,2);
   assert.equal(config.noCostEvents,1);assert.equal(api.compareClasses(result.report,'configuration','composition',{minSuccesses:1}).comparable,false);
   for(const c of ['custom-component','custom-backend','dedicated-runtime'])assert.equal(cls(result,c).outcomes,0);
   const serialized=JSON.stringify(result);
@@ -117,9 +120,25 @@ try{
   await assert.rejects(()=>api.producedOutcomeCostReport(oversized,from,to,A.account),e=>e.code==='EVENT_BOUND');
  });
  await check('missing versions and unknown classifications stay unsupported, not inferred',async()=>{
-  const rows=[{id:id(),user_id:A.account,project_id:p.project,proposal_id:id(),valid_version:0},{id:id(),user_id:A.account,project_id:p.project,proposal_id:id(),valid_version:1,schema_version:99}];
+  const known={valid_version:1,schema_version:3,compiler_version:7,known_instances:1,known_modules:1,instances:1,modules:1,content_instances:1,records_instances:0,files_instances:0,access_instances:0,notifications_module:0,automation_module:0};
+  const row=over=>({id:id(),user_id:A.account,project_id:p.project,proposal_id:id(),...known,...over});
+  // Per-kind instance counts that do not add up, or an extra-module flag that disagrees with the module count, are not classified.
+  const rows=[{id:id(),user_id:A.account,project_id:p.project,proposal_id:id(),valid_version:0},{id:id(),user_id:A.account,project_id:p.project,proposal_id:id(),valid_version:1,schema_version:99},row({instances:2}),row({notifications_module:1}),row({modules:2})];
   const missing={prepare(){return {bind(){return {all:async()=>({results:rows})};}};}};
-  const out=await api.produceOutcomes(missing,from,to,A.account);assert.equal(out.outcomes.length,0);assert.deepEqual(out.unsupported,{missingVersion:1,classificationUnknown:1});
+  const out=await api.produceOutcomes(missing,from,to,A.account);assert.equal(out.outcomes.length,0);assert.deepEqual(out.unsupported,{missingVersion:1,classificationUnknown:4});
+  const fine=await api.produceOutcomes({prepare(){return {bind(){return {all:async()=>({results:[row({})]})};}};}},from,to,A.account);
+  assert.equal(fine.outcomes.length,1);assert.equal(fine.reuse.byKind.find(k=>k.kind==='content').outcomes,1);
+ });
+ await check('composition reuse is counted from the same receipts by standard kind and distinct project, with no ids, names or configuration',async()=>{
+  const reuse=result.reuse;
+  assert.deepEqual(reuse,produced.reuse);
+  assert.equal(reuse.successfulConfiguration,2);assert.equal(reuse.successfulComposition,2);assert.equal(reuse.compositionProjects,2);assert.equal(reuse.withoutEvidence,0);assert.equal(reuse.unsuccessful,0);
+  assert.deepEqual(reuse.byKind,[{kind:'content',outcomes:2,projects:2,instances:2,reusedAcrossProjects:true},{kind:'records',outcomes:0,projects:0,instances:0,reusedAcrossProjects:false},
+   {kind:'files',outcomes:1,projects:1,instances:1,reusedAcrossProjects:false},{kind:'access',outcomes:1,projects:1,instances:1,reusedAcrossProjects:false}]);
+  assert.ok(reuse.byModule.every(k=>k.outcomes===0&&k.projects===0));
+  assert.equal(reuse.costAllocated,false);assert.equal(reuse.moduleMaintenance,'not-measured');
+  const serialized=JSON.stringify(reuse);
+  for(const token of [marker,A.account,p.project,other.project,'listings','members','media','directory'])assert.ok(!serialized.includes(token),token);
  });
  assert.equal(network,0);console.log(`outcome-producer: ${cases} connected current-schema cases passed${process.argv.includes('--d1')?' (local D1)':''}; no network or provider calls`);
 }catch(error){console.error(String(error.stack||error).replace(/data:text\/javascript;base64,[A-Za-z0-9+/=]+/g,'<bundled module>'));process.exitCode=1;}

@@ -1,5 +1,5 @@
 import { validateCostEvent, type CostEvent } from './cost-events';
-import { outcomeCostReport, type OutcomeRecord, type OutcomeTaskLink } from './outcome-cost';
+import { compositionReuse, outcomeCostReport, reuseKinds, reuseModules, type CompositionUse, type OutcomeRecord, type OutcomeTaskLink } from './outcome-cost';
 
 const UUID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 const LIMIT = 2000, EVENT_LIMIT = 10000;
@@ -13,7 +13,8 @@ function window(from: string, to: string, owner: string) {
  requireFact(from < to && Date.parse(to) - Date.parse(from) <= 93 * 86400000, 'INVALID_WINDOW');
 }
 
-type Receipt = { id: string; user_id: string; project_id: string; proposal_id: string; valid_version: number; schema_version: number | null; compiler_version: number | null; instances: number | null; modules: number | null; known_instances: number; known_modules: number };
+type Receipt = { id: string; user_id: string; project_id: string; proposal_id: string; valid_version: number; schema_version: number | null; compiler_version: number | null; instances: number | null; modules: number | null; known_instances: number; known_modules: number }
+ & Record<`${typeof reuseKinds[number]}_instances`, number> & Record<`${typeof reuseModules[number]}_module`, number>;
 
 /** An empty reviewed vocabulary is intentional: today's receipts do not prove a delivered custom fallback. */
 export const producedMissingCapabilities = Object.freeze([] as const);
@@ -27,23 +28,29 @@ export async function produceOutcomes(db: Pick<D1Database, 'prepare'>, from: str
  json_array_length(v.spec_json,'$.instances') instances,
  json_array_length(v.spec_json,'$.modules') modules,
  NOT EXISTS(SELECT 1 FROM json_each(v.spec_json,'$.instances') i WHERE json_extract(i.value,'$.kind') IS NULL OR json_extract(i.value,'$.kind') NOT IN ('content','records','files','access')) known_instances,
- NOT EXISTS(SELECT 1 FROM json_each(v.spec_json,'$.modules') m WHERE json_extract(m.value,'$.id') IS NULL OR json_extract(m.value,'$.id') NOT IN ('content','notifications','automation')) known_modules
+ NOT EXISTS(SELECT 1 FROM json_each(v.spec_json,'$.modules') m WHERE json_extract(m.value,'$.id') IS NULL OR json_extract(m.value,'$.id') NOT IN ('content','notifications','automation')) known_modules,
+ ${reuseKinds.map(k => `(SELECT count(*) FROM json_each(v.spec_json,'$.instances') i WHERE json_extract(i.value,'$.kind')='${k}') ${k}_instances`).join(',\n ')},
+ ${reuseModules.map(k => `EXISTS(SELECT 1 FROM json_each(v.spec_json,'$.modules') m WHERE json_extract(m.value,'$.id')='${k}') ${k}_module`).join(',\n ')}
 FROM project_spec_applies r JOIN projects p ON p.id=r.project_id AND p.owner_user_id=r.user_id
 LEFT JOIN project_spec_versions v ON v.version_id=r.version_id AND v.project_id=r.project_id
 WHERE r.user_id=? AND r.created_at>=? AND r.created_at<? ORDER BY r.id LIMIT 2001`).bind(owner, from, to).all<Receipt>();
  requireFact(results.length <= LIMIT, 'OUTCOME_BOUND');
- const outcomes: OutcomeRecord[] = [], taskLinks: OutcomeTaskLink[] = [];
+ const outcomes: OutcomeRecord[] = [], taskLinks: OutcomeTaskLink[] = [], uses: CompositionUse[] = [];
  const unsupported = { missingVersion: 0, classificationUnknown: 0 };
  for (const r of results) {
   requireFact(r.user_id === owner && [r.id, r.project_id, r.proposal_id].every(v => typeof v === 'string' && UUID.test(v)), 'RECEIPT_SCOPE');
   if (!r.valid_version) { unsupported.missingVersion++; continue; }
   if (r.schema_version !== 3 || r.compiler_version !== 7 || !r.known_instances || !r.known_modules || !Number.isSafeInteger(r.instances) || r.instances! < 0 || !Number.isSafeInteger(r.modules) || r.modules! < 1) { unsupported.classificationUnknown++; continue; }
+  const instances = Object.fromEntries(reuseKinds.map(k => [k, r[`${k}_instances`]])) as CompositionUse['instances'], modules = Object.fromEntries(reuseModules.map(k => [k, r[`${k}_module`] === 1])) as CompositionUse['modules'];
+  // Per-kind counts must add up to the instance total and the extra modules to the module count (content is required once), or the receipt is not classified.
+  if (reuseKinds.reduce((s, k) => s + instances[k], 0) !== r.instances || reuseModules.filter(k => modules[k]).length + 1 !== r.modules) { unsupported.classificationUnknown++; continue; }
   outcomes.push({ ownerId: owner, taskRef: r.id, outcomeClass: r.instances! > 0 || r.modules! > 1 ? 'composition' : 'configuration', success: true, qualityPass: null, fallback: null });
+  uses.push({ ownerId: owner, outcomeTaskRef: r.id, projectId: r.project_id, instances, modules });
   for (const taskRef of new Set([r.id, r.proposal_id])) taskLinks.push({ ownerId: owner, taskRef, outcomeTaskRef: r.id, projectId: r.project_id });
  }
  // Validate ambiguous links even when no cost event exists yet.
  outcomeCostReport([], outcomes, taskLinks);
- return { outcomes, taskLinks, receipts: results.length, unsupported };
+ return { outcomes, taskLinks, uses, reuse: compositionReuse(outcomes, uses), receipts: results.length, unsupported };
 }
 
 /** Private operator read: retained receipts by commit time; all currently recorded costs for their exact task links.
@@ -64,13 +71,14 @@ export async function producedOutcomeCostReport(db: Pick<D1Database, 'prepare'>,
  }
  return { version: 1, scope: 'one-account', from, toExclusive: to,
   evidence: { receipts: produced.receipts, produced: produced.outcomes.length, unsupported: produced.unsupported, quality: 'not-assessed', fallback: 'unavailable', unsupportedClasses: ['custom-component', 'custom-backend', 'dedicated-runtime'] },
-  report: outcomeCostReport(events, produced.outcomes, produced.taskLinks),
+  report: outcomeCostReport(events, produced.outcomes, produced.taskLinks), reuse: produced.reuse,
   limitations: [
    'Success means an owner-confirmed saved private specification apply, not publication, module activation, useful task completion or a quality pass. First-draft creations lack owner confirmation and are not outcomes.',
    'Class describes the saved specification architecture, not which modules changed. Planner intent, compiled proposals and saved custom source are not delivered outcomes.',
    'Only exact proposal and confirmation turn identities join. Creation, other Chat, interaction and planner tasks are not inferred to be the same work.',
    'Receipt cohort uses commit time; linked costs include current retained revisions outside the window. Other in-window failed and unfinished work stays unattributed. Not a historical period close.',
    'Missing/deleted versions cannot be classified. Deleted history, missed emissions, build/test, support and module-maintenance measurements remain unavailable; complete cost-event coverage is not full lifecycle cost.',
-   'Quality is unknown on every produced outcome, so no equivalent-quality savings comparison is available. Standard AI customer units remain zero.'
+   'Quality is unknown on every produced outcome, so no equivalent-quality savings comparison is available. Standard AI customer units remain zero.',
+   'Reuse counts each receipt\'s saved specification, so repeated applies of one project count again as outcomes but once as a project. Reuse is not module activation, use by visitors or a cost allocation; module maintenance is unmeasured, so shared-module break-even stays unknown.'
   ] };
 }

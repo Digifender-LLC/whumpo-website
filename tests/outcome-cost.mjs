@@ -122,4 +122,25 @@ await check('shared-module break-even needs measured inputs and never guesses a 
  throws(()=>m.breakEvenOutcomes({fixedMaintenanceMicros:-1,customMicrosPerOutcome:2,sharedMicrosPerOutcome:1}),'INVALID_INPUT');
 });
 
-console.log(`Outcome cost passed (${cases} cases): attribution by owner and task, category reconciliation, de-duplicated revisions, apart-reporting of unknown/unfinished/shadow, pooled overhead never allocated, closed fallback vocabulary, equivalent-evidence comparison and measured break-even; no database, provider or network.`);
+await check('composition reuse counts successful shared-path outcomes and distinct projects per standard kind, never ids, content or cost',async()=>{
+ const P1=id(),P2=id(),none={content:0,records:0,files:0,access:0},off={notifications:false,automation:false};
+ const use=(taskRef,projectId,instances={},modules={},over={})=>({ownerId:A,outcomeTaskRef:taskRef,projectId,instances:{...none,...instances},modules:{...off,...modules},...over});
+ const outs=[outcome({taskRef:'c1'}),outcome({taskRef:'c2'}),outcome({taskRef:'c3'}),outcome({taskRef:'k1',outcomeClass:'configuration'}),outcome({taskRef:'f1',success:false,qualityPass:null}),outcome({taskRef:'x1',outcomeClass:'configuration'})];
+ const r=m.compositionReuse(outs,[use('c1',P1,{records:2,access:1},{notifications:true}),use('c2',P1,{records:1,access:1}),use('c3',P2,{records:1,files:1}),use('k1',P2),use('f1',P2,{access:1})]);
+ assert.equal(r.successfulComposition,3);assert.equal(r.successfulConfiguration,1);assert.equal(r.compositionProjects,2);assert.equal(r.unsuccessful,1);assert.equal(r.withoutEvidence,1);
+ assert.deepEqual(r.byKind.find(k=>k.kind==='records'),{kind:'records',outcomes:3,projects:2,instances:4,reusedAcrossProjects:true});
+ assert.deepEqual(r.byKind.find(k=>k.kind==='access'),{kind:'access',outcomes:2,projects:1,instances:2,reusedAcrossProjects:false},'repeats in one project are not cross-project reuse; a failed outcome is not reuse');
+ assert.deepEqual(r.byModule.find(k=>k.module==='notifications'),{module:'notifications',outcomes:1,projects:1,reusedAcrossProjects:false});
+ assert.equal(r.costAllocated,false);assert.equal(r.moduleMaintenance,'not-measured');
+ const out=JSON.stringify(r);for(const t of [A,P1,P2,'c1','k1'])assert.ok(!out.includes(t),t);
+ // Refusals: free text or instance ids, unknown kinds, a duplicate or orphan use, evidence that disagrees with the class, and custom classes.
+ for(const bad of [use('c1',P1,{records:1},{},{name:'Private shop'}),{...use('c1',P1),instances:{...none,records:1,members:1}},{...use('c1',P1),instances:{...none,records:1.5}},{...use('c1',P1),modules:{...off,notifications:1}},use('nope',P1,{records:1}),use('c1','not-a-uuid',{records:1})])
+  throws(()=>m.compositionReuse(outs,[bad]),'INVALID_REUSE');
+ throws(()=>m.compositionReuse(outs,[use('c1',P1,{records:1}),use('c1',P1,{records:1})]),'INVALID_REUSE');
+ throws(()=>m.compositionReuse(outs,[use('c1',P1)]),'REUSE_MISMATCH');
+ throws(()=>m.compositionReuse(outs,[use('k1',P1,{content:1})]),'REUSE_MISMATCH');
+ throws(()=>m.compositionReuse([outcome({taskRef:'z',outcomeClass:'custom-backend'})],[use('z',P1)]),'REUSE_MISMATCH');
+ throws(()=>m.compositionReuse([outcome(),outcome()],[]),'DUPLICATE_OUTCOME');
+});
+
+console.log(`Outcome cost passed (${cases} cases): attribution by owner and task, category reconciliation, de-duplicated revisions, apart-reporting of unknown/unfinished/shadow, pooled overhead never allocated, closed fallback vocabulary, equivalent-evidence comparison, measured break-even and composition reuse counts; no database, provider or network.`);
