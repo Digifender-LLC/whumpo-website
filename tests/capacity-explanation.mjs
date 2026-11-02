@@ -72,7 +72,8 @@ await check('rollover, expiry and exhaustion: carried units show their source, e
  const e=m.capacityExplanation(l,30*DAY+2,'complete');
  assert.deepEqual(e.period,{key:'2026-12',grantedAt:30*DAY,endsAt:60*DAY});
  assert.deepEqual(e.balances.rollover,{units:25*T,fromPeriod:'2026-11',expiresAt:60*DAY,expiredUnits:0});
- assert.equal(e.balances.monthly.units,80*T);assert.equal(e.balances.monthly.expiredUnits,5*T,'a hold released after its lot expired is expired, not revived');
+ assert.equal(e.balances.monthly.units,80*T);assert.equal(e.balances.monthly.expiredUnits,0,'November losses do not count against December');
+ assert.deepEqual(e.history.filter(x=>x.cause==='expired').map(x=>[x.at,x.units,x.text]),[[30*DAY,5*T,'5 units of the 2026-11 monthly allowance expired unused.']],'a hold released after its lot expired is expired, not revived');
  assert.equal(e.availableUnits,105*T);assert.match(e.history.find(x=>x.cause==='rollover').text,/^Carried 25 units unused in 2026-11 into 2026-12\.$/);
  l=run(l,'reserve',{id:'w3',units:105*T,at:30*DAY+3});l=run(l,'settle',{id:'w3',actualUnits:105*T,at:30*DAY+4});
  const x=m.capacityExplanation(l,30*DAY+5,'complete');
@@ -80,6 +81,20 @@ await check('rollover, expiry and exhaustion: carried units show their source, e
  assert.match(x.text,/^No capacity is left for metered work\. Standard assistance still costs nothing; .*nothing is bought or upgraded automatically\.$/);
  noBalance(m.capacityExplanation(l,30*DAY+5,'unknown'));
  const after=m.capacityExplanation(l,60*DAY,'complete');assert.equal(after.period,null,'no current period after the last one ends');assert.equal(after.monthlyRemainingPercent,null);
+});
+
+await check('expiry before any expire() is recorded, a fresh period after an unused one, sub-hundredth balances and a zero history limit',()=>{
+ let l=run(m.emptyLedger(),'grant',{id:'m1',kind:'monthly',periodKey:'2026-11',units:100*T,at:1,expiresAt:30*DAY});
+ const lapsed=m.capacityExplanation(l,30*DAY,'complete');
+ assert.equal(lapsed.availableUnits,0);assert.equal(lapsed.period,null);assert.equal(lapsed.balances.monthly.expiredUnits,100*T,'an elapsed lot counts as expired before expire() runs');
+ assert.equal(m.capacityExplanation(run(l,'expire',30*DAY),30*DAY,'complete').balances.monthly.expiredUnits,100*T,'and is not counted twice after it');
+ l=run(l,'grant',{id:'m2',kind:'monthly',periodKey:'2026-12',units:80*T,at:30*DAY,expiresAt:60*DAY});
+ const dec=m.capacityExplanation(l,30*DAY+1,'complete');
+ assert.deepEqual(dec.balances.monthly,{units:80*T,allowance:80*T,expiresAt:60*DAY,expiredUnits:0});assert.equal(dec.monthlyRemainingPercent,100);
+ assert.deepEqual(dec.history.map(x=>x.cause),['monthly-allowance','monthly-allowance','expired']);assert.equal(dec.history[2].text,'100 units of the 2026-11 monthly allowance expired unused.');
+ assert.deepEqual(m.capacityExplanation(l,30*DAY+1,'complete',{historyLimit:0}).history,[],'a zero limit returns no lines');
+ const tiny=m.capacityExplanation(run(m.emptyLedger(),'grant',{id:'m1',kind:'monthly',periodKey:'p',units:1,at:1,expiresAt:9}),2,'complete');
+ assert.equal(tiny.exhausted,false);assert.equal(tiny.text,'less than 0.01 units available.');
 });
 
 await check('unit formatting rounds left down and used up; invalid input and foreign ledgers are refused',()=>{
