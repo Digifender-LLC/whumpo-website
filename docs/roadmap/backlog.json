@@ -5927,7 +5927,9 @@
       ],
       "issue": null,
       "owner": null,
-      "evidence": []
+      "evidence": [
+        "2026-11-02 UTC (scoping only; docs, no source change, no remote read): what exists and what a first slice should reuse. The frozen contract is docs/portable-exports.md (WH-186); its reference builder and readBundle are a prototype, tools/prototypes/portable-export.mjs, exercised only by tests/portable-export-contract.mjs, and are not wired to any store or route. WH-018's account export is merged: src/account-lifecycle/export.ts has prepareAccountExport, downloadAccountExport, the export query budget and the per-account allowance, and src/account-lifecycle/http.ts the routes; src/exports.ts is the existing one-page static archive. A faithful WH-187 needs (1) a per-project section composer over the WH-126 to WH-129 serializers (records, files, roles, directory) that checks every row and object against the requested project at build time, not only by query scope; (2) the manifest, deterministic stored ZIP and receipt digest from the prototype moved into src/ with the reader kept as the only decoder; (3) the owner prepare/download route reusing WH-018's exact review, recent passkey proof, single-use download and allowance; (4) fixtures against actual handlers for two tenants, held/pending/blocked media (a hold must be byte-identical to a pending item), staff pages, visitor scope, expired records, uncleared source and credential tables. Because the filter decides what leaves an account, it should get an independent security and tenancy review before merge even though the route would be off until a cutover (the WH-125 to WH-129 module schema is itself waiting on one, WH-191). Suggested first slice: the composer plus manifest builder as pure functions over plain section inputs, with the prototype's conformance tests pointed at it and the hold-indistinguishability and cross-project-reference cases as failing tests first. Not started."
+      ]
     },
     {
       "id": "WH-188",
