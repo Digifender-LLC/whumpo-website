@@ -14380,6 +14380,14 @@
      ]
     },
     {
+     "file": "tools/report-lost-disputes.mjs",
+     "kind": "tool",
+     "match": "via-import",
+     "methods": [
+      "CLI"
+     ]
+    },
+    {
      "file": "tools/report-maintenance.mjs",
      "kind": "tool",
      "match": "via-import",
