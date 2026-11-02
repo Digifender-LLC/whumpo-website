@@ -2,7 +2,11 @@ import {createFixtureProject,currentSiteFixtureHandlers} from './current-site-fi
 import assert from 'node:assert/strict';
 import {databaseFixture} from './helpers/current-database.mjs';
 import {workspaceFixture} from './helpers/workspace-identity.mjs';
-const m=await currentSiteFixtureHandlers(),{reviewHosting,confirmHosting,disconnectHosting,refreshHosting,sendChat,readChat,host}=m;
+import {build} from 'esbuild';
+const m=await currentSiteFixtureHandlers(),{reviewHosting,confirmHosting,disconnectHosting,refreshHosting,sendChat,readChat,host,listDomains}=m;
+// The scheduled job is not exported by the shared fixture; like the cron it uses only the raw database.
+const {maintainHosting}=await import('data:text/javascript,'+encodeURIComponent((await build({stdin:{contents:"export {maintainHosting} from './src/domain-hosting';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false})).outputFiles[0].text));
+const replyOf=async id=>(await db.prepare('SELECT assistant_text FROM chat_turns WHERE id=?').bind(id).first()).assistant_text;
 const fixture=await databaseFixture({d1:true,r2:true}),db=fixture.db,scopes=new Map(),scope=user=>scopes.get(user);
 const config={token:'synthetic-token',zone:'a'.repeat(32),target:'hosting.whumpo.site'};
 async function account(){const a=await workspaceFixture(db,m);scopes.set(a.account,await a.scope());return a.account;}
@@ -28,6 +32,14 @@ try{
  // Publishing remains separate. A connected hostname with no publication exposes nothing.
  let refreshed=await refreshHosting(scope(user),user,r.id,config,transport);assert.equal(refreshed.connected,true);const get=path=>host.fetch(new Request('https://www.example.com'+path),{DB:db,FILES:fixture.env.FILES});assert.equal((await get('/')).status,404);
  const publication=await chat(user,'/publish '+version);await chat(user,'/confirm '+publication);assert.equal((await get('/')).status,200);assert.equal((await get('/api/chat')).status,404);assert.equal((await get('/s/'+project)).status,404);assert.equal((await host.fetch(new Request('https://foreign.example.com/'),{DB:db,FILES:fixture.env.FILES})).status,404);
+ // WH-033: the connected host reaches only its own project. Another account's published project is not reachable through it,
+ // and that account proving the same name cannot take the reserved hostname over: refused before any provider request.
+ const rival=await account(),{project:rivalProject,version:rivalVersion}=await createFixtureProject(scope(rival),rival,'Rival','Another website','forest');await chat(rival,'/confirm '+await chat(rival,'/publish '+rivalVersion));
+ const local=path=>host.fetch(new Request('http://localhost'+path),{DB:db,FILES:fixture.env.FILES});assert.equal((await local('/s/'+rivalProject+'/')).status,200);
+ for(const path of ['/s/'+rivalProject,'/s/'+rivalProject+'/','/s/'+rivalProject+'/directory.json','/s/'+rivalProject+'/cms/','/s/'+project+'/'])assert.equal((await get(path)).status,404);
+ const ownPage=await (await local('/s/'+project+'/')).text(),ownerClaim=claim,rivalClaimId=await chat(rival,'/domain www.example.com '+rivalProject);claim=await db.prepare('SELECT * FROM domain_claims WHERE id=?').bind(rivalClaimId).first();assert.notEqual(claim.project_id,project);
+ const rivalReview=await reviewHosting(scope(rival),rival,crypto.randomUUID(),rivalClaimId,config);await assert.rejects(()=>confirmHosting(scope(rival),rival,rivalReview.id,config,transport),{status:409});assert.equal(writes,1);claim=ownerClaim;
+ assert.equal((await db.prepare('SELECT state FROM domain_connections WHERE id=?').bind(rivalReview.id).first()).state,'review');const served=await get('/');assert.equal(served.status,200);assert.equal(await served.text(),ownPage);
  // WH-183: /directory and /directory.json follow the same mapping and publication; the ETag is the approved live_digest.
  const dirConfirm=async id=>{const state=await readChat(scope(user),user);assert.equal((await m.sendChatControl(scope(user),user,{id:crypto.randomUUID(),revision:state.state.revision,action:{type:'confirm',kind:'directory',reviewId:id}})).status,200);};
  assert.equal((await get('/directory.json')).status,404);assert.equal((await get('/directory')).status,404);
@@ -40,8 +52,26 @@ try{
  mode='deletefail';assert.equal((await disconnectHosting(scope(user),user,r.id,config,transport)).state,'disconnecting');assert.equal((await get('/')).status,404);mode='ok';assert.equal((await disconnectHosting(scope(user),user,r.id,config,transport)).state,'disconnected');assert.equal(deletes,2);assert.equal((await refreshHosting(scope(user),user,r.id,config,transport)).connected,false);
  const race=await review();reviewId=race.id;mode='disconnect';const racing=await confirmHosting(scope(user),user,race.id,config,transport);assert.equal(racing.state,'disconnecting');assert.ok((await db.prepare('SELECT provider_id FROM domain_connections WHERE id=?').bind(race.id).first()).provider_id);mode='ok';await disconnectHosting(scope(user),user,race.id,config,transport);assert.equal(deletes,3);
  // Uncertain creates keep the hostname reserved and never retry POST.
- const uncertain=await review();mode='timeout';assert.equal((await confirmHosting(scope(user),user,uncertain.id,config,transport)).state,'uncertain');assert.equal(writes,3);await confirmHosting(scope(user),user,uncertain.id,config,transport);assert.equal(writes,3);await disconnectHosting(scope(user),user,uncertain.id,config,transport);assert.equal(deletes,3);assert.equal((await db.prepare('SELECT state FROM domain_connections WHERE id=?').bind(uncertain.id).first()).state,'disconnecting');
+ const uncertain=await review();mode='timeout';assert.equal((await confirmHosting(scope(user),user,uncertain.id,config,transport)).state,'uncertain');assert.equal(writes,3);await confirmHosting(scope(user),user,uncertain.id,config,transport);assert.equal(writes,3);
+ // WH-033: neither a user check nor the hourly job re-sends the create, adopts a hostname or deletes anything for an unknown outcome.
+ mode='ok';assert.equal((await refreshHosting(scope(user),user,uncertain.id,config,transport)).state,'uncertain');await maintainHosting(db,config,transport);assert.equal(writes,3);assert.equal(deletes,3);
+ const unknown=await db.prepare('SELECT state,provider_id,serve_until FROM domain_connections WHERE id=?').bind(uncertain.id).first();assert.deepEqual({...unknown},{state:'uncertain',provider_id:null,serve_until:null});
+ const unknownReply=await replyOf(await chat(user,'/hosting'));assert.match(unknownReply,/Creation is unresolved; it will not be automatically retried or adopted by hostname/);mode='timeout';
+ await disconnectHosting(scope(user),user,uncertain.id,config,transport);assert.equal(deletes,3);assert.equal((await db.prepare('SELECT state FROM domain_connections WHERE id=?').bind(uncertain.id).first()).state,'disconnecting');
  const blocked=await review();await assert.rejects(()=>confirmHosting(scope(user),user,blocked.id,config,transport));assert.equal(writes,3);
  await assert.rejects(()=>db.prepare("UPDATE domain_connections SET hostname='foreign.example.com' WHERE id=?").bind(r.id).run());
- console.log('Domain hosting passed: disabled configuration, ownership, review replay, fresh proof, provider inventory limits, no adoption, single concurrent create, exact ID/certificate/CNAME checks, published-only host isolation, lease expiry, immediate disconnect, retried deletion and uncertain-create no-retry.');
+ // WH-033: ownership proof alone, a hosting review and a created hostname still awaiting its certificate are never shown or served as working hosting.
+ // The control differs only in the certificate becoming active.
+ mode='ok';const proven=await account(),{project:provenProject,version:provenVersion}=await createFixtureProject(scope(proven),proven,'Bakery','A bakery website','forest');await chat(proven,'/confirm '+await chat(proven,'/publish '+provenVersion));
+ const provenClaimId=await chat(proven,'/domain shop.example.net '+provenProject);claim=await db.prepare('SELECT * FROM domain_claims WHERE id=?').bind(provenClaimId).first();
+ const savedFetch=globalThis.fetch;globalThis.fetch=transport;try{await chat(proven,'/verify-domain '+provenClaimId);}finally{globalThis.fetch=savedFetch;}
+ const shop=()=>host.fetch(new Request('https://shop.example.net/'),{DB:db,FILES:fixture.env.FILES});
+ const notLive=async state=>{const d=(await listDomains(scope(proven),proven)).domains.find(d=>d.id===provenClaimId);assert.equal(d.status,'ownership_verified');assert.equal(d.connected,false);assert.equal((await shop()).status,404);
+  const domainsReply=await replyOf(await chat(proven,'/domains'));assert.match(domainsReply,/Hosting: not connected/);assert.doesNotMatch(domainsReply,/saved connection is active/);
+  const hostingReply=await replyOf(await chat(proven,'/hosting'));if(state)assert.match(hostingReply,new RegExp('Hosting for shop\\.example\\.net: '+state+'\\n'));else assert.match(hostingReply,/No hosting connections yet/);assert.doesNotMatch(hostingReply,/: connected\n/);};
+ await notLive();const shopReview=await reviewHosting(scope(proven),proven,crypto.randomUUID(),provenClaimId,config);assert.equal(shopReview.connected,false);await notLive('review');
+ sslStatus='pending_validation';const shopCreated=await confirmHosting(scope(proven),proven,shopReview.id,config,transport);assert.equal(shopCreated.state,'provisioning');assert.equal(shopCreated.connected,false);
+ const pending=await refreshHosting(scope(proven),proven,shopReview.id,config,transport);assert.equal(pending.connected,false);assert.equal(pending.certificateStatus,'pending_validation');await notLive('provisioning');
+ sslStatus='active';assert.equal((await refreshHosting(scope(proven),proven,shopReview.id,config,transport)).connected,true);assert.equal((await shop()).status,200);assert.match(await replyOf(await chat(proven,'/hosting')),/Hosting for shop\.example\.net: connected\n/);assert.equal((await listDomains(scope(proven),proven)).domains.find(d=>d.id===provenClaimId).connected,true);assert.match(await replyOf(await chat(proven,'/domains')),/saved connection is active/);sslStatus='active';
+ console.log('Domain hosting passed: disabled configuration, ownership, review replay, fresh proof, provider inventory limits, no adoption, single concurrent create, exact ID/certificate/CNAME checks, published-only host isolation, lease expiry, immediate disconnect, retried deletion, uncertain-create no-retry by check or hourly job, cross-project/cross-account host isolation and ownership-proof-is-not-hosting (WH-033).');
 }finally{await fixture.close();}
