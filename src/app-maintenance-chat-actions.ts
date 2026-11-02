@@ -21,7 +21,7 @@ export async function appMaintenanceChatActions(db:D1Database,user:string,turns:
    try{
     if(l.kind==='upgrade'){
      const r=await readMigrationReview(db,user,l.review_id);
-     cache.set(key,{kind:'upgrade',id:r.id,projectId:r.projectId,projectName:r.projectName,documents:r.documents,expiresAt:r.expiresAt,state:r.state as AppMaintenancePresentation['state'],fromVersion:r.fromVersion,toVersion:r.toVersion,pointId:r.id,beforePointId:r.id,transformVersion:r.transformVersion,testId:r.testId,ready:r.ready,pending:r.pending,failed:r.failed,changedDocuments:r.changedDocuments});
+     cache.set(key,{kind:'upgrade',id:r.id,projectId:r.projectId,projectName:r.projectName,documents:r.documents,expiresAt:r.expiresAt,state:r.state as AppMaintenancePresentation['state'],fromVersion:r.fromVersion,toVersion:r.toVersion,pointId:r.id,beforePointId:r.id,transformVersion:r.transformVersion,testId:r.testId,ready:r.ready,pending:r.pending,failed:r.failed,busy:r.busy,changedDocuments:r.changedDocuments});
     }else{
      const r=await readProgramRollback(db,user,l.review_id);
      cache.set(key,{kind:'rollback',id:r.id,projectId:r.projectId,projectName:r.projectName,documents:r.documents,expiresAt:r.expiresAt,state:r.state as AppMaintenancePresentation['state'],fromVersion:r.from.id,toVersion:r.to.id,pointId:r.pointId,beforePointId:r.beforePointId,pointCreatedAt:r.pointCreatedAt,ready:0,pending:0,failed:0});
