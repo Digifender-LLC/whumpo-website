@@ -267,7 +267,7 @@ export async function measure({allowedArguments=[]}={}){
    evidence:'Synthetic local fixture counts from the real Worker handlers on the disposable current schema. Not Cloudflare billing, D1 rows read/written, CPU time, latency, or a deployed request. Routing and run_worker_first facts are derived from the wrangler configuration.',
    database:process.argv.includes('--d1')?'local D1':'SQLite',
    workers:Object.fromEntries(Object.entries(workers).map(([k,w])=>[k,{config:w.config,main:w.main,routes:w.routes,assets:w.assets,bindings:w.bindings,workersCache:w.cache}])),
-   inIsolateState:'Source inspection of every module the sites and apps Workers import found no response or data cache; the only module-level state is src/site-traffic.ts (in-flight counter and bounded measurement-gap map). Each route is measured on its first request in this process and on an immediate repeat; a true isolate cold start (script load and compile) is not measurable locally.',
+   inIsolateState:'Source inspection of every module the sites and apps Workers import found no response or data cache; the only module-level state is src/site-traffic.ts (in-flight counter and bounded measurement-gap map) and src/site-host.ts (a WeakMap from the request being served to its custom-domain project, read once by its own after-response count). Each route is measured on its first request in this process and on an immediate repeat; a true isolate cold start (script load and compile) is not measurable locally.',
    routes,revocation:probes
   };
  }finally{console.warn=consoleWarn;console.error=consoleError;globalThis.fetch=originalFetch;await fixture.close?.();}
