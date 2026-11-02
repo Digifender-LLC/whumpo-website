@@ -80,7 +80,10 @@ async function readSession(db:D1Database,env:Config,order:Order,customer:string,
  if(s.status==='complete')await syncSubscription(db,env,s.subscription!,customer,transport);
  return s;
 }
-async function recordInvoice(db:D1Database,env:Config,id:string,sub:Subscription,order:Order,transport:typeof fetch){
+type Void={invoiceId:string;reason:'refund'|'dispute-lost';sourceId:string};
+const voidRow=(db:D1Database,v:Void)=>db.prepare('INSERT INTO stripe_invoice_voids(invoice_id,reason,source_id,created_at) VALUES(?,?,?,?) ON CONFLICT(invoice_id) DO NOTHING').bind(v.invoiceId,v.reason,v.sourceId,now());
+// A void that names this invoice is written in the same batch as the invoice, so a refund delivered first never leaves a moment of coverage.
+async function recordInvoice(db:D1Database,env:Config,id:string,sub:Subscription,order:Order,transport:typeof fetch,voided?:Void){
  requireMatch(objectId(id,'in'));
  const invoice=await stripe<Invoice>(env,'invoices/'+id,transport);
  requireMatch(invoice.id===id&&invoice.livemode===false&&invoice.customer===sub.customer&&invoiceSubscription(invoice)===sub.id);
@@ -93,12 +96,13 @@ async function recordInvoice(db:D1Database,env:Config,id:string,sub:Subscription
  const {start,end}=line.period;
  requireMatch(Number.isSafeInteger(start)&&Number.isSafeInteger(end)&&start>0&&end>start&&end-start<=(order.interval==='year'?367:32)*86400);
  const url=invoice.hosted_invoice_url?hostedURL(invoice.hosted_invoice_url,'invoice.stripe.com'):null;
- await db.prepare('INSERT INTO stripe_paid_invoices(id,user_id,subscription_id,plan_id,amount_cents,interval,starts_at,ends_at,hosted_url,created_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING').bind(id,order.user_id,sub.id,order.plan_id,order.amount_cents,order.interval,start,end,url,invoice.created).run();
+ const insert=db.prepare('INSERT INTO stripe_paid_invoices(id,user_id,subscription_id,plan_id,amount_cents,interval,starts_at,ends_at,hosted_url,created_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING').bind(id,order.user_id,sub.id,order.plan_id,order.amount_cents,order.interval,start,end,url,invoice.created);
+ await db.batch(voided?.invoiceId===id?[insert,voidRow(db,voided)]:[insert]);
  const saved=await db.prepare('SELECT * FROM stripe_paid_invoices WHERE id=?').bind(id).first<{user_id:string;subscription_id:string;plan_id:string;amount_cents:number;starts_at:number;ends_at:number}>();
  requireMatch(saved?.user_id===order.user_id&&saved.subscription_id===sub.id&&saved.plan_id===order.plan_id&&saved.amount_cents===order.amount_cents&&saved.starts_at===start&&saved.ends_at===end);
  return invoice.status;
 }
-async function syncSubscription(db:D1Database,env:Config,id:string,customer:string,transport:typeof fetch,invoiceId?:string){
+async function syncSubscription(db:D1Database,env:Config,id:string,customer:string,transport:typeof fetch,invoiceId?:string,voided?:Void){
  requireMatch(objectId(id,'sub'));
  const sub=await stripe<Subscription>(env,'subscriptions/'+id,transport);
  requireMatch(sub.id===id&&sub.livemode===false&&sub.customer===customer);
@@ -112,8 +116,8 @@ async function syncSubscription(db:D1Database,env:Config,id:string,customer:stri
   db.prepare("UPDATE stripe_subscription_orders SET subscription_id=?,state='complete' WHERE id=? AND state='pending'").bind(id,order.id),
   db.prepare('INSERT INTO stripe_subscriptions(id,order_id,user_id,status,cancel_at_period_end,period_end,latest_invoice_id,updated_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,cancel_at_period_end=excluded.cancel_at_period_end,period_end=excluded.period_end,latest_invoice_id=excluded.latest_invoice_id,updated_at=excluded.updated_at').bind(id,order.id,order.user_id,sub.status,sub.cancel_at_period_end?1:0,end,sub.latest_invoice,now())
  ]);
- if(sub.latest_invoice){const status=await recordInvoice(db,env,sub.latest_invoice,sub,order,transport);await db.prepare('UPDATE stripe_subscriptions SET payment_status=? WHERE id=? AND latest_invoice_id=?').bind(status,id,sub.latest_invoice).run();}
- if(invoiceId&&invoiceId!==sub.latest_invoice)await recordInvoice(db,env,invoiceId,sub,order,transport);
+ if(sub.latest_invoice){const status=await recordInvoice(db,env,sub.latest_invoice,sub,order,transport,voided);await db.prepare('UPDATE stripe_subscriptions SET payment_status=? WHERE id=? AND latest_invoice_id=?').bind(status,id,sub.latest_invoice).run();}
+ if(invoiceId&&invoiceId!==sub.latest_invoice)await recordInvoice(db,env,invoiceId,sub,order,transport,voided);
 }
 async function syncCustomer(db:D1Database,env:Config,c:Customer,transport:typeof fetch){
  if(!c.customer_id)return;
@@ -291,6 +295,8 @@ type InvoicePayments={has_more:boolean;data:{invoice?:string|{id?:string}|null}[
  * WH-042: a fully refunded charge or a dispute closed as lost ends the coverage of the invoice that payment settled. The event only names the object: it is read again, must be
  * test mode, and is followed through its payment intent to the invoice payment. Partial refunds, open disputes and payments for no invoice of ours change nothing. Any shape
  * that does not match throws (a 409 the provider retries), so an unrecognised event never silently keeps or removes access. The row is a compensating fact; the invoice is untouched.
+ * Delivery order does not matter: a refund or loss that arrives before its invoice was recorded reads that invoice through the same verified path as invoice.paid and records it
+ * together with its void, so a later invoice.paid, subscription event or Refresh finds the void already there and grants nothing.
  */
 async function voidInvoiceForPayment(db:D1Database,env:Config,type:'charge.refunded'|'charge.dispute.closed',id:string,transport:typeof fetch){
  const fact=await stripe<PaymentFact>(env,(type==='charge.refunded'?'charges/':'disputes/')+id,transport);
@@ -302,8 +308,14 @@ async function voidInvoiceForPayment(db:D1Database,env:Config,type:'charge.refun
  if(!found.data.length)return;
  const ref=found.data[0].invoice,invoiceId=typeof ref==='string'?ref:ref?.id;
  requireMatch(objectId(invoiceId,'in'));
- if(!await db.prepare('SELECT id FROM stripe_paid_invoices WHERE id=?').bind(invoiceId).first())return;
- await db.prepare('INSERT INTO stripe_invoice_voids(invoice_id,reason,source_id,created_at) VALUES(?,?,?,?) ON CONFLICT(invoice_id) DO NOTHING').bind(invoiceId,type==='charge.refunded'?'refund':'dispute-lost',id,now()).run();
+ const voided:Void={invoiceId:invoiceId!,reason:type==='charge.refunded'?'refund':'dispute-lost',sourceId:id};
+ if(await db.prepare('SELECT id FROM stripe_paid_invoices WHERE id=?').bind(invoiceId).first()){await voidRow(db,voided).run();return;}
+ const invoice=await stripe<Invoice>(env,'invoices/'+invoiceId,transport);requireMatch(invoice.id===invoiceId&&invoice.livemode===false);
+ const sub=invoiceSubscription(invoice);
+ if(!objectId(sub,'sub')||!await db.prepare('SELECT user_id FROM stripe_customers WHERE customer_id=?').bind(invoice.customer).first())return;
+ await syncSubscription(db,env,sub,invoice.customer,transport,invoiceId,voided);
+ // Settled by a payment that was returned, yet not recordable as paid: a later read could still grant it, so never answer success.
+ if(!await db.prepare('SELECT id FROM stripe_paid_invoices WHERE id=?').bind(invoiceId).first())requireMatch(invoice.status==='paid');
 }
 export async function stripeBillingWebhook(request:Request,db:D1Database,env:Config,transport:typeof fetch=fetch){
  const event=await readStripeEvent(request,env),id=event.data?.object?.id;

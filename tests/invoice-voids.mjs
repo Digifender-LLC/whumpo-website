@@ -5,7 +5,7 @@ import {paidPlan} from './helpers/paid-plan.mjs';
 
 // WH-042: a fully refunded charge or a dispute closed as lost voids the invoice it settled (a compensating row; the invoice stays immutable) and the entitlement view reads past it.
 // Synthetic transport only: the shapes are the ones src/stripe-billing.ts reads (Charge.refunded, Dispute.status, payment_intent, invoice_payments by payment intent); no Stripe call.
-const b=await build({stdin:{contents:"export {stripeBillingWebhook} from './src/stripe-billing';export {getBilling} from './src/billing';export {plans} from './src/plans';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
+const b=await build({stdin:{contents:"export {stripeBillingWebhook,refreshSubscriptions} from './src/stripe-billing';export {getBilling} from './src/billing';export {plans} from './src/plans';",resolveDir:process.cwd()},bundle:true,format:'esm',platform:'node',write:false,logLevel:'silent'});
 const m=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
 const fixture=await databaseFixture({d1:true}),db=fixture.db;
 const prices={};for(const p of m.plans.filter(p=>p.monthlyCents))for(const i of ['month','year'])prices[p.id+':'+i]='price_'+p.id.replaceAll('-','')+i;
@@ -15,6 +15,7 @@ const objects=new Map(),payments=new Map();let reads=[];
 const transport=async(url,init)=>{
  assert.equal(init.method,'GET','voiding never writes to Stripe');assert.equal(init.headers['Stripe-Version'],'2026-10-28.endive');
  const u=new URL(url),path=u.pathname.replace('/v1/','');reads.push(path+u.search);
+ if(path==='subscriptions'){const customer=u.searchParams.get('customer');return Response.json({has_more:false,data:[...objects.entries()].filter(([k,v])=>k.startsWith('subscriptions/')&&v.customer===customer).map(([,v])=>v)});}
  if(path==='invoice_payments'){assert.equal(u.searchParams.get('payment[type]'),'payment_intent');const found=payments.get(u.searchParams.get('payment[payment_intent]'));return Response.json(found??{has_more:false,data:[]});}
  const value=objects.get(path);return value?Response.json(value):new Response('{}',{status:404});
 };
@@ -57,7 +58,7 @@ await check('only the voided invoice loses coverage; a payment for no invoice of
  assert.equal(await covered(user),'business','the other paid invoice still covers');
  const before=(await voids()).length;
  objects.set('charges/ch_none',{id:'ch_none',livemode:false,payment_intent:'pi_none',refunded:true});await m.stripeBillingWebhook(await event('charge.refunded','ch_none'),db,env,transport);
- settle('in_unknown1','pi_unk');objects.set('charges/ch_unk',{id:'ch_unk',livemode:false,payment_intent:'pi_unk',refunded:true});await m.stripeBillingWebhook(await event('charge.refunded','ch_unk'),db,env,transport);
+ settle('in_unknown1','pi_unk');objects.set('invoices/in_unknown1',{id:'in_unknown1',livemode:false,customer:'cus_notours',parent:{subscription_details:{subscription:'sub_notours'}},status:'paid'});objects.set('charges/ch_unk',{id:'ch_unk',livemode:false,payment_intent:'pi_unk',refunded:true});await m.stripeBillingWebhook(await event('charge.refunded','ch_unk'),db,env,transport);
  assert.equal((await voids()).length,before,'no invoice payment and an invoice we never recorded each add nothing');
  void c;
 });
@@ -87,5 +88,51 @@ await check('the webhook stays closed with checkout closed, and makes no Stripe 
  await assert.rejects(m.stripeBillingWebhook(await event('charge.refunded','ch_closed'),db,{...env,STRIPE_CHECKOUT_OPEN:undefined},transport),{status:503});
  assert.equal((await voids()).some(v=>v.invoice_id===invoice),false);
 });
-console.log(`Invoice voids passed (${cases} cases): full refund and lost dispute void the invoice by compensating row, partial/open/won change nothing, unrecognised shapes throw, immutable rows, cascade with the account, closed gate; synthetic transport, no Stripe call.`);
+// A real checkout as the Stripe side holds it: our customer and order rows, the subscription and its paid invoice. Nothing is recorded on our side yet (the checkout reply and
+// webhooks can all be late). Shapes follow API 2026-10-28.endive as tests/subscriptions.mjs does.
+const purchase=async(plan,interval,{status='paid',app='whumpo-sandbox-v1'}={})=>{
+ const user=await owner(),key=crypto.randomUUID().replaceAll('-',''),order=crypto.randomUUID(),customer='cus_'+key,sub='sub_'+key,invoice='in_'+key,pi='pi_'+key,charge='ch_'+key,dispute='dp_'+key;
+ const p=m.plans.find(x=>x.id===plan),amount=interval==='year'?p.annualCents:p.monthlyCents,start=Math.floor(Date.now()/1000)-60,end=start+(interval==='year'?365:30)*86400;
+ const price={id:prices[plan+':'+interval],livemode:false,currency:'usd',unit_amount:amount,recurring:{interval,interval_count:1}};
+ await db.prepare('INSERT INTO stripe_customers(user_id,customer_id,created_at) VALUES(?,?,?)').bind(user,customer,start).run();
+ await db.prepare('INSERT INTO stripe_subscription_orders(id,user_id,plan_id,interval,price_id,amount_cents,created_at) VALUES(?,?,?,?,?,?,?)').bind(order,user,plan,interval,price.id,amount,start).run();
+ objects.set('subscriptions/'+sub,{id:sub,livemode:false,customer,metadata:{app,order},status:status==='paid'?'active':'incomplete',cancel_at_period_end:false,latest_invoice:invoice,items:{has_more:false,data:[{quantity:1,price,current_period_end:end}]}});
+ objects.set('invoices/'+invoice,{id:invoice,livemode:false,customer,parent:{type:'subscription_details',subscription_details:{subscription:sub}},status,currency:'usd',amount_paid:status==='paid'?amount:0,total:amount,hosted_invoice_url:'https://invoice.stripe.com/i/synthetic',created:start,billing_reason:'subscription_create',lines:{has_more:false,data:[{quantity:1,pricing:{price_details:{price:price.id}},parent:{type:'subscription_item_details',subscription_item_details:{subscription:sub,proration:false}},amount,period:{start,end}}]}});
+ settle(invoice,pi);objects.set('charges/'+charge,{id:charge,livemode:false,payment_intent:pi,refunded:true});objects.set('disputes/'+dispute,{id:dispute,livemode:false,payment_intent:pi,status:'lost'});
+ return {user,plan,invoice,sub,charge,dispute,start,end};
+};
+const recorded=async invoice=>(await db.prepare('SELECT interval,starts_at,ends_at FROM stripe_paid_invoices WHERE id=?').bind(invoice).all()).results;
+const permutations=a=>a.length<2?[a]:a.flatMap((x,i)=>permutations([...a.slice(0,i),...a.slice(i+1)]).map(r=>[x,...r]));
+
+await check('every delivery order of invoice.paid, a full refund, a subscription update and Refresh converges on one invoice, one void and no coverage (annual, exact interval)',async()=>{
+ for(const order of permutations(['invoice','refund','subscription','refresh'])){
+  const b=await purchase('business','year');let refunded=false;
+  const deliver={invoice:async()=>m.stripeBillingWebhook(await event('invoice.paid',b.invoice),db,env,transport),refund:async()=>m.stripeBillingWebhook(await event('charge.refunded',b.charge),db,env,transport),
+   subscription:async()=>m.stripeBillingWebhook(await event('customer.subscription.updated',b.sub),db,env,transport),refresh:()=>m.refreshSubscriptions(db,env,b.user,transport)};
+  for(const step of order){
+   await deliver[step]();
+   if(step==='refund')refunded=true;
+   if(refunded)assert.equal(await covered(b.user),'explore',`no coverage once the refund is known (${order.join(' > ')}, after ${step})`);
+  }
+  for(const step of order)await deliver[step]();
+  assert.deepEqual(await recorded(b.invoice),[{interval:'year',starts_at:b.start,ends_at:b.end}],`exactly the paid annual interval is recorded, once (${order.join(' > ')})`);
+  assert.deepEqual((await voids()).filter(v=>v.invoice_id===b.invoice),[{invoice_id:b.invoice,reason:'refund',source_id:b.charge}],order.join(' > '));
+  assert.equal(await covered(b.user),'explore',order.join(' > '));
+ }
+});
+await check('a lost dispute delivered before its monthly invoice records the invoice already voided; the later invoice.paid grants nothing',async()=>{
+ const b=await purchase('starter','month');
+ await m.stripeBillingWebhook(await event('charge.dispute.closed',b.dispute),db,env,transport);
+ assert.equal((await recorded(b.invoice)).length,1);assert.deepEqual((await voids()).filter(v=>v.invoice_id===b.invoice),[{invoice_id:b.invoice,reason:'dispute-lost',source_id:b.dispute}]);
+ await m.stripeBillingWebhook(await event('invoice.paid',b.invoice),db,env,transport);assert.equal(await covered(b.user),'explore');
+});
+await check('a returned payment for an invoice of ours that cannot be recorded as paid throws for retry; a foreign subscription changes nothing',async()=>{
+ const open=await purchase('personal','month',{status:'open'});
+ await assert.rejects(m.stripeBillingWebhook(await event('charge.refunded',open.charge),db,env,transport),{status:409});
+ assert.equal((await recorded(open.invoice)).length,0);assert.equal((await voids()).some(v=>v.invoice_id===open.invoice),false);
+ const foreign=await purchase('personal','month',{app:'someone-else'});
+ await m.stripeBillingWebhook(await event('charge.refunded',foreign.charge),db,env,transport);
+ assert.equal((await recorded(foreign.invoice)).length,0);assert.equal((await voids()).some(v=>v.invoice_id===foreign.invoice),false);
+});
+console.log(`Invoice voids passed (${cases} cases): full refund and lost dispute void the invoice by compensating row, partial/open/won change nothing, every delivery order converges (refund or loss before its invoice records the invoice already voided; annual exact interval), unrecognised shapes throw, immutable rows, cascade with the account, closed gate; synthetic transport, no Stripe call.`);
 }finally{await fixture.close();}
