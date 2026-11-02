@@ -103,7 +103,7 @@
    "workersCache": null
   }
  },
- "inIsolateState": "Source inspection of every module the sites and apps Workers import found no response or data cache; the only module-level state is src/site-traffic.ts (in-flight counter and bounded measurement-gap map). Each route is measured on its first request in this process and on an immediate repeat; a true isolate cold start (script load and compile) is not measurable locally.",
+ "inIsolateState": "Source inspection of every module the sites and apps Workers import found no response or data cache; the only module-level state is src/site-traffic.ts (in-flight counter and bounded measurement-gap map) and src/site-host.ts (a WeakMap from the request being served to its custom-domain project, read once by its own after-response count). Each route is measured on its first request in this process and on an immediate repeat; a true isolate cold start (script load and compile) is not measurable locally.",
  "routes": [
   {
    "key": "site.root.get",
@@ -1108,10 +1108,10 @@
      "whumpo-sites"
     ],
     "d1": {
-     "calls": 7,
+     "calls": 6,
      "batches": 0,
-     "statements": 7,
-     "reads": 6,
+     "statements": 6,
+     "reads": 5,
      "writes": 1
     },
     "r2": {},

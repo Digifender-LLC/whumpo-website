@@ -11668,14 +11668,6 @@
      "methods": [
       "GET"
      ]
-    },
-    {
-     "file": "src/site-host.ts",
-     "kind": "host",
-     "match": "env.DB.prepare(\"SELECT project_id FROM domain_connections WHERE hostname=? AND state NOT IN ('review','disconnected') AND state='active' AND serve_until>? AND provider_id IS NOT NULL\").bind(url.hostname,new Date().toISOString())",
-     "methods": [
-      "ANY"
-     ]
     }
    ],
    "cells": {
@@ -11693,7 +11685,7 @@
     },
     "tenant": {
      "state": "evidenced",
-     "detail": "Counts the host's project; the custom-domain lookup lacks the owner join but runs only after the owner-joined serving mapping already returned 200 (informational).",
+     "detail": "Counts the host's project; on a custom domain the count reuses the project the owner-joined serving mapping resolved for the same request (no second lookup).",
      "enforcedAt": [
       {
        "file": "src/site-host.ts",

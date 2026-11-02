@@ -214,7 +214,7 @@
     "test:cms-model-read": "node tests/cms-model-read.mjs",
     "test:cms-rich-editor": "node tests/cms-rich-editor.mjs",
     "test:cms-editor": "node tests/cms-editor-shape.mjs",
-    "test:traffic": "node tests/site-traffic.mjs",
+    "test:traffic": "node tests/site-traffic.mjs && node tests/delayed-traffic.mjs && node tests/delayed-traffic.mjs --d1",
     "test:hot-path-performance": "node tests/hot-path-performance.mjs",
     "test:cms-descriptions": "node tests/cms-content-description.mjs",
     "test:project-details": "node tests/project-details.mjs",
