@@ -76,7 +76,9 @@ for(const kind of ['upgrade','rollback'])for(const state of ['preparing','ready'
  assert.ok(html.includes('&lt;script&gt;unsafe&lt;/script&gt;'));assert.ok(!html.includes('<script>'));assert.ok(!html.includes('<details open'));assert.ok(html.includes('Inspect code and recovery details'));assert.ok(html.includes('app stays offline'));
  assert.equal(html.includes(kind==='upgrade'?'Review app upgrade':'Review app rollback'),state==='ready');assert.equal(html.includes('Check next documents'),false);assert.equal(html.includes('Discard this check'),kind==='upgrade'&&!['applied','cancelled'].includes(state));
 }
-console.log('Maintenance cards passed: escaped content, current-state controls, historical/cancelled refusal, closed source details, offline effects and no rendering mutations.');
+const failedCard=(failed,busy)=>renderToStaticMarkup(createElement(AppMaintenanceCard,{review:{...restoreBase,kind:'upgrade',state:'failed',fromVersion:review,toVersion:review,beforePointId:review,ready:0,pending:1,failed,busy},onAction:async()=>{throw Error('Rendering cannot mutate');}}));
+for(const [failed,busy,isBusy] of [[1,1,true],[2,2,true],[2,1,false],[1,0,false],[1,undefined,false]]){const html=failedCard(failed,busy);assert.equal(html.includes('shared runner was busy'),isBusy);assert.equal(html.includes('No migration code ran and nothing changed'),isBusy);assert.equal(html.includes('A check failed'),!isBusy);assert.equal(html.includes('Ask Whumpo to resolve the issue'),!isBusy);assert.ok(html.includes('Discard this check'));}
+console.log('Maintenance cards passed: escaped content, current-state controls, historical/cancelled refusal, closed source details, offline effects and busy-only failures shown as try-again, genuine failures unchanged, and no rendering mutations.');
 
 for(const text of ['Confirm the reviewed website change.','/confirm '+review,'Explain /api/projects','<script>alert(1)</script>']){
  const shown=renderToStaticMarkup(createElement(ChatRequest,{text}));
