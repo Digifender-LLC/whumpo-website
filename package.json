@@ -238,7 +238,7 @@
     "test:github-app-setup": "node tests/github-app-setup.mjs",
     "verify": "node tools/verify.mjs",
     "capacity": "node tools/capacity.mjs",
-    "test:capacity-store": "node tests/capacity-ledger.mjs && node tests/capacity-store.mjs && node tests/capacity-store-races.mjs && node tests/capacity-store-races.mjs --d1",
+    "test:capacity-store": "node tests/capacity-ledger.mjs && node tests/capacity-explanation.mjs && node tests/capacity-store.mjs && node tests/capacity-store-races.mjs && node tests/capacity-store-races.mjs --d1",
     "test:service-client-compiler": "node tests/service-client-compiler.mjs",
     "test:service-client-authority": "node tests/service-client-authority.mjs",
     "test:service-client-journey": "node tests/service-client-journey.mjs",
