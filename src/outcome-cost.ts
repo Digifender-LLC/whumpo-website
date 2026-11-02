@@ -185,15 +185,15 @@ export function compositionReuse(outcomes: readonly unknown[], uses: readonly un
   const key = `${u.ownerId}|${u.outcomeTaskRef}`, r = index.get(key);
   check(r && !seen.has(key), 'INVALID_REUSE', 'one use per existing outcome');
   seen.add(key);
-  const counts = u.instances as Record<string, number>, present = u.modules as Record<string, boolean>;
+  const counts = u.instances as Record<string, number>, present = u.modules as Record<string, boolean>, projectId = u.projectId as string;
   const structural = reuseKinds.some(k => counts[k] > 0) || reuseModules.some(k => present[k]);
   check(r.outcomeClass === 'configuration' || r.outcomeClass === 'composition', 'REUSE_MISMATCH', 'only shared-path outcomes carry reuse evidence');
   check(structural === (r.outcomeClass === 'composition'), 'REUSE_MISMATCH', 'reuse evidence disagrees with the outcome class');
   if (!r.success) { unsuccessful++; continue; }
   if (!structural) { configuration++; continue; }
-  composition++; compositionProjects.add(u.projectId);
-  reuseKinds.forEach((k, i) => { if (counts[k] > 0) { kinds[i].outcomes++; kinds[i].instances += counts[k]; kinds[i].projects.add(u.projectId); } });
-  reuseModules.forEach((k, i) => { if (present[k]) { modules[i].outcomes++; modules[i].projects.add(u.projectId); } });
+  composition++; compositionProjects.add(projectId);
+  reuseKinds.forEach((k, i) => { if (counts[k] > 0) { kinds[i].outcomes++; kinds[i].instances += counts[k]; kinds[i].projects.add(projectId); } });
+  reuseModules.forEach((k, i) => { if (present[k]) { modules[i].outcomes++; modules[i].projects.add(projectId); } });
  }
  const withoutEvidence = records.filter(r => (r.outcomeClass === 'configuration' || r.outcomeClass === 'composition') && !seen.has(`${r.ownerId}|${r.taskRef}`)).length;
  return {
